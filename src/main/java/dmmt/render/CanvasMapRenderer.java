@@ -8,6 +8,7 @@ import dmmt.lighting.VisibilityService;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.ui.Icons;
+import javafx.geometry.VPos;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -15,6 +16,9 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.TextAlignment;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
@@ -28,6 +32,9 @@ import java.util.List;
 public class CanvasMapRenderer {
     /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
     private static final int LIGHT_MAP_SCALE = 4;
+    /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
+    public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
+    private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.45;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
@@ -572,11 +579,38 @@ public class CanvasMapRenderer {
         double y = worldToScreenY(rect.y(), height, camera);
         double w = rect.width() * camera.getZoom();
         double h = rect.height() * camera.getZoom();
+        double barHeight = VIEWPORT_TITLE_BAR_HEIGHT;
+        double barY = y - barHeight;
+
+        gc.setFill(Color.color(0.0, 0.55, 0.62, 0.9));
+        gc.fillRect(x - 1, barY, w + 2, barHeight);
         gc.setStroke(Color.CYAN);
         gc.setLineWidth(2);
         gc.strokeRect(x, y, w, h);
-        gc.setFill(Color.color(0.0, 1.0, 1.0, 0.1));
-        gc.fillRect(x, y, w, h);
+
+        gc.save();
+        gc.beginPath();
+        gc.rect(x, barY, w, barHeight);
+        gc.clip();
+        gc.setFill(Color.WHITE);
+        gc.setFont(VIEWPORT_TITLE_FONT);
+        gc.setTextAlign(TextAlignment.LEFT);
+        gc.setTextBaseline(VPos.CENTER);
+        gc.fillText("Player view", x + 8, barY + barHeight / 2.0);
+        gc.restore();
+    }
+
+    /** True if the screen point lies on the draggable title bar drawn above the player viewport rectangle. */
+    public boolean isOnViewportTitleBar(WorldRect rect, double screenX, double screenY,
+                                        double width, double height, DmProject.CameraState camera) {
+        if (rect == null) {
+            return false;
+        }
+        double x = worldToScreenX(rect.x(), width, camera);
+        double y = worldToScreenY(rect.y(), height, camera);
+        double w = rect.width() * camera.getZoom();
+        return screenX >= x - 1 && screenX <= x + w + 1
+                && screenY >= y - VIEWPORT_TITLE_BAR_HEIGHT && screenY <= y + 1;
     }
 
     private ImagePyramidStore.MapImage resolveImage(String path, Path projectFile) {

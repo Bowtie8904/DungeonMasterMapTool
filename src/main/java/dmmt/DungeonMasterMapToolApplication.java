@@ -863,6 +863,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private Cursor selectHoverCursor(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (isOnPlayerViewportTitleBar(worldX, worldY)) {
+            return Cursor.MOVE;
+        }
         if (renderer.isWallLayerVisible() && pickInteractableBadge(worldX, worldY) != null) {
             return Cursor.HAND;
         }
@@ -874,10 +877,6 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (pickOverlay(worldX, worldY, zoom) != null) {
             return Cursor.OPEN_HAND;
-        }
-        CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
-        if (playerStage != null && playerRect != null && contains(playerRect, worldX, worldY)) {
-            return Cursor.MOVE;
         }
         DmProject.ImageLayer layer = pickTopmostLayer(worldX, worldY);
         if (layer != null
@@ -1089,6 +1088,17 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            // The viewport grab bar sits on top of everything else, like a window title bar.
+            if (isOnPlayerViewportTitleBar(world.x(), world.y())) {
+                CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
+                draggingPlayerViewport = true;
+                viewportDragOffsetX = world.x() - playerRect.x();
+                viewportDragOffsetY = world.y() - playerRect.y();
+                startPlayerCameraX = project.getViews().getPlayerCamera().getX();
+                startPlayerCameraY = project.getViews().getPlayerCamera().getY();
+                return;
+            }
+
             DmProject.Interactable door = pickInteractableForClick(world.x(), world.y());
             if (door != null) {
                 // Debounce only mouse switch chatter (a few ms); real human double-clicks toggle twice.
@@ -1129,16 +1139,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             selectedOverlayId = null;
-
-            CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
-            if (playerStage != null && playerRect != null && contains(playerRect, world.x(), world.y())) {
-                draggingPlayerViewport = true;
-                viewportDragOffsetX = world.x() - playerRect.x();
-                viewportDragOffsetY = world.y() - playerRect.y();
-                startPlayerCameraX = project.getViews().getPlayerCamera().getX();
-                startPlayerCameraY = project.getViews().getPlayerCamera().getY();
-                return;
-            }
 
             selectedLayer = pickTopmostLayer(world.x(), world.y());
             if (selectedLayer == null) {
@@ -2013,6 +2013,20 @@ public class DungeonMasterMapToolApplication extends Application {
         );
     }
 
+    /** True if the world point is on the player viewport's grab bar (only when the player window is open). */
+    private boolean isOnPlayerViewportTitleBar(double worldX, double worldY) {
+        CanvasMapRenderer.WorldRect rect = getPlayerViewportRect();
+        if (playerStage == null || rect == null || dmCanvas == null) {
+            return false;
+        }
+        DmProject.CameraState dmCamera = project.getViews().getDmCamera();
+        double w = dmCanvas.getWidth();
+        double h = dmCanvas.getHeight();
+        return renderer.isOnViewportTitleBar(rect,
+                renderer.worldToScreenX(worldX, w, dmCamera), renderer.worldToScreenY(worldY, h, dmCamera),
+                w, h, dmCamera);
+    }
+
     private void addPing(double worldX, double worldY) {
         project.getActivePings().add(DmProject.PingEvent.builder()
                 .x(worldX)
@@ -2873,11 +2887,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean contains(DmProject.ImageLayer layer, double x, double y) {
         return x >= layer.getX() && x <= layer.getX() + layer.getWidth()
                 && y >= layer.getY() && y <= layer.getY() + layer.getHeight();
-    }
-
-    private boolean contains(CanvasMapRenderer.WorldRect rect, double x, double y) {
-        return x >= rect.x() && x <= rect.x() + rect.width()
-                && y >= rect.y() && y <= rect.y() + rect.height();
     }
 
     private double pointToSegmentDistance(double px, double py, double x1, double y1, double x2, double y2) {
