@@ -78,6 +78,7 @@ Desktop tool for tabletop dungeon masters that:
 - Freeze mode: player view remains fixed while DM prepares another map/view.
 - While frozen, DM can still move the player viewport rectangle; on unfreeze, player view immediately jumps to that staged rectangle.
 - Player view must stay visually clean: DM-only helper/debug geometry (wall guides, door/window state lines, viewport handles) is never rendered there.
+- **Wall layer (DM only):** all walls (imported dd2vtt walls and manually drawn walls) are drawn as red lines. A **wall layer toggle** next to the wall tools in the Map building section shows/hides the wall lines together with the door/window lines and icon badges (shown by default at startup, session-only). While hidden, doors/windows cannot be clicked; choosing a wall tool shows the layer again. Lights and light tokens are not part of the wall layer and are always shown.
 
 ## 3.4 Map Switching
 
@@ -406,7 +407,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v1.9 (current):** Door/window icon badges in the DM view with single-click toggle; pointing-hand cursor over interactable objects (lights, doors, windows).
+- **v2.0 (current):** Walls drawn as red lines in the DM view; wall layer toggle (walls + door/window lines and badges, lights excluded).
+- **v1.9:** Door/window icon badges in the DM view with single-click toggle; pointing-hand cursor over interactable objects (lights, doors, windows).
 - **v1.8:** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).
 - **v1.7:** Implemented 3.15 and 3.16 (Phase 6 complete).
 - **v1.6:** Added map browser sidebar (3.15), modern DM controls overlay and visual design (3.16), Phase 6. Map switcher dropdown and system file dialogs for open/save replaced by the library.

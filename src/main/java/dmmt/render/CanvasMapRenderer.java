@@ -32,6 +32,7 @@ public class CanvasMapRenderer {
     private static final int LIGHT_MAP_SCALE = 4;
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.45;
+    private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
 
     private static final int MAX_TEXTURE_SIZE = 4096;
     private final java.util.Set<String> failedImages = new java.util.HashSet<>();
@@ -44,9 +45,19 @@ public class CanvasMapRenderer {
     private FogMask fogImageMask;
     private long fogImageMaskVersion = -1;
     private long fogImageLiveVersion = -1;
+    /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
+    private boolean wallLayerVisible = true;
 
     public CanvasMapRenderer(LightingEngine lightingEngine) {
         this.lightingEngine = lightingEngine;
+    }
+
+    public boolean isWallLayerVisible() {
+        return wallLayerVisible;
+    }
+
+    public void setWallLayerVisible(boolean wallLayerVisible) {
+        this.wallLayerVisible = wallLayerVisible;
     }
 
     public void render(
@@ -72,7 +83,7 @@ public class CanvasMapRenderer {
         drawLayers(gc, project, projectFile, width, height, camera);
         drawLighting(gc, project, width, height, camera, playerMode);
         drawOverlays(gc, project, width, height, camera, playerMode);
-        if (!playerMode) {
+        if (!playerMode && wallLayerVisible) {
             drawWalls(gc, project.getWalls(), width, height, camera);
             drawInteractables(gc, project.getInteractables(), width, height, camera);
         }
@@ -101,7 +112,9 @@ public class CanvasMapRenderer {
         drawPings(gc, project, width, height, camera);
         if (!playerMode) {
             drawLightTokens(gc, project, width, height, camera, selectedLightId);
-            drawInteractableBadges(gc, project.getInteractables(), width, height, camera, hoveredInteractableId);
+            if (wallLayerVisible) {
+                drawInteractableBadges(gc, project.getInteractables(), width, height, camera, hoveredInteractableId);
+            }
             if (playerViewportWorld != null) {
                 drawViewportRect(gc, playerViewportWorld, width, height, camera);
             }
@@ -382,7 +395,7 @@ public class CanvasMapRenderer {
     }
 
     private void drawWalls(GraphicsContext gc, List<DmProject.WallSegment> walls, double width, double height, DmProject.CameraState camera) {
-        gc.setStroke(Color.color(1, 1, 1, 0.55));
+        gc.setStroke(WALL_COLOR);
         gc.setLineWidth(2);
         for (DmProject.WallSegment wall : walls) {
             gc.strokeLine(

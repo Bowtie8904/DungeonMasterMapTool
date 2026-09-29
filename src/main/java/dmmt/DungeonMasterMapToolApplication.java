@@ -130,6 +130,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private MapLibraryService mapLibrary;
     private MapBrowser mapBrowser;
     private ToggleButton pingToggle;
+    private ToggleButton wallLayerToggle;
     private ToggleButton playerWindowToggle;
     private HBox toolChip;
     private FontIcon toolChipIcon;
@@ -347,6 +348,10 @@ public class DungeonMasterMapToolApplication extends Application {
         // Tools
         pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) — click the map to flash a marker for the players");
         pingToggle.setOnAction(e -> setPingArmed(pingToggle.isSelected()));
+        wallLayerToggle = Icons.toggle(MaterialDesignL.LAYERS_OUTLINE,
+                "Show / hide the wall layer (wall lines, doors and windows) in the DM view — lights stay visible");
+        wallLayerToggle.setSelected(renderer.isWallLayerVisible());
+        wallLayerToggle.setOnAction(e -> setWallLayerVisible(wallLayerToggle.isSelected()));
         Region toolSpacer = new Region();
         HBox.setHgrow(toolSpacer, Priority.ALWAYS);
         HBox toolsRow = row(toolButtons.get(EditorTool.SELECT), pingToggle, toolSpacer,
@@ -477,7 +482,7 @@ public class DungeonMasterMapToolApplication extends Application {
             snapLayersToGrid = snapLayers.isSelected();
             status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
         });
-        HBox buildRow = row(toolButtons.get(EditorTool.WALL_DRAW), toolButtons.get(EditorTool.WALL_ERASE),
+        HBox buildRow = row(toolButtons.get(EditorTool.WALL_DRAW), toolButtons.get(EditorTool.WALL_ERASE), wallLayerToggle,
                 Icons.separator(), snapLayers,
                 Icons.button(MaterialDesignI.IMAGE_PLUS,
                         "Add an image layer (or drag image files onto the map). Move it with Select, resize at the corner.",
@@ -752,13 +757,13 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private Cursor selectHoverCursor(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
-        if (pickInteractableBadge(worldX, worldY) != null) {
+        if (renderer.isWallLayerVisible() && pickInteractableBadge(worldX, worldY) != null) {
             return Cursor.HAND;
         }
         if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
             return Cursor.HAND;
         }
-        if (pickInteractableLine(worldX, worldY) != null) {
+        if (renderer.isWallLayerVisible() && pickInteractableLine(worldX, worldY) != null) {
             return Cursor.HAND;
         }
         if (pickOverlay(worldX, worldY, zoom) != null) {
@@ -1838,6 +1843,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Door/window under the mouse in Select mode, respecting the same priority as clicks (badge, light, line). */
     private DmProject.Interactable pickInteractableForClick(double worldX, double worldY) {
+        if (!renderer.isWallLayerVisible()) {
+            return null;
+        }
         DmProject.Interactable badge = pickInteractableBadge(worldX, worldY);
         if (badge != null) {
             return badge;
@@ -1892,8 +1900,20 @@ public class DungeonMasterMapToolApplication extends Application {
         hoverWorldY = world.y();
     }
 
+    private void setWallLayerVisible(boolean visible) {
+        renderer.setWallLayerVisible(visible);
+        if (wallLayerToggle != null && wallLayerToggle.isSelected() != visible) {
+            wallLayerToggle.setSelected(visible);
+        }
+        updateCanvasCursor();
+        status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden — doors and windows can't be clicked until it is shown again.");
+    }
+
     private void setActiveTool(EditorTool tool) {
         activeTool = tool == null ? EditorTool.SELECT : tool;
+        if (activeTool.isWallTool() && !renderer.isWallLayerVisible()) {
+            setWallLayerVisible(true);
+        }
         fogDragging = false;
         fogBeforeSnapshot = null;
         draftOverlay = null;
