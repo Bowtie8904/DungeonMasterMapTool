@@ -62,6 +62,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
+import javafx.scene.image.Image;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
@@ -103,6 +104,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_TILE_INCHES = "playerTileInches";
     private static final String PREF_SIDEBAR_VISIBLE = "sidebarVisible";
     private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
+    private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
+    private static List<Image> appIcons;
 
     private final ProjectService projectService = new ProjectService();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
@@ -213,6 +216,17 @@ public class DungeonMasterMapToolApplication extends Application {
     private final Deque<HistoryAction> redoStack = new ArrayDeque<>();
     private static final int MAX_HISTORY = 100;
 
+    /** Pre-scaled copies of the app icon so window title bar and taskbar get a smooth image at their size. */
+    private static List<Image> appIcons() {
+        if (appIcons == null) {
+            var url = DungeonMasterMapToolApplication.class.getResource(APP_ICON_RESOURCE);
+            appIcons = url == null ? List.of() : java.util.stream.IntStream.of(16, 24, 32, 48, 64, 128, 256)
+                    .mapToObj(size -> new Image(url.toExternalForm(), size, size, true, true))
+                    .toList();
+        }
+        return appIcons;
+    }
+
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
@@ -307,6 +321,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         stage.setScene(scene);
+        stage.getIcons().setAll(appIcons());
         stage.setOnCloseRequest(event -> {
             closePlayerWindow();
             Platform.exit();
@@ -1306,6 +1321,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         playerStage = new Stage(StageStyle.UNDECORATED);
         playerStage.setTitle("Player View");
+        playerStage.getIcons().setAll(appIcons());
         playerStage.setScene(scene);
         playerStage.setOnCloseRequest(event -> {
             playerStage = null;

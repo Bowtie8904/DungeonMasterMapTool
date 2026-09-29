@@ -230,6 +230,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - All non-library DM controls live in a **compact overlay panel on the right** side of the DM view, organised in **collapsible sections** (collapsed state is remembered): Tools, Fog of war, Lighting, Effects, Map building, Player view. The whole panel can be collapsed to its header and scrolls if the window is small.
 - **Dark, modern theme** (app-wide stylesheet `dmmt/ui/dark.css`): flat controls, rounded corners, subtle hover states, dark tooltips/menus/dialogs, one accent colour (amber).
+- **App icon:** `src/main/resources/dmmt/icon.png` is set (pre-scaled 16–256 px) on the DM window and the player window, so it shows in the title bar and taskbar.
 - **Icon buttons** (Material Design Icons via Ikonli) instead of text wherever an icon is clear; **every button has a tooltip** describing what it does (and its shortcut if any).
 - **Active tool visibility:**
   - Selected tool/state toggles are filled with the accent colour and glow.
