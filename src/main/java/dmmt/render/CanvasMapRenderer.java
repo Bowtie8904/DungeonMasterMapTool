@@ -23,9 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class CanvasMapRenderer {
     /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
@@ -34,9 +32,7 @@ public class CanvasMapRenderer {
     private static final double DM_DARKNESS_FACTOR = 0.45;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
 
-    private static final int MAX_TEXTURE_SIZE = 4096;
-    private final java.util.Set<String> failedImages = new java.util.HashSet<>();
-    private final Map<String, Image> imageCache = new HashMap<>();
+    private final ImagePyramidStore imageStore = ImagePyramidStore.shared();
     private final LightingEngine lightingEngine;
     private final LightBuffer dmLightBuffer = new LightBuffer();
     private final LightBuffer playerLightBuffer = new LightBuffer();
@@ -151,7 +147,7 @@ public class CanvasMapRenderer {
                 .toList();
 
         for (DmProject.ImageLayer layer : sorted) {
-            Image image = resolveImage(layer.getPath(), projectFile);
+            ImagePyramidStore.MapImage image = resolveImage(layer.getPath(), projectFile);
             if (image == null) {
                 continue;
             }
@@ -165,7 +161,7 @@ public class CanvasMapRenderer {
             double centerY = sy + sh / 2.0;
             gc.translate(centerX, centerY);
             gc.rotate(layer.getRotationDeg());
-            gc.drawImage(image, -sw / 2.0, -sh / 2.0, sw, sh);
+            image.draw(gc, -sw / 2.0, -sh / 2.0, sw, sh);
             gc.restore();
         }
     }
@@ -569,13 +565,7 @@ public class CanvasMapRenderer {
         gc.fillRect(x, y, w, h);
     }
 
-    /** Downscales oversized images so they fit into a GPU texture (a null texture crashes the canvas). */
-    private static Image loadCapped(Path file) {
-        Image image = new Image(file.toUri().toString(), MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE, true, true, false);
-        return image.isError() || image.getWidth() <= 0 ? null : image;
-    }
-
-    private Image resolveImage(String path, Path projectFile) {
+    private ImagePyramidStore.MapImage resolveImage(String path, Path projectFile) {
         if (path == null || path.isBlank()) {
             return null;
         }
@@ -587,16 +577,7 @@ public class CanvasMapRenderer {
             if (!Files.exists(resolved)) {
                 return null;
             }
-            Path finalResolved = resolved;
-            String key = finalResolved.toAbsolutePath().toString();
-            if (failedImages.contains(key)) {
-                return null;
-            }
-            Image image = imageCache.computeIfAbsent(key, k -> loadCapped(finalResolved));
-            if (image == null) {
-                failedImages.add(key);
-            }
-            return image;
+            return imageStore.get(resolved);
         } catch (Exception ex) {
             return null;
         }

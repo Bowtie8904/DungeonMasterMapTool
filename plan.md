@@ -37,6 +37,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] 1-inch tile calibration for the player screen (screen diagonal + tile-inch settings, auto zoom, 1-inch test square)
 - [x] Map browser sidebar with folder tree, drag & drop, rename/copy/delete, custom save/import location dialog (3.15)
 - [x] Modern dark DM controls overlay: collapsible sections, icon buttons, tooltips, active-tool chip + cursors (3.16)
+- [x] Full-resolution rendering of large map images (> 4096 px) via cached tile pyramid (see 5)
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 
 ## 4) Core Functional Requirements
@@ -329,6 +330,10 @@ Desktop tool for tabletop dungeon masters that:
   - cached LOS polygons per light unless moved/changed
   - dirty-rectangle redraw strategy where practical (decided: full-canvas redraw plus idle throttling instead of dirty rectangles, since lighting/fog are composited per frame)
 - Non-blocking file IO for import/save to keep UI responsive. Implemented: import, open, save and map switching run on a background thread (`runInBackground`); saves write a deep-copied snapshot.
+- **Large map images (> 4096 px):** GPU textures are capped at 4096 px, so large images are never drawn from a single downscaled texture alone. Implemented (`dmmt.render.ImagePyramidBuilder` / `ImagePyramidStore`):
+  - On first use, a background thread decodes the image once and writes a multi-resolution **tile pyramid** (1024 px tiles, each level half the size, box-filtered; JPEG q0.92 for opaque images, PNG for images with alpha) plus a <= 4096 px overview into a disk cache (`%LOCALAPPDATA%\DungeonMasterMapTool\image-cache\<hash of path+size+mtime>`, fallback `~/.dmmt/image-cache`). Later sessions reuse the cache; caches unused for 60 days are pruned.
+  - Rendering always draws the overview first. It then picks the pyramid level that has at least one source pixel per physical screen pixel (including zoom, HiDPI output scale and the transform), and draws only the visible tiles of that level. Tiles load asynchronously on two worker threads (newest requests first, stale requests dropped) into an LRU memory cache shared by DM, player and frozen-player renderers. Missing tiles show the overview until they arrive.
+  - While the pyramid is being built (first open), the overview is shown.
 
 ## 6) Architecture Outline
 
@@ -408,7 +413,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.0 (current):** Walls drawn as red lines in the DM view; wall layer toggle (walls + door/window lines and badges, lights excluded).
+- **v2.1 (current):** Large map images (> 4096 px) render at full resolution via a cached tile pyramid instead of a single 4096 px downscaled texture (fixes blurry player view for e.g. 15k x 15k maps).
+- **v2.0:** Walls drawn as red lines in the DM view; wall layer toggle (walls + door/window lines and badges, lights excluded).
 - **v1.9:** Door/window icon badges in the DM view with single-click toggle; pointing-hand cursor over interactable objects (lights, doors, windows).
 - **v1.8:** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).
 - **v1.7:** Implemented 3.15 and 3.16 (Phase 6 complete).
