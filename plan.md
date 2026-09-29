@@ -41,7 +41,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 - [x] One-click room reveal bounded by walls/doors/windows (3.17)
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
-- [ ] Laser pointer on middle mouse button hold (3.19)
+- [x] Laser pointer on middle mouse button hold (3.19)
 - [ ] Map browser thumbnails + search bar for maps and folders (3.20)
 - [ ] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
@@ -283,7 +283,7 @@ Desktop tool for tabletop dungeon masters that:
 - Handouts are session-only: not saved in `.dmmap`, not copied into the map package, not part of undo/redo.
 - Implementation: `dmmt.ui.HandoutWindow` (window, clipboard paste, rotation, shared `drawRotated` used by preview and player screen); the player screen draws it in `renderPlayer` before any map rendering.
 
-## 3.19 Laser Pointer (planned)
+## 3.19 Laser Pointer
 
 - **Hold the middle mouse button** on the DM canvas to show a laser pointer at the cursor position; release to stop. Works with every tool active and does not change the active tool.
 - Rendered as a bright red dot with a short fading trail (~0.5 s) in both DM and player views. The dot size is fixed in screen pixels on the player screen (clearly visible, ~0.3 tile at 1-inch calibration) so it reads well regardless of zoom.

@@ -511,6 +511,47 @@ public class CanvasMapRenderer {
         }
     }
 
+    /** A recorded laser pointer position in world coordinates. */
+    public record LaserPoint(double x, double y, long millis) {
+    }
+
+    public static final long LASER_TRAIL_MILLIS = 500;
+
+    /** Draws the laser trail (oldest first) and, if {@code dotActive}, the bright dot at the newest point. */
+    public void drawLaser(GraphicsContext gc, List<LaserPoint> trail, boolean dotActive, double dotRadius,
+                          double width, double height, DmProject.CameraState camera) {
+        if (trail.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        gc.save();
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        for (int i = 1; i < trail.size(); i++) {
+            LaserPoint a = trail.get(i - 1);
+            LaserPoint b = trail.get(i);
+            double alpha = 1.0 - Math.min(1.0, (now - b.millis()) / (double) LASER_TRAIL_MILLIS);
+            if (alpha <= 0) {
+                continue;
+            }
+            gc.setStroke(Color.color(1, 0.1, 0.1, alpha * 0.8));
+            gc.setLineWidth(Math.max(1.5, dotRadius * 1.4 * alpha));
+            gc.strokeLine(worldToScreenX(a.x(), width, camera), worldToScreenY(a.y(), height, camera),
+                    worldToScreenX(b.x(), width, camera), worldToScreenY(b.y(), height, camera));
+        }
+        if (dotActive) {
+            LaserPoint p = trail.get(trail.size() - 1);
+            double x = worldToScreenX(p.x(), width, camera);
+            double y = worldToScreenY(p.y(), height, camera);
+            gc.setFill(Color.color(1, 0.1, 0.1, 0.35));
+            gc.fillOval(x - dotRadius * 2, y - dotRadius * 2, dotRadius * 4, dotRadius * 4);
+            gc.setFill(Color.color(1, 0.12, 0.1, 1));
+            gc.fillOval(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
+            gc.setFill(Color.color(1, 0.8, 0.8, 0.9));
+            gc.fillOval(x - dotRadius * 0.4, y - dotRadius * 0.4, dotRadius * 0.8, dotRadius * 0.8);
+        }
+        gc.restore();
+    }
+
     private void drawFog(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
         if (project.getFog() == null || !project.getFog().isEnabled()) {
             return;

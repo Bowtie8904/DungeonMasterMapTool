@@ -210,6 +210,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean panningDmCamera;
     private boolean draggingPlayerViewport;
     private boolean pingArmed;
+    private final java.util.ArrayList<CanvasMapRenderer.LaserPoint> laserTrail = new java.util.ArrayList<>();
+    private boolean laserActive;
     private double dragOffsetX;
     private double dragOffsetY;
     private double lastMouseX;
@@ -356,7 +358,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 // Idle scenes without active lights only redraw ~10x per second.
                 boolean animated = project.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())
                         || (frozenPlayerProject != null && frozenPlayerProject.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()));
-                boolean recentInput = now - lastInputNanos < 1_000_000_000L;
+                boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
                 if (!animated && !recentInput && now - lastFrameNanos < 100_000_000L) {
                     return;
                 }
@@ -1126,6 +1128,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (event.getButton() == MouseButton.MIDDLE) {
+                laserActive = true;
+                addLaserPoint(world.x(), world.y());
+                return;
+            }
+
             if (event.getButton() != MouseButton.PRIMARY) {
                 return;
             }
@@ -1281,6 +1289,13 @@ public class DungeonMasterMapToolApplication extends Application {
             CanvasMapRenderer.WorldPoint world = renderer.screenToWorld(
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
 
+            if (laserActive) {
+                if (event.isMiddleButtonDown()) {
+                    addLaserPoint(world.x(), world.y());
+                }
+                return;
+            }
+
             if (panningDmCamera) {
                 double dxScreen = event.getX() - lastMouseX;
                 double dyScreen = event.getY() - lastMouseY;
@@ -1354,6 +1369,10 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnMouseReleased(event -> {
+            if (event.getButton() == MouseButton.MIDDLE) {
+                laserActive = false;
+                return;
+            }
             if (panningDmCamera) {
                 DmProject.CameraState camera = project.getViews().getDmCamera();
                 if (!same(startCameraX, camera.getX()) || !same(startCameraY, camera.getY())) {
@@ -1567,6 +1586,30 @@ public class DungeonMasterMapToolApplication extends Application {
         syncPlayerWindowToggle();
     }
 
+    private void addLaserPoint(double worldX, double worldY) {
+        laserTrail.add(new CanvasMapRenderer.LaserPoint(worldX, worldY, System.currentTimeMillis()));
+    }
+
+    /** Drops expired trail points; while the button is held the newest point stays so the dot remains visible. */
+    private void pruneLaserTrail() {
+        long now = System.currentTimeMillis();
+        if (laserActive && !laserTrail.isEmpty()) {
+            CanvasMapRenderer.LaserPoint last = laserTrail.get(laserTrail.size() - 1);
+            if (now - last.millis() > 50) {
+                laserTrail.set(laserTrail.size() - 1,
+                        new CanvasMapRenderer.LaserPoint(last.x(), last.y(), now));
+            }
+        }
+        laserTrail.removeIf(p -> now - p.millis() > CanvasMapRenderer.LASER_TRAIL_MILLIS);
+    }
+
+    private void drawLaser(GraphicsContext gc, Canvas canvas, DmProject.CameraState camera, double dotRadius) {
+        if (laserTrail.isEmpty()) {
+            return;
+        }
+        renderer.drawLaser(gc, laserTrail, laserActive, dotRadius, canvas.getWidth(), canvas.getHeight(), camera);
+    }
+
     private void renderDm() {
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
         renderer.render(
@@ -1591,6 +1634,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 selectedLight == null ? null : selectedLight.getId(),
                 hoveredInteractableId()
         );
+        pruneLaserTrail();
+        drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), 6);
         drawSelectionHandle(fogGc);
         drawOverlaySelection(fogGc);
         drawToolPreview(fogGc);
@@ -1633,6 +1678,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 null,
                 null
         );
+        if (!frozen) {
+            drawLaser(playerFogCanvas.getGraphicsContext2D(), playerFogCanvas, getEffectivePlayerCamera(),
+                    Math.max(6, 0.15 * playerPixelsPerInch()));
+        }
         if (showScaleTestSquare) {
             drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
         }
