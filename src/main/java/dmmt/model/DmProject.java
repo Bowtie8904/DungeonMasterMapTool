@@ -62,6 +62,17 @@ public class DmProject {
         private GridSpec grid = GridSpec.builder().build();
         @Builder.Default
         private int rotationQuarterTurns = 0;
+        /** {@code null} (older saves) falls back to {@link #defaultImageLayersLocked()}. */
+        private Boolean imageLayersLocked;
+
+        public boolean imageLayersLockedOrDefault() {
+            return imageLayersLocked != null ? imageLayersLocked : defaultImageLayersLocked();
+        }
+
+        /** Imported dd2vtt maps start locked; custom maps start unlocked. */
+        public boolean defaultImageLayersLocked() {
+            return "dd2vtt".equalsIgnoreCase(sourceType) || (sourcePath != null && !sourcePath.isBlank());
+        }
     }
 
     @Data

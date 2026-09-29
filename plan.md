@@ -194,6 +194,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Provide an editor mode for quick map assembly from one or more dropped images.
 - Support snapping/scaling against grid so map tiles align predictably (**Snap layers** toggle: half-tile steps while moving/resizing).
+- **Lock image layer** toggle (lock icon, Map building section): while locked, image layers cannot be selected, moved, resized or deleted from the canvas; lights, doors/windows, effects, the player viewport and all other tools keep working normally. Default: **locked for imported dd2vtt maps**, **unlocked for new custom maps**. The state is saved per map in `.dmmap` (`map.imageLayersLocked`; missing in older saves = locked if the map came from a dd2vtt import). Adding an image (drag & drop / Add image) unlocks the layer so the new image can be positioned.
 - Persist image layer stack order and transforms in `.dmmap`.
 - Allow adding walls manually for custom-image maps so LOS lighting remains usable even without dd2vtt wall data.
 
@@ -253,7 +254,8 @@ Desktop tool for tabletop dungeon masters that:
     "sourcePath": "imports/catacombs/catacombs.dd2vtt",
     "imagePath": "imports/catacombs/catacombs.webp",
     "grid": { "pixelsPerCell": 140, "cellSizeFeet": 5 },
-    "rotationQuarterTurns": 0
+    "rotationQuarterTurns": 0,
+    "imageLayersLocked": true
   },
   "imageLayers": [
     {

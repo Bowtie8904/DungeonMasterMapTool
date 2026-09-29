@@ -65,4 +65,20 @@ class ProjectServiceTest {
         project.getOverlays().clear();
         assertTrue(!copy.getFog().getMask().copyBits().isEmpty(), "Frozen copy must not follow later edits");
         assertEquals(1, copy.getOverlays().size());
+    }
+
+    @Test
+    void imageLayerLockDefaultsAndPersists() throws IOException {
+        DmProject custom = DmProject.builder().build();
+        assertEquals(false, custom.getMap().imageLayersLockedOrDefault(), "New custom maps start unlocked");
+
+        DmProject legacyImport = DmProject.builder().build();
+        legacyImport.getMap().setSourceType("dd2vtt");
+        assertTrue(legacyImport.getMap().imageLayersLockedOrDefault(), "Older imported saves default to locked");
+
+        legacyImport.getMap().setImageLayersLocked(false);
+        Path projectFile = tempDir.resolve("lock").resolve("map.dmmap");
+        ProjectService service = new ProjectService();
+        service.save(projectFile, legacyImport);
+        assertEquals(false, service.load(projectFile).getMap().imageLayersLockedOrDefault());
     }}

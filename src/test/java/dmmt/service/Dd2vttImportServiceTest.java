@@ -65,6 +65,7 @@ class Dd2vttImportServiceTest {
         DmProject project = service.importToProject(dd2vtt, projectDir);
 
         assertEquals("dd2vtt", project.getMap().getSourceType());
+        assertEquals(Boolean.TRUE, project.getMap().getImageLayersLocked());
         assertTrue(project.getMap().getSourcePath().contains("imports"));
         assertTrue(Files.exists(projectDir.resolve(project.getMap().getSourcePath())));
         assertFalse(project.getImageLayers().isEmpty());

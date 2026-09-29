@@ -136,6 +136,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private MapBrowser mapBrowser;
     private ToggleButton pingToggle;
     private ToggleButton wallLayerToggle;
+    private ToggleButton imageLockToggle;
     private ToggleButton playerWindowToggle;
     private HBox toolChip;
     private FontIcon toolChipIcon;
@@ -318,7 +319,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
                 if (findOverlay(selectedOverlayId) != null) {
                     deleteSelectedOverlay();
-                } else if (selectedLayer != null) {
+                } else if (selectedLayer != null && !isImageLayerLocked()) {
                     deleteSelectedLayer();
                 }
                 event.consume();
@@ -508,8 +509,17 @@ public class DungeonMasterMapToolApplication extends Application {
             snapLayersToGrid = snapLayers.isSelected();
             status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
         });
+        imageLockToggle = Icons.toggle(MaterialDesignL.LOCK_OUTLINE,
+                "Lock / unlock the image layer — while locked, map images can't be selected, moved, resized or deleted "
+                        + "(lights, doors and all other tools still work)");
+        imageLockToggle.setOnAction(e -> {
+            if (!syncingControls) {
+                setImageLayerLocked(imageLockToggle.isSelected());
+            }
+        });
+        updateImageLockToggle();
         HBox buildRow = row(toolButtons.get(EditorTool.WALL_DRAW), toolButtons.get(EditorTool.WALL_ERASE), wallLayerToggle,
-                Icons.separator(), snapLayers,
+                Icons.separator(), imageLockToggle, snapLayers,
                 Icons.button(MaterialDesignI.IMAGE_PLUS,
                         "Add an image layer (or drag image files onto the map). Move it with Select, resize at the corner.",
                         () -> chooseImageLayers(stage)));
@@ -878,7 +888,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (pickOverlay(worldX, worldY, zoom) != null) {
             return Cursor.OPEN_HAND;
         }
-        DmProject.ImageLayer layer = pickTopmostLayer(worldX, worldY);
+        DmProject.ImageLayer layer = isImageLayerLocked() ? null : pickTopmostLayer(worldX, worldY);
         if (layer != null
                 && distance(worldX, worldY, layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight()) < 16 / zoom) {
             return Cursor.SE_RESIZE;
@@ -1140,7 +1150,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             selectedOverlayId = null;
 
-            selectedLayer = pickTopmostLayer(world.x(), world.y());
+            selectedLayer = isImageLayerLocked() ? null : pickTopmostLayer(world.x(), world.y());
             if (selectedLayer == null) {
                 return;
             }
@@ -1507,7 +1517,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void drawSelectionHandle(GraphicsContext gc) {
-        if (selectedLayer == null) {
+        if (selectedLayer == null || isImageLayerLocked()) {
             return;
         }
         DmProject.CameraState camera = project.getViews().getDmCamera();
@@ -1865,6 +1875,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 project = DmProject.builder().build();
             }
             project.getMap().setSourceType("custom");
+            if (isImageLayerLocked()) {
+                setImageLayerLocked(false);
+            }
             DmProject.ImageLayer layer = DmProject.ImageLayer.builder()
                     .id("layer-" + UUID.randomUUID())
                     .path(imagePath.toAbsolutePath().toString())
@@ -2055,6 +2068,33 @@ public class DungeonMasterMapToolApplication extends Application {
         status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden — doors and windows can't be clicked until it is shown again.");
     }
 
+    private boolean isImageLayerLocked() {
+        return project != null && project.getMap().imageLayersLockedOrDefault();
+    }
+
+    private void setImageLayerLocked(boolean locked) {
+        project.getMap().setImageLayersLocked(locked);
+        if (locked) {
+            selectedLayer = null;
+            draggingLayer = false;
+            resizingLayer = false;
+        }
+        updateImageLockToggle();
+        updateCanvasCursor();
+        status(locked ? "Image layer locked — map images can't be moved." : "Image layer unlocked — map images can be moved and resized with Select.");
+    }
+
+    private void updateImageLockToggle() {
+        if (imageLockToggle == null) {
+            return;
+        }
+        boolean locked = isImageLayerLocked();
+        if (imageLockToggle.isSelected() != locked) {
+            imageLockToggle.setSelected(locked);
+        }
+        imageLockToggle.setGraphic(Icons.icon(locked ? MaterialDesignL.LOCK_OUTLINE : MaterialDesignL.LOCK_OPEN_VARIANT_OUTLINE));
+    }
+
     private void setActiveTool(EditorTool tool) {
         activeTool = tool == null ? EditorTool.SELECT : tool;
         if (activeTool.isWallTool() && !renderer.isWallLayerVisible()) {
@@ -2241,6 +2281,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (freezePlayerButton != null) {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
+            updateImageLockToggle();
         } finally {
             syncingControls = false;
         }
