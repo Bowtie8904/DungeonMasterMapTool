@@ -1107,6 +1107,19 @@ public class DungeonMasterMapToolApplication extends Application {
         });
     }
 
+    /** After a save the snapshot points at the copies inside the project folder; the live project should too. */
+    private void adoptCopiedAssetPaths(DmProject saved) {
+        for (DmProject.ImageLayer savedLayer : saved.getImageLayers()) {
+            DmProject.ImageLayer live = findLayerById(savedLayer.getId());
+            if (live != null) {
+                live.setPath(savedLayer.getPath());
+            }
+        }
+        if (saved.getMap() != null && saved.getMap().getImagePath() != null) {
+            project.getMap().setImagePath(saved.getMap().getImagePath());
+        }
+    }
+
     private record LoadedProject(DmProject project, Path file) {
     }
 
@@ -1163,6 +1176,7 @@ public class DungeonMasterMapToolApplication extends Application {
             FileChooser chooser = new FileChooser();
             chooser.setTitle("Save Project");
             chooser.setInitialFileName("map.dmmap");
+            applyInitialProjectDirectory(chooser);
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DM Map Project", "*.dmmap"));
             File chosen = chooser.showSaveDialog(stage);
             if (chosen == null) {
@@ -1171,6 +1185,7 @@ public class DungeonMasterMapToolApplication extends Application {
             projectFile = ensureExtension(chosen.toPath(), ".dmmap");
         }
         Path target = projectFile;
+        DmProject savedProject = project;
         DmProject snapshot;
         try {
             snapshot = projectService.copy(project);
@@ -1181,7 +1196,12 @@ public class DungeonMasterMapToolApplication extends Application {
         runInBackground("Saving...", "Save failed: ", () -> {
             projectService.save(target, snapshot);
             return target;
-        }, saved -> status("Saved " + saved.getFileName()));
+        }, saved -> {
+            if (project == savedProject) {
+                adoptCopiedAssetPaths(snapshot);
+            }
+            status("Saved " + saved.getFileName());
+        });
     }
 
     private void addImageLayerFromFile(Path imagePath) {
