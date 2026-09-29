@@ -1,0 +1,640 @@
+/* Dungeon Master Map Tool - dark theme */
+
+.root {
+    -dm-accent: #e8a33d;
+    -dm-bg: #16181c;
+    -dm-surface: #1d2025;
+    -dm-surface-2: #252930;
+    -dm-surface-3: #30353e;
+    -dm-border: #2d3139;
+    -dm-text: #dfe2e8;
+    -dm-muted: #8d94a1;
+    -dm-danger: #ff7b6b;
+
+    -fx-base: #262a31;
+    -fx-background: -dm-bg;
+    -fx-control-inner-background: #1b1e23;
+    -fx-control-inner-background-alt: #1f2227;
+    -fx-accent: -dm-accent;
+    -fx-default-button: -dm-accent;
+    -fx-focus-color: -dm-accent;
+    -fx-faint-focus-color: transparent;
+    -fx-selection-bar: #3d3424;
+    -fx-selection-bar-non-focused: #2c2f36;
+    -fx-selection-bar-text: -dm-text;
+    -fx-text-base-color: -dm-text;
+    -fx-text-background-color: -dm-text;
+    -fx-text-inner-color: -dm-text;
+    -fx-mark-color: -dm-text;
+    -fx-font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-font-size: 12px;
+}
+
+/* ---------- Icons ---------- */
+
+.ikonli-font-icon {
+    -fx-icon-color: #c9ced7;
+    -fx-icon-size: 17px;
+}
+
+.muted-icon {
+    -fx-icon-color: -dm-muted;
+}
+
+.folder-icon {
+    -fx-icon-color: #d9b36a;
+}
+
+.map-icon {
+    -fx-icon-color: #8fb3d9;
+}
+
+/* ---------- Buttons ---------- */
+
+.button, .toggle-button {
+    -fx-background-color: -dm-surface-3;
+    -fx-background-radius: 6;
+    -fx-background-insets: 0;
+    -fx-text-fill: -dm-text;
+    -fx-padding: 6 14;
+    -fx-cursor: hand;
+}
+
+.button:hover, .toggle-button:hover {
+    -fx-background-color: #3a404a;
+}
+
+.button:pressed, .toggle-button:pressed {
+    -fx-background-color: #444b57;
+}
+
+.button:default {
+    -fx-background-color: -dm-accent;
+    -fx-text-fill: #1a1a1a;
+    -fx-font-weight: bold;
+}
+
+.button:default:hover {
+    -fx-background-color: #f2b456;
+}
+
+.dialog-pane .button.danger {
+    -fx-background-color: #8c2f2a;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane .button.danger:hover {
+    -fx-background-color: #a8392f;
+}
+
+.button:focused, .toggle-button:focused {
+    -fx-background-insets: 0;
+}
+
+.button:disabled {
+    -fx-opacity: 0.4;
+}
+
+/* Icon-only buttons */
+.icon-button, .icon-toggle {
+    -fx-background-color: transparent;
+    -fx-background-radius: 7;
+    -fx-padding: 0;
+    -fx-min-width: 30;
+    -fx-min-height: 30;
+    -fx-pref-width: 30;
+    -fx-pref-height: 30;
+    -fx-max-width: 30;
+    -fx-max-height: 30;
+    -fx-alignment: center;
+}
+
+.icon-button:hover, .icon-toggle:hover {
+    -fx-background-color: -dm-surface-3;
+}
+
+.icon-button:pressed, .icon-toggle:pressed {
+    -fx-background-color: #3d434d;
+}
+
+.icon-button:hover .ikonli-font-icon, .icon-toggle:hover .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+.icon-toggle:selected {
+    -fx-background-color: -dm-accent;
+    -fx-effect: dropshadow(gaussian, rgba(232, 163, 61, 0.75), 12, 0.35, 0, 0);
+}
+
+.icon-toggle:selected .ikonli-font-icon,
+.icon-toggle:selected:hover .ikonli-font-icon {
+    -fx-icon-color: #17130b;
+}
+
+.icon-toggle:selected:hover {
+    -fx-background-color: #f2b456;
+}
+
+.icon-button.danger:hover {
+    -fx-background-color: #4a2320;
+}
+
+.icon-button.danger .ikonli-font-icon {
+    -fx-icon-color: -dm-danger;
+}
+
+/* Segmented control (time of day) */
+.segmented {
+    -fx-background-color: -dm-bg;
+    -fx-background-radius: 8;
+    -fx-padding: 2;
+    -fx-spacing: 2;
+}
+
+/* ---------- Text & labels ---------- */
+
+.label {
+    -fx-text-fill: -dm-text;
+}
+
+.muted {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 11px;
+}
+
+.value-label {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 11px;
+    -fx-min-width: 46;
+    -fx-alignment: center-right;
+}
+
+.error-label {
+    -fx-text-fill: -dm-danger;
+    -fx-font-size: 11px;
+}
+
+.caption {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.text-field {
+    -fx-background-color: #121418;
+    -fx-background-radius: 6;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 6;
+    -fx-text-fill: -dm-text;
+    -fx-prompt-text-fill: #646b77;
+    -fx-highlight-fill: -dm-accent;
+    -fx-highlight-text-fill: #17130b;
+    -fx-padding: 6 8;
+}
+
+.text-field:focused {
+    -fx-border-color: -dm-accent;
+}
+
+/* ---------- Sliders ---------- */
+
+.slider .track {
+    -fx-background-color: #343943;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 2;
+}
+
+.slider .thumb {
+    -fx-background-color: -dm-accent;
+    -fx-background-radius: 8;
+    -fx-background-insets: 0;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 4, 0, 0, 1);
+}
+
+.slider .thumb:hover {
+    -fx-background-color: #f2b456;
+}
+
+/* ---------- Combo boxes, spinners, colour picker ---------- */
+
+.combo-box, .spinner, .color-picker {
+    -fx-background-color: #121418;
+    -fx-background-radius: 6;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 6;
+    -fx-background-insets: 0;
+}
+
+.combo-box:focused, .spinner:focused, .color-picker:focused {
+    -fx-border-color: -dm-accent;
+}
+
+.combo-box .list-cell {
+    -fx-text-fill: -dm-text;
+    -fx-background-color: transparent;
+    -fx-padding: 4 8;
+}
+
+.combo-box .arrow-button, .color-picker .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.combo-box .arrow, .color-picker .arrow {
+    -fx-background-color: -dm-muted;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 6;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 6;
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -dm-text;
+    -fx-padding: 6 10;
+}
+
+.combo-box-popup .list-cell:hover, .combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #3a404a;
+}
+
+.spinner .text-field {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 4 6;
+}
+
+.spinner .increment-arrow-button, .spinner .decrement-arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 2 6;
+}
+
+.spinner .increment-arrow-button:hover, .spinner .decrement-arrow-button:hover {
+    -fx-background-color: -dm-surface-3;
+}
+
+.spinner .increment-arrow, .spinner .decrement-arrow {
+    -fx-background-color: -dm-muted;
+}
+
+.color-picker {
+    -fx-color-label-visible: false;
+    -fx-padding: 0;
+}
+
+.color-picker .color-picker-label {
+    -fx-padding: 5 4 5 7;
+}
+
+/* ---------- Scroll bars ---------- */
+
+.scroll-pane, .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 1;
+}
+
+.scroll-bar:vertical {
+    -fx-pref-width: 9;
+}
+
+.scroll-bar:horizontal {
+    -fx-pref-height: 9;
+}
+
+.scroll-bar .track, .scroll-bar .track-background {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #3a3f48;
+    -fx-background-radius: 4;
+    -fx-background-insets: 0;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #4b515c;
+}
+
+.scroll-bar .increment-button, .scroll-bar .decrement-button,
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow {
+    -fx-padding: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-shape: " ";
+}
+
+.corner {
+    -fx-background-color: transparent;
+}
+
+/* ---------- Tooltips, menus ---------- */
+
+.tooltip {
+    -fx-background-color: #2b2f37;
+    -fx-background-radius: 6;
+    -fx-text-fill: #eceef2;
+    -fx-font-size: 12px;
+    -fx-padding: 6 9;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 10, 0, 0, 3);
+}
+
+.context-menu {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 8;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 8;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 14, 0, 0, 4);
+}
+
+.menu-item {
+    -fx-background-radius: 5;
+    -fx-padding: 6 14 6 10;
+}
+
+.menu-item .label {
+    -fx-text-fill: -dm-text;
+}
+
+.menu-item:focused {
+    -fx-background-color: #373c46;
+}
+
+.menu-item.danger .label {
+    -fx-text-fill: -dm-danger;
+}
+
+.menu-item.danger .ikonli-font-icon {
+    -fx-icon-color: -dm-danger;
+}
+
+.menu-item .ikonli-font-icon {
+    -fx-icon-size: 15px;
+}
+
+.separator-menu-item .line {
+    -fx-border-color: #363b44 transparent transparent transparent;
+}
+
+/* ---------- Main layout ---------- */
+
+.app-root {
+    -fx-background-color: -dm-bg;
+}
+
+.status-bar {
+    -fx-background-color: #121418;
+    -fx-border-color: -dm-border transparent transparent transparent;
+    -fx-padding: 2 8;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.status-bar .label {
+    -fx-text-fill: -dm-muted;
+}
+
+/* ---------- Sidebar / map browser ---------- */
+
+.sidebar {
+    -fx-background-color: -dm-surface;
+    -fx-border-color: transparent -dm-border transparent transparent;
+    -fx-padding: 10 8 8 8;
+    -fx-spacing: 8;
+}
+
+.sidebar-title {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.toolbar-row {
+    -fx-spacing: 2;
+    -fx-alignment: center-left;
+}
+
+.current-map-card {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 8;
+    -fx-padding: 8 6 8 10;
+    -fx-spacing: 2;
+}
+
+.current-map-name {
+    -fx-text-fill: -dm-accent;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.current-map-name.unsaved {
+    -fx-text-fill: -dm-muted;
+    -fx-font-style: italic;
+}
+
+.vsep {
+    -fx-background-color: #363b44;
+    -fx-min-width: 1;
+    -fx-pref-width: 1;
+    -fx-max-width: 1;
+    -fx-min-height: 18;
+    -fx-max-height: 18;
+}
+
+.tree-view {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.tree-view:focused {
+    -fx-background-color: transparent;
+}
+
+.tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -dm-text;
+    -fx-padding: 5 6;
+    -fx-background-radius: 6;
+    -fx-graphic-text-gap: 7;
+}
+
+.tree-cell:filled:hover {
+    -fx-background-color: #2a2e36;
+}
+
+.tree-cell:filled:selected {
+    -fx-background-color: #3a3325;
+}
+
+.tree-cell:open-map {
+    -fx-text-fill: -dm-accent;
+    -fx-font-weight: bold;
+}
+
+.tree-cell:open-map .ikonli-font-icon {
+    -fx-icon-color: -dm-accent;
+}
+
+.tree-cell:drop-target {
+    -fx-background-color: #3d3322;
+    -fx-border-color: -dm-accent;
+    -fx-border-radius: 6;
+    -fx-border-width: 1.5;
+}
+
+.tree-cell > .tree-disclosure-node {
+    -fx-padding: 5 5 5 3;
+}
+
+.tree-cell > .tree-disclosure-node > .arrow {
+    -fx-background-color: -dm-muted;
+}
+
+/* ---------- DM controls panel ---------- */
+
+.dm-panel {
+    -fx-background-color: rgba(26, 28, 33, 0.94);
+    -fx-background-radius: 12;
+    -fx-border-color: #30343c;
+    -fx-border-radius: 12;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 18, 0, 0, 5);
+}
+
+.panel-header {
+    -fx-padding: 2 2 4 8;
+    -fx-spacing: 6;
+    -fx-alignment: center-left;
+}
+
+.panel-title {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.dm-section {
+    -fx-border-color: #2c3038 transparent transparent transparent;
+}
+
+.section-header {
+    -fx-padding: 7 6 7 8;
+    -fx-spacing: 7;
+    -fx-alignment: center-left;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+
+.section-header:hover {
+    -fx-background-color: #262a31;
+}
+
+.section-title {
+    -fx-text-fill: #aab0bb;
+    -fx-font-size: 10.5px;
+    -fx-font-weight: bold;
+}
+
+.section-header .ikonli-font-icon {
+    -fx-icon-size: 14px;
+    -fx-icon-color: -dm-muted;
+}
+
+.section-body {
+    -fx-padding: 2 4 10 4;
+    -fx-spacing: 6;
+}
+
+.control-row {
+    -fx-spacing: 4;
+    -fx-alignment: center-left;
+}
+
+.tool-chip {
+    -fx-background-color: rgba(22, 24, 28, 0.92);
+    -fx-background-radius: 20;
+    -fx-border-color: -dm-accent;
+    -fx-border-radius: 20;
+    -fx-border-width: 1.5;
+    -fx-padding: 6 16 6 12;
+    -fx-spacing: 8;
+    -fx-alignment: center;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 3);
+}
+
+.tool-chip .ikonli-font-icon {
+    -fx-icon-color: -dm-accent;
+    -fx-icon-size: 18px;
+}
+
+.tool-chip-label {
+    -fx-text-fill: #f3f4f6;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.tool-chip-hint {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 11px;
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog-pane {
+    -fx-background-color: -dm-surface;
+    -fx-padding: 0;
+}
+
+.dialog-pane > .header-panel {
+    -fx-background-color: -dm-surface-2;
+    -fx-padding: 14 16;
+    -fx-border-color: transparent transparent -dm-border transparent;
+}
+
+.dialog-pane > .header-panel .label {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane > .content {
+    -fx-padding: 16;
+}
+
+.dialog-pane > .content.label {
+    -fx-text-fill: #c4c9d2;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-padding: 10 16 14 16;
+}
+
+.dialog-pane .ikonli-font-icon.dialog-icon {
+    -fx-icon-size: 26px;
+    -fx-icon-color: -dm-accent;
+}
+
+.dialog-pane .ikonli-font-icon.dialog-icon.danger {
+    -fx-icon-color: -dm-danger;
+}
+
+.location-tree {
+    -fx-background-color: #121418;
+    -fx-background-radius: 6;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 6;
+    -fx-padding: 4;
+}

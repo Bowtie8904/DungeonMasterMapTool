@@ -8,18 +8,26 @@ import dmmt.render.CanvasMapRenderer;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
+import dmmt.service.MapLibraryService;
 import dmmt.service.ProjectService;
+import dmmt.ui.CollapsibleSection;
+import dmmt.ui.Dialogs;
+import dmmt.ui.Icons;
+import dmmt.ui.MapBrowser;
+import dmmt.ui.MapLocationDialog;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Rectangle2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
@@ -28,19 +36,36 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.GridPane;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignB;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignI;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
-import javafx.scene.layout.Background;
-import javafx.scene.layout.BackgroundFill;
-import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -52,7 +77,6 @@ import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
-import javafx.util.StringConverter;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -67,6 +91,7 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
@@ -76,6 +101,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_PLAYER_SCREEN_INDEX = "playerScreenIndex";
     private static final String PREF_SCREEN_DIAGONAL_PREFIX = "screenDiagonalInches.";
     private static final String PREF_TILE_INCHES = "playerTileInches";
+    private static final String PREF_SIDEBAR_VISIBLE = "sidebarVisible";
+    private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
 
     private final ProjectService projectService = new ProjectService();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
@@ -99,7 +126,15 @@ public class DungeonMasterMapToolApplication extends Application {
     private Path frozenPlayerProjectFile;
     private final LightingEngine playerLightingEngine = new LightingEngine();
     private final CanvasMapRenderer playerRenderer = new CanvasMapRenderer(playerLightingEngine);
-    private ComboBox<MapEntry> mapSwitcher;
+    private Stage primaryStage;
+    private MapLibraryService mapLibrary;
+    private MapBrowser mapBrowser;
+    private ToggleButton pingToggle;
+    private ToggleButton playerWindowToggle;
+    private HBox toolChip;
+    private FontIcon toolChipIcon;
+    private Label toolChipLabel;
+    private final DoubleProperty brushSize = new SimpleDoubleProperty(1.5);
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
     private boolean showScaleTestSquare;
@@ -139,10 +174,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private double overlayLastY;
     private ColorPicker overlayColorPicker;
     private Slider overlayAlphaSlider;
-    private CheckBox overlayPlayerCheck;
+    private ToggleButton overlayPlayerToggle;
     private ToggleButton fogToggleButton;
     private ToggleButton freezePlayerButton;
-    private ComboBox<TimeOfDayPreset> timeOfDaySelector;
+    private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
 
     private DmProject.ImageLayer selectedLayer;
@@ -175,34 +210,64 @@ public class DungeonMasterMapToolApplication extends Application {
 
     @Override
     public void start(Stage stage) {
+        this.primaryStage = stage;
         this.project = DmProject.builder().build();
+        this.project.getMap().setSourceType("custom");
+        Path libraryRoot;
+        try {
+            libraryRoot = resolveProjectsRoot();
+        } catch (IOException ex) {
+            libraryRoot = Path.of(System.getProperty("user.home"), "dmmap-projects");
+        }
+        mapLibrary = new MapLibraryService(libraryRoot, projectService);
 
         BorderPane root = new BorderPane();
-        statusLabel = new Label("Ready");
-        root.setBottom(statusLabel);
+        root.getStyleClass().add("app-root");
 
         dmCanvas = new Canvas(1280, 800);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
         StackPane center = new StackPane(dmCanvas, dmFogCanvas);
-        VBox overlay = createDmOverlay(stage);
-        StackPane.setAlignment(overlay, Pos.TOP_LEFT);
-        StackPane.setMargin(overlay, new Insets(10));
-        center.getChildren().add(overlay);
+        center.setMinSize(0, 0);
+        Region controls = createControlsPanel(stage);
+        StackPane.setAlignment(controls, Pos.TOP_RIGHT);
+        StackPane.setMargin(controls, new Insets(10));
+        HBox chip = createToolChip();
+        StackPane.setAlignment(chip, Pos.TOP_CENTER);
+        StackPane.setMargin(chip, new Insets(12, 0, 0, 0));
+        center.getChildren().addAll(chip, controls);
         dmCanvas.widthProperty().bind(center.widthProperty());
         dmCanvas.heightProperty().bind(center.heightProperty());
         dmFogCanvas.widthProperty().bind(center.widthProperty());
         dmFogCanvas.heightProperty().bind(center.heightProperty());
         root.setCenter(center);
 
+        mapBrowser = new MapBrowser(mapLibrary, createBrowserHost());
+        root.setLeft(mapBrowser);
+
+        statusLabel = new Label("Ready");
+        ToggleButton sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map library");
+        sidebarToggle.setSelected(preferences.getBoolean(PREF_SIDEBAR_VISIBLE, true));
+        sidebarToggle.selectedProperty().addListener((obs, was, visible) -> {
+            root.setLeft(visible ? mapBrowser : null);
+            preferences.putBoolean(PREF_SIDEBAR_VISIBLE, visible);
+        });
+        if (!sidebarToggle.isSelected()) {
+            root.setLeft(null);
+        }
+        HBox statusBar = new HBox(sidebarToggle, statusLabel);
+        statusBar.getStyleClass().add("status-bar");
+        root.setBottom(statusBar);
+
         installDmInteractions();
 
-        Scene scene = new Scene(root, 1400, 900, Color.BLACK);
+        Scene scene = new Scene(root, 1500, 920, Color.BLACK);
+        scene.getStylesheets().add(Icons.STYLESHEET);
         // Clicks inside the popup never reach this scene, so any click here is "outside" the menu.
         scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> hideLightMenu());
         scene.setOnKeyPressed(event -> {
             if (event.isControlDown() && event.getCode() == KeyCode.S) {
-                handleSave(stage);
+                handleSave();
                 event.consume();
                 return;
             }
@@ -216,24 +281,27 @@ public class DungeonMasterMapToolApplication extends Application {
                 event.consume();
                 return;
             }
+            if (scene.getFocusOwner() instanceof TextInputControl) {
+                return;
+            }
             if (event.getCode() == KeyCode.P) {
-                pingArmed = true;
-                status("Ping mode: click map to ping players.");
+                setPingArmed(true);
                 return;
             }
             if (event.getCode() == KeyCode.ESCAPE) {
+                setPingArmed(false);
                 setActiveTool(EditorTool.SELECT);
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
                 deleteSelectedOverlay();
             }
         });
-        stage.setTitle("Dungeon Master Map Tool");
         stage.setScene(scene);
         stage.setOnCloseRequest(event -> {
             closePlayerWindow();
             Platform.exit();
         });
+        updateWindowTitle();
         stage.show();
 
         scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> lastInputNanos = System.nanoTime());
@@ -260,125 +328,30 @@ public class DungeonMasterMapToolApplication extends Application {
         timer.start();
     }
 
-    private VBox createDmOverlay(Stage stage) {
-        Button newProject = new Button("New");
-        newProject.setOnAction(e -> {
-            DmProject fresh = DmProject.builder().build();
-            fresh.getMap().setSourceType("custom");
-            switchProject(fresh, null);
-            status("Created new empty project.");
-        });
+    // ---- DM controls panel (right side) ----
 
-        Button importDd2vtt = new Button("Import");
-        importDd2vtt.setOnAction(e -> handleImportDd2vtt(stage));
+    private Region createControlsPanel(Stage stage) {
+        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.round(newValue.doubleValue() * 2) / 2.0);
+        ToggleGroup toolGroup = new ToggleGroup();
+        for (EditorTool tool : EditorTool.values()) {
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description);
+            button.setToggleGroup(toolGroup);
+            button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
+            toolButtons.put(tool, button);
+        }
 
-        Button open = new Button("Open");
-        open.setOnAction(e -> handleOpenProject(stage));
+        // Tools
+        pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) — click the map to flash a marker for the players");
+        pingToggle.setOnAction(e -> setPingArmed(pingToggle.isSelected()));
+        Region toolSpacer = new Region();
+        HBox.setHgrow(toolSpacer, Priority.ALWAYS);
+        HBox toolsRow = row(toolButtons.get(EditorTool.SELECT), pingToggle, toolSpacer,
+                Icons.button(MaterialDesignU.UNDO, "Undo (Ctrl+Z)", this::undo),
+                Icons.button(MaterialDesignR.REDO, "Redo (Ctrl+Y)", this::redo));
 
-        Button save = new Button("Save");
-        save.setOnAction(e -> handleSave(stage));
-
-        Button exit = new Button("Exit");
-        exit.setOnAction(e -> stage.close());
-        HBox fileRow = new HBox(6, newProject, importDd2vtt, open, save, exit);
-
-        Button rotateLeft = new Button("Rotate ⟲");
-        rotateLeft.setOnAction(e -> {
-            executeWithHistory(
-                    "Rotate map left",
-                    () -> rotationService.rotateCounterClockwise(project),
-                    () -> rotationService.rotateClockwise(project)
-            );
-            status("Rotated map 90° left.");
-        });
-        Button rotateRight = new Button("Rotate ⟳");
-        rotateRight.setOnAction(e -> {
-            executeWithHistory(
-                    "Rotate map right",
-                    () -> rotationService.rotateClockwise(project),
-                    () -> rotationService.rotateCounterClockwise(project)
-            );
-            status("Rotated map 90° right.");
-        });
-        Button addPing = new Button("Ping");
-        addPing.setOnAction(e -> {
-            pingArmed = true;
-            status("Ping mode: click map to ping players.");
-        });
-        ToggleButton snapLayers = new ToggleButton("Snap layers");
-        snapLayers.setOnAction(e -> {
-            snapLayersToGrid = snapLayers.isSelected();
-            status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
-        });
-        HBox mapRow = new HBox(6, rotateLeft, rotateRight, addPing, snapLayers);
-
-        mapSwitcher = new ComboBox<>();
-        mapSwitcher.setPromptText("Switch map...");
-        mapSwitcher.setPrefWidth(260);
-        mapSwitcher.setOnShowing(e -> refreshMapSwitcher());
-        mapSwitcher.setOnAction(e -> {
-            MapEntry entry = mapSwitcher.getValue();
-            if (syncingControls || entry == null) {
-                return;
-            }
-            // Changing the selection from inside its own selection event breaks the ListView popup.
-            Platform.runLater(() -> {
-                syncingControls = true;
-                try {
-                    mapSwitcher.setValue(null);
-                    mapSwitcher.getSelectionModel().clearSelection();
-                } finally {
-                    syncingControls = false;
-                }
-                switchToMap(entry.file());
-            });
-        });
-        HBox mapSwitchRow = new HBox(6, overlayLabel("Map:"), mapSwitcher);
-        mapSwitchRow.setAlignment(Pos.CENTER_LEFT);
-
-        Button addLight = new Button("Add Light");
-        addLight.setOnAction(e -> addLightAtCamera());
-        Button removeLight = new Button("Remove Light");
-        removeLight.setOnAction(e -> {
-            if (selectedLight != null) {
-                removeLight(selectedLight.getId());
-            } else {
-                removeNearestLight();
-            }
-        });
-        timeOfDaySelector = new ComboBox<>();
-        timeOfDaySelector.getItems().addAll(TimeOfDayPreset.values());
-        timeOfDaySelector.setConverter(new StringConverter<>() {
-            @Override
-            public String toString(TimeOfDayPreset preset) {
-                return preset == null ? "" : preset.label();
-            }
-
-            @Override
-            public TimeOfDayPreset fromString(String text) {
-                return TimeOfDayPreset.from(text);
-            }
-        });
-        timeOfDaySelector.setOnAction(e -> {
-            if (syncingControls || timeOfDaySelector.getValue() == null) {
-                return;
-            }
-            String before = project.getLighting().getTimeOfDayPreset();
-            String after = timeOfDaySelector.getValue().name();
-            if (after.equalsIgnoreCase(before)) {
-                return;
-            }
-            executeWithHistory(
-                    "Change time of day",
-                    () -> setTimeOfDay(after),
-                    () -> setTimeOfDay(before)
-            );
-            status("Time of day: " + timeOfDaySelector.getValue().label());
-        });
-        HBox lightRow = new HBox(6, addLight, removeLight, overlayLabel("Time:"), timeOfDaySelector);
-        lightRow.setAlignment(Pos.CENTER_LEFT);
-
-        fogToggleButton = new ToggleButton("Fog");
+        // Fog of war
+        fogToggleButton = Icons.toggle(MaterialDesignW.WEATHER_FOG,
+                "Fog of war on / off — revealed areas are remembered while fog is off");
         fogToggleButton.setOnAction(e -> {
             if (syncingControls) {
                 return;
@@ -391,20 +364,59 @@ public class DungeonMasterMapToolApplication extends Application {
             );
             status(enabled ? "Fog enabled." : "Fog disabled (reveals are kept).");
         });
-        ToggleGroup toolGroup = new ToggleGroup();
-        HBox toolRow = new HBox(6, fogToggleButton);
-        HBox effectToolRow = new HBox(6);
-        HBox wallToolRow = new HBox(6);
-        for (EditorTool tool : EditorTool.values()) {
-            ToggleButton button = new ToggleButton(tool.label);
-            button.setToggleGroup(toolGroup);
-            button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
-            toolButtons.put(tool, button);
-            (tool.isWallTool() ? wallToolRow : tool.isAoeTool() ? effectToolRow : toolRow).getChildren().add(button);
-        }
+        HBox fogToolsRow = row(fogToggleButton, Icons.separator(),
+                toolButtons.get(EditorTool.REVEAL_BRUSH), toolButtons.get(EditorTool.HIDE_BRUSH),
+                toolButtons.get(EditorTool.REVEAL_RECT), toolButtons.get(EditorTool.HIDE_RECT));
+        HBox fogFillRow = row(
+                Icons.button(MaterialDesignE.EYE_OUTLINE, "Reveal the whole map", () -> fillFog(true)),
+                Icons.button(MaterialDesignE.EYE_OFF_OUTLINE, "Cover the whole map with fog", () -> fillFog(false)),
+                Icons.separator(),
+                brushSlider());
 
+        // Lighting
+        HBox timeSegment = new HBox();
+        timeSegment.getStyleClass().add("segmented");
+        ToggleGroup timeGroup = new ToggleGroup();
+        for (TimeOfDayPreset preset : TimeOfDayPreset.values()) {
+            ToggleButton button = Icons.toggle(timeOfDayIcon(preset), "Time of day: " + preset.label());
+            button.setToggleGroup(timeGroup);
+            button.setOnAction(e -> {
+                if (syncingControls) {
+                    return;
+                }
+                if (!button.isSelected()) {
+                    button.setSelected(true);
+                    return;
+                }
+                changeTimeOfDay(preset);
+            });
+            timeButtons.put(preset, button);
+            timeSegment.getChildren().add(button);
+        }
+        HBox lightRow = row(
+                Icons.button(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
+                        "Add a light in the middle of the view — drag it onto a mini", this::addLightAtCamera),
+                Icons.button(MaterialDesignL.LIGHTBULB_OFF_OUTLINE,
+                        "Remove the selected light (or the one closest to the view center)", () -> {
+                            if (selectedLight != null) {
+                                removeLight(selectedLight.getId());
+                            } else {
+                                removeNearestLight();
+                            }
+                        }),
+                Icons.separator(),
+                timeSegment);
+        Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
+        lightHint.getStyleClass().add("muted");
+        lightHint.setWrapText(true);
+        // Without a fixed pref width the label reports its single-line height, so the panel sizes
+        // itself too short once the text wraps and shows a needless scrollbar.
+        lightHint.setPrefWidth(220);
+        lightHint.setMinHeight(Region.USE_PREF_SIZE);
+
+        // Effects
         overlayColorPicker = new ColorPicker(Color.web(overlayColor));
-        overlayColorPicker.setPrefWidth(90);
+        Icons.tooltip(overlayColorPicker, "Effect color (also changes the selected effect)");
         overlayColorPicker.setOnAction(e -> {
             if (syncingControls) {
                 return;
@@ -415,9 +427,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect color", selected.getId(), s -> s.setColor(overlayColor));
             }
         });
-        Label alphaLabel = overlayLabel("Opacity:");
         overlayAlphaSlider = new Slider(0.1, 0.9, overlayAlpha);
-        overlayAlphaSlider.setPrefWidth(110);
+        Icons.tooltip(overlayAlphaSlider, "Effect opacity");
+        HBox.setHgrow(overlayAlphaSlider, Priority.ALWAYS);
+        overlayAlphaSlider.setPrefWidth(80);
         overlayAlphaSlider.setOnMousePressed(e -> overlayStyleBefore = cloneOverlayOrNull(findOverlay(selectedOverlayId)));
         overlayAlphaSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (syncingControls) {
@@ -437,54 +450,75 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             overlayStyleBefore = null;
         });
-        overlayPlayerCheck = new CheckBox("Players see");
-        overlayPlayerCheck.setTextFill(Color.WHITE);
-        overlayPlayerCheck.setSelected(overlayPlayerVisible);
-        overlayPlayerCheck.setOnAction(e -> {
+        overlayPlayerToggle = Icons.toggle(MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
+                "Players see this effect — turn off for DM-only markings");
+        overlayPlayerToggle.setSelected(overlayPlayerVisible);
+        overlayPlayerToggle.setOnAction(e -> {
             if (syncingControls) {
                 return;
             }
-            overlayPlayerVisible = overlayPlayerCheck.isSelected();
+            overlayPlayerVisible = overlayPlayerToggle.isSelected();
             DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
             if (selected != null) {
                 executeOverlayChange("Change effect visibility", selected.getId(), s -> s.setPlayerVisible(overlayPlayerVisible));
             }
         });
-        Button deleteEffect = new Button("Delete");
-        deleteEffect.setOnAction(e -> deleteSelectedOverlay());
-        Button clearEffects = new Button("Clear All");
-        clearEffects.setOnAction(e -> clearOverlays());
-        HBox effectStyleRow = new HBox(6, overlayColorPicker, alphaLabel, overlayAlphaSlider, overlayPlayerCheck);
-        effectStyleRow.setAlignment(Pos.CENTER_LEFT);
-        effectToolRow.getChildren().addAll(deleteEffect, clearEffects);
+        Button deleteEffect = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected effect (Del)",
+                this::deleteSelectedOverlay);
+        Button clearEffects = Icons.button(MaterialDesignD.DELETE_SWEEP_OUTLINE, "Remove all effects", this::clearOverlays);
+        clearEffects.getStyleClass().add("danger");
+        Region effectSpacer = new Region();
+        HBox.setHgrow(effectSpacer, Priority.ALWAYS);
+        HBox effectToolsRow = row(toolButtons.get(EditorTool.AOE_CIRCLE), toolButtons.get(EditorTool.AOE_RECT),
+                toolButtons.get(EditorTool.AOE_BRUSH), effectSpacer, deleteEffect, clearEffects);
+        HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
+        HBox effectBrushRow = row(brushSlider());
 
-        Label brushLabel = overlayLabel(brushLabelText());
-        Slider brushSlider = new Slider(0.5, 8, brushSizeTiles);
-        brushSlider.setPrefWidth(160);
-        brushSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
-            brushSizeTiles = Math.round(newValue.doubleValue() * 2) / 2.0;
-            brushLabel.setText(brushLabelText());
+        // Map building
+        ToggleButton snapLayers = Icons.toggle(MaterialDesignM.MAGNET,
+                "Snap image layers to half-tile steps while moving / resizing");
+        snapLayers.setOnAction(e -> {
+            snapLayersToGrid = snapLayers.isSelected();
+            status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
         });
-        Button revealAll = new Button("Reveal All");
-        revealAll.setOnAction(e -> fillFog(true));
-        Button hideAll = new Button("Hide All");
-        hideAll.setOnAction(e -> fillFog(false));
-        HBox brushRow = new HBox(6, brushLabel, brushSlider, revealAll, hideAll);
-        brushRow.setAlignment(Pos.CENTER_LEFT);
+        HBox buildRow = row(toolButtons.get(EditorTool.WALL_DRAW), toolButtons.get(EditorTool.WALL_ERASE),
+                Icons.separator(), snapLayers,
+                Icons.button(MaterialDesignI.IMAGE_PLUS,
+                        "Add an image layer (or drag image files onto the map). Move it with Select, resize at the corner.",
+                        () -> chooseImageLayers(stage)));
 
-        Button openPlayer = new Button("Player On");
-        openPlayer.setOnAction(e -> openPlayerWindow());
-        Button closePlayer = new Button("Player Off");
-        closePlayer.setOnAction(e -> closePlayerWindow());
-        freezePlayerButton = new ToggleButton("Freeze Player");
+        // Player view
+        playerWindowToggle = Icons.toggle(MaterialDesignP.PROJECTOR,
+                "Player window on / off (borderless fullscreen on the selected screen)");
+        playerWindowToggle.setOnAction(e -> {
+            if (playerWindowToggle.isSelected()) {
+                openPlayerWindow();
+            } else {
+                closePlayerWindow();
+            }
+        });
+        freezePlayerButton = Icons.toggle(MaterialDesignS.SNOWFLAKE,
+                "Freeze — players keep seeing the current view while you prepare or switch maps");
         freezePlayerButton.setOnAction(e -> {
             setPlayerFrozen(freezePlayerButton.isSelected());
             status(freezePlayerButton.isSelected()
                     ? "Player view frozen. DM viewport can still be moved."
                     : "Player view unfrozen.");
         });
+        ToggleButton scaleTest = Icons.toggle(MaterialDesignR.RULER_SQUARE,
+                "Show a 1-inch test square on the player screen to check the scale");
+        scaleTest.setOnAction(e -> {
+            showScaleTestSquare = scaleTest.isSelected();
+            status(showScaleTestSquare
+                    ? "A 1-inch square is shown on the player screen. If it does not measure 1 inch, correct the screen size."
+                    : "Test square hidden.");
+        });
+        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest);
+
         playerScreenSelector = new ComboBox<>();
-        playerScreenSelector.setPrefWidth(320);
+        playerScreenSelector.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(playerScreenSelector, Priority.ALWAYS);
+        Icons.tooltip(playerScreenSelector, "Screen used for the player window");
         refreshPlayerScreenSelector();
         playerScreenSelector.setOnAction(e -> {
             rememberSelectedPlayerScreenIndex();
@@ -497,67 +531,303 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
             }
         });
-        HBox screenRow = new HBox(6, overlayLabel("Screen:"), playerScreenSelector);
-        screenRow.setAlignment(Pos.CENTER_LEFT);
+        HBox screenRow = row(Icons.icon(MaterialDesignM.MONITOR_SHARE), playerScreenSelector);
 
-        HBox playerRow = new HBox(6, openPlayer, closePlayer, freezePlayerButton);
-
-        screenInchesSpinner = createDoubleSpinner(10, 120, loadScreenDiagonal(), 0.5, 70);
+        screenInchesSpinner = createDoubleSpinner(10, 120, loadScreenDiagonal(), 0.5, 84);
+        Icons.tooltip(screenInchesSpinner, "Diagonal of the player screen in inches (used for the 1-inch grid)");
         screenInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (!syncingControls && newValue != null) {
                 preferences.putDouble(PREF_SCREEN_DIAGONAL_PREFIX + selectedScreenIndex(), newValue);
             }
         });
-        tileInchesSpinner = createDoubleSpinner(0.25, 3, preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 70);
+        tileInchesSpinner = createDoubleSpinner(0.25, 3, preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 84);
+        Icons.tooltip(tileInchesSpinner, "Size of one map tile on the player screen in inches");
         tileInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue != null) {
                 preferences.putDouble(PREF_TILE_INCHES, newValue);
             }
         });
-        ToggleButton scaleTest = new ToggleButton("1 in test square");
-        scaleTest.setOnAction(e -> {
-            showScaleTestSquare = scaleTest.isSelected();
-            status(showScaleTestSquare
-                    ? "A 1-inch square is shown on the player screen. If it does not measure 1 inch, correct the screen size."
-                    : "Test square hidden.");
-        });
-        HBox scaleRow = new HBox(6, overlayLabel("Screen (in):"), screenInchesSpinner,
-                overlayLabel("Tile (in):"), tileInchesSpinner, scaleTest);
-        scaleRow.setAlignment(Pos.CENTER_LEFT);
+        GridPane scaleGrid = new GridPane();
+        scaleGrid.setHgap(8);
+        scaleGrid.setVgap(4);
+        scaleGrid.addRow(0, mutedLabel("Screen diagonal (in)"), screenInchesSpinner);
+        scaleGrid.addRow(1, mutedLabel("Tile size (in)"), tileInchesSpinner);
 
-        VBox body = new VBox(8,
-                fileRow,
-                mapSwitchRow,
-                mapRow,
-                sectionLabel("Lights"), lightRow,
-                sectionLabel("Fog of war"), toolRow, brushRow,
-                sectionLabel("Effects (spell areas)"), effectToolRow, effectStyleRow,
-                sectionLabel("Walls (block light)"), wallToolRow,
-                sectionLabel("Player view"), screenRow, scaleRow, playerRow);
+        VBox sections = new VBox(
+                new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
+                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, lightHint),
+                new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
+                        effectToolsRow, effectStyleRow, effectBrushRow),
+                new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
+                new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
+                        playerRow, screenRow, scaleGrid));
+
+        ScrollPane scroll = new ScrollPane(sections);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.setMinHeight(0);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
 
         Label title = new Label("DM Controls");
-        title.setTextFill(Color.WHITE);
-        title.setStyle("-fx-font-weight: bold;");
+        title.getStyleClass().add("panel-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button collapse = new Button("–");
+        Button collapse = Icons.button(MaterialDesignC.CHEVRON_UP, "Collapse / expand the controls", null);
         collapse.setOnAction(e -> {
-            boolean show = !body.isVisible();
-            body.setVisible(show);
-            body.setManaged(show);
-            collapse.setText(show ? "–" : "+");
+            boolean show = !scroll.isVisible();
+            scroll.setVisible(show);
+            scroll.setManaged(show);
+            ((FontIcon) collapse.getGraphic()).setIconCode(show ? MaterialDesignC.CHEVRON_UP : MaterialDesignC.CHEVRON_DOWN);
+            preferences.putBoolean(PREF_CONTROLS_EXPANDED, show);
         });
-        HBox titleRow = new HBox(6, title, spacer, collapse);
-        titleRow.setAlignment(Pos.CENTER_LEFT);
+        if (!preferences.getBoolean(PREF_CONTROLS_EXPANDED, true)) {
+            collapse.fire();
+        }
+        HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, collapse);
+        titleRow.getStyleClass().add("panel-header");
 
-        VBox overlay = new VBox(8, titleRow, body);
-        overlay.setPadding(new Insets(10));
-        overlay.setBackground(new Background(new BackgroundFill(Color.color(0.1, 0.1, 0.12, 0.72), new CornerRadii(8), Insets.EMPTY)));
-        overlay.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        overlay.setPickOnBounds(false);
+        VBox panel = new VBox(titleRow, scroll);
+        panel.getStyleClass().add("dm-panel");
+        panel.setPrefWidth(268);
+        panel.setMaxWidth(268);
+        panel.setMaxHeight(Region.USE_PREF_SIZE);
+        panel.setPickOnBounds(false);
         setActiveTool(EditorTool.SELECT);
         syncControlsFromProject();
-        return overlay;
+        return panel;
+    }
+
+    private HBox row(javafx.scene.Node... nodes) {
+        HBox row = new HBox(nodes);
+        row.getStyleClass().add("control-row");
+        return row;
+    }
+
+    private Label mutedLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("muted");
+        return label;
+    }
+
+    /** A brush size slider; all brush sliders share one value. */
+    private HBox brushSlider() {
+        Slider slider = new Slider(0.5, 8, brushSize.get());
+        slider.setMajorTickUnit(0.5);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.valueProperty().bindBidirectional(brushSize);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Brush size in tiles");
+        Label value = new Label();
+        value.getStyleClass().add("value-label");
+        value.textProperty().bind(brushSize.asString("%.1f t"));
+        FontIcon icon = Icons.icon(MaterialDesignB.BRUSH);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    private static Ikon timeOfDayIcon(TimeOfDayPreset preset) {
+        return switch (preset) {
+            case DAY -> MaterialDesignW.WEATHER_SUNNY;
+            case DAWN -> MaterialDesignW.WEATHER_SUNSET_UP;
+            case DUSK -> MaterialDesignW.WEATHER_SUNSET_DOWN;
+            case NIGHT -> MaterialDesignW.WEATHER_NIGHT;
+        };
+    }
+
+    private void changeTimeOfDay(TimeOfDayPreset preset) {
+        String before = project.getLighting().getTimeOfDayPreset();
+        String after = preset.name();
+        if (after.equalsIgnoreCase(before)) {
+            return;
+        }
+        executeWithHistory(
+                "Change time of day",
+                () -> setTimeOfDay(after),
+                () -> setTimeOfDay(before)
+        );
+        status("Time of day: " + preset.label());
+    }
+
+    private void chooseImageLayers(Stage stage) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Add image layer");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.webp"));
+        applyInitialImportDirectory(chooser);
+        List<File> files = chooser.showOpenMultipleDialog(stage);
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+        rememberImportDirectory(files.get(0).toPath().getParent());
+        for (File file : files) {
+            addImageLayerFromFile(file.toPath());
+        }
+    }
+
+    // ---- Active tool feedback (chip + cursor) ----
+
+    private HBox createToolChip() {
+        toolChipIcon = new FontIcon(MaterialDesignC.CURSOR_DEFAULT);
+        toolChipLabel = new Label();
+        toolChipLabel.getStyleClass().add("tool-chip-label");
+        Label hint = new Label("Esc to exit");
+        hint.getStyleClass().add("tool-chip-hint");
+        toolChip = new HBox(toolChipIcon, toolChipLabel, hint);
+        toolChip.getStyleClass().add("tool-chip");
+        toolChip.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        toolChip.setMouseTransparent(true);
+        toolChip.setVisible(false);
+        return toolChip;
+    }
+
+    private void updateToolChip() {
+        if (toolChip == null) {
+            return;
+        }
+        if (pingArmed) {
+            toolChipIcon.setIconCode(MaterialDesignC.CROSSHAIRS_GPS);
+            toolChipLabel.setText("Ping — click the map");
+            toolChip.setVisible(true);
+        } else if (activeTool != EditorTool.SELECT) {
+            toolChipIcon.setIconCode(activeTool.icon);
+            toolChipLabel.setText(activeTool.label);
+            toolChip.setVisible(true);
+        } else {
+            toolChip.setVisible(false);
+        }
+    }
+
+    private void setPingArmed(boolean armed) {
+        pingArmed = armed;
+        if (pingToggle != null && pingToggle.isSelected() != armed) {
+            pingToggle.setSelected(armed);
+        }
+        if (armed) {
+            status("Ping mode: click the map to ping players.");
+        }
+        updateToolChip();
+        updateCanvasCursor();
+    }
+
+    private Cursor toolCursor() {
+        if (pingArmed) {
+            return Icons.cursor(MaterialDesignC.CROSSHAIRS_GPS, 0.5, 0.5);
+        }
+        return switch (activeTool) {
+            case SELECT -> Cursor.DEFAULT;
+            case REVEAL_BRUSH -> Icons.cursor(MaterialDesignE.ERASER, 0.2, 0.82);
+            case HIDE_BRUSH -> Icons.cursor(MaterialDesignB.BRUSH, 0.15, 0.85);
+            case AOE_BRUSH -> Icons.cursor(MaterialDesignD.DRAW, 0.14, 0.86);
+            case WALL_DRAW -> Icons.cursor(MaterialDesignP.PENCIL, 0.14, 0.86);
+            case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
+            default -> Cursor.CROSSHAIR;
+        };
+    }
+
+    /** Cursor for the current tool, or for what is under the mouse in Select mode. */
+    private void updateCanvasCursor() {
+        if (dmCanvas == null) {
+            return;
+        }
+        Cursor cursor;
+        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingPlayerViewport) {
+            cursor = Cursor.CLOSED_HAND;
+        } else if (resizingLayer) {
+            cursor = Cursor.SE_RESIZE;
+        } else if (pingArmed || activeTool != EditorTool.SELECT) {
+            cursor = toolCursor();
+        } else {
+            cursor = hoverInsideCanvas ? selectHoverCursor(hoverWorldX, hoverWorldY) : Cursor.DEFAULT;
+        }
+        if (dmCanvas.getCursor() != cursor) {
+            dmCanvas.setCursor(cursor);
+        }
+    }
+
+    private Cursor selectHoverCursor(double worldX, double worldY) {
+        double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
+            return Cursor.OPEN_HAND;
+        }
+        if (pickOverlay(worldX, worldY, zoom) != null) {
+            return Cursor.OPEN_HAND;
+        }
+        CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
+        if (playerStage != null && playerRect != null && contains(playerRect, worldX, worldY)) {
+            return Cursor.MOVE;
+        }
+        DmProject.ImageLayer layer = pickTopmostLayer(worldX, worldY);
+        if (layer != null
+                && distance(worldX, worldY, layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight()) < 16 / zoom) {
+            return Cursor.SE_RESIZE;
+        }
+        return layer != null ? Cursor.OPEN_HAND : Cursor.DEFAULT;
+    }
+
+    // ---- Map library integration ----
+
+    private MapBrowser.Host createBrowserHost() {
+        return new MapBrowser.Host() {
+            @Override
+            public void newMap() {
+                handleNewMap();
+            }
+
+            @Override
+            public void newMapIn(Path folder) {
+                handleNewMapIn(folder);
+            }
+
+            @Override
+            public void importMap(Path suggestedFolder) {
+                handleImportDd2vtt(suggestedFolder);
+            }
+
+            @Override
+            public void saveMap() {
+                handleSave();
+            }
+
+            @Override
+            public void rotateMap(boolean clockwise) {
+                rotateMapInPlace(clockwise);
+            }
+
+            @Override
+            public void openMap(Path mapFile) {
+                openMapFromLibrary(mapFile);
+            }
+
+            @Override
+            public Path currentMapFile() {
+                return projectFile;
+            }
+
+            @Override
+            public void runLibraryOperation(String busyMessage, Path affectedPath, MapBrowser.LibraryOperation operation,
+                                            Consumer<MapLibraryService.Result> onDone) {
+                DungeonMasterMapToolApplication.this.runLibraryOperation(busyMessage, affectedPath, operation, onDone);
+            }
+        };
+    }
+
+    private void rotateMapInPlace(boolean clockwise) {
+        if (clockwise) {
+            executeWithHistory("Rotate map right",
+                    () -> rotationService.rotateClockwise(project),
+                    () -> rotationService.rotateCounterClockwise(project));
+            status("Rotated map 90° clockwise.");
+        } else {
+            executeWithHistory("Rotate map left",
+                    () -> rotationService.rotateCounterClockwise(project),
+                    () -> rotationService.rotateClockwise(project));
+            status("Rotated map 90° counter-clockwise.");
+        }
     }
 
     private void installDmInteractions() {
@@ -597,8 +867,19 @@ public class DungeonMasterMapToolApplication extends Application {
             camera.setY(camera.getY() + (before.y() - after.y()));
         });
 
-        dmCanvas.setOnMouseMoved(event -> updateHover(event.getX(), event.getY()));
+        dmCanvas.setOnMouseMoved(event -> {
+            updateHover(event.getX(), event.getY());
+            updateCanvasCursor();
+        });
         dmCanvas.setOnMouseExited(event -> hoverInsideCanvas = false);
+
+        // Runs after the press/release handlers below have updated the drag state.
+        dmCanvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            // Take keyboard focus away from the map tree so Delete/F2 act on the canvas selection.
+            dmCanvas.requestFocus();
+            Platform.runLater(this::updateCanvasCursor);
+        });
+        dmCanvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> Platform.runLater(this::updateCanvasCursor));
 
         dmCanvas.setOnMousePressed(event -> {
             lastMouseX = event.getX();
@@ -627,7 +908,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (pingArmed) {
                 addPing(world.x(), world.y());
-                pingArmed = false;
+                setPingArmed(false);
                 status("Ping placed.");
                 return;
             }
@@ -984,6 +1265,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage = null;
             playerCanvas = null;
             playerFogCanvas = null;
+            syncPlayerWindowToggle();
         });
 
         Screen target = resolveSelectedPlayerScreen();
@@ -993,6 +1275,14 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setWidth(bounds.getWidth());
         playerStage.setHeight(bounds.getHeight());
         playerStage.show();
+        syncPlayerWindowToggle();
+        status("Player window opened.");
+    }
+
+    private void syncPlayerWindowToggle() {
+        if (playerWindowToggle != null) {
+            playerWindowToggle.setSelected(playerStage != null);
+        }
     }
 
     private void closePlayerWindow() {
@@ -1002,6 +1292,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerCanvas = null;
             playerFogCanvas = null;
         }
+        syncPlayerWindowToggle();
     }
 
     private void renderDm() {
@@ -1081,34 +1372,287 @@ public class DungeonMasterMapToolApplication extends Application {
         gc.fillRect(x + w - 6, y + h - 6, 12, 12);
     }
 
-    private void handleImportDd2vtt(Stage stage) {
+    // ---- New / import / open / save ----
+
+    private DmProject freshProject() {
+        DmProject fresh = DmProject.builder().build();
+        fresh.getMap().setSourceType("custom");
+        return fresh;
+    }
+
+    private boolean hasContent(DmProject candidate) {
+        return !candidate.getImageLayers().isEmpty()
+                || !candidate.getWalls().isEmpty()
+                || !candidate.getLighting().getLights().isEmpty()
+                || !candidate.getOverlays().isEmpty()
+                || (candidate.getMap().getImagePath() != null && !candidate.getMap().getImagePath().isBlank());
+    }
+
+    /**
+     * Runs {@code next} once the current map may be left: saved maps are saved automatically, unsaved new maps
+     * with content ask whether to save them into the library first.
+     */
+    private void leaveCurrentMap(Runnable next) {
+        if (projectFile != null) {
+            saveCurrentThen(next);
+            return;
+        }
+        if (!hasContent(project)) {
+            next.run();
+            return;
+        }
+        switch (Dialogs.askSaveChanges(primaryStage, "Save the new map first?",
+                "This map has not been saved yet. Save it to your map library before leaving it?")) {
+            case SAVE -> saveNewMap(next);
+            case DISCARD -> next.run();
+            case CANCEL -> {
+            }
+        }
+    }
+
+    private void handleNewMap() {
+        leaveCurrentMap(() -> {
+            switchProject(freshProject(), null);
+            status("New empty map. Drop images onto it to build it, then save with Ctrl+S.");
+        });
+    }
+
+    private void handleNewMapIn(Path folder) {
+        String folderName = folder.equals(mapLibrary.getRoot()) ? "Library" : folder.getFileName().toString();
+        Optional<String> name = Dialogs.askText(primaryStage, "New map", "Create an empty map in \"" + folderName + "\"",
+                MaterialDesignM.MAP_PLUS, "Create", "New map", text -> {
+                    try {
+                        mapLibrary.newMapFile(folder, text);
+                        return null;
+                    } catch (IOException ex) {
+                        return ex.getMessage();
+                    }
+                });
+        if (name.isEmpty()) {
+            return;
+        }
+        leaveCurrentMap(() -> runInBackground("Creating map...", "Could not create the map: ", () -> {
+            Path file = mapLibrary.newMapFile(folder, name.get());
+            DmProject fresh = freshProject();
+            new FogService().ensureMask(fresh);
+            projectService.save(file, fresh);
+            return new LoadedProject(fresh, file);
+        }, loaded -> {
+            switchProject(loaded.project(), loaded.file());
+            mapBrowser.refresh();
+            mapBrowser.select(loaded.file());
+            status("Created " + MapBrowser.displayName(loaded.file()) + ". Drop images onto it to build the map.");
+        }));
+    }
+
+    private void handleImportDd2vtt(Path suggestedFolder) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Select DD2VTT map");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DD2VTT", "*.dd2vtt", "*.json"));
         applyInitialImportDirectory(chooser);
-        File source = chooser.showOpenDialog(stage);
+        File source = chooser.showOpenDialog(primaryStage);
         if (source == null) {
             return;
         }
         rememberImportDirectory(source.toPath().getParent());
 
+        Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary,
+                "Import map", MaterialDesignF.FILE_IMPORT_OUTLINE, "Import",
+                MapLibraryService.stripExtension(source.getName()), suggestedFolder);
+        if (selection.isEmpty()) {
+            return;
+        }
         Path sourcePath = source.toPath();
         String sourceName = source.getName();
-        runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
-            String baseName = sanitizeFileStem(stripExtension(sourceName));
-            Path projectDir = createUniqueDirectory(resolveProjectsRoot(), baseName);
-            Path targetPath = projectDir.resolve(baseName + ".dmmap");
-            DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
-            projectService.save(targetPath, imported);
-            return new LoadedProject(imported, targetPath);
+        MapLocationDialog.Selection target = selection.get();
+        leaveCurrentMap(() -> runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
+            Path targetPath = mapLibrary.newMapFile(target.folder(), target.name());
+            Path projectDir = targetPath.getParent();
+            Files.createDirectories(projectDir);
+            try {
+                DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
+                projectService.save(targetPath, imported);
+                return new LoadedProject(imported, targetPath);
+            } catch (IOException | RuntimeException ex) {
+                try {
+                    MapLibraryService.deleteRecursive(projectDir);
+                } catch (IOException ignored) {
+                }
+                throw ex;
+            }
         }, loaded -> {
             switchProject(loaded.project(), loaded.file());
-            status("Imported " + sourceName + " to " + loaded.file());
+            mapBrowser.refresh();
+            mapBrowser.select(loaded.file());
+            status("Imported " + sourceName + " as " + MapBrowser.displayName(loaded.file()) + ".");
+        }));
+    }
+
+    private void openMapFromLibrary(Path file) {
+        if (projectFile != null && file.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize())) {
+            status("That map is already open.");
+            return;
+        }
+        if (projectFile == null && hasContent(project)) {
+            switch (Dialogs.askSaveChanges(primaryStage, "Save the new map first?",
+                    "This map has not been saved yet. Save it to your map library before opening another one?")) {
+                case SAVE -> saveNewMap(() -> switchToMap(file));
+                case DISCARD -> switchToMap(file);
+                case CANCEL -> {
+                }
+            }
+            return;
+        }
+        switchToMap(file);
+    }
+
+    private void handleSave() {
+        if (projectFile == null) {
+            saveNewMap(null);
+        } else {
+            saveCurrentThen(null);
+        }
+    }
+
+    private void saveCurrentThen(Runnable next) {
+        Path target = projectFile;
+        DmProject savedProject = project;
+        DmProject snapshot;
+        try {
+            snapshot = projectService.copy(project);
+        } catch (IOException ex) {
+            status("Save failed: " + ex.getMessage());
+            return;
+        }
+        runInBackground("Saving...", "Save failed: ", () -> {
+            projectService.save(target, snapshot);
+            return target;
+        }, saved -> {
+            if (project == savedProject) {
+                adoptCopiedAssetPaths(snapshot);
+            }
+            status("Saved " + MapBrowser.displayName(saved) + ".");
+            if (next != null) {
+                next.run();
+            }
         });
+    }
+
+    /** Saving a new map asks for a name and a folder inside the map library. */
+    private void saveNewMap(Runnable next) {
+        Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary, "Save map",
+                MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save", "New map", mapBrowser.selectedFolder());
+        if (selection.isEmpty()) {
+            return;
+        }
+        Path target;
+        DmProject snapshot;
+        try {
+            target = mapLibrary.newMapFile(selection.get().folder(), selection.get().name());
+            snapshot = projectService.copy(project);
+        } catch (IOException ex) {
+            Dialogs.error(primaryStage, "Could not save the map", ex.getMessage());
+            return;
+        }
+        DmProject savedProject = project;
+        runInBackground("Saving...", "Save failed: ", () -> {
+            projectService.save(target, snapshot);
+            return target;
+        }, saved -> {
+            if (project == savedProject) {
+                projectFile = saved;
+                adoptCopiedAssetPaths(snapshot);
+                updateWindowTitle();
+            }
+            mapBrowser.refresh();
+            mapBrowser.select(saved);
+            status("Saved " + MapBrowser.displayName(saved) + " to the map library.");
+            if (next != null) {
+                next.run();
+            }
+        });
+    }
+
+    private record LibraryOutcome(MapLibraryService.Result result, Path openMapMovedTo, DmProject reloadedOpenMap) {
+    }
+
+    /**
+     * Runs a map library operation (move, rename, copy, delete, ...). If it touches the open map, the map is saved
+     * first and its file reference is updated afterwards.
+     */
+    private void runLibraryOperation(String busyMessage, Path affectedPath, MapBrowser.LibraryOperation operation,
+                                     Consumer<MapLibraryService.Result> onDone) {
+        Path openFile = projectFile == null ? null : projectFile.toAbsolutePath().normalize();
+        boolean touchesOpenMap = openFile != null && affectedPath != null
+                && openFile.startsWith(affectedPath.toAbsolutePath().normalize());
+        DmProject savedProject = project;
+        DmProject snapshot = null;
+        if (touchesOpenMap) {
+            try {
+                snapshot = projectService.copy(project);
+            } catch (IOException ex) {
+                status("Could not save the open map: " + ex.getMessage());
+                return;
+            }
+        }
+        DmProject toSave = snapshot;
+        runInBackground(busyMessage, "Library operation failed: ", () -> {
+            if (toSave != null) {
+                projectService.save(openFile, toSave);
+            }
+            MapLibraryService.Result result = operation.run();
+            Path movedTo = touchesOpenMap ? movedLocation(result, openFile) : null;
+            DmProject reloaded = movedTo != null ? projectService.load(movedTo) : null;
+            return new LibraryOutcome(result, movedTo, reloaded);
+        }, outcome -> {
+            if (touchesOpenMap && project == savedProject) {
+                if (outcome.openMapMovedTo() != null) {
+                    projectFile = outcome.openMapMovedTo();
+                    adoptCopiedAssetPaths(outcome.reloadedOpenMap());
+                } else if (!Files.exists(openFile)) {
+                    switchProject(freshProject(), null);
+                    status("The open map was deleted.");
+                }
+            }
+            if (frozenPlayerProjectFile != null) {
+                Path frozenMoved = movedLocation(outcome.result(), frozenPlayerProjectFile.toAbsolutePath().normalize());
+                if (frozenMoved != null) {
+                    frozenPlayerProjectFile = frozenMoved;
+                }
+            }
+            onDone.accept(outcome.result());
+            mapBrowser.updateCurrentMap();
+            updateWindowTitle();
+            if (statusLabel.getText().equals(busyMessage)) {
+                status("Done.");
+            }
+        }, ex -> {
+            Dialogs.error(primaryStage, "That did not work", ex.getMessage());
+            mapBrowser.refresh();
+        });
+    }
+
+    private static Path movedLocation(MapLibraryService.Result result, Path file) {
+        for (Map.Entry<Path, Path> entry : result.movedMaps().entrySet()) {
+            if (entry.getKey().toAbsolutePath().normalize().equals(file)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private void updateWindowTitle() {
+        if (primaryStage != null) {
+            primaryStage.setTitle("Dungeon Master Map Tool — "
+                    + (projectFile == null ? "Unsaved new map" : MapBrowser.displayName(projectFile)));
+        }
     }
 
     /** After a save the snapshot points at the copies inside the project folder; the live project should too. */
     private void adoptCopiedAssetPaths(DmProject saved) {
+        if (saved == null) {
+            return;
+        }
         for (DmProject.ImageLayer savedLayer : saved.getImageLayers()) {
             DmProject.ImageLayer live = findLayerById(savedLayer.getId());
             if (live != null) {
@@ -1127,8 +1671,13 @@ public class DungeonMasterMapToolApplication extends Application {
         T run() throws IOException;
     }
 
+    private <T> void runInBackground(String busyMessage, String failurePrefix, IoWork<T> work, Consumer<T> onSuccess) {
+        runInBackground(busyMessage, failurePrefix, work, onSuccess, null);
+    }
+
     /** Runs blocking file work off the FX thread; result handling happens back on the FX thread. */
-    private <T> void runInBackground(String busyMessage, String failurePrefix, IoWork<T> work, java.util.function.Consumer<T> onSuccess) {
+    private <T> void runInBackground(String busyMessage, String failurePrefix, IoWork<T> work, Consumer<T> onSuccess,
+                                     Consumer<Exception> onFailure) {
         if (ioBusy) {
             status("Still working on the previous file operation.");
             return;
@@ -1146,62 +1695,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 Platform.runLater(() -> {
                     ioBusy = false;
                     status(failurePrefix + ex.getMessage());
+                    if (onFailure != null) {
+                        onFailure.accept(ex);
+                    }
                 });
             }
         }, "dmmt-io");
         thread.setDaemon(true);
         thread.start();
-    }
-
-    private void handleOpenProject(Stage stage) {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Open Project");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DM Map Project", "*.dmmap"));
-        applyInitialProjectDirectory(chooser);
-        File file = chooser.showOpenDialog(stage);
-        if (file == null) {
-            return;
-        }
-        Path path = file.toPath();
-        runInBackground("Loading " + file.getName() + "...", "Load failed: ",
-                () -> new LoadedProject(projectService.load(path), path),
-                loaded -> {
-                    switchProject(loaded.project(), loaded.file());
-                    status("Loaded " + path.getFileName());
-                });
-    }
-
-    private void handleSave(Stage stage) {
-        if (projectFile == null) {
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle("Save Project");
-            chooser.setInitialFileName("map.dmmap");
-            applyInitialProjectDirectory(chooser);
-            chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DM Map Project", "*.dmmap"));
-            File chosen = chooser.showSaveDialog(stage);
-            if (chosen == null) {
-                return;
-            }
-            projectFile = ensureExtension(chosen.toPath(), ".dmmap");
-        }
-        Path target = projectFile;
-        DmProject savedProject = project;
-        DmProject snapshot;
-        try {
-            snapshot = projectService.copy(project);
-        } catch (IOException ex) {
-            status("Save failed: " + ex.getMessage());
-            return;
-        }
-        runInBackground("Saving...", "Save failed: ", () -> {
-            projectService.save(target, snapshot);
-            return target;
-        }, saved -> {
-            if (project == savedProject) {
-                adoptCopiedAssetPaths(snapshot);
-            }
-            status("Saved " + saved.getFileName());
-        });
     }
 
     private void addImageLayerFromFile(Path imagePath) {
@@ -1314,6 +1815,11 @@ public class DungeonMasterMapToolApplication extends Application {
         draftOverlay = null;
         draftWall = null;
         toolButtons.forEach((key, button) -> button.setSelected(key == activeTool));
+        if (pingArmed) {
+            setPingArmed(false);
+        }
+        updateToolChip();
+        updateCanvasCursor();
         switch (activeTool) {
             case SELECT -> status("Select: drag lights, layers and the player viewport. Right-click a light for options.");
             case REVEAL_BRUSH -> status("Reveal brush: paint to uncover the map.");
@@ -1326,10 +1832,6 @@ public class DungeonMasterMapToolApplication extends Application {
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
         }
-    }
-
-    private String brushLabelText() {
-        return String.format("Brush: %.1f tiles", brushSizeTiles);
     }
 
     private double brushRadiusWorld() {
@@ -1470,6 +1972,10 @@ public class DungeonMasterMapToolApplication extends Application {
         undoStack.clear();
         redoStack.clear();
         syncControlsFromProject();
+        if (mapBrowser != null) {
+            mapBrowser.updateCurrentMap();
+        }
+        updateWindowTitle();
     }
 
     private void syncControlsFromProject() {
@@ -1477,30 +1983,15 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             if (fogToggleButton != null) {
                 fogToggleButton.setSelected(project.getFog().isEnabled());
-                fogToggleButton.setText(project.getFog().isEnabled() ? "Fog: On" : "Fog: Off");
             }
-            if (timeOfDaySelector != null) {
-                timeOfDaySelector.setValue(TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset()));
-            }
+            TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
+            timeButtons.forEach((key, button) -> button.setSelected(key == preset));
             if (freezePlayerButton != null) {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
         } finally {
             syncingControls = false;
         }
-    }
-
-    private Label overlayLabel(String text) {
-        Label label = new Label(text);
-        label.setTextFill(Color.WHITE);
-        return label;
-    }
-
-    private Label sectionLabel(String text) {
-        Label label = overlayLabel(text);
-        label.setTextFill(Color.web("#C9C9D6"));
-        label.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
-        return label;
     }
 
     // ---- Wall editing ----
@@ -1642,39 +2133,7 @@ public class DungeonMasterMapToolApplication extends Application {
         return spinner;
     }
 
-    // ---- Map switcher ----
-
-    private record MapEntry(String label, Path file) {
-        @Override
-        public String toString() {
-            return label;
-        }
-    }
-
-    private void refreshMapSwitcher() {
-        List<MapEntry> entries = new java.util.ArrayList<>();
-        try {
-            Path root = resolveProjectsRoot();
-            if (Files.isDirectory(root)) {
-                try (java.util.stream.Stream<Path> stream = Files.walk(root, 2)) {
-                    stream.filter(p -> p.getFileName().toString().toLowerCase().endsWith(".dmmap"))
-                            .sorted()
-                            .forEach(p -> {
-                                boolean current = projectFile != null && p.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize());
-                                String name = stripExtension(p.getFileName().toString());
-                                entries.add(new MapEntry(current ? name + "  (open)" : name, p));
-                            });
-                }
-            }
-        } catch (IOException ignored) {
-        }
-        syncingControls = true;
-        try {
-            mapSwitcher.getItems().setAll(entries);
-        } finally {
-            syncingControls = false;
-        }
-    }
+    // ---- Map switching ----
 
     private void switchToMap(Path file) {
         if (projectFile != null && file.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize())) {
@@ -1696,7 +2155,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return new LoadedProject(projectService.load(file), file);
         }, loaded -> {
             switchProject(loaded.project(), loaded.file());
-            status("Switched to " + stripExtension(file.getFileName().toString())
+            status("Switched to " + MapBrowser.displayName(file)
                     + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
         });
     }
@@ -1928,7 +2387,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             overlayColorPicker.setValue(Color.web(shape.getColor()));
             overlayAlphaSlider.setValue(shape.getAlpha());
-            overlayPlayerCheck.setSelected(shape.isPlayerVisible());
+            overlayPlayerToggle.setSelected(shape.isPlayerVisible());
             overlayColor = shape.getColor();
             overlayAlpha = shape.getAlpha();
             overlayPlayerVisible = shape.isPlayerVisible();
@@ -2207,19 +2666,6 @@ public class DungeonMasterMapToolApplication extends Application {
         return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 
-    private Path ensureExtension(Path file, String extension) {
-        String name = file.getFileName().toString().toLowerCase();
-        if (name.endsWith(extension)) {
-            return file;
-        }
-        return file.resolveSibling(file.getFileName() + extension);
-    }
-
-    private String stripExtension(String name) {
-        int dot = name.lastIndexOf('.');
-        return dot > 0 ? name.substring(0, dot) : name;
-    }
-
     private Path resolveProjectsRoot() throws IOException {
         return resolveApplicationHome().resolve("dmmap-projects");
     }
@@ -2242,18 +2688,6 @@ public class DungeonMasterMapToolApplication extends Application {
         preferences.put(PREF_LAST_IMPORT_DIRECTORY, directory.toAbsolutePath().normalize().toString());
     }
 
-    private void applyInitialProjectDirectory(FileChooser chooser) {
-        try {
-            Path projectsRoot = resolveProjectsRoot();
-            Files.createDirectories(projectsRoot);
-            File dir = projectsRoot.toFile();
-            if (dir.exists() && dir.isDirectory()) {
-                chooser.setInitialDirectory(dir);
-            }
-        } catch (IOException ignored) {
-        }
-    }
-
     private Path resolveApplicationHome() throws IOException {
         try {
             Path codeSource = Path.of(DungeonMasterMapToolLauncher.class
@@ -2267,22 +2701,6 @@ public class DungeonMasterMapToolApplication extends Application {
         } catch (URISyntaxException | NullPointerException ex) {
             throw new IOException("Could not resolve application directory.", ex);
         }
-    }
-
-    private Path createUniqueDirectory(Path parent, String folderName) throws IOException {
-        Files.createDirectories(parent);
-        Path candidate = parent.resolve(folderName);
-        int suffix = 2;
-        while (Files.exists(candidate)) {
-            candidate = parent.resolve(folderName + "-" + suffix++);
-        }
-        Files.createDirectories(candidate);
-        return candidate;
-    }
-
-    private String sanitizeFileStem(String name) {
-        String sanitized = name.replaceAll("[^a-zA-Z0-9-_ ]", "").trim().replace(' ', '-');
-        return sanitized.isEmpty() ? "imported-map" : sanitized;
     }
 
     private void refreshPlayerScreenSelector() {
@@ -2535,23 +2953,31 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private enum EditorTool {
-        SELECT("Select", false, false),
-        REVEAL_BRUSH("Reveal", true, false),
-        HIDE_BRUSH("Hide", false, false),
-        REVEAL_RECT("Reveal Area", true, true),
-        HIDE_RECT("Hide Area", false, true),
-        AOE_CIRCLE("Circle", false, false),
-        AOE_RECT("Box", false, true),
-        AOE_BRUSH("Draw", false, false),
-        WALL_DRAW("Wall", false, false),
-        WALL_ERASE("Erase Wall", false, false);
+        SELECT("Select & move", "drag lights, effects, image layers and the player viewport; right-click a light for settings (Esc)",
+                MaterialDesignC.CURSOR_DEFAULT, false, false),
+        REVEAL_BRUSH("Reveal brush", "paint to remove fog", MaterialDesignE.ERASER, true, false),
+        HIDE_BRUSH("Fog brush", "paint fog back over the map", MaterialDesignB.BRUSH, false, false),
+        REVEAL_RECT("Reveal area", "drag a rectangle to remove fog", MaterialDesignS.SELECTION_DRAG, true, true),
+        HIDE_RECT("Fog area", "drag a rectangle to cover it with fog", MaterialDesignR.RECTANGLE, false, true),
+        AOE_CIRCLE("Circle effect", "drag from the center outward to draw a round spell area",
+                MaterialDesignC.CIRCLE_OUTLINE, false, false),
+        AOE_RECT("Box effect", "drag corner to corner to draw a rectangular spell area",
+                MaterialDesignS.SQUARE_OUTLINE, false, true),
+        AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignD.DRAW, false, false),
+        WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
+                MaterialDesignW.WALL, false, false),
+        WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false);
 
         private final String label;
+        private final String description;
+        private final Ikon icon;
         private final boolean reveal;
         private final boolean rect;
 
-        EditorTool(String label, boolean reveal, boolean rect) {
+        EditorTool(String label, String description, Ikon icon, boolean reveal, boolean rect) {
             this.label = label;
+            this.description = description;
+            this.icon = icon;
             this.reveal = reveal;
             this.rect = rect;
         }

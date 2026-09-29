@@ -1,0 +1,554 @@
+package dmmt.ui;
+
+import dmmt.service.MapLibraryService;
+import dmmt.service.MapLibraryService.Entry;
+import javafx.animation.PauseTransition;
+import javafx.css.PseudoClass;
+import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TreeCell;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.stage.Window;
+import javafx.util.Duration;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+
+/**
+ * Left sidebar: map actions plus a file-browser style tree of the map library (folders mirror folders on disk).
+ */
+public class MapBrowser extends VBox {
+
+    /** Callbacks into the application. */
+    public interface Host {
+        void newMap();
+
+        void newMapIn(Path folder);
+
+        void importMap(Path suggestedFolder);
+
+        void saveMap();
+
+        void rotateMap(boolean clockwise);
+
+        void openMap(Path mapFile);
+
+        Path currentMapFile();
+
+        /**
+         * Runs a library operation in the background. The host saves the open map first if it lives under
+         * {@code affectedPath} and fixes up its own references afterwards. {@code onDone} runs on the FX thread.
+         */
+        void runLibraryOperation(String busyMessage, Path affectedPath, LibraryOperation operation,
+                                 Consumer<MapLibraryService.Result> onDone);
+    }
+
+    @FunctionalInterface
+    public interface LibraryOperation {
+        MapLibraryService.Result run() throws IOException;
+    }
+
+    private static final PseudoClass OPEN_MAP = PseudoClass.getPseudoClass("open-map");
+    private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
+
+    private final MapLibraryService library;
+    private final Host host;
+    private final TreeView<Entry> tree = new TreeView<>();
+    private final Set<Path> expandedFolders = new HashSet<>();
+    private final Label currentMapName = new Label();
+    private TreeItem<Entry> draggedItem;
+    private ContextMenu openMenu;
+
+    public MapBrowser(MapLibraryService library, Host host) {
+        this.library = library;
+        this.host = host;
+        getStyleClass().add("sidebar");
+        setPrefWidth(270);
+        setMinWidth(200);
+
+        Label title = new Label("Map Library");
+        title.getStyleClass().add("sidebar-title");
+        Region titleSpacer = new Region();
+        HBox.setHgrow(titleSpacer, Priority.ALWAYS);
+        HBox titleRow = new HBox(4, title, titleSpacer,
+                Icons.button(MaterialDesignF.FOLDER_PLUS_OUTLINE, "New folder in the selected folder",
+                        () -> createFolder(selectedFolder())),
+                Icons.button(MaterialDesignR.REFRESH, "Reload the library from disk", this::refresh));
+        titleRow.getStyleClass().add("toolbar-row");
+
+        HBox actions = new HBox(
+                Icons.button(MaterialDesignM.MAP_PLUS, "New empty map (drop images onto it to build a custom map)",
+                        host::newMap),
+                Icons.button(MaterialDesignF.FILE_IMPORT_OUTLINE, "Import a .dd2vtt map (e.g. from Dungeon Alchemist)",
+                        () -> host.importMap(selectedFolder())),
+                Icons.button(MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save the open map (Ctrl+S)", host::saveMap));
+        actions.getStyleClass().add("toolbar-row");
+
+        Label caption = new Label("OPEN MAP");
+        caption.getStyleClass().add("caption");
+        currentMapName.getStyleClass().add("current-map-name");
+        currentMapName.setMaxWidth(Double.MAX_VALUE);
+        VBox nameBox = new VBox(1, caption, currentMapName);
+        HBox.setHgrow(nameBox, Priority.ALWAYS);
+        nameBox.setMinWidth(0);
+        HBox currentCard = new HBox(4, nameBox,
+                Icons.button(MaterialDesignR.ROTATE_LEFT, "Rotate the map 90° counter-clockwise",
+                        () -> host.rotateMap(false)),
+                Icons.button(MaterialDesignR.ROTATE_RIGHT, "Rotate the map 90° clockwise",
+                        () -> host.rotateMap(true)));
+        currentCard.getStyleClass().add("current-map-card");
+        currentCard.setStyle("-fx-alignment: center-left;");
+
+        tree.setShowRoot(true);
+        tree.setCellFactory(view -> new LibraryCell());
+        VBox.setVgrow(tree, Priority.ALWAYS);
+        tree.setOnKeyPressed(event -> {
+            TreeItem<Entry> item = tree.getSelectionModel().getSelectedItem();
+            Entry entry = item == null ? null : item.getValue();
+            if (entry == null) {
+                return;
+            }
+            if (event.getCode() == KeyCode.ENTER && entry.isMap()) {
+                host.openMap(entry.mapFile());
+                event.consume();
+            } else if (event.getCode() == KeyCode.F2 && !isRoot(entry)) {
+                rename(entry);
+                event.consume();
+            } else if (event.getCode() == KeyCode.DELETE && !isRoot(entry)) {
+                delete(entry);
+                event.consume();
+            }
+        });
+
+        Label hint = new Label("Double-click to open · drag to move · right-click for more");
+        hint.getStyleClass().add("muted");
+        hint.setWrapText(true);
+
+        getChildren().addAll(titleRow, actions, currentCard, tree, hint);
+        refresh();
+    }
+
+    // ---- Public API ----
+
+    public void refresh() {
+        Path selected = selectedPath();
+        Entry root;
+        try {
+            root = library.scan();
+        } catch (IOException exception) {
+            Dialogs.error(window(), "Could not read the map library", exception.getMessage());
+            return;
+        }
+        TreeItem<Entry> rootItem = build(root);
+        rootItem.setExpanded(true);
+        tree.setRoot(rootItem);
+        if (selected != null) {
+            select(selected);
+        }
+        updateCurrentMap();
+    }
+
+    /** Selects (and reveals) a folder, map package or map file. */
+    public void select(Path path) {
+        if (path == null || tree.getRoot() == null) {
+            return;
+        }
+        Path normalized = path.toAbsolutePath().normalize();
+        TreeItem<Entry> item = findItem(tree.getRoot(), normalized);
+        if (item == null) {
+            return;
+        }
+        for (TreeItem<Entry> parent = item.getParent(); parent != null; parent = parent.getParent()) {
+            parent.setExpanded(true);
+        }
+        tree.getSelectionModel().select(item);
+        int row = tree.getRow(item);
+        if (row >= 0) {
+            tree.scrollTo(Math.max(0, row - 3));
+        }
+    }
+
+    public void updateCurrentMap() {
+        Path current = host.currentMapFile();
+        currentMapName.getStyleClass().remove("unsaved");
+        if (current == null) {
+            currentMapName.setText("Unsaved new map");
+            currentMapName.getStyleClass().add("unsaved");
+        } else {
+            currentMapName.setText(displayName(current));
+        }
+        tree.refresh();
+    }
+
+    /** The folder new maps should go to by default: the selected folder, or the folder of the selected map. */
+    public Path selectedFolder() {
+        TreeItem<Entry> item = tree.getSelectionModel().getSelectedItem();
+        if (item == null || item.getValue() == null) {
+            return library.getRoot();
+        }
+        Entry entry = item.getValue();
+        return entry.isFolder() ? entry.path() : entry.containingFolder();
+    }
+
+    public static String displayName(Path mapFile) {
+        String stem = MapLibraryService.stripExtension(mapFile.getFileName().toString());
+        return stem;
+    }
+
+    // ---- Tree building ----
+
+    private TreeItem<Entry> build(Entry entry) {
+        TreeItem<Entry> item = new TreeItem<>(entry);
+        if (entry.isFolder()) {
+            Path key = entry.path().toAbsolutePath().normalize();
+            item.setExpanded(expandedFolders.contains(key));
+            item.expandedProperty().addListener((observable, oldValue, newValue) -> {
+                if (newValue) {
+                    expandedFolders.add(key);
+                } else {
+                    expandedFolders.remove(key);
+                }
+            });
+            for (Entry child : entry.children()) {
+                item.getChildren().add(build(child));
+            }
+        }
+        return item;
+    }
+
+    private static TreeItem<Entry> findItem(TreeItem<Entry> item, Path path) {
+        Entry entry = item.getValue();
+        if (entry != null && (entry.path().toAbsolutePath().normalize().equals(path)
+                || (entry.mapFile() != null && entry.mapFile().toAbsolutePath().normalize().equals(path)))) {
+            return item;
+        }
+        for (TreeItem<Entry> child : item.getChildren()) {
+            TreeItem<Entry> found = findItem(child, path);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private Path selectedPath() {
+        TreeItem<Entry> item = tree.getSelectionModel().getSelectedItem();
+        return item == null || item.getValue() == null ? null : item.getValue().path();
+    }
+
+    private boolean isRoot(Entry entry) {
+        return entry.path().toAbsolutePath().normalize().equals(library.getRoot());
+    }
+
+    private boolean isOpenMap(Entry entry) {
+        Path current = host.currentMapFile();
+        return entry.isMap() && current != null
+                && entry.mapFile().toAbsolutePath().normalize().equals(current.toAbsolutePath().normalize());
+    }
+
+    private Window window() {
+        return getScene() == null ? null : getScene().getWindow();
+    }
+
+    // ---- Actions ----
+
+    private void createFolder(Path parent) {
+        Optional<String> name = Dialogs.askText(window(), "New folder",
+                "Create a folder in \"" + folderLabel(parent) + "\"", MaterialDesignF.FOLDER_PLUS_OUTLINE, "Create", "",
+                MapLocationDialog::nameProblem);
+        if (name.isEmpty()) {
+            return;
+        }
+        Path[] created = new Path[1];
+        host.runLibraryOperation("Creating folder…", null, () -> {
+            created[0] = library.createFolder(parent, name.get());
+            return new MapLibraryService.Result(java.util.Map.of(), null);
+        }, result -> {
+            expandedFolders.add(parent.toAbsolutePath().normalize());
+            refresh();
+            select(created[0]);
+        });
+    }
+
+    private void rename(Entry entry) {
+        String kind = entry.isFolder() ? "folder" : "map";
+        Optional<String> name = Dialogs.askText(window(), "Rename " + kind, "Rename \"" + entry.name() + "\"",
+                MaterialDesignR.RENAME_BOX, "Rename", entry.name(), MapLocationDialog::nameProblem);
+        if (name.isEmpty() || name.get().equals(entry.name())) {
+            return;
+        }
+        host.runLibraryOperation("Renaming…", entry.path(), () -> library.rename(entry, name.get()), result -> {
+            Path renamed = entry.containingFolder().resolve(name.get().trim());
+            if (entry.isFolder()) {
+                remapExpanded(entry.path(), renamed);
+            }
+            refresh();
+            Path newMapFile = result.movedMaps().get(entry.mapFile());
+            select(entry.isMap() && newMapFile != null ? newMapFile : renamed);
+        });
+    }
+
+    private void copy(Entry entry) {
+        host.runLibraryOperation("Copying map…", null, () -> library.copy(entry), result -> {
+            refresh();
+            select(result.createdMap());
+        });
+    }
+
+    private void delete(Entry entry) {
+        String message;
+        if (entry.isMap()) {
+            message = "The map \"" + entry.name() + "\" and all of its images and saved state will be permanently "
+                    + "deleted from disk.";
+        } else {
+            int maps = MapLibraryService.countMaps(entry);
+            message = "The folder \"" + entry.name() + "\" " + (maps == 0 ? "(empty) "
+                    : "and the " + maps + (maps == 1 ? " map" : " maps") + " inside it ")
+                    + "will be permanently deleted from disk.";
+        }
+        boolean confirmed = Dialogs.confirmDanger(window(), "Delete " + (entry.isMap() ? "map" : "folder"),
+                "Delete \"" + entry.name() + "\"?", message + "\n\nThis cannot be undone.", "Delete");
+        if (!confirmed) {
+            return;
+        }
+        host.runLibraryOperation("Deleting…", entry.path(), () -> {
+            library.delete(entry);
+            return new MapLibraryService.Result(java.util.Map.of(), null);
+        }, result -> refresh());
+    }
+
+    private void move(Entry entry, Path targetFolder) {
+        host.runLibraryOperation("Moving…", entry.path(), () -> library.move(entry, targetFolder), result -> {
+            Path destination = targetFolder.resolve(entry.path().getFileName());
+            if (entry.isFolder()) {
+                remapExpanded(entry.path(), destination);
+            }
+            expandedFolders.add(targetFolder.toAbsolutePath().normalize());
+            refresh();
+            Path newMapFile = entry.isMap() ? result.movedMaps().get(entry.mapFile()) : null;
+            select(newMapFile != null ? newMapFile : destination);
+        });
+    }
+
+    private void remapExpanded(Path oldFolder, Path newFolder) {
+        Path oldNormalized = oldFolder.toAbsolutePath().normalize();
+        Path newNormalized = newFolder.toAbsolutePath().normalize();
+        Set<Path> updated = new HashSet<>();
+        for (Path path : expandedFolders) {
+            updated.add(path.startsWith(oldNormalized) ? newNormalized.resolve(oldNormalized.relativize(path)) : path);
+        }
+        expandedFolders.clear();
+        expandedFolders.addAll(updated);
+    }
+
+    private String folderLabel(Path folder) {
+        return folder.toAbsolutePath().normalize().equals(library.getRoot()) ? "Library"
+                : folder.getFileName().toString();
+    }
+
+    private ContextMenu buildMenu(Entry entry) {
+        ContextMenu menu = new ContextMenu();
+        if (entry == null) {
+            entry = tree.getRoot().getValue();
+        }
+        Entry target = entry;
+        if (entry.isMap()) {
+            menu.getItems().addAll(
+                    item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
+                    new SeparatorMenuItem(),
+                    item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
+                    item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
+                    new SeparatorMenuItem(),
+                    danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+        } else {
+            menu.getItems().addAll(
+                    item("New map here…", MaterialDesignM.MAP_PLUS, () -> host.newMapIn(target.path())),
+                    item("Import map here…", MaterialDesignF.FILE_IMPORT_OUTLINE, () -> host.importMap(target.path())),
+                    item("New folder…", MaterialDesignF.FOLDER_PLUS_OUTLINE, () -> createFolder(target.path())));
+            if (!isRoot(entry)) {
+                menu.getItems().addAll(
+                        new SeparatorMenuItem(),
+                        item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
+                        danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+            }
+        }
+        return menu;
+    }
+
+    private static MenuItem item(String text, Ikon ikon, Runnable action) {
+        MenuItem item = new MenuItem(text, Icons.icon(ikon));
+        item.setOnAction(event -> action.run());
+        return item;
+    }
+
+    private static MenuItem danger(MenuItem item) {
+        item.getStyleClass().add("danger");
+        return item;
+    }
+
+    // ---- Drag & drop ----
+
+    private Path dropFolder(Entry target) {
+        if (target == null) {
+            return library.getRoot();
+        }
+        return target.isFolder() ? target.path() : target.containingFolder();
+    }
+
+    private boolean canDrop(Entry dragged, Path targetFolder) {
+        Path target = targetFolder.toAbsolutePath().normalize();
+        if (target.equals(dragged.containingFolder().toAbsolutePath().normalize())) {
+            return false;
+        }
+        return !dragged.isFolder() || !target.startsWith(dragged.path().toAbsolutePath().normalize());
+    }
+
+    private final class LibraryCell extends TreeCell<Entry> {
+        private final FontIcon icon = new FontIcon();
+        private final PauseTransition autoExpand = new PauseTransition(Duration.millis(700));
+        private TreeItem<Entry> observedItem;
+        private final javafx.beans.value.ChangeListener<Boolean> expandedListener =
+                (observable, oldValue, newValue) -> updateFolderIcon();
+
+        LibraryCell() {
+            setOnMouseClicked(event -> {
+                Entry entry = getItem();
+                if (entry != null && entry.isMap() && event.getButton() == MouseButton.PRIMARY
+                        && event.getClickCount() == 2) {
+                    host.openMap(entry.mapFile());
+                    event.consume();
+                }
+            });
+            setOnContextMenuRequested(event -> {
+                if (openMenu != null) {
+                    openMenu.hide();
+                }
+                if (getTreeItem() != null) {
+                    tree.getSelectionModel().select(getTreeItem());
+                }
+                openMenu = buildMenu(isEmpty() ? null : getItem());
+                openMenu.show(this, event.getScreenX(), event.getScreenY());
+                event.consume();
+            });
+
+            setOnDragDetected(event -> {
+                Entry entry = getItem();
+                if (entry == null || isRoot(entry) || event.getButton() != MouseButton.PRIMARY) {
+                    return;
+                }
+                draggedItem = getTreeItem();
+                Dragboard dragboard = startDragAndDrop(TransferMode.MOVE);
+                ClipboardContent content = new ClipboardContent();
+                content.putString(entry.path().toString());
+                dragboard.setContent(content);
+                dragboard.setDragView(snapshot(null, null));
+                event.consume();
+            });
+            setOnDragOver(event -> {
+                if (draggedItem != null && canDrop(draggedItem.getValue(), dropFolder(isEmpty() ? null : getItem()))) {
+                    event.acceptTransferModes(TransferMode.MOVE);
+                }
+                event.consume();
+            });
+            setOnDragEntered(event -> {
+                if (draggedItem != null && canDrop(draggedItem.getValue(), dropFolder(isEmpty() ? null : getItem()))) {
+                    pseudoClassStateChanged(DROP_TARGET, true);
+                    TreeItem<Entry> item = getTreeItem();
+                    if (item != null && item.getValue() != null && item.getValue().isFolder() && !item.isExpanded()) {
+                        autoExpand.setOnFinished(finished -> item.setExpanded(true));
+                        autoExpand.playFromStart();
+                    }
+                }
+            });
+            setOnDragExited(event -> {
+                pseudoClassStateChanged(DROP_TARGET, false);
+                autoExpand.stop();
+            });
+            setOnDragDropped(event -> {
+                boolean success = false;
+                if (draggedItem != null) {
+                    Entry dragged = draggedItem.getValue();
+                    Path target = dropFolder(isEmpty() ? null : getItem());
+                    if (canDrop(dragged, target)) {
+                        move(dragged, target);
+                        success = true;
+                    }
+                }
+                event.setDropCompleted(success);
+                event.consume();
+            });
+            setOnDragDone(event -> draggedItem = null);
+        }
+
+        @Override
+        protected void updateItem(Entry entry, boolean empty) {
+            super.updateItem(entry, empty);
+            if (observedItem != null) {
+                observedItem.expandedProperty().removeListener(expandedListener);
+                observedItem = null;
+            }
+            pseudoClassStateChanged(OPEN_MAP, false);
+            pseudoClassStateChanged(DROP_TARGET, false);
+            icon.getStyleClass().removeAll("folder-icon", "map-icon");
+            if (empty || entry == null) {
+                setText(null);
+                setGraphic(null);
+                setTooltip(null);
+                return;
+            }
+            setText(entry.name());
+            if (entry.isFolder()) {
+                icon.getStyleClass().add("folder-icon");
+                observedItem = getTreeItem();
+                if (observedItem != null) {
+                    observedItem.expandedProperty().addListener(expandedListener);
+                }
+                updateFolderIcon();
+                setTooltip(null);
+            } else {
+                icon.getStyleClass().add("map-icon");
+                icon.setIconCode(MaterialDesignM.MAP_OUTLINE);
+                pseudoClassStateChanged(OPEN_MAP, isOpenMap(entry));
+                setTooltip(Icons.tooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
+                        + "\nDouble-click to open"));
+            }
+            setGraphic(icon);
+        }
+
+        private void updateFolderIcon() {
+            TreeItem<Entry> item = getTreeItem();
+            if (item == null || item.getValue() == null || !item.getValue().isFolder()) {
+                return;
+            }
+            if (isRoot(item.getValue())) {
+                icon.setIconCode(MaterialDesignF.FOLDER_HOME_OUTLINE);
+            } else {
+                icon.setIconCode(item.isExpanded() ? MaterialDesignF.FOLDER_OPEN_OUTLINE : MaterialDesignF.FOLDER_OUTLINE);
+            }
+        }
+    }
+}

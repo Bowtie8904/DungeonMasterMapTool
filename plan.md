@@ -3,7 +3,7 @@
 ## 1) Chosen Technology Stack
 
 - **Language/runtime:** Java 17+ (compiled with release 17, JavaFX 21)
-- **UI/rendering:** JavaFX + Canvas
+- **UI/rendering:** JavaFX + Canvas, custom dark CSS theme, Ikonli (Material Design Icons 2) for icons
 - **Build/deps:** Maven
 - **Codegen:** Lombok (DTOs/models/boilerplate reduction)
 - **Project save format:** Versioned JSON (`.dmmap`)
@@ -35,6 +35,8 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Map switcher with full-snapshot freeze of the player view
 - [x] Manual wall editing for custom-image maps (Wall / Erase Wall tools, half-tile snap, Shift = free, undoable)
 - [x] 1-inch tile calibration for the player screen (screen diagonal + tile-inch settings, auto zoom, 1-inch test square)
+- [x] Map browser sidebar with folder tree, drag & drop, rename/copy/delete, custom save/import location dialog (3.15)
+- [x] Modern dark DM controls overlay: collapsible sections, icon buttons, tooltips, active-tool chip + cursors (3.16)
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 
 ## 4) Core Functional Requirements
@@ -63,9 +65,8 @@ Desktop tool for tabletop dungeon masters that:
 - Render overlays (fog, lights, shapes) with editing controls.
 - Show player viewport rectangle when player screen is active.
 - Provide a map-rotation menu action to rotate the entire map in **90-degree steps** (0/90/180/270).
-- Use an on-canvas **DM-only control overlay** (instead of top window menu) for core actions like import/open/save, player-view controls, ping, and rotation.
-- Remember the last dd2vtt import directory and reopen that location for the next import dialog.
-- Open-project dialog defaults to the app-managed `dmmap-projects` save directory.
+- Layout: **map browser sidebar** on the left (see 3.15), map canvas in the center, compact **DM controls overlay** on the right (see 3.16), slim status bar at the bottom.
+- Remember the last dd2vtt import directory and reopen that location for the next import (source file) dialog.
 
 ## 3.3 Player View (Second Screen)
 
@@ -82,7 +83,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Fast map/project switcher UI.
 - If player view is frozen, switching/opening in DM view must not affect player output until unfreeze/swap action.
-- **Map switcher** (DM overlay, `Map:` dropdown): lists every `.dmmap` under `dmmap-projects`; picking one auto-saves the current map and opens the chosen one.
+- Maps are switched from the **map browser** (3.15): double-clicking a map auto-saves the current map and opens the chosen one.
 - **Freeze** snapshots the *entire* project for the player window (map, fog, lights, effects, camera) using a separate renderer/lighting engine, so players see the old map exactly as it was regardless of DM edits or map switches. Unfreezing makes the player view jump to the currently open map and its staged viewport.
 - Frozen state is session-only (not saved in `.dmmap`).
 
@@ -197,6 +198,39 @@ Desktop tool for tabletop dungeon masters that:
   - overlays/shapes
   - DM and player camera framing
 - Rotation state must be persisted and restored from `.dmmap`.
+
+## 3.15 Map Browser (Left Sidebar)
+
+- Collapsible sidebar on the left of the DM view containing the map library and the map-level actions: **New map, Import dd2vtt, Save, New folder, Refresh, Rotate left/right**, plus the name of the currently open map.
+- Library = the app-managed `dmmap-projects` folder. It is shown as a **tree view** like a file browser:
+  - Folders are real folders on disk and are used to group maps (campaign, cities, generic, wilderness, ...). Folders can be nested, expanded and collapsed; the tree scrolls for large libraries.
+  - Each map is shown **only by its name** - no `.dmmap` extension, no asset files or asset folders.
+  - The currently open map is highlighted.
+- On disk every map is a **map package**: `<folder>/<Map Name>/<Map Name>.dmmap` plus its assets (`assets\...`, `imports\...`). A directory containing exactly one `.dmmap` is treated as a map package; other directories are folders. Loose `.dmmap` files (older saves) are also listed and converted to packages when moved/renamed/copied.
+- Interactions:
+  - **Double-click** (or Enter) opens a map in the DM view (current map is auto-saved first).
+  - **Drag & drop** maps and folders onto a folder (or onto a map to use its folder) to move them; the move happens on disk. Dropping a folder into itself/its children is rejected. Hovering a collapsed folder while dragging expands it.
+  - Right-click a **map**: Open, Rename, Duplicate (copy), Delete. Right-click a **folder** (or empty space = library root): New map here, Import map here, New folder, Rename, Delete. Keyboard: F2 rename, Delete delete, Enter open.
+  - **Delete** always asks for confirmation (folders state how many maps they contain).
+  - **Copy** creates a sibling named `<Name> (Copy)`, `<Name> (Copy 2)`, ... (a copy of a copy re-uses the base name).
+  - **Rename** renames everything required on disk: the package folder and the `.dmmap` file (asset paths are relative, so they stay valid).
+  - Names are validated (no empty names, no `<>:"/\|?*`, no reserved Windows names, no duplicates in the same folder; case-only renames work).
+- File operations that touch the open map save it first and then re-point the app to the new location (deleting the open map switches to an empty new map).
+- **Saving a new map** and **importing a dd2vtt** use a custom in-app **location dialog** (no system file browser): it shows only the folder tree of the library, allows creating folders, and asks for the map name (import pre-fills the dd2vtt name). The system file browser is only used to pick the external dd2vtt / image source files.
+- Leaving an unsaved new map (New/open another map) asks Save / Discard / Cancel.
+
+## 3.16 DM Controls Overlay & Visual Design
+
+- All non-library DM controls live in a **compact overlay panel on the right** side of the DM view, organised in **collapsible sections** (collapsed state is remembered): Tools, Fog of war, Lighting, Effects, Map building, Player view. The whole panel can be collapsed to its header and scrolls if the window is small.
+- **Dark, modern theme** (app-wide stylesheet `dmmt/ui/dark.css`): flat controls, rounded corners, subtle hover states, dark tooltips/menus/dialogs, one accent colour (amber).
+- **Icon buttons** (Material Design Icons via Ikonli) instead of text wherever an icon is clear; **every button has a tooltip** describing what it does (and its shortcut if any).
+- **Active tool visibility:**
+  - Selected tool/state toggles are filled with the accent colour and glow.
+  - A floating **tool chip** at the top of the canvas names the active tool (and "Esc to exit").
+  - The **mouse cursor changes per action**: eraser for revealing fog / erasing walls, brush for painting fog, pen for freehand effects, pencil for walls, crosshair for area/shape tools, target for ping, open/closed hand for grabbing and panning, resize arrow on layer handles.
+- Time of day is a 4-button segmented control (Day/Dawn/Dusk/Night icons). Effect "Players see", Snap layers, Fog on/off, Freeze and Player window are icon toggles.
+- Map building section also offers **Add image** (file picker) in addition to drag & drop.
+- Implementation: `dmmt.ui` package - `Icons` (icon buttons, tooltips, cached icon cursors), `CollapsibleSection`, `Dialogs` (dark text/confirm/save-changes/error dialogs), `MapLocationDialog`, `MapBrowser`; disk operations in `dmmt.service.MapLibraryService` (unit-tested). `assets`/`imports` folders next to loose `.dmmap` files are hidden from the tree.
 
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
@@ -345,6 +379,14 @@ Desktop tool for tabletop dungeon masters that:
 6. Undo/redo integration for fog brush/rectangle actions.
 7. Performance optimization pass.
 
+## Phase 6 - Modern DM UI + Map Library
+
+1. Map library service (scan tree, create folder, move, rename, copy, delete, name validation) with unit tests.
+2. Left map browser sidebar (tree, drag & drop, context menus, confirmations).
+3. Custom save/import location dialog.
+4. Right DM controls overlay with collapsible sections.
+5. Dark theme stylesheet, icon buttons + tooltips, tool chip and per-tool cursors.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -360,7 +402,9 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v1.5 (current):** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.
+- **v1.7 (current):** Implemented 3.15 and 3.16 (Phase 6 complete).
+- **v1.6:** Added map browser sidebar (3.15), modern DM controls overlay and visual design (3.16), Phase 6. Map switcher dropdown and system file dialogs for open/save replaced by the library.
+- **v1.5:** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.
 - **v1.4:** Full-plan audit. Fixed: player window now uses full monitor bounds (covers taskbar), light Brightness menu (intensity), layer Snap toggle, spec corrections (Java 17, freeze not saved). 
 - **v1.3:** Wall editing tools (draw/erase segments; light LOS updates automatically via geometry signature).
 - **v1.2:** Render loop throttles to ~10 fps when idle (no enabled lights, no input for 1 s).
