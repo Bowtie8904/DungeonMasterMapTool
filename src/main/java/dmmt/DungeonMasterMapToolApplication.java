@@ -394,16 +394,8 @@ public class DungeonMasterMapToolApplication extends Application {
             timeSegment.getChildren().add(button);
         }
         HBox lightRow = row(
-                Icons.button(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
-                        "Add a light in the middle of the view — drag it onto a mini", this::addLightAtCamera),
-                Icons.button(MaterialDesignL.LIGHTBULB_OFF_OUTLINE,
-                        "Remove the selected light (or the one closest to the view center)", () -> {
-                            if (selectedLight != null) {
-                                removeLight(selectedLight.getId());
-                            } else {
-                                removeNearestLight();
-                            }
-                        }),
+                toolButtons.get(EditorTool.LIGHT_ADD),
+                toolButtons.get(EditorTool.LIGHT_REMOVE),
                 Icons.separator(),
                 timeSegment);
         Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
@@ -725,6 +717,11 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_BRUSH -> Icons.cursor(MaterialDesignD.DRAW, 0.14, 0.86);
             case WALL_DRAW -> Icons.cursor(MaterialDesignP.PENCIL, 0.14, 0.86);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
+            case LIGHT_ADD -> Icons.cursor(MaterialDesignL.LIGHTBULB_ON_OUTLINE, 0.5, 0.5);
+            case LIGHT_REMOVE -> hoverInsideCanvas && pickNearestLight(hoverWorldX, hoverWorldY,
+                    24 / Math.max(0.01, project.getViews().getDmCamera().getZoom())) != null
+                    ? Icons.cursor(MaterialDesignL.LIGHTBULB_OFF_OUTLINE, 0.5, 0.5)
+                    : Cursor.DEFAULT;
             default -> Cursor.CROSSHAIR;
         };
     }
@@ -910,6 +907,25 @@ public class DungeonMasterMapToolApplication extends Application {
                 addPing(world.x(), world.y());
                 setPingArmed(false);
                 status("Ping placed.");
+                return;
+            }
+
+            if (activeTool == EditorTool.LIGHT_ADD) {
+                addLightAt(world.x(), world.y());
+                setActiveTool(EditorTool.SELECT);
+                status("Added torch light. Drag it to move; right-click for range, flicker, color and fog reveal.");
+                return;
+            }
+
+            if (activeTool == EditorTool.LIGHT_REMOVE) {
+                DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
+                if (hit == null) {
+                    status("No light there — click directly on the light you want to remove.");
+                    return;
+                }
+                removeLight(hit.getId());
+                setActiveTool(EditorTool.SELECT);
+                status("Removed light.");
                 return;
             }
 
@@ -1831,6 +1847,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
+            case LIGHT_ADD -> status("Add light: click the map where the light should go.");
+            case LIGHT_REMOVE -> status("Remove light: click the light you want to remove.");
         }
     }
 
@@ -2783,12 +2801,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private void addLightAtCamera() {
-        DmProject.CameraState camera = project.getViews().getDmCamera();
+    private void addLightAt(double x, double y) {
         DmProject.LightSource light = DmProject.LightSource.builder()
                 .id("light-" + UUID.randomUUID())
-                .x(camera.getX())
-                .y(camera.getY())
+                .x(x)
+                .y(y)
                 .range(project.getMap().getGrid().getPixelsPerCell() * 4)
                 .color("#FFB35C")
                 .flicker(DmProject.Flicker.builder().enabled(true).strength(0.22).speed(1.4).build())
@@ -2804,17 +2821,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 },
                 () -> project.getLighting().getLights().removeIf(l -> l.getId().equals(light.getId()))
         );
-        status("Added torch light. Drag it to move; right-click for range, flicker, color and fog reveal.");
-    }
-
-    private void removeNearestLight() {
-        DmProject.CameraState camera = project.getViews().getDmCamera();
-        DmProject.LightSource nearest = pickNearestLight(camera.getX(), camera.getY(), Double.MAX_VALUE);
-        if (nearest == null) {
-            status("No light to remove.");
-            return;
-        }
-        removeLight(nearest.getId());
     }
 
     private void executeWithHistory(String label, Runnable doAction, Runnable undoAction) {
@@ -2966,7 +2972,9 @@ public class DungeonMasterMapToolApplication extends Application {
         AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignD.DRAW, false, false),
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
-        WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false);
+        WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
+        LIGHT_ADD("Add light", "click the map to place a torch light", MaterialDesignL.LIGHTBULB_ON_OUTLINE, false, false),
+        LIGHT_REMOVE("Remove light", "click a light to remove it", MaterialDesignL.LIGHTBULB_OFF_OUTLINE, false, false);
 
         private final String label;
         private final String description;
@@ -2990,8 +2998,12 @@ public class DungeonMasterMapToolApplication extends Application {
             return this == WALL_DRAW || this == WALL_ERASE;
         }
 
+        boolean isLightTool() {
+            return this == LIGHT_ADD || this == LIGHT_REMOVE;
+        }
+
         boolean isFogTool() {
-            return this != SELECT && !isAoeTool() && !isWallTool();
+            return this != SELECT && !isAoeTool() && !isWallTool() && !isLightTool();
         }
     }
 

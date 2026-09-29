@@ -103,6 +103,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 3.6 Dynamic Lighting
 
 - Add/remove/move one or more light sources in DM view.
+- **Add light** and **Remove light** are one-shot tools: arm the tool, then click the map to place a light at that spot, or click a specific light to remove it. After one successful click the tool returns to Select, so the next click doesn't place or remove another light. A Remove click that misses every light does nothing and the tool stays armed. Esc cancels.
 - Each light has:
   - range/radius
   - intensity/falloff preset
@@ -402,7 +403,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v1.7 (current):** Implemented 3.15 and 3.16 (Phase 6 complete).
+- **v1.8 (current):** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).
+- **v1.7:** Implemented 3.15 and 3.16 (Phase 6 complete).
 - **v1.6:** Added map browser sidebar (3.15), modern DM controls overlay and visual design (3.16), Phase 6. Map switcher dropdown and system file dialogs for open/save replaced by the library.
 - **v1.5:** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.
 - **v1.4:** Full-plan audit. Fixed: player window now uses full monitor bounds (covers taskbar), light Brightness menu (intensity), layer Snap toggle, spec corrections (Java 17, freeze not saved). 
