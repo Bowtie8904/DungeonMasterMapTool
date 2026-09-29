@@ -65,7 +65,7 @@ Desktop tool for tabletop dungeon masters that:
 - Convert imported content into internal project model and allow saving as `.dmmap`.
 - Use the same internal model/save format for dd2vtt and custom-image maps so all features (fog, lights, overlays, player view, freeze) work identically.
 - Imported dd2vtt semantics must remain functional after conversion (no loss of core gameplay behavior).
-- Import must **copy all required source data/assets** from the dd2vtt location into app-managed project storage so the original file location (e.g., USB drive) is no longer required afterward.
+- Import must **copy all required assets** (the map image) from the dd2vtt into app-managed project storage so the original file location (e.g., USB drive) is no longer required afterward. The `.dd2vtt` file itself is **not** stored in the project; everything needed (walls, lights, portals, grid, image) is converted into the internal model and `.dmmap`, and nothing reads the dd2vtt again.
 
 ## 3.2 DM View
 
@@ -346,7 +346,6 @@ Desktop tool for tabletop dungeon masters that:
   "schemaVersion": 1,
   "map": {
     "sourceType": "dd2vtt",
-    "sourcePath": "imports/catacombs/catacombs.dd2vtt",
     "imagePath": "imports/catacombs/catacombs.webp",
     "grid": { "pixelsPerCell": 140, "cellSizeFeet": 5 },
     "rotationQuarterTurns": 0,

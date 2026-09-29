@@ -11,6 +11,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Dd2vttImportServiceTest {
@@ -66,8 +67,8 @@ class Dd2vttImportServiceTest {
 
         assertEquals("dd2vtt", project.getMap().getSourceType());
         assertEquals(Boolean.TRUE, project.getMap().getImageLayersLocked());
-        assertTrue(project.getMap().getSourcePath().contains("imports"));
-        assertTrue(Files.exists(projectDir.resolve(project.getMap().getSourcePath())));
+        assertNull(project.getMap().getSourcePath());
+        assertTrue(Files.notExists(projectDir.resolve("imports").resolve("encounter").resolve("encounter.dd2vtt")));
         assertFalse(project.getImageLayers().isEmpty());
         assertEquals(1, project.getWalls().size());
         assertEquals(1, project.getLighting().getLights().size());

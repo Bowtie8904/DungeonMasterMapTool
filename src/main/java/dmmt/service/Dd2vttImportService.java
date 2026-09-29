@@ -23,13 +23,9 @@ public class Dd2vttImportService {
         Path importDir = projectDirectory.resolve("imports").resolve(baseName);
         Files.createDirectories(importDir);
 
-        Path copiedDd2vtt = importDir.resolve(dd2vttFile.getFileName());
-        Files.copy(dd2vttFile, copiedDd2vtt, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-
         DmProject project = DmProject.builder().build();
         project.getMap().setSourceType("dd2vtt");
         project.getMap().setImageLayersLocked(true);
-        project.getMap().setSourcePath(projectDirectory.relativize(copiedDd2vtt).toString().replace('/', '\\'));
         double pixelsPerGrid = resolvePixelsPerGrid(root);
         project.getMap().setGrid(DmProject.GridSpec.builder()
                 .pixelsPerCell(pixelsPerGrid)
