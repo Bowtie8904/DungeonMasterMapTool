@@ -29,6 +29,8 @@ public class CanvasMapRenderer {
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.45;
 
+    private static final int MAX_TEXTURE_SIZE = 4096;
+    private final java.util.Set<String> failedImages = new java.util.HashSet<>();
     private final Map<String, Image> imageCache = new HashMap<>();
     private final LightingEngine lightingEngine;
     private final LightBuffer dmLightBuffer = new LightBuffer();
@@ -498,6 +500,12 @@ public class CanvasMapRenderer {
         gc.fillRect(x, y, w, h);
     }
 
+    /** Downscales oversized images so they fit into a GPU texture (a null texture crashes the canvas). */
+    private static Image loadCapped(Path file) {
+        Image image = new Image(file.toUri().toString(), MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE, true, true, false);
+        return image.isError() || image.getWidth() <= 0 ? null : image;
+    }
+
     private Image resolveImage(String path, Path projectFile) {
         if (path == null || path.isBlank()) {
             return null;
@@ -512,7 +520,14 @@ public class CanvasMapRenderer {
             }
             Path finalResolved = resolved;
             String key = finalResolved.toAbsolutePath().toString();
-            return imageCache.computeIfAbsent(key, k -> new Image(finalResolved.toUri().toString()));
+            if (failedImages.contains(key)) {
+                return null;
+            }
+            Image image = imageCache.computeIfAbsent(key, k -> loadCapped(finalResolved));
+            if (image == null) {
+                failedImages.add(key);
+            }
+            return image;
         } catch (Exception ex) {
             return null;
         }
