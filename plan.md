@@ -2,7 +2,7 @@
 
 ## 1) Chosen Technology Stack
 
-- **Language/runtime:** Java 21
+- **Language/runtime:** Java 17+ (compiled with release 17, JavaFX 21)
 - **UI/rendering:** JavaFX + Canvas
 - **Build/deps:** Maven
 - **Codegen:** Lombok (DTOs/models/boilerplate reduction)
@@ -33,9 +33,9 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Dynamic lighting + line-of-sight engine (walls + closed doors), flicker, per-light fog reveal modes and time-of-day presets
 - [x] AOE overlay drawing tools (circle/box/freehand) with color, opacity and player-visibility
 - [x] Map switcher with full-snapshot freeze of the player view
-- [ ] Manual wall editing for custom-image maps
-- [ ] 1-inch tile calibration for the player screen
-- [ ] Performance pass (render throttling)
+- [x] Manual wall editing for custom-image maps (Wall / Erase Wall tools, half-tile snap, Shift = free, undoable)
+- [x] 1-inch tile calibration for the player screen (screen diagonal + tile-inch settings, auto zoom, 1-inch test square)
+- [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 
 ## 4) Core Functional Requirements
 
@@ -43,7 +43,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Import dd2vtt map files.
 - Create custom maps by drag-and-drop image import (png/jpg/webp) into a map canvas.
-- Allow image layer transform editing (move, resize/scale, optional rotate) directly with drag handles.
+- Allow image layer transform editing (move, resize/scale) directly with drag handles. Per-layer rotation is intentionally not supported; use whole-map rotation.
 - Parse and store:
   - base image path/data
   - grid size/scale
@@ -182,7 +182,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 3.13 Custom Map Builder
 
 - Provide an editor mode for quick map assembly from one or more dropped images.
-- Support snapping/scaling against grid so map tiles align predictably.
+- Support snapping/scaling against grid so map tiles align predictably (**Snap layers** toggle: half-tile steps while moving/resizing).
 - Persist image layer stack order and transforms in `.dmmap`.
 - Allow adding walls manually for custom-image maps so LOS lighting remains usable even without dd2vtt wall data.
 
@@ -287,8 +287,8 @@ Desktop tool for tabletop dungeon masters that:
 - Keep heavy recomputation incremental:
   - cached fog mask textures
   - cached LOS polygons per light unless moved/changed
-  - dirty-rectangle redraw strategy where practical
-- Non-blocking file IO for import/save to keep UI responsive.
+  - dirty-rectangle redraw strategy where practical (decided: full-canvas redraw plus idle throttling instead of dirty rectangles, since lighting/fog are composited per frame)
+- Non-blocking file IO for import/save to keep UI responsive. Implemented: import, open, save and map switching run on a background thread (`runInBackground`); saves write a deep-copied snapshot.
 
 ## 6) Architecture Outline
 
@@ -347,7 +347,7 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 8) Open Decisions (Track Here)
 
-- Exact tile-to-inch calibration UX (manual slider vs calibration wizard).
+- ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
 - ~~Whether to store fog as stroke history, bitmap mask, or hybrid representation.~~ Decided: bitmap mask (v0.8).
 - Minimum supported GPU/OpenGL profile for JavaFX on older laptops.
 
@@ -360,7 +360,12 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v1.0 (current):** Map switcher dropdown; freeze now snapshots the whole project for the player view (separate renderer/lighting engine).
+- **v1.5 (current):** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.
+- **v1.4:** Full-plan audit. Fixed: player window now uses full monitor bounds (covers taskbar), light Brightness menu (intensity), layer Snap toggle, spec corrections (Java 17, freeze not saved). 
+- **v1.3:** Wall editing tools (draw/erase segments; light LOS updates automatically via geometry signature).
+- **v1.2:** Render loop throttles to ~10 fps when idle (no enabled lights, no input for 1 s).
+- **v1.1:** Player zoom is derived automatically so a tile measures N inches (default 1): PPI = screen diagonal in DIP / entered diagonal (stored per screen); "1 in test square" toggle for verification. Exact calibration UX resolved: manual diagonal entry.
+- **v1.0:** Map switcher dropdown; freeze now snapshots the whole project for the player view (separate renderer/lighting engine).
 - **v0.9:** AOE effect shapes (circle/box/freehand) with color, opacity, player visibility, selection/move/delete and undo.
 - **v0.8:** Fog moved to a persisted grid bitmask with Select/Reveal/Hide/area tools and brush size; dynamic lighting with wall/door LOS, flicker, colors, per-light fog reveal modes via right-click menu, and 4 time-of-day presets.
 

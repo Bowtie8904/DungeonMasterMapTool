@@ -30,6 +30,8 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.Dragboard;
@@ -72,6 +74,8 @@ import java.util.prefs.Preferences;
 public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_LAST_IMPORT_DIRECTORY = "lastImportDirectory";
     private static final String PREF_PLAYER_SCREEN_INDEX = "playerScreenIndex";
+    private static final String PREF_SCREEN_DIAGONAL_PREFIX = "screenDiagonalInches.";
+    private static final String PREF_TILE_INCHES = "playerTileInches";
 
     private final ProjectService projectService = new ProjectService();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
@@ -96,6 +100,14 @@ public class DungeonMasterMapToolApplication extends Application {
     private final LightingEngine playerLightingEngine = new LightingEngine();
     private final CanvasMapRenderer playerRenderer = new CanvasMapRenderer(playerLightingEngine);
     private ComboBox<MapEntry> mapSwitcher;
+    private Spinner<Double> screenInchesSpinner;
+    private Spinner<Double> tileInchesSpinner;
+    private boolean showScaleTestSquare;
+    private DmProject.WallSegment draftWall;
+    private boolean snapLayersToGrid;
+    private volatile boolean ioBusy;
+    private long lastInputNanos = System.nanoTime();
+    private long lastFrameNanos;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
     private double brushSizeTiles = 1.5;
@@ -224,10 +236,20 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         stage.show();
 
+        scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> lastInputNanos = System.nanoTime());
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
+                // Idle scenes without active lights only redraw ~10x per second.
+                boolean animated = project.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())
+                        || (frozenPlayerProject != null && frozenPlayerProject.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()));
+                boolean recentInput = now - lastInputNanos < 1_000_000_000L;
+                if (!animated && !recentInput && now - lastFrameNanos < 100_000_000L) {
+                    return;
+                }
+                lastFrameNanos = now;
                 lightingEngine.update(project);
+                applyPlayerScale();
                 if (frozenPlayerProject != null) {
                     playerLightingEngine.update(frozenPlayerProject);
                 }
@@ -283,7 +305,12 @@ public class DungeonMasterMapToolApplication extends Application {
             pingArmed = true;
             status("Ping mode: click map to ping players.");
         });
-        HBox mapRow = new HBox(6, rotateLeft, rotateRight, addPing);
+        ToggleButton snapLayers = new ToggleButton("Snap layers");
+        snapLayers.setOnAction(e -> {
+            snapLayersToGrid = snapLayers.isSelected();
+            status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
+        });
+        HBox mapRow = new HBox(6, rotateLeft, rotateRight, addPing, snapLayers);
 
         mapSwitcher = new ComboBox<>();
         mapSwitcher.setPromptText("Switch map...");
@@ -367,12 +394,13 @@ public class DungeonMasterMapToolApplication extends Application {
         ToggleGroup toolGroup = new ToggleGroup();
         HBox toolRow = new HBox(6, fogToggleButton);
         HBox effectToolRow = new HBox(6);
+        HBox wallToolRow = new HBox(6);
         for (EditorTool tool : EditorTool.values()) {
             ToggleButton button = new ToggleButton(tool.label);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
-            (tool.isAoeTool() ? effectToolRow : toolRow).getChildren().add(button);
+            (tool.isWallTool() ? wallToolRow : tool.isAoeTool() ? effectToolRow : toolRow).getChildren().add(button);
         }
 
         overlayColorPicker = new ColorPicker(Color.web(overlayColor));
@@ -458,11 +486,44 @@ public class DungeonMasterMapToolApplication extends Application {
         playerScreenSelector = new ComboBox<>();
         playerScreenSelector.setPrefWidth(320);
         refreshPlayerScreenSelector();
-        playerScreenSelector.setOnAction(e -> rememberSelectedPlayerScreenIndex());
+        playerScreenSelector.setOnAction(e -> {
+            rememberSelectedPlayerScreenIndex();
+            if (screenInchesSpinner != null) {
+                syncingControls = true;
+                try {
+                    screenInchesSpinner.getValueFactory().setValue(loadScreenDiagonal());
+                } finally {
+                    syncingControls = false;
+                }
+            }
+        });
         HBox screenRow = new HBox(6, overlayLabel("Screen:"), playerScreenSelector);
         screenRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox playerRow = new HBox(6, openPlayer, closePlayer, freezePlayerButton);
+
+        screenInchesSpinner = createDoubleSpinner(10, 120, loadScreenDiagonal(), 0.5, 70);
+        screenInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (!syncingControls && newValue != null) {
+                preferences.putDouble(PREF_SCREEN_DIAGONAL_PREFIX + selectedScreenIndex(), newValue);
+            }
+        });
+        tileInchesSpinner = createDoubleSpinner(0.25, 3, preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 70);
+        tileInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue != null) {
+                preferences.putDouble(PREF_TILE_INCHES, newValue);
+            }
+        });
+        ToggleButton scaleTest = new ToggleButton("1 in test square");
+        scaleTest.setOnAction(e -> {
+            showScaleTestSquare = scaleTest.isSelected();
+            status(showScaleTestSquare
+                    ? "A 1-inch square is shown on the player screen. If it does not measure 1 inch, correct the screen size."
+                    : "Test square hidden.");
+        });
+        HBox scaleRow = new HBox(6, overlayLabel("Screen (in):"), screenInchesSpinner,
+                overlayLabel("Tile (in):"), tileInchesSpinner, scaleTest);
+        scaleRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox body = new VBox(8,
                 fileRow,
@@ -471,7 +532,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 sectionLabel("Lights"), lightRow,
                 sectionLabel("Fog of war"), toolRow, brushRow,
                 sectionLabel("Effects (spell areas)"), effectToolRow, effectStyleRow,
-                sectionLabel("Player view"), screenRow, playerRow);
+                sectionLabel("Walls (block light)"), wallToolRow,
+                sectionLabel("Player view"), screenRow, scaleRow, playerRow);
 
         Label title = new Label("DM Controls");
         title.setTextFill(Color.WHITE);
@@ -598,6 +660,17 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (activeTool == EditorTool.WALL_DRAW) {
+                double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
+                draftWall = DmProject.WallSegment.builder().x1(p[0]).y1(p[1]).x2(p[0]).y2(p[1]).build();
+                return;
+            }
+
+            if (activeTool == EditorTool.WALL_ERASE) {
+                eraseWallAt(world.x(), world.y(), camera.getZoom());
+                return;
+            }
+
             if (event.getClickCount() >= 2 && toggleInteractableNear(world.x(), world.y())) {
                 return;
             }
@@ -694,6 +767,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (draftWall != null) {
+                double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
+                draftWall.setX2(p[0]);
+                draftWall.setY2(p[1]);
+                return;
+            }
+
             if (draggingOverlay) {
                 DmProject.OverlayShape moving = findOverlay(selectedOverlayId);
                 if (moving != null) {
@@ -724,11 +804,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             if (draggingLayer) {
-                selectedLayer.setX(world.x() - dragOffsetX);
-                selectedLayer.setY(world.y() - dragOffsetY);
+                selectedLayer.setX(snapLayer(world.x() - dragOffsetX));
+                selectedLayer.setY(snapLayer(world.y() - dragOffsetY));
             } else if (resizingLayer) {
-                selectedLayer.setWidth(Math.max(16, world.x() - selectedLayer.getX()));
-                selectedLayer.setHeight(Math.max(16, world.y() - selectedLayer.getY()));
+                selectedLayer.setWidth(Math.max(16, snapLayer(world.x()) - selectedLayer.getX()));
+                selectedLayer.setHeight(Math.max(16, snapLayer(world.y()) - selectedLayer.getY()));
             }
         });
 
@@ -779,6 +859,11 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (draftOverlay != null) {
                 finishOverlayDraw();
+                return;
+            }
+
+            if (draftWall != null) {
+                finishWallDraw();
                 return;
             }
 
@@ -902,7 +987,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         Screen target = resolveSelectedPlayerScreen();
-        Rectangle2D bounds = target.getVisualBounds();
+        Rectangle2D bounds = target.getBounds();
         playerStage.setX(bounds.getMinX());
         playerStage.setY(bounds.getMinY());
         playerStage.setWidth(bounds.getWidth());
@@ -975,6 +1060,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 null,
                 null
         );
+        if (showScaleTestSquare) {
+            drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
+        }
     }
 
     private void drawSelectionHandle(GraphicsContext gc) {
@@ -1004,19 +1092,52 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         rememberImportDirectory(source.toPath().getParent());
 
-        try {
-            String baseName = sanitizeFileStem(stripExtension(source.getName()));
-            Path projectsRoot = resolveProjectsRoot();
-            Path projectDir = createUniqueDirectory(projectsRoot, baseName);
+        Path sourcePath = source.toPath();
+        String sourceName = source.getName();
+        runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
+            String baseName = sanitizeFileStem(stripExtension(sourceName));
+            Path projectDir = createUniqueDirectory(resolveProjectsRoot(), baseName);
             Path targetPath = projectDir.resolve(baseName + ".dmmap");
-
-            DmProject imported = dd2vttImportService.importToProject(source.toPath(), projectDir);
+            DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
             projectService.save(targetPath, imported);
-            switchProject(imported, targetPath);
-            status("Imported " + source.getName() + " to " + targetPath);
-        } catch (IOException ex) {
-            status("Import failed: " + ex.getMessage());
+            return new LoadedProject(imported, targetPath);
+        }, loaded -> {
+            switchProject(loaded.project(), loaded.file());
+            status("Imported " + sourceName + " to " + loaded.file());
+        });
+    }
+
+    private record LoadedProject(DmProject project, Path file) {
+    }
+
+    private interface IoWork<T> {
+        T run() throws IOException;
+    }
+
+    /** Runs blocking file work off the FX thread; result handling happens back on the FX thread. */
+    private <T> void runInBackground(String busyMessage, String failurePrefix, IoWork<T> work, java.util.function.Consumer<T> onSuccess) {
+        if (ioBusy) {
+            status("Still working on the previous file operation.");
+            return;
         }
+        ioBusy = true;
+        status(busyMessage);
+        Thread thread = new Thread(() -> {
+            try {
+                T result = work.run();
+                Platform.runLater(() -> {
+                    ioBusy = false;
+                    onSuccess.accept(result);
+                });
+            } catch (IOException | RuntimeException ex) {
+                Platform.runLater(() -> {
+                    ioBusy = false;
+                    status(failurePrefix + ex.getMessage());
+                });
+            }
+        }, "dmmt-io");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void handleOpenProject(Stage stage) {
@@ -1028,12 +1149,13 @@ public class DungeonMasterMapToolApplication extends Application {
         if (file == null) {
             return;
         }
-        try {
-            switchProject(projectService.load(file.toPath()), file.toPath());
-            status("Loaded " + file.getName());
-        } catch (IOException ex) {
-            status("Load failed: " + ex.getMessage());
-        }
+        Path path = file.toPath();
+        runInBackground("Loading " + file.getName() + "...", "Load failed: ",
+                () -> new LoadedProject(projectService.load(path), path),
+                loaded -> {
+                    switchProject(loaded.project(), loaded.file());
+                    status("Loaded " + path.getFileName());
+                });
     }
 
     private void handleSave(Stage stage) {
@@ -1048,12 +1170,18 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             projectFile = ensureExtension(chosen.toPath(), ".dmmap");
         }
+        Path target = projectFile;
+        DmProject snapshot;
         try {
-            projectService.save(projectFile, project);
-            status("Saved " + projectFile.getFileName());
+            snapshot = projectService.copy(project);
         } catch (IOException ex) {
             status("Save failed: " + ex.getMessage());
+            return;
         }
+        runInBackground("Saving...", "Save failed: ", () -> {
+            projectService.save(target, snapshot);
+            return target;
+        }, saved -> status("Saved " + saved.getFileName()));
     }
 
     private void addImageLayerFromFile(Path imagePath) {
@@ -1164,6 +1292,7 @@ public class DungeonMasterMapToolApplication extends Application {
         fogDragging = false;
         fogBeforeSnapshot = null;
         draftOverlay = null;
+        draftWall = null;
         toolButtons.forEach((key, button) -> button.setSelected(key == activeTool));
         switch (activeTool) {
             case SELECT -> status("Select: drag lights, layers and the player viewport. Right-click a light for options.");
@@ -1174,6 +1303,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
+            case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
+            case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
         }
     }
 
@@ -1264,6 +1395,15 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void drawToolPreview(GraphicsContext gc) {
+        if (draftWall != null) {
+            DmProject.CameraState wallCamera = project.getViews().getDmCamera();
+            double ww = dmFogCanvas.getWidth();
+            double wh = dmFogCanvas.getHeight();
+            gc.setStroke(Color.web("#FFD24A"));
+            gc.setLineWidth(3);
+            gc.strokeLine(renderer.worldToScreenX(draftWall.getX1(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY1(), wh, wallCamera),
+                    renderer.worldToScreenX(draftWall.getX2(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY2(), wh, wallCamera));
+        }
         if (!activeTool.isFogTool()) {
             return;
         }
@@ -1343,6 +1483,145 @@ public class DungeonMasterMapToolApplication extends Application {
         return label;
     }
 
+    // ---- Wall editing ----
+
+    private double snapLayer(double value) {
+        if (!snapLayersToGrid) {
+            return value;
+        }
+        double step = project.getMap().getGrid().getPixelsPerCell() / 2.0;
+        return Math.round(value / step) * step;
+    }
+
+    private double[] snapWallPoint(double worldX, double worldY, boolean free) {
+        if (free) {
+            return new double[]{worldX, worldY};
+        }
+        double step = project.getMap().getGrid().getPixelsPerCell() / 2.0;
+        return new double[]{Math.round(worldX / step) * step, Math.round(worldY / step) * step};
+    }
+
+    private void finishWallDraw() {
+        DmProject.WallSegment wall = draftWall;
+        draftWall = null;
+        if (distance(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2()) < 2) {
+            return;
+        }
+        executeWithHistory("Add wall", () -> project.getWalls().add(wall), () -> project.getWalls().remove(wall));
+    }
+
+    private void eraseWallAt(double worldX, double worldY, double zoom) {
+        double tolerance = 10 / Math.max(0.01, zoom);
+        DmProject.WallSegment nearest = null;
+        double best = tolerance;
+        for (DmProject.WallSegment wall : project.getWalls()) {
+            double d = distanceToSegment(worldX, worldY, wall);
+            if (d <= best) {
+                best = d;
+                nearest = wall;
+            }
+        }
+        if (nearest == null) {
+            return;
+        }
+        DmProject.WallSegment target = nearest;
+        int index = project.getWalls().indexOf(target);
+        executeWithHistory("Erase wall", () -> project.getWalls().remove(target),
+                () -> project.getWalls().add(Math.min(index, project.getWalls().size()), target));
+    }
+
+    private double distanceToSegment(double px, double py, DmProject.WallSegment wall) {
+        double dx = wall.getX2() - wall.getX1();
+        double dy = wall.getY2() - wall.getY1();
+        double lengthSq = dx * dx + dy * dy;
+        double t = lengthSq == 0 ? 0 : clamp(((px - wall.getX1()) * dx + (py - wall.getY1()) * dy) / lengthSq, 0, 1);
+        return distance(px, py, wall.getX1() + t * dx, wall.getY1() + t * dy);
+    }
+
+    // ---- Player scale (1 inch per tile) ----
+
+    private int selectedScreenIndex() {
+        int index = playerScreenSelector == null ? -1 : playerScreenSelector.getSelectionModel().getSelectedIndex();
+        return index >= 0 ? index : preferences.getInt(PREF_PLAYER_SCREEN_INDEX, 0);
+    }
+
+    /** Stored diagonal for the selected screen, or an estimate from the OS-reported DPI. */
+    private double loadScreenDiagonal() {
+        List<Screen> screens = Screen.getScreens();
+        int index = Math.max(0, Math.min(selectedScreenIndex(), screens.size() - 1));
+        double stored = preferences.getDouble(PREF_SCREEN_DIAGONAL_PREFIX + index, 0);
+        if (stored >= 10) {
+            return stored;
+        }
+        Screen screen = screens.isEmpty() ? Screen.getPrimary() : screens.get(index);
+        Rectangle2D bounds = screen.getBounds();
+        double physicalWidth = bounds.getWidth() * screen.getOutputScaleX();
+        double physicalHeight = bounds.getHeight() * screen.getOutputScaleY();
+        double dpi = Math.max(48, screen.getDpi());
+        double guess = Math.hypot(physicalWidth, physicalHeight) / dpi;
+        return Math.max(10, Math.min(120, Math.round(guess * 2) / 2.0));
+    }
+
+    /** Player-canvas pixels (device-independent) per physical inch on the selected screen. */
+    private double playerPixelsPerInch() {
+        Screen screen = resolveSelectedPlayerScreen();
+        Rectangle2D bounds = screen.getBounds();
+        double diagonal = screenInchesSpinner == null || screenInchesSpinner.getValue() == null ? 27 : screenInchesSpinner.getValue();
+        return Math.hypot(bounds.getWidth(), bounds.getHeight()) / Math.max(1, diagonal);
+    }
+
+    /** Keeps the player camera zoom so that one map tile measures the configured number of inches. */
+    private void applyPlayerScale() {
+        if (playerStage == null || tileInchesSpinner == null || tileInchesSpinner.getValue() == null) {
+            return;
+        }
+        double ppi = playerPixelsPerInch();
+        applyScaleTo(project.getViews().getPlayerCamera(), project, ppi);
+        if (frozenPlayerProject != null && frozenPlayerCamera != null) {
+            applyScaleTo(frozenPlayerCamera, frozenPlayerProject, ppi);
+        }
+    }
+
+    private void applyScaleTo(DmProject.CameraState camera, DmProject target, double ppi) {
+        double cell = Math.max(1, target.getMap().getGrid().getPixelsPerCell());
+        double zoom = clamp(ppi * tileInchesSpinner.getValue() / cell, 0.05, 12);
+        if (Math.abs(camera.getZoom() - zoom) > 1e-4) {
+            camera.setZoom(zoom);
+        }
+    }
+
+    private void drawScaleTestSquare(GraphicsContext gc) {
+        double size = playerPixelsPerInch();
+        double x = (playerFogCanvas.getWidth() - size) / 2.0;
+        double y = (playerFogCanvas.getHeight() - size) / 2.0;
+        gc.setFill(Color.color(1, 1, 1, 0.85));
+        gc.fillRect(x, y, size, size);
+        gc.setStroke(Color.RED);
+        gc.setLineWidth(2);
+        gc.strokeRect(x, y, size, size);
+        gc.setFill(Color.BLACK);
+        gc.fillText("1 inch", x + size / 2.0 - 16, y + size / 2.0 + 4);
+    }
+
+    private Spinner<Double> createDoubleSpinner(double min, double max, double initial, double step, double width) {
+        Spinner<Double> spinner = new Spinner<>();
+        spinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, Math.max(min, Math.min(max, initial)), step));
+        spinner.setEditable(true);
+        spinner.setPrefWidth(width);
+        // Commit typed text when focus leaves the editor.
+        spinner.getEditor().focusedProperty().addListener((obs, was, focused) -> {
+            if (!focused) {
+                try {
+                    double typed = Double.parseDouble(spinner.getEditor().getText().replace(',', '.'));
+                    spinner.getValueFactory().setValue(Math.max(min, Math.min(max, typed)));
+                } catch (NumberFormatException ex) {
+                    spinner.getEditor().setText(String.valueOf(spinner.getValue()));
+                }
+            }
+        });
+        return spinner;
+    }
+
     // ---- Map switcher ----
 
     private record MapEntry(String label, Path file) {
@@ -1382,16 +1661,24 @@ public class DungeonMasterMapToolApplication extends Application {
             status("That map is already open.");
             return;
         }
+        Path current = projectFile;
+        DmProject snapshot;
         try {
-            if (projectFile != null) {
-                projectService.save(projectFile, project);
-            }
-            switchProject(projectService.load(file), file);
-            status("Switched to " + stripExtension(file.getFileName().toString())
-                    + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
+            snapshot = current == null ? null : projectService.copy(project);
         } catch (IOException ex) {
             status("Could not switch map: " + ex.getMessage());
+            return;
         }
+        runInBackground("Loading map...", "Could not switch map: ", () -> {
+            if (snapshot != null) {
+                projectService.save(current, snapshot);
+            }
+            return new LoadedProject(projectService.load(file), file);
+        }, loaded -> {
+            switchProject(loaded.project(), loaded.file());
+            status("Switched to " + stripExtension(file.getFileName().toString())
+                    + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
+        });
     }
 
     // ---- Effects (AOE overlays) ----
@@ -1775,6 +2062,17 @@ public class DungeonMasterMapToolApplication extends Application {
             colorMenu.getItems().add(item);
         }
 
+        Menu brightnessMenu = new Menu("Brightness");
+        ToggleGroup brightnessGroup = new ToggleGroup();
+        for (Object[] option : new Object[][]{{"Dim", 0.4}, {"Normal", 0.75}, {"Bright", 1.0}}) {
+            double value = (double) option[1];
+            RadioMenuItem item = new RadioMenuItem((String) option[0]);
+            item.setToggleGroup(brightnessGroup);
+            item.setSelected(Math.abs(light.getIntensity() - value) < 0.05);
+            item.setOnAction(e -> updateLight(id, "Change light brightness", l -> l.setIntensity(value)));
+            brightnessMenu.getItems().add(item);
+        }
+
         CheckMenuItem shadows = new CheckMenuItem("Blocked by walls");
         shadows.setSelected(light.isCastsShadows());
         shadows.setOnAction(e -> updateLight(id, "Toggle light wall blocking", l -> l.setCastsShadows(shadows.isSelected())));
@@ -1782,7 +2080,7 @@ public class DungeonMasterMapToolApplication extends Application {
         MenuItem remove = new MenuItem("Remove light");
         remove.setOnAction(e -> removeLight(id));
 
-        menu.getItems().addAll(power, new SeparatorMenuItem(), revealMenu, rangeMenu, flickerMenu, colorMenu, shadows, new SeparatorMenuItem(), remove);
+        menu.getItems().addAll(power, new SeparatorMenuItem(), revealMenu, rangeMenu, brightnessMenu, flickerMenu, colorMenu, shadows, new SeparatorMenuItem(), remove);
         hideLightMenu();
         activeLightMenu = menu;
         menu.setOnHidden(e -> {
@@ -2224,7 +2522,9 @@ public class DungeonMasterMapToolApplication extends Application {
         HIDE_RECT("Hide Area", false, true),
         AOE_CIRCLE("Circle", false, false),
         AOE_RECT("Box", false, true),
-        AOE_BRUSH("Draw", false, false);
+        AOE_BRUSH("Draw", false, false),
+        WALL_DRAW("Wall", false, false),
+        WALL_ERASE("Erase Wall", false, false);
 
         private final String label;
         private final boolean reveal;
@@ -2240,8 +2540,12 @@ public class DungeonMasterMapToolApplication extends Application {
             return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH;
         }
 
+        boolean isWallTool() {
+            return this == WALL_DRAW || this == WALL_ERASE;
+        }
+
         boolean isFogTool() {
-            return this != SELECT && !isAoeTool();
+            return this != SELECT && !isAoeTool() && !isWallTool();
         }
     }
 
