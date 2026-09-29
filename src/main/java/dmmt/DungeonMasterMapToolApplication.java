@@ -17,6 +17,7 @@ import dmmt.ui.HandoutWindow;
 import dmmt.ui.Icons;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
+import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -203,6 +204,31 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker overlayColorPicker;
     private Slider overlayAlphaSlider;
     private ToggleButton overlayPlayerToggle;
+    private static final String PREF_TEXT_FONT_SIZE = "textFontSize";
+    private static final String PREF_TEXT_COLOR = "textColor";
+    private static final String PREF_TEXT_BACKGROUND = "textBackground";
+    private static final String PREF_TEXT_BORDER = "textBorder";
+    private static final double TEXT_MIN_SIZE = 40;
+    private static final int TEXT_HANDLE_COUNT = 8;
+    private TextBoxEditor textEditor;
+    private String selectedTextId;
+    private String editingTextId;
+    private boolean editingTextIsNew;
+    private DmProject.TextBox editingTextBefore;
+    private DmProject.TextBox draftText;
+    private double textStartX;
+    private double textStartY;
+    private boolean draggingText;
+    private int resizingTextHandle = -1;
+    private DmProject.TextBox textDragBefore;
+    private double textLastX;
+    private double textLastY;
+    private DmProject.TextBox textClipboard;
+    private Spinner<Integer> textSizeSpinner;
+    private ColorPicker textColorPicker;
+    private ColorPicker textBackgroundPicker;
+    private ColorPicker textBorderPicker;
+    private ToggleButton textLayerToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
     private Label ambientBrightnessValue;
@@ -274,7 +300,9 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas = new Canvas(1280, 800);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
-        StackPane center = new StackPane(dmCanvas, dmFogCanvas);
+        textEditor = new TextBoxEditor();
+        initTextEditor();
+        StackPane center = new StackPane(dmCanvas, dmFogCanvas, textEditor.node());
         center.setMinSize(0, 0);
         Region controls = createControlsPanel(stage);
         StackPane.setAlignment(controls, Pos.TOP_RIGHT);
@@ -319,6 +347,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 event.consume();
                 return;
             }
+            if (textEditor.isFocused()) {
+                return;
+            }
             if (event.isControlDown() && event.getCode() == KeyCode.Z) {
                 undo();
                 event.consume();
@@ -332,6 +363,17 @@ public class DungeonMasterMapToolApplication extends Application {
             if (scene.getFocusOwner() instanceof TextInputControl) {
                 return;
             }
+            if (event.isControlDown() && event.getCode() == KeyCode.C) {
+                if (copySelectedText()) {
+                    event.consume();
+                }
+                return;
+            }
+            if (event.isControlDown() && event.getCode() == KeyCode.V) {
+                pasteText();
+                event.consume();
+                return;
+            }
             if (event.getCode() == KeyCode.P) {
                 setPingArmed(true);
                 return;
@@ -340,7 +382,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
-                if (findOverlay(selectedOverlayId) != null) {
+                if (findTextBox(selectedTextId) != null) {
+                    deleteSelectedText();
+                } else if (findOverlay(selectedOverlayId) != null) {
                     deleteSelectedOverlay();
                 } else if (selectedLayer != null && !isImageLayerLocked()) {
                     deleteSelectedLayer();
@@ -546,6 +590,78 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
         HBox effectBrushRow = row(brushSlider());
 
+        // Text
+        textLayerToggle = Icons.toggle(MaterialDesignE.EYE_OUTLINE,
+                "Show / hide all text boxes (DM and player view) — text is drawn below the fog");
+        textLayerToggle.setSelected(true);
+        textLayerToggle.setOnAction(e -> {
+            if (!syncingControls) {
+                setTextLayerVisible(textLayerToggle.isSelected());
+            }
+        });
+        Button copyText = Icons.button(MaterialDesignC.CONTENT_COPY, "Copy the selected text box (Ctrl+C)", this::copySelectedText);
+        Button pasteText = Icons.button(MaterialDesignC.CONTENT_PASTE,
+                "Paste the copied text box, also into another map (Ctrl+V)", this::pasteText);
+        Button deleteText = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
+        Region textSpacer = new Region();
+        HBox.setHgrow(textSpacer, Priority.ALWAYS);
+        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textSpacer, copyText, pasteText, deleteText);
+
+        textSizeSpinner = new Spinner<>();
+        textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(6, 400, DmProject.DEFAULT_TEXT_SIZE, 2));
+        textSizeSpinner.setEditable(true);
+        textSizeSpinner.setPrefWidth(84);
+        Icons.tooltip(textSizeSpinner, "Font size — applies to the selected text while typing, or to new text; "
+                + "with a text box selected it changes all of its text");
+        textSizeSpinner.getEditor().focusedProperty().addListener((obs, was, focused) -> {
+            if (!focused) {
+                try {
+                    int typed = (int) Math.round(Double.parseDouble(textSizeSpinner.getEditor().getText().replace(',', '.')));
+                    textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, typed)));
+                } catch (NumberFormatException ex) {
+                    textSizeSpinner.getEditor().setText(String.valueOf(textSizeSpinner.getValue()));
+                }
+            }
+        });
+        textSizeSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (!syncingControls && newValue != null) {
+                applyTextFontSize(newValue);
+            }
+        });
+        textColorPicker = new ColorPicker(Color.web(DmProject.DEFAULT_TEXT_COLOR));
+        Icons.tooltip(textColorPicker, "Text color — applies to the selected text while typing, or to new text");
+        textColorPicker.setOnAction(e -> {
+            if (!syncingControls) {
+                applyTextColor(toHex(textColorPicker.getValue()));
+            }
+        });
+        textBackgroundPicker = new ColorPicker(Color.TRANSPARENT);
+        Icons.tooltip(textBackgroundPicker, "Text box background color (transparent by default)");
+        textBackgroundPicker.setOnAction(e -> {
+            if (!syncingControls) {
+                applyTextBoxStyle("Change text background", b -> b.setBackgroundColor(toRgba(textBackgroundPicker.getValue())));
+            }
+        });
+        textBorderPicker = new ColorPicker(Color.TRANSPARENT);
+        Icons.tooltip(textBorderPicker, "Text box border color (transparent by default)");
+        textBorderPicker.setOnAction(e -> {
+            if (!syncingControls) {
+                applyTextBoxStyle("Change text border", b -> b.setBorderColor(toRgba(textBorderPicker.getValue())));
+            }
+        });
+        Button noFill = Icons.button(MaterialDesignC.CLOSE_CIRCLE_OUTLINE, "No background", () -> {
+            textBackgroundPicker.setValue(Color.TRANSPARENT);
+            applyTextBoxStyle("Change text background", b -> b.setBackgroundColor(DmProject.TRANSPARENT));
+        });
+        Button noBorder = Icons.button(MaterialDesignC.CLOSE_CIRCLE_OUTLINE, "No border", () -> {
+            textBorderPicker.setValue(Color.TRANSPARENT);
+            applyTextBoxStyle("Change text border", b -> b.setBorderColor(DmProject.TRANSPARENT));
+        });
+        HBox textSizeRow = row(Icons.icon(MaterialDesignF.FORMAT_SIZE), textSizeSpinner,
+                Icons.icon(MaterialDesignF.FORMAT_COLOR_TEXT), textColorPicker);
+        HBox textBoxColorRow = row(Icons.icon(MaterialDesignF.FORMAT_COLOR_FILL), textBackgroundPicker, noFill,
+                Icons.icon(MaterialDesignB.BORDER_COLOR), textBorderPicker, noBorder);
+
         // Map building
         ToggleButton snapLayers = Icons.toggle(MaterialDesignM.MAGNET,
                 "Snap image layers to half-tile steps while moving / resizing");
@@ -642,6 +758,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectBrushRow),
+                new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
+                        textToolsRow, textSizeRow, textBoxColorRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
                 new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
                         playerRow, screenRow, scaleGrid));
@@ -959,6 +1077,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case REVEAL_BRUSH -> Icons.cursor(MaterialDesignE.ERASER, 0.2, 0.82);
             case HIDE_BRUSH -> Icons.cursor(MaterialDesignB.BRUSH, 0.15, 0.85);
             case AOE_BRUSH -> Icons.tipCursor(MaterialDesignD.DRAW, 0.0, 1.0);
+            case TEXT -> Cursor.TEXT;
             case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
             case LIGHT_ADD, LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
@@ -977,8 +1096,10 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         Cursor cursor;
-        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingPlayerViewport) {
+        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingPlayerViewport) {
             cursor = Cursor.CLOSED_HAND;
+        } else if (resizingTextHandle >= 0) {
+            cursor = textResizeCursor(resizingTextHandle);
         } else if (resizingLayer) {
             cursor = Cursor.SE_RESIZE;
         } else if (pingArmed || activeTool != EditorTool.SELECT) {
@@ -1004,6 +1125,16 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (renderer.isWallLayerVisible() && pickInteractableLine(worldX, worldY) != null) {
             return Cursor.HAND;
+        }
+        if (project.isTextLayerVisible()) {
+            DmProject.TextBox selectedText = findTextBox(selectedTextId);
+            int handle = selectedText == null ? -1 : pickTextHandle(selectedText, worldX, worldY, zoom);
+            if (handle >= 0) {
+                return textResizeCursor(handle);
+            }
+            if (pickTextBox(worldX, worldY) != null) {
+                return Cursor.OPEN_HAND;
+            }
         }
         if (pickOverlay(worldX, worldY, zoom) != null) {
             return Cursor.OPEN_HAND;
@@ -1129,6 +1260,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> Platform.runLater(this::updateCanvasCursor));
 
         dmCanvas.setOnMousePressed(event -> {
+            commitTextEdit();
             lastMouseX = event.getX();
             lastMouseY = event.getY();
             DmProject.CameraState camera = project.getViews().getDmCamera();
@@ -1222,6 +1354,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (activeTool == EditorTool.TEXT) {
+                pressWithTextTool(world.x(), world.y());
+                return;
+            }
+
             if (activeTool == EditorTool.WALL_DRAW) {
                 double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
                 draftWall = DmProject.WallSegment.builder().x1(p[0]).y1(p[1]).x2(p[0]).y2(p[1]).build();
@@ -1268,8 +1405,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 lightDragFogBefore = snapshotFog();
                 selectedLayer = null;
                 selectedOverlayId = null;
+                selectedTextId = null;
                 return;
             }
+
+            if (pressTextWithSelectTool(world.x(), world.y(), camera.getZoom(), event.getClickCount())) {
+                return;
+            }
+            selectedTextId = null;
 
             DmProject.OverlayShape hitOverlay = pickOverlay(world.x(), world.y(), camera.getZoom());
             if (hitOverlay != null) {
@@ -1351,6 +1494,30 @@ public class DungeonMasterMapToolApplication extends Application {
                 double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
                 draftWall.setX2(p[0]);
                 draftWall.setY2(p[1]);
+                return;
+            }
+
+            if (draftText != null) {
+                updateTextDraft(world.x(), world.y());
+                return;
+            }
+
+            if (draggingText) {
+                DmProject.TextBox moving = findTextBox(selectedTextId);
+                if (moving != null) {
+                    moving.setX(moving.getX() + world.x() - textLastX);
+                    moving.setY(moving.getY() + world.y() - textLastY);
+                }
+                textLastX = world.x();
+                textLastY = world.y();
+                return;
+            }
+
+            if (resizingTextHandle >= 0) {
+                DmProject.TextBox resizing = findTextBox(selectedTextId);
+                if (resizing != null && textDragBefore != null) {
+                    resizeText(resizing, textDragBefore, resizingTextHandle, world.x(), world.y());
+                }
                 return;
             }
 
@@ -1460,6 +1627,22 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (draftWall != null) {
                 finishWallDraw();
+                return;
+            }
+
+            if (draftText != null) {
+                finishTextDraft();
+                return;
+            }
+
+            if (draggingText || resizingTextHandle >= 0) {
+                DmProject.TextBox changed = findTextBox(selectedTextId);
+                if (changed != null && textDragBefore != null && !textDragBefore.equals(changed)) {
+                    recordTextChange(draggingText ? "Move text" : "Resize text", changed.getId(), textDragBefore, cloneText(changed));
+                }
+                draggingText = false;
+                resizingTextHandle = -1;
+                textDragBefore = null;
                 return;
             }
 
@@ -1674,7 +1857,9 @@ public class DungeonMasterMapToolApplication extends Application {
         drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), 6);
         drawSelectionHandle(fogGc);
         drawOverlaySelection(fogGc);
+        drawTextSelection(fogGc);
         drawToolPreview(fogGc);
+        updateTextEditorPlacement();
     }
 
     private void renderPlayer() {
@@ -1752,6 +1937,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 || !candidate.getWalls().isEmpty()
                 || !candidate.getLighting().getLights().isEmpty()
                 || !candidate.getOverlays().isEmpty()
+                || !candidate.getTextBoxes().isEmpty()
                 || (candidate.getMap().getImagePath() != null && !candidate.getMap().getImagePath().isBlank());
     }
 
@@ -1964,6 +2150,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private boolean interactionInProgress() {
         return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay
+                || draggingText || resizingTextHandle >= 0 || draftText != null
                 || draggingPlayerViewport || panningDmCamera || draftWall != null || draftOverlay != null;
     }
 
@@ -2428,7 +2615,22 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setActiveTool(EditorTool tool) {
+        commitTextEdit();
+        if (draftText != null) {
+            DmProject.TextBox abandoned = draftText;
+            project.getTextBoxes().remove(abandoned);
+        }
+        draftText = null;
+        draggingText = false;
+        resizingTextHandle = -1;
         activeTool = tool == null ? EditorTool.SELECT : tool;
+        if (activeTool == EditorTool.TEXT) {
+            if (!project.isTextLayerVisible()) {
+                setTextLayerVisible(true);
+            }
+            selectedTextId = null;
+            loadTextSettingsIntoControls();
+        }
         if (activeTool.isWallTool() && !renderer.isWallLayerVisible()) {
             setWallLayerVisible(true);
         }
@@ -2452,6 +2654,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
+            case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it. Esc or right-click to exit.");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
@@ -2677,6 +2880,7 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- Project switching & control sync ----
 
     private void switchProject(DmProject next, Path file) {
+        commitTextEdit();
         project = next;
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
@@ -2690,11 +2894,18 @@ public class DungeonMasterMapToolApplication extends Application {
         selectedOverlayId = null;
         draftOverlay = null;
         draggingOverlay = false;
+        selectedTextId = null;
+        draftText = null;
+        draggingText = false;
+        resizingTextHandle = -1;
         fogDragging = false;
         undoStack.clear();
         redoStack.clear();
         savedFingerprint = fingerprintOrNull(project);
         syncControlsFromProject();
+        if (activeTool == EditorTool.TEXT) {
+            loadTextSettingsIntoControls();
+        }
         if (mapBrowser != null) {
             mapBrowser.updateCurrentMap();
         }
@@ -2734,6 +2945,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
             updateImageLockToggle();
+            if (textLayerToggle != null) {
+                textLayerToggle.setSelected(project.isTextLayerVisible());
+            }
         } finally {
             syncingControls = false;
         }
@@ -3193,6 +3407,552 @@ public class DungeonMasterMapToolApplication extends Application {
                 (int) Math.round(color.getBlue() * 255));
     }
 
+    // ---- Text boxes ----
+
+    private void initTextEditor() {
+        textEditor.setOnContentChanged(() -> {
+            DmProject.TextBox box = findTextBox(editingTextId);
+            if (box != null) {
+                box.setRuns(textEditor.runs());
+            }
+        });
+        textEditor.setOnCaretStyleChanged((size, color) -> syncTextStyleControls(size, color));
+        textEditor.setOnFinish(this::commitTextEdit);
+    }
+
+    private DmProject.TextBox findTextBox(String id) {
+        if (id == null) {
+            return null;
+        }
+        return project.getTextBoxes().stream().filter(t -> id.equals(t.getId())).findFirst().orElse(null);
+    }
+
+    private DmProject.TextBox cloneText(DmProject.TextBox source) {
+        List<DmProject.TextRun> runs = new java.util.ArrayList<>();
+        for (DmProject.TextRun run : source.getRuns()) {
+            runs.add(DmProject.TextRun.builder().text(run.getText()).fontSize(run.getFontSize()).color(run.getColor()).build());
+        }
+        return DmProject.TextBox.builder()
+                .id(source.getId())
+                .x(source.getX())
+                .y(source.getY())
+                .width(source.getWidth())
+                .height(source.getHeight())
+                .runs(runs)
+                .backgroundColor(source.getBackgroundColor())
+                .borderColor(source.getBorderColor())
+                .build();
+    }
+
+    private DmProject.TextBox cloneTextOrNull(DmProject.TextBox source) {
+        return source == null ? null : cloneText(source);
+    }
+
+    /** Sets the text box to the given state, inserting it if missing, or removes it when state is null. */
+    private void applyTextState(String id, DmProject.TextBox state) {
+        if (id.equals(editingTextId)) {
+            editingTextId = null;
+            editingTextBefore = null;
+            textEditor.hide();
+            renderer.setEditingTextBoxId(null);
+        }
+        List<DmProject.TextBox> boxes = project.getTextBoxes();
+        int index = -1;
+        for (int i = 0; i < boxes.size(); i++) {
+            if (id.equals(boxes.get(i).getId())) {
+                index = i;
+                break;
+            }
+        }
+        if (state == null) {
+            if (index >= 0) {
+                boxes.remove(index);
+            }
+            if (id.equals(selectedTextId)) {
+                selectedTextId = null;
+            }
+            return;
+        }
+        DmProject.TextBox copy = cloneText(state);
+        if (index >= 0) {
+            boxes.set(index, copy);
+        } else {
+            boxes.add(copy);
+        }
+    }
+
+    private void recordTextChange(String label, String id, DmProject.TextBox before, DmProject.TextBox after) {
+        DmProject.TextBox beforeCopy = cloneTextOrNull(before);
+        DmProject.TextBox afterCopy = cloneTextOrNull(after);
+        pushHistory(new HistoryAction(
+                label,
+                () -> applyTextState(id, afterCopy),
+                () -> applyTextState(id, beforeCopy)
+        ));
+    }
+
+    private void executeTextChange(String label, String id, Consumer<DmProject.TextBox> mutator) {
+        DmProject.TextBox box = findTextBox(id);
+        if (box == null) {
+            return;
+        }
+        DmProject.TextBox before = cloneText(box);
+        mutator.accept(box);
+        if (!before.equals(box)) {
+            recordTextChange(label, id, before, cloneText(box));
+        }
+    }
+
+    private DmProject.TextBox pickTextBox(double worldX, double worldY) {
+        if (!project.isTextLayerVisible()) {
+            return null;
+        }
+        List<DmProject.TextBox> boxes = project.getTextBoxes();
+        for (int i = boxes.size() - 1; i >= 0; i--) {
+            DmProject.TextBox box = boxes.get(i);
+            if (worldX >= box.getX() && worldX <= box.getX() + box.getWidth()
+                    && worldY >= box.getY() && worldY <= box.getY() + box.getHeight()) {
+                return box;
+            }
+        }
+        return null;
+    }
+
+    /** Handle order: NW, N, NE, E, SE, S, SW, W. */
+    private double[] textHandlePosition(DmProject.TextBox box, int handle) {
+        double left = box.getX();
+        double top = box.getY();
+        double right = left + box.getWidth();
+        double bottom = top + box.getHeight();
+        double midX = (left + right) / 2.0;
+        double midY = (top + bottom) / 2.0;
+        return switch (handle) {
+            case 0 -> new double[]{left, top};
+            case 1 -> new double[]{midX, top};
+            case 2 -> new double[]{right, top};
+            case 3 -> new double[]{right, midY};
+            case 4 -> new double[]{right, bottom};
+            case 5 -> new double[]{midX, bottom};
+            case 6 -> new double[]{left, bottom};
+            default -> new double[]{left, midY};
+        };
+    }
+
+    private int pickTextHandle(DmProject.TextBox box, double worldX, double worldY, double zoom) {
+        double reach = 9 / Math.max(0.01, zoom);
+        int best = -1;
+        double bestDistance = reach;
+        for (int handle = 0; handle < TEXT_HANDLE_COUNT; handle++) {
+            double[] p = textHandlePosition(box, handle);
+            double d = distance(worldX, worldY, p[0], p[1]);
+            if (d <= bestDistance) {
+                bestDistance = d;
+                best = handle;
+            }
+        }
+        return best;
+    }
+
+    private Cursor textResizeCursor(int handle) {
+        return switch (handle) {
+            case 0 -> Cursor.NW_RESIZE;
+            case 1 -> Cursor.N_RESIZE;
+            case 2 -> Cursor.NE_RESIZE;
+            case 3 -> Cursor.E_RESIZE;
+            case 4 -> Cursor.SE_RESIZE;
+            case 5 -> Cursor.S_RESIZE;
+            case 6 -> Cursor.SW_RESIZE;
+            default -> Cursor.W_RESIZE;
+        };
+    }
+
+    private void resizeText(DmProject.TextBox box, DmProject.TextBox original, int handle, double worldX, double worldY) {
+        boolean moveLeft = handle == 0 || handle == 6 || handle == 7;
+        boolean moveRight = handle == 2 || handle == 3 || handle == 4;
+        boolean moveTop = handle == 0 || handle == 1 || handle == 2;
+        boolean moveBottom = handle == 4 || handle == 5 || handle == 6;
+        double left = original.getX();
+        double top = original.getY();
+        double right = left + original.getWidth();
+        double bottom = top + original.getHeight();
+        if (moveLeft) {
+            left = Math.min(worldX, right - TEXT_MIN_SIZE);
+        }
+        if (moveRight) {
+            right = Math.max(worldX, left + TEXT_MIN_SIZE);
+        }
+        if (moveTop) {
+            top = Math.min(worldY, bottom - TEXT_MIN_SIZE);
+        }
+        if (moveBottom) {
+            bottom = Math.max(worldY, top + TEXT_MIN_SIZE);
+        }
+        box.setX(left);
+        box.setY(top);
+        box.setWidth(right - left);
+        box.setHeight(bottom - top);
+    }
+
+    private boolean pressTextWithSelectTool(double worldX, double worldY, double zoom, int clickCount) {
+        if (!project.isTextLayerVisible()) {
+            return false;
+        }
+        DmProject.TextBox selected = findTextBox(selectedTextId);
+        if (selected != null) {
+            int handle = pickTextHandle(selected, worldX, worldY, zoom);
+            if (handle >= 0) {
+                resizingTextHandle = handle;
+                textDragBefore = cloneText(selected);
+                return true;
+            }
+        }
+        DmProject.TextBox hit = pickTextBox(worldX, worldY);
+        if (hit == null) {
+            return false;
+        }
+        selectedTextId = hit.getId();
+        selectedOverlayId = null;
+        selectedLayer = null;
+        selectedLight = null;
+        syncTextControls(hit);
+        if (clickCount >= 2) {
+            beginTextEdit(hit, false);
+            return true;
+        }
+        draggingText = true;
+        textDragBefore = cloneText(hit);
+        textLastX = worldX;
+        textLastY = worldY;
+        return true;
+    }
+
+    private void pressWithTextTool(double worldX, double worldY) {
+        DmProject.TextBox hit = pickTextBox(worldX, worldY);
+        selectedOverlayId = null;
+        selectedLayer = null;
+        selectedLight = null;
+        if (hit != null) {
+            selectedTextId = hit.getId();
+            syncTextControls(hit);
+            beginTextEdit(hit, false);
+            return;
+        }
+        DmProject.TextBox box = DmProject.TextBox.builder()
+                .id("text-" + UUID.randomUUID())
+                .x(worldX)
+                .y(worldY)
+                .backgroundColor(toRgba(textBackgroundPicker.getValue()))
+                .borderColor(toRgba(textBorderPicker.getValue()))
+                .build();
+        textStartX = worldX;
+        textStartY = worldY;
+        project.getTextBoxes().add(box);
+        selectedTextId = box.getId();
+        draftText = box;
+    }
+
+    private void updateTextDraft(double worldX, double worldY) {
+        DmProject.TextBox box = draftText;
+        box.setX(Math.min(textStartX, worldX));
+        box.setY(Math.min(textStartY, worldY));
+        box.setWidth(Math.abs(worldX - textStartX));
+        box.setHeight(Math.abs(worldY - textStartY));
+    }
+
+    private void finishTextDraft() {
+        DmProject.TextBox box = draftText;
+        draftText = null;
+        double cell = project.getMap().getGrid().getPixelsPerCell();
+        if (box.getWidth() < 30 && box.getHeight() < 30) {
+            box.setX(textStartX);
+            box.setY(textStartY);
+            box.setWidth(5 * cell);
+            box.setHeight(1.5 * cell);
+        } else {
+            box.setWidth(Math.max(TEXT_MIN_SIZE, box.getWidth()));
+            box.setHeight(Math.max(TEXT_MIN_SIZE, box.getHeight()));
+        }
+        beginTextEdit(box, true);
+    }
+
+    private void beginTextEdit(DmProject.TextBox box, boolean isNew) {
+        commitTextEdit();
+        editingTextId = box.getId();
+        editingTextIsNew = isNew;
+        editingTextBefore = isNew ? null : cloneText(box);
+        selectedTextId = box.getId();
+        renderer.setEditingTextBoxId(box.getId());
+        textEditor.setBoxColors(box.getBackgroundColor(), box.getBorderColor());
+        textEditor.show(box.getRuns(), textSizeSpinner.getValue(), toHex(textColorPicker.getValue()));
+        updateTextEditorPlacement();
+        syncTextStyleControls(textEditor.typingSize(), textEditor.typingColor());
+        status("Editing text — Esc or click outside to finish. Change size and color with the Text controls.");
+    }
+
+    /** Writes the editor content into its box, records one undo step, and closes the editor. */
+    private void commitTextEdit() {
+        if (editingTextId == null) {
+            return;
+        }
+        String id = editingTextId;
+        boolean isNew = editingTextIsNew;
+        DmProject.TextBox before = editingTextBefore;
+        List<DmProject.TextRun> runs = textEditor.runs();
+        editingTextId = null;
+        editingTextBefore = null;
+        editingTextIsNew = false;
+        textEditor.hide();
+        renderer.setEditingTextBoxId(null);
+        if (dmCanvas != null) {
+            dmCanvas.requestFocus();
+        }
+        DmProject.TextBox box = findTextBox(id);
+        if (box == null) {
+            return;
+        }
+        box.setRuns(runs);
+        if (isNew) {
+            if (runs.isEmpty()) {
+                project.getTextBoxes().remove(box);
+                selectedTextId = null;
+            } else {
+                recordTextChange("Add text", id, null, cloneText(box));
+                rememberTextSettings();
+            }
+        } else if (before != null && !before.equals(box)) {
+            recordTextChange("Edit text", id, before, cloneText(box));
+        }
+    }
+
+    private void updateTextEditorPlacement() {
+        if (editingTextId == null) {
+            return;
+        }
+        DmProject.TextBox box = findTextBox(editingTextId);
+        if (box == null) {
+            editingTextId = null;
+            textEditor.hide();
+            renderer.setEditingTextBoxId(null);
+            return;
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        textEditor.place(
+                renderer.worldToScreenX(box.getX(), dmCanvas.getWidth(), camera),
+                renderer.worldToScreenY(box.getY(), dmCanvas.getHeight(), camera),
+                box.getWidth(), box.getHeight(), camera.getZoom());
+    }
+
+    private void deleteSelectedText() {
+        DmProject.TextBox box = findTextBox(selectedTextId);
+        if (box == null) {
+            return;
+        }
+        commitTextEdit();
+        DmProject.TextBox before = cloneText(box);
+        applyTextState(box.getId(), null);
+        recordTextChange("Delete text", before.getId(), before, null);
+        status("Deleted text box.");
+    }
+
+    private void setTextLayerVisible(boolean visible) {
+        commitTextEdit();
+        project.setTextLayerVisible(visible);
+        if (textLayerToggle != null && textLayerToggle.isSelected() != visible) {
+            syncingControls = true;
+            try {
+                textLayerToggle.setSelected(visible);
+            } finally {
+                syncingControls = false;
+            }
+        }
+        if (!visible) {
+            selectedTextId = null;
+            draggingText = false;
+            resizingTextHandle = -1;
+            if (activeTool == EditorTool.TEXT) {
+                setActiveTool(EditorTool.SELECT);
+            }
+        }
+        updateCanvasCursor();
+        status(visible ? "Text layer shown." : "Text layer hidden for DM and players.");
+    }
+
+    private boolean copySelectedText() {
+        DmProject.TextBox box = findTextBox(selectedTextId);
+        if (box == null) {
+            status("Select a text box first, then copy it with Ctrl+C.");
+            return false;
+        }
+        textClipboard = cloneText(box);
+        status("Copied text box. Paste it with Ctrl+V, also on another map.");
+        return true;
+    }
+
+    private void pasteText() {
+        if (textClipboard == null) {
+            status("No text box copied yet.");
+            return;
+        }
+        commitTextEdit();
+        if (!project.isTextLayerVisible()) {
+            setTextLayerVisible(true);
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double centerX = hoverInsideCanvas ? hoverWorldX : camera.getX();
+        double centerY = hoverInsideCanvas ? hoverWorldY : camera.getY();
+        DmProject.TextBox copy = cloneText(textClipboard);
+        copy.setId("text-" + UUID.randomUUID());
+        copy.setX(centerX - copy.getWidth() / 2.0);
+        copy.setY(centerY - copy.getHeight() / 2.0);
+        applyTextState(copy.getId(), copy);
+        recordTextChange("Paste text", copy.getId(), null, copy);
+        selectedTextId = copy.getId();
+        selectedOverlayId = null;
+        selectedLayer = null;
+        selectedLight = null;
+        syncTextControls(copy);
+        status("Pasted text box.");
+    }
+
+    // Text style controls
+
+    private void applyTextFontSize(int size) {
+        if (editingTextId != null) {
+            textEditor.applyFontSize(size);
+            textEditor.focus();
+        } else {
+            executeTextChange("Change text size", selectedTextId,
+                    box -> box.getRuns().forEach(run -> run.setFontSize(size)));
+        }
+        rememberTextSettings();
+    }
+
+    private void applyTextColor(String color) {
+        if (editingTextId != null) {
+            textEditor.applyTextColor(color);
+            textEditor.focus();
+        } else {
+            executeTextChange("Change text color", selectedTextId,
+                    box -> box.getRuns().forEach(run -> run.setColor(color)));
+        }
+        rememberTextSettings();
+    }
+
+    /** Background and border belong to the whole box, so they change live while editing and undo with the edit. */
+    private void applyTextBoxStyle(String label, Consumer<DmProject.TextBox> mutator) {
+        if (editingTextId != null) {
+            DmProject.TextBox box = findTextBox(editingTextId);
+            if (box != null) {
+                mutator.accept(box);
+                textEditor.setBoxColors(box.getBackgroundColor(), box.getBorderColor());
+                textEditor.focus();
+            }
+        } else {
+            executeTextChange(label, selectedTextId, mutator);
+        }
+        rememberTextSettings();
+    }
+
+    private DmProject.TextSettings currentTextSettings() {
+        return DmProject.TextSettings.builder()
+                .fontSize(textSizeSpinner.getValue())
+                .textColor(toHex(textColorPicker.getValue()))
+                .backgroundColor(toRgba(textBackgroundPicker.getValue()))
+                .borderColor(toRgba(textBorderPicker.getValue()))
+                .build();
+    }
+
+    /** Stores the current text settings as this map's last used ones and as the global fallback. */
+    private void rememberTextSettings() {
+        DmProject.TextSettings settings = currentTextSettings();
+        project.setLastTextSettings(settings);
+        preferences.putInt(PREF_TEXT_FONT_SIZE, settings.getFontSize());
+        preferences.put(PREF_TEXT_COLOR, settings.getTextColor());
+        preferences.put(PREF_TEXT_BACKGROUND, settings.getBackgroundColor());
+        preferences.put(PREF_TEXT_BORDER, settings.getBorderColor());
+    }
+
+    /** The map's own last used settings, or the globally last used ones when the map has none yet. */
+    private void loadTextSettingsIntoControls() {
+        DmProject.TextSettings settings = project.getLastTextSettings();
+        if (settings == null) {
+            settings = DmProject.TextSettings.builder()
+                    .fontSize(preferences.getInt(PREF_TEXT_FONT_SIZE, DmProject.DEFAULT_TEXT_SIZE))
+                    .textColor(preferences.get(PREF_TEXT_COLOR, DmProject.DEFAULT_TEXT_COLOR))
+                    .backgroundColor(preferences.get(PREF_TEXT_BACKGROUND, DmProject.TRANSPARENT))
+                    .borderColor(preferences.get(PREF_TEXT_BORDER, DmProject.TRANSPARENT))
+                    .build();
+        }
+        syncingControls = true;
+        try {
+            textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, settings.getFontSize())));
+            textColorPicker.setValue(CanvasMapRenderer.parseColor(settings.getTextColor()));
+            textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(settings.getBackgroundColor()));
+            textBorderPicker.setValue(CanvasMapRenderer.parseColor(settings.getBorderColor()));
+        } finally {
+            syncingControls = false;
+        }
+    }
+
+    /** Shows the selected box's style in the controls without treating it as a user change. */
+    private void syncTextControls(DmProject.TextBox box) {
+        syncingControls = true;
+        try {
+            if (!box.getRuns().isEmpty()) {
+                DmProject.TextRun last = box.getRuns().get(box.getRuns().size() - 1);
+                textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, last.getFontSize())));
+                textColorPicker.setValue(CanvasMapRenderer.parseColor(last.getColor()));
+            }
+            textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(box.getBackgroundColor()));
+            textBorderPicker.setValue(CanvasMapRenderer.parseColor(box.getBorderColor()));
+        } finally {
+            syncingControls = false;
+        }
+    }
+
+    private void syncTextStyleControls(int size, String color) {
+        syncingControls = true;
+        try {
+            textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, size)));
+            textColorPicker.setValue(CanvasMapRenderer.parseColor(color));
+        } finally {
+            syncingControls = false;
+        }
+    }
+
+    private void drawTextSelection(GraphicsContext gc) {
+        DmProject.TextBox box = findTextBox(selectedTextId);
+        if (box == null || !project.isTextLayerVisible() || box.getId().equals(editingTextId)) {
+            return;
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double x = renderer.worldToScreenX(box.getX(), w, camera);
+        double y = renderer.worldToScreenY(box.getY(), h, camera);
+        gc.setStroke(Color.YELLOW);
+        gc.setLineWidth(1.5);
+        gc.setLineDashes(8, 6);
+        gc.strokeRect(x, y, box.getWidth() * camera.getZoom(), box.getHeight() * camera.getZoom());
+        gc.setLineDashes((double[]) null);
+        if (draftText != null) {
+            return;
+        }
+        gc.setFill(Color.YELLOW);
+        for (int handle = 0; handle < TEXT_HANDLE_COUNT; handle++) {
+            double[] p = textHandlePosition(box, handle);
+            gc.fillRect(renderer.worldToScreenX(p[0], w, camera) - 5, renderer.worldToScreenY(p[1], h, camera) - 5, 10, 10);
+        }
+    }
+
+    private static String toRgba(Color color) {
+        return String.format("#%02X%02X%02X%02X",
+                (int) Math.round(color.getRed() * 255),
+                (int) Math.round(color.getGreen() * 255),
+                (int) Math.round(color.getBlue() * 255),
+                (int) Math.round(color.getOpacity() * 255));
+    }
+
     // ---- Light context menu ----
 
     private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12, 16, 24, 100};
@@ -3580,6 +4340,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void undo() {
+        commitTextEdit();
         if (undoStack.isEmpty()) {
             status("Nothing to undo.");
             return;
@@ -3592,6 +4353,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void redo() {
+        commitTextEdit();
         if (redoStack.isEmpty()) {
             status("Nothing to redo.");
             return;
@@ -3717,6 +4479,8 @@ public class DungeonMasterMapToolApplication extends Application {
         AOE_RECT("Box effect", "drag corner to corner to draw a rectangular spell area",
                 MaterialDesignS.SQUARE_OUTLINE, false, true),
         AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignD.DRAW, false, false),
+        TEXT("Text box", "drag on the map to draw a text box and type; click a text box to edit it",
+                MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
@@ -3759,7 +4523,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isFogTool() {
-            return this != SELECT && !isAoeTool() && !isWallTool() && !isLightTool();
+            return this != SELECT && this != TEXT && !isAoeTool() && !isWallTool() && !isLightTool();
         }
     }
 

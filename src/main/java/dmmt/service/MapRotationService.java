@@ -57,6 +57,16 @@ public class MapRotationService {
             rotateOverlay(overlay, cx, cy, clockwise);
         }
 
+        for (DmProject.TextBox box : project.getTextBoxes()) {
+            Point center = rotatePoint(box.getX() + box.getWidth() / 2.0, box.getY() + box.getHeight() / 2.0, cx, cy, clockwise);
+            double width = box.getHeight();
+            double height = box.getWidth();
+            box.setWidth(width);
+            box.setHeight(height);
+            box.setX(center.x - width / 2.0);
+            box.setY(center.y - height / 2.0);
+        }
+
         if (project.getFog() != null && project.getFog().getMask() != null) {
             project.getFog().getMask().rotateQuarter(cx, cy, clockwise);
         }

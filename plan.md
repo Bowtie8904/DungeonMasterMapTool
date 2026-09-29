@@ -339,6 +339,19 @@ Desktop tool for tabletop dungeon masters that:
 - While Select is active, right-click behaves as before (light menu on a light, pan otherwise).
 - Tool chip and tool tooltips mention both exits ("Esc or right-click to exit").
 
+## 3.24 Text Boxes
+
+- **Text** tool (*Text* section of the DM controls): click-drag on the map to draw a text box (a plain click creates a default-sized one) and start typing immediately. Click a box with the Text tool, or double-click it with Select, to edit its text. `Esc`, clicking outside the box, or switching tool finishes editing.
+- Text wraps automatically to the width of the box; text that does not fit is clipped at the box edge.
+- Text is centered in the box, each line horizontally and the whole text block vertically (in the editor and in the rendered view).
+- Rich text: **font size** and **text color** can be changed before typing (applies to newly typed text) and after typing (applies to the selected text; with a box selected but not being edited, to all of its text). Editing uses an in-place editor scaled with the map zoom, so what is typed is what is drawn.
+- Box style: **background color** (transparent by default), **border color** (transparent by default), rounded corners. Colors may carry opacity (custom color dialog); "no fill" / "no border" buttons reset to transparent.
+- Select tool: click a box to select, drag to move, drag one of the 8 handles to resize, `Delete` removes it. Create/edit/move/resize/style/delete are undoable.
+- **Text layer** toggle hides/shows all text boxes in both DM and player views (saved with the map). Choosing the Text tool shows the layer again.
+- Text boxes are drawn above map, lighting and effects but **below fog**, so fog hides them from players.
+- **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in user preferences. Selecting the Text tool loads the map's settings, or the global ones when the map has none.
+- `Ctrl+C` copies the selected text box, `Ctrl+V` pastes it (at the mouse position, or the view center) — also into a different map opened afterwards.
+- Text boxes rotate with the map (box rectangle turns, text stays upright) and persist in the save file (`textBoxes`, `textLayerVisible`, `lastTextSettings`).
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -409,6 +422,15 @@ Desktop tool for tabletop dungeon masters that:
     "style": "default",
     "persistHistory": false
   },
+  "textBoxes": [
+    {
+      "id": "text-1", "x": 100, "y": 100, "width": 400, "height": 120,
+      "backgroundColor": "#00000000", "borderColor": "#00000000",
+      "runs": [ { "text": "Hello", "fontSize": 32, "color": "#FFFFFF" } ]
+    }
+  ],
+  "textLayerVisible": true,
+  "lastTextSettings": { "fontSize": 32, "textColor": "#FFFFFF", "backgroundColor": "#00000000", "borderColor": "#00000000" },
   "overlays": [
     {
       "id": "ov-1",
@@ -508,6 +530,7 @@ Desktop tool for tabletop dungeon masters that:
 5. One-click room reveal with hover preview (3.17), with unit tests for the flood fill (enclosed room, door boundary, gap tolerance, unenclosed area limited to map bounds).
 6. Map browser thumbnails and search bar (3.20), with unit tests for the tree filter.
 7. Right-click cancels the active tool (3.23).
+8. Text boxes (3.24), with unit tests for word wrap layout and map rotation.
 
 ## 8) Open Decisions (Track Here)
 
@@ -524,7 +547,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.3 (current, planned):** Added Phase 7 live-play specs: one-click room reveal (3.17), handout window (clipboard paste, show-to-players toggle, 90-degree rotation) (3.18), middle-mouse laser pointer (3.19), map browser thumbnails + search (3.20), auto-save for maps on disk (3.21), light presets (3.22), right-click cancels the active tool (3.23).
+- **v2.4 (current):** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.
+- **v2.3 (planned):** Added Phase 7 live-play specs: one-click room reveal (3.17), handout window (clipboard paste, show-to-players toggle, 90-degree rotation) (3.18), middle-mouse laser pointer (3.19), map browser thumbnails + search (3.20), auto-save for maps on disk (3.21), light presets (3.22), right-click cancels the active tool (3.23).
 - **v2.2:** Per-map, per-time-of-day ambient brightness slider (saved in `.dmmap`, undoable).
 - **v2.1:** Large map images (> 4096 px) render at full resolution via a cached tile pyramid instead of a single 4096 px downscaled texture (fixes blurry player view for e.g. 15k x 15k maps).
 - **v2.0:** Walls drawn as red lines in the DM view; wall layer toggle (walls + door/window lines and badges, lights excluded).

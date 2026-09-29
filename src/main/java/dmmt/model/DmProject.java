@@ -52,6 +52,14 @@ public class DmProject {
     private List<OverlayShape> overlays = new ArrayList<>();
 
     @Builder.Default
+    private List<TextBox> textBoxes = new ArrayList<>();
+
+    @Builder.Default
+    private boolean textLayerVisible = true;
+
+    /** Text settings last used on this map; {@code null} until text has been used here. */
+    private TextSettings lastTextSettings;
+    @Builder.Default
     private List<PingEvent> activePings = new ArrayList<>();
 
     @Data
@@ -331,5 +339,57 @@ public class DmProject {
         private double alpha = 0.4;
         @Builder.Default
         private boolean playerVisible = true;
+    }
+
+    public static final String TRANSPARENT = "#00000000";
+    public static final int DEFAULT_TEXT_SIZE = 32;
+    public static final String DEFAULT_TEXT_COLOR = "#FFFFFF";
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TextBox {
+        private String id;
+        /** Top-left corner and size in world coordinates. */
+        private double x;
+        private double y;
+        private double width;
+        private double height;
+        @Builder.Default
+        private List<TextRun> runs = new ArrayList<>();
+        /** "#RRGGBBAA"; fully transparent by default. */
+        @Builder.Default
+        private String backgroundColor = TRANSPARENT;
+        @Builder.Default
+        private String borderColor = TRANSPARENT;
+    }
+
+    /** A stretch of text with one font size and color; line breaks are "\n" inside the text. */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TextRun {
+        private String text;
+        @Builder.Default
+        private int fontSize = DEFAULT_TEXT_SIZE;
+        @Builder.Default
+        private String color = DEFAULT_TEXT_COLOR;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TextSettings {
+        @Builder.Default
+        private int fontSize = DEFAULT_TEXT_SIZE;
+        @Builder.Default
+        private String textColor = DEFAULT_TEXT_COLOR;
+        @Builder.Default
+        private String backgroundColor = TRANSPARENT;
+        @Builder.Default
+        private String borderColor = TRANSPARENT;
     }
 }

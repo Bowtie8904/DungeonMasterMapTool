@@ -649,3 +649,12 @@
     -fx-border-radius: 6;
     -fx-padding: 4;
 }
+
+/* ---------- Text box editor (in-place rich text) ---------- */
+.text-box-editor.styled-text-area .caret {
+    -fx-stroke: #000000;
+    -fx-stroke-width: 2;
+}
+.text-box-editor.styled-text-area .selection {
+    -fx-fill: rgba(80, 140, 255, 0.55);
+}

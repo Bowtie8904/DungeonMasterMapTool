@@ -18,6 +18,7 @@ import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
@@ -27,7 +28,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CanvasMapRenderer {
     /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
@@ -65,8 +68,18 @@ public class CanvasMapRenderer {
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
     private boolean wallLayerVisible = true;
 
+    private final Text measureText = new Text();
+    private final Map<Integer, Font> fontCache = new HashMap<>();
+    private final Map<String, CachedTextLayout> textLayouts = new HashMap<>();
+    /** DM view only: the box being edited in the in-place editor, which draws it itself. */
+    private String editingTextBoxId;
+
     public CanvasMapRenderer(LightingEngine lightingEngine) {
         this.lightingEngine = lightingEngine;
+    }
+
+    public void setEditingTextBoxId(String id) {
+        this.editingTextBoxId = id;
     }
 
     public boolean isWallLayerVisible() {
@@ -100,6 +113,9 @@ public class CanvasMapRenderer {
         drawLayers(gc, project, projectFile, width, height, camera);
         drawLighting(gc, project, width, height, camera, playerMode);
         drawOverlays(gc, project, width, height, camera, playerMode);
+        if (project.isTextLayerVisible()) {
+            drawTextBoxes(gc, project, width, height, camera, playerMode);
+        }
         if (!playerMode && wallLayerVisible) {
             drawWalls(gc, project.getWalls(), width, height, camera);
             drawInteractables(gc, project.getInteractables(), width, height, camera);
@@ -231,6 +247,125 @@ public class CanvasMapRenderer {
         }
     }
 
+    public static final double TEXT_BOX_PADDING = 12;
+    public static final double TEXT_BOX_CORNER_RADIUS = 12;
+    public static final double TEXT_BOX_BORDER_WIDTH = 6;
+
+    private record CachedTextLayout(List<DmProject.TextRun> runs, double width, TextLayout.Result result) {
+    }
+
+    /** Text boxes sit above the map, lighting and effects but below fog, so fog still hides them from players. */
+    private void drawTextBoxes(GraphicsContext gc, DmProject project, double width, double height,
+                               DmProject.CameraState camera, boolean playerMode) {
+        double zoom = camera.getZoom();
+        textLayouts.keySet().retainAll(project.getTextBoxes().stream().map(DmProject.TextBox::getId).toList());
+        TextLayout.Metrics metrics = new FxMetrics();
+        for (DmProject.TextBox box : project.getTextBoxes()) {
+            if (!playerMode && box.getId() != null && box.getId().equals(editingTextBoxId)) {
+                continue;
+            }
+            double sx = worldToScreenX(box.getX(), width, camera);
+            double sy = worldToScreenY(box.getY(), height, camera);
+            double sw = box.getWidth() * zoom;
+            double sh = box.getHeight() * zoom;
+            if (sx > width || sy > height || sx + sw < 0 || sy + sh < 0) {
+                continue;
+            }
+            double arc = Math.min(TEXT_BOX_CORNER_RADIUS, Math.min(box.getWidth(), box.getHeight()) / 2.0) * zoom * 2;
+            Color background = parseColor(box.getBackgroundColor());
+            Color border = parseColor(box.getBorderColor());
+            double lineWidth = border.getOpacity() > 0 ? Math.max(1, TEXT_BOX_BORDER_WIDTH * zoom) : 0;
+            // Fill and stroke share the border's center line so the fill never shows outside the border.
+            double inset = lineWidth / 2;
+            double innerArc = Math.max(0, arc - lineWidth);
+            if (background.getOpacity() > 0) {
+                gc.setFill(background);
+                gc.fillRoundRect(sx + inset, sy + inset, sw - lineWidth, sh - lineWidth, innerArc, innerArc);
+            }
+            if (lineWidth > 0) {
+                gc.setStroke(border);
+                gc.setLineWidth(lineWidth);
+                gc.strokeRoundRect(sx + inset, sy + inset, sw - lineWidth, sh - lineWidth, innerArc, innerArc);
+            }
+            double innerWidth = box.getWidth() - 2 * TEXT_BOX_PADDING;
+            if (innerWidth <= 0) {
+                continue;
+            }
+            TextLayout.Result layout = layoutFor(box, innerWidth, metrics);
+            gc.save();
+            gc.beginPath();
+            gc.rect(sx, sy, sw, sh);
+            gc.closePath();
+            gc.clip();
+            double innerHeight = box.getHeight() - 2 * TEXT_BOX_PADDING;
+            double topOffset = Math.max(0, (innerHeight - layout.totalHeight()) / 2);
+            gc.translate(sx + TEXT_BOX_PADDING * zoom, (sy + (TEXT_BOX_PADDING + topOffset) * zoom));
+            gc.scale(zoom, zoom);
+            gc.setTextAlign(TextAlignment.LEFT);
+            gc.setTextBaseline(VPos.BASELINE);
+            for (TextLayout.Line line : layout.lines()) {
+                for (TextLayout.Fragment fragment : line.fragments()) {
+                    gc.setFont(fontFor(fragment.fontSize()));
+                    gc.setFill(parseColor(fragment.color()));
+                    gc.fillText(fragment.text(), fragment.x(), line.y() + line.baseline());
+                }
+            }
+            gc.restore();
+        }
+    }
+
+    private TextLayout.Result layoutFor(DmProject.TextBox box, double innerWidth, TextLayout.Metrics metrics) {
+        CachedTextLayout cached = textLayouts.get(box.getId());
+        if (cached != null && cached.width == innerWidth && cached.runs.equals(box.getRuns())) {
+            return cached.result;
+        }
+        List<DmProject.TextRun> snapshot = new java.util.ArrayList<>();
+        for (DmProject.TextRun run : box.getRuns()) {
+            snapshot.add(DmProject.TextRun.builder().text(run.getText()).fontSize(run.getFontSize()).color(run.getColor()).build());
+        }
+        TextLayout.Result result = TextLayout.layout(snapshot, innerWidth, metrics);
+        textLayouts.put(box.getId(), new CachedTextLayout(snapshot, innerWidth, result));
+        return result;
+    }
+
+    private Font fontFor(int size) {
+        return fontCache.computeIfAbsent(size, s -> Font.font(s));
+    }
+
+    /** Parses "#RRGGBB" / "#RRGGBBAA"; unreadable values become transparent. */
+    public static Color parseColor(String value) {
+        if (value == null || value.isBlank()) {
+            return Color.TRANSPARENT;
+        }
+        try {
+            return Color.web(value);
+        } catch (IllegalArgumentException ex) {
+            return Color.TRANSPARENT;
+        }
+    }
+
+    private final class FxMetrics implements TextLayout.Metrics {
+        @Override
+        public double width(String text, int fontSize) {
+            measureText.setFont(fontFor(fontSize));
+            measureText.setText(text);
+            return measureText.getLayoutBounds().getWidth();
+        }
+
+        @Override
+        public double lineHeight(int fontSize) {
+            measureText.setFont(fontFor(fontSize));
+            measureText.setText("Ag");
+            return measureText.getLayoutBounds().getHeight();
+        }
+
+        @Override
+        public double ascent(int fontSize) {
+            measureText.setFont(fontFor(fontSize));
+            measureText.setText("Ag");
+            return measureText.getBaselineOffset();
+        }
+    }
     private void drawBrushStroke(GraphicsContext gc, DmProject.OverlayShape shape, Color fill, double width, double height, DmProject.CameraState camera) {
         List<Double> points = shape.getPoints();
         int n = points.size() / 2;
@@ -460,7 +595,7 @@ public class CanvasMapRenderer {
             Color color = interactableColor(interactable);
             if (hovered) {
                 gc.setStroke(color.deriveColor(0, 1, 1.2, 0.9));
-                gc.setLineWidth(6);
+                gc.setLineWidth(8);
                 gc.setLineCap(StrokeLineCap.ROUND);
                 gc.strokeLine(sx1, sy1, sx2, sy2);
                 gc.setLineCap(StrokeLineCap.SQUARE);

@@ -19,6 +19,7 @@
         <lombok.version>1.18.36</lombok.version>
         <jts.version>1.20.0</jts.version>
         <ikonli.version>12.3.1</ikonli.version>
+        <richtextfx.version>0.11.4</richtextfx.version>
     </properties>
 
     <dependencies>
@@ -51,6 +52,11 @@
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-materialdesign2-pack</artifactId>
             <version>${ikonli.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.fxmisc.richtext</groupId>
+            <artifactId>richtextfx</artifactId>
+            <version>${richtextfx.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
