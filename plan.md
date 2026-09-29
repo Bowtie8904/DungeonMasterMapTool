@@ -46,6 +46,7 @@ Desktop tool for tabletop dungeon masters that:
 - Import dd2vtt map files.
 - Create custom maps by drag-and-drop image import (png/jpg/webp) into a map canvas.
 - Allow image layer transform editing (move, resize/scale) directly with drag handles. Per-layer rotation is intentionally not supported; use whole-map rotation.
+- With the Select tool, a selected image layer can be removed by pressing `Delete` (or `Backspace`); removal is undoable.
 - Parse and store:
   - base image path/data
   - grid size/scale

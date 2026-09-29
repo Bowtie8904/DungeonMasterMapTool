@@ -298,7 +298,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 setActiveTool(EditorTool.SELECT);
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
-                deleteSelectedOverlay();
+                if (findOverlay(selectedOverlayId) != null) {
+                    deleteSelectedOverlay();
+                } else if (selectedLayer != null) {
+                    deleteSelectedLayer();
+                }
+                event.consume();
             }
         });
         stage.setScene(scene);
@@ -1783,6 +1788,31 @@ public class DungeonMasterMapToolApplication extends Application {
         } catch (IOException ex) {
             status("Could not add image: " + ex.getMessage());
         }
+    }
+
+    private void deleteSelectedLayer() {
+        DmProject.ImageLayer layer = findLayerById(selectedLayer == null ? null : selectedLayer.getId());
+        if (layer == null) {
+            selectedLayer = null;
+            return;
+        }
+        DmProject.ImageLayer backup = cloneLayer(layer);
+        executeWithHistory(
+                "Delete image layer",
+                () -> {
+                    project.getImageLayers().removeIf(l -> l.getId().equals(backup.getId()));
+                    if (selectedLayer != null && backup.getId().equals(selectedLayer.getId())) {
+                        selectedLayer = null;
+                    }
+                },
+                () -> {
+                    if (findLayerById(backup.getId()) == null) {
+                        project.getImageLayers().add(cloneLayer(backup));
+                    }
+                    selectedLayer = findLayerById(backup.getId());
+                }
+        );
+        status("Deleted image layer.");
     }
 
     private DmProject.ImageLayer pickTopmostLayer(double worldX, double worldY) {
