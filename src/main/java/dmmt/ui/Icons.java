@@ -1,7 +1,10 @@
 package dmmt.ui;
 
+import javafx.application.Platform;
 import javafx.geometry.Dimension2D;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Cursor;
 import javafx.scene.ImageCursor;
 import javafx.scene.Scene;
@@ -18,6 +21,8 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.robot.Robot;
+import javafx.stage.Screen;
 import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -34,6 +39,9 @@ public final class Icons {
 
     private static final Map<String, Cursor> CURSOR_CACHE = new HashMap<>();
     private static final Map<String, Image> IMAGE_CACHE = new HashMap<>();
+    private static final double TOOLTIP_CURSOR_GAP = 4;
+    /** Vertical distance below the cursor hotspot that clears the (arrow/hand) cursor image. */
+    private static final double TOOLTIP_CURSOR_CLEARANCE = 22;
 
     private Icons() {
     }
@@ -80,7 +88,43 @@ public final class Icons {
         tooltip.setShowDuration(Duration.seconds(12));
         tooltip.setWrapText(true);
         tooltip.setMaxWidth(300);
+        tooltip.setOnShown(event -> Platform.runLater(() -> keepAwayFromCursor(tooltip)));
         return tooltip;
+    }
+
+    /**
+     * JavaFX shifts a tooltip back onto the screen when it would overflow an edge (e.g. for buttons in the top-right
+     * controls panel), which can place the tooltip window under the cursor. The owner then receives MOUSE_EXITED, the
+     * tooltip hides, the cursor "re-enters" the button and the tooltip reappears - a constant flicker. Move such a
+     * tooltip beside the cursor instead.
+     */
+    private static void keepAwayFromCursor(Tooltip tooltip) {
+        if (!tooltip.isShowing()) {
+            return;
+        }
+        Point2D mouse = new Robot().getMousePosition();
+        double width = tooltip.getWidth();
+        double height = tooltip.getHeight();
+        Rectangle2D window = new Rectangle2D(tooltip.getX() - TOOLTIP_CURSOR_GAP, tooltip.getY() - TOOLTIP_CURSOR_GAP,
+                width + 2 * TOOLTIP_CURSOR_GAP, height + 2 * TOOLTIP_CURSOR_GAP);
+        if (!window.contains(mouse)) {
+            return;
+        }
+        Rectangle2D visual = Screen.getScreensForRectangle(mouse.getX(), mouse.getY(), 1, 1).stream()
+                .findFirst()
+                .orElse(Screen.getPrimary())
+                .getVisualBounds();
+        double x = tooltip.getX();
+        double y = tooltip.getY();
+        if (mouse.getX() - TOOLTIP_CURSOR_GAP - width >= visual.getMinX()) {
+            x = mouse.getX() - TOOLTIP_CURSOR_GAP - width;
+        } else if (mouse.getY() + TOOLTIP_CURSOR_CLEARANCE + height <= visual.getMaxY()) {
+            y = mouse.getY() + TOOLTIP_CURSOR_CLEARANCE;
+        } else {
+            y = mouse.getY() - TOOLTIP_CURSOR_GAP - height;
+        }
+        tooltip.setAnchorX(x);
+        tooltip.setAnchorY(y);
     }
 
     public static Region separator() {
