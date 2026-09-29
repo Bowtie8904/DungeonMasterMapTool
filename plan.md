@@ -43,7 +43,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)
 - [x] Map browser thumbnails + search bar for maps and folders (3.20)
-- [ ] Auto-save for maps that already exist on disk (3.21)
+- [x] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [ ] Right-click cancels the active tool like Esc (3.23)
 
@@ -309,7 +309,7 @@ Desktop tool for tabletop dungeon masters that:
 - No favourites.
 - Implementation: `ThumbnailService` (Java2D render of image layers, written by `ProjectService.save` for packaged maps, lazy generation via `loadOrCreateThumbnail`), `MapTreeFilter` (pure filter, unit-tested), `MapBrowser` (search field, thumbnail cache + background loader).
 
-## 3.21 Auto-Save (planned)
+## 3.21 Auto-Save
 
 - Maps that **already have a file on disk** are saved automatically in the background. New maps that were never saved are **not** auto-saved (they keep the Save / Discard / Cancel prompt).
 - Auto-save runs every **2 minutes** when the map has unsaved changes (dirty flag), and additionally when the DM window loses focus / on app close for dirty saved maps. No save happens if nothing changed.

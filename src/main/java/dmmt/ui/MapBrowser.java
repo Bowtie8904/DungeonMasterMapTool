@@ -110,6 +110,7 @@ public class MapBrowser extends VBox {
         thread.setDaemon(true);
         return thread;
     });
+    private HBox actions;
     private Entry scannedRoot;
     private TreeItem<Entry> draggedItem;
     private ContextMenu openMenu;
@@ -138,6 +139,7 @@ public class MapBrowser extends VBox {
                         () -> host.importMap(selectedFolder())),
                 Icons.button(MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save the open map (Ctrl+S)", host::saveMap));
         actions.getStyleClass().add("toolbar-row");
+        this.actions = actions;
 
         Label caption = new Label("OPEN MAP");
         caption.getStyleClass().add("caption");
@@ -186,6 +188,11 @@ public class MapBrowser extends VBox {
 
         getChildren().addAll(titleRow, actions, currentCard, searchBox, noResults, tree, hint);
         refresh();
+    }
+
+    /** Adds a control to the row of map actions (new / import / save). */
+    public void addAction(javafx.scene.Node node) {
+        actions.getChildren().add(node);
     }
 
     private HBox buildSearchBox() {

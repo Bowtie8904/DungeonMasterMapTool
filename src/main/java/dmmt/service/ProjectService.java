@@ -32,6 +32,17 @@ public class ProjectService {
         return copy;
     }
 
+    /** Content hash used to tell whether a project differs from what was last saved. */
+    public String fingerprint(DmProject project) throws IOException {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(objectMapper.writeValueAsBytes(project));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
     public void save(Path projectFile, DmProject project) throws IOException {
         if (projectFile.getParent() != null) {
             Files.createDirectories(projectFile.getParent());

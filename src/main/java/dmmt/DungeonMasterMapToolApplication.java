@@ -110,6 +110,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fogCellsPerGrid";
     private static final String PREF_LIGHT_TINT = "lightTint";
+    private static final String PREF_AUTOSAVE_ENABLED = "autoSaveEnabled";
+    private static final String PREF_AUTOSAVE_MINUTES = "autoSaveMinutes";
+    private static final int[] AUTOSAVE_MINUTE_OPTIONS = {1, 2, 5, 10};
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
     private static List<Image> appIcons;
 
@@ -153,6 +156,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.WallSegment draftWall;
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
+    private String savedFingerprint;
+    private long historyVersion;
+    private long lastAutoSaveNanos = System.nanoTime();
     private long lastInputNanos = System.nanoTime();
     private long lastFrameNanos;
     private DmProject.LightSource selectedLight;
@@ -281,6 +287,7 @@ public class DungeonMasterMapToolApplication extends Application {
         root.setCenter(center);
 
         mapBrowser = new MapBrowser(mapLibrary, createBrowserHost());
+        mapBrowser.addAction(createAutoSaveMenu());
         root.setLeft(mapBrowser);
 
         statusLabel = new Label("Ready");
@@ -342,6 +349,7 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.setScene(scene);
         stage.getIcons().setAll(appIcons());
         stage.setOnCloseRequest(event -> {
+            saveOnExit();
             if (handoutWindow != null) {
                 handoutWindow.close();
             }
@@ -350,6 +358,16 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         updateWindowTitle();
         stage.show();
+
+        stage.focusedProperty().addListener((obs, was, focused) -> {
+            if (!focused) {
+                autoSaveIfDirty();
+            }
+        });
+        javafx.animation.Timeline autoSaveTicker = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(10), e -> autoSaveTick()));
+        autoSaveTicker.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        autoSaveTicker.play();
 
         scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> lastInputNanos = System.nanoTime());
         AnimationTimer timer = new AnimationTimer() {
@@ -1849,6 +1867,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Path target = projectFile;
         DmProject savedProject = project;
         DmProject snapshot;
+        long version = historyVersion;
         try {
             snapshot = projectService.copy(project);
         } catch (IOException ex) {
@@ -1861,6 +1880,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }, saved -> {
             if (project == savedProject) {
                 adoptCopiedAssetPaths(snapshot);
+                markSaved(snapshot, version);
             }
             mapBrowser.invalidateThumbnails();
             status("Saved " + MapBrowser.displayName(saved) + ".");
@@ -1868,6 +1888,114 @@ public class DungeonMasterMapToolApplication extends Application {
                 next.run();
             }
         });
+    }
+
+    private String fingerprintOrNull(DmProject candidate) {
+        try {
+            return projectService.fingerprint(candidate);
+        } catch (IOException | RuntimeException ex) {
+            return null;
+        }
+    }
+
+    /** Records the just-saved state; edits made while the save ran keep the map dirty. */
+    private void markSaved(DmProject snapshot, long versionAtSnapshot) {
+        savedFingerprint = fingerprintOrNull(historyVersion == versionAtSnapshot ? project : snapshot);
+    }
+
+    private boolean autoSaveEnabled() {
+        return preferences.getBoolean(PREF_AUTOSAVE_ENABLED, true);
+    }
+
+    private int autoSaveMinutes() {
+        return preferences.getInt(PREF_AUTOSAVE_MINUTES, 2);
+    }
+
+    private HBox createAutoSaveMenu() {
+        CheckMenuItem enabled = new CheckMenuItem("Auto-save");
+        enabled.setSelected(autoSaveEnabled());
+        enabled.selectedProperty().addListener((obs, was, on) -> {
+            preferences.putBoolean(PREF_AUTOSAVE_ENABLED, on);
+            lastAutoSaveNanos = System.nanoTime();
+        });
+        javafx.scene.control.MenuButton button = new javafx.scene.control.MenuButton();
+        button.setGraphic(Icons.icon(MaterialDesignA.AUTORENEW));
+        Icons.tooltip(button, "Auto-save settings: saves maps that are already on disk in the background");
+        button.getItems().add(enabled);
+        button.getItems().add(new SeparatorMenuItem());
+        ToggleGroup group = new ToggleGroup();
+        for (int minutes : AUTOSAVE_MINUTE_OPTIONS) {
+            RadioMenuItem item = new RadioMenuItem("Every " + minutes + (minutes == 1 ? " minute" : " minutes"));
+            item.setToggleGroup(group);
+            item.setSelected(minutes == autoSaveMinutes());
+            item.setOnAction(e -> {
+                preferences.putInt(PREF_AUTOSAVE_MINUTES, minutes);
+                lastAutoSaveNanos = System.nanoTime();
+            });
+            button.getItems().add(item);
+        }
+        return new HBox(button);
+    }
+
+    private void autoSaveTick() {
+        long intervalNanos = autoSaveMinutes() * 60_000_000_000L;
+        if (System.nanoTime() - lastAutoSaveNanos >= intervalNanos) {
+            autoSaveIfDirty();
+        }
+    }
+
+    private boolean interactionInProgress() {
+        return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay
+                || draggingPlayerViewport || panningDmCamera || draftWall != null || draftOverlay != null;
+    }
+
+    private boolean hasUnsavedChanges() {
+        if (projectFile == null || project == null) {
+            return false;
+        }
+        String current = fingerprintOrNull(project);
+        return current != null && !current.equals(savedFingerprint);
+    }
+
+    /** Background save of a map that already exists on disk; postponed during drags, skipped while another save runs. */
+    private void autoSaveIfDirty() {
+        if (!autoSaveEnabled() || projectFile == null || ioBusy || interactionInProgress() || !hasUnsavedChanges()) {
+            return;
+        }
+        lastAutoSaveNanos = System.nanoTime();
+        Path target = projectFile;
+        DmProject savedProject = project;
+        long version = historyVersion;
+        DmProject snapshot;
+        try {
+            snapshot = projectService.copy(project);
+        } catch (IOException ex) {
+            status("Auto-save failed: " + ex.getMessage());
+            return;
+        }
+        runInBackground("Auto-saving...", "Auto-save failed: ", () -> {
+            projectService.save(target, snapshot);
+            return target;
+        }, saved -> {
+            if (project == savedProject) {
+                adoptCopiedAssetPaths(snapshot);
+                markSaved(snapshot, version);
+            }
+            mapBrowser.invalidateThumbnails();
+            status("Auto-saved " + java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
+        });
+    }
+
+    /** The app is about to exit, so the save has to finish before the window closes. */
+    private void saveOnExit() {
+        if (!autoSaveEnabled() || ioBusy || !hasUnsavedChanges()) {
+            return;
+        }
+        try {
+            projectService.save(projectFile, projectService.copy(project));
+        } catch (IOException | RuntimeException ex) {
+            status("Auto-save failed: " + ex.getMessage());
+        }
     }
 
     /** Saving a new map asks for a name and a folder inside the map library. */
@@ -1887,6 +2015,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         DmProject savedProject = project;
+        long version = historyVersion;
         runInBackground("Saving...", "Save failed: ", () -> {
             projectService.save(target, snapshot);
             return target;
@@ -1894,6 +2023,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (project == savedProject) {
                 projectFile = saved;
                 adoptCopiedAssetPaths(snapshot);
+                markSaved(snapshot, version);
                 updateWindowTitle();
             }
             mapBrowser.refresh();
@@ -1918,6 +2048,7 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean touchesOpenMap = openFile != null && affectedPath != null
                 && openFile.startsWith(affectedPath.toAbsolutePath().normalize());
         DmProject savedProject = project;
+        long version = historyVersion;
         DmProject snapshot = null;
         if (touchesOpenMap) {
             try {
@@ -1938,6 +2069,9 @@ public class DungeonMasterMapToolApplication extends Application {
             return new LibraryOutcome(result, movedTo, reloaded);
         }, outcome -> {
             if (touchesOpenMap && project == savedProject) {
+                if (toSave != null) {
+                    markSaved(toSave, version);
+                }
                 if (outcome.openMapMovedTo() != null) {
                     projectFile = outcome.openMapMovedTo();
                     adoptCopiedAssetPaths(outcome.reloadedOpenMap());
@@ -2532,6 +2666,7 @@ public class DungeonMasterMapToolApplication extends Application {
         fogDragging = false;
         undoStack.clear();
         redoStack.clear();
+        savedFingerprint = fingerprintOrNull(project);
         syncControlsFromProject();
         if (mapBrowser != null) {
             mapBrowser.updateCurrentMap();
@@ -3396,6 +3531,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void pushHistory(HistoryAction action) {
+        historyVersion++;
         undoStack.push(action);
         redoStack.clear();
         while (undoStack.size() > MAX_HISTORY) {
@@ -3409,6 +3545,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         HistoryAction action = undoStack.pop();
+        historyVersion++;
         action.undo.run();
         redoStack.push(action);
         status("Undid: " + action.label);
@@ -3420,6 +3557,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         HistoryAction action = redoStack.pop();
+        historyVersion++;
         action.redo.run();
         undoStack.push(action);
         status("Redid: " + action.label);
