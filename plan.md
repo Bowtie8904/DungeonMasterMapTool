@@ -5,6 +5,7 @@
 - **Language/runtime:** Java 21
 - **UI/rendering:** JavaFX + Canvas
 - **Build/deps:** Maven
+- **Codegen:** Lombok (DTOs/models/boilerplate reduction)
 - **Project save format:** Versioned JSON (`.dmmap`)
 - **D2VTT import:** Jackson for JSON parsing
 - **Math/geometry:** JTS (or lightweight in-house geometry where enough)
@@ -291,3 +292,24 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.3 (current):** Added whole-map 90-degree rotation via menu with save/restore in `.dmmap`.
 - **v0.4 (current):** Added ping tool, full d2vtt lights/doors/windows support, and DM door/window interaction with persisted open/closed state.
 - **v0.5 (current):** Import now requires copying d2vtt/source assets into managed project storage so external source media is not needed after import.
+- **v0.6 (current):** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
+
+## 10) Testing Strategy
+
+- **Unit tests (JUnit 5):**
+  - d2vtt parsing/normalization (walls, lights, doors/windows).
+  - `.dmmap` serialization/deserialization and schema-version migration.
+  - Geometry/LOS calculations, door/window occlusion state changes.
+  - Fog mask operations (brush/rect reveal consistency).
+- **Integration tests:**
+  - Import d2vtt -> save `.dmmap` -> reload -> verify state parity.
+  - External-source removal scenario (import from removable path, then load from copied project assets only).
+  - Whole-map rotation (0/90/180/270) preserving interactables, lights, fog, overlays.
+- **Rendering/regression checks:**
+  - Snapshot-style checks for key layer combinations (fog on/off, day/night, open/closed doors).
+  - Performance smoke checks on representative map sizes (target stable interaction at 60 FPS class hardware).
+- **Manual acceptance checklist per release:**
+  - Two-window DM/player flow including freeze/unfreeze.
+  - Ping visibility and timing behavior.
+  - Custom map drag/drop + resize + save/reload fidelity.
+  - Ctrl+S persistence across all active tool states.
