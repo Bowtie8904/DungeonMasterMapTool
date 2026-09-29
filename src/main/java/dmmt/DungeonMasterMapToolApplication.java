@@ -108,6 +108,12 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_PLAYER_SCREEN_INDEX = "player.screenIndex";
     private static final String PREF_SCREEN_DIAGONAL_PREFIX = "player.screenDiagonalInches.";
     private static final String PREF_TILE_INCHES = "player.tileInches";
+    private static final String PREF_FPS_TARGET = "render.targetFps";
+    private static final String PREF_FPS_ANIMATION = "render.animationFps";
+    private static final String PREF_FPS_IDLE = "render.idleFps";
+    private static final int DEFAULT_FPS_TARGET = 60;
+    private static final int DEFAULT_FPS_ANIMATION = 30;
+    private static final int DEFAULT_FPS_IDLE = 10;
     private static final String PREF_SIDEBAR_VISIBLE = "ui.sidebarVisible";
     private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
@@ -128,6 +134,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject project;
     private Path projectFile;
 
+    private Canvas dmBaseCanvas;
+    private final CanvasMapRenderer.BaseLayerState dmBaseState = new CanvasMapRenderer.BaseLayerState();
+    private Canvas playerBaseCanvas;
+    private CanvasMapRenderer.BaseLayerState playerBaseState = new CanvasMapRenderer.BaseLayerState();
     private Canvas dmCanvas;
     private Canvas dmFogCanvas;
     private Canvas playerCanvas;
@@ -165,6 +175,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private long historyVersion;
     private long lastAutoSaveNanos = System.nanoTime();
     private long lastInputNanos = System.nanoTime();
+    private volatile int targetFps = DEFAULT_FPS_TARGET;
+    private volatile int animationFps = DEFAULT_FPS_ANIMATION;
+    private volatile int idleFps = DEFAULT_FPS_IDLE;
     private long lastFrameNanos;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
@@ -292,6 +305,10 @@ public class DungeonMasterMapToolApplication extends Application {
         this.primaryStage = stage;
         FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
         CanvasMapRenderer.setLightTint(preferences.getDouble(PREF_LIGHT_TINT, CanvasMapRenderer.DEFAULT_LIGHT_TINT));
+        targetFps = clampFps(preferences.getInt(PREF_FPS_TARGET, DEFAULT_FPS_TARGET));
+        animationFps = clampFps(preferences.getInt(PREF_FPS_ANIMATION, DEFAULT_FPS_ANIMATION));
+        CanvasMapRenderer.setAnimationFps(animationFps);
+        idleFps = clampFps(preferences.getInt(PREF_FPS_IDLE, DEFAULT_FPS_IDLE));
         this.project = DmProject.builder().build();
         this.project.getMap().setSourceType("custom");
         Path libraryRoot;
@@ -305,12 +322,14 @@ public class DungeonMasterMapToolApplication extends Application {
         BorderPane root = new BorderPane();
         root.getStyleClass().add("app-root");
 
+        dmBaseCanvas = new Canvas(1280, 800);
+        dmBaseCanvas.setMouseTransparent(true);
         dmCanvas = new Canvas(1280, 800);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmCanvas, dmFogCanvas, textEditor.node());
+        StackPane center = new StackPane(dmBaseCanvas, dmCanvas, dmFogCanvas, textEditor.node());
         center.setMinSize(0, 0);
         Region controls = createControlsPanel(stage);
         StackPane.setAlignment(controls, Pos.TOP_RIGHT);
@@ -319,6 +338,8 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setAlignment(chip, Pos.TOP_CENTER);
         StackPane.setMargin(chip, new Insets(12, 0, 0, 0));
         center.getChildren().addAll(chip, controls);
+        dmBaseCanvas.widthProperty().bind(center.widthProperty());
+        dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
         dmCanvas.heightProperty().bind(center.heightProperty());
         dmFogCanvas.widthProperty().bind(center.widthProperty());
@@ -429,11 +450,14 @@ public class DungeonMasterMapToolApplication extends Application {
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                // Idle scenes without active lights only redraw ~10x per second.
+                // Frame rates are configurable: target while interacting, animation for moving effects, idle otherwise.
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
-                if (!animated && !recentInput && now - lastFrameNanos < 100_000_000L) {
+                int fps = recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
+                // 10% slack so vsync jitter does not push a frame to the next tick.
+                long minInterval = (long) (900_000_000L / fps);
+                if (now - lastFrameNanos < minInterval) {
                     return;
                 }
                 lastFrameNanos = now;
@@ -856,7 +880,9 @@ public class DungeonMasterMapToolApplication extends Application {
                         textToolsRow, textSizeRow, textBoxColorRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
                 new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
-                        playerRow, screenRow, scaleGrid));
+                        playerRow, screenRow, scaleGrid),
+                new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
+                        frameRateGrid()));
 
         ScrollPane scroll = new ScrollPane(sections);
         scroll.setFitToWidth(true);
@@ -1840,10 +1866,15 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage.toFront();
             return;
         }
+        playerBaseCanvas = new Canvas(1280, 720);
+        playerBaseCanvas.setMouseTransparent(true);
+        playerBaseState = new CanvasMapRenderer.BaseLayerState();
         playerCanvas = new Canvas(1280, 720);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerCanvas, playerFogCanvas);
+        StackPane root = new StackPane(playerBaseCanvas, playerCanvas, playerFogCanvas);
+        playerBaseCanvas.widthProperty().bind(root.widthProperty());
+        playerBaseCanvas.heightProperty().bind(root.heightProperty());
         playerCanvas.widthProperty().bind(root.widthProperty());
         playerCanvas.heightProperty().bind(root.heightProperty());
         playerFogCanvas.widthProperty().bind(root.widthProperty());
@@ -1857,6 +1888,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setOnCloseRequest(event -> {
             playerStage = null;
             playerCanvas = null;
+            playerBaseCanvas = null;
             playerFogCanvas = null;
             syncPlayerWindowToggle();
         });
@@ -1894,6 +1926,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage.close();
             playerStage = null;
             playerCanvas = null;
+            playerBaseCanvas = null;
             playerFogCanvas = null;
         }
         syncPlayerWindowToggle();
@@ -1924,6 +1957,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void renderDm() {
+        renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
+                dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
         renderer.render(
                 gc,
@@ -1972,6 +2007,9 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean frozen = frozenPlayerProject != null;
         DmProject shown = frozen ? frozenPlayerProject : project;
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
+        playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
+                frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
+                getEffectivePlayerCamera());
         playerView.render(
                 gc,
                 shown,
@@ -3178,6 +3216,56 @@ public class DungeonMasterMapToolApplication extends Application {
         gc.strokeRect(x, y, size, size);
         gc.setFill(Color.BLACK);
         gc.fillText("1 inch", x + size / 2.0 - 16, y + size / 2.0 + 4);
+    }
+
+    private static int clampFps(int fps) {
+        return Math.max(1, Math.min(240, fps));
+    }
+
+    private GridPane frameRateGrid() {
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(4);
+        grid.addRow(0, mutedLabel("Target FPS"), fpsSpinner(PREF_FPS_TARGET, targetFps, 10, 240,
+                "Frame rate while you interact with the map (mouse, keyboard, laser). Applies to DM and player view.",
+                value -> targetFps = value));
+        grid.addRow(1, mutedLabel("Animation FPS"), fpsSpinner(PREF_FPS_ANIMATION, animationFps, 1, 240,
+                "Frame rate of effect textures and light flicker. Flicker never updates faster than this, even while you interact (never above the target FPS).",
+                value -> {
+                    animationFps = value;
+                    CanvasMapRenderer.setAnimationFps(value);
+                }));
+        grid.addRow(2, mutedLabel("Idle FPS"), fpsSpinner(PREF_FPS_IDLE, idleFps, 1, 60,
+                "Frame rate when nothing moves and there was no input for a second. Lower saves CPU.",
+                value -> idleFps = value));
+        return grid;
+    }
+
+    private Spinner<Integer> fpsSpinner(String key, int initial, int min, int max, String tooltip,
+                                        java.util.function.IntConsumer apply) {
+        Spinner<Integer> spinner = new Spinner<>();
+        spinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(min, max,
+                Math.max(min, Math.min(max, initial)), 5));
+        spinner.setEditable(true);
+        spinner.setPrefWidth(84);
+        Icons.tooltip(spinner, tooltip);
+        spinner.getEditor().focusedProperty().addListener((obs, was, focused) -> {
+            if (!focused) {
+                try {
+                    int typed = (int) Math.round(Double.parseDouble(spinner.getEditor().getText().replace(',', '.')));
+                    spinner.getValueFactory().setValue(Math.max(min, Math.min(max, typed)));
+                } catch (NumberFormatException ex) {
+                    spinner.getEditor().setText(String.valueOf(spinner.getValue()));
+                }
+            }
+        });
+        spinner.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue != null) {
+                apply.accept(newValue);
+                preferences.putInt(key, newValue);
+            }
+        });
+        return spinner;
     }
 
     private Spinner<Double> createDoubleSpinner(double min, double max, double initial, double step, double width) {

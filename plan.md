@@ -39,6 +39,8 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Modern dark DM controls overlay: collapsible sections, icon buttons, tooltips, active-tool chip + cursors (3.16)
 - [x] Full-resolution rendering of large map images (> 4096 px) via cached tile pyramid (see 5)
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
+- [x] Configurable frame rates (Performance sidebar section + `render.targetFps` 60 / `render.animationFps` 30 / `render.idleFps` 10 in the settings file); the light map is cached and only rasterised when its inputs change; light flicker time advances at the animation fps only; lights whose range does not touch the screen are skipped
+- [x] Separate base canvas (background, grid, map images) below the animated canvas in DM and player view; only redrawn on camera/layer/size changes or when image tiles finish loading
 - [x] One-click room reveal bounded by walls/doors/windows (3.17)
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)

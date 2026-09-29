@@ -49,6 +49,7 @@ public final class ImagePyramidStore {
     private final Set<TileKey> broken = new HashSet<>();
     private final ConcurrentLinkedQueue<LoadedTile> loaded = new ConcurrentLinkedQueue<>();
     private final LinkedBlockingDeque<TileKey> loadQueue = new LinkedBlockingDeque<>();
+    private final java.util.concurrent.atomic.AtomicLong changes = new java.util.concurrent.atomic.AtomicLong();
     private final ExecutorService builder = Executors.newSingleThreadExecutor(r -> daemon(r, "dmmt-pyramid-builder", Thread.MIN_PRIORITY));
 
     public static synchronized ImagePyramidStore shared() {
@@ -79,6 +80,12 @@ public final class ImagePyramidStore {
             return Path.of(localAppData, "DungeonMasterMapTool", "image-cache");
         }
         return Path.of(System.getProperty("user.home"), ".dmmt", "image-cache");
+    }
+
+    /** Increases whenever a tile finished loading or a pyramid became available, so cached drawings can be refreshed. */
+    public long changeVersion() {
+        drainLoaded();
+        return changes.get();
     }
 
     /** Returns the drawable image for {@code file}, or null if it cannot be loaded. */
@@ -137,6 +144,7 @@ public final class ImagePyramidStore {
         try {
             ImagePyramidBuilder.Meta meta = ImagePyramidBuilder.build(file, dir);
             image.meta = meta;
+            changes.incrementAndGet();
             System.out.printf("Built image pyramid for %s (%dx%d) in %d ms%n",
                     file.getFileName(), meta.width(), meta.height(), (System.nanoTime() - start) / 1_000_000);
         } catch (Throwable ex) {
@@ -243,6 +251,7 @@ public final class ImagePyramidStore {
                 continue;
             }
             tiles.put(done.key(), done.image());
+            changes.incrementAndGet();
             if (tiles.size() > MAX_CACHED_TILES) {
                 var it = tiles.entrySet().iterator();
                 it.next();
@@ -292,12 +301,15 @@ public final class ImagePyramidStore {
             this.dir = dir;
         }
 
-        /** Draws the whole image into the rectangle (in the current GC transform). */
-        public void draw(GraphicsContext gc, double dx, double dy, double dw, double dh) {
+        /**
+         * Draws the whole image into the rectangle (in the current GC transform). Returns false while
+         * detail tiles are still loading, so callers that cache the result know to draw again.
+         */
+        public boolean draw(GraphicsContext gc, double dx, double dy, double dw, double dh) {
             gc.drawImage(base, dx, dy, dw, dh);
             ImagePyramidBuilder.Meta meta = this.meta;
             if (meta == null || dw <= 0 || dh <= 0) {
-                return;
+                return true;
             }
             Affine transform = gc.getTransform();
             double transformScale = Math.sqrt(Math.abs(transform.determinant()));
@@ -307,19 +319,19 @@ public final class ImagePyramidStore {
                     ? 0
                     : (int) Math.floor(Math.log(1.0 / screenPixelsPerSourcePixel) / Math.log(2));
             if (level >= meta.overviewLevel()) {
-                return;
+                return true;
             }
 
             double[] visible = visibleLocalBounds(gc, transform);
             if (visible == null) {
-                return;
+                return true;
             }
             double u0 = Math.max(0, (visible[0] - dx) / dw * meta.width());
             double v0 = Math.max(0, (visible[1] - dy) / dh * meta.height());
             double u1 = Math.min(meta.width(), (visible[2] - dx) / dw * meta.width());
             double v1 = Math.min(meta.height(), (visible[3] - dy) / dh * meta.height());
             if (u1 <= u0 || v1 <= v0) {
-                return;
+                return true;
             }
             int span = meta.tileSize() << level;
             int tx0 = (int) Math.floor(u0 / span);
@@ -327,10 +339,12 @@ public final class ImagePyramidStore {
             int tx1 = Math.min(meta.tileColumns(level) - 1, (int) Math.floor((u1 - 1e-6) / span));
             int ty1 = Math.min(meta.tileRows(level) - 1, (int) Math.floor((v1 - 1e-6) / span));
             double levelScale = 1 << level;
+            boolean complete = true;
             for (int ty = ty0; ty <= ty1; ty++) {
                 for (int tx = tx0; tx <= tx1; tx++) {
                     Image tile = tile(this, level, tx, ty);
                     if (tile == null) {
+                        complete &= broken.contains(new TileKey(this, level, tx, ty));
                         continue;
                     }
                     double pu = (double) tx * span;
@@ -343,6 +357,7 @@ public final class ImagePyramidStore {
                             coveredW / meta.width() * dw, coveredH / meta.height() * dh);
                 }
             }
+            return complete;
         }
 
         private double[] visibleLocalBounds(GraphicsContext gc, Affine transform) {

@@ -30,7 +30,7 @@ public final class AppSettings {
     private record Section(String title, List<Entry> entries) {
     }
 
-    private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player"};
+    private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player", "performance"};
 
     private final Path file;
     private final Map<String, String> values = new LinkedHashMap<>();
@@ -259,6 +259,11 @@ public final class AppSettings {
         sections.add(new Section("Fog and lighting", List.of(
                 new Entry("fog.cellsPerGrid", String.valueOf(FogService.DEFAULT_CELLS_PER_GRID), "Fog cells per grid cell (edge sharpness of fog of war)."),
                 new Entry("lighting.tint", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_LIGHT_TINT), "Strength of the light colour tint over lit areas (0-1)."))));
+
+        sections.add(new Section("Performance (frames per second, 1-240)", List.of(
+                new Entry("render.targetFps", "60", "Frame rate while interacting with the map."),
+                new Entry("render.animationFps", "30", "Frame rate while only effect textures or light flicker move (capped by targetFps)."),
+                new Entry("render.idleFps", "10", "Frame rate when nothing moves and there was no input for a second."))));
 
         sections.add(new Section("Auto-save", List.of(
                 new Entry("autosave.enabled", "true", "Save the project automatically (true/false)."),

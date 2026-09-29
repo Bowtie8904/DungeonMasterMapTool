@@ -50,6 +50,13 @@ public class CanvasMapRenderer {
     /** Global strength of the light colour tint over lit areas; applies to every light in every project. */
     private static volatile double lightTint = DEFAULT_LIGHT_TINT;
 
+    /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
+    private static volatile int animationFps = 30;
+
+    public static void setAnimationFps(int fps) {
+        animationFps = Math.max(1, fps);
+    }
+
     public static double getLightTint() {
         return lightTint;
     }
@@ -92,6 +99,76 @@ public class CanvasMapRenderer {
         this.wallLayerVisible = wallLayerVisible;
     }
 
+    /** Remembers what a base canvas currently shows, so it is only redrawn when that changes. */
+    public static final class BaseLayerState {
+        private long signature;
+        private long imageVersion;
+        private boolean valid;
+    }
+
+    /**
+     * Draws background, grid and map images on their own canvas below the animated one. Nothing here moves
+     * with light flicker or effect animations, so the canvas is only redrawn when the view, the layers or
+     * the loaded image detail change.
+     */
+    public void renderBase(
+            GraphicsContext gc,
+            BaseLayerState state,
+            DmProject project,
+            Path projectFile,
+            double width,
+            double height,
+            DmProject.CameraState camera
+    ) {
+        long imageVersion = imageStore.changeVersion();
+        long signature = baseSignature(project, projectFile, width, height, camera);
+        if (state.valid && state.signature == signature && state.imageVersion == imageVersion) {
+            return;
+        }
+        gc.setFill(Color.web("#202125"));
+        gc.fillRect(0, 0, width, height);
+        boolean complete = true;
+        if (project == null) {
+            gc.setFill(Color.web("#cccccc"));
+            gc.fillText("Open or import a map to begin.", 20, 30);
+        } else {
+            drawGrid(gc, project, width, height, camera);
+            complete = drawLayers(gc, project, projectFile, width, height, camera);
+        }
+        state.signature = signature;
+        state.imageVersion = imageVersion;
+        // Detail tiles that are still loading need another pass once they arrive.
+        state.valid = complete;
+    }
+
+    private static long baseSignature(DmProject project, Path projectFile, double width, double height,
+                                      DmProject.CameraState camera) {
+        long hash = 1125899906842597L;
+        hash = 31 * hash + Double.hashCode(width);
+        hash = 31 * hash + Double.hashCode(height);
+        if (project == null) {
+            return hash;
+        }
+        hash = 31 * hash + System.identityHashCode(project);
+        hash = 31 * hash + (projectFile == null ? 0 : projectFile.hashCode());
+        hash = 31 * hash + Double.hashCode(camera.getX());
+        hash = 31 * hash + Double.hashCode(camera.getY());
+        hash = 31 * hash + Double.hashCode(camera.getZoom());
+        hash = 31 * hash + Double.hashCode(project.getMap().getGrid().getPixelsPerCell());
+        for (DmProject.ImageLayer layer : project.getImageLayers()) {
+            hash = 31 * hash + (layer.getPath() == null ? 0 : layer.getPath().hashCode());
+            hash = 31 * hash + (layer.isVisible() ? 1 : 0);
+            hash = 31 * hash + layer.getZIndex();
+            hash = 31 * hash + Double.hashCode(layer.getX());
+            hash = 31 * hash + Double.hashCode(layer.getY());
+            hash = 31 * hash + Double.hashCode(layer.getWidth());
+            hash = 31 * hash + Double.hashCode(layer.getHeight());
+            hash = 31 * hash + Double.hashCode(layer.getRotationDeg());
+        }
+        return hash;
+    }
+
+    /** Draws everything that sits above the base canvas; the canvas itself stays transparent. */
     public void render(
             GraphicsContext gc,
             DmProject project,
@@ -102,17 +179,11 @@ public class CanvasMapRenderer {
             boolean playerMode,
             WorldRect playerViewportWorld
     ) {
-        gc.setFill(Color.web("#202125"));
-        gc.fillRect(0, 0, width, height);
-
+        gc.clearRect(0, 0, width, height);
         if (project == null) {
-            gc.setFill(Color.web("#cccccc"));
-            gc.fillText("Open or import a map to begin.", 20, 30);
             return;
         }
 
-        drawGrid(gc, project, width, height, camera);
-        drawLayers(gc, project, projectFile, width, height, camera);
         drawLighting(gc, project, width, height, camera, playerMode);
         drawOverlays(gc, project, width, height, camera, playerMode);
         if (project.isTextLayerVisible()) {
@@ -179,7 +250,9 @@ public class CanvasMapRenderer {
         }
     }
 
-    private void drawLayers(GraphicsContext gc, DmProject project, Path projectFile, double width, double height, DmProject.CameraState camera) {
+    /** Returns false if some detail tiles were not available yet. */
+    private boolean drawLayers(GraphicsContext gc, DmProject project, Path projectFile, double width, double height, DmProject.CameraState camera) {
+        boolean complete = true;
         List<DmProject.ImageLayer> sorted = project.getImageLayers().stream()
                 .filter(DmProject.ImageLayer::isVisible)
                 .sorted((a, b) -> Integer.compare(a.getZIndex(), b.getZIndex()))
@@ -200,9 +273,10 @@ public class CanvasMapRenderer {
             double centerY = sy + sh / 2.0;
             gc.translate(centerX, centerY);
             gc.rotate(layer.getRotationDeg());
-            image.draw(gc, -sw / 2.0, -sh / 2.0, sw, sh);
+            complete &= image.draw(gc, -sw / 2.0, -sh / 2.0, sw, sh);
             gc.restore();
         }
+        return complete;
     }
 
     /** AOE shapes sit above the map and lighting but below fog, so fog still hides them from players. */
@@ -624,19 +698,52 @@ public class CanvasMapRenderer {
         int bh = Math.max(1, (int) Math.ceil(height / LIGHT_MAP_SCALE));
         LightBuffer buffer = playerMode ? playerLightBuffer : dmLightBuffer;
         buffer.ensureSize(bw, bh);
-        Arrays.fill(buffer.lit, 0f);
 
         List<DmProject.LightSource> lights = project.getLighting().getLights();
-        int[] lightRgb = new int[lights.size()];
-        long now = System.currentTimeMillis();
+        int fps = animationFps;
+        long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
         double zoom = camera.getZoom();
+        double[] flickers = new double[lights.size()];
+        // Rasterising the light map is the expensive part, so it is redone only when one of its inputs changed.
+        long key = 1125899906842597L;
+        key = 31 * key + Double.hashCode(darkness);
+        key = 31 * key + Double.hashCode(lightTint);
+        key = 31 * key + preset.name().hashCode();
+        key = 31 * key + Double.hashCode(ambientBrightness);
+        key = 31 * key + Double.hashCode(camera.getX());
+        key = 31 * key + Double.hashCode(camera.getY());
+        key = 31 * key + Double.hashCode(zoom);
+        for (int li = 0; li < lights.size(); li++) {
+            DmProject.LightSource light = lights.get(li);
+            boolean relevant = light.isEnabled() && lightRangeTouchesScreen(light, width, height, camera);
+            key = 31 * key + (relevant ? 1 : 0);
+            if (!relevant) {
+                continue;
+            }
+            flickers[li] = project.isEffectAnimations() ? LightFlicker.amount(light, now) : 0;
+            key = 31 * key + Double.hashCode(flickers[li]);
+            key = 31 * key + Double.hashCode(light.getRange());
+            key = 31 * key + Double.hashCode(light.getIntensity());
+            key = 31 * key + (light.getColor() == null ? 0 : light.getColor().hashCode());
+            key = 31 * key + System.identityHashCode(lightingEngine.polygonFor(light));
+        }
+        if (buffer.valid && buffer.key == key) {
+            gc.setImageSmoothing(true);
+            gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
+            return;
+        }
+        buffer.key = key;
+        buffer.valid = true;
+        Arrays.fill(buffer.lit, 0f);
+
+        int[] lightRgb = new int[lights.size()];
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             lightRgb[li] = parseRgb(light.getColor());
-            if (!light.isEnabled()) {
+            if (!light.isEnabled() || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;
             }
-            double flicker = project.isEffectAnimations() ? LightFlicker.amount(light, now) : 0;
+            double flicker = flickers[li];
             double radius = light.getRange() * zoom * (1.0 - 0.25 * flicker) / LIGHT_MAP_SCALE;
             if (radius < 0.5) {
                 continue;
@@ -702,6 +809,19 @@ public class CanvasMapRenderer {
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         gc.setImageSmoothing(true);
         gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
+    }
+
+    /**
+     * True if the light's full range circle overlaps the canvas. Flicker only shrinks the radius, so a light that
+     * fails this test can never contribute to the light map.
+     */
+    private boolean lightRangeTouchesScreen(DmProject.LightSource light, double width, double height, DmProject.CameraState camera) {
+        double radius = light.getRange() * camera.getZoom();
+        double cx = worldToScreenX(light.getX(), width, camera);
+        double cy = worldToScreenY(light.getY(), height, camera);
+        double dx = cx - Math.max(0, Math.min(width, cx));
+        double dy = cy - Math.max(0, Math.min(height, cy));
+        return dx * dx + dy * dy <= radius * radius;
     }
 
     /** Full brightness in the inner half of the radius, smooth fade to zero at the edge. */
@@ -1053,11 +1173,14 @@ public class CanvasMapRenderer {
         private int[] source = new int[0];
         private int[] argb = new int[0];
         private WritableImage image;
+        private long key;
+        private boolean valid;
 
         void ensureSize(int w, int h) {
             if (image != null && w == width && h == height) {
                 return;
             }
+            valid = false;
             width = w;
             height = h;
             lit = new float[w * h];
