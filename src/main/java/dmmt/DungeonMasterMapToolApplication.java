@@ -435,9 +435,13 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         HBox lightRow = row(
                 toolButtons.get(EditorTool.LIGHT_ADD),
-                toolButtons.get(EditorTool.LIGHT_REMOVE),
+                toolButtons.get(EditorTool.LIGHT_CANDLE),
+                toolButtons.get(EditorTool.LIGHT_LANTERN),
+                toolButtons.get(EditorTool.LIGHT_CAMPFIRE),
+                toolButtons.get(EditorTool.LIGHT_MAGIC),
                 Icons.separator(),
-                timeSegment);
+                toolButtons.get(EditorTool.LIGHT_REMOVE));
+        HBox timeRow = row(timeSegment);
         Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
         lightHint.getStyleClass().add("muted");
         lightHint.setWrapText(true);
@@ -599,7 +603,7 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, ambientBrightnessRow, lightTintRow, lightHint),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectBrushRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
@@ -921,7 +925,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_BRUSH -> Icons.tipCursor(MaterialDesignD.DRAW, 0.0, 1.0);
             case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
-            case LIGHT_ADD -> Icons.cursor(MaterialDesignL.LIGHTBULB_ON_OUTLINE, 0.5, 0.5);
+            case LIGHT_ADD, LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
+                    Icons.cursor(activeTool.icon, 0.5, 0.5);
             case LIGHT_REMOVE -> hoverInsideCanvas && pickNearestLight(hoverWorldX, hoverWorldY,
                     24 / Math.max(0.01, project.getViews().getDmCamera().getZoom())) != null
                     ? Icons.cursor(MaterialDesignL.LIGHTBULB_OFF_OUTLINE, 0.5, 0.5)
@@ -1119,10 +1124,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (activeTool == EditorTool.LIGHT_ADD) {
-                addLightAt(world.x(), world.y());
+            if (activeTool.isLightPlaceTool()) {
+                LightPreset preset = LightPreset.forTool(activeTool);
+                addLightAt(world.x(), world.y(), preset);
                 setActiveTool(EditorTool.SELECT);
-                status("Added torch light. Drag it to move; right-click for range, flicker, color and fog reveal.");
+                status("Added " + preset.label().toLowerCase() + ". Drag it to move; right-click for range, flicker, color and fog reveal.");
                 return;
             }
 
@@ -2200,7 +2206,9 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
-            case LIGHT_ADD -> status("Add light: click the map where the light should go.");
+            case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
+            case LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
+                    status(activeTool.label + ": click the map where the light should go.");
             case LIGHT_REMOVE -> status("Remove light: click the light you want to remove.");
         }
     }
@@ -2830,7 +2838,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- Light context menu ----
 
-    private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12, 24, 100};
+    private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12, 16, 24, 100};
     private static final String[][] LIGHT_COLORS = {
             {"Warm torch", "#FFB35C"},
             {"Candle", "#FFD9A0"},
@@ -3158,14 +3166,34 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private void addLightAt(double x, double y) {
+    private record LightPreset(String label, double rangeTiles, String color, boolean flicker,
+                               double flickerStrength, double flickerSpeed) {
+        static final LightPreset TORCH = new LightPreset("Torch", 8, "#FFB35C", true, 0.22, 1.4);
+        static final LightPreset CANDLE = new LightPreset("Candle", 2, "#FFD98A", true, 0.12, 2.5);
+        static final LightPreset LANTERN = new LightPreset("Lantern", 12, "#FFF4E0", true, 0.22, 1.4);
+        static final LightPreset CAMPFIRE = new LightPreset("Campfire", 16, "#FF8A3D", true, 0.35, 1.8);
+        static final LightPreset MAGIC = new LightPreset("Magic light", 12, "#CFE4FF", false, 0.0, 0.0);
+
+        static LightPreset forTool(EditorTool tool) {
+            return switch (tool) {
+                case LIGHT_CANDLE -> CANDLE;
+                case LIGHT_LANTERN -> LANTERN;
+                case LIGHT_CAMPFIRE -> CAMPFIRE;
+                case LIGHT_MAGIC -> MAGIC;
+                default -> TORCH;
+            };
+        }
+    }
+
+    private void addLightAt(double x, double y, LightPreset preset) {
         DmProject.LightSource light = DmProject.LightSource.builder()
                 .id("light-" + UUID.randomUUID())
                 .x(x)
                 .y(y)
-                .range(project.getMap().getGrid().getPixelsPerCell() * 4)
-                .color("#FFB35C")
-                .flicker(DmProject.Flicker.builder().enabled(true).strength(0.22).speed(1.4).build())
+                .range(project.getMap().getGrid().getPixelsPerCell() * preset.rangeTiles())
+                .color(preset.color())
+                .flicker(DmProject.Flicker.builder().enabled(preset.flicker())
+                        .strength(preset.flickerStrength()).speed(preset.flickerSpeed()).build())
                 .build();
         executeWithFogHistory(
                 "Add light",
@@ -3330,7 +3358,11 @@ public class DungeonMasterMapToolApplication extends Application {
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
-        LIGHT_ADD("Add light", "click the map to place a torch light", MaterialDesignL.LIGHTBULB_ON_OUTLINE, false, false),
+        LIGHT_ADD("Add light", "click the map to place a torch (8 tiles, torch flicker)", MaterialDesignL.LIGHTBULB_ON_OUTLINE, false, false),
+        LIGHT_CANDLE("Candle", "click the map to place a candle (2 tiles)", MaterialDesignC.CANDLE, false, false),
+        LIGHT_LANTERN("Lantern", "click the map to place a lantern (12 tiles)", MaterialDesignL.LAMP, false, false),
+        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (16 tiles)", MaterialDesignC.CAMPFIRE, false, false),
+        LIGHT_MAGIC("Magic light", "click the map to place a steady magical light (12 tiles)", MaterialDesignA.AUTO_FIX, false, false),
         LIGHT_REMOVE("Remove light", "click a light to remove it", MaterialDesignL.LIGHTBULB_OFF_OUTLINE, false, false);
 
         private final String label;
@@ -3356,7 +3388,12 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isLightTool() {
-            return this == LIGHT_ADD || this == LIGHT_REMOVE;
+            return this == LIGHT_REMOVE || isLightPlaceTool();
+        }
+
+        boolean isLightPlaceTool() {
+            return this == LIGHT_ADD || this == LIGHT_CANDLE || this == LIGHT_LANTERN
+                    || this == LIGHT_CAMPFIRE || this == LIGHT_MAGIC;
         }
 
         boolean isFogTool() {
