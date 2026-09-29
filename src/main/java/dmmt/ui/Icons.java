@@ -11,6 +11,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.effect.BlurType;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.image.Image;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -30,6 +31,7 @@ public final class Icons {
     public static final String STYLESHEET = Icons.class.getResource("/dmmt/ui/dark.css").toExternalForm();
 
     private static final Map<String, Cursor> CURSOR_CACHE = new HashMap<>();
+    private static final Map<String, Image> IMAGE_CACHE = new HashMap<>();
 
     private Icons() {
     }
@@ -92,6 +94,35 @@ public final class Icons {
     public static Cursor cursor(Ikon ikon, double hotspotFractionX, double hotspotFractionY) {
         String key = ikon.getDescription() + "@" + hotspotFractionX + "," + hotspotFractionY;
         return CURSOR_CACHE.computeIfAbsent(key, ignored -> createCursor(ikon, hotspotFractionX, hotspotFractionY));
+    }
+
+    /**
+     * Renders (and caches) an icon glyph to an image so it can be drawn onto a canvas. Returns {@code null}
+     * if the glyph cannot be rendered. Must be called on the JavaFX application thread.
+     */
+    public static Image image(Ikon ikon, int size, Color color) {
+        String key = ikon.getDescription() + "@" + size + "," + color;
+        if (IMAGE_CACHE.containsKey(key)) {
+            return IMAGE_CACHE.get(key);
+        }
+        Image image;
+        try {
+            FontIcon glyph = new FontIcon(ikon);
+            glyph.setIconSize(size);
+            glyph.setIconColor(color);
+            StackPane pane = new StackPane(glyph);
+            pane.setStyle("-fx-background-color: transparent;");
+            new Scene(pane, Color.TRANSPARENT);
+            pane.applyCss();
+            pane.layout();
+            SnapshotParameters parameters = new SnapshotParameters();
+            parameters.setFill(Color.TRANSPARENT);
+            image = pane.snapshot(parameters, null);
+        } catch (RuntimeException exception) {
+            image = null;
+        }
+        IMAGE_CACHE.put(key, image);
+        return image;
     }
 
     private static Cursor createCursor(Ikon ikon, double hotspotFractionX, double hotspotFractionY) {

@@ -147,6 +147,9 @@ Desktop tool for tabletop dungeon masters that:
 
 - Imported doors and windows must be represented as interactable map objects.
 - DM can open/close doors and windows directly from DM view.
+  - Every door/window shows a round **icon badge** (door/window glyph, open/closed variant, red/green resp. blue state colour) at the middle of its line in the DM view only, drawn above the fog so it is always visible.
+  - In Select mode a **single click** on the badge (or within a few pixels of the door line) toggles it; a human double-click toggles twice (quick open/close); only presses on the same door within 60 ms (mechanical switch bounce) are ignored. Badge hits take priority over lights, lights over door lines.
+  - Hovering a door highlights its badge and line.
 - Open/closed state affects line of sight and lighting occlusion in real time.
 - Interactable states must render correctly in DM and player views.
 - Open/closed state must be persisted in `.dmmap`.
@@ -228,7 +231,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Active tool visibility:**
   - Selected tool/state toggles are filled with the accent colour and glow.
   - A floating **tool chip** at the top of the canvas names the active tool (and "Esc to exit").
-  - The **mouse cursor changes per action**: eraser for revealing fog / erasing walls, brush for painting fog, pen for freehand effects, pencil for walls, crosshair for area/shape tools, target for ping, open/closed hand for grabbing and panning, resize arrow on layer handles.
+  - The **mouse cursor changes per action**: eraser for revealing fog / erasing walls, brush for painting fog, pen for freehand effects, pencil for walls, crosshair for area/shape tools, target for ping, pointing hand (link cursor) when hovering interactable objects (lights, door/window badges and lines), open/closed hand for grabbing layers/effects and panning, resize arrow on layer handles.
 - Time of day is a 4-button segmented control (Day/Dawn/Dusk/Night icons). Effect "Players see", Snap layers, Fog on/off, Freeze and Player window are icon toggles.
 - Map building section also offers **Add image** (file picker) in addition to drag & drop.
 - Implementation: `dmmt.ui` package - `Icons` (icon buttons, tooltips, cached icon cursors), `CollapsibleSection`, `Dialogs` (dark text/confirm/save-changes/error dialogs), `MapLocationDialog`, `MapBrowser`; disk operations in `dmmt.service.MapLibraryService` (unit-tested). `assets`/`imports` folders next to loose `.dmmap` files are hidden from the tree.
@@ -403,7 +406,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v1.8 (current):** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).
+- **v1.9 (current):** Door/window icon badges in the DM view with single-click toggle; pointing-hand cursor over interactable objects (lights, doors, windows).
+- **v1.8:** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).
 - **v1.7:** Implemented 3.15 and 3.16 (Phase 6 complete).
 - **v1.6:** Added map browser sidebar (3.15), modern DM controls overlay and visual design (3.16), Phase 6. Map switcher dropdown and system file dialogs for open/save replaced by the library.
 - **v1.5:** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.

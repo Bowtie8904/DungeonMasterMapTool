@@ -7,6 +7,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.lighting.VisibilityService;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.ui.Icons;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -14,6 +15,9 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,7 +90,8 @@ public class CanvasMapRenderer {
             DmProject.CameraState camera,
             boolean playerMode,
             WorldRect playerViewportWorld,
-            String selectedLightId
+            String selectedLightId,
+            String hoveredInteractableId
     ) {
         gc.clearRect(0, 0, width, height);
         if (project == null) {
@@ -96,6 +101,7 @@ public class CanvasMapRenderer {
         drawPings(gc, project, width, height, camera);
         if (!playerMode) {
             drawLightTokens(gc, project, width, height, camera, selectedLightId);
+            drawInteractableBadges(gc, project.getInteractables(), width, height, camera, hoveredInteractableId);
             if (playerViewportWorld != null) {
                 drawViewportRect(gc, playerViewportWorld, width, height, camera);
             }
@@ -388,16 +394,66 @@ public class CanvasMapRenderer {
         }
     }
 
+    /** Screen-space radius of the clickable door/window badge drawn at the middle of each interactable (DM only). */
+    public static final double INTERACTABLE_BADGE_RADIUS = 12;
+
+    private static boolean isOpen(DmProject.Interactable interactable) {
+        return "open".equalsIgnoreCase(interactable.getState());
+    }
+
+    private static boolean isWindow(DmProject.Interactable interactable) {
+        return "window".equalsIgnoreCase(interactable.getType());
+    }
+
+    private static Color interactableColor(DmProject.Interactable interactable) {
+        if (isWindow(interactable)) {
+            return isOpen(interactable) ? Color.DEEPSKYBLUE : Color.web("#3b6fd8");
+        }
+        return isOpen(interactable) ? Color.LIMEGREEN : Color.web("#e0473c");
+    }
+
+    private void drawInteractableBadges(GraphicsContext gc, List<DmProject.Interactable> interactables, double width, double height,
+                                        DmProject.CameraState camera, String hoveredId) {
+        double r = INTERACTABLE_BADGE_RADIUS;
+        for (DmProject.Interactable interactable : interactables) {
+            double sx1 = worldToScreenX(interactable.getX1(), width, camera);
+            double sy1 = worldToScreenY(interactable.getY1(), height, camera);
+            double sx2 = worldToScreenX(interactable.getX2(), width, camera);
+            double sy2 = worldToScreenY(interactable.getY2(), height, camera);
+            double cx = (sx1 + sx2) / 2.0;
+            double cy = (sy1 + sy2) / 2.0;
+            if (cx < -r || cy < -r || cx > width + r || cy > height + r) {
+                continue;
+            }
+            boolean hovered = interactable.getId() != null && interactable.getId().equals(hoveredId);
+            Color color = interactableColor(interactable);
+            if (hovered) {
+                gc.setStroke(color.deriveColor(0, 1, 1.2, 0.9));
+                gc.setLineWidth(6);
+                gc.setLineCap(StrokeLineCap.ROUND);
+                gc.strokeLine(sx1, sy1, sx2, sy2);
+                gc.setLineCap(StrokeLineCap.SQUARE);
+            }
+            double radius = hovered ? r + 2 : r;
+            gc.setFill(Color.color(0.1, 0.1, 0.12, hovered ? 0.95 : 0.85));
+            gc.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
+            gc.setStroke(hovered ? Color.WHITE : color);
+            gc.setLineWidth(2);
+            gc.strokeOval(cx - radius, cy - radius, radius * 2, radius * 2);
+            Ikon ikon = isWindow(interactable)
+                    ? (isOpen(interactable) ? MaterialDesignW.WINDOW_OPEN_VARIANT : MaterialDesignW.WINDOW_CLOSED_VARIANT)
+                    : (isOpen(interactable) ? MaterialDesignD.DOOR_OPEN : MaterialDesignD.DOOR_CLOSED);
+            Image glyph = Icons.image(ikon, 14, color.deriveColor(0, 0.6, 1.4, 1));
+            if (glyph != null) {
+                gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
+            }
+        }
+    }
+
     private void drawInteractables(GraphicsContext gc, List<DmProject.Interactable> interactables, double width, double height, DmProject.CameraState camera) {
         gc.setLineWidth(4);
         for (DmProject.Interactable interactable : interactables) {
-            Color color;
-            if ("window".equalsIgnoreCase(interactable.getType())) {
-                color = "open".equalsIgnoreCase(interactable.getState()) ? Color.DEEPSKYBLUE : Color.DARKBLUE;
-            } else {
-                color = "open".equalsIgnoreCase(interactable.getState()) ? Color.LIMEGREEN : Color.FIREBRICK;
-            }
-            gc.setStroke(color);
+            gc.setStroke(interactableColor(interactable));
             gc.strokeLine(
                     worldToScreenX(interactable.getX1(), width, camera),
                     worldToScreenY(interactable.getY1(), height, camera),

@@ -156,6 +156,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private FogMask.Snapshot fogBeforeSnapshot;
     private FogMask.Snapshot lightDragFogBefore;
     private boolean hoverInsideCanvas;
+    /** Presses on the same door closer together than this are treated as mechanical switch bounce. */
+    private static final long DOOR_CHATTER_NANOS = 60_000_000L;
+    private String lastDoorToggleId;
+    private long lastDoorToggleNanos;
     private double hoverWorldX;
     private double hoverWorldY;
     private boolean syncingControls;
@@ -748,8 +752,14 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private Cursor selectHoverCursor(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (pickInteractableBadge(worldX, worldY) != null) {
+            return Cursor.HAND;
+        }
         if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
-            return Cursor.OPEN_HAND;
+            return Cursor.HAND;
+        }
+        if (pickInteractableLine(worldX, worldY) != null) {
+            return Cursor.HAND;
         }
         if (pickOverlay(worldX, worldY, zoom) != null) {
             return Cursor.OPEN_HAND;
@@ -968,7 +978,17 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (event.getClickCount() >= 2 && toggleInteractableNear(world.x(), world.y())) {
+            DmProject.Interactable door = pickInteractableForClick(world.x(), world.y());
+            if (door != null) {
+                // Debounce only mouse switch chatter (a few ms); real human double-clicks toggle twice.
+                long nowNanos = System.nanoTime();
+                boolean chatter = door.getId() != null && door.getId().equals(lastDoorToggleId)
+                        && nowNanos - lastDoorToggleNanos < DOOR_CHATTER_NANOS;
+                if (!chatter) {
+                    toggleInteractable(door);
+                    lastDoorToggleId = door.getId();
+                    lastDoorToggleNanos = nowNanos;
+                }
                 return;
             }
 
@@ -1332,7 +1352,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 project.getViews().getDmCamera(),
                 false,
                 getPlayerViewportRect(),
-                selectedLight == null ? null : selectedLight.getId()
+                selectedLight == null ? null : selectedLight.getId(),
+                hoveredInteractableId()
         );
         drawSelectionHandle(fogGc);
         drawOverlaySelection(fogGc);
@@ -1364,6 +1385,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 playerFogCanvas.getHeight(),
                 getEffectivePlayerCamera(),
                 true,
+                null,
                 null,
                 null
         );
@@ -1765,29 +1787,75 @@ public class DungeonMasterMapToolApplication extends Application {
                 .orElse(null);
     }
 
-    private boolean toggleInteractableNear(double worldX, double worldY) {
+    private boolean toggleInteractable(DmProject.Interactable target) {
+        if (target == null) {
+            return false;
+        }
+        String previous = target.getState();
+        String next = "open".equalsIgnoreCase(previous) ? "closed" : "open";
+        String interactableId = target.getId();
+        executeWithFogHistory(
+                "Toggle " + target.getType(),
+                () -> setInteractableState(interactableId, next),
+                () -> setInteractableState(interactableId, previous)
+        );
+        status("Set " + target.getType() + " to " + target.getState());
+        return true;
+    }
+
+    /** Door/window whose icon badge (drawn at the middle of the door line) is under the given world point. */
+    private DmProject.Interactable pickInteractableBadge(double worldX, double worldY) {
+        double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        double tolerance = (CanvasMapRenderer.INTERACTABLE_BADGE_RADIUS + 3) / zoom;
         DmProject.Interactable nearest = null;
-        double best = Double.MAX_VALUE;
+        double best = tolerance;
         for (DmProject.Interactable interactable : project.getInteractables()) {
-            double d = pointToSegmentDistance(worldX, worldY, interactable.getX1(), interactable.getY1(), interactable.getX2(), interactable.getY2());
-            if (d < best) {
+            double d = distance(worldX, worldY,
+                    (interactable.getX1() + interactable.getX2()) / 2.0,
+                    (interactable.getY1() + interactable.getY2()) / 2.0);
+            if (d <= best) {
                 best = d;
                 nearest = interactable;
             }
         }
-        if (nearest == null || best > 24 / project.getViews().getDmCamera().getZoom()) {
-            return false;
+        return nearest;
+    }
+
+    /** Door/window whose line is within a few screen pixels of the given world point. */
+    private DmProject.Interactable pickInteractableLine(double worldX, double worldY) {
+        double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        DmProject.Interactable nearest = null;
+        double best = 10 / zoom;
+        for (DmProject.Interactable interactable : project.getInteractables()) {
+            double d = pointToSegmentDistance(worldX, worldY, interactable.getX1(), interactable.getY1(), interactable.getX2(), interactable.getY2());
+            if (d <= best) {
+                best = d;
+                nearest = interactable;
+            }
         }
-        String previous = nearest.getState();
-        String next = "open".equalsIgnoreCase(previous) ? "closed" : "open";
-        String interactableId = nearest.getId();
-        executeWithFogHistory(
-                "Toggle " + nearest.getType(),
-                () -> setInteractableState(interactableId, next),
-                () -> setInteractableState(interactableId, previous)
-        );
-        status("Set " + nearest.getType() + " to " + nearest.getState());
-        return true;
+        return nearest;
+    }
+
+    /** Door/window under the mouse in Select mode, respecting the same priority as clicks (badge, light, line). */
+    private DmProject.Interactable pickInteractableForClick(double worldX, double worldY) {
+        DmProject.Interactable badge = pickInteractableBadge(worldX, worldY);
+        if (badge != null) {
+            return badge;
+        }
+        double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
+            return null;
+        }
+        return pickInteractableLine(worldX, worldY);
+    }
+
+    private String hoveredInteractableId() {
+        if (!hoverInsideCanvas || pingArmed || activeTool != EditorTool.SELECT
+                || panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingPlayerViewport || resizingLayer) {
+            return null;
+        }
+        DmProject.Interactable hovered = pickInteractableForClick(hoverWorldX, hoverWorldY);
+        return hovered == null ? null : hovered.getId();
     }
 
     private CanvasMapRenderer.WorldRect getPlayerViewportRect() {
@@ -1837,7 +1905,7 @@ public class DungeonMasterMapToolApplication extends Application {
         updateToolChip();
         updateCanvasCursor();
         switch (activeTool) {
-            case SELECT -> status("Select: drag lights, layers and the player viewport. Right-click a light for options.");
+            case SELECT -> status("Select: click a door/window icon to open or close it; drag lights, layers and the player viewport. Right-click a light for options.");
             case REVEAL_BRUSH -> status("Reveal brush: paint to uncover the map.");
             case HIDE_BRUSH -> status("Hide brush: paint to cover the map with fog.");
             case REVEAL_RECT -> status("Reveal rectangle: drag to uncover an area.");
