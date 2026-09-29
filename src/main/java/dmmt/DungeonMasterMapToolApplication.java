@@ -9,6 +9,7 @@ import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
+import dmmt.service.RoomFillService;
 import dmmt.service.ProjectService;
 import dmmt.ui.CollapsibleSection;
 import dmmt.ui.Dialogs;
@@ -87,6 +88,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.BitSet;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
@@ -163,6 +165,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private double fogCurrentWorldY;
     private FogMask.Snapshot fogBeforeSnapshot;
     private FogMask.Snapshot lightDragFogBefore;
+    private BitSet roomBarrier;
+    private long roomBarrierSignature;
+    private RoomFillService.Result roomPreview;
     private boolean hoverInsideCanvas;
     /** Presses on the same door closer together than this are treated as mechanical switch bounce. */
     private static final long DOOR_CHATTER_NANOS = 60_000_000L;
@@ -409,6 +414,7 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox fogFillRow = row(
                 Icons.button(MaterialDesignE.EYE_OUTLINE, "Reveal the whole map", () -> fillFog(true)),
                 Icons.button(MaterialDesignE.EYE_OFF_OUTLINE, "Cover the whole map with fog", () -> fillFog(false)),
+                toolButtons.get(EditorTool.REVEAL_ROOM),
                 Icons.separator(),
                 brushSlider());
         HBox fogSharpnessRow = fogSharpnessSlider();
@@ -1141,6 +1147,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 removeLight(hit.getId());
                 setActiveTool(EditorTool.SELECT);
                 status("Removed light.");
+                return;
+            }
+
+            if (activeTool == EditorTool.REVEAL_ROOM) {
+                revealRoomAt(world.x(), world.y(), !event.isShiftDown());
                 return;
             }
 
@@ -2201,6 +2212,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case HIDE_BRUSH -> status("Hide brush: paint to cover the map with fog.");
             case REVEAL_RECT -> status("Reveal rectangle: drag to uncover an area.");
             case HIDE_RECT -> status("Hide rectangle: drag to cover an area with fog.");
+            case REVEAL_ROOM -> status("Reveal room: click inside a room to uncover it (Shift+click covers it). Esc to exit.");
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
@@ -2295,6 +2307,94 @@ public class DungeonMasterMapToolApplication extends Application {
         ));
     }
 
+    private RoomFillService.Result roomAt(double worldX, double worldY) {
+        FogMask mask = project.getFog().getMask();
+        if (mask == null) {
+            return null;
+        }
+        long signature = RoomFillService.geometrySignature(mask, project.getWalls(), project.getInteractables());
+        if (roomBarrier == null || signature != roomBarrierSignature) {
+            roomBarrier = RoomFillService.buildBarrier(mask, project.getWalls(), project.getInteractables());
+            roomBarrierSignature = signature;
+            roomPreview = null;
+        }
+        int col = (int) Math.floor((worldX - mask.getOriginX()) / mask.getCellSize());
+        int row = (int) Math.floor((worldY - mask.getOriginY()) / mask.getCellSize());
+        if (col < 0 || row < 0 || col >= mask.getCols() || row >= mask.getRows()) {
+            return new RoomFillService.Result(new BitSet(), false);
+        }
+        int index = row * mask.getCols() + col;
+        if (roomPreview != null && !roomBarrier.get(index) && roomPreview.cells().get(index)) {
+            return roomPreview;
+        }
+        roomPreview = RoomFillService.fill(mask, roomBarrier, worldX, worldY);
+        return roomPreview;
+    }
+
+    private void revealRoomAt(double worldX, double worldY, boolean reveal) {
+        if (!project.getFog().isEnabled()) {
+            status("Fog is off. Turn fog on to edit it.");
+            return;
+        }
+        FogMask mask = project.getFog().getMask();
+        RoomFillService.Result room = mask == null ? null : roomAt(worldX, worldY);
+        if (room == null || room.isEmpty()) {
+            status("Click inside a room, not on a wall.");
+            return;
+        }
+        FogMask.Snapshot before = mask.snapshot();
+        mask.applyCells(room.cells().stream().toArray(), reveal);
+        FogMask.Snapshot after = mask.snapshot();
+        if (!before.sameBits(after)) {
+            recordHistory(reveal ? "Reveal room" : "Hide room", () -> restoreFog(after), () -> restoreFog(before));
+        }
+        String verb = reveal ? "Revealed" : "Covered";
+        status(room.leaked()
+                ? verb + " an area that is not closed off — check for gaps in the walls."
+                : verb + " the room.");
+    }
+
+    private void drawRoomPreview(GraphicsContext gc) {
+        FogMask mask = project.getFog().getMask();
+        if (!hoverInsideCanvas || mask == null || !project.getFog().isEnabled()) {
+            return;
+        }
+        RoomFillService.Result room = roomAt(hoverWorldX, hoverWorldY);
+        if (room == null || room.isEmpty()) {
+            return;
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        CanvasMapRenderer.WorldPoint topLeft = renderer.screenToWorld(0, 0, w, h, camera);
+        CanvasMapRenderer.WorldPoint bottomRight = renderer.screenToWorld(w, h, w, h, camera);
+        double cell = mask.getCellSize();
+        int cols = mask.getCols();
+        int minCol = Math.max(0, (int) Math.floor((Math.min(topLeft.x(), bottomRight.x()) - mask.getOriginX()) / cell));
+        int maxCol = Math.min(cols - 1, (int) Math.floor((Math.max(topLeft.x(), bottomRight.x()) - mask.getOriginX()) / cell));
+        int minRow = Math.max(0, (int) Math.floor((Math.min(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
+        int maxRow = Math.min(mask.getRows() - 1, (int) Math.floor((Math.max(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
+        gc.setFill(room.leaked() ? Color.web("#FFB020", 0.35) : Color.web("#7CFFB2", 0.3));
+        BitSet cells = room.cells();
+        double cellScreen = cell * camera.getZoom();
+        for (int row = minRow; row <= maxRow; row++) {
+            double y = renderer.worldToScreenY(mask.getOriginY() + row * cell, h, camera);
+            int col = minCol;
+            while (col <= maxCol) {
+                if (!cells.get(row * cols + col)) {
+                    col++;
+                    continue;
+                }
+                int runStart = col;
+                while (col <= maxCol && cells.get(row * cols + col)) {
+                    col++;
+                }
+                double x = renderer.worldToScreenX(mask.getOriginX() + runStart * cell, w, camera);
+                gc.fillRect(x, y, (col - runStart) * cellScreen + 0.5, cellScreen + 0.5);
+            }
+        }
+    }
+
     private void drawToolPreview(GraphicsContext gc) {
         if (draftWall != null) {
             DmProject.CameraState wallCamera = project.getViews().getDmCamera();
@@ -2306,6 +2406,10 @@ public class DungeonMasterMapToolApplication extends Application {
                     renderer.worldToScreenX(draftWall.getX2(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY2(), wh, wallCamera));
         }
         if (!activeTool.isFogTool()) {
+            return;
+        }
+        if (activeTool == EditorTool.REVEAL_ROOM) {
+            drawRoomPreview(gc);
             return;
         }
         DmProject.CameraState camera = project.getViews().getDmCamera();
@@ -2342,6 +2446,8 @@ public class DungeonMasterMapToolApplication extends Application {
         projectFile = file;
         new FogService().ensureMask(project);
         lightingEngine.reset();
+        roomBarrier = null;
+        roomPreview = null;
         selectedLayer = null;
         selectedLight = null;
         selectedOverlayId = null;
@@ -3350,6 +3456,8 @@ public class DungeonMasterMapToolApplication extends Application {
         HIDE_BRUSH("Fog brush", "paint fog back over the map", MaterialDesignB.BRUSH, false, false),
         REVEAL_RECT("Reveal area", "drag a rectangle to remove fog", MaterialDesignS.SELECTION_DRAG, true, true),
         HIDE_RECT("Fog area", "drag a rectangle to cover it with fog", MaterialDesignR.RECTANGLE, false, true),
+        REVEAL_ROOM("Reveal room", "click inside a room to reveal it up to its walls and doors; Shift+click covers it with fog again",
+                MaterialDesignD.DOOR_OPEN, true, false),
         AOE_CIRCLE("Circle effect", "drag from the center outward to draw a round spell area",
                 MaterialDesignC.CIRCLE_OUTLINE, false, false),
         AOE_RECT("Box effect", "drag corner to corner to draw a rectangular spell area",

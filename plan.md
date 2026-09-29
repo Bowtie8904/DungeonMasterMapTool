@@ -39,7 +39,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Modern dark DM controls overlay: collapsible sections, icon buttons, tooltips, active-tool chip + cursors (3.16)
 - [x] Full-resolution rendering of large map images (> 4096 px) via cached tile pyramid (see 5)
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
-- [ ] One-click room reveal bounded by walls/doors/windows (3.17)
+- [x] One-click room reveal bounded by walls/doors/windows (3.17)
 - [ ] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [ ] Laser pointer on middle mouse button hold (3.19)
 - [ ] Map browser thumbnails + search bar for maps and folders (3.20)
