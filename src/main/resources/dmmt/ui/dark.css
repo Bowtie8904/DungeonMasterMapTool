@@ -49,6 +49,17 @@
     -fx-icon-color: #8fb3d9;
 }
 
+.thumbnail-box {
+    -fx-background-color: #121418;
+    -fx-background-radius: 3;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 3;
+}
+
+.search-row .ikonli-font-icon {
+    -fx-icon-color: -dm-muted;
+}
+
 /* ---------- Buttons ---------- */
 
 .button, .toggle-button {

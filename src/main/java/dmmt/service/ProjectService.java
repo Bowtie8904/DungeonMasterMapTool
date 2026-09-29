@@ -17,6 +17,7 @@ public class ProjectService {
             .enable(SerializationFeature.INDENT_OUTPUT)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final FogService fogService = new FogService();
+    private final ThumbnailService thumbnailService = new ThumbnailService();
 
     public DmProject load(Path projectFile) throws IOException {
         DmProject project = objectMapper.readValue(projectFile.toFile(), DmProject.class);
@@ -37,6 +38,25 @@ public class ProjectService {
         }
         normalizeAssetPaths(projectFile, project);
         objectMapper.writeValue(projectFile.toFile(), project);
+        try {
+            thumbnailService.write(projectFile, project);
+        } catch (IOException | RuntimeException ignored) {
+            // A missing thumbnail must never fail a save; it is regenerated lazily.
+        }
+    }
+
+    /** Loads the map's thumbnail PNG, generating it (and storing it for packaged maps) if it is missing. */
+    public byte[] loadOrCreateThumbnail(Path projectFile) throws IOException {
+        Path thumbnail = ThumbnailService.thumbnailFile(projectFile);
+        if (ThumbnailService.isPackage(projectFile) && Files.isRegularFile(thumbnail)) {
+            return Files.readAllBytes(thumbnail);
+        }
+        DmProject project = load(projectFile);
+        byte[] png = thumbnailService.renderPng(project, projectFile);
+        if (png != null && ThumbnailService.isPackage(projectFile)) {
+            Files.write(thumbnail, png);
+        }
+        return png;
     }
 
     private void normalizeAssetPaths(Path projectFile, DmProject project) throws IOException {

@@ -42,7 +42,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] One-click room reveal bounded by walls/doors/windows (3.17)
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)
-- [ ] Map browser thumbnails + search bar for maps and folders (3.20)
+- [x] Map browser thumbnails + search bar for maps and folders (3.20)
 - [ ] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [ ] Right-click cancels the active tool like Esc (3.23)
@@ -292,7 +292,7 @@ Desktop tool for tabletop dungeon masters that:
 - Not persisted and not undoable. While active it keeps the render loop at full frame rate (wakes the idle throttle).
 - Middle mouse is currently unused, so there is no conflict with right-click panning or tools.
 
-## 3.20 Map Browser Thumbnails & Search (planned)
+## 3.20 Map Browser Thumbnails & Search
 
 - **Thumbnails:**
   - Every map row in the tree shows a small thumbnail (~48x32 px) left of the name; hovering a map shows a larger thumbnail (~256 px) in its tooltip.
@@ -307,6 +307,7 @@ Desktop tool for tabletop dungeon masters that:
   - `Esc` in the search field or the clear button clears the filter and restores the previous expand/collapse state.
   - All interactions (open, drag & drop, context menus, rename, delete) keep working on the filtered tree. The filter stays applied after refresh/file operations.
 - No favourites.
+- Implementation: `ThumbnailService` (Java2D render of image layers, written by `ProjectService.save` for packaged maps, lazy generation via `loadOrCreateThumbnail`), `MapTreeFilter` (pure filter, unit-tested), `MapBrowser` (search field, thumbnail cache + background loader).
 
 ## 3.21 Auto-Save (planned)
 

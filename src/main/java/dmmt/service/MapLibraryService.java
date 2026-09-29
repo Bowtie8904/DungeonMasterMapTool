@@ -80,6 +80,10 @@ public class MapLibraryService {
         return root;
     }
 
+    public byte[] loadOrCreateThumbnail(Path mapFile) throws IOException {
+        return projectService.loadOrCreateThumbnail(mapFile);
+    }
+
     // ---- Scanning ----
 
     public Entry scan() throws IOException {

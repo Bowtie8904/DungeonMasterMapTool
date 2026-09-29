@@ -2,13 +2,22 @@ package dmmt.ui;
 
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
+import dmmt.service.MapTreeFilter;
+import dmmt.service.ThumbnailService;
 import javafx.animation.PauseTransition;
 import javafx.css.PseudoClass;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.StackPane;
+import javafx.application.Platform;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
@@ -31,11 +40,17 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -72,6 +87,12 @@ public class MapBrowser extends VBox {
         MapLibraryService.Result run() throws IOException;
     }
 
+    /** A loaded thumbnail (or {@code null} image if the map has none) and the file stamp it was loaded for. */
+    private record Thumbnail(Image image, long stamp) {
+    }
+
+    private static final double THUMB_WIDTH = 48;
+    private static final double THUMB_HEIGHT = 32;
     private static final PseudoClass OPEN_MAP = PseudoClass.getPseudoClass("open-map");
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
 
@@ -80,6 +101,16 @@ public class MapBrowser extends VBox {
     private final TreeView<Entry> tree = new TreeView<>();
     private final Set<Path> expandedFolders = new HashSet<>();
     private final Label currentMapName = new Label();
+    private final TextField searchField = new TextField();
+    private final Label noResults = new Label("No maps or folders found");
+    private final Map<Path, Thumbnail> thumbnails = new HashMap<>();
+    private final Set<Path> loadingThumbnails = new HashSet<>();
+    private final ExecutorService thumbnailLoader = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "map-thumbnails");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private Entry scannedRoot;
     private TreeItem<Entry> draggedItem;
     private ContextMenu openMenu;
 
@@ -148,28 +179,77 @@ public class MapBrowser extends VBox {
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
 
-        getChildren().addAll(titleRow, actions, currentCard, tree, hint);
+        HBox searchBox = buildSearchBox();
+        noResults.getStyleClass().add("muted");
+        noResults.setVisible(false);
+        noResults.setManaged(false);
+
+        getChildren().addAll(titleRow, actions, currentCard, searchBox, noResults, tree, hint);
         refresh();
+    }
+
+    private HBox buildSearchBox() {
+        searchField.setPromptText("Search maps and folders");
+        searchField.getStyleClass().add("search-field");
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+        Button clear = Icons.button(MaterialDesignC.CLOSE_CIRCLE_OUTLINE, "Clear the search (Esc)", this::clearSearch);
+        clear.visibleProperty().bind(searchField.textProperty().isNotEmpty());
+        clear.managedProperty().bind(clear.visibleProperty());
+        searchField.textProperty().addListener((observable, oldValue, newValue) -> rebuildTree());
+        searchField.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                clearSearch();
+                event.consume();
+            }
+        });
+        HBox box = new HBox(4, Icons.icon(MaterialDesignM.MAGNIFY), searchField, clear);
+        box.getStyleClass().addAll("toolbar-row", "search-row");
+        box.setStyle("-fx-alignment: center-left;");
+        return box;
+    }
+
+    private void clearSearch() {
+        searchField.clear();
+        tree.requestFocus();
     }
 
     // ---- Public API ----
 
     public void refresh() {
-        Path selected = selectedPath();
-        Entry root;
         try {
-            root = library.scan();
+            scannedRoot = library.scan();
         } catch (IOException exception) {
             Dialogs.error(window(), "Could not read the map library", exception.getMessage());
             return;
         }
-        TreeItem<Entry> rootItem = build(root);
+        invalidateThumbnails();
+        rebuildTree();
+    }
+
+    /** Rebuilds the tree from the last scan, applying the current search filter. */
+    private void rebuildTree() {
+        if (scannedRoot == null) {
+            return;
+        }
+        Path selected = selectedPath();
+        boolean filtering = MapTreeFilter.isActive(searchField.getText());
+        Entry root = MapTreeFilter.filter(scannedRoot, searchField.getText());
+        TreeItem<Entry> rootItem = build(root, filtering);
         rootItem.setExpanded(true);
         tree.setRoot(rootItem);
+        boolean empty = filtering && root.children().isEmpty();
+        noResults.setVisible(empty);
+        noResults.setManaged(empty);
         if (selected != null) {
             select(selected);
         }
         updateCurrentMap();
+    }
+
+    /** Drops cached thumbnails whose file changed on disk (e.g. after a save) so they are reloaded. */
+    public void invalidateThumbnails() {
+        thumbnails.entrySet().removeIf(entry -> stamp(entry.getKey()) != entry.getValue().stamp());
+        tree.refresh();
     }
 
     /** Selects (and reveals) a folder, map package or map file. */
@@ -221,23 +301,73 @@ public class MapBrowser extends VBox {
 
     // ---- Tree building ----
 
-    private TreeItem<Entry> build(Entry entry) {
+    /** While filtering, all folders are expanded and the user's own expand/collapse state is left untouched. */
+    private TreeItem<Entry> build(Entry entry, boolean filtering) {
         TreeItem<Entry> item = new TreeItem<>(entry);
         if (entry.isFolder()) {
             Path key = entry.path().toAbsolutePath().normalize();
-            item.setExpanded(expandedFolders.contains(key));
-            item.expandedProperty().addListener((observable, oldValue, newValue) -> {
-                if (newValue) {
-                    expandedFolders.add(key);
-                } else {
-                    expandedFolders.remove(key);
-                }
-            });
+            if (filtering) {
+                item.setExpanded(true);
+            } else {
+                item.setExpanded(expandedFolders.contains(key));
+                item.expandedProperty().addListener((observable, oldValue, newValue) -> {
+                    if (newValue) {
+                        expandedFolders.add(key);
+                    } else {
+                        expandedFolders.remove(key);
+                    }
+                });
+            }
             for (Entry child : entry.children()) {
-                item.getChildren().add(build(child));
+                item.getChildren().add(build(child, filtering));
             }
         }
         return item;
+    }
+
+    // ---- Thumbnails ----
+
+    /** Modification stamp of what the thumbnail is derived from (thumbnail file if present, else the map file). */
+    private static long stamp(Path mapFile) {
+        try {
+            Path file = ThumbnailService.thumbnailFile(mapFile);
+            if (ThumbnailService.isPackage(mapFile) && Files.isRegularFile(file)) {
+                return Files.getLastModifiedTime(file).toMillis();
+            }
+            return Files.getLastModifiedTime(mapFile).toMillis();
+        } catch (IOException exception) {
+            return -1;
+        }
+    }
+
+    /** The cached thumbnail, or {@code null} while it is loading (a background load is started) or missing. */
+    private Image thumbnailFor(Entry entry) {
+        Path key = entry.mapFile().toAbsolutePath().normalize();
+        Thumbnail cached = thumbnails.get(key);
+        if (cached != null) {
+            return cached.image();
+        }
+        if (loadingThumbnails.add(key)) {
+            thumbnailLoader.execute(() -> {
+                Image image = null;
+                try {
+                    byte[] png = library.loadOrCreateThumbnail(key);
+                    if (png != null) {
+                        image = new Image(new ByteArrayInputStream(png));
+                    }
+                } catch (IOException | RuntimeException ignored) {
+                    // No thumbnail: the placeholder stays.
+                }
+                Image loaded = image;
+                long stamp = stamp(key);
+                Platform.runLater(() -> {
+                    loadingThumbnails.remove(key);
+                    thumbnails.put(key, new Thumbnail(loaded, stamp));
+                    tree.refresh();
+                });
+            });
+        }
+        return null;
     }
 
     private static TreeItem<Entry> findItem(TreeItem<Entry> item, Path path) {
@@ -429,12 +559,24 @@ public class MapBrowser extends VBox {
 
     private final class LibraryCell extends TreeCell<Entry> {
         private final FontIcon icon = new FontIcon();
+        private final FontIcon placeholder = new FontIcon(MaterialDesignM.MAP_OUTLINE);
+        private final ImageView thumbnailView = new ImageView();
+        private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView);
         private final PauseTransition autoExpand = new PauseTransition(Duration.millis(700));
         private TreeItem<Entry> observedItem;
         private final javafx.beans.value.ChangeListener<Boolean> expandedListener =
                 (observable, oldValue, newValue) -> updateFolderIcon();
 
         LibraryCell() {
+            thumbnailBox.getStyleClass().add("thumbnail-box");
+            thumbnailBox.setMinSize(THUMB_WIDTH, THUMB_HEIGHT);
+            thumbnailBox.setPrefSize(THUMB_WIDTH, THUMB_HEIGHT);
+            thumbnailBox.setMaxSize(THUMB_WIDTH, THUMB_HEIGHT);
+            placeholder.getStyleClass().add("map-icon");
+            thumbnailView.setFitWidth(THUMB_WIDTH);
+            thumbnailView.setFitHeight(THUMB_HEIGHT);
+            thumbnailView.setPreserveRatio(true);
+            thumbnailView.setSmooth(true);
             setOnMouseClicked(event -> {
                 Entry entry = getItem();
                 if (entry != null && entry.isMap() && event.getButton() == MouseButton.PRIMARY
@@ -530,11 +672,24 @@ public class MapBrowser extends VBox {
                 updateFolderIcon();
                 setTooltip(null);
             } else {
-                icon.getStyleClass().add("map-icon");
-                icon.setIconCode(MaterialDesignM.MAP_OUTLINE);
                 pseudoClassStateChanged(OPEN_MAP, isOpenMap(entry));
-                setTooltip(Icons.tooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
-                        + "\nDouble-click to open"));
+                Image image = thumbnailFor(entry);
+                thumbnailView.setImage(image);
+                placeholder.setVisible(image == null);
+                Tooltip tooltip = Icons.tooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
+                        + "\nDouble-click to open");
+                if (image != null) {
+                    ImageView large = new ImageView(image);
+                    large.setPreserveRatio(true);
+                    large.setSmooth(true);
+                    large.setFitWidth(Math.min(256, image.getWidth()));
+                    large.setFitHeight(Math.min(256, image.getHeight()));
+                    tooltip.setGraphic(large);
+                    tooltip.setContentDisplay(ContentDisplay.TOP);
+                }
+                setTooltip(tooltip);
+                setGraphic(thumbnailBox);
+                return;
             }
             setGraphic(icon);
         }

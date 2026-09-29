@@ -1862,6 +1862,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (project == savedProject) {
                 adoptCopiedAssetPaths(snapshot);
             }
+            mapBrowser.invalidateThumbnails();
             status("Saved " + MapBrowser.displayName(saved) + ".");
             if (next != null) {
                 next.run();
