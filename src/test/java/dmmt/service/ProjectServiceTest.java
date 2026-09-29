@@ -45,4 +45,24 @@ class ProjectServiceTest {
         DmProject loaded = service.load(projectFile);
         assertEquals(savedPath, loaded.getImageLayers().get(0).getPath());
     }
-}
+
+    @Test
+    void copyIsIndependentAndKeepsFogAndOverlays() throws IOException {
+        DmProject project = DmProject.builder().build();
+        project.getOverlays().add(DmProject.OverlayShape.builder().id("o").type("brush")
+                .points(new java.util.ArrayList<>(java.util.List.of(1.0, 2.0, 3.0, 4.0))).playerVisible(false).build());
+        new FogService().ensureMask(project);
+        project.getFog().getMask().applyRect(0, 0, 200, 200, true);
+
+        ProjectService service = new ProjectService();
+        DmProject copy = service.copy(project);
+
+        assertEquals(project.getFog().getMask().copyBits(), copy.getFog().getMask().copyBits());
+        assertEquals(4, copy.getOverlays().get(0).getPoints().size());
+        assertEquals(false, copy.getOverlays().get(0).isPlayerVisible());
+
+        project.getFog().getMask().applyRect(0, 0, 2000, 2000, false);
+        project.getOverlays().clear();
+        assertTrue(!copy.getFog().getMask().copyBits().isEmpty(), "Frozen copy must not follow later edits");
+        assertEquals(1, copy.getOverlays().size());
+    }}

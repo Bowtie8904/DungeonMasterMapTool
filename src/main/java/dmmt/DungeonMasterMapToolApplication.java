@@ -91,6 +91,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private Label statusLabel;
     private ComboBox<String> playerScreenSelector;
     private DmProject.CameraState frozenPlayerCamera;
+    private DmProject frozenPlayerProject;
+    private Path frozenPlayerProjectFile;
+    private final LightingEngine playerLightingEngine = new LightingEngine();
+    private final CanvasMapRenderer playerRenderer = new CanvasMapRenderer(playerLightingEngine);
+    private ComboBox<MapEntry> mapSwitcher;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
     private double brushSizeTiles = 1.5;
@@ -223,6 +228,9 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override
             public void handle(long now) {
                 lightingEngine.update(project);
+                if (frozenPlayerProject != null) {
+                    playerLightingEngine.update(frozenPlayerProject);
+                }
                 renderDm();
                 renderPlayer();
             }
@@ -276,6 +284,30 @@ public class DungeonMasterMapToolApplication extends Application {
             status("Ping mode: click map to ping players.");
         });
         HBox mapRow = new HBox(6, rotateLeft, rotateRight, addPing);
+
+        mapSwitcher = new ComboBox<>();
+        mapSwitcher.setPromptText("Switch map...");
+        mapSwitcher.setPrefWidth(260);
+        mapSwitcher.setOnShowing(e -> refreshMapSwitcher());
+        mapSwitcher.setOnAction(e -> {
+            MapEntry entry = mapSwitcher.getValue();
+            if (syncingControls || entry == null) {
+                return;
+            }
+            // Changing the selection from inside its own selection event breaks the ListView popup.
+            Platform.runLater(() -> {
+                syncingControls = true;
+                try {
+                    mapSwitcher.setValue(null);
+                    mapSwitcher.getSelectionModel().clearSelection();
+                } finally {
+                    syncingControls = false;
+                }
+                switchToMap(entry.file());
+            });
+        });
+        HBox mapSwitchRow = new HBox(6, overlayLabel("Map:"), mapSwitcher);
+        mapSwitchRow.setAlignment(Pos.CENTER_LEFT);
 
         Button addLight = new Button("Add Light");
         addLight.setOnAction(e -> addLightAtCamera());
@@ -434,6 +466,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         VBox body = new VBox(8,
                 fileRow,
+                mapSwitchRow,
                 mapRow,
                 sectionLabel("Lights"), lightRow,
                 sectionLabel("Fog of war"), toolRow, brushRow,
@@ -919,19 +952,22 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         GraphicsContext gc = playerCanvas.getGraphicsContext2D();
-        renderer.render(
+        boolean frozen = frozenPlayerProject != null;
+        DmProject shown = frozen ? frozenPlayerProject : project;
+        CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
+        playerView.render(
                 gc,
-                project,
-                projectFile,
+                shown,
+                frozen ? frozenPlayerProjectFile : projectFile,
                 playerCanvas.getWidth(),
                 playerCanvas.getHeight(),
                 getEffectivePlayerCamera(),
                 true,
                 null
         );
-        renderer.renderFogLayer(
+        playerView.renderFogLayer(
                 playerFogCanvas.getGraphicsContext2D(),
-                project,
+                shown,
                 playerFogCanvas.getWidth(),
                 playerFogCanvas.getHeight(),
                 getEffectivePlayerCamera(),
@@ -1261,6 +1297,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void switchProject(DmProject next, Path file) {
         project = next;
+        project.getViews().setPlayerFrozen(false);
         projectFile = file;
         new FogService().ensureMask(project);
         lightingEngine.reset();
@@ -1286,7 +1323,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 timeOfDaySelector.setValue(TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset()));
             }
             if (freezePlayerButton != null) {
-                freezePlayerButton.setSelected(project.getViews().isPlayerFrozen());
+                freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
         } finally {
             syncingControls = false;
@@ -1304,6 +1341,57 @@ public class DungeonMasterMapToolApplication extends Application {
         label.setTextFill(Color.web("#C9C9D6"));
         label.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
         return label;
+    }
+
+    // ---- Map switcher ----
+
+    private record MapEntry(String label, Path file) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    private void refreshMapSwitcher() {
+        List<MapEntry> entries = new java.util.ArrayList<>();
+        try {
+            Path root = resolveProjectsRoot();
+            if (Files.isDirectory(root)) {
+                try (java.util.stream.Stream<Path> stream = Files.walk(root, 2)) {
+                    stream.filter(p -> p.getFileName().toString().toLowerCase().endsWith(".dmmap"))
+                            .sorted()
+                            .forEach(p -> {
+                                boolean current = projectFile != null && p.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize());
+                                String name = stripExtension(p.getFileName().toString());
+                                entries.add(new MapEntry(current ? name + "  (open)" : name, p));
+                            });
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        syncingControls = true;
+        try {
+            mapSwitcher.getItems().setAll(entries);
+        } finally {
+            syncingControls = false;
+        }
+    }
+
+    private void switchToMap(Path file) {
+        if (projectFile != null && file.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize())) {
+            status("That map is already open.");
+            return;
+        }
+        try {
+            if (projectFile != null) {
+                projectService.save(projectFile, project);
+            }
+            switchProject(projectService.load(file), file);
+            status("Switched to " + stripExtension(file.getFileName().toString())
+                    + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
+        } catch (IOException ex) {
+            status("Could not switch map: " + ex.getMessage());
+        }
     }
 
     // ---- Effects (AOE overlays) ----
@@ -1935,12 +2023,27 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
+    /**
+     * Freezing snapshots the whole project (map, fog, lights, effects, camera) for the player view,
+     * so the DM can edit or switch maps without the players seeing any of it until unfreezing.
+     */
     private void setPlayerFrozen(boolean frozen) {
-        project.getViews().setPlayerFrozen(frozen);
-        if (frozen) {
-            frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
-        } else {
+        if (!frozen) {
+            frozenPlayerProject = null;
+            frozenPlayerProjectFile = null;
             frozenPlayerCamera = null;
+            playerLightingEngine.reset();
+            return;
+        }
+        try {
+            frozenPlayerProject = projectService.copy(project);
+            frozenPlayerProjectFile = projectFile;
+            frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
+            playerLightingEngine.reset();
+        } catch (IOException ex) {
+            frozenPlayerProject = null;
+            status("Could not freeze player view: " + ex.getMessage());
+            syncControlsFromProject();
         }
     }
 
@@ -2099,11 +2202,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private DmProject.CameraState getEffectivePlayerCamera() {
-        if (!project.getViews().isPlayerFrozen()) {
+        if (frozenPlayerProject == null || frozenPlayerCamera == null) {
             return project.getViews().getPlayerCamera();
-        }
-        if (frozenPlayerCamera == null) {
-            frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
         }
         return frozenPlayerCamera;
     }

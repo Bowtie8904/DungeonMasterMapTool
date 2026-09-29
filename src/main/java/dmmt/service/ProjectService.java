@@ -24,6 +24,13 @@ public class ProjectService {
         return project;
     }
 
+    /** Deep copy via serialization; used to freeze what the players see. */
+    public DmProject copy(DmProject project) throws IOException {
+        DmProject copy = objectMapper.readValue(objectMapper.writeValueAsBytes(project), DmProject.class);
+        fogService.ensureMask(copy);
+        return copy;
+    }
+
     public void save(Path projectFile, DmProject project) throws IOException {
         if (projectFile.getParent() != null) {
             Files.createDirectories(projectFile.getParent());

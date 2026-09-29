@@ -32,7 +32,10 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Fog-of-war reveal/hide brush + area tools on a persisted grid bitmask (`FogMask`), with undo/redo
 - [x] Dynamic lighting + line-of-sight engine (walls + closed doors), flicker, per-light fog reveal modes and time-of-day presets
 - [x] AOE overlay drawing tools (circle/box/freehand) with color, opacity and player-visibility
-- [ ] Map-switcher and broader live-session workflows
+- [x] Map switcher with full-snapshot freeze of the player view
+- [ ] Manual wall editing for custom-image maps
+- [ ] 1-inch tile calibration for the player screen
+- [ ] Performance pass (render throttling)
 
 ## 4) Core Functional Requirements
 
@@ -79,6 +82,9 @@ Desktop tool for tabletop dungeon masters that:
 
 - Fast map/project switcher UI.
 - If player view is frozen, switching/opening in DM view must not affect player output until unfreeze/swap action.
+- **Map switcher** (DM overlay, `Map:` dropdown): lists every `.dmmap` under `dmmap-projects`; picking one auto-saves the current map and opens the chosen one.
+- **Freeze** snapshots the *entire* project for the player window (map, fog, lights, effects, camera) using a separate renderer/lighting engine, so players see the old map exactly as it was regardless of DM edits or map switches. Unfreezing makes the player view jump to the currently open map and its staged viewport.
+- Frozen state is session-only (not saved in `.dmmap`).
 
 ## 3.5 Fog of War
 
@@ -354,7 +360,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v0.9 (current):** AOE effect shapes (circle/box/freehand) with color, opacity, player visibility, selection/move/delete and undo.
+- **v1.0 (current):** Map switcher dropdown; freeze now snapshots the whole project for the player view (separate renderer/lighting engine).
+- **v0.9:** AOE effect shapes (circle/box/freehand) with color, opacity, player visibility, selection/move/delete and undo.
 - **v0.8:** Fog moved to a persisted grid bitmask with Select/Reveal/Hide/area tools and brush size; dynamic lighting with wall/door LOS, flicker, colors, per-light fog reveal modes via right-click menu, and 4 time-of-day presets.
 
 ## 10) Testing Strategy
