@@ -723,8 +723,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case SELECT -> Cursor.DEFAULT;
             case REVEAL_BRUSH -> Icons.cursor(MaterialDesignE.ERASER, 0.2, 0.82);
             case HIDE_BRUSH -> Icons.cursor(MaterialDesignB.BRUSH, 0.15, 0.85);
-            case AOE_BRUSH -> Icons.cursor(MaterialDesignD.DRAW, 0.14, 0.86);
-            case WALL_DRAW -> Icons.cursor(MaterialDesignP.PENCIL, 0.14, 0.86);
+            case AOE_BRUSH -> Icons.tipCursor(MaterialDesignD.DRAW, 0.0, 1.0);
+            case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
             case LIGHT_ADD -> Icons.cursor(MaterialDesignL.LIGHTBULB_ON_OUTLINE, 0.5, 0.5);
             case LIGHT_REMOVE -> hoverInsideCanvas && pickNearestLight(hoverWorldX, hoverWorldY,

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import javafx.geometry.Dimension2D;
 import javafx.geometry.Insets;
 import javafx.scene.Cursor;
 import javafx.scene.ImageCursor;
@@ -12,6 +13,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.effect.BlurType;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
+import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -93,7 +95,16 @@ public final class Icons {
      */
     public static Cursor cursor(Ikon ikon, double hotspotFractionX, double hotspotFractionY) {
         String key = ikon.getDescription() + "@" + hotspotFractionX + "," + hotspotFractionY;
-        return CURSOR_CACHE.computeIfAbsent(key, ignored -> createCursor(ikon, hotspotFractionX, hotspotFractionY));
+        return CURSOR_CACHE.computeIfAbsent(key, ignored -> createCursor(ikon, hotspotFractionX, hotspotFractionY, false));
+    }
+
+    /**
+     * Like {@link #cursor}, but for pen-like tools: the hotspot is moved onto the glyph pixel closest to the given
+     * fraction, so it lands exactly on the drawn tip (e.g. the pencil point) instead of the padding/shadow around it.
+     */
+    public static Cursor tipCursor(Ikon ikon, double tipFractionX, double tipFractionY) {
+        String key = ikon.getDescription() + "@tip" + tipFractionX + "," + tipFractionY;
+        return CURSOR_CACHE.computeIfAbsent(key, ignored -> createCursor(ikon, tipFractionX, tipFractionY, true));
     }
 
     /**
@@ -125,7 +136,7 @@ public final class Icons {
         return image;
     }
 
-    private static Cursor createCursor(Ikon ikon, double hotspotFractionX, double hotspotFractionY) {
+    private static Cursor createCursor(Ikon ikon, double hotspotFractionX, double hotspotFractionY, boolean snapToGlyph) {
         try {
             FontIcon glyph = new FontIcon(ikon);
             glyph.setIconSize(22);
@@ -141,9 +152,63 @@ public final class Icons {
             SnapshotParameters parameters = new SnapshotParameters();
             parameters.setFill(Color.TRANSPARENT);
             WritableImage image = pane.snapshot(parameters, null);
-            return new ImageCursor(image, image.getWidth() * hotspotFractionX, image.getHeight() * hotspotFractionY);
+            double hotspotX = image.getWidth() * hotspotFractionX;
+            double hotspotY = image.getHeight() * hotspotFractionY;
+            if (snapToGlyph) {
+                int[] tip = nearestGlyphPixel(image, hotspotX, hotspotY);
+                if (tip != null) {
+                    hotspotX = tip[0];
+                    hotspotY = tip[1];
+                }
+            }
+            return new ImageCursor(padToCursorSize(image), hotspotX, hotspotY);
         } catch (RuntimeException exception) {
             return Cursor.CROSSHAIR;
         }
+    }
+
+    /** Nearest pixel of the (white) glyph itself, ignoring the dark drop shadow and transparent padding. */
+    private static int[] nearestGlyphPixel(Image image, double targetX, double targetY) {
+        PixelReader reader = image.getPixelReader();
+        int w = (int) image.getWidth();
+        int h = (int) image.getHeight();
+        int[] best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int argb = reader.getArgb(x, y);
+                int alpha = argb >>> 24;
+                int red = (argb >> 16) & 0xFF;
+                if (alpha < 128 || red < 128) {
+                    continue;
+                }
+                double dx = x + 0.5 - targetX;
+                double dy = y + 0.5 - targetY;
+                double d = dx * dx + dy * dy;
+                if (d < bestDistance) {
+                    bestDistance = d;
+                    best = new int[]{x, y};
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Pads the image (anchored top-left, so hotspot coordinates stay valid) to the platform's cursor size.
+     * Otherwise the OS rescales the image without moving the hotspot, which shifts it off the drawn tip.
+     */
+    private static Image padToCursorSize(WritableImage image) {
+        int w = (int) image.getWidth();
+        int h = (int) image.getHeight();
+        Dimension2D best = ImageCursor.getBestSize(w, h);
+        int bw = (int) best.getWidth();
+        int bh = (int) best.getHeight();
+        if (bw < w || bh < h || (bw == w && bh == h)) {
+            return image;
+        }
+        WritableImage padded = new WritableImage(bw, bh);
+        padded.getPixelWriter().setPixels(0, 0, w, h, image.getPixelReader(), 0, 0);
+        return padded;
     }
 }
