@@ -394,6 +394,8 @@ public class DungeonMasterMapToolApplication extends Application {
                     deleteSelectedText();
                 } else if (findOverlay(selectedOverlayId) != null) {
                     deleteSelectedOverlay();
+                } else if (selectedLight != null && findLightById(selectedLight.getId()) != null) {
+                    removeLight(selectedLight.getId());
                 } else if (selectedLayer != null && !isImageLayerLocked()) {
                     deleteSelectedLayer();
                 }
@@ -428,10 +430,8 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override
             public void handle(long now) {
                 // Idle scenes without active lights only redraw ~10x per second.
-                boolean animated = project.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())
-                        || hasAnimatedOverlays(project)
-                        || (frozenPlayerProject != null && (hasAnimatedOverlays(frozenPlayerProject)
-                        || frozenPlayerProject.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())));
+                boolean animated = hasAnimation(project)
+                        || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
                 if (!animated && !recentInput && now - lastFrameNanos < 100_000_000L) {
                     return;
@@ -662,11 +662,14 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         effectAnimationsToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
-                "Animate effect textures on this map (turn off to improve performance)");
+                "Animate effect textures and light flicker on this map (turn off to improve performance)");
         effectAnimationsToggle.setSelected(true);
         effectAnimationsToggle.setOnAction(e -> {
             if (!syncingControls) {
                 project.setEffectAnimations(effectAnimationsToggle.isSelected());
+                if (frozenPlayerProject != null) {
+                    frozenPlayerProject.setEffectAnimations(effectAnimationsToggle.isSelected());
+                }
                 renderDm();
                 renderPlayer();
             }
@@ -2017,8 +2020,14 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- New / import / open / save ----
 
-    private static boolean hasAnimatedOverlays(DmProject candidate) {
-        return candidate.isEffectAnimations() && candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()));
+    /** True when the map has flickering lights or moving effect textures and animations are enabled. */
+    private static boolean hasAnimation(DmProject candidate) {
+        if (!candidate.isEffectAnimations()) {
+            return false;
+        }
+        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()))
+                || candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
+                && l.getFlicker() != null && l.getFlicker().isEnabled() && l.getFlicker().getStrength() > 0);
     }
 
     private DmProject freshProject() {

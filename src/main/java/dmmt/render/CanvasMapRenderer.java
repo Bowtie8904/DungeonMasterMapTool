@@ -636,7 +636,7 @@ public class CanvasMapRenderer {
             if (!light.isEnabled()) {
                 continue;
             }
-            double flicker = LightFlicker.amount(light, now);
+            double flicker = project.isEffectAnimations() ? LightFlicker.amount(light, now) : 0;
             double radius = light.getRange() * zoom * (1.0 - 0.25 * flicker) / LIGHT_MAP_SCALE;
             if (radius < 0.5) {
                 continue;
