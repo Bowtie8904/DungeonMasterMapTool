@@ -25,7 +25,7 @@ public final class TextLayout {
     public record Line(List<Fragment> fragments, double y, double height, double baseline) {
     }
 
-    public record Result(List<Line> lines, double totalHeight) {
+    public record Result(List<Line> lines, double totalHeight, double contentWidth, double extentWidth) {
     }
 
     private enum Kind { WORD, SPACE, NEWLINE }
@@ -47,7 +47,7 @@ public final class TextLayout {
             }
         }
         builder.finish();
-        return new Result(builder.lines, builder.y);
+        return new Result(builder.lines, builder.y, builder.contentWidth, builder.extentWidth);
     }
 
     private static List<Token> tokenize(List<DmProject.TextRun> runs) {
@@ -93,6 +93,8 @@ public final class TextLayout {
         private double lineAscent;
         private int lastFontSize = DmProject.DEFAULT_TEXT_SIZE;
         private boolean softWrapped;
+        private double contentWidth;
+        private double extentWidth;
 
         private Builder(double maxWidth, Metrics metrics) {
             this.maxWidth = maxWidth;
@@ -169,6 +171,7 @@ public final class TextLayout {
         private void endLine() {
             double height = fragments.isEmpty() ? metrics.lineHeight(lastFontSize) : lineHeight;
             double ascent = fragments.isEmpty() ? metrics.ascent(lastFontSize) : lineAscent;
+            extentWidth = Math.max(extentWidth, x);
             List<Fragment> placed = center(fragments);
             lines.add(new Line(placed, y, height, ascent));
             y += height;
@@ -193,6 +196,7 @@ public final class TextLayout {
                     break;
                 }
             }
+            contentWidth = Math.max(contentWidth, end - start);
             double shift = Math.max(0, (maxWidth - (end - start)) / 2) - start;
             List<Fragment> shifted = new ArrayList<>();
             for (Fragment fragment : line) {

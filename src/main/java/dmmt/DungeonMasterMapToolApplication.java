@@ -5,6 +5,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.render.CanvasMapRenderer;
+import dmmt.render.OverlayTextures;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
@@ -192,6 +193,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private String overlayColor = "#55AA33";
     private double overlayAlpha = 0.4;
     private boolean overlayPlayerVisible = true;
+    private String overlayTexture = OverlayTextures.NONE;
+    private ComboBox<String> overlayTextureBox;
+    private boolean overlayBorder;
+    private ToggleButton overlayBorderToggle;
     private String selectedOverlayId;
     private DmProject.OverlayShape draftOverlay;
     private double overlayStartX;
@@ -209,6 +214,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_TEXT_BACKGROUND = "textBackground";
     private static final String PREF_TEXT_BORDER = "textBorder";
     private static final double TEXT_MIN_SIZE = 40;
+    private static final double TEXT_AUTO_MAX_CELLS = 12;
     private static final int TEXT_HANDLE_COUNT = 8;
     private TextBoxEditor textEditor;
     private String selectedTextId;
@@ -229,6 +235,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker textBackgroundPicker;
     private ColorPicker textBorderPicker;
     private ToggleButton textLayerToggle;
+    private ToggleButton textAutoSizeToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
     private Label ambientBrightnessValue;
@@ -421,7 +428,9 @@ public class DungeonMasterMapToolApplication extends Application {
             public void handle(long now) {
                 // Idle scenes without active lights only redraw ~10x per second.
                 boolean animated = project.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())
-                        || (frozenPlayerProject != null && frozenPlayerProject.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()));
+                        || hasAnimatedOverlays(project)
+                        || (frozenPlayerProject != null && (hasAnimatedOverlays(frozenPlayerProject)
+                        || frozenPlayerProject.getLighting().getLights().stream().anyMatch(l -> l.isEnabled())));
                 boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
                 if (!animated && !recentInput && now - lastFrameNanos < 100_000_000L) {
                     return;
@@ -543,7 +552,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect color", selected.getId(), s -> s.setColor(overlayColor));
             }
         });
-        overlayAlphaSlider = new Slider(0.1, 0.9, overlayAlpha);
+        overlayAlphaSlider = new Slider(0.1, 1.0, overlayAlpha);
         Icons.tooltip(overlayAlphaSlider, "Effect opacity");
         HBox.setHgrow(overlayAlphaSlider, Priority.ALWAYS);
         overlayAlphaSlider.setPrefWidth(80);
@@ -588,6 +597,70 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox effectToolsRow = row(toolButtons.get(EditorTool.AOE_CIRCLE), toolButtons.get(EditorTool.AOE_RECT),
                 toolButtons.get(EditorTool.AOE_BRUSH), effectSpacer, deleteEffect, clearEffects);
         HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
+        overlayTextureBox = new ComboBox<>();
+        overlayTextureBox.getItems().addAll(OverlayTextures.KINDS);
+        overlayTextureBox.setValue(overlayTexture);
+        overlayTextureBox.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(String kind) {
+                return kind == null ? "" : OverlayTextures.label(kind);
+            }
+
+            @Override
+            public String fromString(String text) {
+                return OverlayTextures.NONE;
+            }
+        });
+        Icons.tooltip(overlayTextureBox, "Effect texture (also changes the selected effect). Picking one loads its default color and opacity (smoke grey, fire red, water blue, ...); adjust both afterwards.");
+        overlayTextureBox.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(overlayTextureBox, Priority.ALWAYS);
+        overlayTextureBox.setOnAction(e -> {
+            if (syncingControls || overlayTextureBox.getValue() == null) {
+                return;
+            }
+            overlayTexture = overlayTextureBox.getValue();
+            String textureColor = OverlayTextures.defaultColor(overlayTexture);
+            double textureAlpha = OverlayTextures.defaultAlpha(overlayTexture);
+            syncingControls = true;
+            try {
+                if (textureColor != null) {
+                    overlayColor = textureColor;
+                    overlayColorPicker.setValue(Color.web(textureColor));
+                }
+                if (textureAlpha > 0) {
+                    overlayAlpha = textureAlpha;
+                    overlayAlphaSlider.setValue(textureAlpha);
+                }
+            } finally {
+                syncingControls = false;
+            }
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect texture", selected.getId(), s -> {
+                    s.setTexture(overlayTexture);
+                    if (textureColor != null) {
+                        s.setColor(textureColor);
+                    }
+                    if (textureAlpha > 0) {
+                        s.setAlpha(textureAlpha);
+                    }
+                });
+            }
+        });
+        overlayBorderToggle = Icons.toggle(MaterialDesignS.SQUARE_OUTLINE,
+                "Border around textured effects (off by default) — also changes the selected effect");
+        overlayBorderToggle.setSelected(overlayBorder);
+        overlayBorderToggle.setOnAction(e -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayBorder = overlayBorderToggle.isSelected();
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect border", selected.getId(), s -> s.setBorder(overlayBorder));
+            }
+        });
+        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle);
         HBox effectBrushRow = row(brushSlider());
 
         // Text
@@ -605,7 +678,14 @@ public class DungeonMasterMapToolApplication extends Application {
         Button deleteText = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
         Region textSpacer = new Region();
         HBox.setHgrow(textSpacer, Priority.ALWAYS);
-        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textSpacer, copyText, pasteText, deleteText);
+        textAutoSizeToggle = Icons.toggle(MaterialDesignA.ARROW_EXPAND_ALL,
+                "Auto-size: the selected text box grows and shrinks to fit its text");
+        textAutoSizeToggle.setOnAction(e -> {
+            if (!syncingControls) {
+                setTextAutoSize(textAutoSizeToggle.isSelected());
+            }
+        });
+        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textSpacer, copyText, pasteText, deleteText);
 
         textSizeSpinner = new Spinner<>();
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(6, 400, DmProject.DEFAULT_TEXT_SIZE, 2));
@@ -757,7 +837,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
-                        effectToolsRow, effectStyleRow, effectBrushRow),
+                        effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
                 new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
                         textToolsRow, textSizeRow, textBoxColorRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
@@ -1925,6 +2005,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     // ---- New / import / open / save ----
+
+    private static boolean hasAnimatedOverlays(DmProject candidate) {
+        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()));
+    }
 
     private DmProject freshProject() {
         DmProject fresh = DmProject.builder().build();
@@ -3142,6 +3226,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 .color(source.getColor())
                 .alpha(source.getAlpha())
                 .playerVisible(source.isPlayerVisible())
+                .texture(source.getTexture())
+                .border(source.isBorder())
                 .build();
     }
 
@@ -3212,6 +3298,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 .color(overlayColor)
                 .alpha(overlayAlpha)
                 .playerVisible(overlayPlayerVisible)
+                .texture(overlayTexture)
+                .border(overlayBorder)
                 .build();
         if ("brush".equals(type)) {
             shape.getPoints().add(worldX);
@@ -3347,6 +3435,10 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayColorPicker.setValue(Color.web(shape.getColor()));
             overlayAlphaSlider.setValue(shape.getAlpha());
             overlayPlayerToggle.setSelected(shape.isPlayerVisible());
+            overlayTexture = OverlayTextures.normalize(shape.getTexture());
+            overlayTextureBox.setValue(overlayTexture);
+            overlayBorder = shape.isBorder();
+            overlayBorderToggle.setSelected(overlayBorder);
             overlayColor = shape.getColor();
             overlayAlpha = shape.getAlpha();
             overlayPlayerVisible = shape.isPlayerVisible();
@@ -3414,6 +3506,10 @@ public class DungeonMasterMapToolApplication extends Application {
             DmProject.TextBox box = findTextBox(editingTextId);
             if (box != null) {
                 box.setRuns(textEditor.runs());
+                if (box.isAutoSize()) {
+                    fitTextBox(box);
+                    updateTextEditorPlacement();
+                }
             }
         });
         textEditor.setOnCaretStyleChanged((size, color) -> syncTextStyleControls(size, color));
@@ -3441,7 +3537,28 @@ public class DungeonMasterMapToolApplication extends Application {
                 .runs(runs)
                 .backgroundColor(source.getBackgroundColor())
                 .borderColor(source.getBorderColor())
+                .autoSize(source.isAutoSize())
                 .build();
+    }
+
+    /** Fits an auto-size box to its text; while editing, an empty box is sized for the typing font. */
+    private void fitTextBox(DmProject.TextBox box) {
+        double cell = project.getMap().getGrid().getPixelsPerCell();
+        int emptySize = editingTextId != null && editingTextId.equals(box.getId())
+                ? textEditor.typingSize() : textSizeSpinner.getValue();
+        renderer.fitTextBox(box, TEXT_AUTO_MAX_CELLS * cell, emptySize);
+    }
+
+    private void setTextAutoSize(boolean enabled) {
+        applyTextBoxStyle("Toggle text auto-size", box -> {
+            box.setAutoSize(enabled);
+            if (enabled) {
+                fitTextBox(box);
+            }
+        });
+        if (editingTextId != null) {
+            updateTextEditorPlacement();
+        }
     }
 
     private DmProject.TextBox cloneTextOrNull(DmProject.TextBox source) {
@@ -3498,6 +3615,9 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         DmProject.TextBox before = cloneText(box);
         mutator.accept(box);
+        if (box.isAutoSize()) {
+            fitTextBox(box);
+        }
         if (!before.equals(box)) {
             recordTextChange(label, id, before, cloneText(box));
         }
@@ -3587,6 +3707,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (moveBottom) {
             bottom = Math.max(worldY, top + TEXT_MIN_SIZE);
         }
+        box.setAutoSize(false);
         box.setX(left);
         box.setY(top);
         box.setWidth(right - left);
@@ -3666,8 +3787,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (box.getWidth() < 30 && box.getHeight() < 30) {
             box.setX(textStartX);
             box.setY(textStartY);
-            box.setWidth(5 * cell);
-            box.setHeight(1.5 * cell);
+            box.setAutoSize(true);
+            fitTextBox(box);
         } else {
             box.setWidth(Math.max(TEXT_MIN_SIZE, box.getWidth()));
             box.setHeight(Math.max(TEXT_MIN_SIZE, box.getHeight()));
@@ -3684,6 +3805,15 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.setEditingTextBoxId(box.getId());
         textEditor.setBoxColors(box.getBackgroundColor(), box.getBorderColor());
         textEditor.show(box.getRuns(), textSizeSpinner.getValue(), toHex(textColorPicker.getValue()));
+        if (box.isAutoSize()) {
+            fitTextBox(box);
+        }
+        syncingControls = true;
+        try {
+            textAutoSizeToggle.setSelected(box.isAutoSize());
+        } finally {
+            syncingControls = false;
+        }
         updateTextEditorPlacement();
         syncTextStyleControls(textEditor.typingSize(), textEditor.typingColor());
         status("Editing text — Esc or click outside to finish. Change size and color with the Text controls.");
@@ -3819,6 +3949,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private void applyTextFontSize(int size) {
         if (editingTextId != null) {
             textEditor.applyFontSize(size);
+            DmProject.TextBox editing = findTextBox(editingTextId);
+            if (editing != null && editing.isAutoSize()) {
+                fitTextBox(editing);
+                updateTextEditorPlacement();
+            }
             textEditor.focus();
         } else {
             executeTextChange("Change text size", selectedTextId,
@@ -3905,6 +4040,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(box.getBackgroundColor()));
             textBorderPicker.setValue(CanvasMapRenderer.parseColor(box.getBorderColor()));
+            textAutoSizeToggle.setSelected(box.isAutoSize());
         } finally {
             syncingControls = false;
         }
@@ -4539,3 +4675,4 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 }
+

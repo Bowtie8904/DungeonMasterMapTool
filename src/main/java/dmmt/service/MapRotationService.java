@@ -59,8 +59,8 @@ public class MapRotationService {
 
         for (DmProject.TextBox box : project.getTextBoxes()) {
             Point center = rotatePoint(box.getX() + box.getWidth() / 2.0, box.getY() + box.getHeight() / 2.0, cx, cy, clockwise);
-            double width = box.getHeight();
-            double height = box.getWidth();
+            double width = box.isAutoSize() ? box.getWidth() : box.getHeight();
+            double height = box.isAutoSize() ? box.getHeight() : box.getWidth();
             box.setWidth(width);
             box.setHeight(height);
             box.setX(center.x - width / 2.0);

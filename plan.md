@@ -144,11 +144,12 @@ Desktop tool for tabletop dungeon masters that:
 
 - Draw circles/rectangles/free brush overlays (tools **Circle**, **Box**, **Draw** in the *Effects* section of the DM controls).
   - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider.
-- Adjustable color (color picker) and opacity (0.1-0.9); the current style applies to new shapes, and to the selected shape if there is one.
+- Adjustable color (color picker) and opacity (0.1-1.0); the current style applies to new shapes, and to the selected shape if there is one.
 - Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed/dimmed).
 - Shapes are drawn above map and lighting but below fog, so fog still conceals them.
 - With the Select tool: click a shape to select and drag to move; `Delete` or the Delete button removes it; Clear All removes every shape.
-- All create/move/style/delete/clear actions are undoable; shapes rotate with the map and persist in the save file (`overlays`: `type`, `x/y`, `radius`, `width/height`, `points`, `strokeWidth`, `color`, `alpha`, `playerVisible`).
+- All create/move/style/delete/clear actions are undoable; shapes rotate with the map and persist in the save file (`overlays`: `type`, `x/y`, `radius`, `width/height`, `points`, `strokeWidth`, `color`, `alpha`, `playerVisible`, `texture`).
+- **Animated textures:** a *Texture* dropdown in the Effects section sets the texture of new shapes and of the selected shape (undoable). Textures: Flat color, Smoke, Fire, Water, Lava, Acid/slime, Ice/frost, Lightning, Arcane runes, Darkness/void, Mist/fog, Blood, Spider web, Holy light, Grease/oil, Sand/dust storm, Wind gusts, Radiation/aura. They are procedurally generated, seamlessly tiling tiles drawn as scrolling and/or pulsing layers in both DM and player views, for circle, box and freehand shapes alike. Every texture is colourised with the effect color; picking a texture loads its default color (smoke grey, fire red, water blue, ...) and default opacity (denser textures such as lava, darkness, blood and web start at 100%), both of which can then be changed freely (e.g. orange water = lava-like, green = acid). Blood and Spider web are static; the spider web is a connected net of irregular little webs (uneven spokes and rings with missing threads) that continues across tile borders without gaps. Soft textures (smoke, fire, mist, darkness, holy light, sand, wind, lightning, radiation) fade out towards the shape edge (feathered over up to 0.9 grid cells) instead of ending in a hard cut; solid textures (water, lava, blood, web, ...) keep a crisp edge. The opacity slider (10-100%) is stored per shape and applies directly to textured shapes; *Players see* still applies. A per-shape **border** toggle (next to the texture dropdown, default off, saved as `border`) outlines a textured shape in its effect color (freehand strokes get one outline around their final merged area); flat shapes always keep their edge line. Only textures that actually move (`OverlayTextures.isMoving`) keep the render loop at full frame rate (wakes the idle throttle). Missing/unknown `texture` = flat color (older saves). Implementation: `dmmt.render.OverlayTextures` (table of definitions, unit-tested).
 
 ## 3.9 Map Ping Tool
 
@@ -343,6 +344,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - **Text** tool (*Text* section of the DM controls): click-drag on the map to draw a text box (a plain click creates a default-sized one) and start typing immediately. Click a box with the Text tool, or double-click it with Select, to edit its text. `Esc`, clicking outside the box, or switching tool finishes editing.
 - Text wraps automatically to the width of the box; text that does not fit is clipped at the box edge.
+- **Auto-size:** boxes created with a plain click start small and grow/shrink (width and height) to fit the text as it is typed or deleted; text wraps once the box reaches a maximum width of 12 grid cells. A drag-created box has a fixed size, manually resizing a box switches auto-size off, and the *Auto-size* toggle in the Text section switches it on or off for the selected box (saved as utoSize).
 - Text is centered in the box, each line horizontally and the whole text block vertically (in the editor and in the rendered view).
 - Rich text: **font size** and **text color** can be changed before typing (applies to newly typed text) and after typing (applies to the selected text; with a box selected but not being edited, to all of its text). Editing uses an in-place editor scaled with the map zoom, so what is typed is what is drawn.
 - Box style: **background color** (transparent by default), **border color** (transparent by default), rounded corners. Colors may carry opacity (custom color dialog); "no fill" / "no border" buttons reset to transparent.
@@ -547,7 +549,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.4 (current):** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.
+- **v2.5 (current):** Animated effect textures (smoke, fire, water) for AOE shapes (3.8).
+- **v2.4:** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.
 - **v2.3 (planned):** Added Phase 7 live-play specs: one-click room reveal (3.17), handout window (clipboard paste, show-to-players toggle, 90-degree rotation) (3.18), middle-mouse laser pointer (3.19), map browser thumbnails + search (3.20), auto-save for maps on disk (3.21), light presets (3.22), right-click cancels the active tool (3.23).
 - **v2.2:** Per-map, per-time-of-day ambient brightness slider (saved in `.dmmap`, undoable).
 - **v2.1:** Large map images (> 4096 px) render at full resolution via a cached tile pyramid instead of a single 4096 px downscaled texture (fixes blurry player view for e.g. 15k x 15k maps).

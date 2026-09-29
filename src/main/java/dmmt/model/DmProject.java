@@ -339,6 +339,12 @@ public class DmProject {
         private double alpha = 0.4;
         @Builder.Default
         private boolean playerVisible = true;
+        /** "none" (flat colour), "smoke", "fire" or "water"; the latter three are animated. */
+        @Builder.Default
+        private String texture = "none";
+        /** Outline around a textured shape; off by default (flat shapes always have their edge line). */
+        @Builder.Default
+        private boolean border = false;
     }
 
     public static final String TRANSPARENT = "#00000000";
@@ -363,6 +369,8 @@ public class DmProject {
         private String backgroundColor = TRANSPARENT;
         @Builder.Default
         private String borderColor = TRANSPARENT;
+        /** When set, the box width and height follow its text instead of being fixed. */
+        private boolean autoSize;
     }
 
     /** A stretch of text with one font size and color; line breaks are "\n" inside the text. */
@@ -391,5 +399,8 @@ public class DmProject {
         private String backgroundColor = TRANSPARENT;
         @Builder.Default
         private String borderColor = TRANSPARENT;
+        /** When set, the box width and height follow its text instead of being fixed. */
+        private boolean autoSize;
     }
 }
+

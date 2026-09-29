@@ -14,6 +14,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.ImagePattern;
+import javafx.scene.paint.Paint;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
@@ -38,6 +40,9 @@ public class CanvasMapRenderer {
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
+    private static final double TEXTURE_TILE_CELLS = 4;
+    private static final int FEATHER_PASSES = 8;
+    private static final double FEATHER_CELLS = 0.9;
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.65;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
@@ -206,6 +211,7 @@ public class CanvasMapRenderer {
     /** AOE shapes sit above the map and lighting but below fog, so fog still hides them from players. */
     private void drawOverlays(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
         double zoom = camera.getZoom();
+        brushOutlines.keySet().retainAll(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
         for (DmProject.OverlayShape shape : project.getOverlays()) {
             if (playerMode && !shape.isPlayerVisible()) {
                 continue;
@@ -225,6 +231,12 @@ public class CanvasMapRenderer {
             gc.setLineWidth(2);
             gc.setLineDashes(dmOnly ? new double[]{8, 6} : null);
             String type = shape.getType() == null ? "" : shape.getType();
+            String texture = OverlayTextures.normalize(shape.getTexture());
+            if (OverlayTextures.isAnimated(texture)) {
+                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? 0.6 : 1.0, width, height, camera);
+                gc.setLineDashes(null);
+                continue;
+            }
             switch (type) {
                 case "circle" -> {
                     double cx = worldToScreenX(shape.getX(), width, camera);
@@ -245,6 +257,191 @@ public class CanvasMapRenderer {
             }
             gc.setLineDashes(null);
         }
+    }
+
+    private static double pulseFactor(OverlayTextures.Layer layer, double seconds) {
+        if (layer.pulse() <= 0) {
+            return 1;
+        }
+        double wave = 0.5 - 0.5 * Math.cos(2 * Math.PI * layer.pulseHz() * seconds);
+        return 1 - layer.pulse() * wave;
+    }
+
+    /** Scrolls the texture layers over the shape; each layer is a tiled ImagePattern anchored to world origin plus a drift. */
+    private void drawTexturedShape(GraphicsContext gc, DmProject project, DmProject.OverlayShape shape, String type,
+                                   String texture, Color base, Color edge, double visibility, double width, double height,
+                                   DmProject.CameraState camera) {
+        double zoom = camera.getZoom();
+        double seconds = System.nanoTime() / 1_000_000_000.0;
+        double tileWorld = project.getMap().getGrid().getPixelsPerCell() * TEXTURE_TILE_CELLS;
+        int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
+                | (int) Math.round(base.getBlue() * 255);
+        Image tile = OverlayTextures.image(texture, rgb);
+        double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * visibility;
+        double originX = worldToScreenX(0, width, camera);
+        double originY = worldToScreenY(0, height, camera);
+        boolean soft = OverlayTextures.isSoft(texture);
+        int passes = soft ? FEATHER_PASSES : 1;
+        double ppc = project.getMap().getGrid().getPixelsPerCell();
+        double featherWorld = switch (type) {
+            case "circle" -> Math.min(FEATHER_CELLS * ppc, 0.4 * shape.getRadius());
+            case "rect" -> Math.min(FEATHER_CELLS * ppc, 0.4 * Math.min(shape.getWidth(), shape.getHeight()));
+            default -> Math.min(FEATHER_CELLS * ppc, 0.4 * shape.getStrokeWidth());
+        };
+        double feather = featherWorld * zoom;
+        gc.save();
+        for (OverlayTextures.Layer layer : OverlayTextures.layers(texture)) {
+            double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
+            double phaseX = ((seconds * layer.vx()) % 1.0 + 1.0) % 1.0;
+            double phaseY = ((seconds * layer.vy()) % 1.0 + 1.0) % 1.0;
+            ImagePattern pattern = new ImagePattern(tile, originX + phaseX * tileScreen, originY + phaseY * tileScreen,
+                    tileScreen, tileScreen, false);
+            double layerAlpha = alpha * layer.alpha() * pulseFactor(layer, seconds);
+            gc.setFill(pattern);
+            gc.setStroke(pattern);
+            // Soft textures are painted in several progressively inset passes whose combined alpha ramps up
+            // towards the middle, so the edge fades out instead of ending in a hard cut.
+            double previous = 0;
+            for (int pass = 0; pass < passes; pass++) {
+                double cumulative = soft ? Math.min(0.999, layerAlpha * smooth((pass + 1.0) / passes)) : layerAlpha;
+                gc.setGlobalAlpha(soft ? 1 - (1 - cumulative) / (1 - previous) : layerAlpha);
+                previous = cumulative;
+                double inset = feather * pass / passes;
+                switch (type) {
+                    case "circle" -> {
+                        double cx = worldToScreenX(shape.getX(), width, camera);
+                        double cy = worldToScreenY(shape.getY(), height, camera);
+                        double r = Math.max(0.5, shape.getRadius() * zoom - inset);
+                        gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+                    }
+                    case "rect" -> {
+                        double w = shape.getWidth() * zoom - 2 * inset;
+                        double h = shape.getHeight() * zoom - 2 * inset;
+                        if (w > 0 && h > 0) {
+                            gc.fillRect(worldToScreenX(shape.getX(), width, camera) + inset,
+                                    worldToScreenY(shape.getY(), height, camera) + inset, w, h);
+                        }
+                    }
+                    case "brush" -> drawBrushStroke(gc, shape, pattern, width, height, camera,
+                            Math.max(1, shape.getStrokeWidth() * zoom - 2 * inset));
+                    default -> {
+                    }
+                }
+            }
+        }
+        gc.restore();
+        if (shape.isBorder()) {
+            gc.save();
+            gc.setStroke(edge);
+            gc.setLineWidth(3);
+            if ("circle".equals(type)) {
+                double cx = worldToScreenX(shape.getX(), width, camera);
+                double cy = worldToScreenY(shape.getY(), height, camera);
+                double r = shape.getRadius() * zoom;
+                gc.strokeOval(cx - r, cy - r, r * 2, r * 2);
+            } else if ("rect".equals(type)) {
+                gc.strokeRect(worldToScreenX(shape.getX(), width, camera), worldToScreenY(shape.getY(), height, camera),
+                        shape.getWidth() * zoom, shape.getHeight() * zoom);
+            } else if ("brush".equals(type)) {
+                strokeBrushOutline(gc, shape, width, height, camera);
+            }
+            gc.restore();
+        }
+    }
+
+    private record BrushOutline(long key, List<double[]> polygons) {
+    }
+
+    private final Map<String, BrushOutline> brushOutlines = new HashMap<>();
+
+    /**
+     * Outlines the final area covered by a freehand stroke: the stroked path is merged into one area (so movement
+     * inside the stroke and self-crossings leave no lines) and only its boundary is drawn. Cached in world coordinates.
+     */
+    private void strokeBrushOutline(GraphicsContext gc, DmProject.OverlayShape shape, double width, double height,
+                                    DmProject.CameraState camera) {
+        List<Double> points = shape.getPoints();
+        if (points.size() < 2) {
+            return;
+        }
+        long key = points.size() * 31L + Double.doubleToLongBits(shape.getStrokeWidth())
+                + Double.doubleToLongBits(points.get(points.size() - 1)) * 17L;
+        String id = shape.getId() == null ? "" : shape.getId();
+        BrushOutline outline = brushOutlines.get(id);
+        if (outline == null || outline.key() != key) {
+            outline = new BrushOutline(key, computeBrushOutline(points, shape.getStrokeWidth()));
+            brushOutlines.put(id, outline);
+        }
+        for (double[] polygon : outline.polygons()) {
+            gc.beginPath();
+            for (int i = 0; i + 1 < polygon.length; i += 2) {
+                double sx = worldToScreenX(polygon[i], width, camera);
+                double sy = worldToScreenY(polygon[i + 1], height, camera);
+                if (i == 0) {
+                    gc.moveTo(sx, sy);
+                } else {
+                    gc.lineTo(sx, sy);
+                }
+            }
+            gc.closePath();
+            gc.stroke();
+        }
+    }
+
+    private static List<double[]> computeBrushOutline(List<Double> points, double strokeWidth) {
+        double minGap = Math.max(1, strokeWidth * 0.12);
+        java.awt.geom.Path2D.Double path = new java.awt.geom.Path2D.Double();
+        double lastX = points.get(0);
+        double lastY = points.get(1);
+        path.moveTo(lastX, lastY);
+        int count = points.size() / 2;
+        for (int i = 1; i < count; i++) {
+            double x = points.get(2 * i);
+            double y = points.get(2 * i + 1);
+            if (i == count - 1 || Math.hypot(x - lastX, y - lastY) >= minGap) {
+                path.lineTo(x, y);
+                lastX = x;
+                lastY = y;
+            }
+        }
+        if (count == 1) {
+            path.lineTo(lastX + 0.01, lastY);
+        }
+        java.awt.Shape stroked = new java.awt.BasicStroke((float) Math.max(1, strokeWidth),
+                java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND).createStrokedShape(path);
+        java.awt.geom.Area area = new java.awt.geom.Area(stroked);
+        List<double[]> polygons = new java.util.ArrayList<>();
+        List<Double> current = new java.util.ArrayList<>();
+        double[] coords = new double[6];
+        java.awt.geom.PathIterator it = new java.awt.geom.FlatteningPathIterator(area.getPathIterator(null),
+                Math.max(0.3, strokeWidth * 0.02));
+        while (!it.isDone()) {
+            int type = it.currentSegment(coords);
+            if (type == java.awt.geom.PathIterator.SEG_MOVETO) {
+                flushPolygon(current, polygons);
+                current.add(coords[0]);
+                current.add(coords[1]);
+            } else if (type == java.awt.geom.PathIterator.SEG_LINETO) {
+                current.add(coords[0]);
+                current.add(coords[1]);
+            } else if (type == java.awt.geom.PathIterator.SEG_CLOSE) {
+                flushPolygon(current, polygons);
+            }
+            it.next();
+        }
+        flushPolygon(current, polygons);
+        return polygons;
+    }
+
+    private static void flushPolygon(List<Double> current, List<double[]> polygons) {
+        if (current.size() >= 6) {
+            polygons.add(current.stream().mapToDouble(Double::doubleValue).toArray());
+        }
+        current.clear();
+    }
+    private static double smooth(double t) {
+        double c = Math.max(0, Math.min(1, t));
+        return c * c * (3 - 2 * c);
     }
 
     public static final double TEXT_BOX_PADDING = 12;
@@ -328,6 +525,26 @@ public class CanvasMapRenderer {
         return result;
     }
 
+    /**
+     * Resizes an auto-size box to its text: wrapped at {@code maxWidth}, otherwise as wide as the longest line.
+     * An empty box is one line of {@code emptyFontSize} high.
+     */
+    public void fitTextBox(DmProject.TextBox box, double maxWidth, int emptyFontSize) {
+        TextLayout.Metrics metrics = new FxMetrics();
+        List<DmProject.TextRun> runs = box.getRuns();
+        int lastSize = runs.isEmpty() ? emptyFontSize : runs.get(runs.size() - 1).getFontSize();
+        TextLayout.Result layout = TextLayout.layout(runs, Math.max(1, maxWidth - 2 * TEXT_BOX_PADDING), metrics);
+        double textHeight = layout.totalHeight();
+        String lastText = runs.isEmpty() ? "" : runs.get(runs.size() - 1).getText();
+        if (textHeight == 0 || (lastText != null && lastText.endsWith("\n"))) {
+            textHeight += metrics.lineHeight(lastSize);
+        }
+        // Trailing spaces count so the editor never wraps the caret onto a new line before the box has grown.
+        double textWidth = layout.extentWidth() > 0 ? layout.extentWidth() : lastSize;
+        box.setWidth(Math.ceil(Math.min(maxWidth, textWidth + 2 * TEXT_BOX_PADDING + 4)));
+        box.setHeight(Math.ceil(textHeight + 2 * TEXT_BOX_PADDING));
+    }
+
     private Font fontFor(int size) {
         return fontCache.computeIfAbsent(size, s -> Font.font(s));
     }
@@ -366,13 +583,17 @@ public class CanvasMapRenderer {
             return measureText.getBaselineOffset();
         }
     }
-    private void drawBrushStroke(GraphicsContext gc, DmProject.OverlayShape shape, Color fill, double width, double height, DmProject.CameraState camera) {
+    private void drawBrushStroke(GraphicsContext gc, DmProject.OverlayShape shape, Paint fill, double width, double height, DmProject.CameraState camera) {
+        drawBrushStroke(gc, shape, fill, width, height, camera, Math.max(1, shape.getStrokeWidth() * camera.getZoom()));
+    }
+
+    private void drawBrushStroke(GraphicsContext gc, DmProject.OverlayShape shape, Paint fill, double width, double height,
+                                 DmProject.CameraState camera, double lineWidth) {
         List<Double> points = shape.getPoints();
         int n = points.size() / 2;
         if (n == 0) {
             return;
         }
-        double lineWidth = Math.max(1, shape.getStrokeWidth() * camera.getZoom());
         if (n == 1) {
             double cx = worldToScreenX(points.get(0), width, camera);
             double cy = worldToScreenY(points.get(1), height, camera);
@@ -849,3 +1070,8 @@ public class CanvasMapRenderer {
         }
     }
 }
+
+
+
+
+
