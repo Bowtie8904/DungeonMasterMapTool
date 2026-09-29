@@ -15,7 +15,7 @@ import java.util.Iterator;
 import java.util.UUID;
 
 public class Dd2vttImportService {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMappers.create();
 
     public DmProject importToProject(Path dd2vttFile, Path projectDirectory) throws IOException {
         JsonNode root = mapper.readTree(dd2vttFile.toFile());

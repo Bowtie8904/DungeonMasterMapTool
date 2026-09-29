@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ProjectService {
-    private final ObjectMapper objectMapper = new ObjectMapper()
+    private final ObjectMapper objectMapper = JsonMappers.create()
             .enable(SerializationFeature.INDENT_OUTPUT)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final FogService fogService = new FogService();

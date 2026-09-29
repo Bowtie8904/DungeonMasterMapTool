@@ -18,6 +18,26 @@ class Dd2vttImportServiceTest {
     Path tempDir;
 
     @Test
+    void importsDd2vttWithImageLargerThanDefaultJacksonStringLimit() throws Exception {
+        // Jackson's default max string length is 20,000,000 chars; exceed it with a valid base64 payload.
+        BufferedImage buffered = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
+        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+        ImageIO.write(buffered, "png", png);
+        byte[] padded = java.util.Arrays.copyOf(png.toByteArray(), 16_000_000);
+        String base64 = java.util.Base64.getEncoder().encodeToString(padded);
+        assertTrue(base64.length() > 20_000_000);
+
+        Path dd2vtt = tempDir.resolve("huge.dd2vtt");
+        Files.writeString(dd2vtt, "{\"image\":\"" + base64 + "\",\"pixels_per_grid\":100}");
+        Path projectDir = tempDir.resolve("project");
+        Files.createDirectories(projectDir);
+
+        DmProject project = new Dd2vttImportService().importToProject(dd2vtt, projectDir);
+
+        assertTrue(Files.exists(projectDir.resolve(project.getMap().getImagePath())));
+    }
+
+    @Test
     void importsAndCopiesDd2vttDependencies() throws Exception {
         Path sourceDir = tempDir.resolve("usb");
         Files.createDirectories(sourceDir);
