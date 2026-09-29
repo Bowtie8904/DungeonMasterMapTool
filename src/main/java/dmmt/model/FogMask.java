@@ -274,13 +274,50 @@ public class FogMask {
         version++;
     }
 
+    /**
+     * Changes the cell size, keeping the covered world area and resampling reveals by cell center
+     * (nearest neighbour).
+     */
+    public void resample(double newCellSize) {
+        if (newCellSize <= 0 || newCellSize == cellSize) {
+            return;
+        }
+        int newCols = Math.max(1, (int) Math.ceil(cols * cellSize / newCellSize - 1e-9));
+        int newRows = Math.max(1, (int) Math.ceil(rows * cellSize / newCellSize - 1e-9));
+        BitSet next = new BitSet();
+        int[] srcCol = new int[newCols];
+        for (int col = 0; col < newCols; col++) {
+            srcCol[col] = Math.min(cols - 1, (int) Math.floor((col + 0.5) * newCellSize / cellSize));
+        }
+        for (int row = 0; row < newRows; row++) {
+            int srcRow = Math.min(rows - 1, (int) Math.floor((row + 0.5) * newCellSize / cellSize));
+            int srcBase = srcRow * cols;
+            int firstSet = revealed.nextSetBit(srcBase);
+            if (firstSet < 0 || firstSet >= srcBase + cols) {
+                continue;
+            }
+            int base = row * newCols;
+            for (int col = 0; col < newCols; col++) {
+                if (revealed.get(srcBase + srcCol[col])) {
+                    next.set(base + col);
+                }
+            }
+        }
+        cellSize = newCellSize;
+        cols = newCols;
+        rows = newRows;
+        revealed = next;
+        version++;
+    }
+
     public Snapshot snapshot() {
-        return new Snapshot(originX, originY, cols, rows, (BitSet) revealed.clone());
+        return new Snapshot(originX, originY, cellSize, cols, rows, (BitSet) revealed.clone());
     }
 
     public void restore(Snapshot snapshot) {
         originX = snapshot.originX();
         originY = snapshot.originY();
+        cellSize = snapshot.cellSize();
         cols = snapshot.cols();
         rows = snapshot.rows();
         revealed = (BitSet) snapshot.bits().clone();
@@ -309,13 +346,14 @@ public class FogMask {
         revealed.set(row * cols + colStart, row * cols + colEnd + 1, reveal);
     }
 
-    public record Snapshot(double originX, double originY, int cols, int rows, BitSet bits) {
+    public record Snapshot(double originX, double originY, double cellSize, int cols, int rows, BitSet bits) {
         public boolean sameBits(Snapshot other) {
             return other != null
                     && cols == other.cols
                     && rows == other.rows
                     && Double.compare(originX, other.originX) == 0
                     && Double.compare(originY, other.originY) == 0
+                    && Double.compare(cellSize, other.cellSize) == 0
                     && bits.equals(other.bits);
         }
     }

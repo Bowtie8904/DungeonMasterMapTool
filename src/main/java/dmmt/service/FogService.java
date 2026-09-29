@@ -4,10 +4,24 @@ import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 
 public class FogService {
-    /** Fog cells per map grid cell along each axis. */
-    private static final int CELLS_PER_GRID = 10;
+    public static final int MIN_CELLS_PER_GRID = 5;
+    public static final int MAX_CELLS_PER_GRID = 30;
+    public static final int DEFAULT_CELLS_PER_GRID = 10;
+    private static final double MIN_CELL_SIZE = 2;
+    private static final double MAX_CELL_SIZE = 50;
     private static final double DEFAULT_WIDTH = 1920;
     private static final double DEFAULT_HEIGHT = 1080;
+
+    /** Global fog resolution (fog cells per map grid cell along each axis); applies to every project. */
+    private static volatile int cellsPerGrid = DEFAULT_CELLS_PER_GRID;
+
+    public static int getCellsPerGrid() {
+        return cellsPerGrid;
+    }
+
+    public static void setCellsPerGrid(int value) {
+        cellsPerGrid = Math.max(MIN_CELLS_PER_GRID, Math.min(MAX_CELLS_PER_GRID, value));
+    }
 
     /** Creates the fog mask if needed and grows it to cover all map content. Migrates legacy rect reveals. */
     public void ensureMask(DmProject project) {
@@ -25,6 +39,10 @@ public class FogService {
             mask = new FogMask(bounds[0], bounds[1], cellSize, cols, rows);
             fog.setMask(mask);
         } else {
+            double cellSize = cellSizeFor(project);
+            if (Math.abs(mask.getCellSize() - cellSize) > cellSize * 0.001) {
+                mask.resample(cellSize);
+            }
             mask.resizeToCover(bounds[0], bounds[1], bounds[2], bounds[3]);
         }
 
@@ -40,7 +58,7 @@ public class FogService {
         double pixelsPerCell = project.getMap() != null && project.getMap().getGrid() != null
                 ? project.getMap().getGrid().getPixelsPerCell()
                 : 100;
-        return Math.max(4, Math.min(50, pixelsPerCell / CELLS_PER_GRID));
+        return Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, pixelsPerCell / cellsPerGrid));
     }
 
     /** Returns [minX, minY, maxX, maxY] of all image layers and walls. */

@@ -100,6 +100,29 @@ class FogMaskTest {
     }
 
     @Test
+    void resampleKeepsRevealedAreaAndCoverage() {
+        FogMask mask = new FogMask(0, 0, 10, 20, 10);
+        mask.applyRect(40, 20, 60, 40, true);
+
+        mask.resample(4);
+        assertEquals(4, mask.getCellSize());
+        assertEquals(50, mask.getCols());
+        assertEquals(25, mask.getRows());
+        assertTrue(mask.getWidth() >= 200);
+        assertTrue(revealedAt(mask, 70, 40));
+        assertFalse(revealedAt(mask, 10, 10));
+        assertFalse(revealedAt(mask, 150, 80));
+
+        FogMask.Snapshot fine = mask.snapshot();
+        mask.resample(25);
+        assertEquals(8, mask.getCols());
+        assertTrue(revealedAt(mask, 70, 40));
+        mask.restore(fine);
+        assertEquals(4, mask.getCellSize());
+        assertTrue(fine.sameBits(mask.snapshot()));
+    }
+
+    @Test
     void snapshotRestore() {
         FogMask mask = new FogMask(0, 0, 10, 10, 10);
         FogMask.Snapshot before = mask.snapshot();

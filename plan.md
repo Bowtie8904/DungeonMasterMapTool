@@ -101,7 +101,8 @@ Desktop tool for tabletop dungeon masters that:
 - Fog is rendered on its own transparent canvas above the map (never erase map pixels).
 - DM fog rendering: semi-transparent (DM sees obscured content faintly).
 - Player fog rendering: fully opaque except revealed/light-visible regions.
-- Storage: world-space grid bitmask, cell size = grid cell / 10 (clamped 4-50 px); grows to cover map content; rotates with the map.
+- Storage: world-space grid bitmask, cell size = grid cell / N (clamped 2-50 px); grows to cover map content; rotates with the map.
+- **Fog sharpness** slider (Fog of war section): N = fog cells per tile (5-30, default 10). Stored globally in user preferences (applies to all projects); existing masks are resampled (nearest neighbour) to the new cell size when a project loads or the slider is released, and persistent light reveals are re-applied at the new resolution.
 
 ## 3.6 Dynamic Lighting
 

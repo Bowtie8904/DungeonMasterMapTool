@@ -24,6 +24,7 @@ public class LightingEngine {
     private DmProject currentProject;
     private long geometrySignature = Long.MIN_VALUE;
     private double[] blockingSegments = new double[0];
+    private double lastMaskCellSize = Double.NaN;
 
     private BitSet liveReveal = new BitSet();
     private String liveRevealKey = "";
@@ -42,6 +43,11 @@ public class LightingEngine {
 
         Set<String> activeIds = new HashSet<>();
         FogMask mask = project.getFog().getMask();
+        if (mask != null && mask.getCellSize() != lastMaskCellSize) {
+            // Re-apply persistent reveals so their edges use the new fog resolution.
+            lastMaskCellSize = mask.getCellSize();
+            lastPersistentKey.clear();
+        }
         boolean fogEnabled = project.getFog().isEnabled();
         StringBuilder liveKey = new StringBuilder();
 
@@ -68,7 +74,7 @@ public class LightingEngine {
         cache.keySet().retainAll(activeIds);
         lastPersistentKey.keySet().retainAll(activeIds);
 
-        String maskKey = mask == null ? "" : mask.getOriginX() + "," + mask.getOriginY() + "," + mask.getCols() + "," + mask.getRows();
+        String maskKey = mask == null ? "" : mask.getOriginX() + "," + mask.getOriginY() + "," + mask.getCellSize() + "," + mask.getCols() + "," + mask.getRows();
         String nextLiveKey = liveKey + "#" + maskKey;
         if (!nextLiveKey.equals(liveRevealKey)) {
             rebuildLiveReveal(project, mask);
@@ -106,6 +112,7 @@ public class LightingEngine {
         lastPersistentKey.clear();
         geometrySignature = Long.MIN_VALUE;
         blockingSegments = new double[0];
+        lastMaskCellSize = Double.NaN;
         liveReveal = new BitSet();
         liveRevealKey = "";
         liveRevealVersion++;

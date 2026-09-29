@@ -104,6 +104,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_TILE_INCHES = "playerTileInches";
     private static final String PREF_SIDEBAR_VISIBLE = "sidebarVisible";
     private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
+    private static final String PREF_FOG_CELLS_PER_GRID = "fogCellsPerGrid";
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
     private static List<Image> appIcons;
 
@@ -230,6 +231,7 @@ public class DungeonMasterMapToolApplication extends Application {
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
+        FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
         this.project = DmProject.builder().build();
         this.project.getMap().setSourceType("custom");
         Path libraryRoot;
@@ -401,6 +403,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 Icons.button(MaterialDesignE.EYE_OFF_OUTLINE, "Cover the whole map with fog", () -> fillFog(false)),
                 Icons.separator(),
                 brushSlider());
+        HBox fogSharpnessRow = fogSharpnessSlider();
 
         // Lighting
         HBox timeSegment = new HBox();
@@ -576,7 +579,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
-                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow),
+                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectBrushRow),
@@ -646,6 +649,49 @@ public class DungeonMasterMapToolApplication extends Application {
         value.getStyleClass().add("value-label");
         value.textProperty().bind(brushSize.asString("%.1f t"));
         FontIcon icon = Icons.icon(MaterialDesignB.BRUSH);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    /**
+     * Global fog edge sharpness (fog cells per grid cell). Stored in user preferences so it applies
+     * to every project; the fog mask is resampled when the slider is released.
+     */
+    private HBox fogSharpnessSlider() {
+        int initial = FogService.getCellsPerGrid();
+        Slider slider = new Slider(FogService.MIN_CELLS_PER_GRID, FogService.MAX_CELLS_PER_GRID, initial);
+        slider.setMajorTickUnit(1);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.setBlockIncrement(1);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Fog shadow edge sharpness (fog cells per tile, applies to all maps). "
+                + "Higher is smoother but uses more memory and CPU.");
+        Label value = new Label(initial + "/t");
+        value.getStyleClass().add("value-label");
+        Runnable apply = () -> {
+            int cells = (int) Math.round(slider.getValue());
+            if (cells != FogService.getCellsPerGrid()) {
+                FogService.setCellsPerGrid(cells);
+                preferences.putInt(PREF_FOG_CELLS_PER_GRID, FogService.getCellsPerGrid());
+                status("Fog sharpness: " + FogService.getCellsPerGrid() + " cells per tile.");
+            }
+        };
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            value.setText(Math.round(newValue.doubleValue()) + "/t");
+            if (!slider.isValueChanging()) {
+                apply.run();
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing) {
+                apply.run();
+            }
+        });
+        FontIcon icon = Icons.icon(MaterialDesignB.BLUR);
         icon.getStyleClass().add("muted-icon");
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
