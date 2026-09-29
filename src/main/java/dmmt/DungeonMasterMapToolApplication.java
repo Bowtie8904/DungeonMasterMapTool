@@ -1512,7 +1512,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void handleImportDd2vtt(Path suggestedFolder) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Select DD2VTT map");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DD2VTT", "*.dd2vtt", "*.json"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Universal VTT", "*.dd2vtt", "*.uvtt"));
         applyInitialImportDirectory(chooser);
         File source = chooser.showOpenDialog(primaryStage);
         if (source == null) {
@@ -2602,7 +2602,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- Light context menu ----
 
-    private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12};
+    private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12, 24, 100};
     private static final String[][] LIGHT_COLORS = {
             {"Warm torch", "#FFB35C"},
             {"Candle", "#FFD9A0"},
