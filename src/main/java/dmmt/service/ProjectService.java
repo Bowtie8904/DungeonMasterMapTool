@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import dmmt.model.DmProject;
@@ -12,10 +13,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ProjectService {
-    private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    private final FogService fogService = new FogService();
 
     public DmProject load(Path projectFile) throws IOException {
-        return objectMapper.readValue(projectFile.toFile(), DmProject.class);
+        DmProject project = objectMapper.readValue(projectFile.toFile(), DmProject.class);
+        fogService.ensureMask(project);
+        return project;
     }
 
     public void save(Path projectFile, DmProject project) throws IOException {

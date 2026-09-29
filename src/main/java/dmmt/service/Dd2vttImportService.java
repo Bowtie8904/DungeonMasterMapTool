@@ -45,6 +45,7 @@ public class Dd2vttImportService {
         parseWalls(root, project, pixelsPerGrid);
         parseLights(root, project, pixelsPerGrid);
         parsePortals(root, project, pixelsPerGrid);
+        new FogService().ensureMask(project);
         return project;
     }
 
@@ -209,9 +210,29 @@ public class Dd2vttImportService {
                     .x(toPixels(x, pixelsPerGrid))
                     .y(toPixels(y, pixelsPerGrid))
                     .range(toPixels(resolveDouble(node, "range", "distance", 2.0), pixelsPerGrid))
+                    .color(parseDd2vttColor(node.path("color").asText(null)))
+                    .intensity(resolveDouble(node, "intensity", "brightness", 1.0))
+                    .castsShadows(node.path("shadows").asBoolean(true))
+                    // Map lamps light the scene but must not uncover fog on their own.
+                    .revealMode(DmProject.RevealMode.NONE)
                     .flicker(DmProject.Flicker.builder().enabled(false).build())
                     .build());
         }
+    }
+
+    /** dd2vtt colors are AARRGGBB hex strings (e.g. "ffFFEDCF"). Returns "#RRGGBB". */
+    static String parseDd2vttColor(String raw) {
+        if (raw == null) {
+            return "#FFD9A0";
+        }
+        String hex = raw.trim().replace("#", "");
+        if (hex.length() == 8) {
+            hex = hex.substring(2);
+        }
+        if (hex.length() != 6 || !hex.matches("[0-9a-fA-F]{6}")) {
+            return "#FFD9A0";
+        }
+        return "#" + hex.toUpperCase();
     }
 
     private void parsePortals(JsonNode root, DmProject project, double pixelsPerGrid) {

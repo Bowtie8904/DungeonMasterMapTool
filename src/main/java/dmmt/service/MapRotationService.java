@@ -59,6 +59,10 @@ public class MapRotationService {
             overlay.setY(p.y);
         }
 
+        if (project.getFog() != null && project.getFog().getMask() != null) {
+            project.getFog().getMask().rotateQuarter(cx, cy, clockwise);
+        }
+
         Point dm = rotatePoint(project.getViews().getDmCamera().getX(), project.getViews().getDmCamera().getY(), cx, cy, clockwise);
         project.getViews().getDmCamera().setX(dm.x);
         project.getViews().getDmCamera().setY(dm.y);
@@ -91,8 +95,8 @@ public class MapRotationService {
         double dx = x - cx;
         double dy = y - cy;
         return clockwise
-                ? new Point(cx + dy, cy - dx)
-                : new Point(cx - dy, cy + dx);
+                ? new Point(cx - dy, cy + dx)
+                : new Point(cx + dy, cy - dx);
     }
 
     private double normalizeDegrees(double value) {

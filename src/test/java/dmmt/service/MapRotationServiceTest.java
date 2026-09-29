@@ -28,6 +28,11 @@ class MapRotationServiceTest {
         assertEquals(100, layer.getHeight(), 0.0001);
         assertEquals(25, layer.getX(), 0.0001);
         assertEquals(-25, layer.getY(), 0.0001);
+        DmProject.WallSegment wall = project.getWalls().get(0);
+        assertEquals(75, wall.getX1(), 0.0001);
+        assertEquals(-25, wall.getY1(), 0.0001);
+        assertEquals(75, wall.getX2(), 0.0001);
+        assertEquals(75, wall.getY2(), 0.0001);
         assertEquals(1, project.getMap().getRotationQuarterTurns());
     }
 }

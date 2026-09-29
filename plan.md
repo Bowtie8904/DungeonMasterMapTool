@@ -20,7 +20,21 @@ Desktop tool for tabletop dungeon masters that:
 4. Supports fog of war, lighting, and overlay drawing workflows fast enough for live sessions on a mid-range laptop.
 5. Supports creating custom maps from imported images while keeping full feature parity with imported dd2vtt maps.
 
-## 3) Core Functional Requirements
+## 3) Current Implementation Status
+
+- [x] DD2VTT import and managed project copy flow
+- [x] JavaFX bootstrap fixed and app runs with explicit launcher entrypoint
+- [x] DM overlay and multi-monitor player selection
+- [x] Freeze/staged player camera behavior with clean player render path
+- [x] Save/open project handling into app-managed storage
+- [x] Basic undo/redo support for map and editor actions
+- [x] Whole-map rotation with corrected direction logic
+- [x] Fog-of-war reveal/hide brush + area tools on a persisted grid bitmask (`FogMask`), with undo/redo
+- [x] Dynamic lighting + line-of-sight engine (walls + closed doors), flicker, per-light fog reveal modes and time-of-day presets
+- [ ] AOE overlay drawing tools and color/alpha editing
+- [ ] Map-switcher and broader live-session workflows
+
+## 4) Core Functional Requirements
 
 ## 3.1 Import and Map Model
 
@@ -70,10 +84,14 @@ Desktop tool for tabletop dungeon masters that:
 
 - Fog toggle on/off without losing reveal state.
 - Reveal/hide via:
-  - brush (size configurable)
-  - rectangular drag tool
+  - brush (size configurable, 0.5-8 tiles, circular cursor preview)
+  - rectangular area drag tool (dashed preview while dragging)
+  - Reveal All / Hide All
+- Fog tools only act while fog is enabled; the **Select** tool (default, `Esc`) is used for dragging lights, layers and the player viewport.
+- Fog is rendered on its own transparent canvas above the map (never erase map pixels).
 - DM fog rendering: semi-transparent (DM sees obscured content faintly).
-- Player fog rendering: fully concealing except revealed/light-visible regions.
+- Player fog rendering: fully opaque except revealed/light-visible regions.
+- Storage: world-space grid bitmask, cell size = grid cell / 10 (clamped 4-50 px); grows to cover map content; rotates with the map.
 
 ## 3.6 Dynamic Lighting
 
@@ -83,12 +101,22 @@ Desktop tool for tabletop dungeon masters that:
   - intensity/falloff preset
   - optional flicker (torch-style)
 - Player view shows resulting illumination only (not editor token glyphs).
-- LOS and occlusion use imported dd2vtt wall data.
+- LOS and occlusion use imported dd2vtt wall data plus closed doors (open doors let light through).
+- Right-click a light in the DM view for its menu: fog reveal mode, range (1-12 tiles), flicker preset (Off/Candle/Torch/Strong torch/Slow pulse), color preset, "Blocked by walls", remove.
+- Per-light fog reveal mode (decided):
+  - **Keep revealed** (`PERSISTENT`): LOS area is written into the fog mask and stays revealed after the light moves.
+  - **Only while lit** (`WHILE_LIT`, default for DM-added lights): LOS area is uncovered only while the light is there; not saved into the mask.
+  - **Don't reveal** (`NONE`, default for imported dd2vtt map lamps): illuminates only.
+- Each light can be switched on/off from its menu (`Light on`); an off light casts no light and reveals nothing (its token is drawn hollow). Undoable.
+- Persistent reveals only accumulate while fog is enabled.
+- Light moves, light setting changes and door toggles are undoable, including the fog they revealed.
+- Rendering: quarter-resolution light map (cached LOS polygons per light, recomputed only on move/geometry change), skipped entirely at Day.
 
 ## 3.7 Time-of-Day Lighting
 
-- 4 presets (e.g., Day, Dusk, Night, Dawn or user-renamable variants).
-- Preset affects ambient light color/intensity globally.
+- 4 presets: Day, Dawn, Dusk, Night (selector in the DM overlay, undoable).
+- Preset affects ambient darkness + tint globally; Day = no darkness (dd2vtt maps have baked lighting).
+- DM view shows darkness at reduced strength so the DM can still read the map.
 
 ## 3.8 Tactical/AOE Overlays
 
@@ -205,8 +233,10 @@ Desktop tool for tabletop dungeon masters that:
   },
   "fog": {
     "enabled": true,
-    "maskResolution": 0.5,
-    "revealedRegions": [ /* compressed strokes/rects/polygons */ ]
+    "mask": {
+      "originX": 0, "originY": 0, "cellSize": 15, "cols": 500, "rows": 500,
+      "revealed": "<base64 of deflate-compressed BitSet bytes>"
+    }
   },
   "lighting": {
     "timeOfDayPreset": "DUSK",
@@ -216,7 +246,11 @@ Desktop tool for tabletop dungeon masters that:
         "x": 100,
         "y": 200,
         "range": 450,
-        "flicker": { "enabled": true, "strength": 0.18, "speed": 1.5 }
+        "color": "#FFB35C",
+        "intensity": 1.0,
+        "castsShadows": true,
+        "revealMode": "PERSISTENT",
+        "flicker": { "enabled": true, "strength": 0.22, "speed": 1.4 }
       }
     ]
   },
@@ -305,7 +339,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 8) Open Decisions (Track Here)
 
 - Exact tile-to-inch calibration UX (manual slider vs calibration wizard).
-- Whether to store fog as stroke history, bitmap mask, or hybrid representation.
+- ~~Whether to store fog as stroke history, bitmap mask, or hybrid representation.~~ Decided: bitmap mask (v0.8).
 - Minimum supported GPU/OpenGL profile for JavaFX on older laptops.
 
 ## 9) Change Log
@@ -316,7 +350,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.4:** Added ping tool, full dd2vtt lights/doors/windows support, and DM door/window interaction with persisted open/closed state.
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
-- **v0.7 (current):** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
+- **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
+- **v0.8 (current):** Fog moved to a persisted grid bitmask with Select/Reveal/Hide/area tools and brush size; dynamic lighting with wall/door LOS, flicker, colors, per-light fog reveal modes via right-click menu, and 4 time-of-day presets.
 
 ## 10) Testing Strategy
 

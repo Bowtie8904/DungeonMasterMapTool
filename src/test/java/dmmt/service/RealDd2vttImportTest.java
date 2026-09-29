@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,5 +42,11 @@ class RealDd2vttImportTest {
         assertFalse(project.getWalls().isEmpty(), "Expected line-of-sight walls from DD2VTT.");
         assertFalse(project.getInteractables().isEmpty(), "Expected portals/interactables from DD2VTT.");
         assertFalse(project.getLighting().getLights().isEmpty(), "Expected lights from DD2VTT.");
+        for (DmProject.LightSource light : project.getLighting().getLights()) {
+            assertEquals(DmProject.RevealMode.NONE, light.getRevealMode(), "Map lamps must not reveal fog.");
+            assertTrue(light.getColor().matches("#[0-9A-Fa-f]{6}"), "Unexpected light color " + light.getColor());
+        }
+        assertNotNull(project.getFog().getMask(), "Imported project should have a fog mask.");
+        assertEquals("#FFEDCF", Dd2vttImportService.parseDd2vttColor("ffFFEDCF").toUpperCase());
     }
 }

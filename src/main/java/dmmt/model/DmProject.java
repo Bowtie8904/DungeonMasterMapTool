@@ -1,5 +1,7 @@
 package dmmt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,6 +14,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DmProject {
     @Builder.Default
     private int schemaVersion = 1;
@@ -159,7 +162,10 @@ public class DmProject {
         private boolean enabled = true;
         @Builder.Default
         private double maskResolution = 0.5;
+        private FogMask mask;
+        /** Legacy (pre-mask) rectangle reveals; migrated into {@link #mask} on load. */
         @Builder.Default
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
         private List<RevealedRegion> revealedRegions = new ArrayList<>();
     }
 
@@ -182,9 +188,18 @@ public class DmProject {
     @AllArgsConstructor
     public static class LightingState {
         @Builder.Default
-        private String timeOfDayPreset = "DUSK";
+        private String timeOfDayPreset = "DAY";
         @Builder.Default
         private List<LightSource> lights = new ArrayList<>();
+    }
+
+    public enum RevealMode {
+        /** Fog uncovered by the light stays revealed after the light moves away. */
+        PERSISTENT,
+        /** Fog is only uncovered while the light currently sees the area. */
+        WHILE_LIT,
+        /** The light never uncovers fog (e.g. static map lamps). */
+        NONE
     }
 
     @Data
@@ -197,6 +212,16 @@ public class DmProject {
         private double y;
         @Builder.Default
         private double range = 300;
+        @Builder.Default
+        private String color = "#FFD9A0";
+        @Builder.Default
+        private double intensity = 1.0;
+        @Builder.Default
+        private boolean enabled = true;
+        @Builder.Default
+        private boolean castsShadows = true;
+        @Builder.Default
+        private RevealMode revealMode = RevealMode.WHILE_LIT;
         @Builder.Default
         private Flicker flicker = Flicker.builder().build();
     }
