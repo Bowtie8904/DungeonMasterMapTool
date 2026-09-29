@@ -148,7 +148,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox toolChip;
     private FontIcon toolChipIcon;
     private Label toolChipLabel;
-    private final DoubleProperty brushSize = new SimpleDoubleProperty(1.5);
+    private static final double RIGHT_CLICK_MAX_MOVE_PX = 5;
+    private boolean rightClickCancelCandidate;
+    private double rightPressScreenX;
+    private double rightPressScreenY;    private final DoubleProperty brushSize = new SimpleDoubleProperty(1.5);
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
     private boolean showScaleTestSquare;
@@ -334,8 +337,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             if (event.getCode() == KeyCode.ESCAPE) {
-                setPingArmed(false);
-                setActiveTool(EditorTool.SELECT);
+                cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
                 if (findOverlay(selectedOverlayId) != null) {
@@ -399,7 +401,8 @@ public class DungeonMasterMapToolApplication extends Application {
         brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.round(newValue.doubleValue() * 2) / 2.0);
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
-            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description);
+            String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description + exitHint);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
@@ -908,7 +911,7 @@ public class DungeonMasterMapToolApplication extends Application {
         toolChipIcon = new FontIcon(MaterialDesignC.CURSOR_DEFAULT);
         toolChipLabel = new Label();
         toolChipLabel.getStyleClass().add("tool-chip-label");
-        Label hint = new Label("Esc to exit");
+        Label hint = new Label("Esc or right-click to exit");
         hint.getStyleClass().add("tool-chip-hint");
         toolChip = new HBox(toolChipIcon, toolChipLabel, hint);
         toolChip.getStyleClass().add("tool-chip");
@@ -1133,7 +1136,10 @@ public class DungeonMasterMapToolApplication extends Application {
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
 
             if (event.getButton() == MouseButton.SECONDARY) {
-                DmProject.LightSource light = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
+                rightClickCancelCandidate = pingArmed || activeTool != EditorTool.SELECT;
+                rightPressScreenX = event.getX();
+                rightPressScreenY = event.getY();
+                DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
                 if (light != null) {
                     selectedLight = light;
                     selectedLayer = null;
@@ -1390,6 +1396,18 @@ public class DungeonMasterMapToolApplication extends Application {
             if (event.getButton() == MouseButton.MIDDLE) {
                 laserActive = false;
                 return;
+            }
+            if (event.getButton() == MouseButton.SECONDARY && rightClickCancelCandidate) {
+                rightClickCancelCandidate = false;
+                if (panningDmCamera && Math.hypot(event.getX() - rightPressScreenX, event.getY() - rightPressScreenY)
+                        <= RIGHT_CLICK_MAX_MOVE_PX) {
+                    DmProject.CameraState camera = project.getViews().getDmCamera();
+                    camera.setX(startCameraX);
+                    camera.setY(startCameraY);
+                    panningDmCamera = false;
+                    cancelActiveTool();
+                    return;
+                }
             }
             if (panningDmCamera) {
                 DmProject.CameraState camera = project.getViews().getDmCamera();
@@ -2401,6 +2419,14 @@ public class DungeonMasterMapToolApplication extends Application {
         imageLockToggle.setGraphic(Icons.icon(locked ? MaterialDesignL.LOCK_OUTLINE : MaterialDesignL.LOCK_OPEN_VARIANT_OUTLINE));
     }
 
+    private void cancelActiveTool() {
+        if (fogDragging) {
+            restoreFog(fogBeforeSnapshot);
+        }
+        setPingArmed(false);
+        setActiveTool(EditorTool.SELECT);
+    }
+
     private void setActiveTool(EditorTool tool) {
         activeTool = tool == null ? EditorTool.SELECT : tool;
         if (activeTool.isWallTool() && !renderer.isWallLayerVisible()) {
@@ -2422,7 +2448,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case HIDE_BRUSH -> status("Hide brush: paint to cover the map with fog.");
             case REVEAL_RECT -> status("Reveal rectangle: drag to uncover an area.");
             case HIDE_RECT -> status("Hide rectangle: drag to cover an area with fog.");
-            case REVEAL_ROOM -> status("Reveal room: click inside a room to uncover it (Shift+click covers it). Esc to exit.");
+            case REVEAL_ROOM -> status("Reveal room: click inside a room to uncover it (Shift+click covers it). Esc or right-click to exit.");
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
@@ -2655,6 +2681,7 @@ public class DungeonMasterMapToolApplication extends Application {
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
         new FogService().ensureMask(project);
+        centerUnsetCameras(project);
         lightingEngine.reset();
         roomBarrier = null;
         roomPreview = null;
@@ -2672,6 +2699,19 @@ public class DungeonMasterMapToolApplication extends Application {
             mapBrowser.updateCurrentMap();
         }
         updateWindowTitle();
+    }
+
+    /** Cameras still at the origin have never been positioned, so start them at the middle of the map. */
+    private void centerUnsetCameras(DmProject target) {
+        double[] bounds = new FogService().contentBounds(target);
+        double centerX = (bounds[0] + bounds[2]) / 2.0;
+        double centerY = (bounds[1] + bounds[3]) / 2.0;
+        for (DmProject.CameraState camera : List.of(target.getViews().getDmCamera(), target.getViews().getPlayerCamera())) {
+            if (camera.getX() == 0 && camera.getY() == 0) {
+                camera.setX(centerX);
+                camera.setY(centerY);
+            }
+        }
     }
 
     private void syncControlsFromProject() {

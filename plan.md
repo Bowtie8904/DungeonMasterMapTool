@@ -45,7 +45,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Map browser thumbnails + search bar for maps and folders (3.20)
 - [x] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
-- [ ] Right-click cancels the active tool like Esc (3.23)
+- [x] Right-click cancels the active tool like Esc (3.23)
 
 ## 4) Core Functional Requirements
 
@@ -331,7 +331,7 @@ Desktop tool for tabletop dungeon masters that:
 - The existing **Add light** button stays and places a Torch.
 - Ranges are in tiles, so presets scale with the map's grid size.
 
-## 3.23 Right-Click Cancels the Active Tool (planned)
+## 3.23 Right-Click Cancels the Active Tool
 
 - While any tool other than Select is active (fog brush/area/room reveal, Add/Remove light and light presets, effect shapes, walls, ping, ...), a **right-click on the DM canvas does exactly what `Esc` does**: disarm ping, return to the Select tool and cancel an in-progress stroke/shape drag (the partial action is discarded, not added to history).
 - "Right-click" = right button pressed and released without moving more than a few pixels. A **right-drag still pans** the camera as today and keeps the active tool.
