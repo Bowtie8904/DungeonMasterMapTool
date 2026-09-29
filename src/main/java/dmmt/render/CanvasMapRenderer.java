@@ -269,7 +269,7 @@ public class CanvasMapRenderer {
                                    String texture, Color base, Color edge, double visibility, double width, double height,
                                    DmProject.CameraState camera) {
         double zoom = camera.getZoom();
-        double seconds = System.nanoTime() / 1_000_000_000.0;
+        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
         double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
                 | (int) Math.round(base.getBlue() * 255);

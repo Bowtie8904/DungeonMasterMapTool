@@ -235,6 +235,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker textBackgroundPicker;
     private ColorPicker textBorderPicker;
     private ToggleButton textLayerToggle;
+    private ToggleButton effectAnimationsToggle;
     private ToggleButton textAutoSizeToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
@@ -660,7 +661,17 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect border", selected.getId(), s -> s.setBorder(overlayBorder));
             }
         });
-        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle);
+        effectAnimationsToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
+                "Animate effect textures on this map (turn off to improve performance)");
+        effectAnimationsToggle.setSelected(true);
+        effectAnimationsToggle.setOnAction(e -> {
+            if (!syncingControls) {
+                project.setEffectAnimations(effectAnimationsToggle.isSelected());
+                renderDm();
+                renderPlayer();
+            }
+        });
+        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, effectAnimationsToggle);
         HBox effectBrushRow = row(brushSlider());
 
         // Text
@@ -2007,7 +2018,7 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- New / import / open / save ----
 
     private static boolean hasAnimatedOverlays(DmProject candidate) {
-        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()));
+        return candidate.isEffectAnimations() && candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()));
     }
 
     private DmProject freshProject() {
@@ -3031,6 +3042,9 @@ public class DungeonMasterMapToolApplication extends Application {
             updateImageLockToggle();
             if (textLayerToggle != null) {
                 textLayerToggle.setSelected(project.isTextLayerVisible());
+                if (effectAnimationsToggle != null) {
+                    effectAnimationsToggle.setSelected(project.isEffectAnimations());
+                }
             }
         } finally {
             syncingControls = false;

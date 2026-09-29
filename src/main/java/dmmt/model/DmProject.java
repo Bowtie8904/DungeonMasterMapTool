@@ -56,6 +56,8 @@ public class DmProject {
 
     @Builder.Default
     private boolean textLayerVisible = true;
+    @Builder.Default
+    private boolean effectAnimations = true;
 
     /** Text settings last used on this map; {@code null} until text has been used here. */
     private TextSettings lastTextSettings;
