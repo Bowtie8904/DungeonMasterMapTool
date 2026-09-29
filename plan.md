@@ -131,6 +131,7 @@ Desktop tool for tabletop dungeon masters that:
 - 4 presets: Day, Dawn, Dusk, Night (selector in the DM overlay, undoable).
 - Preset affects ambient darkness + tint globally; Day = no darkness (dd2vtt maps have baked lighting).
 - DM view shows darkness at reduced strength so the DM can still read the map.
+- **Ambient brightness** slider (Lighting section, -50% to +100%, default 0%): adjusts the ambient darkness of the *current* preset for *this map* (effective darkness = preset darkness x (1 - brightness)). Stored per preset in the project (`lighting.ambientBrightness`, keyed by preset name, 0 entries omitted), so e.g. Night can be brightened on one map only. Updates live while dragging; one undo step per release; double-click resets. Disabled at Day (no darkness).
 
 ## 3.8 Tactical/AOE Overlays
 
@@ -169,7 +170,7 @@ Desktop tool for tabletop dungeon masters that:
   - reveal mask
   - light definitions
   - imported/interactable object states (doors/windows)
-  - time-of-day preset
+  - time-of-day preset (and per-preset ambient brightness)
   - overlays/shapes
   - ping-related settings/history if configured to persist
   - DM/player camera states
@@ -296,6 +297,7 @@ Desktop tool for tabletop dungeon masters that:
   },
   "lighting": {
     "timeOfDayPreset": "DUSK",
+    "ambientBrightness": { "NIGHT": 0.35 },
     "lights": [
       {
         "id": "light-1",
@@ -419,7 +421,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.1 (current):** Large map images (> 4096 px) render at full resolution via a cached tile pyramid instead of a single 4096 px downscaled texture (fixes blurry player view for e.g. 15k x 15k maps).
+- **v2.2 (current):** Per-map, per-time-of-day ambient brightness slider (saved in `.dmmap`, undoable).
+- **v2.1:** Large map images (> 4096 px) render at full resolution via a cached tile pyramid instead of a single 4096 px downscaled texture (fixes blurry player view for e.g. 15k x 15k maps).
 - **v2.0:** Walls drawn as red lines in the DM view; wall layer toggle (walls + door/window lines and badges, lights excluded).
 - **v1.9:** Door/window icon badges in the DM view with single-click toggle; pointing-hand cursor over interactable objects (lights, doors, windows).
 - **v1.8:** Add light / Remove light are one-shot click tools (place at click / remove the clicked light, then back to Select).

@@ -29,6 +29,26 @@ public enum TimeOfDayPreset {
         return darkness;
     }
 
+    /**
+     * Darkness after applying a per-map ambient brightness adjustment: 0 keeps the preset,
+     * positive values brighten (1 = no darkness), negative values darken.
+     */
+    public double darkness(double brightness) {
+        double b = clampBrightness(brightness);
+        return Math.max(0.0, Math.min(1.0, darkness * (1.0 - b)));
+    }
+
+    /** Ambient brightness adjustment range; 0 means the preset's default darkness. */
+    public static final double MIN_BRIGHTNESS = -0.5;
+    public static final double MAX_BRIGHTNESS = 1.0;
+
+    public static double clampBrightness(double brightness) {
+        if (Double.isNaN(brightness)) {
+            return 0.0;
+        }
+        return Math.max(MIN_BRIGHTNESS, Math.min(MAX_BRIGHTNESS, brightness));
+    }
+
     public double red() {
         return red;
     }

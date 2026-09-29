@@ -7,8 +7,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import dmmt.lighting.TimeOfDayPreset;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 
 @Data
 @Builder
@@ -202,6 +207,36 @@ public class DmProject {
         private String timeOfDayPreset = "DAY";
         @Builder.Default
         private List<LightSource> lights = new ArrayList<>();
+        /**
+         * Per time-of-day ambient brightness adjustment for this map, keyed by preset name
+         * (e.g. "NIGHT"). Missing entries mean 0 (preset default).
+         */
+        @Builder.Default
+        private Map<String, Double> ambientBrightness = new TreeMap<>();
+
+        public double ambientBrightnessFor(String presetName) {
+            if (ambientBrightness == null || presetName == null) {
+                return 0.0;
+            }
+            Double value = ambientBrightness.get(presetName.trim().toUpperCase(Locale.ROOT));
+            return value == null ? 0.0 : TimeOfDayPreset.clampBrightness(value);
+        }
+
+        public void putAmbientBrightness(String presetName, double brightness) {
+            if (presetName == null) {
+                return;
+            }
+            if (ambientBrightness == null) {
+                ambientBrightness = new TreeMap<>();
+            }
+            String key = presetName.trim().toUpperCase(Locale.ROOT);
+            double value = TimeOfDayPreset.clampBrightness(brightness);
+            if (Math.abs(value) < 1e-9) {
+                ambientBrightness.remove(key);
+            } else {
+                ambientBrightness.put(key, value);
+            }
+        }
     }
 
     public enum RevealMode {

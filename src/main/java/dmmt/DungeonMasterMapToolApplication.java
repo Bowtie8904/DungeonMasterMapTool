@@ -91,6 +91,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -187,6 +188,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private Slider overlayAlphaSlider;
     private ToggleButton overlayPlayerToggle;
     private ToggleButton fogToggleButton;
+    private Slider ambientBrightnessSlider;
+    private Label ambientBrightnessValue;
+    /** Last committed ambient brightness of the current preset; the "before" value for undo. */
+    private double ambientBrightnessCommitted;
     private ToggleButton freezePlayerButton;
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
@@ -441,6 +446,7 @@ public class DungeonMasterMapToolApplication extends Application {
         lightHint.setPrefWidth(220);
         lightHint.setMinHeight(Region.USE_PREF_SIZE);
         HBox lightTintRow = lightTintSlider();
+        HBox ambientBrightnessRow = ambientBrightnessSlider();
 
         // Effects
         overlayColorPicker = new ColorPicker(Color.web(overlayColor));
@@ -593,7 +599,7 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, lightTintRow, lightHint),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectBrushRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
@@ -746,6 +752,79 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
         return box;
+    }
+
+    /**
+     * Ambient brightness of the current time-of-day preset for this map (saved in the project).
+     * Updates live while dragging; the change is recorded as one undo step on release.
+     */
+    private HBox ambientBrightnessSlider() {
+        Slider slider = new Slider(TimeOfDayPreset.MIN_BRIGHTNESS, TimeOfDayPreset.MAX_BRIGHTNESS, 0);
+        slider.setMajorTickUnit(0.05);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.setBlockIncrement(0.05);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Ambient brightness for the current time of day on this map "
+                + "(saved with the map). Raise it if e.g. Night is too dark without a light. Double-click to reset.");
+        Label value = new Label(formatAmbientBrightness(0));
+        value.getStyleClass().add("value-label");
+        ambientBrightnessSlider = slider;
+        ambientBrightnessValue = value;
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            value.setText(formatAmbientBrightness(newValue.doubleValue()));
+            if (syncingControls) {
+                return;
+            }
+            project.getLighting().putAmbientBrightness(project.getLighting().getTimeOfDayPreset(), newValue.doubleValue());
+            if (!slider.isValueChanging()) {
+                commitAmbientBrightness();
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing && !syncingControls) {
+                commitAmbientBrightness();
+            }
+        });
+        slider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                slider.setValue(0);
+                commitAmbientBrightness();
+            }
+        });
+        FontIcon icon = Icons.icon(MaterialDesignB.BRIGHTNESS_6);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    private static String formatAmbientBrightness(double brightness) {
+        long percent = Math.round(brightness * 100);
+        return (percent > 0 ? "+" : "") + percent + "%";
+    }
+
+    private void commitAmbientBrightness() {
+        String presetName = project.getLighting().getTimeOfDayPreset();
+        double before = ambientBrightnessCommitted;
+        double after = project.getLighting().ambientBrightnessFor(presetName);
+        if (Math.abs(after - before) < 1e-9) {
+            return;
+        }
+        ambientBrightnessCommitted = after;
+        TimeOfDayPreset preset = TimeOfDayPreset.from(presetName);
+        recordHistory(
+                "Change " + preset.label().toLowerCase(Locale.ROOT) + " brightness",
+                () -> setAmbientBrightness(presetName, after),
+                () -> setAmbientBrightness(presetName, before)
+        );
+        status(preset.label() + " brightness on this map: " + formatAmbientBrightness(after) + ".");
+    }
+
+    private void setAmbientBrightness(String presetName, double brightness) {
+        project.getLighting().putAmbientBrightness(presetName, brightness);
+        syncControlsFromProject();
     }
 
     private static Ikon timeOfDayIcon(TimeOfDayPreset preset) {
@@ -2278,6 +2357,14 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
             timeButtons.forEach((key, button) -> button.setSelected(key == preset));
+            if (ambientBrightnessSlider != null) {
+                double brightness = project.getLighting().ambientBrightnessFor(preset.name());
+                ambientBrightnessCommitted = brightness;
+                ambientBrightnessSlider.setValue(brightness);
+                ambientBrightnessValue.setText(formatAmbientBrightness(brightness));
+                // Day has no ambient darkness, so there is nothing to adjust.
+                ambientBrightnessSlider.setDisable(preset.darkness() <= 0);
+            }
             if (freezePlayerButton != null) {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }

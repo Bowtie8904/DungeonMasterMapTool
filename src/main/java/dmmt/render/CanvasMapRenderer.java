@@ -36,7 +36,7 @@ public class CanvasMapRenderer {
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
     private static final double DM_FOG_ALPHA = 0.58;
-    private static final double DM_DARKNESS_FACTOR = 0.45;
+    private static final double DM_DARKNESS_FACTOR = 0.65;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
     public static final double MIN_LIGHT_TINT = 0.0;
     public static final double MAX_LIGHT_TINT = 0.3;
@@ -262,7 +262,8 @@ public class CanvasMapRenderer {
 
     private void drawLighting(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
-        double darkness = preset.darkness() * (playerMode ? 1.0 : DM_DARKNESS_FACTOR);
+        double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
+        double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : DM_DARKNESS_FACTOR);
         if (darkness < 0.01) {
             return;
         }

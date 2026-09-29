@@ -81,4 +81,27 @@ class ProjectServiceTest {
         ProjectService service = new ProjectService();
         service.save(projectFile, legacyImport);
         assertEquals(false, service.load(projectFile).getMap().imageLayersLockedOrDefault());
+    }
+
+    @Test
+    void ambientBrightnessIsPerPresetAndPersists() throws IOException {
+        DmProject project = DmProject.builder().build();
+        project.getLighting().putAmbientBrightness("NIGHT", 0.4);
+        project.getLighting().putAmbientBrightness("dusk", -0.2);
+        assertEquals(0.0, project.getLighting().ambientBrightnessFor("DAWN"));
+
+        Path projectFile = tempDir.resolve("ambient").resolve("map.dmmap");
+        ProjectService service = new ProjectService();
+        service.save(projectFile, project);
+        DmProject loaded = service.load(projectFile);
+        assertEquals(0.4, loaded.getLighting().ambientBrightnessFor("NIGHT"), 1e-9);
+        assertEquals(-0.2, loaded.getLighting().ambientBrightnessFor("DUSK"), 1e-9);
+        assertEquals(0.4, service.copy(project).getLighting().ambientBrightnessFor("NIGHT"), 1e-9);
+
+        double night = dmmt.lighting.TimeOfDayPreset.NIGHT.darkness();
+        assertEquals(night * 0.6, dmmt.lighting.TimeOfDayPreset.NIGHT.darkness(0.4), 1e-9);
+        assertEquals(0.0, dmmt.lighting.TimeOfDayPreset.NIGHT.darkness(1.0), 1e-9);
+
+        project.getLighting().putAmbientBrightness("NIGHT", 0.0);
+        assertTrue(!project.getLighting().getAmbientBrightness().containsKey("NIGHT"));
     }}
