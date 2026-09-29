@@ -31,7 +31,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Whole-map rotation with corrected direction logic
 - [x] Fog-of-war reveal/hide brush + area tools on a persisted grid bitmask (`FogMask`), with undo/redo
 - [x] Dynamic lighting + line-of-sight engine (walls + closed doors), flicker, per-light fog reveal modes and time-of-day presets
-- [ ] AOE overlay drawing tools and color/alpha editing
+- [x] AOE overlay drawing tools (circle/box/freehand) with color, opacity and player-visibility
 - [ ] Map-switcher and broader live-session workflows
 
 ## 4) Core Functional Requirements
@@ -120,10 +120,13 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3.8 Tactical/AOE Overlays
 
-- Draw circles/rectangles/free brush overlays.
-- Adjustable color and transparency.
-- Visible in both DM and player views (unless explicitly hidden).
-- Persist in save file.
+- Draw circles/rectangles/free brush overlays (tools **Circle**, **Box**, **Draw** in the *Effects* section of the DM controls).
+  - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider.
+- Adjustable color (color picker) and opacity (0.1-0.9); the current style applies to new shapes, and to the selected shape if there is one.
+- Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed/dimmed).
+- Shapes are drawn above map and lighting but below fog, so fog still conceals them.
+- With the Select tool: click a shape to select and drag to move; `Delete` or the Delete button removes it; Clear All removes every shape.
+- All create/move/style/delete/clear actions are undoable; shapes rotate with the map and persist in the save file (`overlays`: `type`, `x/y`, `radius`, `width/height`, `points`, `strokeWidth`, `color`, `alpha`, `playerVisible`).
 
 ## 3.9 Map Ping Tool
 
@@ -351,7 +354,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v0.8 (current):** Fog moved to a persisted grid bitmask with Select/Reveal/Hide/area tools and brush size; dynamic lighting with wall/door LOS, flicker, colors, per-light fog reveal modes via right-click menu, and 4 time-of-day presets.
+- **v0.9 (current):** AOE effect shapes (circle/box/freehand) with color, opacity, player visibility, selection/move/delete and undo.
+- **v0.8:** Fog moved to a persisted grid bitmask with Select/Reveal/Hide/area tools and brush size; dynamic lighting with wall/door LOS, flicker, colors, per-light fog reveal modes via right-click menu, and 4 time-of-day presets.
 
 ## 10) Testing Strategy
 

@@ -35,4 +35,30 @@ class MapRotationServiceTest {
         assertEquals(75, wall.getY2(), 0.0001);
         assertEquals(1, project.getMap().getRotationQuarterTurns());
     }
-}
+
+    @Test
+    void rotatesOverlayShapesAndRoundTrips() {
+        DmProject project = DmProject.builder().build();
+        project.getImageLayers().add(DmProject.ImageLayer.builder().id("base").x(0).y(0).width(100).height(50).build());
+        project.getOverlays().add(DmProject.OverlayShape.builder().id("r").type("rect").x(10).y(5).width(20).height(10).build());
+        project.getOverlays().add(DmProject.OverlayShape.builder().id("b").type("brush").strokeWidth(8)
+                .points(new java.util.ArrayList<>(java.util.List.of(10.0, 10.0, 40.0, 20.0))).build());
+
+        MapRotationService service = new MapRotationService();
+        service.rotateClockwise(project);
+
+        DmProject.OverlayShape rect = project.getOverlays().get(0);
+        assertEquals(10, rect.getWidth(), 0.0001);
+        assertEquals(20, rect.getHeight(), 0.0001);
+        // center (20,10) -> (cx - (y - cy), cy + (x - cx)) with c = (50,25) => (65, -5)
+        assertEquals(65, rect.getX() + rect.getWidth() / 2, 0.0001);
+        assertEquals(-5, rect.getY() + rect.getHeight() / 2, 0.0001);
+        assertEquals(65.0, project.getOverlays().get(1).getPoints().get(0), 0.0001);
+
+        service.rotateCounterClockwise(project);
+        assertEquals(10, rect.getX(), 0.0001);
+        assertEquals(5, rect.getY(), 0.0001);
+        assertEquals(20, rect.getWidth(), 0.0001);
+        assertEquals(10.0, project.getOverlays().get(1).getPoints().get(0), 0.0001);
+        assertEquals(20.0, project.getOverlays().get(1).getPoints().get(3), 0.0001);
+    }}

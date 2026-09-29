@@ -54,9 +54,7 @@ public class MapRotationService {
         }
 
         for (DmProject.OverlayShape overlay : project.getOverlays()) {
-            Point p = rotatePoint(overlay.getX(), overlay.getY(), cx, cy, clockwise);
-            overlay.setX(p.x);
-            overlay.setY(p.y);
+            rotateOverlay(overlay, cx, cy, clockwise);
         }
 
         if (project.getFog() != null && project.getFog().getMask() != null) {
@@ -74,6 +72,29 @@ public class MapRotationService {
         int delta = clockwise ? 1 : -1;
         int turns = Math.floorMod(project.getMap().getRotationQuarterTurns() + delta, 4);
         project.getMap().setRotationQuarterTurns(turns);
+    }
+
+    private void rotateOverlay(DmProject.OverlayShape overlay, double cx, double cy, boolean clockwise) {
+        if ("rect".equals(overlay.getType())) {
+            Point center = rotatePoint(overlay.getX() + overlay.getWidth() / 2.0, overlay.getY() + overlay.getHeight() / 2.0, cx, cy, clockwise);
+            double width = overlay.getHeight();
+            double height = overlay.getWidth();
+            overlay.setWidth(width);
+            overlay.setHeight(height);
+            overlay.setX(center.x - width / 2.0);
+            overlay.setY(center.y - height / 2.0);
+        } else if ("brush".equals(overlay.getType())) {
+            java.util.List<Double> points = overlay.getPoints();
+            for (int i = 0; i + 1 < points.size(); i += 2) {
+                Point p = rotatePoint(points.get(i), points.get(i + 1), cx, cy, clockwise);
+                points.set(i, p.x);
+                points.set(i + 1, p.y);
+            }
+        } else {
+            Point p = rotatePoint(overlay.getX(), overlay.getY(), cx, cy, clockwise);
+            overlay.setX(p.x);
+            overlay.setY(p.y);
+        }
     }
 
     private Bounds computeBounds(DmProject project) {

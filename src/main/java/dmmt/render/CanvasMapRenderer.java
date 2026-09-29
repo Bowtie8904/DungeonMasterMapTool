@@ -12,6 +12,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.StrokeLineJoin;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,6 +65,7 @@ public class CanvasMapRenderer {
         drawGrid(gc, project, width, height, camera);
         drawLayers(gc, project, projectFile, width, height, camera);
         drawLighting(gc, project, width, height, camera, playerMode);
+        drawOverlays(gc, project, width, height, camera, playerMode);
         if (!playerMode) {
             drawWalls(gc, project.getWalls(), width, height, camera);
             drawInteractables(gc, project.getInteractables(), width, height, camera);
@@ -144,6 +147,79 @@ public class CanvasMapRenderer {
             gc.drawImage(image, -sw / 2.0, -sh / 2.0, sw, sh);
             gc.restore();
         }
+    }
+
+    /** AOE shapes sit above the map and lighting but below fog, so fog still hides them from players. */
+    private void drawOverlays(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
+        double zoom = camera.getZoom();
+        for (DmProject.OverlayShape shape : project.getOverlays()) {
+            if (playerMode && !shape.isPlayerVisible()) {
+                continue;
+            }
+            boolean dmOnly = !playerMode && !shape.isPlayerVisible();
+            Color base;
+            try {
+                base = Color.web(shape.getColor() == null ? "#55AA33" : shape.getColor());
+            } catch (IllegalArgumentException ex) {
+                base = Color.web("#55AA33");
+            }
+            double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * (dmOnly ? 0.6 : 1.0);
+            Color fill = base.deriveColor(0, 1, 1, alpha);
+            Color edge = base.deriveColor(0, 1, 1, Math.min(1.0, alpha + 0.35));
+            gc.setFill(fill);
+            gc.setStroke(edge);
+            gc.setLineWidth(2);
+            gc.setLineDashes(dmOnly ? new double[]{8, 6} : null);
+            String type = shape.getType() == null ? "" : shape.getType();
+            switch (type) {
+                case "circle" -> {
+                    double cx = worldToScreenX(shape.getX(), width, camera);
+                    double cy = worldToScreenY(shape.getY(), height, camera);
+                    double r = shape.getRadius() * zoom;
+                    gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+                    gc.strokeOval(cx - r, cy - r, r * 2, r * 2);
+                }
+                case "rect" -> {
+                    double sx = worldToScreenX(shape.getX(), width, camera);
+                    double sy = worldToScreenY(shape.getY(), height, camera);
+                    gc.fillRect(sx, sy, shape.getWidth() * zoom, shape.getHeight() * zoom);
+                    gc.strokeRect(sx, sy, shape.getWidth() * zoom, shape.getHeight() * zoom);
+                }
+                case "brush" -> drawBrushStroke(gc, shape, fill, width, height, camera);
+                default -> {
+                }
+            }
+            gc.setLineDashes(null);
+        }
+    }
+
+    private void drawBrushStroke(GraphicsContext gc, DmProject.OverlayShape shape, Color fill, double width, double height, DmProject.CameraState camera) {
+        List<Double> points = shape.getPoints();
+        int n = points.size() / 2;
+        if (n == 0) {
+            return;
+        }
+        double lineWidth = Math.max(1, shape.getStrokeWidth() * camera.getZoom());
+        if (n == 1) {
+            double cx = worldToScreenX(points.get(0), width, camera);
+            double cy = worldToScreenY(points.get(1), height, camera);
+            gc.fillOval(cx - lineWidth / 2, cy - lineWidth / 2, lineWidth, lineWidth);
+            return;
+        }
+        double[] xs = new double[n];
+        double[] ys = new double[n];
+        for (int i = 0; i < n; i++) {
+            xs[i] = worldToScreenX(points.get(2 * i), width, camera);
+            ys[i] = worldToScreenY(points.get(2 * i + 1), height, camera);
+        }
+        // One stroked path keeps the alpha uniform where the stroke overlaps itself.
+        gc.setStroke(fill);
+        gc.setLineWidth(lineWidth);
+        gc.setLineCap(StrokeLineCap.ROUND);
+        gc.setLineJoin(StrokeLineJoin.ROUND);
+        gc.strokePolyline(xs, ys, n);
+        gc.setLineCap(StrokeLineCap.BUTT);
+        gc.setLineJoin(StrokeLineJoin.MITER);
     }
 
     private void drawLighting(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {

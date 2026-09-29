@@ -268,14 +268,22 @@ public class DmProject {
     @AllArgsConstructor
     public static class OverlayShape {
         private String id;
+        /** "circle" (x,y = center, radius), "rect" (x,y = top-left, width, height) or "brush" (points, strokeWidth). */
         private String type;
         private double x;
         private double y;
         private double width;
         private double height;
+        private double radius;
+        private double strokeWidth;
+        /** Flat list of x,y world coordinates for brush strokes. */
+        @Builder.Default
+        private List<Double> points = new ArrayList<>();
         @Builder.Default
         private String color = "#55AA33";
         @Builder.Default
         private double alpha = 0.4;
+        @Builder.Default
+        private boolean playerVisible = true;
     }
 }

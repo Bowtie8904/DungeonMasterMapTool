@@ -19,7 +19,9 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
@@ -106,6 +108,21 @@ public class DungeonMasterMapToolApplication extends Application {
     private double hoverWorldY;
     private boolean syncingControls;
     private ContextMenu activeLightMenu;
+    private String overlayColor = "#55AA33";
+    private double overlayAlpha = 0.4;
+    private boolean overlayPlayerVisible = true;
+    private String selectedOverlayId;
+    private DmProject.OverlayShape draftOverlay;
+    private double overlayStartX;
+    private double overlayStartY;
+    private boolean draggingOverlay;
+    private DmProject.OverlayShape overlayDragBefore;
+    private DmProject.OverlayShape overlayStyleBefore;
+    private double overlayLastX;
+    private double overlayLastY;
+    private ColorPicker overlayColorPicker;
+    private Slider overlayAlphaSlider;
+    private CheckBox overlayPlayerCheck;
     private ToggleButton fogToggleButton;
     private ToggleButton freezePlayerButton;
     private ComboBox<TimeOfDayPreset> timeOfDaySelector;
@@ -189,6 +206,9 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (event.getCode() == KeyCode.ESCAPE) {
                 setActiveTool(EditorTool.SELECT);
+            }
+            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                deleteSelectedOverlay();
             }
         });
         stage.setTitle("Dungeon Master Map Tool");
@@ -314,13 +334,69 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         ToggleGroup toolGroup = new ToggleGroup();
         HBox toolRow = new HBox(6, fogToggleButton);
+        HBox effectToolRow = new HBox(6);
         for (EditorTool tool : EditorTool.values()) {
             ToggleButton button = new ToggleButton(tool.label);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
-            toolRow.getChildren().add(button);
+            (tool.isAoeTool() ? effectToolRow : toolRow).getChildren().add(button);
         }
+
+        overlayColorPicker = new ColorPicker(Color.web(overlayColor));
+        overlayColorPicker.setPrefWidth(90);
+        overlayColorPicker.setOnAction(e -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayColor = toHex(overlayColorPicker.getValue());
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect color", selected.getId(), s -> s.setColor(overlayColor));
+            }
+        });
+        Label alphaLabel = overlayLabel("Opacity:");
+        overlayAlphaSlider = new Slider(0.1, 0.9, overlayAlpha);
+        overlayAlphaSlider.setPrefWidth(110);
+        overlayAlphaSlider.setOnMousePressed(e -> overlayStyleBefore = cloneOverlayOrNull(findOverlay(selectedOverlayId)));
+        overlayAlphaSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayAlpha = newValue.doubleValue();
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                selected.setAlpha(overlayAlpha);
+            }
+        });
+        overlayAlphaSlider.setOnMouseReleased(e -> {
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null && overlayStyleBefore != null && overlayStyleBefore.getId().equals(selected.getId())
+                    && !same(overlayStyleBefore.getAlpha(), selected.getAlpha())) {
+                recordOverlayChange("Change effect opacity", selected.getId(), overlayStyleBefore, cloneOverlay(selected));
+            }
+            overlayStyleBefore = null;
+        });
+        overlayPlayerCheck = new CheckBox("Players see");
+        overlayPlayerCheck.setTextFill(Color.WHITE);
+        overlayPlayerCheck.setSelected(overlayPlayerVisible);
+        overlayPlayerCheck.setOnAction(e -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayPlayerVisible = overlayPlayerCheck.isSelected();
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect visibility", selected.getId(), s -> s.setPlayerVisible(overlayPlayerVisible));
+            }
+        });
+        Button deleteEffect = new Button("Delete");
+        deleteEffect.setOnAction(e -> deleteSelectedOverlay());
+        Button clearEffects = new Button("Clear All");
+        clearEffects.setOnAction(e -> clearOverlays());
+        HBox effectStyleRow = new HBox(6, overlayColorPicker, alphaLabel, overlayAlphaSlider, overlayPlayerCheck);
+        effectStyleRow.setAlignment(Pos.CENTER_LEFT);
+        effectToolRow.getChildren().addAll(deleteEffect, clearEffects);
 
         Label brushLabel = overlayLabel(brushLabelText());
         Slider brushSlider = new Slider(0.5, 8, brushSizeTiles);
@@ -361,6 +437,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 mapRow,
                 sectionLabel("Lights"), lightRow,
                 sectionLabel("Fog of war"), toolRow, brushRow,
+                sectionLabel("Effects (spell areas)"), effectToolRow, effectStyleRow,
                 sectionLabel("Player view"), screenRow, playerRow);
 
         Label title = new Label("DM Controls");
@@ -483,6 +560,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (activeTool.isAoeTool()) {
+                beginOverlayDraw(world.x(), world.y());
+                return;
+            }
+
             if (event.getClickCount() >= 2 && toggleInteractableNear(world.x(), world.y())) {
                 return;
             }
@@ -496,8 +578,23 @@ public class DungeonMasterMapToolApplication extends Application {
                 startLightY = selectedLight.getY();
                 lightDragFogBefore = snapshotFog();
                 selectedLayer = null;
+                selectedOverlayId = null;
                 return;
             }
+
+            DmProject.OverlayShape hitOverlay = pickOverlay(world.x(), world.y(), camera.getZoom());
+            if (hitOverlay != null) {
+                selectedOverlayId = hitOverlay.getId();
+                selectedLayer = null;
+                selectedLight = null;
+                draggingOverlay = true;
+                overlayDragBefore = cloneOverlay(hitOverlay);
+                overlayLastX = world.x();
+                overlayLastY = world.y();
+                syncOverlayControls(hitOverlay);
+                return;
+            }
+            selectedOverlayId = null;
 
             CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
             if (playerStage != null && playerRect != null && contains(playerRect, world.x(), world.y())) {
@@ -556,6 +653,21 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 fogLastWorldX = world.x();
                 fogLastWorldY = world.y();
+                return;
+            }
+
+            if (draftOverlay != null) {
+                updateOverlayDraw(world.x(), world.y());
+                return;
+            }
+
+            if (draggingOverlay) {
+                DmProject.OverlayShape moving = findOverlay(selectedOverlayId);
+                if (moving != null) {
+                    translateOverlay(moving, world.x() - overlayLastX, world.y() - overlayLastY);
+                }
+                overlayLastX = world.x();
+                overlayLastY = world.y();
                 return;
             }
 
@@ -629,6 +741,23 @@ public class DungeonMasterMapToolApplication extends Application {
                     }
                 }
                 fogBeforeSnapshot = null;
+                return;
+            }
+
+            if (draftOverlay != null) {
+                finishOverlayDraw();
+                return;
+            }
+
+            if (draggingOverlay) {
+                DmProject.OverlayShape moved = findOverlay(selectedOverlayId);
+                if (moved != null && overlayDragBefore != null
+                        && (!same(moved.getX(), overlayDragBefore.getX()) || !same(moved.getY(), overlayDragBefore.getY())
+                        || !moved.getPoints().equals(overlayDragBefore.getPoints()))) {
+                    recordOverlayChange("Move effect", moved.getId(), overlayDragBefore, cloneOverlay(moved));
+                }
+                draggingOverlay = false;
+                overlayDragBefore = null;
                 return;
             }
 
@@ -781,6 +910,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 selectedLight == null ? null : selectedLight.getId()
         );
         drawSelectionHandle(fogGc);
+        drawOverlaySelection(fogGc);
         drawToolPreview(fogGc);
     }
 
@@ -997,6 +1127,7 @@ public class DungeonMasterMapToolApplication extends Application {
         activeTool = tool == null ? EditorTool.SELECT : tool;
         fogDragging = false;
         fogBeforeSnapshot = null;
+        draftOverlay = null;
         toolButtons.forEach((key, button) -> button.setSelected(key == activeTool));
         switch (activeTool) {
             case SELECT -> status("Select: drag lights, layers and the player viewport. Right-click a light for options.");
@@ -1004,6 +1135,9 @@ public class DungeonMasterMapToolApplication extends Application {
             case HIDE_BRUSH -> status("Hide brush: paint to cover the map with fog.");
             case REVEAL_RECT -> status("Reveal rectangle: drag to uncover an area.");
             case HIDE_RECT -> status("Hide rectangle: drag to cover an area with fog.");
+            case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
+            case AOE_RECT -> status("Box effect: drag from corner to corner.");
+            case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
         }
     }
 
@@ -1132,6 +1266,9 @@ public class DungeonMasterMapToolApplication extends Application {
         lightingEngine.reset();
         selectedLayer = null;
         selectedLight = null;
+        selectedOverlayId = null;
+        draftOverlay = null;
+        draggingOverlay = false;
         fogDragging = false;
         undoStack.clear();
         redoStack.clear();
@@ -1167,6 +1304,294 @@ public class DungeonMasterMapToolApplication extends Application {
         label.setTextFill(Color.web("#C9C9D6"));
         label.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
         return label;
+    }
+
+    // ---- Effects (AOE overlays) ----
+
+    private DmProject.OverlayShape findOverlay(String id) {
+        if (id == null) {
+            return null;
+        }
+        return project.getOverlays().stream().filter(o -> id.equals(o.getId())).findFirst().orElse(null);
+    }
+
+    private DmProject.OverlayShape cloneOverlay(DmProject.OverlayShape source) {
+        return DmProject.OverlayShape.builder()
+                .id(source.getId())
+                .type(source.getType())
+                .x(source.getX())
+                .y(source.getY())
+                .width(source.getWidth())
+                .height(source.getHeight())
+                .radius(source.getRadius())
+                .strokeWidth(source.getStrokeWidth())
+                .points(new java.util.ArrayList<>(source.getPoints()))
+                .color(source.getColor())
+                .alpha(source.getAlpha())
+                .playerVisible(source.isPlayerVisible())
+                .build();
+    }
+
+    private DmProject.OverlayShape cloneOverlayOrNull(DmProject.OverlayShape source) {
+        return source == null ? null : cloneOverlay(source);
+    }
+
+    /** Sets the overlay to the given state, inserting it if missing, or removes it when state is null. */
+    private void applyOverlayState(String id, DmProject.OverlayShape state) {
+        List<DmProject.OverlayShape> overlays = project.getOverlays();
+        int index = -1;
+        for (int i = 0; i < overlays.size(); i++) {
+            if (id.equals(overlays.get(i).getId())) {
+                index = i;
+                break;
+            }
+        }
+        if (state == null) {
+            if (index >= 0) {
+                overlays.remove(index);
+            }
+            if (id.equals(selectedOverlayId)) {
+                selectedOverlayId = null;
+            }
+            return;
+        }
+        DmProject.OverlayShape copy = cloneOverlay(state);
+        if (index >= 0) {
+            overlays.set(index, copy);
+        } else {
+            overlays.add(copy);
+        }
+    }
+
+    private void recordOverlayChange(String label, String id, DmProject.OverlayShape before, DmProject.OverlayShape after) {
+        DmProject.OverlayShape beforeCopy = cloneOverlayOrNull(before);
+        DmProject.OverlayShape afterCopy = cloneOverlayOrNull(after);
+        pushHistory(new HistoryAction(
+                label,
+                () -> applyOverlayState(id, afterCopy),
+                () -> applyOverlayState(id, beforeCopy)
+        ));
+    }
+
+    private void executeOverlayChange(String label, String id, Consumer<DmProject.OverlayShape> mutator) {
+        DmProject.OverlayShape shape = findOverlay(id);
+        if (shape == null) {
+            return;
+        }
+        DmProject.OverlayShape before = cloneOverlay(shape);
+        mutator.accept(shape);
+        recordOverlayChange(label, id, before, cloneOverlay(shape));
+    }
+
+    private void beginOverlayDraw(double worldX, double worldY) {
+        double pixelsPerCell = project.getMap().getGrid().getPixelsPerCell();
+        String type = switch (activeTool) {
+            case AOE_CIRCLE -> "circle";
+            case AOE_RECT -> "rect";
+            default -> "brush";
+        };
+        DmProject.OverlayShape shape = DmProject.OverlayShape.builder()
+                .id("overlay-" + UUID.randomUUID())
+                .type(type)
+                .x(worldX)
+                .y(worldY)
+                .strokeWidth(brushSizeTiles * pixelsPerCell)
+                .color(overlayColor)
+                .alpha(overlayAlpha)
+                .playerVisible(overlayPlayerVisible)
+                .build();
+        if ("brush".equals(type)) {
+            shape.getPoints().add(worldX);
+            shape.getPoints().add(worldY);
+        }
+        overlayStartX = worldX;
+        overlayStartY = worldY;
+        selectedOverlayId = null;
+        project.getOverlays().add(shape);
+        draftOverlay = shape;
+    }
+
+    private void updateOverlayDraw(double worldX, double worldY) {
+        DmProject.OverlayShape shape = draftOverlay;
+        switch (shape.getType()) {
+            case "circle" -> shape.setRadius(distance(overlayStartX, overlayStartY, worldX, worldY));
+            case "rect" -> {
+                shape.setX(Math.min(overlayStartX, worldX));
+                shape.setY(Math.min(overlayStartY, worldY));
+                shape.setWidth(Math.abs(worldX - overlayStartX));
+                shape.setHeight(Math.abs(worldY - overlayStartY));
+            }
+            default -> {
+                List<Double> points = shape.getPoints();
+                double lastX = points.get(points.size() - 2);
+                double lastY = points.get(points.size() - 1);
+                if (distance(lastX, lastY, worldX, worldY) >= Math.max(2, shape.getStrokeWidth() / 8.0)) {
+                    points.add(worldX);
+                    points.add(worldY);
+                }
+            }
+        }
+    }
+
+    private void finishOverlayDraw() {
+        DmProject.OverlayShape shape = draftOverlay;
+        draftOverlay = null;
+        boolean tooSmall = switch (shape.getType()) {
+            case "circle" -> shape.getRadius() < 3;
+            case "rect" -> shape.getWidth() < 3 || shape.getHeight() < 3;
+            default -> false;
+        };
+        if (tooSmall) {
+            project.getOverlays().removeIf(o -> o.getId().equals(shape.getId()));
+            return;
+        }
+        selectedOverlayId = shape.getId();
+        recordOverlayChange("Draw effect", shape.getId(), null, cloneOverlay(shape));
+    }
+
+    private DmProject.OverlayShape pickOverlay(double worldX, double worldY, double zoom) {
+        List<DmProject.OverlayShape> overlays = project.getOverlays();
+        double tolerance = 6 / Math.max(0.01, zoom);
+        for (int i = overlays.size() - 1; i >= 0; i--) {
+            DmProject.OverlayShape shape = overlays.get(i);
+            boolean hit = switch (shape.getType() == null ? "" : shape.getType()) {
+                case "circle" -> distance(worldX, worldY, shape.getX(), shape.getY()) <= shape.getRadius();
+                case "rect" -> worldX >= shape.getX() && worldX <= shape.getX() + shape.getWidth()
+                        && worldY >= shape.getY() && worldY <= shape.getY() + shape.getHeight();
+                case "brush" -> brushHit(shape, worldX, worldY, shape.getStrokeWidth() / 2.0 + tolerance);
+                default -> false;
+            };
+            if (hit) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private boolean brushHit(DmProject.OverlayShape shape, double worldX, double worldY, double reach) {
+        List<Double> points = shape.getPoints();
+        int n = points.size() / 2;
+        if (n == 1) {
+            return distance(worldX, worldY, points.get(0), points.get(1)) <= reach;
+        }
+        for (int i = 0; i + 1 < n; i++) {
+            if (pointToSegmentDistance(worldX, worldY,
+                    points.get(2 * i), points.get(2 * i + 1), points.get(2 * i + 2), points.get(2 * i + 3)) <= reach) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void translateOverlay(DmProject.OverlayShape shape, double dx, double dy) {
+        shape.setX(shape.getX() + dx);
+        shape.setY(shape.getY() + dy);
+        List<Double> points = shape.getPoints();
+        for (int i = 0; i + 1 < points.size(); i += 2) {
+            points.set(i, points.get(i) + dx);
+            points.set(i + 1, points.get(i + 1) + dy);
+        }
+    }
+
+    private void deleteSelectedOverlay() {
+        DmProject.OverlayShape shape = findOverlay(selectedOverlayId);
+        if (shape == null) {
+            return;
+        }
+        DmProject.OverlayShape before = cloneOverlay(shape);
+        applyOverlayState(shape.getId(), null);
+        recordOverlayChange("Delete effect", before.getId(), before, null);
+        status("Deleted effect.");
+    }
+
+    private void clearOverlays() {
+        if (project.getOverlays().isEmpty()) {
+            return;
+        }
+        List<DmProject.OverlayShape> backup = new java.util.ArrayList<>();
+        for (DmProject.OverlayShape shape : project.getOverlays()) {
+            backup.add(cloneOverlay(shape));
+        }
+        executeWithHistory(
+                "Clear effects",
+                () -> {
+                    project.getOverlays().clear();
+                    selectedOverlayId = null;
+                },
+                () -> {
+                    project.getOverlays().clear();
+                    for (DmProject.OverlayShape shape : backup) {
+                        project.getOverlays().add(cloneOverlay(shape));
+                    }
+                }
+        );
+        status("Cleared all effects.");
+    }
+
+    private void syncOverlayControls(DmProject.OverlayShape shape) {
+        syncingControls = true;
+        try {
+            overlayColorPicker.setValue(Color.web(shape.getColor()));
+            overlayAlphaSlider.setValue(shape.getAlpha());
+            overlayPlayerCheck.setSelected(shape.isPlayerVisible());
+            overlayColor = shape.getColor();
+            overlayAlpha = shape.getAlpha();
+            overlayPlayerVisible = shape.isPlayerVisible();
+        } finally {
+            syncingControls = false;
+        }
+    }
+
+    private void drawOverlaySelection(GraphicsContext gc) {
+        DmProject.OverlayShape shape = findOverlay(selectedOverlayId);
+        if (shape == null) {
+            return;
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double zoom = camera.getZoom();
+        gc.setStroke(Color.YELLOW);
+        gc.setLineWidth(1.5);
+        gc.setLineDashes(8, 6);
+        switch (shape.getType()) {
+            case "circle" -> {
+                double cx = renderer.worldToScreenX(shape.getX(), w, camera);
+                double cy = renderer.worldToScreenY(shape.getY(), h, camera);
+                double r = shape.getRadius() * zoom;
+                gc.strokeOval(cx - r, cy - r, r * 2, r * 2);
+            }
+            case "rect" -> gc.strokeRect(
+                    renderer.worldToScreenX(shape.getX(), w, camera),
+                    renderer.worldToScreenY(shape.getY(), h, camera),
+                    shape.getWidth() * zoom, shape.getHeight() * zoom);
+            default -> {
+                List<Double> points = shape.getPoints();
+                double minX = Double.MAX_VALUE;
+                double minY = Double.MAX_VALUE;
+                double maxX = -Double.MAX_VALUE;
+                double maxY = -Double.MAX_VALUE;
+                for (int i = 0; i + 1 < points.size(); i += 2) {
+                    minX = Math.min(minX, points.get(i));
+                    maxX = Math.max(maxX, points.get(i));
+                    minY = Math.min(minY, points.get(i + 1));
+                    maxY = Math.max(maxY, points.get(i + 1));
+                }
+                double pad = shape.getStrokeWidth() / 2.0;
+                gc.strokeRect(
+                        renderer.worldToScreenX(minX - pad, w, camera),
+                        renderer.worldToScreenY(minY - pad, h, camera),
+                        (maxX - minX + 2 * pad) * zoom, (maxY - minY + 2 * pad) * zoom);
+            }
+        }
+        gc.setLineDashes((double[]) null);
+    }
+
+    private static String toHex(Color color) {
+        return String.format("#%02X%02X%02X",
+                (int) Math.round(color.getRed() * 255),
+                (int) Math.round(color.getGreen() * 255),
+                (int) Math.round(color.getBlue() * 255));
     }
 
     // ---- Light context menu ----
@@ -1696,7 +2121,10 @@ public class DungeonMasterMapToolApplication extends Application {
         REVEAL_BRUSH("Reveal", true, false),
         HIDE_BRUSH("Hide", false, false),
         REVEAL_RECT("Reveal Area", true, true),
-        HIDE_RECT("Hide Area", false, true);
+        HIDE_RECT("Hide Area", false, true),
+        AOE_CIRCLE("Circle", false, false),
+        AOE_RECT("Box", false, true),
+        AOE_BRUSH("Draw", false, false);
 
         private final String label;
         private final boolean reveal;
@@ -1708,8 +2136,12 @@ public class DungeonMasterMapToolApplication extends Application {
             this.rect = rect;
         }
 
+        boolean isAoeTool() {
+            return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH;
+        }
+
         boolean isFogTool() {
-            return this != SELECT;
+            return this != SELECT && !isAoeTool();
         }
     }
 
