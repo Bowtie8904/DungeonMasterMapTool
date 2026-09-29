@@ -13,6 +13,7 @@ import dmmt.service.RoomFillService;
 import dmmt.service.ProjectService;
 import dmmt.ui.CollapsibleSection;
 import dmmt.ui.Dialogs;
+import dmmt.ui.HandoutWindow;
 import dmmt.ui.Icons;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
@@ -148,6 +149,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
     private boolean showScaleTestSquare;
+    private HandoutWindow handoutWindow;
     private DmProject.WallSegment draftWall;
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
@@ -338,6 +340,9 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.setScene(scene);
         stage.getIcons().setAll(appIcons());
         stage.setOnCloseRequest(event -> {
+            if (handoutWindow != null) {
+                handoutWindow.close();
+            }
             closePlayerWindow();
             Platform.exit();
         });
@@ -566,7 +571,9 @@ public class DungeonMasterMapToolApplication extends Application {
                     ? "A 1-inch square is shown on the player screen. If it does not measure 1 inch, correct the screen size."
                     : "Test square hidden.");
         });
-        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest);
+        Button handoutButton = Icons.button(MaterialDesignI.IMAGE_FRAME,
+                "Handout — paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
+        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
 
         playerScreenSelector = new ComboBox<>();
         playerScreenSelector.setMaxWidth(Double.MAX_VALUE);
@@ -1533,7 +1540,18 @@ public class DungeonMasterMapToolApplication extends Application {
         status("Player window opened.");
     }
 
+    private void openHandoutWindow(Stage owner) {
+        if (handoutWindow == null) {
+            handoutWindow = new HandoutWindow(owner, appIcons(), () -> playerStage != null,
+                    () -> lastInputNanos = System.nanoTime(), () -> handoutWindow = null);
+        }
+        handoutWindow.show();
+    }
+
     private void syncPlayerWindowToggle() {
+        if (handoutWindow != null) {
+            handoutWindow.playerWindowChanged();
+        }
         if (playerWindowToggle != null) {
             playerWindowToggle.setSelected(playerStage != null);
         }
@@ -1583,6 +1601,14 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         GraphicsContext gc = playerCanvas.getGraphicsContext2D();
+        if (handoutWindow != null && handoutWindow.isShownToPlayers()) {
+            playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
+            gc.setFill(Color.BLACK);
+            gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
+            HandoutWindow.drawRotated(gc, handoutWindow.getImage(), handoutWindow.getRotation(),
+                    playerCanvas.getWidth(), playerCanvas.getHeight(), HandoutWindow.fitFraction());
+            return;
+        }
         boolean frozen = frozenPlayerProject != null;
         DmProject shown = frozen ? frozenPlayerProject : project;
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;

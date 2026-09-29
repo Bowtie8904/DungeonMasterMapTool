@@ -40,7 +40,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Full-resolution rendering of large map images (> 4096 px) via cached tile pyramid (see 5)
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 - [x] One-click room reveal bounded by walls/doors/windows (3.17)
-- [ ] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
+- [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [ ] Laser pointer on middle mouse button hold (3.19)
 - [ ] Map browser thumbnails + search bar for maps and folders (3.20)
 - [ ] Auto-save for maps that already exist on disk (3.21)
@@ -252,7 +252,7 @@ Desktop tool for tabletop dungeon masters that:
 - Map building section also offers **Add image** (file picker) in addition to drag & drop.
 - Implementation: `dmmt.ui` package - `Icons` (icon buttons, tooltips, cached icon cursors), `CollapsibleSection`, `Dialogs` (dark text/confirm/save-changes/error dialogs), `MapLocationDialog`, `MapBrowser`; disk operations in `dmmt.service.MapLibraryService` (unit-tested). `assets`/`imports` folders next to loose `.dmmap` files are hidden from the tree.
 
-## 3.17 One-Click Room Reveal (planned)
+## 3.17 One-Click Room Reveal
 
 - New fog tool **Reveal room** in the **Fog of war section** of the DM controls (icon toggle button next to the other fog tools, tooltip, own cursor, named in the tool chip). Only acts while fog is enabled, like the other fog tools.
 - **Room reveal only happens while this tool is explicitly selected.** Clicks with Select or any other tool never reveal a room, and there is no shortcut or modifier that reveals a room without selecting the tool first.
@@ -267,7 +267,7 @@ Desktop tool for tabletop dungeon masters that:
 - Each click is one undo step (uses the existing fog history). No named/saved reveal regions.
 - Works identically on rotated maps (fill runs on the rotated fog grid with rotated wall geometry).
 
-## 3.18 Handout Mode (planned)
+## 3.18 Handout Mode
 
 - Show an image to the players on the player screen (e.g. a portrait of an NPC they meet), pasted from the **clipboard**.
 - A **Handout** button in the Player view section of the DM controls opens a separate, non-modal **handout window** for the DM (dark theme, stays on the DM monitor, only one instance; pressing the button again focuses it). Ctrl+V is **not** a global shortcut in the DM view; pasting only happens inside the handout window.
@@ -281,6 +281,7 @@ Desktop tool for tabletop dungeon masters that:
 - The handout sits on top of whatever the player view is doing: hiding it returns the player screen to the live or frozen view exactly as before. Freeze/unfreeze, map switching and DM editing keep working while a handout is shown.
 - If the player window is closed while a handout is shown, the toggle switches off.
 - Handouts are session-only: not saved in `.dmmap`, not copied into the map package, not part of undo/redo.
+- Implementation: `dmmt.ui.HandoutWindow` (window, clipboard paste, rotation, shared `drawRotated` used by preview and player screen); the player screen draws it in `renderPlayer` before any map rendering.
 
 ## 3.19 Laser Pointer (planned)
 
@@ -316,7 +317,7 @@ Desktop tool for tabletop dungeon masters that:
 - Auto-save on/off and the interval (1/2/5/10 minutes) are global user preferences (default: on, 2 min), toggled from the map browser next to Save.
 - Undo/redo history is unaffected by auto-save.
 
-## 3.22 Light Presets (planned)
+## 3.22 Light Presets
 
 - The Lighting section gets a row of **preset buttons** (icon + tooltip with range): each one arms a one-shot place tool like **Add light** (click the map to drop the light, then back to Select; `Esc` cancels). No configuration needed before placing.
 - Built-in presets (range in tiles, flicker preset, colour):
