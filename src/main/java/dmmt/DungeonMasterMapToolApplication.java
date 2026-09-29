@@ -105,6 +105,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_SIDEBAR_VISIBLE = "sidebarVisible";
     private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fogCellsPerGrid";
+    private static final String PREF_LIGHT_TINT = "lightTint";
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
     private static List<Image> appIcons;
 
@@ -232,6 +233,7 @@ public class DungeonMasterMapToolApplication extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
         FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
+        CanvasMapRenderer.setLightTint(preferences.getDouble(PREF_LIGHT_TINT, CanvasMapRenderer.DEFAULT_LIGHT_TINT));
         this.project = DmProject.builder().build();
         this.project.getMap().setSourceType("custom");
         Path libraryRoot;
@@ -437,6 +439,7 @@ public class DungeonMasterMapToolApplication extends Application {
         // itself too short once the text wraps and shows a needless scrollbar.
         lightHint.setPrefWidth(220);
         lightHint.setMinHeight(Region.USE_PREF_SIZE);
+        HBox lightTintRow = lightTintSlider();
 
         // Effects
         overlayColorPicker = new ColorPicker(Color.web(overlayColor));
@@ -580,7 +583,7 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, lightHint),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectBrushRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
@@ -692,6 +695,43 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         FontIcon icon = Icons.icon(MaterialDesignB.BLUR);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    /**
+     * Global strength of the light colour tint over lit areas. Stored in user preferences so it
+     * applies to every light in every project; the renderer picks it up on the next frame.
+     */
+    private HBox lightTintSlider() {
+        double initial = CanvasMapRenderer.getLightTint();
+        Slider slider = new Slider(CanvasMapRenderer.MIN_LIGHT_TINT, CanvasMapRenderer.MAX_LIGHT_TINT, initial);
+        slider.setMajorTickUnit(0.01);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.setBlockIncrement(0.01);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Light colour tint strength (applies to all lights and maps). "
+                + "Lower keeps the map's own colours, higher tints lit areas with the light colour.");
+        Label value = new Label(Math.round(initial * 100) + "%");
+        value.getStyleClass().add("value-label");
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            CanvasMapRenderer.setLightTint(newValue.doubleValue());
+            value.setText(Math.round(CanvasMapRenderer.getLightTint() * 100) + "%");
+            if (!slider.isValueChanging()) {
+                preferences.putDouble(PREF_LIGHT_TINT, CanvasMapRenderer.getLightTint());
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing) {
+                preferences.putDouble(PREF_LIGHT_TINT, CanvasMapRenderer.getLightTint());
+                status("Light tint: " + Math.round(CanvasMapRenderer.getLightTint() * 100) + "%.");
+            }
+        });
+        FontIcon icon = Icons.icon(MaterialDesignP.PALETTE_OUTLINE);
         icon.getStyleClass().add("muted-icon");
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);

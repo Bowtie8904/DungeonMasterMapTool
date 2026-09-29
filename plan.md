@@ -119,10 +119,12 @@ Desktop tool for tabletop dungeon masters that:
   - **Keep revealed** (`PERSISTENT`): LOS area is written into the fog mask and stays revealed after the light moves.
   - **Only while lit** (`WHILE_LIT`, default for DM-added lights): LOS area is uncovered only while the light is there; not saved into the mask.
   - **Don't reveal** (`NONE`, default for imported dd2vtt map lamps): illuminates only.
+- Imported dd2vtt lights default to the **Torch** flicker preset (dd2vtt carries no flicker data).
 - Each light can be switched on/off from its menu (`Light on`); an off light casts no light and reveals nothing (its token is drawn hollow). Undoable.
 - Persistent reveals only accumulate while fog is enabled.
 - Light moves, light setting changes and door toggles are undoable, including the fog they revealed.
 - Rendering: quarter-resolution light map (cached LOS polygons per light, recomputed only on move/geometry change), skipped entirely at Day.
+- **Light tint** slider (Lighting section): strength of the light colour tint over lit areas (0-30%, default 8%). Stored globally in user preferences (applies to all lights and projects); updates live while dragging.
 
 ## 3.7 Time-of-Day Lighting
 

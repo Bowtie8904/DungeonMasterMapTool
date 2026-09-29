@@ -31,6 +31,20 @@ public class CanvasMapRenderer {
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.45;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
+    public static final double MIN_LIGHT_TINT = 0.0;
+    public static final double MAX_LIGHT_TINT = 0.3;
+    public static final double DEFAULT_LIGHT_TINT = 0.08;
+
+    /** Global strength of the light colour tint over lit areas; applies to every light in every project. */
+    private static volatile double lightTint = DEFAULT_LIGHT_TINT;
+
+    public static double getLightTint() {
+        return lightTint;
+    }
+
+    public static void setLightTint(double value) {
+        lightTint = Math.max(MIN_LIGHT_TINT, Math.min(MAX_LIGHT_TINT, value));
+    }
 
     private final ImagePyramidStore imageStore = ImagePyramidStore.shared();
     private final LightingEngine lightingEngine;
@@ -301,7 +315,7 @@ public class CanvasMapRenderer {
             });
         }
 
-        double glowStrength = 0.22 * Math.sqrt(darkness);
+        double glowStrength = lightTint * Math.sqrt(darkness);
         double ambR = preset.red() * 255;
         double ambG = preset.green() * 255;
         double ambB = preset.blue() * 255;
