@@ -101,19 +101,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.prefs.Preferences;
+import dmmt.service.AppSettings;
 
 public class DungeonMasterMapToolApplication extends Application {
-    private static final String PREF_LAST_IMPORT_DIRECTORY = "lastImportDirectory";
-    private static final String PREF_PLAYER_SCREEN_INDEX = "playerScreenIndex";
-    private static final String PREF_SCREEN_DIAGONAL_PREFIX = "screenDiagonalInches.";
-    private static final String PREF_TILE_INCHES = "playerTileInches";
-    private static final String PREF_SIDEBAR_VISIBLE = "sidebarVisible";
-    private static final String PREF_CONTROLS_EXPANDED = "controlsExpanded";
-    private static final String PREF_FOG_CELLS_PER_GRID = "fogCellsPerGrid";
-    private static final String PREF_LIGHT_TINT = "lightTint";
-    private static final String PREF_AUTOSAVE_ENABLED = "autoSaveEnabled";
-    private static final String PREF_AUTOSAVE_MINUTES = "autoSaveMinutes";
+    private static final String PREF_LAST_IMPORT_DIRECTORY = "import.lastDirectory";
+    private static final String PREF_PLAYER_SCREEN_INDEX = "player.screenIndex";
+    private static final String PREF_SCREEN_DIAGONAL_PREFIX = "player.screenDiagonalInches.";
+    private static final String PREF_TILE_INCHES = "player.tileInches";
+    private static final String PREF_SIDEBAR_VISIBLE = "ui.sidebarVisible";
+    private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
+    private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
+    private static final String PREF_LIGHT_TINT = "lighting.tint";
+    private static final String PREF_AUTOSAVE_ENABLED = "autosave.enabled";
+    private static final String PREF_AUTOSAVE_MINUTES = "autosave.minutes";
     private static final int[] AUTOSAVE_MINUTE_OPTIONS = {1, 2, 5, 10};
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
     private static List<Image> appIcons;
@@ -123,7 +123,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private final MapRotationService rotationService = new MapRotationService();
     private final LightingEngine lightingEngine = new LightingEngine();
     private final CanvasMapRenderer renderer = new CanvasMapRenderer(lightingEngine);
-    private final Preferences preferences = Preferences.userNodeForPackage(DungeonMasterMapToolApplication.class);
+    private final AppSettings preferences = AppSettings.load();
 
     private DmProject project;
     private Path projectFile;
@@ -209,10 +209,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker overlayColorPicker;
     private Slider overlayAlphaSlider;
     private ToggleButton overlayPlayerToggle;
-    private static final String PREF_TEXT_FONT_SIZE = "textFontSize";
-    private static final String PREF_TEXT_COLOR = "textColor";
-    private static final String PREF_TEXT_BACKGROUND = "textBackground";
-    private static final String PREF_TEXT_BORDER = "textBorder";
+    private static final String PREF_TEXT_FONT_SIZE = "text.fontSize";
+    private static final String PREF_TEXT_COLOR = "text.textColor";
+    private static final String PREF_TEXT_BACKGROUND = "text.backgroundColor";
+    private static final String PREF_TEXT_BORDER = "text.borderColor";
     private static final double TEXT_MIN_SIZE = 40;
     private static final double TEXT_AUTO_MAX_CELLS = 12;
     private static final int TEXT_HANDLE_COUNT = 8;
@@ -913,7 +913,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     /**
-     * Global fog edge sharpness (fog cells per grid cell). Stored in user preferences so it applies
+     * Global fog edge sharpness (fog cells per grid cell). Stored in the settings file so it applies
      * to every project; the fog mask is resampled when the slider is released.
      */
     private HBox fogSharpnessSlider() {
@@ -956,7 +956,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     /**
-     * Global strength of the light colour tint over lit areas. Stored in user preferences so it
+     * Global strength of the light colour tint over lit areas. Stored in the settings file so it
      * applies to every light in every project; the renderer picks it up on the next frame.
      */
     private HBox lightTintSlider() {

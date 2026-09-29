@@ -110,6 +110,14 @@ public final class OverlayTextures {
     private OverlayTextures() {
     }
 
+    private record Custom(String color, Double alpha, Boolean soft, List<Layer> layers) {
+    }
+
+    private static volatile Map<String, Custom> overrides = Map.of();
+    private static volatile double featherCells = 0.9;
+    private static volatile int featherPasses = 8;
+    private static volatile double tileCells = 4;
+
     /** True for every texture other than flat colour. */
     public static boolean isAnimated(String kind) {
         return !NONE.equals(normalize(kind));
@@ -117,7 +125,13 @@ public final class OverlayTextures {
 
     /** Soft textures (fire, smoke, ...) fade out at the shape edge instead of ending in a hard cut. */
     public static boolean isSoft(String kind) {
-        return switch (normalize(kind)) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.soft() != null ? o.soft() : builtInSoft(k);
+    }
+
+    private static boolean builtInSoft(String k) {
+        return switch (k) {
             case SMOKE, FIRE, MIST, DARKNESS, HOLY, SAND, WIND, LIGHTNING, RADIATION -> true;
             default -> false;
         };
@@ -138,12 +152,20 @@ public final class OverlayTextures {
 
     /** Colour a texture starts with when it is picked; null for flat colour (the current colour is kept). */
     public static String defaultColor(String kind) {
-        return DEFINITIONS.get(normalize(kind)).color();
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.color() != null ? o.color() : DEFINITIONS.get(k).color();
     }
 
     /** Opacity a texture starts with when it is picked; 0 for flat colour (the current opacity is kept). */
     public static double defaultAlpha(String kind) {
-        return switch (normalize(kind)) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.alpha() != null ? o.alpha() : builtInAlpha(k);
+    }
+
+    private static double builtInAlpha(String k) {
+        return switch (k) {
             case SMOKE, MIST -> 0.75;
             case FIRE -> 0.90;
             case WATER -> 0.55;
@@ -157,9 +179,135 @@ public final class OverlayTextures {
     }
 
     public static List<Layer> layers(String kind) {
-        return DEFINITIONS.get(normalize(kind)).layers();
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.layers() != null ? o.layers() : DEFINITIONS.get(k).layers();
     }
 
+    /** World size of one texture tile, in grid cells. */
+    public static double tileCells() {
+        return tileCells;
+    }
+
+    /** Width of the soft edge of fire, smoke and similar textures, in grid cells. */
+    public static double featherCells() {
+        return featherCells;
+    }
+
+    public static int featherPasses() {
+        return featherPasses;
+    }
+
+    /** Built-in values of every configurable setting, keyed by settings-file key, in file order. */
+    public static Map<String, String> settingsDefaults() {
+        Map<String, String> map = new LinkedHashMap<>();
+        map.put("texture.tileCells", "4");
+        map.put("texture.featherCells", "0.9");
+        map.put("texture.featherPasses", "8");
+        for (String kind : KINDS) {
+            if (NONE.equals(kind)) {
+                continue;
+            }
+            Definition d = DEFINITIONS.get(kind);
+            String p = "texture." + kind + ".";
+            map.put(p + "color", d.color());
+            map.put(p + "opacity", num(builtInAlpha(kind)));
+            map.put(p + "softEdges", String.valueOf(builtInSoft(kind)));
+            int n = 1;
+            for (Layer l : d.layers()) {
+                String lp = p + "layer" + n++ + ".";
+                map.put(lp + "speedX", num(l.vx()));
+                map.put(lp + "speedY", num(l.vy()));
+                map.put(lp + "scale", num(l.scale()));
+                map.put(lp + "opacity", num(l.alpha()));
+                map.put(lp + "pulseDepth", num(l.pulse()));
+                map.put(lp + "pulseHz", num(l.pulseHz()));
+            }
+        }
+        return map;
+    }
+
+    private static String num(double value) {
+        return value == Math.rint(value) && Math.abs(value) < 1e9 ? String.valueOf((long) value) : String.valueOf(value);
+    }
+
+    /**
+     * Replaces the texture defaults with the values found through {@code lookup} (settings-file key to value).
+     * Missing or invalid entries keep their built-in value; a lookup that returns nothing restores all built-ins.
+     */
+    public static void applySettings(java.util.function.Function<String, String> lookup) {
+        featherCells = clamp(parse(lookup.apply("texture.featherCells"), 0.9), 0, 5);
+        featherPasses = (int) clamp(Math.round(parse(lookup.apply("texture.featherPasses"), 8)), 1, 24);
+        double tile = parse(lookup.apply("texture.tileCells"), 4);
+        tileCells = tile >= 0.25 ? Math.min(tile, 64) : 4;
+
+        Map<String, Custom> next = new LinkedHashMap<>();
+        for (String kind : KINDS) {
+            if (NONE.equals(kind)) {
+                continue;
+            }
+            Definition d = DEFINITIONS.get(kind);
+            String p = "texture." + kind + ".";
+            String color = validColor(lookup.apply(p + "color"));
+            Double alpha = null;
+            double a = parse(lookup.apply(p + "opacity"), Double.NaN);
+            if (!Double.isNaN(a)) {
+                alpha = clamp(a, 0.05, 1.0);
+            }
+            String softText = lookup.apply(p + "softEdges");
+            Boolean soft = softText == null ? null
+                    : "true".equalsIgnoreCase(softText.trim()) ? Boolean.TRUE
+                    : "false".equalsIgnoreCase(softText.trim()) ? Boolean.FALSE : null;
+
+            List<Layer> layers = new java.util.ArrayList<>();
+            int builtIn = d.layers().size();
+            for (int i = 1; i <= Math.max(builtIn, 6); i++) {
+                String lp = p + "layer" + i + ".";
+                Layer base = i <= builtIn ? d.layers().get(i - 1) : null;
+                if (base == null && lookup.apply(lp + "scale") == null) {
+                    break;
+                }
+                Layer fallback = base != null ? base : new Layer(0, 0, 1, 0.8);
+                layers.add(new Layer(
+                        parse(lookup.apply(lp + "speedX"), fallback.vx()),
+                        parse(lookup.apply(lp + "speedY"), fallback.vy()),
+                        clamp(parse(lookup.apply(lp + "scale"), fallback.scale()), 0.1, 16),
+                        clamp(parse(lookup.apply(lp + "opacity"), fallback.alpha()), 0, 1),
+                        clamp(parse(lookup.apply(lp + "pulseDepth"), fallback.pulse()), 0, 1),
+                        Math.max(0, parse(lookup.apply(lp + "pulseHz"), fallback.pulseHz()))));
+            }
+            next.put(kind, new Custom(color, alpha, soft, layers));
+        }
+        overrides = next;
+    }
+
+    private static String validColor(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            Color.web(text.trim());
+            return text.trim();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static double parse(String text, double fallback) {
+        if (text == null) {
+            return fallback;
+        }
+        try {
+            double value = Double.parseDouble(text.trim());
+            return Double.isFinite(value) ? value : fallback;
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
     public static synchronized Image image(String kind, int rgb) {
         String normalized = normalize(kind);
         int color = rgb & 0xFFFFFF;

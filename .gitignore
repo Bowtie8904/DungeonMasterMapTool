@@ -38,3 +38,5 @@ build/
 ### Mac OS ###
 .DS_Store
 /dmmap-projects/
+
+dmmt-settings.ini

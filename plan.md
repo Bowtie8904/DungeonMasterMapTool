@@ -109,7 +109,7 @@ Desktop tool for tabletop dungeon masters that:
 - DM fog rendering: semi-transparent (DM sees obscured content faintly).
 - Player fog rendering: fully opaque except revealed/light-visible regions.
 - Storage: world-space grid bitmask, cell size = grid cell / N (clamped 2-50 px); grows to cover map content; rotates with the map.
-- **Fog sharpness** slider (Fog of war section): N = fog cells per tile (5-30, default 10). Stored globally in user preferences (applies to all projects); existing masks are resampled (nearest neighbour) to the new cell size when a project loads or the slider is released, and persistent light reveals are re-applied at the new resolution.
+- **Fog sharpness** slider (Fog of war section): N = fog cells per tile (5-30, default 10). Stored globally in the settings file (3.25) (applies to all projects); existing masks are resampled (nearest neighbour) to the new cell size when a project loads or the slider is released, and persistent light reveals are re-applied at the new resolution.
 
 ## 3.6 Dynamic Lighting
 
@@ -131,7 +131,7 @@ Desktop tool for tabletop dungeon masters that:
 - Persistent reveals only accumulate while fog is enabled.
 - Light moves, light setting changes and door toggles are undoable, including the fog they revealed.
 - Rendering: quarter-resolution light map (cached LOS polygons per light, recomputed only on move/geometry change), skipped entirely at Day.
-- **Light tint** slider (Lighting section): strength of the light colour tint over lit areas (0-30%, default 8%). Stored globally in user preferences (applies to all lights and projects); updates live while dragging.
+- **Light tint** slider (Lighting section): strength of the light colour tint over lit areas (0-30%, default 8%). Stored globally in the settings file (3.25) (applies to all lights and projects); updates live while dragging.
 
 ## 3.7 Time-of-Day Lighting
 
@@ -316,7 +316,7 @@ Desktop tool for tabletop dungeon masters that:
 - Auto-save runs every **2 minutes** when the map has unsaved changes (dirty flag), and additionally when the DM window loses focus / on app close for dirty saved maps. No save happens if nothing changed.
 - Uses the existing background save path (deep-copied snapshot, `runInBackground`), so the UI never blocks. An auto-save is postponed while a drag/brush stroke is in progress and skipped if a save is already running.
 - Status bar shows "Auto-saved HH:mm"; errors are shown in the status bar (no modal dialog during play) and retried on the next interval.
-- Auto-save on/off and the interval (1/2/5/10 minutes) are global user preferences (default: on, 2 min), toggled from the map browser next to Save.
+- Auto-save on/off and the interval (1/2/5/10 minutes) are global settings (settings file, 3.25) (default: on, 2 min), toggled from the map browser next to Save.
 - Undo/redo history is unaffected by auto-save.
 
 ## 3.22 Light Presets
@@ -351,9 +351,15 @@ Desktop tool for tabletop dungeon masters that:
 - Select tool: click a box to select, drag to move, drag one of the 8 handles to resize, `Delete` removes it. Create/edit/move/resize/style/delete are undoable.
 - **Text layer** toggle hides/shows all text boxes in both DM and player views (saved with the map). Choosing the Text tool shows the layer again.
 - Text boxes are drawn above map, lighting and effects but **below fog**, so fog hides them from players.
-- **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in user preferences. Selecting the Text tool loads the map's settings, or the global ones when the map has none.
+- **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in the settings file (3.25). Selecting the Text tool loads the map's settings, or the global ones when the map has none.
 - `Ctrl+C` copies the selected text box, `Ctrl+V` pastes it (at the mouse position, or the view center) — also into a different map opened afterwards.
 - Text boxes rotate with the map (box rectangle turns, text stays upright) and persist in the save file (`textBoxes`, `textLayerVisible`, `lastTextSettings`).
+## 3.25 Settings File
+
+- All global preferences (sidebar/section state, player screen, tile inches, fog sharpness, light tint, auto-save, text defaults, last import folder) live in `dmmt-settings.ini` **next to the jar** (working directory when run from an IDE; override with `-Ddmmt.settings=<path>`). Nothing is stored in `java.util.prefs` any more; on first start existing values are imported once from the old preferences.
+- Plain `key = value` lines with `#` comments; the file is created with every known setting and its default, kept in sync when the app changes a value (atomic write), and unknown keys are preserved. Invalid values fall back to the defaults.
+- **Texture defaults** are configurable: `texture.<kind>.color`, `.opacity`, `.softEdges` and per animated layer `texture.<kind>.layerN.speedX/speedY/scale/opacity/pulseDepth/pulseHz`, plus global `texture.tileCells`, `texture.featherCells`, `texture.featherPasses`. Hand edits are picked up when the window regains focus (other settings on next start); per-effect values already stored in a map are unaffected.
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -549,7 +555,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.5 (current):** Animated effect textures (smoke, fire, water) for AOE shapes (3.8).
+- **v2.6 (current):** Global preferences moved to an editable settings file next to the jar, including texture defaults (3.25).
+- **v2.5:** Animated effect textures (smoke, fire, water) for AOE shapes (3.8).
 - **v2.4:** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.
 - **v2.3 (planned):** Added Phase 7 live-play specs: one-click room reveal (3.17), handout window (clipboard paste, show-to-players toggle, 90-degree rotation) (3.18), middle-mouse laser pointer (3.19), map browser thumbnails + search (3.20), auto-save for maps on disk (3.21), light presets (3.22), right-click cancels the active tool (3.23).
 - **v2.2:** Per-map, per-time-of-day ambient brightness slider (saved in `.dmmap`, undoable).

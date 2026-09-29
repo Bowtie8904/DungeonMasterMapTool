@@ -12,16 +12,16 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 
-import java.util.prefs.Preferences;
+import dmmt.service.AppSettings;
 
 /**
- * A compact, collapsible panel section. The expanded state is remembered in the given preferences.
+ * A compact, collapsible panel section. The expanded state is remembered in the given settings.
  */
 public class CollapsibleSection extends VBox {
 
     private final BooleanProperty expanded = new SimpleBooleanProperty(true);
 
-    public CollapsibleSection(String title, Ikon ikon, Preferences preferences, String id, Node... content) {
+    public CollapsibleSection(String title, Ikon ikon, AppSettings preferences, String id, Node... content) {
         getStyleClass().add("dm-section");
 
         FontIcon sectionIcon = Icons.icon(ikon);
@@ -37,7 +37,7 @@ public class CollapsibleSection extends VBox {
         VBox body = new VBox(content);
         body.getStyleClass().add("section-body");
 
-        String key = "section." + id + ".expanded";
+        String key = "ui.section." + id + ".expanded";
         expanded.addListener((observable, oldValue, newValue) -> {
             body.setVisible(newValue);
             body.setManaged(newValue);

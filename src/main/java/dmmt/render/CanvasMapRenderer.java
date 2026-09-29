@@ -40,9 +40,6 @@ public class CanvasMapRenderer {
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
-    private static final double TEXTURE_TILE_CELLS = 4;
-    private static final int FEATHER_PASSES = 8;
-    private static final double FEATHER_CELLS = 0.9;
     private static final double DM_FOG_ALPHA = 0.58;
     private static final double DM_DARKNESS_FACTOR = 0.65;
     private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
@@ -273,7 +270,7 @@ public class CanvasMapRenderer {
                                    DmProject.CameraState camera) {
         double zoom = camera.getZoom();
         double seconds = System.nanoTime() / 1_000_000_000.0;
-        double tileWorld = project.getMap().getGrid().getPixelsPerCell() * TEXTURE_TILE_CELLS;
+        double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
                 | (int) Math.round(base.getBlue() * 255);
         Image tile = OverlayTextures.image(texture, rgb);
@@ -281,12 +278,12 @@ public class CanvasMapRenderer {
         double originX = worldToScreenX(0, width, camera);
         double originY = worldToScreenY(0, height, camera);
         boolean soft = OverlayTextures.isSoft(texture);
-        int passes = soft ? FEATHER_PASSES : 1;
+        int passes = soft ? OverlayTextures.featherPasses() : 1;
         double ppc = project.getMap().getGrid().getPixelsPerCell();
         double featherWorld = switch (type) {
-            case "circle" -> Math.min(FEATHER_CELLS * ppc, 0.4 * shape.getRadius());
-            case "rect" -> Math.min(FEATHER_CELLS * ppc, 0.4 * Math.min(shape.getWidth(), shape.getHeight()));
-            default -> Math.min(FEATHER_CELLS * ppc, 0.4 * shape.getStrokeWidth());
+            case "circle" -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getRadius());
+            case "rect" -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * Math.min(shape.getWidth(), shape.getHeight()));
+            default -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getStrokeWidth());
         };
         double feather = featherWorld * zoom;
         gc.save();
