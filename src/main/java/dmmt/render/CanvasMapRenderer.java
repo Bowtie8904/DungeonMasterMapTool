@@ -76,6 +76,34 @@ public class CanvasMapRenderer {
         lightTint = Math.max(MIN_LIGHT_TINT, Math.min(MAX_LIGHT_TINT, value));
     }
 
+    public static final double MAX_FOG_SOFTNESS = 1.0;
+    public static final double DEFAULT_FOG_SOFTNESS = 0.3;
+    /** Seconds a fog cell needs to fade completely in or out. */
+    public static final double FOG_FADE_SECONDS = 0.5;
+    /** Fade time when the change comes from a light, so moving lights do not trail behind. */
+    public static final double FOG_LIGHT_FADE_SECONDS = 0.12;
+
+    /** Width of the soft fog edge in grid tiles (0 = hard edge); applies to every project. */
+    private static volatile double fogSoftness = DEFAULT_FOG_SOFTNESS;
+    /** Whether fog fades when it is revealed or hidden; applies to every project. */
+    private static volatile boolean fogFadeEnabled = true;
+
+    public static double getFogSoftness() {
+        return fogSoftness;
+    }
+
+    public static void setFogSoftness(double tiles) {
+        fogSoftness = Math.max(0, Math.min(MAX_FOG_SOFTNESS, tiles));
+    }
+
+    public static boolean isFogFadeEnabled() {
+        return fogFadeEnabled;
+    }
+
+    public static void setFogFadeEnabled(boolean enabled) {
+        fogFadeEnabled = enabled;
+    }
+
     private final ImagePyramidStore imageStore = ImagePyramidStore.shared();
     private final LightingEngine lightingEngine;
     private final LightBuffer dmLightBuffer = new LightBuffer();
@@ -86,6 +114,17 @@ public class CanvasMapRenderer {
     private long fogImageMaskVersion = -1;
     private long fogImageLiveVersion = -1;
     private int fogImageFactor = 1;
+    private int fogImageRadius;
+    private double fogImageOriginX;
+    private double fogImageOriginY;
+    private double fogImageCellSize;
+    private float[] fogShown;
+    private float[] fogTarget;
+    private int[] fogPixels;
+    private long fogLastAdvanceNanos;
+    private boolean fogAnimating;
+    private double fogFadeSeconds = FOG_FADE_SECONDS;
+    private long fogLightChangesSeen;
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
     private boolean wallLayerVisible = true;
 
@@ -1431,21 +1470,38 @@ public class CanvasMapRenderer {
                 : 1;
     }
 
+    /** True while fog cells are still fading; the render loop then keeps a high frame rate. */
+    public boolean isFogAnimating() {
+        return fogAnimating;
+    }
+
+    /** Soft edge width in fog cells; performance mode (merged cells) always uses hard edges. */
+    private static int fogSoftRadius(int factor) {
+        return factor == 1 ? (int) Math.round(fogSoftness * FogService.getCellsPerGrid()) : 0;
+    }
+
     /** Rebuilds the world-space fog image only when the mask, live light reveals or the fog detail changed. */
     private void refreshFogImage(FogMask mask) {
         long liveVersion = lightingEngine.getLiveRevealVersion();
         int factor = fogDownsample();
+        int radius = fogSoftRadius(factor);
         int cols = mask.getCols();
         int rows = mask.getRows();
         int imgCols = (cols + factor - 1) / factor;
         int imgRows = (rows + factor - 1) / factor;
-        if (fogImage != null
+        boolean sameGeometry = fogImage != null
                 && fogImageMask == mask
-                && fogImageMaskVersion == mask.getVersion()
-                && fogImageLiveVersion == liveVersion
                 && fogImageFactor == factor
                 && (int) fogImage.getWidth() == imgCols
-                && (int) fogImage.getHeight() == imgRows) {
+                && (int) fogImage.getHeight() == imgRows
+                && fogImageOriginX == mask.getOriginX()
+                && fogImageOriginY == mask.getOriginY()
+                && fogImageCellSize == mask.getCellSize();
+        if (sameGeometry
+                && fogImageMaskVersion == mask.getVersion()
+                && fogImageLiveVersion == liveVersion
+                && fogImageRadius == radius) {
+            advanceFog(cols, rows);
             return;
         }
         if (fogImage == null || (int) fogImage.getWidth() != imgCols || (int) fogImage.getHeight() != imgRows) {
@@ -1453,13 +1509,41 @@ public class CanvasMapRenderer {
         }
         BitSet revealed = mask.copyBits();
         revealed.or(lightingEngine.getLiveReveal());
+        if (factor == 1) {
+            float[] target = FogShading.fogOpacity(revealed, cols, rows, radius);
+            boolean fade = fogFadeEnabled && !PerformanceMode.isEnabled() && sameGeometry
+                    && fogShown != null && fogShown.length == target.length;
+            fogTarget = target;
+            long lightChanges = lightingEngine.getLightRevealChanges();
+            fogFadeSeconds = lightChanges != fogLightChangesSeen ? FOG_LIGHT_FADE_SECONDS : FOG_FADE_SECONDS;
+            fogLightChangesSeen = lightChanges;
+            if (fade) {
+                fogLastAdvanceNanos = System.nanoTime();
+                fogAnimating = true;
+            } else {
+                fogShown = target.clone();
+                fogAnimating = false;
+                uploadFogRows(cols, 0, rows - 1);
+            }
+            fogImageMask = mask;
+            fogImageMaskVersion = mask.getVersion();
+            fogImageLiveVersion = liveVersion;
+            fogImageFactor = factor;
+            fogImageRadius = radius;
+            fogImageOriginX = mask.getOriginX();
+            fogImageOriginY = mask.getOriginY();
+            fogImageCellSize = mask.getCellSize();
+            if (fade) {
+                advanceFog(cols, rows);
+            }
+            return;
+        }
+        fogShown = null;
+        fogTarget = null;
+        fogAnimating = false;
         int[] pixels = new int[imgCols * imgRows];
         Arrays.fill(pixels, 0xFF000000);
-        if (factor == 1) {
-            for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < pixels.length; idx = revealed.nextSetBit(idx + 1)) {
-                pixels[idx] = 0;
-            }
-        } else {
+        {
             int[] counts = new int[pixels.length];
             for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < cols * rows; idx = revealed.nextSetBit(idx + 1)) {
                 counts[(idx / cols / factor) * imgCols + (idx % cols) / factor]++;
@@ -1479,6 +1563,43 @@ public class CanvasMapRenderer {
         fogImageMaskVersion = mask.getVersion();
         fogImageLiveVersion = liveVersion;
         fogImageFactor = factor;
+        fogImageRadius = radius;
+        fogImageOriginX = mask.getOriginX();
+        fogImageOriginY = mask.getOriginY();
+        fogImageCellSize = mask.getCellSize();
+    }
+
+    /** Moves the shown fog towards the target by the time elapsed since the last call (idempotent within a frame). */
+    private void advanceFog(int cols, int rows) {
+        if (fogShown == null || fogTarget == null || !fogAnimating) {
+            return;
+        }
+        long now = System.nanoTime();
+        double seconds = Math.min(0.1, (now - fogLastAdvanceNanos) / 1_000_000_000.0);
+        if (seconds <= 0) {
+            return;
+        }
+        fogLastAdvanceNanos = now;
+        int[] changed = FogShading.advance(fogShown, fogTarget, (float) (seconds / fogFadeSeconds));
+        if (changed == null) {
+            fogAnimating = false;
+            return;
+        }
+        uploadFogRows(cols, changed[0] / cols, changed[1] / cols);
+        fogAnimating = !FogShading.reached(fogShown, fogTarget);
+    }
+
+    private void uploadFogRows(int cols, int firstRow, int lastRow) {
+        int count = (lastRow - firstRow + 1) * cols;
+        if (fogPixels == null || fogPixels.length < count) {
+            fogPixels = new int[count];
+        }
+        int base = firstRow * cols;
+        for (int i = 0; i < count; i++) {
+            fogPixels[i] = FogShading.pixel(fogShown[base + i]);
+        }
+        fogImage.getPixelWriter().setPixels(0, firstRow, cols, lastRow - firstRow + 1,
+                PixelFormat.getIntArgbInstance(), fogPixels, 0, cols);
     }
     private void drawViewportRect(GraphicsContext gc, WorldRect rect, double width, double height, DmProject.CameraState camera) {
         double x = worldToScreenX(rect.x(), width, camera);

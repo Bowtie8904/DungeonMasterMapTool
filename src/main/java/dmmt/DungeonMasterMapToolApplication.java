@@ -123,6 +123,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_PERFORMANCE_MODE = "ui.performanceMode";
     private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
+    private static final String PREF_FOG_SOFTNESS = "fog.softness";
+    private static final String PREF_FOG_FADE = "fog.fadeAnimation";
     private static final String PREF_LIGHT_TINT = "lighting.tint";
     private static final String PREF_AUTOSAVE_ENABLED = "autosave.enabled";
     private static final String PREF_AUTOSAVE_MINUTES = "autosave.minutes";
@@ -335,6 +337,8 @@ public class DungeonMasterMapToolApplication extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
         FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
+        CanvasMapRenderer.setFogSoftness(preferences.getDouble(PREF_FOG_SOFTNESS, CanvasMapRenderer.DEFAULT_FOG_SOFTNESS));
+        CanvasMapRenderer.setFogFadeEnabled(preferences.getBoolean(PREF_FOG_FADE, true));
         CanvasMapRenderer.setLightTint(preferences.getDouble(PREF_LIGHT_TINT, CanvasMapRenderer.DEFAULT_LIGHT_TINT));
         targetFps = clampFps(preferences.getInt(PREF_FPS_TARGET, DEFAULT_FPS_TARGET));
         animationFps = clampFps(preferences.getInt(PREF_FPS_ANIMATION, DEFAULT_FPS_ANIMATION));
@@ -515,9 +519,11 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override
             public void handle(long now) {
                 // Frame rates are configurable: target while interacting, animation for moving effects, idle otherwise.
+                boolean fogFading = renderer.isFogAnimating() || playerRenderer.isFogAnimating();
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
-                boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
+                boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty()
+                        || fogFading;
                 int fps = PerformanceMode.isEnabled()
                         ? recentInput ? Math.min(PerformanceMode.INTERACTION_FPS, targetFps)
                         : animated ? PerformanceMode.TEXTURE_ANIMATION_FPS : Math.min(PerformanceMode.IDLE_FPS, idleFps)
@@ -638,6 +644,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 Icons.separator(),
                 brushSlider());
         HBox fogSharpnessRow = fogSharpnessSlider();
+        HBox fogEffectsRow = fogEffectsRow();
 
         // Lighting
         HBox timeSegment = new HBox();
@@ -1003,7 +1010,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
-                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow),
+                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
@@ -1122,6 +1129,37 @@ public class DungeonMasterMapToolApplication extends Application {
         FontIcon icon = Icons.icon(MaterialDesignB.BLUR);
         icon.getStyleClass().add("muted-icon");
         HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    /** Global soft fog edge width and the fade-in/out toggle; both are stored in the settings file. */
+    private HBox fogEffectsRow() {
+        ToggleButton fade = Icons.toggle(MaterialDesignA.ANIMATION_OUTLINE,
+                "Fade fog in and out when it is revealed or hidden (applies to all maps)");
+        fade.setSelected(CanvasMapRenderer.isFogFadeEnabled());
+        fade.setOnAction(e -> {
+            CanvasMapRenderer.setFogFadeEnabled(fade.isSelected());
+            preferences.putBoolean(PREF_FOG_FADE, fade.isSelected());
+            lastInputNanos = System.nanoTime();
+        });
+        Slider slider = new Slider(0, CanvasMapRenderer.MAX_FOG_SOFTNESS, CanvasMapRenderer.getFogSoftness());
+        slider.setBlockIncrement(0.05);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Soft fog edge width in tiles (0 = hard edge, applies to all maps)");
+        Label value = new Label(Math.round(slider.getValue() * 100) + "%");
+        value.getStyleClass().add("value-label");
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            double softness = Math.round(newValue.doubleValue() * 20) / 20.0;
+            value.setText(Math.round(softness * 100) + "%");
+            CanvasMapRenderer.setFogSoftness(softness);
+            preferences.putDouble(PREF_FOG_SOFTNESS, softness);
+            lastInputNanos = System.nanoTime();
+        });
+        FontIcon icon = Icons.icon(MaterialDesignB.BLUR_LINEAR);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(fade, icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
         return box;
     }

@@ -50,6 +50,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [x] Right-click cancels the active tool like Esc (3.23)
+- [x] Soft fog edges and fog fade animation (3.5)
 - [x] Batch import of dd2vtt maps: multi-file selection and whole-folder import (3.26)
 - [x] Handout upgrades: multiple pasted images shown together in an auto-fitted grid, per-image delete (3.27)
 
@@ -115,6 +116,8 @@ Desktop tool for tabletop dungeon masters that:
 - DM fog rendering: semi-transparent (DM sees obscured content faintly).
 - Player fog rendering: fully opaque except revealed/light-visible regions.
 - Storage: world-space grid bitmask, cell size = grid cell / N (clamped 2-50 px); grows to cover map content; rotates with the map.
+- **Soft fog edges:** revealed cells fade from opaque at the real edge of the revealed area to clear over a configurable width (*Fog softness* slider in the Fog of war section, 0-100 % of a tile, default 30 %, `fog.softness` in the settings file; 0 = the previous hard edge). The gradient lies entirely **inside** the revealed area: fogged cells always stay 100 % opaque, so a soft edge never reveals anything beyond walls or the real reveal border (players cannot peek past walls). The ramp is computed from the distance to the nearest fogged cell (`dmmt.render.FogShading`), which also smooths the cell staircase along diagonal line-of-sight edges. Purely a rendering effect: the saved fog mask, reveal logic and line of sight are unchanged, the interior stays fully clear, and a fully revealed map has no dark border. Performance mode keeps hard edges.
+- **Fog fade animation:** when fog changes (brush, rectangle, room reveal, reveal/hide all, undo/redo, moving lights that reveal) the affected cells fade in/out over 0.5 s instead of switching instantly. Toggle button in the Fog of war section (`fog.fadeAnimation`, default on). Switching maps, rotating, resampling and loading snap instantly; performance mode disables the fade. While a fade runs the render loop uses the target frame rate, otherwise the normal idle throttling applies. Fog changes caused by a light (live or persistent reveal, e.g. while dragging a light) fade much faster (0.12 s) so the lit area keeps up with the light. The DM and player views fade independently but identically.
 - **Fog sharpness** slider (Fog of war section): N = fog cells per tile (5-30, default 10). Stored globally in the settings file (3.25) (applies to all projects); existing masks are resampled (nearest neighbour) to the new cell size when a project loads or the slider is released, and persistent light reveals are re-applied at the new resolution.
 
 ## 3.6 Dynamic Lighting
@@ -577,10 +580,11 @@ Desktop tool for tabletop dungeon masters that:
 7. Right-click cancels the active tool (3.23).
 8. Text boxes (3.24), with unit tests for word wrap layout and map rotation.
 
-## Phase 8 - Import and Handout Improvements (planned)
+## Phase 8 - Import, Handout and Fog Improvements
 
 1. Batch import of dd2vtt maps (3.26), with unit tests for folder scan and unique naming.
 2. Handout upgrades (3.27), with unit tests for the grid layout.
+3. Soft fog edges and fog fade animation (3.5), with unit tests for `FogShading`.
 
 ## 8) Open Decisions (Track Here)
 
@@ -597,7 +601,7 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.9 (planned):** Batch import of maps (3.26) and multi-image handouts with grid layout and per-image delete (3.27), Phase 8.
+- **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
 - **v2.8 (current):** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
 - **v2.7:** Per-map toggle to disable effect animations (3.8).
 - **v2.6:** Global preferences moved to an editable settings file next to the jar, including texture defaults (3.25).

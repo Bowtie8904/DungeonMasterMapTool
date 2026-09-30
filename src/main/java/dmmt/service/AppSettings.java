@@ -267,6 +267,8 @@ public final class AppSettings {
 
         sections.add(new Section("Fog and lighting", List.of(
                 new Entry("fog.cellsPerGrid", String.valueOf(FogService.DEFAULT_CELLS_PER_GRID), "Fog cells per grid cell (edge sharpness of fog of war)."),
+                new Entry("fog.softness", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_FOG_SOFTNESS), "Width of the soft fog edge in grid tiles (0 = hard edge, max 1)."),
+                new Entry("fog.fadeAnimation", "true", "Fade fog in and out when it is revealed or hidden (true/false)."),
                 new Entry("lighting.tint", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_LIGHT_TINT), "Strength of the light colour tint over lit areas (0-1)."))));
 
         sections.add(new Section("Performance (frames per second, 1-240)", List.of(

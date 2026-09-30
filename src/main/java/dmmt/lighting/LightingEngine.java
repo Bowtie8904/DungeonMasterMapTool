@@ -29,6 +29,7 @@ public class LightingEngine {
     private BitSet liveReveal = new BitSet();
     private String liveRevealKey = "";
     private long liveRevealVersion;
+    private long lightRevealChanges;
 
     public void update(DmProject project) {
         if (project == null) {
@@ -65,6 +66,7 @@ public class LightingEngine {
             if (mode == DmProject.RevealMode.PERSISTENT && fogEnabled && mask != null) {
                 if (!vis.key.equals(lastPersistentKey.get(light.getId()))) {
                     mask.applyPolygon(vis.polygon.xs(), vis.polygon.ys(), true);
+                    lightRevealChanges++;
                     lastPersistentKey.put(light.getId(), vis.key);
                 }
             } else if (mode == DmProject.RevealMode.WHILE_LIT) {
@@ -80,6 +82,7 @@ public class LightingEngine {
             rebuildLiveReveal(project, mask);
             liveRevealKey = nextLiveKey;
             liveRevealVersion++;
+            lightRevealChanges++;
         }
     }
 
@@ -125,6 +128,11 @@ public class LightingEngine {
 
     public BitSet getLiveReveal() {
         return liveReveal;
+    }
+
+    /** Counts fog changes caused by lights (live or persistent reveals); lets the renderer fade them faster. */
+    public long getLightRevealChanges() {
+        return lightRevealChanges;
     }
 
     public long getLiveRevealVersion() {
