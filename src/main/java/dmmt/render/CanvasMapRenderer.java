@@ -375,7 +375,18 @@ public class CanvasMapRenderer {
             default -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getStrokeWidth());
         };
         double feather = featherWorld * zoom;
+        boolean chasm = OverlayTextures.CHASM.equals(texture);
         gc.save();
+        if (chasm && "brush".equals(type)) {
+            double rimWorld = Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * shape.getStrokeWidth());
+            OverlayTextures.Layer layer = OverlayTextures.layers(texture).get(0);
+            double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
+            drawChasmBrush(gc, shape, new ImagePattern(tile, originX, originY, tileScreen, tileScreen, false),
+                    rimWorld * zoom, alpha, width, height, camera);
+            gc.restore();
+            drawShapeBorder(gc, shape, type, edge, width, height, camera);
+            return;
+        }
         for (OverlayTextures.Layer layer : OverlayTextures.layers(texture)) {
             double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
             double phaseX = ((seconds * layer.vx()) % 1.0 + 1.0) % 1.0;
@@ -392,30 +403,34 @@ public class CanvasMapRenderer {
                 double cumulative = soft ? Math.min(0.999, layerAlpha * smooth((pass + 1.0) / passes)) : layerAlpha;
                 gc.setGlobalAlpha(soft ? 1 - (1 - cumulative) / (1 - previous) : layerAlpha);
                 previous = cumulative;
-                double inset = feather * pass / passes;
-                switch (type) {
-                    case "circle" -> {
-                        double cx = worldToScreenX(shape.getX(), width, camera);
-                        double cy = worldToScreenY(shape.getY(), height, camera);
-                        double r = Math.max(0.5, shape.getRadius() * zoom - inset);
-                        gc.fillOval(cx - r, cy - r, r * 2, r * 2);
-                    }
-                    case "rect" -> {
-                        double w = shape.getWidth() * zoom - 2 * inset;
-                        double h = shape.getHeight() * zoom - 2 * inset;
-                        if (w > 0 && h > 0) {
-                            gc.fillRect(worldToScreenX(shape.getX(), width, camera) + inset,
-                                    worldToScreenY(shape.getY(), height, camera) + inset, w, h);
-                        }
-                    }
-                    case "brush" -> drawBrushStroke(gc, shape, pattern, width, height, camera,
-                            Math.max(1, shape.getStrokeWidth() * zoom - 2 * inset));
-                    default -> {
-                    }
-                }
+                fillShapeInset(gc, shape, type, pattern, feather * pass / passes, width, height, camera);
+            }
+        }
+        if (chasm) {
+            // The shape is a hole: only a rim of broken earth remains at its edge and the rim breaks up into a
+            // black void towards the middle (inset passes whose combined alpha ramps from 0 at the edge to 1).
+            double rimWorld = switch (type) {
+                case "circle" -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * shape.getRadius());
+                case "rect" -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * Math.min(shape.getWidth(), shape.getHeight()));
+                default -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.45 * shape.getStrokeWidth());
+            };
+            double rim = rimWorld * zoom;
+            int voidPasses = Math.max(passes, 12);
+            double previous = 0;
+            for (int pass = 0; pass < voidPasses; pass++) {
+                double cumulative = Math.min(0.999, alpha * smooth((pass + 1.0) / voidPasses));
+                gc.setGlobalAlpha(1 - (1 - cumulative) / (1 - previous));
+                previous = cumulative;
+                fillShapeInset(gc, shape, type, Color.web("#050403"), rim * pass / voidPasses, width, height, camera);
             }
         }
         gc.restore();
+        drawShapeBorder(gc, shape, type, edge, width, height, camera);
+    }
+
+    private void drawShapeBorder(GraphicsContext gc, DmProject.OverlayShape shape, String type, Color edge, double width,
+                                 double height, DmProject.CameraState camera) {
+        double zoom = camera.getZoom();
         if (shape.isBorder()) {
             gc.save();
             gc.setStroke(edge);
@@ -435,6 +450,91 @@ public class CanvasMapRenderer {
         }
     }
 
+    private void fillShapeInset(GraphicsContext gc, DmProject.OverlayShape shape, String type, Paint paint, double inset,
+                                double width, double height, DmProject.CameraState camera) {
+        double zoom = camera.getZoom();
+        gc.setFill(paint);
+        switch (type) {
+            case "circle" -> {
+                double cx = worldToScreenX(shape.getX(), width, camera);
+                double cy = worldToScreenY(shape.getY(), height, camera);
+                double r = Math.max(0.5, shape.getRadius() * zoom - inset);
+                gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+            }
+            case "rect" -> {
+                double w = shape.getWidth() * zoom - 2 * inset;
+                double h = shape.getHeight() * zoom - 2 * inset;
+                if (w > 0 && h > 0) {
+                    gc.fillRect(worldToScreenX(shape.getX(), width, camera) + inset,
+                            worldToScreenY(shape.getY(), height, camera) + inset, w, h);
+                }
+            }
+            case "brush" -> drawBrushStroke(gc, shape, paint, width, height, camera,
+                    Math.max(1, shape.getStrokeWidth() * zoom - 2 * inset));
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * Draws a freehand chasm from the merged final area of the stroke: the area is clipped, filled with the black
+     * void, and the earth rim is painted as boundary strokes of decreasing width, so the void depends on the distance
+     * to the outline of the whole shape instead of on the path of the brush.
+     */
+    private void drawChasmBrush(GraphicsContext gc, DmProject.OverlayShape shape, ImagePattern earth, double rim,
+                                double alpha, double width, double height, DmProject.CameraState camera) {
+        BrushOutline outline = brushOutline(shape);
+        if (outline == null || outline.polygons().isEmpty()) {
+            return;
+        }
+        gc.beginPath();
+        for (double[] polygon : outline.polygons()) {
+            for (int i = 0; i + 1 < polygon.length; i += 2) {
+                double sx = worldToScreenX(polygon[i], width, camera);
+                double sy = worldToScreenY(polygon[i + 1], height, camera);
+                if (i == 0) {
+                    gc.moveTo(sx, sy);
+                } else {
+                    gc.lineTo(sx, sy);
+                }
+            }
+            gc.closePath();
+        }
+        gc.setFillRule(javafx.scene.shape.FillRule.EVEN_ODD);
+        gc.clip();
+        gc.setGlobalAlpha(alpha);
+        gc.setFill(Color.web("#050403"));
+        gc.fillRect(0, 0, width, height);
+
+        int passes = 12;
+        gc.setStroke(earth);
+        gc.setLineJoin(StrokeLineJoin.ROUND);
+        double previous = 0;
+        for (int pass = 0; pass < passes; pass++) {
+            double half = rim * (passes - pass) / passes;
+            double mid = rim * (passes - pass - 0.5) / passes;
+            double cumulative = Math.min(0.999, alpha * (1 - smooth(mid / rim)));
+            gc.setGlobalAlpha(1 - (1 - cumulative) / (1 - previous));
+            previous = cumulative;
+            gc.setLineWidth(2 * half);
+            for (double[] polygon : outline.polygons()) {
+                gc.beginPath();
+                for (int i = 0; i + 1 < polygon.length; i += 2) {
+                    double sx = worldToScreenX(polygon[i], width, camera);
+                    double sy = worldToScreenY(polygon[i + 1], height, camera);
+                    if (i == 0) {
+                        gc.moveTo(sx, sy);
+                    } else {
+                        gc.lineTo(sx, sy);
+                    }
+                }
+                gc.closePath();
+                gc.stroke();
+            }
+        }
+        gc.setLineJoin(StrokeLineJoin.MITER);
+    }
+
     private record BrushOutline(long key, List<double[]> polygons) {
     }
 
@@ -444,11 +544,10 @@ public class CanvasMapRenderer {
      * Outlines the final area covered by a freehand stroke: the stroked path is merged into one area (so movement
      * inside the stroke and self-crossings leave no lines) and only its boundary is drawn. Cached in world coordinates.
      */
-    private void strokeBrushOutline(GraphicsContext gc, DmProject.OverlayShape shape, double width, double height,
-                                    DmProject.CameraState camera) {
+    private BrushOutline brushOutline(DmProject.OverlayShape shape) {
         List<Double> points = shape.getPoints();
         if (points.size() < 2) {
-            return;
+            return null;
         }
         long key = points.size() * 31L + Double.doubleToLongBits(shape.getStrokeWidth())
                 + Double.doubleToLongBits(points.get(points.size() - 1)) * 17L;
@@ -457,6 +556,15 @@ public class CanvasMapRenderer {
         if (outline == null || outline.key() != key) {
             outline = new BrushOutline(key, computeBrushOutline(points, shape.getStrokeWidth()));
             brushOutlines.put(id, outline);
+        }
+        return outline;
+    }
+
+    private void strokeBrushOutline(GraphicsContext gc, DmProject.OverlayShape shape, double width, double height,
+                                    DmProject.CameraState camera) {
+        BrushOutline outline = brushOutline(shape);
+        if (outline == null) {
+            return;
         }
         for (double[] polygon : outline.polygons()) {
             gc.beginPath();

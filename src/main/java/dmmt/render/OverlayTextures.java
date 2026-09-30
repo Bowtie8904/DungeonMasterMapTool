@@ -40,6 +40,7 @@ public final class OverlayTextures {
     public static final String FORCE = "force";
     public static final String NECROTIC = "necrotic";
     public static final String PORTAL = "portal";
+    public static final String CHASM = "chasm";
 
     public static final int TILE_SIZE = 256;
 
@@ -115,7 +116,9 @@ public final class OverlayTextures {
         DEFINITIONS.put(NECROTIC, new Definition("Necrotic / shadow rot", "#5B2A86",
                 List.of(new Layer(0.014, -0.010, 1.0, 0.95, 0.25, 0.3), new Layer(-0.012, 0.008, 1.4, 0.75)), OverlayTextures::necrotic));
         DEFINITIONS.put(PORTAL, new Definition("Entropy / void / portal", "#8A4DFF",
-                List.of(new Layer(0.010, -0.008, 1.0, 0.95, 0.35, 0.5), new Layer(-0.012, 0.010, 0.6, 0.7, 0.5, 0.8)), OverlayTextures::portal));    }
+                List.of(new Layer(0.010, -0.008, 1.0, 0.95, 0.35, 0.5), new Layer(-0.012, 0.010, 0.6, 0.7, 0.5, 0.8)), OverlayTextures::portal));
+        DEFINITIONS.put(CHASM, new Definition("Chasm / broken earth", "#7A6248",
+                List.of(new Layer(0, 0, 1.0, 1.0)), OverlayTextures::chasm));    }
 
     public static final List<String> KINDS = List.copyOf(DEFINITIONS.keySet());
 
@@ -192,7 +195,7 @@ public final class OverlayTextures {
             case SMOKE, MIST -> 0.75;
             case FIRE -> 0.90;
             case WATER -> 0.55;
-            case LAVA, BLOOD, WEB, DARKNESS, RUBBLE -> 1.0;
+            case LAVA, BLOOD, WEB, DARKNESS, RUBBLE, CHASM -> 1.0;
             case ACID, GREASE, HOLY, ARCANE, FORCE -> 0.85;
             case LIGHTNING -> 0.9;
             case ICE, SAND, RADIATION -> 0.75;
@@ -554,11 +557,36 @@ public final class OverlayTextures {
 
     private static int blood(double u, double v, int rgb) {
         double n = fbm(u, v, 3, 3, 4, 89);
-        double pool = smoothstep(0.34, 0.40, n);
-        double edge = smoothstep(0.42, 0.62, n);
+        double pool = smoothstep(0.12, 0.19, n);
+        double edge = smoothstep(0.30, 0.50, n);
         int color = mix(mix(rgb, 0x000000, 0.5), rgb, edge);
         double sheen = smoothstep(0.55, 0.60, n) * smoothstep(0.7, 0.6, n);
         return withAlpha(pool, mix(color, mix(rgb, 0xFFFFFF, 0.5), sheen * 0.5));
+    }
+
+    /**
+     * Broken earth after a quake: warped cellular plates separated by irregular black cracks of varying width, with
+     * shaded plate edges, hairline cracks and grain. Everything is tileable noise, so the tile is seamless.
+     */
+    private static int chasm(double u, double v, int rgb) {
+        double wu = fract(u + 0.06 * (fbm(u, v, 3, 3, 3, 211) - 0.5));
+        double wv = fract(v + 0.06 * (fbm(u, v, 3, 3, 3, 223) - 0.5));
+        double[] w = worley(wu, wv, 4, 227);
+        double gap = w[1] - w[0];
+        double width = 0.05 + 0.13 * fbm(u, v, 4, 4, 2, 229);
+        if (gap < width * 0.55) {
+            double depth = fbm(u, v, 8, 8, 2, 233);
+            return withAlpha(1, mix(0x000000, mix(rgb, 0x000000, 0.9), depth * 0.5));
+        }
+        double plateTone = 0.8 + 0.3 * hash((int) w[4], 5, 239);
+        double grain = fbm(u, v, 16, 16, 3, 241);
+        int plate = mix(mix(rgb, 0x000000, 0.35), mix(rgb, 0xFFFFFF, 0.15), clamp(plateTone * (0.4 + 0.7 * grain) - 0.2, 0, 1));
+        // Shadowed lip where the plate drops into the crack, brighter on the far side of the rim.
+        double lip = smoothstep(width * 0.55, width * 1.4, gap);
+        int color = mix(mix(rgb, 0x000000, 0.8), plate, lip);
+        double[] fine = worley(wu, wv, 10, 251);
+        double hairline = smoothstep(0.03, 0.008, fine[1] - fine[0]) * smoothstep(0.35, 0.6, fbm(u, v, 6, 6, 2, 257)) * lip;
+        return withAlpha(1, mix(color, 0x000000, hairline * 0.7));
     }
 
     /**
