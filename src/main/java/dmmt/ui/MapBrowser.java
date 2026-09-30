@@ -66,6 +66,8 @@ public class MapBrowser extends VBox {
 
         void importMap(Path suggestedFolder);
 
+        void importMapFolder(Path suggestedFolder);
+
         void saveMap();
 
         void rotateMap(boolean clockwise);
@@ -135,8 +137,11 @@ public class MapBrowser extends VBox {
         HBox actions = new HBox(
                 Icons.button(MaterialDesignM.MAP_PLUS, "New empty map (drop images onto it to build a custom map)",
                         host::newMap),
-                Icons.button(MaterialDesignF.FILE_IMPORT_OUTLINE, "Import a .dd2vtt map (e.g. from Dungeon Alchemist)",
+                Icons.button(MaterialDesignF.FILE_IMPORT_OUTLINE,
+                        "Import one or more .dd2vtt maps (e.g. from Dungeon Alchemist)",
                         () -> host.importMap(selectedFolder())),
+                Icons.button(MaterialDesignF.FOLDER_DOWNLOAD_OUTLINE, "Import all maps from a folder",
+                        () -> host.importMapFolder(selectedFolder())),
                 Icons.button(MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save the open map (Ctrl+S)", host::saveMap));
         actions.getStyleClass().add("toolbar-row");
         this.actions = actions;
@@ -524,7 +529,9 @@ public class MapBrowser extends VBox {
         } else {
             menu.getItems().addAll(
                     item("New map here…", MaterialDesignM.MAP_PLUS, () -> host.newMapIn(target.path())),
-                    item("Import map here…", MaterialDesignF.FILE_IMPORT_OUTLINE, () -> host.importMap(target.path())),
+                    item("Import maps here…", MaterialDesignF.FILE_IMPORT_OUTLINE, () -> host.importMap(target.path())),
+                    item("Import folder here…", MaterialDesignF.FOLDER_DOWNLOAD_OUTLINE,
+                            () -> host.importMapFolder(target.path())),
                     item("New folder…", MaterialDesignF.FOLDER_PLUS_OUTLINE, () -> createFolder(target.path())));
             if (!isRoot(entry)) {
                 menu.getItems().addAll(

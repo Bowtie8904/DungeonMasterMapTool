@@ -8,6 +8,7 @@ import dmmt.render.CanvasMapRenderer;
 import dmmt.render.FrameProfiler;
 import dmmt.render.OverlayTextures;
 import dmmt.render.PerformanceMode;
+import dmmt.service.BatchImportService;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
@@ -81,6 +82,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -1422,6 +1424,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             @Override
+            public void importMapFolder(Path suggestedFolder) {
+                handleImportDd2vttFolder(suggestedFolder);
+            }
+
+            @Override
             public void saveMap() {
                 handleSave();
             }
@@ -2346,14 +2353,19 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void handleImportDd2vtt(Path suggestedFolder) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Select DD2VTT map");
+        chooser.setTitle("Select DD2VTT maps");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Universal VTT", "*.dd2vtt", "*.uvtt"));
         applyInitialImportDirectory(chooser);
-        File source = chooser.showOpenDialog(primaryStage);
-        if (source == null) {
+        List<File> selected = chooser.showOpenMultipleDialog(primaryStage);
+        if (selected == null || selected.isEmpty()) {
             return;
         }
-        rememberImportDirectory(source.toPath().getParent());
+        rememberImportDirectory(selected.get(0).toPath().getParent());
+        if (selected.size() > 1) {
+            importBatch(selected.stream().map(File::toPath).toList(), suggestedFolder);
+            return;
+        }
+        File source = selected.get(0);
 
         Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary,
                 "Import map", MaterialDesignF.FILE_IMPORT_OUTLINE, "Import",
@@ -2385,6 +2397,57 @@ public class DungeonMasterMapToolApplication extends Application {
             mapBrowser.select(loaded.file());
             status("Imported " + sourceName + " as " + MapBrowser.displayName(loaded.file()) + ".");
         }));
+    }
+
+    private void handleImportDd2vttFolder(Path suggestedFolder) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select a folder with DD2VTT maps");
+        applyInitialImportDirectory(chooser);
+        File folder = chooser.showDialog(primaryStage);
+        if (folder == null) {
+            return;
+        }
+        rememberImportDirectory(folder.toPath());
+        List<Path> maps;
+        try {
+            maps = BatchImportService.findMaps(folder.toPath());
+        } catch (IOException ex) {
+            status("Could not read the folder: " + ex.getMessage());
+            return;
+        }
+        if (maps.isEmpty()) {
+            Dialogs.error(primaryStage, "No maps found", "The folder \"" + folder.getName()
+                    + "\" (including its sub-folders) contains no .dd2vtt or .uvtt files.");
+            return;
+        }
+        importBatch(maps, suggestedFolder);
+    }
+
+    private void importBatch(List<Path> sources, Path suggestedFolder) {
+        Optional<Path> target = MapLocationDialog.showFolder(primaryStage, mapLibrary,
+                "Import " + sources.size() + " maps", MaterialDesignF.FILE_IMPORT_OUTLINE, "Import", suggestedFolder);
+        if (target.isEmpty()) {
+            return;
+        }
+        BatchImportService batch = new BatchImportService(mapLibrary, projectService, dd2vttImportService);
+        runInBackground("Importing " + sources.size() + " maps...", "Import failed: ", () -> batch.importAll(
+                sources, target.get(),
+                (index, total, name) -> Platform.runLater(() -> status("Importing " + index + "/" + total + ": " + name + "..."))),
+                result -> {
+                    mapBrowser.refresh();
+                    if (!result.imported().isEmpty()) {
+                        mapBrowser.select(result.imported().get(0));
+                    }
+                    status("Imported " + result.imported().size() + " of " + result.total() + " maps.");
+                    if (!result.failures().isEmpty()) {
+                        StringBuilder text = new StringBuilder();
+                        for (BatchImportService.Failure failure : result.failures()) {
+                            text.append(failure.source().getFileName()).append(": ").append(failure.reason()).append('\n');
+                        }
+                        Dialogs.error(primaryStage, result.failures().size() + " maps could not be imported",
+                                text.toString().trim());
+                    }
+                });
     }
 
     private void openMapFromLibrary(Path file) {
@@ -5263,14 +5326,20 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void applyInitialImportDirectory(FileChooser chooser) {
+        lastImportDirectory().ifPresent(chooser::setInitialDirectory);
+    }
+
+    private void applyInitialImportDirectory(DirectoryChooser chooser) {
+        lastImportDirectory().ifPresent(chooser::setInitialDirectory);
+    }
+
+    private Optional<File> lastImportDirectory() {
         String lastImportDirectory = preferences.get(PREF_LAST_IMPORT_DIRECTORY, null);
         if (lastImportDirectory == null || lastImportDirectory.isBlank()) {
-            return;
+            return Optional.empty();
         }
         File dir = Path.of(lastImportDirectory).toFile();
-        if (dir.exists() && dir.isDirectory()) {
-            chooser.setInitialDirectory(dir);
-        }
+        return dir.exists() && dir.isDirectory() ? Optional.of(dir) : Optional.empty();
     }
 
     private void rememberImportDirectory(Path directory) {

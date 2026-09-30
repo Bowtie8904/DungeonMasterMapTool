@@ -40,8 +40,21 @@ public final class MapLocationDialog {
 
     public static Optional<Selection> show(Window owner, MapLibraryService library, String title, Ikon ikon,
                                            String actionLabel, String initialName, Path initialFolder) {
+        return show(owner, library, title, ikon, actionLabel, initialName, initialFolder, true);
+    }
+
+    /** Folder-only variant (no name field) for batch imports. */
+    public static Optional<Path> showFolder(Window owner, MapLibraryService library, String title, Ikon ikon,
+                                            String actionLabel, Path initialFolder) {
+        return show(owner, library, title, ikon, actionLabel, null, initialFolder, false).map(Selection::folder);
+    }
+
+    private static Optional<Selection> show(Window owner, MapLibraryService library, String title, Ikon ikon,
+                                            String actionLabel, String initialName, Path initialFolder,
+                                            boolean askName) {
         Dialog<Selection> dialog = new Dialog<>();
-        Dialogs.style(dialog, owner, title, "Choose a name and a folder in your map library", ikon, false);
+        Dialogs.style(dialog, owner, title, askName ? "Choose a name and a folder in your map library"
+                : "Choose the folder in your map library to import the maps into", ikon, false);
 
         TextField nameField = new TextField(initialName == null ? "" : initialName);
         nameField.setPromptText("Map name");
@@ -77,8 +90,13 @@ public final class MapLocationDialog {
         Runnable updatePreview = () -> {
             Path folder = selectedFolder(tree, library);
             String relative = library.getRoot().relativize(folder).toString().replace('\\', '/');
+            String path = "Library/" + (relative.isEmpty() ? "" : relative + "/");
+            if (!askName) {
+                preview.setText("Imported into: " + path);
+                return;
+            }
             String name = nameField.getText().trim().isEmpty() ? "…" : nameField.getText().trim();
-            preview.setText("Saved as: Library/" + (relative.isEmpty() ? "" : relative + "/") + name);
+            preview.setText("Saved as: " + path + name);
         };
 
         Button newFolder = new Button("New folder", Icons.icon(MaterialDesignF.FOLDER_PLUS_OUTLINE));
@@ -107,7 +125,8 @@ public final class MapLocationDialog {
         HBox folderHeader = new HBox(8, folderLabel, spacer, newFolder);
         folderHeader.setStyle("-fx-alignment: bottom-left;");
 
-        VBox content = new VBox(6, nameLabel, nameField, new Region(), folderHeader, tree, preview, error);
+        VBox content = askName ? new VBox(6, nameLabel, nameField, new Region(), folderHeader, tree, preview, error)
+                : new VBox(6, folderHeader, tree, preview, error);
         content.setPrefWidth(420);
         dialog.getDialogPane().setContent(content);
 
@@ -115,6 +134,9 @@ public final class MapLocationDialog {
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, action);
         Button actionButton = (Button) dialog.getDialogPane().lookupButton(action);
         actionButton.addEventFilter(ActionEvent.ACTION, event -> {
+            if (!askName) {
+                return;
+            }
             try {
                 library.newMapFile(selectedFolder(tree, library), nameField.getText());
             } catch (IOException exception) {
@@ -139,16 +161,21 @@ public final class MapLocationDialog {
             if (buttonType != action) {
                 return null;
             }
+            if (!askName) {
+                return new Selection(selectedFolder(tree, library), null);
+            }
             try {
                 return new Selection(selectedFolder(tree, library), MapLibraryService.cleanName(nameField.getText()));
             } catch (IOException exception) {
                 return null;
             }
         });
-        Platform.runLater(() -> {
-            nameField.requestFocus();
-            nameField.selectAll();
-        });
+        if (askName) {
+            Platform.runLater(() -> {
+                nameField.requestFocus();
+                nameField.selectAll();
+            });
+        }
         return dialog.showAndWait();
     }
 
