@@ -338,6 +338,8 @@ public class CanvasMapRenderer {
                         strokeBrushOutline(gc, shape, width, height, camera);
                     }
                 }
+                case "pen" -> drawBrushStroke(gc, shape, edge, width, height, camera,
+                        Math.max(2, shape.getStrokeWidth() * zoom));
                 default -> {
                 }
             }

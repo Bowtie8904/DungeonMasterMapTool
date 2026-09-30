@@ -218,6 +218,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private double overlayStartX;
     private double overlayStartY;
     private boolean draggingOverlay;
+    private static final double PEN_WIDTH_CELLS = 0.06;
+    private boolean resizingOverlay;
     private DmProject.OverlayShape overlayDragBefore;
     private DmProject.OverlayShape overlayStyleBefore;
     private double overlayLastX;
@@ -502,17 +504,17 @@ public class DungeonMasterMapToolApplication extends Application {
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
             String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";
-            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description + exitHint);
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " â€” " + tool.description + exitHint);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
         }
 
         // Tools
-        pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) — click the map to flash a marker for the players");
+        pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) â€” click the map to flash a marker for the players");
         pingToggle.setOnAction(e -> setPingArmed(pingToggle.isSelected()));
         wallLayerToggle = Icons.toggle(MaterialDesignL.LAYERS_OUTLINE,
-                "Show / hide the wall layer (wall lines, doors and windows) in the DM view — lights stay visible");
+                "Show / hide the wall layer (wall lines, doors and windows) in the DM view â€” lights stay visible");
         wallLayerToggle.setSelected(renderer.isWallLayerVisible());
         wallLayerToggle.setOnAction(e -> setWallLayerVisible(wallLayerToggle.isSelected()));
         Region toolSpacer = new Region();
@@ -523,7 +525,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         // Fog of war
         fogToggleButton = Icons.toggle(MaterialDesignW.WEATHER_FOG,
-                "Fog of war on / off — revealed areas are remembered while fog is off");
+                "Fog of war on / off â€” revealed areas are remembered while fog is off");
         fogToggleButton.setOnAction(e -> {
             if (syncingControls) {
                 return;
@@ -623,7 +625,7 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayStyleBefore = null;
         });
         overlayPlayerToggle = Icons.toggle(MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
-                "Players see this effect — turn off for DM-only markings");
+                "Players see this effect â€” turn off for DM-only markings");
         overlayPlayerToggle.setSelected(overlayPlayerVisible);
         overlayPlayerToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -642,7 +644,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Region effectSpacer = new Region();
         HBox.setHgrow(effectSpacer, Priority.ALWAYS);
         HBox effectToolsRow = row(toolButtons.get(EditorTool.AOE_CIRCLE), toolButtons.get(EditorTool.AOE_RECT),
-                toolButtons.get(EditorTool.AOE_BRUSH), effectSpacer, deleteEffect, clearEffects);
+                toolButtons.get(EditorTool.AOE_BRUSH), toolButtons.get(EditorTool.AOE_PEN), effectSpacer, deleteEffect, clearEffects);
         HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
         overlayTextureBox = new ComboBox<>();
         overlayTextureBox.getItems().addAll(OverlayTextures.KINDS);
@@ -699,7 +701,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         overlayBorderToggle = Icons.toggle(MaterialDesignS.SQUARE_OUTLINE,
-                "Border around textured effects (off by default) — also changes the selected effect");
+                "Border around textured effects (off by default) â€” also changes the selected effect");
         overlayBorderToggle.setSelected(overlayBorder);
         overlayBorderToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -712,7 +714,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         overlayLightToggle = Icons.toggle(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
-                "Effect emits light in its color (visible when the map is dark) — also changes the selected effect. Defaults per texture are set in the settings file");
+                "Effect emits light in its color (visible when the map is dark) â€” also changes the selected effect. Defaults per texture are set in the settings file");
         overlayLightToggle.setSelected(overlayEmitsLight);
         overlayLightToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -742,7 +744,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         // Text
         textLayerToggle = Icons.toggle(MaterialDesignE.EYE_OUTLINE,
-                "Show / hide all text boxes (DM and player view) — text is drawn below the fog");
+                "Show / hide all text boxes (DM and player view) â€” text is drawn below the fog");
         textLayerToggle.setSelected(true);
         textLayerToggle.setOnAction(e -> {
             if (!syncingControls) {
@@ -768,7 +770,7 @@ public class DungeonMasterMapToolApplication extends Application {
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(6, 400, DmProject.DEFAULT_TEXT_SIZE, 2));
         textSizeSpinner.setEditable(true);
         textSizeSpinner.setPrefWidth(84);
-        Icons.tooltip(textSizeSpinner, "Font size — applies to the selected text while typing, or to new text; "
+        Icons.tooltip(textSizeSpinner, "Font size â€” applies to the selected text while typing, or to new text; "
                 + "with a text box selected it changes all of its text");
         textSizeSpinner.getEditor().focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
@@ -786,7 +788,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         textColorPicker = new ColorPicker(Color.web(DmProject.DEFAULT_TEXT_COLOR));
-        Icons.tooltip(textColorPicker, "Text color — applies to the selected text while typing, or to new text");
+        Icons.tooltip(textColorPicker, "Text color â€” applies to the selected text while typing, or to new text");
         textColorPicker.setOnAction(e -> {
             if (!syncingControls) {
                 applyTextColor(toHex(textColorPicker.getValue()));
@@ -827,7 +829,7 @@ public class DungeonMasterMapToolApplication extends Application {
             status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
         });
         imageLockToggle = Icons.toggle(MaterialDesignL.LOCK_OUTLINE,
-                "Lock / unlock the image layer — while locked, map images can't be selected, moved, resized or deleted "
+                "Lock / unlock the image layer â€” while locked, map images can't be selected, moved, resized or deleted "
                         + "(lights, doors and all other tools still work)");
         imageLockToggle.setOnAction(e -> {
             if (!syncingControls) {
@@ -852,7 +854,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         freezePlayerButton = Icons.toggle(MaterialDesignS.SNOWFLAKE,
-                "Freeze — players keep seeing the current view while you prepare or switch maps");
+                "Freeze â€” players keep seeing the current view while you prepare or switch maps");
         freezePlayerButton.setOnAction(e -> {
             setPlayerFrozen(freezePlayerButton.isSelected());
             status(freezePlayerButton.isSelected()
@@ -868,7 +870,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     : "Test square hidden.");
         });
         Button handoutButton = Icons.button(MaterialDesignI.IMAGE_FRAME,
-                "Handout — paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
+                "Handout â€” paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
         HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
 
         playerScreenSelector = new ComboBox<>();
@@ -1204,7 +1206,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (pingArmed) {
             toolChipIcon.setIconCode(MaterialDesignC.CROSSHAIRS_GPS);
-            toolChipLabel.setText("Ping — click the map");
+            toolChipLabel.setText("Ping â€” click the map");
             toolChip.setVisible(true);
         } else if (activeTool != EditorTool.SELECT) {
             toolChipIcon.setIconCode(activeTool.icon);
@@ -1235,7 +1237,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case SELECT -> Cursor.DEFAULT;
             case REVEAL_BRUSH -> Icons.cursor(MaterialDesignE.ERASER, 0.2, 0.82);
             case HIDE_BRUSH -> Icons.cursor(MaterialDesignB.BRUSH, 0.15, 0.85);
-            case AOE_BRUSH -> Icons.tipCursor(MaterialDesignD.DRAW, 0.0, 1.0);
+            case AOE_BRUSH -> Icons.tipCursor(MaterialDesignB.BRUSH, 0.0, 1.0);
+            case AOE_PEN -> Icons.tipCursor(MaterialDesignP.PEN, 0.0, 1.0);
             case TEXT -> Cursor.TEXT;
             case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
@@ -1260,7 +1263,7 @@ public class DungeonMasterMapToolApplication extends Application {
             cursor = Cursor.CLOSED_HAND;
         } else if (resizingTextHandle >= 0) {
             cursor = textResizeCursor(resizingTextHandle);
-        } else if (resizingLayer) {
+        } else if (resizingLayer || resizingOverlay) {
             cursor = Cursor.SE_RESIZE;
         } else if (pingArmed || activeTool != EditorTool.SELECT) {
             cursor = toolCursor();
@@ -1295,6 +1298,9 @@ public class DungeonMasterMapToolApplication extends Application {
             if (pickTextBox(worldX, worldY) != null) {
                 return Cursor.OPEN_HAND;
             }
+        }
+        if (isOnOverlayHandle(findOverlay(selectedOverlayId), worldX, worldY, zoom)) {
+            return Cursor.SE_RESIZE;
         }
         if (pickOverlay(worldX, worldY, zoom) != null) {
             return Cursor.OPEN_HAND;
@@ -1359,12 +1365,12 @@ public class DungeonMasterMapToolApplication extends Application {
             executeWithHistory("Rotate map right",
                     () -> rotationService.rotateClockwise(project),
                     () -> rotationService.rotateCounterClockwise(project));
-            status("Rotated map 90° clockwise.");
+            status("Rotated map 90Â° clockwise.");
         } else {
             executeWithHistory("Rotate map left",
                     () -> rotationService.rotateCounterClockwise(project),
                     () -> rotationService.rotateClockwise(project));
-            status("Rotated map 90° counter-clockwise.");
+            status("Rotated map 90Â° counter-clockwise.");
         }
     }
 
@@ -1472,7 +1478,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (activeTool == EditorTool.LIGHT_REMOVE) {
                 DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
                 if (hit == null) {
-                    status("No light there — click directly on the light you want to remove.");
+                    status("No light there â€” click directly on the light you want to remove.");
                     return;
                 }
                 removeLight(hit.getId());
@@ -1577,6 +1583,15 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             selectedTextId = null;
+
+            DmProject.OverlayShape handleOverlay = findOverlay(selectedOverlayId);
+            if (isOnOverlayHandle(handleOverlay, world.x(), world.y(), camera.getZoom())) {
+                selectedLayer = null;
+                selectedLight = null;
+                resizingOverlay = true;
+                overlayDragBefore = cloneOverlay(handleOverlay);
+                return;
+            }
 
             DmProject.OverlayShape hitOverlay = pickOverlay(world.x(), world.y(), camera.getZoom());
             if (hitOverlay != null) {
@@ -1705,6 +1720,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 overlayLastX = world.x();
                 overlayLastY = world.y();
+                return;
+            }
+
+            if (resizingOverlay) {
+                DmProject.OverlayShape resizing = findOverlay(selectedOverlayId);
+                if (resizing != null && overlayDragBefore != null) {
+                    resizeOverlay(resizing, overlayDragBefore, world.x(), world.y());
+                }
                 return;
             }
 
@@ -1841,6 +1864,16 @@ public class DungeonMasterMapToolApplication extends Application {
                     recordOverlayChange("Move effect", moved.getId(), overlayDragBefore, cloneOverlay(moved));
                 }
                 draggingOverlay = false;
+                overlayDragBefore = null;
+                return;
+            }
+
+            if (resizingOverlay) {
+                DmProject.OverlayShape resized = findOverlay(selectedOverlayId);
+                if (resized != null && overlayDragBefore != null && !overlayDragBefore.equals(resized)) {
+                    recordOverlayChange("Resize effect", resized.getId(), overlayDragBefore, cloneOverlay(resized));
+                }
+                resizingOverlay = false;
                 overlayDragBefore = null;
                 return;
             }
@@ -2052,6 +2085,7 @@ public class DungeonMasterMapToolApplication extends Application {
         pruneLaserTrail();
         drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), 6);
         drawSelectionHandle(fogGc);
+        updateEffectStyleControls();
         drawOverlaySelection(fogGc);
         drawTextSelection(fogGc);
         drawGroupSelection(fogGc);
@@ -2360,7 +2394,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean interactionInProgress() {
-        return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay
+        return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
                 || draggingText || resizingTextHandle >= 0 || draftText != null
                 || draggingPlayerViewport || panningDmCamera || draftWall != null || draftOverlay != null;
     }
@@ -2525,7 +2559,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void updateWindowTitle() {
         if (primaryStage != null) {
-            primaryStage.setTitle("Dungeon Master Map Tool — "
+            primaryStage.setTitle("Dungeon Master Map Tool â€” "
                     + (projectFile == null ? "Unsaved new map" : MapBrowser.displayName(projectFile)));
         }
     }
@@ -2727,7 +2761,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private String hoveredInteractableId() {
         if (!hoverInsideCanvas || pingArmed || activeTool != EditorTool.SELECT
-                || panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingPlayerViewport || resizingLayer) {
+                || panningDmCamera || draggingLight || draggingLayer || draggingOverlay || resizingOverlay || draggingPlayerViewport || resizingLayer) {
             return null;
         }
         DmProject.Interactable hovered = pickInteractableForClick(hoverWorldX, hoverWorldY);
@@ -2788,7 +2822,7 @@ public class DungeonMasterMapToolApplication extends Application {
             wallLayerToggle.setSelected(visible);
         }
         updateCanvasCursor();
-        status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden — doors and windows can't be clicked until it is shown again.");
+        status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden â€” doors and windows can't be clicked until it is shown again.");
     }
 
     private boolean isImageLayerLocked() {
@@ -2804,11 +2838,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         updateImageLockToggle();
         updateCanvasCursor();
-        status(locked ? "Image layer locked — map images can't be moved." : "Image layer unlocked — map images can be moved and resized with Select.");
+        status(locked ? "Image layer locked â€” map images can't be moved." : "Image layer unlocked â€” map images can be moved and resized with Select.");
     }
 
     private HBox createImageUnlockBanner() {
-        Label label = new Label("Image layer is unlocked — map images can be moved and resized.");
+        Label label = new Label("Image layer is unlocked â€” map images can be moved and resized.");
         label.getStyleClass().add("image-unlock-banner-label");
         Button lockButton = new Button("Lock", Icons.icon(MaterialDesignL.LOCK_OUTLINE));
         lockButton.setOnAction(e -> {
@@ -2886,6 +2920,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
+            case AOE_PEN -> status("Pen: draw a thin freehand line in the selected color.");
             case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it. Esc or right-click to exit.");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
@@ -3021,7 +3056,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         String verb = reveal ? "Revealed" : "Covered";
         status(room.leaked()
-                ? verb + " an area that is not closed off — check for gaps in the walls."
+                ? verb + " an area that is not closed off â€” check for gaps in the walls."
                 : verb + " the room.");
     }
 
@@ -3184,6 +3219,7 @@ public class DungeonMasterMapToolApplication extends Application {
         selectedOverlayId = null;
         draftOverlay = null;
         draggingOverlay = false;
+        resizingOverlay = false;
         selectedTextId = null;
         draftText = null;
         draggingText = false;
@@ -3547,22 +3583,24 @@ public class DungeonMasterMapToolApplication extends Application {
         String type = switch (activeTool) {
             case AOE_CIRCLE -> "circle";
             case AOE_RECT -> "rect";
+            case AOE_PEN -> "pen";
             default -> "brush";
         };
+        boolean pen = "pen".equals(type);
         DmProject.OverlayShape shape = DmProject.OverlayShape.builder()
                 .id("overlay-" + UUID.randomUUID())
                 .type(type)
                 .x(worldX)
                 .y(worldY)
-                .strokeWidth(brushSizeTiles * pixelsPerCell)
+                .strokeWidth(pen ? PEN_WIDTH_CELLS * pixelsPerCell : brushSizeTiles * pixelsPerCell)
                 .color(overlayColor)
                 .alpha(overlayAlpha)
                 .playerVisible(overlayPlayerVisible)
-                .texture(overlayTexture)
-                .border(overlayBorder)
-                .emitsLight(overlayEmitsLight)
+                .texture(pen ? OverlayTextures.NONE : overlayTexture)
+                .border(!pen && overlayBorder)
+                .emitsLight(!pen && overlayEmitsLight)
                 .build();
-        if ("brush".equals(type)) {
+        if (isStrokeOverlay(shape)) {
             shape.getPoints().add(worldX);
             shape.getPoints().add(worldY);
         }
@@ -3620,7 +3658,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 case "circle" -> distance(worldX, worldY, shape.getX(), shape.getY()) <= shape.getRadius();
                 case "rect" -> worldX >= shape.getX() && worldX <= shape.getX() + shape.getWidth()
                         && worldY >= shape.getY() && worldY <= shape.getY() + shape.getHeight();
-                case "brush" -> brushHit(shape, worldX, worldY, shape.getStrokeWidth() / 2.0 + tolerance);
+                case "brush", "pen" -> brushHit(shape, worldX, worldY, shape.getStrokeWidth() / 2.0 + tolerance);
                 default -> false;
             };
             if (hit) {
@@ -3643,6 +3681,105 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         }
         return false;
+    }
+
+    private static boolean isStrokeOverlay(DmProject.OverlayShape shape) {
+        return "brush".equals(shape.getType()) || "pen".equals(shape.getType());
+    }
+
+    /** Bounds {minX, minY, maxX, maxY} of the point path of a freehand/pen shape, without stroke padding. */
+    private static double[] pointBounds(DmProject.OverlayShape shape) {
+        List<Double> points = shape.getPoints();
+        double minX = Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double maxY = -Double.MAX_VALUE;
+        for (int i = 0; i + 1 < points.size(); i += 2) {
+            minX = Math.min(minX, points.get(i));
+            maxX = Math.max(maxX, points.get(i));
+            minY = Math.min(minY, points.get(i + 1));
+            maxY = Math.max(maxY, points.get(i + 1));
+        }
+        return new double[]{minX, minY, maxX, maxY};
+    }
+
+    /** World position of the resize handle: bottom-right corner of the shape's bounds, or null if it has none. */
+    private static double[] overlayHandle(DmProject.OverlayShape shape) {
+        if (shape == null) {
+            return null;
+        }
+        if ("circle".equals(shape.getType())) {
+            return new double[]{shape.getX() + shape.getRadius(), shape.getY() + shape.getRadius()};
+        }
+        if ("rect".equals(shape.getType())) {
+            return new double[]{shape.getX() + shape.getWidth(), shape.getY() + shape.getHeight()};
+        }
+        if (isStrokeOverlay(shape) && shape.getPoints().size() >= 2) {
+            double[] b = pointBounds(shape);
+            double pad = shape.getStrokeWidth() / 2.0;
+            return new double[]{b[2] + pad, b[3] + pad};
+        }
+        return null;
+    }
+
+    private boolean isOnOverlayHandle(DmProject.OverlayShape shape, double worldX, double worldY, double zoom) {
+        double[] handle = overlayHandle(shape);
+        return handle != null && distance(worldX, worldY, handle[0], handle[1]) < 12 / Math.max(0.01, zoom);
+    }
+
+    /** Stretches the shape so that its bottom-right handle follows the mouse; always derived from the state before the drag. */
+    private void resizeOverlay(DmProject.OverlayShape shape, DmProject.OverlayShape before, double worldX, double worldY) {
+        double min = 8;
+        switch (before.getType() == null ? "" : before.getType()) {
+            case "circle" -> shape.setRadius(Math.max(min / 2, ((worldX - before.getX()) + (worldY - before.getY())) / 2.0));
+            case "rect" -> {
+                shape.setWidth(Math.max(min, worldX - before.getX()));
+                shape.setHeight(Math.max(min, worldY - before.getY()));
+            }
+            default -> {
+                List<Double> original = before.getPoints();
+                if (original.size() < 2) {
+                    return;
+                }
+                double[] b = pointBounds(before);
+                double stroke = before.getStrokeWidth();
+                double extentX = b[2] - b[0];
+                double extentY = b[3] - b[1];
+                double boxW = extentX + stroke;
+                double boxH = extentY + stroke;
+                double left = b[0] - stroke / 2.0;
+                double top = b[1] - stroke / 2.0;
+                double factorX = Math.max(min, worldX - left) / boxW;
+                double factorY = Math.max(min, worldY - top) / boxH;
+                // Freehand blobs scale as a whole (stroke included) so they do not turn into rings; pen lines keep their width.
+                double newStroke = "pen".equals(before.getType()) ? stroke : stroke * (factorX + factorY) / 2.0;
+                double newExtentX = Math.max(0, boxW * factorX - newStroke);
+                double newExtentY = Math.max(0, boxH * factorY - newStroke);
+                double scaleX = extentX < 1 ? 1 : newExtentX / extentX;
+                double scaleY = extentY < 1 ? 1 : newExtentY / extentY;
+                double originX = left + newStroke / 2.0;
+                double originY = top + newStroke / 2.0;
+                shape.setStrokeWidth(newStroke);
+                List<Double> points = shape.getPoints();
+                for (int i = 0; i + 1 < original.size(); i += 2) {
+                    points.set(i, originX + (original.get(i) - b[0]) * scaleX);
+                    points.set(i + 1, originY + (original.get(i + 1) - b[1]) * scaleY);
+                }
+            }
+        }
+    }
+
+    /** The texture, border and light controls do not apply to pen lines; light also needs a light-emitting texture. */
+    private void updateEffectStyleControls() {
+        if (overlayTextureBox == null) {
+            return;
+        }
+        DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+        boolean pen = activeTool == EditorTool.AOE_PEN || selected != null && "pen".equals(selected.getType());
+        boolean noLight = pen || !OverlayTextures.defaultEmitsLight(overlayTexture);
+        overlayTextureBox.setDisable(pen);
+        overlayBorderToggle.setDisable(pen);
+        overlayLightToggle.setDisable(noLight);
     }
 
     private void translateOverlay(DmProject.OverlayShape shape, double dx, double dy) {
@@ -3753,6 +3890,16 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         }
         gc.setLineDashes((double[]) null);
+        double[] handle = overlayHandle(shape);
+        if (handle != null) {
+            double hx = renderer.worldToScreenX(handle[0], w, camera);
+            double hy = renderer.worldToScreenY(handle[1], h, camera);
+            gc.setFill(Color.YELLOW);
+            gc.fillRect(hx - 5, hy - 5, 10, 10);
+            gc.setStroke(Color.BLACK);
+            gc.setLineWidth(1);
+            gc.strokeRect(hx - 5, hy - 5, 10, 10);
+        }
     }
 
     private static String toHex(Color color) {
@@ -4079,7 +4226,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         updateTextEditorPlacement();
         syncTextStyleControls(textEditor.typingSize(), textEditor.typingColor());
-        status("Editing text — Esc or click outside to finish. Change size and color with the Text controls.");
+        status("Editing text â€” Esc or click outside to finish. Change size and color with the Text controls.");
     }
 
     /** Writes the editor content into its box, records one undo step, and closes the editor. */
@@ -4415,6 +4562,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean onSingleSelectionHandle(double worldX, double worldY, double zoom) {
         DmProject.TextBox text = project.isTextLayerVisible() ? findTextBox(selectedTextId) : null;
         if (text != null && pickTextHandle(text, worldX, worldY, zoom) >= 0) {
+            return true;
+        }
+        if (isOnOverlayHandle(findOverlay(selectedOverlayId), worldX, worldY, zoom)) {
             return true;
         }
         return selectedLayer != null && !isImageLayerLocked()
@@ -5281,7 +5431,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 MaterialDesignC.CIRCLE_OUTLINE, false, false),
         AOE_RECT("Box effect", "drag corner to corner to draw a rectangular spell area",
                 MaterialDesignS.SQUARE_OUTLINE, false, true),
-        AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignD.DRAW, false, false),
+        AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignB.BRUSH, false, false),
+        AOE_PEN("Pen", "draw a thin freehand line in the selected color (no texture, ignores brush size)",
+                MaterialDesignP.PEN, false, false),
         TEXT("Text box", "drag on the map to draw a text box and type; click a text box to edit it",
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
@@ -5309,7 +5461,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isAoeTool() {
-            return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH;
+            return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH || this == AOE_PEN;
         }
 
         boolean isWallTool() {
