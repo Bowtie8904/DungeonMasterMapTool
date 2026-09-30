@@ -272,6 +272,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton textAutoSizeToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
+    private static final double PLAYER_ZOOM_MIN_STEP = -2;
+    private static final double PLAYER_ZOOM_MAX_STEP = 2;
+    private static final double PLAYER_ZOOM_CURSOR_PULL = 0.4;
+    private Slider playerZoomSlider;
+    private Label playerZoomValue;
     private Label ambientBrightnessValue;
     /** Last committed ambient brightness of the current preset; the "before" value for undo. */
     private double ambientBrightnessCommitted;
@@ -1008,6 +1013,31 @@ public class DungeonMasterMapToolApplication extends Application {
         scaleGrid.addRow(0, mutedLabel("Screen diagonal (in)"), screenInchesSpinner);
         scaleGrid.addRow(1, mutedLabel("Tile size (in)"), tileInchesSpinner);
 
+        playerZoomSlider = new Slider(PLAYER_ZOOM_MIN_STEP, PLAYER_ZOOM_MAX_STEP, 0);
+        playerZoomSlider.setMajorTickUnit(0.05);
+        playerZoomSlider.setMinorTickCount(0);
+        playerZoomSlider.setSnapToTicks(true);
+        playerZoomSlider.setBlockIncrement(0.05);
+        playerZoomSlider.setPrefWidth(90);
+        HBox.setHgrow(playerZoomSlider, Priority.ALWAYS);
+        Icons.tooltip(playerZoomSlider, "Player view zoom for this map (saved with the map). 0 = calibrated tile size; "
+                + "lower zooms out, higher zooms in. Double-click to reset.");
+        playerZoomValue = new Label(formatPlayerZoom(0));
+        playerZoomValue.getStyleClass().add("value-label");
+        playerZoomSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            playerZoomValue.setText(formatPlayerZoom(newValue.doubleValue()));
+            if (!syncingControls) {
+                project.getViews().setPlayerZoomStep(newValue.doubleValue());
+            }
+        });
+        playerZoomSlider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                playerZoomSlider.setValue(0);
+            }
+        });
+        HBox playerZoomRow = row(Icons.icon(MaterialDesignM.MAGNIFY), playerZoomSlider, playerZoomValue);
+        HBox.setHgrow(playerZoomRow, Priority.ALWAYS);
+
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
@@ -1018,7 +1048,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         textToolsRow, textSizeRow, textBoxColorRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
                 new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
-                        playerRow, screenRow, scaleGrid),
+                        playerRow, screenRow, scaleGrid, playerZoomRow),
                 new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
                         frameRateGrid()));
 
@@ -1245,6 +1275,10 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
         return box;
+    }
+
+    private static String formatPlayerZoom(double step) {
+        return Math.round(Math.pow(2, step) * 100) + "%";
     }
 
     private static String formatAmbientBrightness(double brightness) {
@@ -1533,6 +1567,31 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnScroll(event -> {
+            if (event.isControlDown()) {
+                if (event.getDeltaY() != 0 && playerZoomSlider != null) {
+                    double delta = Math.log(1.1) / Math.log(2);
+                    double oldStep = playerZoomSlider.getValue();
+                    CanvasMapRenderer.WorldRect box = getPlayerViewportRect();
+                    CanvasMapRenderer.WorldPoint cursor = renderer.screenToWorld(
+                            event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(),
+                            project.getViews().getDmCamera());
+                    playerZoomSlider.setValue(oldStep + (event.getDeltaY() > 0 ? delta : -delta));
+                    double ratio = Math.pow(2, oldStep - playerZoomSlider.getValue());
+                    boolean inside = box != null && cursor.x() >= box.x() && cursor.x() <= box.x() + box.width()
+                            && cursor.y() >= box.y() && cursor.y() <= box.y() + box.height();
+                    if (inside) {
+                        // Keep the world point under the cursor at the same spot inside the box.
+                        DmProject.CameraState playerCamera = project.getViews().getPlayerCamera();
+                        double anchoredX = cursor.x() + (playerCamera.getX() - cursor.x()) * ratio;
+                        double anchoredY = cursor.y() + (playerCamera.getY() - cursor.y()) * ratio;
+                        // When zooming in, also pull the box centre towards the cursor so the target ends up centred.
+                        double pull = ratio < 1 ? PLAYER_ZOOM_CURSOR_PULL : 0;
+                        playerCamera.setX(anchoredX + (cursor.x() - anchoredX) * pull);
+                        playerCamera.setY(anchoredY + (cursor.y() - anchoredY) * pull);
+                    }
+                }
+                return;
+            }
             DmProject.CameraState camera = project.getViews().getDmCamera();
             double factor = event.getDeltaY() > 0 ? 1.1 : 0.9;
             double newZoom = clamp(camera.getZoom() * factor, 0.1, 6.0);
@@ -3470,6 +3529,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 // Day has no ambient darkness, so there is nothing to adjust.
                 ambientBrightnessSlider.setDisable(preset.darkness() <= 0);
             }
+            if (playerZoomSlider != null) {
+                playerZoomSlider.setValue(project.getViews().getPlayerZoomStep());
+            }
             if (freezePlayerButton != null) {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
@@ -3586,7 +3648,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void applyScaleTo(DmProject.CameraState camera, DmProject target, double ppi) {
         double cell = Math.max(1, target.getMap().getGrid().getPixelsPerCell());
-        double zoom = clamp(ppi * tileInchesSpinner.getValue() / cell, 0.05, 12);
+        double step = clamp(target.getViews().getPlayerZoomStep(), PLAYER_ZOOM_MIN_STEP, PLAYER_ZOOM_MAX_STEP);
+        double zoom = clamp(ppi * tileInchesSpinner.getValue() * Math.pow(2, step) / cell, 0.02, 48);
         if (Math.abs(camera.getZoom() - zoom) > 1e-4) {
             camera.setZoom(zoom);
         }

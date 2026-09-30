@@ -91,9 +91,7 @@ Desktop tool for tabletop dungeon masters that:
 - Borderless fullscreen mode.
 - Adjustable world-to-screen scale so each tile is approximately **1 inch** physical size.
 - Player window mirrors a movable camera rectangle controlled from DM view.
-- Freeze mode: player view remains fixed while DM prepares another map/view.
-- While frozen, DM can still move the player viewport rectangle; on unfreeze, player view immediately jumps to that staged rectangle.
-- Player view must stay visually clean: DM-only helper/debug geometry (wall guides, door/window state lines, viewport handles) is never rendered there.
+- **Player zoom slider** (Player view section): per-map, saved in `.dmmap` (`views.playerZoomStep`). 0 = calibrated tile size; the zoom factor is `2^step` (range -2..+2, i.e. 25%-400%). Negative zooms out, positive zooms in. The DM-view player viewport box always reflects the resulting zoom. Double-click resets to 0. **Ctrl + mouse wheel** over the DM view changes the player zoom (same 10% per notch as the plain wheel does for the DM view zoom). If the cursor is inside the player viewport box, the zoom is anchored on the cursor (the box moves so the point under the cursor keeps its place within the box); when zooming in, the box centre is additionally pulled towards the cursor so the target ends up centred after a few notches.- Freeze mode: player view remains fixed while DM prepares another map/view.- While frozen, DM can still move the player viewport rectangle; on unfreeze, player view immediately jumps to that staged rectangle.- Player view must stay visually clean: DM-only helper/debug geometry (wall guides, door/window state lines, viewport handles) is never rendered there.
 - **Wall layer (DM only):** all walls (imported dd2vtt walls and manually drawn walls) are drawn as red lines. A **wall layer toggle** next to the wall tools in the Map building section shows/hides the wall lines together with the door/window lines and icon badges (shown by default at startup, session-only). While hidden, doors/windows cannot be clicked; choosing a wall tool shows the layer again. Lights and light tokens are not part of the wall layer and are always shown.
 
 ## 3.4 Map Switching
@@ -601,6 +599,7 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
+- **v3.0:** Per-map player zoom slider (3.3).
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
 - **v2.8 (current):** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
 - **v2.7:** Per-map toggle to disable effect animations (3.8).

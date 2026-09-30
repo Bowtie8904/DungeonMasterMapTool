@@ -164,6 +164,9 @@ public class DmProject {
         private CameraState playerCamera = CameraState.builder().build();
         @Builder.Default
         private boolean playerFrozen = false;
+        /** Player zoom relative to the calibrated tile size, as a power of two (0 = calibrated). */
+        @Builder.Default
+        private double playerZoomStep = 0;
     }
 
     @Data
