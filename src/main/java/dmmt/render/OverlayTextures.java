@@ -243,7 +243,7 @@ public final class OverlayTextures {
             case FIRE -> 0.3;
             case LIGHTNING -> 0.6;
             case LAVA -> 0.12;
-            case ARCANE, PORTAL, RADIATION -> 0.1;
+            case ARCANE, PORTAL, RADIATION, FORCE -> 0.1;
             case HOLY -> 0.05;
             default -> 0;
         };
@@ -260,7 +260,7 @@ public final class OverlayTextures {
 
     private static boolean builtInEmits(String k) {
         return switch (k) {
-            case FIRE, LAVA, LIGHTNING, ARCANE, HOLY, RADIATION, PORTAL -> true;
+            case FIRE, LAVA, LIGHTNING, ARCANE, HOLY, RADIATION, PORTAL, FORCE -> true;
             default -> false;
         };
     }
@@ -270,7 +270,7 @@ public final class OverlayTextures {
             case FIRE -> 0.85;
             case LAVA -> 0.7;
             case LIGHTNING, HOLY -> 0.9;
-            case ARCANE, PORTAL -> 0.6;
+            case ARCANE, PORTAL, FORCE -> 0.6;
             default -> 0.5;
         };
     }
