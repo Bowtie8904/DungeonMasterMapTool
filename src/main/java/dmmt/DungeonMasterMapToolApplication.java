@@ -5446,10 +5446,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private record LightPreset(String label, double rangeTiles, String color, boolean flicker,
                                double flickerStrength, double flickerSpeed) {
-        static final LightPreset TORCH = new LightPreset("Torch", 8, "#FFB35C", true, 0.22, 1.4);
+        static final LightPreset TORCH = new LightPreset("Torch", 6, "#FFB35C", true, 0.22, 1.4);
         static final LightPreset CANDLE = new LightPreset("Candle", 2, "#FFD98A", true, 0.12, 2.5);
-        static final LightPreset LANTERN = new LightPreset("Lantern", 12, "#FFF4E0", true, 0.22, 1.4);
-        static final LightPreset CAMPFIRE = new LightPreset("Campfire", 16, "#FF8A3D", true, 0.35, 1.8);
+        static final LightPreset LANTERN = new LightPreset("Lantern", 8, "#FFF4E0", true, 0.22, 1.4);
+        static final LightPreset CAMPFIRE = new LightPreset("Campfire", 12, "#FF8A3D", true, 0.35, 1.8);
         static final LightPreset MAGIC = new LightPreset("Magic light", 12, "#CFE4FF", false, 0.0, 0.0);
 
         static LightPreset forTool(EditorTool tool) {
@@ -5649,10 +5649,10 @@ public class DungeonMasterMapToolApplication extends Application {
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
-        LIGHT_ADD("Add light", "click the map to place a torch (8 tiles, torch flicker)", MaterialDesignL.LIGHTBULB_ON_OUTLINE, false, false),
+        LIGHT_ADD("Add light", "click the map to place a torch (6 tiles, torch flicker)", MaterialDesignL.LIGHTBULB_ON, false, false),
         LIGHT_CANDLE("Candle", "click the map to place a candle (2 tiles)", MaterialDesignC.CANDLE, false, false),
-        LIGHT_LANTERN("Lantern", "click the map to place a lantern (12 tiles)", MaterialDesignL.LAMP, false, false),
-        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (16 tiles)", MaterialDesignC.CAMPFIRE, false, false),
+        LIGHT_LANTERN("Lantern", "click the map to place a lantern (8 tiles)", MaterialDesignL.LAMP, false, false),
+        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (12 tiles)", MaterialDesignC.CAMPFIRE, false, false),
         LIGHT_MAGIC("Magic light", "click the map to place a steady magical light (12 tiles)", MaterialDesignA.AUTO_FIX, false, false),
         LIGHT_REMOVE("Remove light", "click a light to remove it", MaterialDesignL.LIGHTBULB_OFF_OUTLINE, false, false);
 
