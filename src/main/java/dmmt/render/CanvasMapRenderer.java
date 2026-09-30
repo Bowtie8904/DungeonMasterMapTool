@@ -7,6 +7,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.lighting.VisibilityService;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.service.FogService;
 import dmmt.ui.Icons;
 import javafx.geometry.VPos;
 import javafx.scene.canvas.GraphicsContext;
@@ -39,6 +40,9 @@ import java.util.Objects;
 public class CanvasMapRenderer {
     /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
     private static final int LIGHT_MAP_SCALE = 4;
+    private static int lightMapScale() {
+        return PerformanceMode.isEnabled() ? PerformanceMode.LIGHT_MAP_SCALE : LIGHT_MAP_SCALE;
+    }
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
@@ -54,6 +58,11 @@ public class CanvasMapRenderer {
 
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
+
+    /** Effect textures and light flicker only move when the map allows it and performance mode is off. */
+    public static boolean animationsOn(DmProject project) {
+        return project.isEffectAnimations() && !PerformanceMode.isEnabled();
+    }
 
     public static void setAnimationFps(int fps) {
         animationFps = Math.max(1, fps);
@@ -76,6 +85,7 @@ public class CanvasMapRenderer {
     private FogMask fogImageMask;
     private long fogImageMaskVersion = -1;
     private long fogImageLiveVersion = -1;
+    private int fogImageFactor = 1;
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
     private boolean wallLayerVisible = true;
 
@@ -148,6 +158,7 @@ public class CanvasMapRenderer {
         long hash = 1125899906842597L;
         hash = 31 * hash + Double.hashCode(width);
         hash = 31 * hash + Double.hashCode(height);
+        hash = 31 * hash + (PerformanceMode.isEnabled() ? 1 : 0);
         if (project == null) {
             return hash;
         }
@@ -416,7 +427,7 @@ public class CanvasMapRenderer {
                                    String texture, Color base, Color edge, double visibility, double width, double height,
                                    DmProject.CameraState camera) {
         double zoom = camera.getZoom();
-        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
+        double seconds = animationsOn(project) ? System.nanoTime() / 1_000_000_000.0 : 0;
         double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
                 | (int) Math.round(base.getBlue() * 255);
@@ -875,8 +886,8 @@ public class CanvasMapRenderer {
         if (darkness < 0.01) {
             return;
         }
-        int bw = Math.max(1, (int) Math.ceil(width / LIGHT_MAP_SCALE));
-        int bh = Math.max(1, (int) Math.ceil(height / LIGHT_MAP_SCALE));
+        int bw = Math.max(1, (int) Math.ceil(width / lightMapScale()));
+        int bh = Math.max(1, (int) Math.ceil(height / lightMapScale()));
         LightBuffer buffer = playerMode ? playerLightBuffer : dmLightBuffer;
         buffer.ensureSize(bw, bh);
 
@@ -888,6 +899,7 @@ public class CanvasMapRenderer {
         // Rasterising the light map is the expensive part, so it is redone only when one of its inputs changed.
         long key = 1125899906842597L;
         key = 31 * key + Double.hashCode(darkness);
+        key = 31 * key + lightMapScale();
         key = 31 * key + Double.hashCode(lightTint);
         key = 31 * key + preset.name().hashCode();
         key = 31 * key + Double.hashCode(ambientBrightness);
@@ -901,7 +913,7 @@ public class CanvasMapRenderer {
             if (!relevant) {
                 continue;
             }
-            flickers[li] = project.isEffectAnimations() ? LightFlicker.amount(light, now) : 0;
+            flickers[li] = animationsOn(project) ? LightFlicker.amount(light, now) : 0;
             key = 31 * key + Double.hashCode(flickers[li]);
             key = 31 * key + Double.hashCode(light.getRange());
             key = 31 * key + Double.hashCode(light.getIntensity());
@@ -914,7 +926,7 @@ public class CanvasMapRenderer {
             if (shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())
                     && (!playerMode || shape.isPlayerVisible())) {
                 String texture = OverlayTextures.normalize(shape.getTexture());
-                double flicker = project.isEffectAnimations()
+                double flicker = animationsOn(project)
                         ? LightFlicker.amount(shape.getId(), OverlayTextures.lightFlicker(texture),
                         OverlayTextures.lightFlickerSpeed(texture), now)
                         : 0;
@@ -926,7 +938,7 @@ public class CanvasMapRenderer {
         }
         if (buffer.valid && buffer.key == key) {
             gc.setImageSmoothing(true);
-            gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
+            gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
             return;
         }
         buffer.key = key;
@@ -941,12 +953,12 @@ public class CanvasMapRenderer {
                 continue;
             }
             double flicker = flickers[li];
-            double radius = light.getRange() * zoom * (1.0 - 0.25 * flicker) / LIGHT_MAP_SCALE;
+            double radius = light.getRange() * zoom * (1.0 - 0.25 * flicker) / lightMapScale();
             if (radius < 0.5) {
                 continue;
             }
-            double lx = worldToScreenX(light.getX(), width, camera) / LIGHT_MAP_SCALE;
-            double ly = worldToScreenY(light.getY(), height, camera) / LIGHT_MAP_SCALE;
+            double lx = worldToScreenX(light.getX(), width, camera) / lightMapScale();
+            double ly = worldToScreenY(light.getY(), height, camera) / lightMapScale();
             if (lx + radius < 0 || ly + radius < 0 || lx - radius > bw || ly - radius > bh) {
                 continue;
             }
@@ -955,8 +967,8 @@ public class CanvasMapRenderer {
             double[] xs = new double[polygon.size()];
             double[] ys = new double[polygon.size()];
             for (int i = 0; i < xs.length; i++) {
-                xs[i] = worldToScreenX(polygon.xs()[i], width, camera) / LIGHT_MAP_SCALE;
-                ys[i] = worldToScreenY(polygon.ys()[i], height, camera) / LIGHT_MAP_SCALE;
+                xs[i] = worldToScreenX(polygon.xs()[i], width, camera) / lightMapScale();
+                ys[i] = worldToScreenY(polygon.ys()[i], height, camera) / lightMapScale();
             }
             final int lightIndex = li;
             final float[] lit = buffer.lit;
@@ -1013,7 +1025,7 @@ public class CanvasMapRenderer {
         }
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         gc.setImageSmoothing(true);
-        gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
+        gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
     }
 
     private static long shapeLightKey(DmProject.OverlayShape shape) {
@@ -1039,7 +1051,7 @@ public class CanvasMapRenderer {
                                 double flicker, int bw, int bh, double width, double height, DmProject.CameraState camera) {
         String texture = OverlayTextures.normalize(shape.getTexture());
         double strength = OverlayTextures.lightStrength(texture) * (1.0 - 0.6 * flicker);
-        double scale = camera.getZoom() / LIGHT_MAP_SCALE;
+        double scale = camera.getZoom() / lightMapScale();
         double glow = Math.max(0.001, OverlayTextures.lightRangeCells(texture) * ppc * scale * (1.0 - 0.25 * flicker));
         if (strength <= 0) {
             return;
@@ -1054,8 +1066,8 @@ public class CanvasMapRenderer {
         double inner = 0;
         switch (type) {
             case "circle" -> {
-                double cx = worldToScreenX(shape.getX(), width, camera) / LIGHT_MAP_SCALE;
-                double cy = worldToScreenY(shape.getY(), height, camera) / LIGHT_MAP_SCALE;
+                double cx = worldToScreenX(shape.getX(), width, camera) / lightMapScale();
+                double cy = worldToScreenY(shape.getY(), height, camera) / lightMapScale();
                 double r = shape.getRadius() * scale;
                 x0 = cx - r;
                 x1 = cx + r;
@@ -1066,8 +1078,8 @@ public class CanvasMapRenderer {
                 inner = r;
             }
             case "rect" -> {
-                x0 = worldToScreenX(shape.getX(), width, camera) / LIGHT_MAP_SCALE;
-                y0 = worldToScreenY(shape.getY(), height, camera) / LIGHT_MAP_SCALE;
+                x0 = worldToScreenX(shape.getX(), width, camera) / lightMapScale();
+                y0 = worldToScreenY(shape.getY(), height, camera) / lightMapScale();
                 x1 = x0 + shape.getWidth() * scale;
                 y1 = y0 + shape.getHeight() * scale;
             }
@@ -1083,8 +1095,8 @@ public class CanvasMapRenderer {
                 py = new double[count];
                 for (int i = 0; i < count; i++) {
                     int src = Math.min(n - 1, i * step);
-                    px[i] = worldToScreenX(points.get(2 * src), width, camera) / LIGHT_MAP_SCALE;
-                    py[i] = worldToScreenY(points.get(2 * src + 1), height, camera) / LIGHT_MAP_SCALE;
+                    px[i] = worldToScreenX(points.get(2 * src), width, camera) / lightMapScale();
+                    py[i] = worldToScreenY(points.get(2 * src + 1), height, camera) / lightMapScale();
                 }
                 inner = Math.max(0.5, shape.getStrokeWidth() * scale / 2);
                 x0 = Double.MAX_VALUE;
@@ -1385,7 +1397,9 @@ public class CanvasMapRenderer {
         fillClamped(gc, 0, sy, sx, sh);
         fillClamped(gc, sx + sw, sy, width - (sx + sw), sh);
         gc.setImageSmoothing(true);
-        gc.drawImage(fogImage, sx, sy, sw, sh);
+        int factor = fogImageFactor;
+        gc.drawImage(fogImage, 0, 0, Math.min(fogImage.getWidth(), (double) mask.getCols() / factor),
+                Math.min(fogImage.getHeight(), (double) mask.getRows() / factor), sx, sy, sw, sh);
         gc.restore();
     }
 
@@ -1395,35 +1409,62 @@ public class CanvasMapRenderer {
         }
     }
 
-    /** Rebuilds the world-space fog image only when the mask or live light reveals changed. */
+    /** Fog cells merged per fog image pixel; performance mode draws the fog at the lowest fog resolution. */
+    private static int fogDownsample() {
+        return PerformanceMode.isEnabled()
+                ? Math.max(1, FogService.getCellsPerGrid() / FogService.MIN_CELLS_PER_GRID)
+                : 1;
+    }
+
+    /** Rebuilds the world-space fog image only when the mask, live light reveals or the fog detail changed. */
     private void refreshFogImage(FogMask mask) {
         long liveVersion = lightingEngine.getLiveRevealVersion();
+        int factor = fogDownsample();
+        int cols = mask.getCols();
+        int rows = mask.getRows();
+        int imgCols = (cols + factor - 1) / factor;
+        int imgRows = (rows + factor - 1) / factor;
         if (fogImage != null
                 && fogImageMask == mask
                 && fogImageMaskVersion == mask.getVersion()
                 && fogImageLiveVersion == liveVersion
-                && (int) fogImage.getWidth() == mask.getCols()
-                && (int) fogImage.getHeight() == mask.getRows()) {
+                && fogImageFactor == factor
+                && (int) fogImage.getWidth() == imgCols
+                && (int) fogImage.getHeight() == imgRows) {
             return;
         }
-        int cols = mask.getCols();
-        int rows = mask.getRows();
-        if (fogImage == null || (int) fogImage.getWidth() != cols || (int) fogImage.getHeight() != rows) {
-            fogImage = new WritableImage(cols, rows);
+        if (fogImage == null || (int) fogImage.getWidth() != imgCols || (int) fogImage.getHeight() != imgRows) {
+            fogImage = new WritableImage(imgCols, imgRows);
         }
         BitSet revealed = mask.copyBits();
         revealed.or(lightingEngine.getLiveReveal());
-        int[] pixels = new int[cols * rows];
+        int[] pixels = new int[imgCols * imgRows];
         Arrays.fill(pixels, 0xFF000000);
-        for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < pixels.length; idx = revealed.nextSetBit(idx + 1)) {
-            pixels[idx] = 0;
+        if (factor == 1) {
+            for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < pixels.length; idx = revealed.nextSetBit(idx + 1)) {
+                pixels[idx] = 0;
+            }
+        } else {
+            int[] counts = new int[pixels.length];
+            for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < cols * rows; idx = revealed.nextSetBit(idx + 1)) {
+                counts[(idx / cols / factor) * imgCols + (idx % cols) / factor]++;
+            }
+            for (int r = 0; r < imgRows; r++) {
+                int blockRows = Math.min(factor, rows - r * factor);
+                for (int c = 0; c < imgCols; c++) {
+                    int blockCells = blockRows * Math.min(factor, cols - c * factor);
+                    if (counts[r * imgCols + c] * 2 >= blockCells) {
+                        pixels[r * imgCols + c] = 0;
+                    }
+                }
+            }
         }
-        fogImage.getPixelWriter().setPixels(0, 0, cols, rows, PixelFormat.getIntArgbInstance(), pixels, 0, cols);
+        fogImage.getPixelWriter().setPixels(0, 0, imgCols, imgRows, PixelFormat.getIntArgbInstance(), pixels, 0, imgCols);
         fogImageMask = mask;
         fogImageMaskVersion = mask.getVersion();
         fogImageLiveVersion = liveVersion;
+        fogImageFactor = factor;
     }
-
     private void drawViewportRect(GraphicsContext gc, WorldRect rect, double width, double height, DmProject.CameraState camera) {
         double x = worldToScreenX(rect.x(), width, camera);
         double y = worldToScreenY(rect.y(), height, camera);

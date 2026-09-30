@@ -318,6 +318,9 @@ public final class ImagePyramidStore {
             int level = screenPixelsPerSourcePixel >= 1.0
                     ? 0
                     : (int) Math.floor(Math.log(1.0 / screenPixelsPerSourcePixel) / Math.log(2));
+            if (PerformanceMode.isEnabled()) {
+                level += PerformanceMode.IMAGE_LEVEL_BIAS;
+            }
             if (level >= meta.overviewLevel()) {
                 return true;
             }

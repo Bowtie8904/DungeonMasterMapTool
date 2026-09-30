@@ -41,6 +41,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Performance pass (idle throttle: ~10 fps when no active lights and no input for 1s) (render throttling)
 - [x] Configurable frame rates (Performance sidebar section + `render.targetFps` 60 / `render.animationFps` 30 / `render.idleFps` 10 in the settings file); the light map is cached and only rasterised when its inputs change; light flicker time advances at the animation fps only; lights whose range does not touch the screen are skipped
 - [x] Separate base canvas (background, grid, map images) below the animated canvas in DM and player view; only redrawn on camera/layer/size changes or when image tiles finish loading
+- [x] Performance mode toggle (bottom-left of the status bar, default off, persisted as `ui.performanceMode` in the settings): a temporary in-memory override (`dmmt.render.PerformanceMode`) that never modifies project data or other settings and reverts fully when switched off. While on: the light map is rasterised at 1/8 instead of 1/4 resolution, effect textures and light/emitter flicker are frozen, the render loop always runs at the idle FPS (never above it, even while interacting), map images use tiles one pyramid level coarser, and soft texture edges use at most 2 feather passes. The fog image is drawn at the lowest fog sharpness (5 cells per tile) by merging mask cells, without touching the saved fog mask or the fog sharpness setting. Visibility polygons are unchanged because they drive gameplay (reveal while lit)
 - [x] One-click room reveal bounded by walls/doors/windows (3.17)
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)
@@ -580,6 +581,7 @@ Desktop tool for tabletop dungeon masters that:
 - **v1.7:** Implemented 3.15 and 3.16 (Phase 6 complete).
 - **v1.6:** Added map browser sidebar (3.15), modern DM controls overlay and visual design (3.16), Phase 6. Map switcher dropdown and system file dialogs for open/save replaced by the library.
 - **v1.5:** Async file IO; removed per-layer rotation and hand-drawn doors from scope; dirty-rect redraw replaced by idle throttling.
+- **v1.5:** Performance mode toggle (temporary override, persisted on/off state).
 - **v1.4:** Full-plan audit. Fixed: player window now uses full monitor bounds (covers taskbar), light Brightness menu (intensity), layer Snap toggle, spec corrections (Java 17, freeze not saved). 
 - **v1.3:** Wall editing tools (draw/erase segments; light LOS updates automatically via geometry signature).
 - **v1.2:** Render loop throttles to ~10 fps when idle (no enabled lights, no input for 1 s).

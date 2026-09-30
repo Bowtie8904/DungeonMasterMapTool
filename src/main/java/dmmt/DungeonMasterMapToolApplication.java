@@ -6,6 +6,7 @@ import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.render.CanvasMapRenderer;
 import dmmt.render.OverlayTextures;
+import dmmt.render.PerformanceMode;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
@@ -116,6 +117,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final int DEFAULT_FPS_ANIMATION = 30;
     private static final int DEFAULT_FPS_IDLE = 10;
     private static final String PREF_SIDEBAR_VISIBLE = "ui.sidebarVisible";
+    private static final String PREF_PERFORMANCE_MODE = "ui.performanceMode";
     private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
     private static final String PREF_LIGHT_TINT = "lighting.tint";
@@ -382,7 +384,17 @@ public class DungeonMasterMapToolApplication extends Application {
         if (!sidebarToggle.isSelected()) {
             root.setLeft(null);
         }
-        HBox statusBar = new HBox(sidebarToggle, statusLabel);
+        ToggleButton performanceToggle = Icons.toggle(MaterialDesignS.SPEEDOMETER,
+                "Performance mode — temporarily lowers shadow quality, map image detail and soft edges, freezes animations and flicker, "
+                        + "and never renders faster than the idle FPS. Your settings and maps are not changed.");
+        performanceToggle.setSelected(preferences.getBoolean(PREF_PERFORMANCE_MODE, false));
+        PerformanceMode.setEnabled(performanceToggle.isSelected());
+        performanceToggle.selectedProperty().addListener((obs, was, on) -> {
+            PerformanceMode.setEnabled(on);
+            preferences.putBoolean(PREF_PERFORMANCE_MODE, on);
+            status(on ? "Performance mode on." : "Performance mode off.");
+        });
+        HBox statusBar = new HBox(sidebarToggle, performanceToggle, statusLabel);
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
 
@@ -479,7 +491,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
-                int fps = recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
+                int fps = PerformanceMode.isEnabled() ? idleFps
+                        : recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
                 // 10% slack so vsync jitter does not push a frame to the next tick.
                 long minInterval = (long) (900_000_000L / fps);
                 if (now - lastFrameNanos < minInterval) {
@@ -976,8 +989,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** A brush size slider; all brush sliders share one value. */
     private HBox brushSlider() {
-        Slider slider = new Slider(0.5, 8, brushSize.get());
-        slider.setMajorTickUnit(0.5);
+        Slider slider = new Slider(0.2, 8, brushSize.get());
+        slider.setMajorTickUnit(0.2);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
         slider.valueProperty().bindBidirectional(brushSize);
@@ -2173,7 +2186,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** True when the map has flickering lights or moving effect textures and animations are enabled. */
     private static boolean hasAnimation(DmProject candidate) {
-        if (!candidate.isEffectAnimations()) {
+        if (!CanvasMapRenderer.animationsOn(candidate)) {
             return false;
         }
         return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture())

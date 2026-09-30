@@ -306,7 +306,7 @@ public final class OverlayTextures {
     }
 
     public static int featherPasses() {
-        return featherPasses;
+        return PerformanceMode.isEnabled() ? Math.min(featherPasses, PerformanceMode.MAX_FEATHER_PASSES) : featherPasses;
     }
 
     /** Built-in values of every configurable setting, keyed by settings-file key, in file order. */
