@@ -3046,7 +3046,52 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
+    private void drawOverlaySizeLabel(GraphicsContext gc) {
+        DmProject.OverlayShape shape = draftOverlay;
+        boolean circle = "circle".equals(shape.getType());
+        if (!circle && !"rect".equals(shape.getType())) {
+            return;
+        }
+        DmProject.CameraState cam = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double cell = project.getMap().getGrid().getPixelsPerCell();
+        double cx;
+        double cy;
+        String text;
+        if (circle) {
+            cx = renderer.worldToScreenX(shape.getX(), w, cam);
+            cy = renderer.worldToScreenY(shape.getY(), h, cam);
+            text = formatTiles(shape.getRadius() / cell);
+        } else {
+            cx = renderer.worldToScreenX(shape.getX() + shape.getWidth() / 2.0, w, cam);
+            cy = renderer.worldToScreenY(shape.getY() + shape.getHeight() / 2.0, h, cam);
+            text = formatTiles(shape.getWidth() / cell) + " x " + formatTiles(shape.getHeight() / cell);
+        }
+        javafx.scene.text.Text measure = new javafx.scene.text.Text(text);
+        measure.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 16));
+        double tw = measure.getLayoutBounds().getWidth();
+        double th = measure.getLayoutBounds().getHeight();
+        gc.setFill(Color.web("#000000", 0.65));
+        gc.fillRoundRect(cx - tw / 2 - 8, cy - th / 2 - 4, tw + 16, th + 8, 8, 8);
+        gc.setFont(measure.getFont());
+        gc.setFill(Color.WHITE);
+        gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
+        gc.setTextBaseline(javafx.geometry.VPos.CENTER);
+        gc.fillText(text, cx, cy);
+        gc.setTextAlign(javafx.scene.text.TextAlignment.LEFT);
+        gc.setTextBaseline(javafx.geometry.VPos.BASELINE);
+    }
+
+    private static String formatTiles(double tiles) {
+        double rounded = Math.round(tiles * 10.0) / 10.0;
+        return rounded == Math.floor(rounded) ? String.valueOf((long) rounded) : String.valueOf(rounded);
+    }
+
     private void drawToolPreview(GraphicsContext gc) {
+        if (draftOverlay != null) {
+            drawOverlaySizeLabel(gc);
+        }
         if (draftWall != null) {
             DmProject.CameraState wallCamera = project.getViews().getDmCamera();
             double ww = dmFogCanvas.getWidth();

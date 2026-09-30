@@ -146,6 +146,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Draw circles/rectangles/free brush overlays (tools **Circle**, **Box**, **Draw** in the *Effects* section of the DM controls).
   - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider; a dashed brush-size outline follows the cursor (like the fog brush).
+  - While dragging, a live size label is shown at the shape's center in the DM view only, in grid tiles (circle: radius, e.g. `2.5`; box: `width x height`, e.g. `3 x 2`). One tile equals the configured tile size on the player screen (1 tile = 1 inch by default), so radius `1` is a 1-inch radius.
 - Adjustable color (color picker) and opacity (0.1-1.0); the current style applies to new shapes, and to the selected shape if there is one.
 - Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed/dimmed).
 - Shapes are drawn above map and lighting but below fog, so fog still conceals them.
