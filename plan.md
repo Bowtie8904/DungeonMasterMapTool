@@ -145,7 +145,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 3.8 Tactical/AOE Overlays
 
 - Draw circles/rectangles/free brush overlays (tools **Circle**, **Box**, **Draw** in the *Effects* section of the DM controls).
-  - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider.
+  - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider; a dashed brush-size outline follows the cursor (like the fog brush).
 - Adjustable color (color picker) and opacity (0.1-1.0); the current style applies to new shapes, and to the selected shape if there is one.
 - Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed/dimmed).
 - Shapes are drawn above map and lighting but below fog, so fog still conceals them.

@@ -3056,6 +3056,18 @@ public class DungeonMasterMapToolApplication extends Application {
             gc.strokeLine(renderer.worldToScreenX(draftWall.getX1(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY1(), wh, wallCamera),
                     renderer.worldToScreenX(draftWall.getX2(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY2(), wh, wallCamera));
         }
+        if (activeTool == EditorTool.AOE_BRUSH && hoverInsideCanvas) {
+            DmProject.CameraState brushCamera = project.getViews().getDmCamera();
+            double bcx = renderer.worldToScreenX(hoverWorldX, dmFogCanvas.getWidth(), brushCamera);
+            double bcy = renderer.worldToScreenY(hoverWorldY, dmFogCanvas.getHeight(), brushCamera);
+            double br = brushRadiusWorld() * brushCamera.getZoom();
+            gc.setStroke(Color.web("#FFFFFF", 0.9));
+            gc.setLineWidth(1.5);
+            gc.setLineDashes(6, 4);
+            gc.strokeOval(bcx - br, bcy - br, br * 2, br * 2);
+            gc.setLineDashes((double[]) null);
+            return;
+        }
         if (!activeTool.isFogTool()) {
             return;
         }
