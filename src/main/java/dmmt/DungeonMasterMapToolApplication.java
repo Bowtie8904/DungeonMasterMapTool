@@ -495,7 +495,20 @@ public class DungeonMasterMapToolApplication extends Application {
         autoSaveTicker.setCycleCount(javafx.animation.Animation.INDEFINITE);
         autoSaveTicker.play();
 
-        scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> lastInputNanos = System.nanoTime());
+        scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> {
+            // In performance mode plain hovering with the select tool is not interaction and must not raise the frame rate.
+            boolean hoverOnly = e instanceof javafx.scene.input.MouseEvent me && !me.isPrimaryButtonDown()
+                    && !me.isSecondaryButtonDown() && !me.isMiddleButtonDown()
+                    && (me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_MOVED
+                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED
+                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED
+                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED_TARGET
+                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED_TARGET);
+            if (hoverOnly && PerformanceMode.isEnabled() && activeTool == EditorTool.SELECT && !pingArmed) {
+                return;
+            }
+            lastInputNanos = System.nanoTime();
+        });
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
