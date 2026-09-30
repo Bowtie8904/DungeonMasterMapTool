@@ -559,6 +559,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         Runtime rt = Runtime.getRuntime();
         long usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+        long allocatedMb = rt.totalMemory() / (1024 * 1024);
         double frames = metricsFrames;
         List<Map.Entry<String, Long>> sections = metricsSectionNanos.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed()).toList();
@@ -573,10 +574,10 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         }
         detail.append("\n\n'player total' includes the player parts listed above it. 'base redraw' only appears when the map image layer had to be redrawn.");
-        metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms (max %.1f) | %d MB | %s",
+        metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms (max %.1f)         | %d/%d MB | %s",
                 metricsFrames * 1e9 / elapsed, targetFramesPerSecond,
-                metricsNanosSum / 1e6 / metricsFrames, metricsNanosMax / 1e6, usedMb, top));
-        metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | memory in use | slowest parts\n\n" + detail);
+                        metricsNanosSum / 1e6 / metricsFrames, metricsNanosMax / 1e6, usedMb, allocatedMb, top));
+                metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | heap in use/allocated | slowest parts\n\n" + detail);
         metricsSectionNanos.clear();
         metricsWindowStart = nowNanos;
         metricsFrames = 0;
