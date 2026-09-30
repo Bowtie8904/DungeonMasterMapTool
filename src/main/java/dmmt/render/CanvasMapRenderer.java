@@ -322,7 +322,13 @@ public class CanvasMapRenderer {
                     gc.fillRect(sx, sy, shape.getWidth() * zoom, shape.getHeight() * zoom);
                     gc.strokeRect(sx, sy, shape.getWidth() * zoom, shape.getHeight() * zoom);
                 }
-                case "brush" -> drawBrushStroke(gc, shape, fill, width, height, camera);
+                case "brush" -> {
+                    drawBrushStroke(gc, shape, fill, width, height, camera);
+                    if (shape.isBorder()) {
+                        gc.setLineWidth(3);
+                        strokeBrushOutline(gc, shape, width, height, camera);
+                    }
+                }
                 default -> {
                 }
             }

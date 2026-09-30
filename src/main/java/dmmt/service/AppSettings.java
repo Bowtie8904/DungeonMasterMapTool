@@ -203,6 +203,15 @@ public final class AppSettings {
     }
 
     private String render() {
+        return render(values);
+    }
+
+    /** Settings-file text with every built-in default; kept in the repository as dmmt-settings.default.ini. */
+    public static String renderDefaults() {
+        return render(Map.of());
+    }
+
+    private static String render(Map<String, String> values) {
         StringBuilder out = new StringBuilder();
         out.append("# Dungeon Master Map Tool settings\n");
         out.append("# Edit this file with any text editor. Lines are 'key = value'; lines starting with # are comments.\n");

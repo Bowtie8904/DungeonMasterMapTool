@@ -45,6 +45,30 @@ class OverlayTexturesTest {
     }
 
     @Test
+    void newTexturesHaveExpectedEdgeDefaultsAndAreConfigurable() {
+        for (String kind : new String[]{OverlayTextures.POISON, OverlayTextures.NECROTIC, OverlayTextures.PORTAL}) {
+            assertTrue(OverlayTextures.isSoft(kind), kind);
+        }
+        for (String kind : new String[]{OverlayTextures.SWAMP, OverlayTextures.RUBBLE, OverlayTextures.THORNS,
+                OverlayTextures.FORCE}) {
+            assertFalse(OverlayTextures.isSoft(kind), kind);
+        }
+        assertTrue(OverlayTextures.settingsDefaults().containsKey("texture.force.softEdges"));
+        try {
+            OverlayTextures.applySettings(key -> switch (key) {
+                case "texture.force.softEdges" -> "true";
+                case "texture.poison.softEdges" -> "false";
+                default -> null;
+            });
+            assertTrue(OverlayTextures.isSoft(OverlayTextures.FORCE));
+            assertFalse(OverlayTextures.isSoft(OverlayTextures.POISON));
+        } finally {
+            OverlayTextures.applySettings(key -> null);
+        }
+        assertFalse(OverlayTextures.isSoft(OverlayTextures.FORCE));
+    }
+
+    @Test
     void textureColorFollowsShapeColor() {
         int[] red = OverlayTextures.generate(OverlayTextures.WATER, 0xFF0000, 32);
         int[] blue = OverlayTextures.generate(OverlayTextures.WATER, 0x0000FF, 32);

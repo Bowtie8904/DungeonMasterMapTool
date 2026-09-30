@@ -33,6 +33,13 @@ public final class OverlayTextures {
     public static final String SAND = "sand";
     public static final String WIND = "wind";
     public static final String RADIATION = "radiation";
+    public static final String POISON = "poison";
+    public static final String SWAMP = "swamp";
+    public static final String RUBBLE = "rubble";
+    public static final String THORNS = "thorns";
+    public static final String FORCE = "force";
+    public static final String NECROTIC = "necrotic";
+    public static final String PORTAL = "portal";
 
     public static final int TILE_SIZE = 256;
 
@@ -95,7 +102,20 @@ public final class OverlayTextures {
                 List.of(new Layer(0.50, 0.0, 1.0, 0.8), new Layer(0.80, 0.02, 0.6, 0.5)), OverlayTextures::wind));
         DEFINITIONS.put(RADIATION, new Definition("Radiation / aura", "#7CFF3A",
                 List.of(new Layer(0.015, 0.010, 1.0, 0.9, 0.6, 0.5), new Layer(-0.012, 0.008, 1.4, 0.6, 0.6, 0.8)), OverlayTextures::radiation));
-    }
+        DEFINITIONS.put(POISON, new Definition("Poison / toxic gas", "#8FC12A",
+                List.of(new Layer(0.018, -0.012, 1.0, 0.9, 0.2, 0.35), new Layer(-0.014, 0.010, 1.6, 0.65)), OverlayTextures::poison));
+        DEFINITIONS.put(SWAMP, new Definition("Swamp / mud / bog", "#4E5A2C",
+                List.of(new Layer(0.004, 0.002, 1.0, 0.95), new Layer(-0.003, 0.004, 1.5, 0.45, 0.3, 0.2)), OverlayTextures::swamp));
+        DEFINITIONS.put(RUBBLE, new Definition("Rubble / debris", "#8C867C",
+                List.of(new Layer(0, 0, 1.0, 1.0)), OverlayTextures::rubble));
+        DEFINITIONS.put(THORNS, new Definition("Thorns / brambles", "#4F7A2A",
+                List.of(new Layer(0.004, 0.002, 1.0, 0.95), new Layer(-0.003, 0.003, 1.6, 0.6)), OverlayTextures::thorns));
+        DEFINITIONS.put(FORCE, new Definition("Force / shield", "#5AC8FF",
+                List.of(new Layer(0.0, 0.0, 1.0, 0.9, 0.5, 0.6), new Layer(0.02, 0.012, 1.7, 0.5, 0.4, 0.9)), OverlayTextures::force));
+        DEFINITIONS.put(NECROTIC, new Definition("Necrotic / shadow rot", "#5B2A86",
+                List.of(new Layer(0.014, -0.010, 1.0, 0.95, 0.25, 0.3), new Layer(-0.012, 0.008, 1.4, 0.75)), OverlayTextures::necrotic));
+        DEFINITIONS.put(PORTAL, new Definition("Entropy / void / portal", "#8A4DFF",
+                List.of(new Layer(0.010, -0.008, 1.0, 0.95, 0.35, 0.5), new Layer(-0.012, 0.010, 0.6, 0.7, 0.5, 0.8)), OverlayTextures::portal));    }
 
     public static final List<String> KINDS = List.copyOf(DEFINITIONS.keySet());
 
@@ -132,7 +152,7 @@ public final class OverlayTextures {
 
     private static boolean builtInSoft(String k) {
         return switch (k) {
-            case SMOKE, FIRE, MIST, DARKNESS, HOLY, SAND, WIND, LIGHTNING, RADIATION -> true;
+            case SMOKE, FIRE, MIST, DARKNESS, HOLY, SAND, WIND, LIGHTNING, RADIATION, POISON, NECROTIC, PORTAL -> true;
             default -> false;
         };
     }
@@ -169,11 +189,15 @@ public final class OverlayTextures {
             case SMOKE, MIST -> 0.75;
             case FIRE -> 0.90;
             case WATER -> 0.55;
-            case LAVA, BLOOD, WEB, DARKNESS -> 1.0;
-            case ACID, GREASE, HOLY, ARCANE -> 0.85;
+            case LAVA, BLOOD, WEB, DARKNESS, RUBBLE -> 1.0;
+            case ACID, GREASE, HOLY, ARCANE, FORCE -> 0.85;
             case LIGHTNING -> 0.9;
             case ICE, SAND, RADIATION -> 0.75;
             case WIND -> 0.65;
+            case POISON -> 0.75;
+            case SWAMP -> 0.9;
+            case THORNS -> 0.95;
+            case NECROTIC, PORTAL -> 0.9;
             default -> 0;
         };
     }
@@ -505,6 +529,110 @@ public final class OverlayTextures {
         return withAlpha(a, mix(rgb, 0xFFFFFF, 0.45 * ring));
     }
 
+    private static int poison(double u, double v, int rgb) {
+        double warp = fbm(u, v, 2, 2, 3, 171);
+        double n = fbm(fract(u + 0.3 * warp), fract(v + 0.25 * warp), 3, 3, 5, 173);
+        double density = smoothstep(0.28, 0.75, n) * 0.95;
+        double swirl = fbm(fract(u - 0.2 * warp), v, 4, 4, 4, 179);
+        int light = mix(shiftHue(rgb, -20), 0xFFFFFF, 0.15);
+        int color = mix(mix(rgb, 0x000000, 0.55), light, smoothstep(0.3, 0.85, swirl));
+        return withAlpha(density, color);
+    }
+
+    private static int swamp(double u, double v, int rgb) {
+        double n = fbm(u, v, 3, 3, 5, 181);
+        double silt = fbm(u, v, 6, 6, 4, 183);
+        int base = mix(mix(rgb, 0x000000, 0.6), rgb, n);
+        base = mix(base, mix(rgb, 0xFFFFFF, 0.2), smoothstep(0.55, 0.8, silt) * 0.6);
+        double[] w = worley(u, v, 7, 187);
+        boolean bubbleCell = hash((int) w[4], 3, 191) > 0.5;
+        double rim = bubbleCell ? smoothstep(0.05, 0.0, Math.abs(w[0] - 0.2)) : 0;
+        double shine = bubbleCell ? smoothstep(0.08, 0.0, Math.hypot(w[2] + 0.08, w[3] + 0.08)) : 0;
+        int color = mix(base, mix(rgb, 0xFFFFFF, 0.6), Math.min(1, rim * 0.7 + shine));
+        return withAlpha(0.92, color);
+    }
+
+    private static int rubble(double u, double v, int rgb) {
+        double[] w = worley(u, v, 6, 193);
+        int cell = (int) w[4];
+        double stone = smoothstep(0.03, 0.12, w[1] - w[0]);
+        double tone = 0.35 + 0.45 * hash(cell, 1, 197);
+        double lit = clamp(-(w[2] + w[3]) * 0.5, -1, 1);
+        double grain = fbm(u, v, 24, 24, 3, 199);
+        double shade = clamp(tone + lit * 0.3 + (grain - 0.5) * 0.35, 0, 1);
+        int face = mix(mix(rgb, 0x000000, 0.55), mix(rgb, 0xFFFFFF, 0.25), shade);
+        int dust = mix(rgb, 0x000000, 0.8);
+        return withAlpha(0.75 + 0.25 * stone, mix(dust, face, stone));
+    }
+
+    private static int thorns(double u, double v, int rgb) {
+        double n1 = fbm(u, v, 3, 3, 4, 201);
+        double n2 = fbm(u, v, 4, 3, 4, 203);
+        double vine = Math.max(smoothstep(0.055, 0.02, Math.abs(n1 - 0.5)), smoothstep(0.055, 0.02, Math.abs(n2 - 0.5)));
+        double[] w = worley(u, v, 8, 207);
+        int cell = (int) w[4];
+        double angle = Math.atan2(w[3], w[2]);
+        double tri = Math.abs(fract(angle / (2 * Math.PI) * 3 + hash(cell, 2, 209)) - 0.5) * 2;
+        double limit = 0.34 * Math.pow(1 - tri, 1.6);
+        double spike = hash(cell, 5, 211) > 0.35 ? smoothstep(limit + 0.03, limit - 0.01, w[0]) : 0;
+        double leaf = smoothstep(0.55, 0.8, fbm(u, v, 5, 5, 3, 213)) * 0.3;
+        int color = mix(mix(rgb, 0x000000, 0.35), mix(rgb, 0xFFFFFF, 0.4), spike);
+        return withAlpha(Math.max(leaf, Math.max(vine, spike)), color);
+    }
+
+    /** Hex grid (period of 3 x 5 hex units so it tiles) with softly flickering cells and bright edges. */
+    private static int force(double u, double v, int rgb) {
+        double s3 = Math.sqrt(3);
+        double x = u * 9 + 0.4;
+        double y = v * 5 * s3 + 0.4;
+        int ai = (int) Math.round(x / 3);
+        int aj = (int) Math.round(y / s3);
+        double da = hexDistance(x - 3 * ai, y - s3 * aj);
+        int bi = (int) Math.floor(x / 3);
+        int bj = (int) Math.floor(y / s3);
+        double db = hexDistance(x - (3 * bi + 1.5), y - s3 * (bj + 0.5));
+        boolean first = da <= db;
+        double hd = first ? da : db;
+        int cell = first ? Math.floorMod(ai, 3) * 2 * 5 + Math.floorMod(aj, 5)
+                : (Math.floorMod(bi, 3) * 2 + 1) * 5 + Math.floorMod(bj, 5);
+        double edge = smoothstep(0.09, 0.0, s3 / 2 - hd);
+        double flicker = 0.1 + 0.3 * hash(cell, 7, 217) * fbm(u, v, 3, 3, 3, 219) * 2;
+        double a = Math.min(1, edge + flicker);
+        return withAlpha(a, mix(rgb, 0xFFFFFF, Math.min(1, 0.15 + edge * 0.6)));
+    }
+
+    private static double hexDistance(double dx, double dy) {
+        double qx = Math.abs(dx);
+        double qy = Math.abs(dy);
+        return Math.max(qx * Math.sqrt(3) / 2 + qy * 0.5, qy);
+    }
+
+    private static int necrotic(double u, double v, int rgb) {
+        double warp = fbm(u, v, 2, 2, 3, 229);
+        double n = fbm(fract(u + 0.25 * warp), v, 3, 3, 5, 231);
+        double density = smoothstep(0.2, 0.6, n) * 0.95;
+        double ridge = 1 - Math.abs(2 * fbm(fract(u + 0.25 * warp), fract(v - 0.2 * warp), 4, 4, 4, 233) - 1);
+        double tendril = Math.pow(ridge, 10);
+        double[] w = worley(u, v, 5, 239);
+        double rim = hash((int) w[4], 4, 241) > 0.5 ? smoothstep(0.08, 0.0, Math.abs(w[0] - 0.2)) : 0;
+        double glow = Math.min(1, tendril * 1.4 + rim * 0.7);
+        int color = mix(mix(rgb, 0x000000, 0.85), mix(rgb, 0xFFFFFF, 0.4), glow);
+        return withAlpha(Math.max(density, glow), color);
+    }
+
+    /** Several small spiral vortices (one per noise cell) with dark cores and glowing rims. */
+    private static int portal(double u, double v, int rgb) {
+        double[] w = worley(u, v, 3, 251);
+        double angle = Math.atan2(w[3], w[2]);
+        double arms = 0.5 + 0.5 * Math.cos(3 * angle - 14 * w[0]);
+        double fall = smoothstep(0.62, 0.2, w[0]);
+        double core = smoothstep(0.14, 0.09, w[0]);
+        double rim = smoothstep(0.05, 0.0, Math.abs(w[0] - 0.16));
+        double haze = fbm(u, v, 3, 3, 3, 253) * 0.25;
+        double a = Math.max(Math.pow(arms, 1.5) * fall, Math.max(core, Math.max(rim * 0.9, haze)));
+        int color = mix(mix(0x000000, rgb, arms), mix(rgb, 0xFFFFFF, 0.6), rim);
+        return withAlpha(a, mix(color, 0x000000, core));
+    }
     // ---- noise and colour helpers ----
 
     /** Anti-aliased thin ring around radius r. */
