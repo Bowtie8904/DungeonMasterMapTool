@@ -394,7 +394,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         ToggleButton performanceToggle = Icons.toggle(MaterialDesignS.SPEEDOMETER,
                 "Performance mode — temporarily lowers shadow quality, map image detail and soft edges, freezes animations and flicker, "
-                        + "and never renders faster than the idle FPS. Your settings and maps are not changed.");
+                        + "and limits FPS. Your settings and maps are not changed.");
         performanceToggle.setSelected(preferences.getBoolean(PREF_PERFORMANCE_MODE, false));
         PerformanceMode.setEnabled(performanceToggle.isSelected());
         performanceToggle.selectedProperty().addListener((obs, was, on) -> {
