@@ -65,6 +65,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignV;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import javafx.scene.image.Image;
 import javafx.scene.input.Dragboard;
@@ -644,7 +645,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Region effectSpacer = new Region();
         HBox.setHgrow(effectSpacer, Priority.ALWAYS);
         HBox effectToolsRow = row(toolButtons.get(EditorTool.AOE_CIRCLE), toolButtons.get(EditorTool.AOE_RECT),
-                toolButtons.get(EditorTool.AOE_BRUSH), toolButtons.get(EditorTool.AOE_PEN), effectSpacer, deleteEffect, clearEffects);
+                toolButtons.get(EditorTool.AOE_BRUSH), toolButtons.get(EditorTool.AOE_PEN), toolButtons.get(EditorTool.AOE_LINE), effectSpacer, deleteEffect, clearEffects);
         HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
         overlayTextureBox = new ComboBox<>();
         overlayTextureBox.getItems().addAll(OverlayTextures.KINDS);
@@ -1239,6 +1240,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case HIDE_BRUSH -> Icons.cursor(MaterialDesignB.BRUSH, 0.15, 0.85);
             case AOE_BRUSH -> Icons.tipCursor(MaterialDesignB.BRUSH, 0.0, 1.0);
             case AOE_PEN -> Icons.tipCursor(MaterialDesignP.PEN, 0.0, 1.0);
+            case AOE_LINE -> Cursor.CROSSHAIR;
             case TEXT -> Cursor.TEXT;
             case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
@@ -1442,6 +1444,15 @@ public class DungeonMasterMapToolApplication extends Application {
                     selectedLight = light;
                     selectedLayer = null;
                     showLightContextMenu(light, event.getScreenX(), event.getScreenY());
+                    return;
+                }
+                DmProject.OverlayShape shape = rightClickCancelCandidate ? null : pickOverlay(world.x(), world.y(), camera.getZoom());
+                if (shape != null) {
+                    selectedOverlayId = shape.getId();
+                    selectedLayer = null;
+                    selectedLight = null;
+                    syncOverlayControls(shape);
+                    showOverlayContextMenu(shape, event.getScreenX(), event.getScreenY());
                     return;
                 }
                 panningDmCamera = true;
@@ -2921,6 +2932,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
             case AOE_PEN -> status("Pen: draw a thin freehand line in the selected color.");
+            case AOE_LINE -> status("Line: drag to draw a straight line (brush size and color, no texture).");
             case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it. Esc or right-click to exit.");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
@@ -3156,7 +3168,7 @@ public class DungeonMasterMapToolApplication extends Application {
             gc.strokeLine(renderer.worldToScreenX(draftWall.getX1(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY1(), wh, wallCamera),
                     renderer.worldToScreenX(draftWall.getX2(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY2(), wh, wallCamera));
         }
-        if (activeTool == EditorTool.AOE_BRUSH && hoverInsideCanvas) {
+        if ((activeTool == EditorTool.AOE_BRUSH || activeTool == EditorTool.AOE_LINE) && hoverInsideCanvas) {
             DmProject.CameraState brushCamera = project.getViews().getDmCamera();
             double bcx = renderer.worldToScreenX(hoverWorldX, dmFogCanvas.getWidth(), brushCamera);
             double bcy = renderer.worldToScreenY(hoverWorldY, dmFogCanvas.getHeight(), brushCamera);
@@ -3584,15 +3596,16 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_CIRCLE -> "circle";
             case AOE_RECT -> "rect";
             case AOE_PEN -> "pen";
+            case AOE_LINE -> "line";
             default -> "brush";
         };
-        boolean pen = "pen".equals(type);
+        boolean pen = "pen".equals(type) || "line".equals(type);
         DmProject.OverlayShape shape = DmProject.OverlayShape.builder()
                 .id("overlay-" + UUID.randomUUID())
                 .type(type)
                 .x(worldX)
                 .y(worldY)
-                .strokeWidth(pen ? PEN_WIDTH_CELLS * pixelsPerCell : brushSizeTiles * pixelsPerCell)
+                .strokeWidth("pen".equals(type) ? PEN_WIDTH_CELLS * pixelsPerCell : brushSizeTiles * pixelsPerCell)
                 .color(overlayColor)
                 .alpha(overlayAlpha)
                 .playerVisible(overlayPlayerVisible)
@@ -3603,6 +3616,10 @@ public class DungeonMasterMapToolApplication extends Application {
         if (isStrokeOverlay(shape)) {
             shape.getPoints().add(worldX);
             shape.getPoints().add(worldY);
+            if ("line".equals(type)) {
+                shape.getPoints().add(worldX);
+                shape.getPoints().add(worldY);
+            }
         }
         overlayStartX = worldX;
         overlayStartY = worldY;
@@ -3620,6 +3637,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 shape.setY(Math.min(overlayStartY, worldY));
                 shape.setWidth(Math.abs(worldX - overlayStartX));
                 shape.setHeight(Math.abs(worldY - overlayStartY));
+            }
+            case "line" -> {
+                List<Double> points = shape.getPoints();
+                points.set(2, worldX);
+                points.set(3, worldY);
             }
             default -> {
                 List<Double> points = shape.getPoints();
@@ -3639,6 +3661,8 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean tooSmall = switch (shape.getType()) {
             case "circle" -> shape.getRadius() < 3;
             case "rect" -> shape.getWidth() < 3 || shape.getHeight() < 3;
+            case "line" -> distance(shape.getPoints().get(0), shape.getPoints().get(1),
+                    shape.getPoints().get(2), shape.getPoints().get(3)) < 3;
             default -> false;
         };
         if (tooSmall) {
@@ -3658,7 +3682,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 case "circle" -> distance(worldX, worldY, shape.getX(), shape.getY()) <= shape.getRadius();
                 case "rect" -> worldX >= shape.getX() && worldX <= shape.getX() + shape.getWidth()
                         && worldY >= shape.getY() && worldY <= shape.getY() + shape.getHeight();
-                case "brush", "pen" -> brushHit(shape, worldX, worldY, shape.getStrokeWidth() / 2.0 + tolerance);
+                case "brush", "pen", "line" -> brushHit(shape, worldX, worldY, shape.getStrokeWidth() / 2.0 + tolerance);
                 default -> false;
             };
             if (hit) {
@@ -3684,7 +3708,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private static boolean isStrokeOverlay(DmProject.OverlayShape shape) {
-        return "brush".equals(shape.getType()) || "pen".equals(shape.getType());
+        return "brush".equals(shape.getType()) || "pen".equals(shape.getType()) || "line".equals(shape.getType());
     }
 
     /** Bounds {minX, minY, maxX, maxY} of the point path of a freehand/pen shape, without stroke padding. */
@@ -3752,7 +3776,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 double factorX = Math.max(min, worldX - left) / boxW;
                 double factorY = Math.max(min, worldY - top) / boxH;
                 // Freehand blobs scale as a whole (stroke included) so they do not turn into rings; pen lines keep their width.
-                double newStroke = "pen".equals(before.getType()) ? stroke : stroke * (factorX + factorY) / 2.0;
+                double newStroke = "pen".equals(before.getType()) || "line".equals(before.getType()) ? stroke : stroke * (factorX + factorY) / 2.0;
                 double newExtentX = Math.max(0, boxW * factorX - newStroke);
                 double newExtentY = Math.max(0, boxH * factorY - newStroke);
                 double scaleX = extentX < 1 ? 1 : newExtentX / extentX;
@@ -3775,7 +3799,8 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
-        boolean pen = activeTool == EditorTool.AOE_PEN || selected != null && "pen".equals(selected.getType());
+        boolean pen = activeTool == EditorTool.AOE_PEN || activeTool == EditorTool.AOE_LINE
+                || selected != null && ("pen".equals(selected.getType()) || "line".equals(selected.getType()));
         boolean noLight = pen || !OverlayTextures.defaultEmitsLight(overlayTexture);
         overlayTextureBox.setDisable(pen);
         overlayBorderToggle.setDisable(pen);
@@ -5028,6 +5053,30 @@ public class DungeonMasterMapToolApplication extends Application {
         menu.show(dmCanvas, screenX, screenY);
     }
 
+    private void showOverlayContextMenu(DmProject.OverlayShape shape, double screenX, double screenY) {
+        String id = shape.getId();
+        ContextMenu menu = new ContextMenu();
+        CheckMenuItem visible = new CheckMenuItem("Visible to players");
+        visible.setSelected(shape.isPlayerVisible());
+        visible.setOnAction(e -> {
+            boolean value = visible.isSelected();
+            executeOverlayChange(value ? "Show effect to players" : "Hide effect from players", id, s -> s.setPlayerVisible(value));
+            DmProject.OverlayShape current = findOverlay(id);
+            if (current != null) {
+                syncOverlayControls(current);
+            }
+        });
+        menu.getItems().add(visible);
+        hideLightMenu();
+        activeLightMenu = menu;
+        menu.setOnHidden(e -> {
+            if (activeLightMenu == menu) {
+                activeLightMenu = null;
+            }
+        });
+        menu.show(dmCanvas, screenX, screenY);
+    }
+
     private void hideLightMenu() {
         if (activeLightMenu != null) {
             activeLightMenu.hide();
@@ -5434,6 +5483,8 @@ public class DungeonMasterMapToolApplication extends Application {
         AOE_BRUSH("Freehand effect", "paint a free-form spell area with the brush", MaterialDesignB.BRUSH, false, false),
         AOE_PEN("Pen", "draw a thin freehand line in the selected color (no texture, ignores brush size)",
                 MaterialDesignP.PEN, false, false),
+        AOE_LINE("Line", "drag to draw a straight line in the selected color and brush size (no texture)",
+                MaterialDesignV.VECTOR_LINE, false, false),
         TEXT("Text box", "drag on the map to draw a text box and type; click a text box to edit it",
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
@@ -5461,7 +5512,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isAoeTool() {
-            return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH || this == AOE_PEN;
+            return this == AOE_CIRCLE || this == AOE_RECT || this == AOE_BRUSH || this == AOE_PEN || this == AOE_LINE;
         }
 
         boolean isWallTool() {

@@ -148,8 +148,9 @@ Desktop tool for tabletop dungeon masters that:
   - Circle: drag from center outward. Box: drag corner to corner. Draw: freehand, thickness = brush size slider; a dashed brush-size outline follows the cursor (like the fog brush).
   - **Pen**: freehand thin line in the selected color (and opacity); ignores the brush size, has no texture, border or light (those controls are disabled while the Pen tool is active or a pen line is selected). Saved as overlay type pen (points, fixed strokeWidth).
   - While dragging, a live size label is shown at the shape's center in the DM view only, in grid tiles (circle: radius, e.g. `2.5`; box: `width x height`, e.g. `3 x 2`). One tile equals the configured tile size on the player screen (1 tile = 1 inch by default), so radius `1` is a 1-inch radius.
+  - **Line**: drag to draw a perfectly straight line (two points) using the brush size as thickness and the selected color/opacity; no texture, border or light (controls disabled like Pen). Saved as overlay type `line` (`points` = start/end, `strokeWidth`). Resizing keeps the line width. The dashed brush-size outline follows the cursor.
 - Adjustable color (color picker) and opacity (0.1-1.0); the current style applies to new shapes, and to the selected shape if there is one.
-- Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed/dimmed).
+- Visible in both DM and player views; **Players see** unchecked hides a shape from the player view (DM sees it dashed and strongly dimmed (35%) with a crossed-out eye badge at its center). With the Select tool, **right-clicking any effect shape** (circle, box, freehand, pen, line) opens a menu with a *Visible to players* toggle (undoable, same as the Players see toggle).
 - Shapes are drawn above map and lighting but below fog, so fog still conceals them.
 - With the Select tool: click a shape to select and drag to move; a selected shape shows a resize handle at the bottom-right corner of its bounds - drag it to rescale/stretch the shape (box: width/height, freehand: points and brush thickness are scaled together so a blob stays a blob (thickness follows the average of the two axis factors); pen: points stretched, line width unchanged, circle: radius, uniform); undoable (Resize effect); `Delete` or the Delete button removes it; Clear All removes every shape.
 - All create/move/style/delete/clear actions are undoable; shapes rotate with the map and persist in the save file (`overlays`: `type`, `x/y`, `radius`, `width/height`, `points`, `strokeWidth`, `color`, `alpha`, `playerVisible`, `texture`).
@@ -565,7 +566,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v0.5:** Import now requires copying dd2vtt/source assets into managed project storage so external source media is not needed after import.
 - **v0.6:** Added Lombok as implementation dependency and defined testing strategy (unit/integration/regression/manual acceptance).
 - **v0.7:** Added command-history undo/redo requirements (`Ctrl+Z`/`Ctrl+Y`) for map transforms, lights, door/window state, and fog-of-war edits.
-- **v2.7 (current):** Per-map toggle to disable effect animations (3.8).
+- **v2.8 (current):** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
+- **v2.7:** Per-map toggle to disable effect animations (3.8).
 - **v2.6:** Global preferences moved to an editable settings file next to the jar, including texture defaults (3.25).
 - **v2.5:** Animated effect textures (smoke, fire, water) for AOE shapes (3.8).
 - **v2.4:** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.

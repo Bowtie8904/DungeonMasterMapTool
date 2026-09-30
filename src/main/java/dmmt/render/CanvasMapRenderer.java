@@ -24,6 +24,7 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 
 import java.nio.file.Files;
@@ -188,6 +189,9 @@ public class CanvasMapRenderer {
         drawOverlays(gc, project, width, height, camera, playerMode, false);
         drawLighting(gc, project, width, height, camera, playerMode);
         drawOverlays(gc, project, width, height, camera, playerMode, true);
+        if (!playerMode) {
+            drawHiddenOverlayBadges(gc, project, width, height, camera);
+        }
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
@@ -281,6 +285,8 @@ public class CanvasMapRenderer {
         return complete;
     }
 
+    private static final double HIDDEN_SHAPE_VISIBILITY = 0.35;
+
     /**
      * AOE shapes sit above the map and below fog. Shapes that do not emit light are drawn before the lighting
      * pass so darkness dims them; emitting shapes are drawn after it and stay fully bright.
@@ -303,7 +309,7 @@ public class CanvasMapRenderer {
             } catch (IllegalArgumentException ex) {
                 base = Color.web("#55AA33");
             }
-            double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * (dmOnly ? 0.6 : 1.0);
+            double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * (dmOnly ? HIDDEN_SHAPE_VISIBILITY : 1.0);
             Color fill = base.deriveColor(0, 1, 1, alpha);
             Color edge = base.deriveColor(0, 1, 1, Math.min(1.0, alpha + 0.35));
             gc.setFill(fill);
@@ -313,7 +319,7 @@ public class CanvasMapRenderer {
             String type = shape.getType() == null ? "" : shape.getType();
             String texture = OverlayTextures.normalize(shape.getTexture());
             if (OverlayTextures.isAnimated(texture)) {
-                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? 0.6 : 1.0, width, height, camera);
+                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? HIDDEN_SHAPE_VISIBILITY : 1.0, width, height, camera);
                 gc.setLineDashes(null);
                 continue;
             }
@@ -340,10 +346,60 @@ public class CanvasMapRenderer {
                 }
                 case "pen" -> drawBrushStroke(gc, shape, edge, width, height, camera,
                         Math.max(2, shape.getStrokeWidth() * zoom));
+                case "line" -> drawBrushStroke(gc, shape, fill, width, height, camera,
+                        Math.max(2, shape.getStrokeWidth() * zoom));
                 default -> {
                 }
             }
             gc.setLineDashes(null);
+        }
+    }
+
+    /** Small crossed-out eye on every shape that players cannot see, so hidden shapes stand out in the DM view. */
+    private void drawHiddenOverlayBadges(GraphicsContext gc, DmProject project, double width, double height,
+                                         DmProject.CameraState camera) {
+        double r = 11;
+        for (DmProject.OverlayShape shape : project.getOverlays()) {
+            if (shape.isPlayerVisible()) {
+                continue;
+            }
+            double wx;
+            double wy;
+            String type = shape.getType() == null ? "" : shape.getType();
+            if ("rect".equals(type)) {
+                wx = shape.getX() + shape.getWidth() / 2.0;
+                wy = shape.getY() + shape.getHeight() / 2.0;
+            } else if ("circle".equals(type)) {
+                wx = shape.getX();
+                wy = shape.getY();
+            } else if (shape.getPoints().size() >= 2) {
+                List<Double> points = shape.getPoints();
+                double minX = Double.MAX_VALUE;
+                double minY = Double.MAX_VALUE;
+                double maxX = -Double.MAX_VALUE;
+                double maxY = -Double.MAX_VALUE;
+                for (int i = 0; i + 1 < points.size(); i += 2) {
+                    minX = Math.min(minX, points.get(i));
+                    maxX = Math.max(maxX, points.get(i));
+                    minY = Math.min(minY, points.get(i + 1));
+                    maxY = Math.max(maxY, points.get(i + 1));
+                }
+                wx = (minX + maxX) / 2.0;
+                wy = (minY + maxY) / 2.0;
+            } else {
+                continue;
+            }
+            double cx = worldToScreenX(wx, width, camera);
+            double cy = worldToScreenY(wy, height, camera);
+            if (cx < -r || cy < -r || cx > width + r || cy > height + r) {
+                continue;
+            }
+            gc.setFill(Color.color(0.1, 0.1, 0.12, 0.8));
+            gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+            Image glyph = Icons.image(MaterialDesignE.EYE_OFF_OUTLINE, 14, Color.web("#dddddd"));
+            if (glyph != null) {
+                gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
+            }
         }
     }
 
