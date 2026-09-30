@@ -597,6 +597,28 @@
     -fx-font-size: 13px;
 }
 
+.image-unlock-banner {
+    -fx-background-color: rgba(22, 24, 28, 0.92);
+    -fx-background-radius: 8;
+    -fx-border-color: #f59e0b;
+    -fx-border-radius: 8;
+    -fx-border-width: 1.5;
+    -fx-padding: 5 8 5 12;
+    -fx-spacing: 10;
+    -fx-alignment: center;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 3);
+}
+
+.image-unlock-banner .ikonli-font-icon {
+    -fx-icon-color: #f59e0b;
+    -fx-icon-size: 18px;
+}
+
+.image-unlock-banner-label {
+    -fx-text-fill: #f3f4f6;
+    -fx-font-size: 13px;
+}
+
 .tool-chip-hint {
     -fx-text-fill: -dm-muted;
     -fx-font-size: 11px;

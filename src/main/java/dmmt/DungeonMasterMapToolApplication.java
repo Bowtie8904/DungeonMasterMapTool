@@ -156,6 +156,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton pingToggle;
     private ToggleButton wallLayerToggle;
     private ToggleButton imageLockToggle;
+    private HBox imageUnlockBanner;
     private ToggleButton playerWindowToggle;
     private HBox toolChip;
     private FontIcon toolChipIcon;
@@ -350,7 +351,10 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox chip = createToolChip();
         StackPane.setAlignment(chip, Pos.TOP_CENTER);
         StackPane.setMargin(chip, new Insets(12, 0, 0, 0));
-        center.getChildren().addAll(chip, controls);
+        imageUnlockBanner = createImageUnlockBanner();
+        StackPane.setAlignment(imageUnlockBanner, Pos.TOP_CENTER);
+        StackPane.setMargin(imageUnlockBanner, new Insets(58, 0, 0, 0));
+        center.getChildren().addAll(chip, imageUnlockBanner, controls);
         dmBaseCanvas.widthProperty().bind(center.widthProperty());
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
@@ -2783,7 +2787,26 @@ public class DungeonMasterMapToolApplication extends Application {
         status(locked ? "Image layer locked — map images can't be moved." : "Image layer unlocked — map images can be moved and resized with Select.");
     }
 
+    private HBox createImageUnlockBanner() {
+        Label label = new Label("Image layer is unlocked — map images can be moved and resized.");
+        label.getStyleClass().add("image-unlock-banner-label");
+        Button lockButton = new Button("Lock", Icons.icon(MaterialDesignL.LOCK_OUTLINE));
+        lockButton.setOnAction(e -> {
+            if (project != null) {
+                setImageLayerLocked(true);
+            }
+        });
+        HBox banner = new HBox(new FontIcon(MaterialDesignL.LOCK_OPEN_VARIANT_OUTLINE), label, lockButton);
+        banner.getStyleClass().add("image-unlock-banner");
+        banner.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        banner.setVisible(false);
+        return banner;
+    }
+
     private void updateImageLockToggle() {
+        if (imageUnlockBanner != null) {
+            imageUnlockBanner.setVisible(project != null && !isImageLayerLocked());
+        }
         if (imageLockToggle == null) {
             return;
         }
