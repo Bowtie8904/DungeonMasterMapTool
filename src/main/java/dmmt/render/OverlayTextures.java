@@ -119,7 +119,9 @@ public final class OverlayTextures {
 
     public static final List<String> KINDS = List.copyOf(DEFINITIONS.keySet());
 
-    private static final int MAX_CACHED = 24;
+    // One tile per texture+colour. Must exceed the number of combinations drawn per frame, otherwise the LRU cache
+    // thrashes and every frame regenerates tiles.
+    private static final int MAX_CACHED = 128;
     private static final Map<String, Image> CACHE = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
