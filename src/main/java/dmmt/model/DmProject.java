@@ -347,6 +347,9 @@ public class DmProject {
         /** Outline around a textured shape; off by default (flat shapes always have their edge line). */
         @Builder.Default
         private boolean border = false;
+        /** Whether the effect adds light (in its colour) to the lighting map. */
+        @Builder.Default
+        private boolean emitsLight = false;
     }
 
     public static final String TRANSPARENT = "#00000000";

@@ -130,7 +130,8 @@ public final class OverlayTextures {
     private OverlayTextures() {
     }
 
-    private record Custom(String color, Double alpha, Boolean soft, List<Layer> layers) {
+    private record Custom(String color, Double alpha, Boolean soft, List<Layer> layers, Boolean emits,
+                          Double lightStrength, Double lightRange, Double flicker, Double flickerSpeed) {
     }
 
     private static volatile Map<String, Custom> overrides = Map.of();
@@ -202,6 +203,87 @@ public final class OverlayTextures {
         };
     }
 
+    /** Whether a new effect of this texture emits light by default. */
+    public static boolean defaultEmitsLight(String kind) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.emits() != null ? o.emits() : builtInEmits(k);
+    }
+
+    /** Brightness (0-1) of the light emitted by an effect of this texture. */
+    public static double lightStrength(String kind) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.lightStrength() != null ? o.lightStrength() : builtInLightStrength(k);
+    }
+
+    /** Distance in grid cells beyond the shape edge that the emitted light reaches. */
+    public static double lightRangeCells(String kind) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.lightRange() != null ? o.lightRange() : builtInLightRange(k);
+    }
+
+    /** Depth (0-1) of the brightness flicker of an emitting effect; 0 = steady light. */
+    public static double lightFlicker(String kind) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.flicker() != null ? o.flicker() : builtInFlicker(k);
+    }
+
+    /** Speed multiplier of the flicker. */
+    public static double lightFlickerSpeed(String kind) {
+        String k = normalize(kind);
+        Custom o = overrides.get(k);
+        return o != null && o.flickerSpeed() != null ? o.flickerSpeed() : builtInFlickerSpeed(k);
+    }
+
+    private static double builtInFlicker(String k) {
+        return switch (k) {
+            case FIRE -> 0.3;
+            case LIGHTNING -> 0.6;
+            case LAVA -> 0.12;
+            case ARCANE, PORTAL, RADIATION -> 0.1;
+            case HOLY -> 0.05;
+            default -> 0;
+        };
+    }
+
+    private static double builtInFlickerSpeed(String k) {
+        return switch (k) {
+            case FIRE -> 1.6;
+            case LIGHTNING -> 4;
+            case LAVA -> 0.5;
+            default -> 0.8;
+        };
+    }
+
+    private static boolean builtInEmits(String k) {
+        return switch (k) {
+            case FIRE, LAVA, LIGHTNING, ARCANE, HOLY, RADIATION, PORTAL -> true;
+            default -> false;
+        };
+    }
+
+    private static double builtInLightStrength(String k) {
+        return switch (k) {
+            case FIRE -> 0.85;
+            case LAVA -> 0.7;
+            case LIGHTNING, HOLY -> 0.9;
+            case ARCANE, PORTAL -> 0.6;
+            default -> 0.5;
+        };
+    }
+
+    private static double builtInLightRange(String k) {
+        return switch (k) {
+            case FIRE, LIGHTNING -> 3;
+            case LAVA -> 2.5;
+            case HOLY -> 3.5;
+            default -> 2;
+        };
+    }
+
     public static List<Layer> layers(String kind) {
         String k = normalize(kind);
         Custom o = overrides.get(k);
@@ -237,6 +319,11 @@ public final class OverlayTextures {
             map.put(p + "color", d.color());
             map.put(p + "opacity", num(builtInAlpha(kind)));
             map.put(p + "softEdges", String.valueOf(builtInSoft(kind)));
+            map.put(p + "emitsLight", String.valueOf(builtInEmits(kind)));
+            map.put(p + "lightStrength", num(builtInLightStrength(kind)));
+            map.put(p + "lightRange", num(builtInLightRange(kind)));
+            map.put(p + "lightFlicker", num(builtInFlicker(kind)));
+            map.put(p + "lightFlickerSpeed", num(builtInFlickerSpeed(kind)));
             int n = 1;
             for (Layer l : d.layers()) {
                 String lp = p + "layer" + n++ + ".";
@@ -300,7 +387,19 @@ public final class OverlayTextures {
                         clamp(parse(lookup.apply(lp + "pulseDepth"), fallback.pulse()), 0, 1),
                         Math.max(0, parse(lookup.apply(lp + "pulseHz"), fallback.pulseHz()))));
             }
-            next.put(kind, new Custom(color, alpha, soft, layers));
+            String emitsText = lookup.apply(p + "emitsLight");
+            Boolean emits = emitsText == null ? null
+                    : "true".equalsIgnoreCase(emitsText.trim()) ? Boolean.TRUE
+                    : "false".equalsIgnoreCase(emitsText.trim()) ? Boolean.FALSE : null;
+            double strength = parse(lookup.apply(p + "lightStrength"), Double.NaN);
+            double range = parse(lookup.apply(p + "lightRange"), Double.NaN);
+            double flicker = parse(lookup.apply(p + "lightFlicker"), Double.NaN);
+            double flickerSpeed = parse(lookup.apply(p + "lightFlickerSpeed"), Double.NaN);
+            next.put(kind, new Custom(color, alpha, soft, layers, emits,
+                    Double.isNaN(strength) ? null : clamp(strength, 0, 1),
+                    Double.isNaN(range) ? null : clamp(range, 0, 20),
+                    Double.isNaN(flicker) ? null : clamp(flicker, 0, 1),
+                    Double.isNaN(flickerSpeed) ? null : clamp(flickerSpeed, 0.05, 20)));
         }
         overrides = next;
     }

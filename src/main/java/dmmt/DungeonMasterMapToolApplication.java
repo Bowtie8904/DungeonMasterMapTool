@@ -211,6 +211,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private ComboBox<String> overlayTextureBox;
     private boolean overlayBorder;
     private ToggleButton overlayBorderToggle;
+    private boolean overlayEmitsLight;
+    private ToggleButton overlayLightToggle;
     private String selectedOverlayId;
     private DmProject.OverlayShape draftOverlay;
     private double overlayStartX;
@@ -666,8 +668,11 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayTexture = overlayTextureBox.getValue();
             String textureColor = OverlayTextures.defaultColor(overlayTexture);
             double textureAlpha = OverlayTextures.defaultAlpha(overlayTexture);
+            boolean textureLight = OverlayTextures.defaultEmitsLight(overlayTexture);
             syncingControls = true;
             try {
+                overlayEmitsLight = textureLight;
+                overlayLightToggle.setSelected(textureLight);
                 if (textureColor != null) {
                     overlayColor = textureColor;
                     overlayColorPicker.setValue(Color.web(textureColor));
@@ -683,6 +688,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (selected != null) {
                 executeOverlayChange("Change effect texture", selected.getId(), s -> {
                     s.setTexture(overlayTexture);
+                    s.setEmitsLight(textureLight);
                     if (textureColor != null) {
                         s.setColor(textureColor);
                     }
@@ -705,6 +711,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect border", selected.getId(), s -> s.setBorder(overlayBorder));
             }
         });
+        overlayLightToggle = Icons.toggle(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
+                "Effect emits light in its color (visible when the map is dark) — also changes the selected effect. Defaults per texture are set in the settings file");
+        overlayLightToggle.setSelected(overlayEmitsLight);
+        overlayLightToggle.setOnAction(e -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayEmitsLight = overlayLightToggle.isSelected();
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect light", selected.getId(), s -> s.setEmitsLight(overlayEmitsLight));
+            }
+        });
         effectAnimationsToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
                 "Animate effect textures and light flicker on this map (turn off to improve performance)");
         effectAnimationsToggle.setSelected(true);
@@ -718,7 +737,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 renderPlayer();
             }
         });
-        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, effectAnimationsToggle);
+        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, overlayLightToggle, effectAnimationsToggle);
         HBox effectBrushRow = row(brushSlider());
 
         // Text
@@ -2112,7 +2131,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (!candidate.isEffectAnimations()) {
             return false;
         }
-        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture()))
+        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture())
+                || o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
                 || candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
                 && l.getFlicker() != null && l.getFlicker().isEnabled() && l.getFlicker().getStrength() > 0);
     }
@@ -3467,6 +3487,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .playerVisible(source.isPlayerVisible())
                 .texture(source.getTexture())
                 .border(source.isBorder())
+                .emitsLight(source.isEmitsLight())
                 .build();
     }
 
@@ -3539,6 +3560,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .playerVisible(overlayPlayerVisible)
                 .texture(overlayTexture)
                 .border(overlayBorder)
+                .emitsLight(overlayEmitsLight)
                 .build();
         if ("brush".equals(type)) {
             shape.getPoints().add(worldX);
@@ -3678,6 +3700,8 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayTextureBox.setValue(overlayTexture);
             overlayBorder = shape.isBorder();
             overlayBorderToggle.setSelected(overlayBorder);
+            overlayEmitsLight = shape.isEmitsLight();
+            overlayLightToggle.setSelected(overlayEmitsLight);
             overlayColor = shape.getColor();
             overlayAlpha = shape.getAlpha();
             overlayPlayerVisible = shape.isPlayerVisible();

@@ -316,6 +316,21 @@ public final class AppSettings {
         if (key.endsWith(".softEdges")) {
             return "  fade out at the shape edge (true/false).";
         }
+        if (key.endsWith(".emitsLight")) {
+            return "  new effects of this texture emit light in the effect colour (true/false).";
+        }
+        if (key.endsWith(".lightStrength")) {
+            return "  light brightness (0-1).";
+        }
+        if (key.endsWith(".lightFlicker")) {
+            return "  light flicker depth (0 = steady, 1 = deep dips).";
+        }
+        if (key.endsWith(".lightFlickerSpeed")) {
+            return "  light flicker speed (1 = normal).";
+        }
+        if (key.endsWith(".lightRange")) {
+            return "  how far the light reaches beyond the shape edge, in grid cells.";
+        }
         if (key.endsWith(".layer1.speedX") || key.endsWith(".layer2.speedX")) {
             return "  layer: speedX/speedY in tiles per second, scale (bigger = larger pattern), opacity (0-1), "
                     + "pulseDepth (0-1) at pulseHz per second.";

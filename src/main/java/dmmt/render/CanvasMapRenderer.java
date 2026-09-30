@@ -33,6 +33,7 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class CanvasMapRenderer {
     /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
@@ -184,8 +185,9 @@ public class CanvasMapRenderer {
             return;
         }
 
+        drawOverlays(gc, project, width, height, camera, playerMode, false);
         drawLighting(gc, project, width, height, camera, playerMode);
-        drawOverlays(gc, project, width, height, camera, playerMode);
+        drawOverlays(gc, project, width, height, camera, playerMode, true);
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
@@ -279,12 +281,19 @@ public class CanvasMapRenderer {
         return complete;
     }
 
-    /** AOE shapes sit above the map and lighting but below fog, so fog still hides them from players. */
-    private void drawOverlays(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
+    /**
+     * AOE shapes sit above the map and below fog. Shapes that do not emit light are drawn before the lighting
+     * pass so darkness dims them; emitting shapes are drawn after it and stay fully bright.
+     */
+    private void drawOverlays(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera,
+                              boolean playerMode, boolean emitting) {
         double zoom = camera.getZoom();
         brushOutlines.keySet().retainAll(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
         for (DmProject.OverlayShape shape : project.getOverlays()) {
             if (playerMode && !shape.isPlayerVisible()) {
+                continue;
+            }
+            if ((shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())) != emitting) {
                 continue;
             }
             boolean dmOnly = !playerMode && !shape.isPlayerVisible();
@@ -733,6 +742,22 @@ public class CanvasMapRenderer {
             key = 31 * key + (light.getColor() == null ? 0 : light.getColor().hashCode());
             key = 31 * key + System.identityHashCode(lightingEngine.polygonFor(light));
         }
+        List<DmProject.OverlayShape> emitters = new java.util.ArrayList<>();
+        List<Double> emitterFlickers = new java.util.ArrayList<>();
+        for (DmProject.OverlayShape shape : project.getOverlays()) {
+            if (shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())
+                    && (!playerMode || shape.isPlayerVisible())) {
+                String texture = OverlayTextures.normalize(shape.getTexture());
+                double flicker = project.isEffectAnimations()
+                        ? LightFlicker.amount(shape.getId(), OverlayTextures.lightFlicker(texture),
+                        OverlayTextures.lightFlickerSpeed(texture), now)
+                        : 0;
+                emitters.add(shape);
+                emitterFlickers.add(flicker);
+                key = 31 * key + shapeLightKey(shape);
+                key = 31 * key + Double.hashCode(flicker);
+            }
+        }
         if (buffer.valid && buffer.key == key) {
             gc.setImageSmoothing(true);
             gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
@@ -742,7 +767,7 @@ public class CanvasMapRenderer {
         buffer.valid = true;
         Arrays.fill(buffer.lit, 0f);
 
-        int[] lightRgb = new int[lights.size()];
+        int[] lightRgb = new int[lights.size() + emitters.size()];
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             lightRgb[li] = parseRgb(light.getColor());
@@ -789,6 +814,14 @@ public class CanvasMapRenderer {
             });
         }
 
+        double ppc = project.getMap().getGrid().getPixelsPerCell();
+        for (int ei = 0; ei < emitters.size(); ei++) {
+            DmProject.OverlayShape shape = emitters.get(ei);
+            int index = lights.size() + ei;
+            lightRgb[index] = parseRgb(shape.getColor());
+            emitShapeLight(buffer, shape, index, ppc, emitterFlickers.get(ei), bw, bh, width, height, camera);
+        }
+
         double glowStrength = lightTint * Math.sqrt(darkness);
         double ambR = preset.red() * 255;
         double ambG = preset.green() * 255;
@@ -815,6 +848,136 @@ public class CanvasMapRenderer {
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         gc.setImageSmoothing(true);
         gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) LIGHT_MAP_SCALE, bh * (double) LIGHT_MAP_SCALE);
+    }
+
+    private static long shapeLightKey(DmProject.OverlayShape shape) {
+        String texture = OverlayTextures.normalize(shape.getTexture());
+        long h = Objects.hash(shape.getId(), shape.getType(), shape.getX(), shape.getY(), shape.getWidth(),
+                shape.getHeight(), shape.getRadius(), shape.getStrokeWidth(), shape.getColor(),
+                OverlayTextures.lightStrength(texture), OverlayTextures.lightRangeCells(texture),
+                OverlayTextures.lightFlicker(texture), OverlayTextures.lightFlickerSpeed(texture));
+        List<Double> points = shape.getPoints();
+        h = 31 * h + points.size();
+        if (!points.isEmpty()) {
+            h = 31 * h + Double.hashCode(points.get(points.size() - 1));
+            h = 31 * h + Double.hashCode(points.get(points.size() - 2));
+        }
+        return h;
+    }
+
+    /**
+     * Adds the glow of one emissive effect to the light map: full strength inside the shape, fading to zero over
+     * the texture's light range beyond its edge. Walls do not block this light.
+     */
+    private void emitShapeLight(LightBuffer buffer, DmProject.OverlayShape shape, int sourceIndex, double ppc,
+                                double flicker, int bw, int bh, double width, double height, DmProject.CameraState camera) {
+        String texture = OverlayTextures.normalize(shape.getTexture());
+        double strength = OverlayTextures.lightStrength(texture) * (1.0 - 0.6 * flicker);
+        double scale = camera.getZoom() / LIGHT_MAP_SCALE;
+        double glow = Math.max(0.001, OverlayTextures.lightRangeCells(texture) * ppc * scale * (1.0 - 0.25 * flicker));
+        if (strength <= 0) {
+            return;
+        }
+        String type = shape.getType() == null ? "" : shape.getType();
+        double[] px = null;
+        double[] py = null;
+        double x0;
+        double y0;
+        double x1;
+        double y1;
+        double inner = 0;
+        switch (type) {
+            case "circle" -> {
+                double cx = worldToScreenX(shape.getX(), width, camera) / LIGHT_MAP_SCALE;
+                double cy = worldToScreenY(shape.getY(), height, camera) / LIGHT_MAP_SCALE;
+                double r = shape.getRadius() * scale;
+                x0 = cx - r;
+                x1 = cx + r;
+                y0 = cy - r;
+                y1 = cy + r;
+                px = new double[]{cx};
+                py = new double[]{cy};
+                inner = r;
+            }
+            case "rect" -> {
+                x0 = worldToScreenX(shape.getX(), width, camera) / LIGHT_MAP_SCALE;
+                y0 = worldToScreenY(shape.getY(), height, camera) / LIGHT_MAP_SCALE;
+                x1 = x0 + shape.getWidth() * scale;
+                y1 = y0 + shape.getHeight() * scale;
+            }
+            case "brush" -> {
+                List<Double> points = shape.getPoints();
+                int n = points.size() / 2;
+                if (n == 0) {
+                    return;
+                }
+                int step = Math.max(1, (int) Math.ceil((n - 1) / 32.0));
+                int count = (int) Math.ceil((n - 1) / (double) step) + 1;
+                px = new double[count];
+                py = new double[count];
+                for (int i = 0; i < count; i++) {
+                    int src = Math.min(n - 1, i * step);
+                    px[i] = worldToScreenX(points.get(2 * src), width, camera) / LIGHT_MAP_SCALE;
+                    py[i] = worldToScreenY(points.get(2 * src + 1), height, camera) / LIGHT_MAP_SCALE;
+                }
+                inner = Math.max(0.5, shape.getStrokeWidth() * scale / 2);
+                x0 = Double.MAX_VALUE;
+                y0 = Double.MAX_VALUE;
+                x1 = -Double.MAX_VALUE;
+                y1 = -Double.MAX_VALUE;
+                for (int i = 0; i < count; i++) {
+                    x0 = Math.min(x0, px[i] - inner);
+                    x1 = Math.max(x1, px[i] + inner);
+                    y0 = Math.min(y0, py[i] - inner);
+                    y1 = Math.max(y1, py[i] + inner);
+                }
+            }
+            default -> {
+                return;
+            }
+        }
+        int colStart = Math.max(0, (int) Math.floor(x0 - glow));
+        int colEnd = Math.min(bw - 1, (int) Math.ceil(x1 + glow));
+        int rowStart = Math.max(0, (int) Math.floor(y0 - glow));
+        int rowEnd = Math.min(bh - 1, (int) Math.ceil(y1 + glow));
+        for (int row = rowStart; row <= rowEnd; row++) {
+            double y = row + 0.5;
+            for (int col = colStart; col <= colEnd; col++) {
+                double x = col + 0.5;
+                double d;
+                if (px == null) {
+                    double dx = Math.max(Math.max(x0 - x, 0), x - x1);
+                    double dy = Math.max(Math.max(y0 - y, 0), y - y1);
+                    d = Math.hypot(dx, dy);
+                } else if (px.length == 1) {
+                    d = Math.max(0, Math.hypot(x - px[0], y - py[0]) - inner);
+                } else {
+                    double best = Double.MAX_VALUE;
+                    for (int i = 0; i + 1 < px.length; i++) {
+                        best = Math.min(best, segmentDistance(x, y, px[i], py[i], px[i + 1], py[i + 1]));
+                    }
+                    d = Math.max(0, best - inner);
+                }
+                if (d >= glow) {
+                    continue;
+                }
+                double t = d / glow;
+                float value = (float) (strength * (1 - t * t * (3 - 2 * t)));
+                int idx = row * bw + col;
+                if (value > buffer.lit[idx]) {
+                    buffer.lit[idx] = value;
+                    buffer.source[idx] = sourceIndex;
+                }
+            }
+        }
+    }
+
+    private static double segmentDistance(double x, double y, double ax, double ay, double bx, double by) {
+        double dx = bx - ax;
+        double dy = by - ay;
+        double len2 = dx * dx + dy * dy;
+        double t = len2 == 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+        return Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
     }
 
     /**
