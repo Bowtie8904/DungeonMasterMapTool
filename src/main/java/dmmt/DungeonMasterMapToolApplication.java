@@ -5,6 +5,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.render.CanvasMapRenderer;
+import dmmt.render.FrameProfiler;
 import dmmt.render.OverlayTextures;
 import dmmt.render.PerformanceMode;
 import dmmt.service.Dd2vttImportService;
@@ -183,6 +184,13 @@ public class DungeonMasterMapToolApplication extends Application {
     private volatile int animationFps = DEFAULT_FPS_ANIMATION;
     private volatile int idleFps = DEFAULT_FPS_IDLE;
     private long lastFrameNanos;
+    private Label metricsLabel;
+    private javafx.scene.control.Tooltip metricsTooltip;
+    private final Map<String, Long> metricsSectionNanos = new java.util.HashMap<>();
+    private long metricsWindowStart;
+    private int metricsFrames;
+    private long metricsNanosSum;
+    private long metricsNanosMax;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
     private double brushSizeTiles = 1.5;
@@ -394,7 +402,11 @@ public class DungeonMasterMapToolApplication extends Application {
             preferences.putBoolean(PREF_PERFORMANCE_MODE, on);
             status(on ? "Performance mode on." : "Performance mode off.");
         });
-        HBox statusBar = new HBox(sidebarToggle, performanceToggle, statusLabel);
+        metricsLabel = new Label();
+        metricsLabel.setMinWidth(430);
+        metricsTooltip = Icons.tooltip("Waiting for the first frames...");
+        javafx.scene.control.Tooltip.install(metricsLabel, metricsTooltip);
+        HBox statusBar = new HBox(sidebarToggle, performanceToggle, metricsLabel, statusLabel);
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
 
@@ -491,7 +503,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty();
-                int fps = PerformanceMode.isEnabled() ? idleFps
+                int fps = PerformanceMode.isEnabled()
+                        ? recentInput ? Math.min(PerformanceMode.INTERACTION_FPS, targetFps)
+                        : animated ? PerformanceMode.TEXTURE_ANIMATION_FPS : Math.min(PerformanceMode.IDLE_FPS, idleFps)
                         : recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
                 // 10% slack so vsync jitter does not push a frame to the next tick.
                 long minInterval = (long) (900_000_000L / fps);
@@ -499,16 +513,62 @@ public class DungeonMasterMapToolApplication extends Application {
                     return;
                 }
                 lastFrameNanos = now;
+                long frameStart = System.nanoTime();
+                long section = FrameProfiler.start();
                 lightingEngine.update(project);
                 applyPlayerScale();
                 if (frozenPlayerProject != null) {
                     playerLightingEngine.update(frozenPlayerProject);
                 }
+                FrameProfiler.lap("light engine", section);
                 renderDm();
+                section = FrameProfiler.start();
                 renderPlayer();
+                FrameProfiler.lap("player total", section);
+                recordFrame(System.nanoTime() - frameStart, now, fps);
             }
         };
         timer.start();
+    }
+
+    /** Collects per-frame render times and refreshes the status bar readout about once a second. */
+    private void recordFrame(long frameNanos, long nowNanos, int targetFramesPerSecond) {
+        if (metricsWindowStart == 0) {
+            metricsWindowStart = nowNanos;
+        }
+        metricsFrames++;
+        metricsNanosSum += frameNanos;
+        metricsNanosMax = Math.max(metricsNanosMax, frameNanos);
+        FrameProfiler.drain().forEach((name, nanos) -> metricsSectionNanos.merge(name, nanos, Long::sum));
+        long elapsed = nowNanos - metricsWindowStart;
+        if (elapsed < 1_000_000_000L) {
+            return;
+        }
+        Runtime rt = Runtime.getRuntime();
+        long usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+        double frames = metricsFrames;
+        List<Map.Entry<String, Long>> sections = metricsSectionNanos.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()).toList();
+        StringBuilder top = new StringBuilder();
+        StringBuilder detail = new StringBuilder("Average time per frame by part (ms):");
+        for (int i = 0; i < sections.size(); i++) {
+            Map.Entry<String, Long> entry = sections.get(i);
+            String ms = String.format(Locale.ROOT, "%.1f", entry.getValue() / 1e6 / frames);
+            detail.append("\n").append(entry.getKey()).append(": ").append(ms);
+            if (i < 2 && !entry.getKey().equals("player total")) {
+                top.append(top.length() == 0 ? "" : ", ").append(entry.getKey()).append(' ').append(ms);
+            }
+        }
+        detail.append("\n\n'player total' includes the player parts listed above it. 'base redraw' only appears when the map image layer had to be redrawn.");
+        metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms (max %.1f) | %d MB | %s",
+                metricsFrames * 1e9 / elapsed, targetFramesPerSecond,
+                metricsNanosSum / 1e6 / metricsFrames, metricsNanosMax / 1e6, usedMb, top));
+        metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | memory in use | slowest parts\n\n" + detail);
+        metricsSectionNanos.clear();
+        metricsWindowStart = nowNanos;
+        metricsFrames = 0;
+        metricsNanosSum = 0;
+        metricsNanosMax = 0;
     }
 
     // ---- DM controls panel (right side) ----
@@ -2106,6 +2166,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 selectedLight == null ? null : selectedLight.getId(),
                 hoveredInteractableId()
         );
+        long toolsStart = FrameProfiler.start();
         pruneLaserTrail();
         drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), 6);
         drawSelectionHandle(fogGc);
@@ -2115,6 +2176,7 @@ public class DungeonMasterMapToolApplication extends Application {
         drawGroupSelection(fogGc);
         drawToolPreview(fogGc);
         updateTextEditorPlacement();
+        FrameProfiler.lap("dm tools/ui", toolsStart);
     }
 
     private void renderPlayer() {
@@ -2186,12 +2248,13 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** True when the map has flickering lights or moving effect textures and animations are enabled. */
     private static boolean hasAnimation(DmProject candidate) {
-        if (!CanvasMapRenderer.animationsOn(candidate)) {
+        if (!candidate.isEffectAnimations()) {
             return false;
         }
+        boolean flicker = CanvasMapRenderer.flickerOn(candidate);
         return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture())
-                || o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
-                || candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
+                || flicker && o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
+                || flicker && candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
                 && l.getFlicker() != null && l.getFlicker().isEnabled() && l.getFlicker().getStrength() > 0);
     }
 

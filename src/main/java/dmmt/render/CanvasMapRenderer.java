@@ -59,8 +59,8 @@ public class CanvasMapRenderer {
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
 
-    /** Effect textures and light flicker only move when the map allows it and performance mode is off. */
-    public static boolean animationsOn(DmProject project) {
+    /** Light flicker only runs when the map allows animations and performance mode is off. */
+    public static boolean flickerOn(DmProject project) {
         return project.isEffectAnimations() && !PerformanceMode.isEnabled();
     }
 
@@ -137,6 +137,7 @@ public class CanvasMapRenderer {
         if (state.valid && state.signature == signature && state.imageVersion == imageVersion) {
             return;
         }
+        long profileStart = FrameProfiler.start();
         gc.setFill(Color.web("#202125"));
         gc.fillRect(0, 0, width, height);
         boolean complete = true;
@@ -147,6 +148,7 @@ public class CanvasMapRenderer {
             drawGrid(gc, project, width, height, camera);
             complete = drawLayers(gc, project, projectFile, width, height, camera);
         }
+        FrameProfiler.lap("base redraw", profileStart);
         state.signature = signature;
         state.imageVersion = imageVersion;
         // Detail tiles that are still loading need another pass once they arrive.
@@ -197,19 +199,26 @@ public class CanvasMapRenderer {
             return;
         }
 
+        String who = playerMode ? "player " : "dm ";
+        long t = FrameProfiler.start();
         drawOverlays(gc, project, width, height, camera, playerMode, false);
+        t = FrameProfiler.lap(who + "effects", t);
         drawLighting(gc, project, width, height, camera, playerMode);
+        t = FrameProfiler.lap(who + "lighting", t);
         drawOverlays(gc, project, width, height, camera, playerMode, true);
         if (!playerMode) {
             drawHiddenOverlayBadges(gc, project, width, height, camera);
         }
+        t = FrameProfiler.lap(who + "effects", t);
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
+        t = FrameProfiler.lap(who + "text", t);
         if (!playerMode && wallLayerVisible) {
             drawWalls(gc, project.getWalls(), width, height, camera);
             drawInteractables(gc, project.getInteractables(), width, height, camera);
         }
+        FrameProfiler.lap(who + "walls", t);
     }
 
     /**
@@ -231,7 +240,10 @@ public class CanvasMapRenderer {
         if (project == null) {
             return;
         }
+        String who = playerMode ? "player " : "dm ";
+        long t = FrameProfiler.start();
         drawFog(gc, project, width, height, camera, playerMode);
+        FrameProfiler.lap(who + "fog", t);
         drawPings(gc, project, width, height, camera);
         if (!playerMode) {
             drawLightTokens(gc, project, width, height, camera, selectedLightId);
@@ -427,7 +439,10 @@ public class CanvasMapRenderer {
                                    String texture, Color base, Color edge, double visibility, double width, double height,
                                    DmProject.CameraState camera) {
         double zoom = camera.getZoom();
-        double seconds = animationsOn(project) ? System.nanoTime() / 1_000_000_000.0 : 0;
+        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
+        if (PerformanceMode.isEnabled()) {
+            seconds = Math.floor(seconds * PerformanceMode.TEXTURE_ANIMATION_FPS) / PerformanceMode.TEXTURE_ANIMATION_FPS;
+        }
         double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
                 | (int) Math.round(base.getBlue() * 255);
@@ -913,7 +928,7 @@ public class CanvasMapRenderer {
             if (!relevant) {
                 continue;
             }
-            flickers[li] = animationsOn(project) ? LightFlicker.amount(light, now) : 0;
+            flickers[li] = flickerOn(project) ? LightFlicker.amount(light, now) : 0;
             key = 31 * key + Double.hashCode(flickers[li]);
             key = 31 * key + Double.hashCode(light.getRange());
             key = 31 * key + Double.hashCode(light.getIntensity());
@@ -926,7 +941,7 @@ public class CanvasMapRenderer {
             if (shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())
                     && (!playerMode || shape.isPlayerVisible())) {
                 String texture = OverlayTextures.normalize(shape.getTexture());
-                double flicker = animationsOn(project)
+                double flicker = flickerOn(project)
                         ? LightFlicker.amount(shape.getId(), OverlayTextures.lightFlicker(texture),
                         OverlayTextures.lightFlickerSpeed(texture), now)
                         : 0;
