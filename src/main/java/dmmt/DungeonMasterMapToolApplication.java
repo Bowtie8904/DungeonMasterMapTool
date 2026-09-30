@@ -596,7 +596,7 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- DM controls panel (right side) ----
 
     private Region createControlsPanel(Stage stage) {
-        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.round(newValue.doubleValue() * 2) / 2.0);
+        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.max(0.2, Math.round(newValue.doubleValue() * 2) / 2.0));
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
             String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";

@@ -81,7 +81,7 @@ public class CanvasMapRenderer {
     /** Seconds a fog cell needs to fade completely in or out. */
     public static final double FOG_FADE_SECONDS = 0.5;
     /** Fade time when the change comes from a light, so moving lights do not trail behind. */
-    public static final double FOG_LIGHT_FADE_SECONDS = 0.12;
+    public static final double FOG_LIGHT_FADE_SECONDS = 0.06;
 
     /** Width of the soft fog edge in grid tiles (0 = hard edge); applies to every project. */
     private static volatile double fogSoftness = DEFAULT_FOG_SOFTNESS;
