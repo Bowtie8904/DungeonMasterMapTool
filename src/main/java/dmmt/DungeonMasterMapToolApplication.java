@@ -259,6 +259,19 @@ public class DungeonMasterMapToolApplication extends Application {
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
 
+    /** Multi-selection: keys like "light:id", "text:id", "overlay:id", "layer:id". Replaces the single selection while non-empty. */
+    private final java.util.Set<String> groupKeys = new java.util.LinkedHashSet<>();
+    private boolean draggingGroup;
+    private double groupLastX;
+    private double groupLastY;
+    private Map<String, double[]> groupStartPositions;
+    private FogMask.Snapshot groupFogBefore;
+    private boolean marqueeActive;
+    private double marqueeStartX;
+    private double marqueeStartY;
+    private double marqueeCurrentX;
+    private double marqueeCurrentY;
+
     private DmProject.ImageLayer selectedLayer;
     private boolean draggingLayer;
     private boolean resizingLayer;
@@ -411,7 +424,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
-                if (findTextBox(selectedTextId) != null) {
+                pruneGroup();
+                if (!groupKeys.isEmpty()) {
+                    deleteGroup();
+                } else if (findTextBox(selectedTextId) != null) {
                     deleteSelectedText();
                 } else if (findOverlay(selectedOverlayId) != null) {
                     deleteSelectedOverlay();
@@ -1216,7 +1232,8 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         Cursor cursor;
-        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingPlayerViewport) {
+        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingPlayerViewport
+                || draggingGroup) {
             cursor = Cursor.CLOSED_HAND;
         } else if (resizingTextHandle >= 0) {
             cursor = textResizeCursor(resizingTextHandle);
@@ -1515,6 +1532,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            if (pressGroupSelection(world.x(), world.y(), camera.getZoom(), event.isControlDown())) {
+                return;
+            }
+
             selectedLight = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
             if (selectedLight != null) {
                 draggingLight = true;
@@ -1590,6 +1611,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 camera.setY(camera.getY() - dyScreen / camera.getZoom());
                 lastMouseX = event.getX();
                 lastMouseY = event.getY();
+                return;
+            }
+
+            if (marqueeActive) {
+                marqueeCurrentX = world.x();
+                marqueeCurrentY = world.y();
+                return;
+            }
+
+            if (draggingGroup) {
+                moveGroupBy(world.x() - groupLastX, world.y() - groupLastY);
+                groupLastX = world.x();
+                groupLastY = world.y();
                 return;
             }
 
@@ -1696,6 +1730,16 @@ public class DungeonMasterMapToolApplication extends Application {
                     return;
                 }
             }
+            if (marqueeActive) {
+                marqueeActive = false;
+                selectInMarquee();
+                return;
+            }
+            if (draggingGroup) {
+                finishGroupDrag();
+                return;
+            }
+
             if (panningDmCamera) {
                 DmProject.CameraState camera = project.getViews().getDmCamera();
                 if (!same(startCameraX, camera.getX()) || !same(startCameraY, camera.getY())) {
@@ -1987,6 +2031,7 @@ public class DungeonMasterMapToolApplication extends Application {
         drawSelectionHandle(fogGc);
         drawOverlaySelection(fogGc);
         drawTextSelection(fogGc);
+        drawGroupSelection(fogGc);
         drawToolPreview(fogGc);
         updateTextEditorPlacement();
     }
@@ -2541,6 +2586,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     .zIndex(project.getImageLayers().size())
                     .build();
             project.getImageLayers().add(layer);
+            clearGroup();
             selectedLayer = layer;
             selectedLight = null;
             executeWithHistory(
@@ -2758,6 +2804,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void setActiveTool(EditorTool tool) {
         commitTextEdit();
+        clearGroup();
         if (draftText != null) {
             DmProject.TextBox abandoned = draftText;
             project.getTextBoxes().remove(abandoned);
@@ -3031,6 +3078,7 @@ public class DungeonMasterMapToolApplication extends Application {
         lightingEngine.reset();
         roomBarrier = null;
         roomPreview = null;
+        clearGroup();
         selectedLayer = null;
         selectedLight = null;
         selectedOverlayId = null;
@@ -4048,6 +4096,7 @@ public class DungeonMasterMapToolApplication extends Application {
         applyTextState(copy.getId(), copy);
         recordTextChange("Paste text", copy.getId(), null, copy);
         selectedTextId = copy.getId();
+        clearGroup();
         selectedOverlayId = null;
         selectedLayer = null;
         selectedLight = null;
@@ -4198,6 +4247,409 @@ public class DungeonMasterMapToolApplication extends Application {
                 (int) Math.round(color.getGreen() * 255),
                 (int) Math.round(color.getBlue() * 255),
                 (int) Math.round(color.getOpacity() * 255));
+    }
+
+    // ---- Multi-selection (rectangle / Ctrl+click) ----
+
+    private static String groupKey(String kind, String id) {
+        return kind + ":" + id;
+    }
+
+    private void clearGroup() {
+        groupKeys.clear();
+        draggingGroup = false;
+        marqueeActive = false;
+        groupStartPositions = null;
+        groupFogBefore = null;
+    }
+
+    private void clearSingleSelection() {
+        selectedLight = null;
+        selectedTextId = null;
+        selectedOverlayId = null;
+        selectedLayer = null;
+    }
+
+    /** Drops group members that no longer exist (deleted, undone, or image layers that got locked). */
+    private void pruneGroup() {
+        groupKeys.removeIf(key -> groupBounds(key) == null);
+    }
+
+    private void seedGroupFromSingleSelection() {
+        if (selectedLight != null && findLightById(selectedLight.getId()) != null) {
+            groupKeys.add(groupKey("light", selectedLight.getId()));
+        }
+        if (findTextBox(selectedTextId) != null) {
+            groupKeys.add(groupKey("text", selectedTextId));
+        }
+        if (findOverlay(selectedOverlayId) != null) {
+            groupKeys.add(groupKey("overlay", selectedOverlayId));
+        }
+        if (selectedLayer != null && !isImageLayerLocked() && findLayerById(selectedLayer.getId()) != null) {
+            groupKeys.add(groupKey("layer", selectedLayer.getId()));
+        }
+    }
+
+    /** Topmost selectable item under the point, in the same priority order as single selection. */
+    private String pickGroupKey(double worldX, double worldY, double zoom) {
+        DmProject.LightSource light = pickNearestLight(worldX, worldY, 24 / Math.max(0.01, zoom));
+        if (light != null) {
+            return groupKey("light", light.getId());
+        }
+        DmProject.TextBox box = pickTextBox(worldX, worldY);
+        if (box != null) {
+            return groupKey("text", box.getId());
+        }
+        DmProject.OverlayShape overlay = pickOverlay(worldX, worldY, zoom);
+        if (overlay != null) {
+            return groupKey("overlay", overlay.getId());
+        }
+        DmProject.ImageLayer layer = isImageLayerLocked() ? null : pickTopmostLayer(worldX, worldY);
+        return layer == null ? null : groupKey("layer", layer.getId());
+    }
+
+    private boolean onSingleSelectionHandle(double worldX, double worldY, double zoom) {
+        DmProject.TextBox text = project.isTextLayerVisible() ? findTextBox(selectedTextId) : null;
+        if (text != null && pickTextHandle(text, worldX, worldY, zoom) >= 0) {
+            return true;
+        }
+        return selectedLayer != null && !isImageLayerLocked()
+                && distance(worldX, worldY, selectedLayer.getX() + selectedLayer.getWidth(),
+                selectedLayer.getY() + selectedLayer.getHeight()) < 16 / Math.max(0.01, zoom);
+    }
+
+    /** Handles Select-tool presses for group selection; returns true when the press was consumed. */
+    private boolean pressGroupSelection(double worldX, double worldY, double zoom, boolean ctrl) {
+        pruneGroup();
+        String hit = pickGroupKey(worldX, worldY, zoom);
+        if (ctrl) {
+            if (hit == null) {
+                return true;
+            }
+            if (groupKeys.isEmpty()) {
+                seedGroupFromSingleSelection();
+            }
+            if (!groupKeys.remove(hit)) {
+                groupKeys.add(hit);
+            }
+            clearSingleSelection();
+            status(groupKeys.size() + " selected. Drag to move, Del to delete, Ctrl+click to add or remove.");
+            return true;
+        }
+        if (!groupKeys.isEmpty()) {
+            if (hit != null && groupKeys.contains(hit)) {
+                draggingGroup = true;
+                groupLastX = worldX;
+                groupLastY = worldY;
+                groupStartPositions = captureGroupPositions();
+                groupFogBefore = groupKeys.stream().anyMatch(k -> k.startsWith("light:")) ? snapshotFog() : null;
+                return true;
+            }
+            clearGroup();
+        }
+        if (hit == null && !onSingleSelectionHandle(worldX, worldY, zoom)) {
+            clearSingleSelection();
+            marqueeActive = true;
+            marqueeStartX = worldX;
+            marqueeStartY = worldY;
+            marqueeCurrentX = worldX;
+            marqueeCurrentY = worldY;
+            return true;
+        }
+        return false;
+    }
+
+    private static String keyId(String key) {
+        return key.substring(key.indexOf(':') + 1);
+    }
+
+    private double[] groupPosition(String key) {
+        String id = keyId(key);
+        if (key.startsWith("light:")) {
+            DmProject.LightSource light = findLightById(id);
+            return light == null ? null : new double[]{light.getX(), light.getY()};
+        }
+        if (key.startsWith("text:")) {
+            DmProject.TextBox box = findTextBox(id);
+            return box == null ? null : new double[]{box.getX(), box.getY()};
+        }
+        if (key.startsWith("overlay:")) {
+            DmProject.OverlayShape shape = findOverlay(id);
+            return shape == null ? null : new double[]{shape.getX(), shape.getY()};
+        }
+        DmProject.ImageLayer layer = findLayerById(id);
+        return layer == null ? null : new double[]{layer.getX(), layer.getY()};
+    }
+
+    private Map<String, double[]> captureGroupPositions() {
+        Map<String, double[]> positions = new java.util.LinkedHashMap<>();
+        for (String key : groupKeys) {
+            double[] position = groupPosition(key);
+            if (position != null) {
+                positions.put(key, position);
+            }
+        }
+        return positions;
+    }
+
+    private void moveGroupBy(double dx, double dy) {
+        for (String key : groupKeys) {
+            double[] p = groupPosition(key);
+            if (p != null) {
+                moveGroupItemTo(key, p[0] + dx, p[1] + dy);
+            }
+        }
+    }
+
+    private void moveGroupItemTo(String key, double x, double y) {
+        String id = keyId(key);
+        if (key.startsWith("light:")) {
+            DmProject.LightSource light = findLightById(id);
+            if (light != null) {
+                light.setX(x);
+                light.setY(y);
+            }
+        } else if (key.startsWith("text:")) {
+            DmProject.TextBox box = findTextBox(id);
+            if (box != null) {
+                box.setX(x);
+                box.setY(y);
+            }
+        } else if (key.startsWith("overlay:")) {
+            DmProject.OverlayShape shape = findOverlay(id);
+            if (shape != null) {
+                translateOverlay(shape, x - shape.getX(), y - shape.getY());
+            }
+        } else {
+            DmProject.ImageLayer layer = findLayerById(id);
+            if (layer != null) {
+                layer.setX(x);
+                layer.setY(y);
+            }
+        }
+    }
+
+    private void finishGroupDrag() {
+        draggingGroup = false;
+        Map<String, double[]> before = groupStartPositions;
+        FogMask.Snapshot fogBefore = groupFogBefore;
+        groupStartPositions = null;
+        groupFogBefore = null;
+        if (before == null) {
+            return;
+        }
+        Map<String, double[]> after = captureGroupPositions();
+        boolean changed = before.entrySet().stream().anyMatch(e -> {
+            double[] now = after.get(e.getKey());
+            return now != null && (!same(e.getValue()[0], now[0]) || !same(e.getValue()[1], now[1]));
+        });
+        if (!changed) {
+            return;
+        }
+        Runnable redo = () -> after.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
+        Runnable undo = () -> before.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
+        if (fogBefore != null) {
+            recordWithFog("Move selection", fogBefore, redo, undo);
+        } else {
+            recordHistory("Move selection", redo, undo);
+        }
+    }
+
+    private void deleteGroup() {
+        commitTextEdit();
+        java.util.List<String> keys = new java.util.ArrayList<>(groupKeys);
+        Map<String, Object> backups = new java.util.LinkedHashMap<>();
+        for (String key : keys) {
+            String id = keyId(key);
+            if (key.startsWith("light:")) {
+                backups.put(key, cloneLight(findLightById(id)));
+            } else if (key.startsWith("text:")) {
+                backups.put(key, cloneText(findTextBox(id)));
+            } else if (key.startsWith("overlay:")) {
+                backups.put(key, cloneOverlay(findOverlay(id)));
+            } else {
+                backups.put(key, cloneLayer(findLayerById(id)));
+            }
+        }
+        Runnable redo = () -> {
+            for (String key : keys) {
+                String id = keyId(key);
+                if (key.startsWith("light:")) {
+                    project.getLighting().getLights().removeIf(l -> id.equals(l.getId()));
+                } else if (key.startsWith("text:")) {
+                    applyTextState(id, null);
+                } else if (key.startsWith("overlay:")) {
+                    applyOverlayState(id, null);
+                } else {
+                    project.getImageLayers().removeIf(l -> id.equals(l.getId()));
+                }
+            }
+            clearGroup();
+            clearSingleSelection();
+        };
+        Runnable undo = () -> {
+            for (Map.Entry<String, Object> entry : backups.entrySet()) {
+                String key = entry.getKey();
+                String id = keyId(key);
+                if (key.startsWith("light:")) {
+                    if (findLightById(id) == null) {
+                        project.getLighting().getLights().add(cloneLight((DmProject.LightSource) entry.getValue()));
+                    }
+                } else if (key.startsWith("text:")) {
+                    applyTextState(id, (DmProject.TextBox) entry.getValue());
+                } else if (key.startsWith("overlay:")) {
+                    applyOverlayState(id, (DmProject.OverlayShape) entry.getValue());
+                } else if (findLayerById(id) == null) {
+                    project.getImageLayers().add(cloneLayer((DmProject.ImageLayer) entry.getValue()));
+                }
+            }
+            groupKeys.clear();
+            groupKeys.addAll(keys);
+        };
+        int count = keys.size();
+        executeWithFogHistory("Delete selection", redo, undo);
+        status("Deleted " + count + " selected items.");
+    }
+
+    /** World bounds {minX, minY, maxX, maxY} of a group member, or null when it no longer exists / is not selectable. */
+    private double[] groupBounds(String key) {
+        String id = keyId(key);
+        if (key.startsWith("light:")) {
+            DmProject.LightSource light = findLightById(id);
+            return light == null ? null : new double[]{light.getX(), light.getY(), light.getX(), light.getY()};
+        }
+        if (key.startsWith("text:")) {
+            DmProject.TextBox box = project.isTextLayerVisible() ? findTextBox(id) : null;
+            return box == null ? null
+                    : new double[]{box.getX(), box.getY(), box.getX() + box.getWidth(), box.getY() + box.getHeight()};
+        }
+        if (key.startsWith("overlay:")) {
+            DmProject.OverlayShape shape = findOverlay(id);
+            if (shape == null) {
+                return null;
+            }
+            switch (shape.getType() == null ? "" : shape.getType()) {
+                case "circle":
+                    return new double[]{shape.getX() - shape.getRadius(), shape.getY() - shape.getRadius(),
+                            shape.getX() + shape.getRadius(), shape.getY() + shape.getRadius()};
+                case "rect":
+                    return new double[]{shape.getX(), shape.getY(),
+                            shape.getX() + shape.getWidth(), shape.getY() + shape.getHeight()};
+                default:
+                    List<Double> points = shape.getPoints();
+                    if (points.size() < 2) {
+                        return null;
+                    }
+                    double pad = shape.getStrokeWidth() / 2.0;
+                    double minX = Double.MAX_VALUE;
+                    double minY = Double.MAX_VALUE;
+                    double maxX = -Double.MAX_VALUE;
+                    double maxY = -Double.MAX_VALUE;
+                    for (int i = 0; i + 1 < points.size(); i += 2) {
+                        minX = Math.min(minX, points.get(i));
+                        maxX = Math.max(maxX, points.get(i));
+                        minY = Math.min(minY, points.get(i + 1));
+                        maxY = Math.max(maxY, points.get(i + 1));
+                    }
+                    return new double[]{minX - pad, minY - pad, maxX + pad, maxY + pad};
+            }
+        }
+        DmProject.ImageLayer layer = isImageLayerLocked() ? null : findLayerById(id);
+        return layer == null ? null
+                : new double[]{layer.getX(), layer.getY(), layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight()};
+    }
+
+    private void selectInMarquee() {
+        double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (Math.abs(marqueeCurrentX - marqueeStartX) < 4 / zoom && Math.abs(marqueeCurrentY - marqueeStartY) < 4 / zoom) {
+            return;
+        }
+        groupKeys.clear();
+        groupKeys.addAll(keysInMarquee());
+        if (!groupKeys.isEmpty()) {
+            status(groupKeys.size() + " selected. Drag to move, Del to delete, Ctrl+click to add or remove.");
+        }
+    }
+
+    private java.util.List<String> keysInMarquee() {
+        double minX = Math.min(marqueeStartX, marqueeCurrentX);
+        double maxX = Math.max(marqueeStartX, marqueeCurrentX);
+        double minY = Math.min(marqueeStartY, marqueeCurrentY);
+        double maxY = Math.max(marqueeStartY, marqueeCurrentY);
+        java.util.List<String> candidates = new java.util.ArrayList<>();
+        project.getLighting().getLights().forEach(l -> candidates.add(groupKey("light", l.getId())));
+        project.getTextBoxes().forEach(t -> candidates.add(groupKey("text", t.getId())));
+        project.getOverlays().forEach(o -> candidates.add(groupKey("overlay", o.getId())));
+        project.getImageLayers().forEach(l -> candidates.add(groupKey("layer", l.getId())));
+        java.util.List<String> result = new java.util.ArrayList<>();
+        for (String key : candidates) {
+            double[] b = groupBounds(key);
+            if (b == null) {
+                continue;
+            }
+            // Big image layers only count when fully enclosed; everything else when touched by the rectangle.
+            boolean selected = key.startsWith("layer:")
+                    ? b[0] >= minX && b[1] >= minY && b[2] <= maxX && b[3] <= maxY
+                    : b[2] >= minX && b[0] <= maxX && b[3] >= minY && b[1] <= maxY;
+            if (selected) {
+                result.add(key);
+            }
+        }
+        return result;
+    }
+
+    private void strokeGroupItem(GraphicsContext gc, String key, DmProject.CameraState camera, double w, double h) {
+        double[] b = groupBounds(key);
+        if (b == null) {
+            return;
+        }
+        double zoom = camera.getZoom();
+        double x = renderer.worldToScreenX(b[0], w, camera);
+        double y = renderer.worldToScreenY(b[1], h, camera);
+        if (key.startsWith("light:")) {
+            gc.strokeOval(x - 14, y - 14, 28, 28);
+        } else {
+            gc.strokeRect(x - 2, y - 2, (b[2] - b[0]) * zoom + 4, (b[3] - b[1]) * zoom + 4);
+        }
+    }
+
+    private void drawGroupSelection(GraphicsContext gc) {
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double zoom = camera.getZoom();
+        gc.setLineDashes(8, 6);
+        if (!groupKeys.isEmpty()) {
+            gc.setStroke(Color.YELLOW);
+            gc.setLineWidth(1.5);
+            for (String key : groupKeys) {
+                strokeGroupItem(gc, key, camera, w, h);
+            }
+        }
+        if (marqueeActive) {
+            java.util.List<String> inside = keysInMarquee();
+            boolean any = !inside.isEmpty();
+            Color accent = any ? Color.LIMEGREEN : Color.CYAN;
+            double x = renderer.worldToScreenX(Math.min(marqueeStartX, marqueeCurrentX), w, camera);
+            double y = renderer.worldToScreenY(Math.min(marqueeStartY, marqueeCurrentY), h, camera);
+            double rw = Math.abs(marqueeCurrentX - marqueeStartX) * zoom;
+            double rh = Math.abs(marqueeCurrentY - marqueeStartY) * zoom;
+            gc.setFill(Color.color(accent.getRed(), accent.getGreen(), accent.getBlue(), any ? 0.22 : 0.12));
+            gc.fillRect(x, y, rw, rh);
+            gc.setStroke(accent);
+            gc.setLineWidth(1.5);
+            gc.strokeRect(x, y, rw, rh);
+            gc.setLineDashes((double[]) null);
+            gc.setLineWidth(2.5);
+            for (String key : inside) {
+                strokeGroupItem(gc, key, camera, w, h);
+            }
+            if (any) {
+                gc.setFill(accent);
+                gc.fillText(String.valueOf(inside.size()), x + 6, y + 16);
+            }
+        }
+        gc.setLineDashes((double[]) null);
     }
 
     // ---- Light context menu ----
