@@ -59,6 +59,21 @@ public class DmProject {
     @Builder.Default
     private boolean effectAnimations = true;
 
+    @Builder.Default
+    private WeatherState weather = WeatherState.builder().build();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WeatherState {
+        /** Lower-case {@code dmmt.render.WeatherType} name; "none" for clear weather. */
+        @Builder.Default
+        private String type = "none";
+        @Builder.Default
+        private double intensity = 0.4;
+    }
+
     /** Text settings last used on this map; {@code null} until text has been used here. */
     private TextSettings lastTextSettings;
     @Builder.Default

@@ -53,6 +53,8 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Soft fog edges and fog fade animation (3.5)
 - [x] Batch import of dd2vtt maps: multi-file selection and whole-folder import (3.26)
 - [x] Handout upgrades: multiple pasted images shown together in an auto-fitted grid, per-image delete (3.27)
+- [x] Copy/paste of lights, effect shapes and text boxes (Ctrl+C / Ctrl+V), also across maps (3.28)
+- [x] Subtle ambient weather per map: rain, snow, mist, dust motes, embers (3.29)
 
 ## 4) Core Functional Requirements
 
@@ -370,7 +372,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Text layer** toggle hides/shows all text boxes in both DM and player views (saved with the map). Choosing the Text tool shows the layer again.
 - Text boxes are drawn above map, lighting and effects but **below fog**, so fog hides them from players.
 - **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in the settings file (3.25). Selecting the Text tool loads the map's settings, or the global ones when the map has none.
-- `Ctrl+C` copies the selected text box, `Ctrl+V` pastes it (at the mouse position, or the view center) — also into a different map opened afterwards.
+- `Ctrl+C` copies the selection, `Ctrl+V` pastes it at the mouse position (or the view center) — also into a different map opened afterwards (see 3.28; text boxes are part of the copied items).
 - Text boxes rotate with the map (box rectangle turns, text stays upright) and persist in the save file (`textBoxes`, `textLayerVisible`, `lastTextSettings`).
 ## 3.25 Settings File
 
@@ -398,6 +400,21 @@ Desktop tool for tabletop dungeon masters that:
 - When the last image is removed the window returns to its empty state and "Show to players" turns off.
 - Handouts remain session-only (3.18).
 - Implementation: `HandoutLayout` (pure, unit-tested: single image, rows/columns choice, wide vs. tall images, rotation, removal), `HandoutWindow` (image list, hit-testing, selection, context menu), `renderPlayer` draws all images via the shared layout.
+
+## 3.28 Copy & Paste of Lights, Effects and Text (implemented)
+
+- `Ctrl+C` copies the current selection: a single selected light, effect shape or text box, or a multi-selection (marquee / Ctrl+click) containing any mix of them. Image layers are not copied. The copy/paste buttons in the *Text* section do the same.
+- `Ctrl+V` pastes all copied items as one undoable step ("Paste"), keeping their relative arrangement, with the group centred on the mouse cursor (or the view centre when the cursor is outside the canvas). Pasted items get new ids; a single pasted item is selected, several pasted items become the multi-selection.
+- The clipboard lives in the app (not the system clipboard) and survives map switches, so items can be pasted into another map. Positions and sizes are copied as-is in world units (no rescaling between maps with different grid sizes). Pasting text boxes re-enables a hidden text layer.
+- Pasted lights keep all their settings (range, colour, flicker, reveal mode, on/off); persistent reveals are recorded in the fog history so undo restores the fog.
+
+## 3.29 Ambient Weather (implemented)
+
+- *Weather* section in the DM controls: a type dropdown (None, Rain, Snow, Mist, Dust motes, Embers) and an intensity slider (10-100%, default 40%, double-click resets). Both are stored per map (`weather.type`, `weather.intensity`) and changes are undoable; older saves = no weather.
+- Weather is **subtle by design**: thin low-opacity particles (rain streaks ~22%, snow ~50%, dust and embers fade in and out, mist is a few very soft gradient blobs with at most ~12% opacity each) that never hide map details.
+- Shown in both DM and player views, above map, effects and lighting but **below text boxes and fog**. It is screen-space: particle positions are a pure function of index and time (`dmmt.render.WeatherEffects`), so DM and player canvases need no shared state.
+- Follows the map's *Animations* toggle (off = static frame, render loop not woken) and Performance mode (half the particles, 5 fps animation). The frozen player view keeps the weather of the moment it was frozen.
+- Implementation: `WeatherType`, `WeatherEffects` (unit-tested: counts, determinism, wrap, clamping), `DmProject.WeatherState`, `CanvasMapRenderer.drawWeather`.
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -583,6 +600,8 @@ Desktop tool for tabletop dungeon masters that:
 1. Batch import of dd2vtt maps (3.26), with unit tests for folder scan and unique naming.
 2. Handout upgrades (3.27), with unit tests for the grid layout.
 3. Soft fog edges and fog fade animation (3.5), with unit tests for `FogShading`.
+4. Copy/paste of lights, effects and text across maps (3.28).
+5. Ambient weather (3.29), with unit tests for `WeatherEffects`.
 
 ## 8) Open Decisions (Track Here)
 
@@ -603,6 +622,7 @@ Desktop tool for tabletop dungeon masters that:
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
 - **v2.8 (current):** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
 - **v2.7:** Per-map toggle to disable effect animations (3.8).
+- **v2.7:** Ctrl+C / Ctrl+V for lights, effect shapes and text boxes incl. multi-selection and across maps (3.28); ambient weather per map (3.29).
 - **v2.6:** Global preferences moved to an editable settings file next to the jar, including texture defaults (3.25).
 - **v2.5:** Animated effect textures (smoke, fire, water) for AOE shapes (3.8).
 - **v2.4:** Text boxes on the map (3.24): rich text (size/color), background/border, wrap, layer toggle, per-map last-used settings, copy/paste between maps.

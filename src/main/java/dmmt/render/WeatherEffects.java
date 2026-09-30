@@ -1,0 +1,159 @@
+package dmmt.render;
+
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.RadialGradient;
+import javafx.scene.paint.Stop;
+
+/**
+ * Subtle screen-space weather. Particles are stateless: every position is a pure function of the particle
+ * index and the clock, so the DM and player canvases show the same weather without sharing any state.
+ * Opacities are deliberately low so the map always stays readable.
+ */
+public final class WeatherEffects {
+    public static final double DEFAULT_INTENSITY = 0.4;
+    public static final double MIN_INTENSITY = 0.1;
+    public static final double MAX_INTENSITY = 1.0;
+
+    private static final double REFERENCE_AREA = 1920.0 * 1080.0;
+    private static final double EDGE_MARGIN = 40;
+
+    private WeatherEffects() {
+    }
+
+    public static double clampIntensity(double intensity) {
+        return Math.max(MIN_INTENSITY, Math.min(MAX_INTENSITY, intensity));
+    }
+
+    /** Number of particles for the screen size; scales with intensity and area, at least one when active. */
+    public static int particleCount(WeatherType type, double intensity, double width, double height) {
+        if (type == null || type == WeatherType.NONE) {
+            return 0;
+        }
+        if (type == WeatherType.MIST) {
+            return type.maxParticles();
+        }
+        double area = Math.max(0.3, Math.min(2.0, width * height / REFERENCE_AREA));
+        return Math.max(1, (int) Math.round(type.maxParticles() * clampIntensity(intensity) * area));
+    }
+
+    /** Deterministic pseudo-random value in [0, 1) for particle {@code index} and property {@code salt}. */
+    public static double unit(int index, int salt) {
+        long z = (index * 0x9E3779B97F4A7C15L) ^ (salt * 0xBF58476D1CE4E5B9L);
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        z ^= z >>> 31;
+        return (z >>> 11) * 0x1.0p-53;
+    }
+
+    /** Wraps {@code value} into [0, span). */
+    static double wrap(double value, double span) {
+        double result = value % span;
+        return result < 0 ? result + span : result;
+    }
+
+    public static void draw(GraphicsContext gc, WeatherType type, double intensity, double width, double height,
+                            double seconds, boolean reduced) {
+        if (type == null || type == WeatherType.NONE || width <= 0 || height <= 0) {
+            return;
+        }
+        double level = clampIntensity(intensity);
+        int count = particleCount(type, level, width, height);
+        if (reduced && type != WeatherType.MIST) {
+            count = Math.max(1, count / 2);
+        }
+        double scale = Math.max(0.6, Math.min(2.0, Math.min(width, height) / 900.0));
+        double previousAlpha = gc.getGlobalAlpha();
+        switch (type) {
+            case RAIN -> drawRain(gc, count, width, height, seconds, scale);
+            case SNOW -> drawSnow(gc, count, width, height, seconds, scale);
+            case DUST -> drawDust(gc, count, width, height, seconds, scale);
+            case EMBERS -> drawEmbers(gc, count, width, height, seconds, scale);
+            case MIST -> drawMist(gc, level, width, height, seconds, scale);
+            default -> {
+            }
+        }
+        gc.setGlobalAlpha(previousAlpha);
+    }
+
+    private static void drawRain(GraphicsContext gc, int count, double w, double h, double t, double scale) {
+        gc.setStroke(Color.rgb(200, 215, 235));
+        gc.setLineWidth(Math.max(1.0, scale));
+        gc.setGlobalAlpha(0.42);
+        double spanX = w + 2 * EDGE_MARGIN;
+        double spanY = h + 2 * EDGE_MARGIN;
+        for (int i = 0; i < count; i++) {
+            double speed = (650 + 350 * unit(i, 2)) * scale;
+            double length = (9 + 12 * unit(i, 3)) * scale;
+            double vx = speed * 0.22;
+            double x = wrap(unit(i, 1) * spanX + vx * t, spanX) - EDGE_MARGIN;
+            double y = wrap(unit(i, 4) * spanY + speed * t, spanY) - EDGE_MARGIN;
+            double norm = Math.hypot(vx, speed);
+            gc.strokeLine(x, y, x - length * vx / norm, y - length * speed / norm);
+        }
+    }
+
+    private static void drawSnow(GraphicsContext gc, int count, double w, double h, double t, double scale) {
+        gc.setFill(Color.rgb(245, 248, 255));
+        gc.setGlobalAlpha(0.5);
+        double spanX = w + 2 * EDGE_MARGIN;
+        double spanY = h + 2 * EDGE_MARGIN;
+        for (int i = 0; i < count; i++) {
+            double radius = (1.1 + 1.7 * unit(i, 3)) * scale;
+            double fall = (22 + 34 * unit(i, 2)) * scale;
+            double sway = Math.sin(t * (0.4 + unit(i, 5)) + unit(i, 6) * Math.PI * 2) * 16 * scale;
+            double x = wrap(unit(i, 1) * spanX, spanX) - EDGE_MARGIN + sway;
+            double y = wrap(unit(i, 4) * spanY + fall * t, spanY) - EDGE_MARGIN;
+            gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
+        }
+    }
+
+    private static void drawDust(GraphicsContext gc, int count, double w, double h, double t, double scale) {
+        gc.setFill(Color.rgb(255, 240, 205));
+        for (int i = 0; i < count; i++) {
+            double radius = (0.8 + 1.2 * unit(i, 3)) * scale;
+            double vx = (5 + 8 * unit(i, 2)) * scale;
+            double vy = -(2 + 5 * unit(i, 7)) * scale;
+            double x = wrap(unit(i, 1) * w + vx * t, w);
+            double y = wrap(unit(i, 4) * h + vy * t, h);
+            double twinkle = 0.5 + 0.5 * Math.sin(t * (0.3 + unit(i, 5)) + unit(i, 6) * Math.PI * 2);
+            gc.setGlobalAlpha(0.06 + 0.42 * twinkle);
+            gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
+        }
+    }
+
+    private static void drawEmbers(GraphicsContext gc, int count, double w, double h, double t, double scale) {
+        gc.setFill(Color.rgb(255, 150, 60));
+        double spanY = h + 2 * EDGE_MARGIN;
+        for (int i = 0; i < count; i++) {
+            double radius = (1.0 + 1.5 * unit(i, 3)) * scale;
+            double rise = (28 + 42 * unit(i, 2)) * scale;
+            double sway = Math.sin(t * (0.6 + unit(i, 5)) + unit(i, 6) * Math.PI * 2) * 20 * scale;
+            double x = wrap(unit(i, 1) * w + sway, w);
+            double y = spanY - wrap(unit(i, 4) * spanY + rise * t, spanY) - EDGE_MARGIN;
+            double flicker = 0.5 + 0.5 * Math.sin(t * (2 + 3 * unit(i, 7)) + unit(i, 6) * 9);
+            gc.setGlobalAlpha(0.15 + 0.6 * flicker);
+            gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
+        }
+    }
+
+    private static void drawMist(GraphicsContext gc, double level, double w, double h, double t, double scale) {
+        int blobs = WeatherType.MIST.maxParticles();
+        double alpha = 0.04 + 0.08 * level;
+        double longest = Math.max(w, h);
+        for (int i = 0; i < blobs; i++) {
+            double radius = (0.22 + 0.22 * unit(i, 3)) * longest;
+            double span = w + 2 * radius;
+            double drift = (5 + 9 * unit(i, 2)) * scale;
+            double x = wrap(unit(i, 1) * span + drift * t, span) - radius;
+            double y = (0.1 + 0.8 * unit(i, 4)) * h + Math.sin(t * 0.05 + unit(i, 6) * Math.PI * 2) * 0.04 * h;
+            RadialGradient gradient = new RadialGradient(0, 0, x, y, radius, false, CycleMethod.NO_CYCLE,
+                    new Stop(0, Color.color(0.86, 0.89, 0.93, alpha)),
+                    new Stop(1, Color.color(0.86, 0.89, 0.93, 0)));
+            gc.setGlobalAlpha(1.0);
+            gc.setFill(gradient);
+            gc.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        }
+    }
+}

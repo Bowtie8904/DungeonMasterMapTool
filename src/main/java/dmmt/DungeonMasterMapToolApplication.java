@@ -8,6 +8,8 @@ import dmmt.render.CanvasMapRenderer;
 import dmmt.render.FrameProfiler;
 import dmmt.render.OverlayTextures;
 import dmmt.render.PerformanceMode;
+import dmmt.render.WeatherEffects;
+import dmmt.render.WeatherType;
 import dmmt.service.BatchImportService;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
@@ -262,7 +264,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.TextBox textDragBefore;
     private double textLastX;
     private double textLastY;
-    private DmProject.TextBox textClipboard;
+    private CopiedItems CopiedItems;
     private Spinner<Integer> textSizeSpinner;
     private ColorPicker textColorPicker;
     private ColorPicker textBackgroundPicker;
@@ -280,6 +282,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private Label ambientBrightnessValue;
     /** Last committed ambient brightness of the current preset; the "before" value for undo. */
     private double ambientBrightnessCommitted;
+    private ComboBox<WeatherType> weatherBox;
+    private Slider weatherIntensitySlider;
+    private Label weatherIntensityValue;
+    private double weatherIntensityCommitted = WeatherEffects.DEFAULT_INTENSITY;
     private ToggleButton freezePlayerButton;
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
@@ -450,13 +456,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             if (event.isControlDown() && event.getCode() == KeyCode.C) {
-                if (copySelectedText()) {
+                if (copySelection()) {
                     event.consume();
                 }
                 return;
             }
             if (event.isControlDown() && event.getCode() == KeyCode.V) {
-                pasteText();
+                pasteSelection();
                 event.consume();
                 return;
             }
@@ -853,9 +859,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 setTextLayerVisible(textLayerToggle.isSelected());
             }
         });
-        Button copyText = Icons.button(MaterialDesignC.CONTENT_COPY, "Copy the selected text box (Ctrl+C)", this::copySelectedText);
+        Button copyText = Icons.button(MaterialDesignC.CONTENT_COPY, "Copy the selected lights, effects and text boxes (Ctrl+C)", this::copySelection);
         Button pasteText = Icons.button(MaterialDesignC.CONTENT_PASTE,
-                "Paste the copied text box, also into another map (Ctrl+V)", this::pasteText);
+                "Paste the copied items at the cursor, also into another map (Ctrl+V)", this::pasteSelection);
         Button deleteText = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
         Region textSpacer = new Region();
         HBox.setHgrow(textSpacer, Priority.ALWAYS);
@@ -1038,10 +1044,13 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox playerZoomRow = row(Icons.icon(MaterialDesignM.MAGNIFY), playerZoomSlider, playerZoomValue);
         HBox.setHgrow(playerZoomRow, Priority.ALWAYS);
 
+        HBox weatherRow = weatherRow();
+
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
+                new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather", weatherRow),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
                 new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
@@ -1275,6 +1284,102 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
         return box;
+    }
+
+    /** Ambient weather of this map: type dropdown plus a subtle-to-stronger intensity slider, both undoable. */
+    private HBox weatherRow() {
+        weatherBox = new ComboBox<>();
+        weatherBox.getItems().addAll(WeatherType.values());
+        weatherBox.setValue(WeatherType.NONE);
+        weatherBox.setMaxWidth(Double.MAX_VALUE);
+        Icons.tooltip(weatherBox, "Ambient weather for this map, shown to DM and players above the map and below fog and text.");
+        weatherBox.setOnAction(e -> {
+            if (!syncingControls && weatherBox.getValue() != null) {
+                changeWeather(weatherBox.getValue().key(), currentWeather().getIntensity());
+            }
+        });
+
+        Slider slider = new Slider(WeatherEffects.MIN_INTENSITY, WeatherEffects.MAX_INTENSITY,
+                WeatherEffects.DEFAULT_INTENSITY);
+        slider.setMajorTickUnit(0.05);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.setBlockIncrement(0.05);
+        slider.setPrefWidth(70);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        Icons.tooltip(slider, "Weather intensity. Keep it low for a subtle effect. Double-click to reset.");
+        Label value = new Label(Math.round(slider.getValue() * 100) + "%");
+        value.getStyleClass().add("value-label");
+        weatherIntensitySlider = slider;
+        weatherIntensityValue = value;
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            value.setText(Math.round(newValue.doubleValue() * 100) + "%");
+            if (syncingControls) {
+                return;
+            }
+            project.getWeather().setIntensity(newValue.doubleValue());
+            if (!slider.isValueChanging()) {
+                commitWeatherIntensity();
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing && !syncingControls) {
+                commitWeatherIntensity();
+            }
+        });
+        slider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                slider.setValue(WeatherEffects.DEFAULT_INTENSITY);
+                commitWeatherIntensity();
+            }
+        });
+        HBox box = row(weatherBox, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    private DmProject.WeatherState currentWeather() {
+        if (project.getWeather() == null) {
+            project.setWeather(DmProject.WeatherState.builder().build());
+        }
+        return project.getWeather();
+    }
+
+    private void changeWeather(String typeKey, double intensity) {
+        DmProject.WeatherState weather = currentWeather();
+        String beforeType = weather.getType();
+        double beforeIntensity = weather.getIntensity();
+        if (WeatherType.from(beforeType) == WeatherType.from(typeKey)) {
+            return;
+        }
+        executeWithHistory(
+                "Change weather",
+                () -> setWeather(typeKey, intensity),
+                () -> setWeather(beforeType, beforeIntensity)
+        );
+        status("Weather: " + WeatherType.from(typeKey).label());
+    }
+
+    private void commitWeatherIntensity() {
+        double before = weatherIntensityCommitted;
+        double after = currentWeather().getIntensity();
+        if (Math.abs(after - before) < 1e-9) {
+            return;
+        }
+        weatherIntensityCommitted = after;
+        String typeKey = currentWeather().getType();
+        recordHistory(
+                "Change weather intensity",
+                () -> setWeather(typeKey, after),
+                () -> setWeather(typeKey, before)
+        );
+    }
+
+    private void setWeather(String typeKey, double intensity) {
+        DmProject.WeatherState weather = currentWeather();
+        weather.setType(WeatherType.from(typeKey).key());
+        weather.setIntensity(WeatherEffects.clampIntensity(intensity));
+        syncControlsFromProject();
     }
 
     private static String formatPlayerZoom(double step) {
@@ -2370,6 +2475,9 @@ public class DungeonMasterMapToolApplication extends Application {
             return false;
         }
         boolean flicker = CanvasMapRenderer.flickerOn(candidate);
+        if (candidate.getWeather() != null && WeatherType.from(candidate.getWeather().getType()) != WeatherType.NONE) {
+            return true;
+        }
         return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture())
                 || flicker && o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
                 || flicker && candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
@@ -3536,6 +3644,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 freezePlayerButton.setSelected(frozenPlayerProject != null);
             }
             updateImageLockToggle();
+            if (weatherBox != null) {
+                DmProject.WeatherState weather = currentWeather();
+                weatherBox.setValue(WeatherType.from(weather.getType()));
+                weatherIntensityCommitted = weather.getIntensity();
+                weatherIntensitySlider.setValue(weather.getIntensity());
+                weatherIntensityValue.setText(Math.round(weather.getIntensity() * 100) + "%");
+                weatherIntensitySlider.setDisable(WeatherType.from(weather.getType()) == WeatherType.NONE);
+            }
             if (textLayerToggle != null) {
                 textLayerToggle.setSelected(project.isTextLayerVisible());
                 if (effectAnimationsToggle != null) {
@@ -4596,42 +4712,150 @@ public class DungeonMasterMapToolApplication extends Application {
         status(visible ? "Text layer shown." : "Text layer hidden for DM and players.");
     }
 
-    private boolean copySelectedText() {
-        DmProject.TextBox box = findTextBox(selectedTextId);
-        if (box == null) {
-            status("Select a text box first, then copy it with Ctrl+C.");
+    /** Keys of the copyable items (lights, text boxes, effect shapes) in the current selection. */
+    private java.util.List<String> copyableKeys() {
+        pruneGroup();
+        java.util.List<String> keys = new java.util.ArrayList<>(groupKeys);
+        if (keys.isEmpty()) {
+            if (selectedLight != null && findLightById(selectedLight.getId()) != null) {
+                keys.add(groupKey("light", selectedLight.getId()));
+            }
+            if (findTextBox(selectedTextId) != null) {
+                keys.add(groupKey("text", selectedTextId));
+            }
+            if (findOverlay(selectedOverlayId) != null) {
+                keys.add(groupKey("overlay", selectedOverlayId));
+            }
+        }
+        keys.removeIf(key -> key.startsWith("layer:"));
+        return keys;
+    }
+
+    private boolean copySelection() {
+        java.util.List<String> keys = copyableKeys();
+        if (keys.isEmpty()) {
+            status("Select lights, effects or text boxes first, then copy them with Ctrl+C.");
             return false;
         }
-        textClipboard = cloneText(box);
-        status("Copied text box. Paste it with Ctrl+V, also on another map.");
+        CopiedItems content = new CopiedItems();
+        double minX = Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double maxY = -Double.MAX_VALUE;
+        for (String key : keys) {
+            String id = keyId(key);
+            if (key.startsWith("light:")) {
+                content.lights.add(cloneLight(findLightById(id)));
+            } else if (key.startsWith("text:")) {
+                content.texts.add(cloneText(findTextBox(id)));
+            } else {
+                content.overlays.add(cloneOverlay(findOverlay(id)));
+            }
+            double[] bounds = groupBounds(key);
+            if (bounds != null) {
+                minX = Math.min(minX, bounds[0]);
+                minY = Math.min(minY, bounds[1]);
+                maxX = Math.max(maxX, bounds[2]);
+                maxY = Math.max(maxY, bounds[3]);
+            }
+        }
+        content.centerX = (minX + maxX) / 2.0;
+        content.centerY = (minY + maxY) / 2.0;
+        CopiedItems = content;
+        status("Copied " + keys.size() + (keys.size() == 1 ? " item" : " items")
+                + ". Paste with Ctrl+V, also on another map.");
         return true;
     }
 
-    private void pasteText() {
-        if (textClipboard == null) {
-            status("No text box copied yet.");
+    /** Pastes the copied items centered on the cursor as one undo step. */
+    private void pasteSelection() {
+        CopiedItems content = CopiedItems;
+        if (content == null || content.isEmpty()) {
+            status("Nothing copied yet.");
             return;
         }
         commitTextEdit();
-        if (!project.isTextLayerVisible()) {
+        if (!content.texts.isEmpty() && !project.isTextLayerVisible()) {
             setTextLayerVisible(true);
         }
         DmProject.CameraState camera = project.getViews().getDmCamera();
-        double centerX = hoverInsideCanvas ? hoverWorldX : camera.getX();
-        double centerY = hoverInsideCanvas ? hoverWorldY : camera.getY();
-        DmProject.TextBox copy = cloneText(textClipboard);
-        copy.setId("text-" + UUID.randomUUID());
-        copy.setX(centerX - copy.getWidth() / 2.0);
-        copy.setY(centerY - copy.getHeight() / 2.0);
-        applyTextState(copy.getId(), copy);
-        recordTextChange("Paste text", copy.getId(), null, copy);
-        selectedTextId = copy.getId();
+        double dx = (hoverInsideCanvas ? hoverWorldX : camera.getX()) - content.centerX;
+        double dy = (hoverInsideCanvas ? hoverWorldY : camera.getY()) - content.centerY;
+
+        java.util.List<DmProject.LightSource> lights = new java.util.ArrayList<>();
+        for (DmProject.LightSource source : content.lights) {
+            DmProject.LightSource copy = cloneLight(source);
+            copy.setId("light-" + UUID.randomUUID());
+            copy.setX(copy.getX() + dx);
+            copy.setY(copy.getY() + dy);
+            lights.add(copy);
+        }
+        java.util.List<DmProject.OverlayShape> overlays = new java.util.ArrayList<>();
+        for (DmProject.OverlayShape source : content.overlays) {
+            DmProject.OverlayShape copy = cloneOverlay(source);
+            copy.setId("overlay-" + UUID.randomUUID());
+            translateOverlay(copy, dx, dy);
+            overlays.add(copy);
+        }
+        java.util.List<DmProject.TextBox> texts = new java.util.ArrayList<>();
+        for (DmProject.TextBox source : content.texts) {
+            DmProject.TextBox copy = cloneText(source);
+            copy.setId("text-" + UUID.randomUUID());
+            copy.setX(copy.getX() + dx);
+            copy.setY(copy.getY() + dy);
+            texts.add(copy);
+        }
+
+        Runnable redo = () -> {
+            for (DmProject.LightSource light : lights) {
+                if (findLightById(light.getId()) == null) {
+                    project.getLighting().getLights().add(cloneLight(light));
+                }
+            }
+            overlays.forEach(shape -> applyOverlayState(shape.getId(), shape));
+            texts.forEach(box -> applyTextState(box.getId(), box));
+        };
+        Runnable undo = () -> {
+            lights.forEach(light -> project.getLighting().getLights()
+                    .removeIf(l -> light.getId().equals(l.getId())));
+            overlays.forEach(shape -> applyOverlayState(shape.getId(), null));
+            texts.forEach(box -> applyTextState(box.getId(), null));
+            pruneGroup();
+        };
+        executeWithFogHistory("Paste", redo, undo);
+
         clearGroup();
-        selectedOverlayId = null;
-        selectedLayer = null;
-        selectedLight = null;
-        syncTextControls(copy);
-        status("Pasted text box.");
+        clearSingleSelection();
+        java.util.List<String> pasted = new java.util.ArrayList<>();
+        lights.forEach(l -> pasted.add(groupKey("light", l.getId())));
+        overlays.forEach(o -> pasted.add(groupKey("overlay", o.getId())));
+        texts.forEach(t -> pasted.add(groupKey("text", t.getId())));
+        if (pasted.size() == 1) {
+            if (!lights.isEmpty()) {
+                selectedLight = findLightById(lights.get(0).getId());
+            } else if (!overlays.isEmpty()) {
+                selectedOverlayId = overlays.get(0).getId();
+            } else {
+                selectedTextId = texts.get(0).getId();
+                syncTextControls(findTextBox(selectedTextId));
+            }
+        } else {
+            groupKeys.addAll(pasted);
+        }
+        status("Pasted " + pasted.size() + (pasted.size() == 1 ? " item." : " items."));
+    }
+
+    /** Copied items in the coordinates of the map they came from; survives map switches. */
+    private static final class CopiedItems {
+        private final java.util.List<DmProject.LightSource> lights = new java.util.ArrayList<>();
+        private final java.util.List<DmProject.OverlayShape> overlays = new java.util.ArrayList<>();
+        private final java.util.List<DmProject.TextBox> texts = new java.util.ArrayList<>();
+        private double centerX;
+        private double centerY;
+
+        private boolean isEmpty() {
+            return lights.isEmpty() && overlays.isEmpty() && texts.isEmpty();
+        }
     }
 
     // Text style controls

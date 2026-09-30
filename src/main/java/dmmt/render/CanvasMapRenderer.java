@@ -249,6 +249,8 @@ public class CanvasMapRenderer {
             drawHiddenOverlayBadges(gc, project, width, height, camera);
         }
         t = FrameProfiler.lap(who + "effects", t);
+        drawWeather(gc, project, width, height);
+        t = FrameProfiler.lap(who + "weather", t);
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
@@ -293,6 +295,19 @@ public class CanvasMapRenderer {
                 drawViewportRect(gc, playerViewportWorld, width, height, camera);
             }
         }
+    }
+
+    private void drawWeather(GraphicsContext gc, DmProject project, double width, double height) {
+        DmProject.WeatherState weather = project.getWeather();
+        WeatherType type = weather == null ? WeatherType.NONE : WeatherType.from(weather.getType());
+        if (type == WeatherType.NONE) {
+            return;
+        }
+        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
+        if (PerformanceMode.isEnabled()) {
+            seconds = Math.floor(seconds * PerformanceMode.TEXTURE_ANIMATION_FPS) / PerformanceMode.TEXTURE_ANIMATION_FPS;
+        }
+        WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
     }
 
     private void drawGrid(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera) {
