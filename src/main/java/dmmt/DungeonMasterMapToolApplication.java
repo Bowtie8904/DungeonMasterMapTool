@@ -504,17 +504,17 @@ public class DungeonMasterMapToolApplication extends Application {
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
             String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";
-            ToggleButton button = Icons.toggle(tool.icon, tool.label + " â€” " + tool.description + exitHint);
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description + exitHint);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
         }
 
         // Tools
-        pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) â€” click the map to flash a marker for the players");
+        pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) — click the map to flash a marker for the players");
         pingToggle.setOnAction(e -> setPingArmed(pingToggle.isSelected()));
         wallLayerToggle = Icons.toggle(MaterialDesignL.LAYERS_OUTLINE,
-                "Show / hide the wall layer (wall lines, doors and windows) in the DM view â€” lights stay visible");
+                "Show / hide the wall layer (wall lines, doors and windows) in the DM view — lights stay visible");
         wallLayerToggle.setSelected(renderer.isWallLayerVisible());
         wallLayerToggle.setOnAction(e -> setWallLayerVisible(wallLayerToggle.isSelected()));
         Region toolSpacer = new Region();
@@ -525,7 +525,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         // Fog of war
         fogToggleButton = Icons.toggle(MaterialDesignW.WEATHER_FOG,
-                "Fog of war on / off â€” revealed areas are remembered while fog is off");
+                "Fog of war on / off — revealed areas are remembered while fog is off");
         fogToggleButton.setOnAction(e -> {
             if (syncingControls) {
                 return;
@@ -625,7 +625,7 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayStyleBefore = null;
         });
         overlayPlayerToggle = Icons.toggle(MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
-                "Players see this effect â€” turn off for DM-only markings");
+                "Players see this effect — turn off for DM-only markings");
         overlayPlayerToggle.setSelected(overlayPlayerVisible);
         overlayPlayerToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -701,7 +701,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         overlayBorderToggle = Icons.toggle(MaterialDesignS.SQUARE_OUTLINE,
-                "Border around textured effects (off by default) â€” also changes the selected effect");
+                "Border around textured effects (off by default) — also changes the selected effect");
         overlayBorderToggle.setSelected(overlayBorder);
         overlayBorderToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -714,7 +714,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         overlayLightToggle = Icons.toggle(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
-                "Effect emits light in its color (visible when the map is dark) â€” also changes the selected effect. Defaults per texture are set in the settings file");
+                "Effect emits light in its color (visible when the map is dark) — also changes the selected effect. Defaults per texture are set in the settings file");
         overlayLightToggle.setSelected(overlayEmitsLight);
         overlayLightToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -744,7 +744,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         // Text
         textLayerToggle = Icons.toggle(MaterialDesignE.EYE_OUTLINE,
-                "Show / hide all text boxes (DM and player view) â€” text is drawn below the fog");
+                "Show / hide all text boxes (DM and player view) — text is drawn below the fog");
         textLayerToggle.setSelected(true);
         textLayerToggle.setOnAction(e -> {
             if (!syncingControls) {
@@ -770,7 +770,7 @@ public class DungeonMasterMapToolApplication extends Application {
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(6, 400, DmProject.DEFAULT_TEXT_SIZE, 2));
         textSizeSpinner.setEditable(true);
         textSizeSpinner.setPrefWidth(84);
-        Icons.tooltip(textSizeSpinner, "Font size â€” applies to the selected text while typing, or to new text; "
+        Icons.tooltip(textSizeSpinner, "Font size — applies to the selected text while typing, or to new text; "
                 + "with a text box selected it changes all of its text");
         textSizeSpinner.getEditor().focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
@@ -788,7 +788,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         textColorPicker = new ColorPicker(Color.web(DmProject.DEFAULT_TEXT_COLOR));
-        Icons.tooltip(textColorPicker, "Text color â€” applies to the selected text while typing, or to new text");
+        Icons.tooltip(textColorPicker, "Text color — applies to the selected text while typing, or to new text");
         textColorPicker.setOnAction(e -> {
             if (!syncingControls) {
                 applyTextColor(toHex(textColorPicker.getValue()));
@@ -829,7 +829,7 @@ public class DungeonMasterMapToolApplication extends Application {
             status(snapLayersToGrid ? "Image layers snap to half-tile steps while moving/resizing." : "Layer snapping off.");
         });
         imageLockToggle = Icons.toggle(MaterialDesignL.LOCK_OUTLINE,
-                "Lock / unlock the image layer â€” while locked, map images can't be selected, moved, resized or deleted "
+                "Lock / unlock the image layer — while locked, map images can't be selected, moved, resized or deleted "
                         + "(lights, doors and all other tools still work)");
         imageLockToggle.setOnAction(e -> {
             if (!syncingControls) {
@@ -854,7 +854,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         freezePlayerButton = Icons.toggle(MaterialDesignS.SNOWFLAKE,
-                "Freeze â€” players keep seeing the current view while you prepare or switch maps");
+                "Freeze — players keep seeing the current view while you prepare or switch maps");
         freezePlayerButton.setOnAction(e -> {
             setPlayerFrozen(freezePlayerButton.isSelected());
             status(freezePlayerButton.isSelected()
@@ -870,7 +870,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     : "Test square hidden.");
         });
         Button handoutButton = Icons.button(MaterialDesignI.IMAGE_FRAME,
-                "Handout â€” paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
+                "Handout — paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
         HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
 
         playerScreenSelector = new ComboBox<>();
@@ -1206,7 +1206,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (pingArmed) {
             toolChipIcon.setIconCode(MaterialDesignC.CROSSHAIRS_GPS);
-            toolChipLabel.setText("Ping â€” click the map");
+            toolChipLabel.setText("Ping — click the map");
             toolChip.setVisible(true);
         } else if (activeTool != EditorTool.SELECT) {
             toolChipIcon.setIconCode(activeTool.icon);
@@ -1365,12 +1365,12 @@ public class DungeonMasterMapToolApplication extends Application {
             executeWithHistory("Rotate map right",
                     () -> rotationService.rotateClockwise(project),
                     () -> rotationService.rotateCounterClockwise(project));
-            status("Rotated map 90Â° clockwise.");
+            status("Rotated map 90° clockwise.");
         } else {
             executeWithHistory("Rotate map left",
                     () -> rotationService.rotateCounterClockwise(project),
                     () -> rotationService.rotateClockwise(project));
-            status("Rotated map 90Â° counter-clockwise.");
+            status("Rotated map 90° counter-clockwise.");
         }
     }
 
@@ -1478,7 +1478,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (activeTool == EditorTool.LIGHT_REMOVE) {
                 DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
                 if (hit == null) {
-                    status("No light there â€” click directly on the light you want to remove.");
+                    status("No light there — click directly on the light you want to remove.");
                     return;
                 }
                 removeLight(hit.getId());
@@ -2559,7 +2559,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void updateWindowTitle() {
         if (primaryStage != null) {
-            primaryStage.setTitle("Dungeon Master Map Tool â€” "
+            primaryStage.setTitle("Dungeon Master Map Tool — "
                     + (projectFile == null ? "Unsaved new map" : MapBrowser.displayName(projectFile)));
         }
     }
@@ -2822,7 +2822,7 @@ public class DungeonMasterMapToolApplication extends Application {
             wallLayerToggle.setSelected(visible);
         }
         updateCanvasCursor();
-        status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden â€” doors and windows can't be clicked until it is shown again.");
+        status(visible ? "Wall layer shown (walls, doors and windows)." : "Wall layer hidden — doors and windows can't be clicked until it is shown again.");
     }
 
     private boolean isImageLayerLocked() {
@@ -2838,11 +2838,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         updateImageLockToggle();
         updateCanvasCursor();
-        status(locked ? "Image layer locked â€” map images can't be moved." : "Image layer unlocked â€” map images can be moved and resized with Select.");
+        status(locked ? "Image layer locked — map images can't be moved." : "Image layer unlocked — map images can be moved and resized with Select.");
     }
 
     private HBox createImageUnlockBanner() {
-        Label label = new Label("Image layer is unlocked â€” map images can be moved and resized.");
+        Label label = new Label("Image layer is unlocked — map images can be moved and resized.");
         label.getStyleClass().add("image-unlock-banner-label");
         Button lockButton = new Button("Lock", Icons.icon(MaterialDesignL.LOCK_OUTLINE));
         lockButton.setOnAction(e -> {
@@ -3056,7 +3056,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         String verb = reveal ? "Revealed" : "Covered";
         status(room.leaked()
-                ? verb + " an area that is not closed off â€” check for gaps in the walls."
+                ? verb + " an area that is not closed off — check for gaps in the walls."
                 : verb + " the room.");
     }
 
@@ -4226,7 +4226,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         updateTextEditorPlacement();
         syncTextStyleControls(textEditor.typingSize(), textEditor.typingColor());
-        status("Editing text â€” Esc or click outside to finish. Change size and color with the Text controls.");
+        status("Editing text — Esc or click outside to finish. Change size and color with the Text controls.");
     }
 
     /** Writes the editor content into its box, records one undo step, and closes the editor. */
