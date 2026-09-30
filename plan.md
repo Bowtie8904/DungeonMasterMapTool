@@ -51,7 +51,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [x] Right-click cancels the active tool like Esc (3.23)
 - [x] Batch import of dd2vtt maps: multi-file selection and whole-folder import (3.26)
-- [ ] Handout upgrades: multiple pasted images shown together in an auto-fitted grid, per-image delete (3.27)
+- [x] Handout upgrades: multiple pasted images shown together in an auto-fitted grid, per-image delete (3.27)
 
 ## 4) Core Functional Requirements
 
@@ -285,6 +285,8 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3.18 Handout Mode
 
+> Superseded in parts by 3.27: the handout holds several images (pasting adds instead of replacing) shown in an auto-fitted grid, and rotation/fit-to-screen apply to the whole arrangement (HandoutWindow.drawBoard, HandoutLayout). The single-image wording below describes the original behaviour.
+
 - Show an image to the players on the player screen (e.g. a portrait of an NPC they meet), pasted from the **clipboard**.
 - A **Handout** button in the Player view section of the DM controls opens a separate, non-modal **handout window** for the DM (dark theme, stays on the DM monitor, only one instance; pressing the button again focuses it). Ctrl+V is **not** a global shortcut in the DM view; pasting only happens inside the handout window.
 - Handout window contents:
@@ -385,7 +387,7 @@ Desktop tool for tabletop dungeon masters that:
 - An empty folder / selection with no suitable file shows a hint instead of the location dialog. The last used import directory (3.25) is remembered for both choosers.
 - Implementation: `dmmt.service.BatchImportService` (folder scan, unique naming, sequential import with progress callback; unit-tested), `MapLocationDialog` gets a folder-only mode.
 
-## 3.27 Handout Upgrades (multiple images)
+## 3.27 Handout Upgrades (multiple images, implemented)
 
 - Extends 3.18: the handout window holds a **list of images** instead of one. Every paste (Ctrl+V / Paste button) **adds** an image (copied image files: all image files in the clipboard are added). Pasting never replaces existing images.
 - The handout window preview and the player screen show all images **together in a grid**. The grid is computed by `dmmt.ui.HandoutLayout`: for N images it tries every column count (1..N), lays the images out row by row, fits each image into its cell keeping its aspect ratio (no distortion, a thin gap between cells) and picks the arrangement that covers the **largest total image area** of the available screen. Incomplete last rows are centred. With a single image it fills the screen as much as possible (no longer the ~90% margin of 3.18; a thin outer margin remains).

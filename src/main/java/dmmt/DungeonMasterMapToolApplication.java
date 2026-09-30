@@ -960,7 +960,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     : "Test square hidden.");
         });
         Button handoutButton = Icons.button(MaterialDesignI.IMAGE_FRAME,
-                "Handout — paste an image from the clipboard and show it to the players", () -> openHandoutWindow(stage));
+                "Handout — paste images from the clipboard and show them to the players", () -> openHandoutWindow(stage));
         HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
 
         playerScreenSelector = new ComboBox<>();
@@ -2209,8 +2209,8 @@ public class DungeonMasterMapToolApplication extends Application {
             playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
-            HandoutWindow.drawRotated(gc, handoutWindow.getImage(), handoutWindow.getRotation(),
-                    playerCanvas.getWidth(), playerCanvas.getHeight(), HandoutWindow.fitFraction());
+            HandoutWindow.drawBoard(gc, handoutWindow.getImages(), handoutWindow.getRotation(),
+                    playerCanvas.getWidth(), playerCanvas.getHeight(), -1);
             return;
         }
         boolean frozen = frozenPlayerProject != null;
