@@ -40,6 +40,39 @@ class Dd2vttImportServiceTest {
 
     @Test
     void importsAndCopiesDd2vttDependencies() throws Exception {
+        Path dd2vtt = writeSampleDd2vtt();
+        Path projectDir = tempDir.resolve("project");
+        Files.createDirectories(projectDir);
+
+        Dd2vttImportService service = new Dd2vttImportService();
+        DmProject project = service.importToProject(dd2vtt, projectDir);
+
+        assertEquals("dd2vtt", project.getMap().getSourceType());
+        assertEquals(Boolean.TRUE, project.getMap().getImageLayersLocked());
+        assertNull(project.getMap().getSourcePath());
+        assertTrue(Files.notExists(projectDir.resolve("imports").resolve("encounter").resolve("encounter.dd2vtt")));
+        assertFalse(project.getImageLayers().isEmpty());
+        assertEquals(1, project.getWalls().size());
+        assertEquals(1, project.getLighting().getLights().size());
+        assertEquals(1, project.getInteractables().size());
+        assertTrue(project.getLighting().getLights().get(0).getFlicker().isEnabled());
+    }
+
+    @Test
+    void zeroImportFlickerDepthTurnsFlickerOff() throws Exception {
+        Path dd2vtt = writeSampleDd2vtt();
+        Path projectDir = tempDir.resolve("project");
+        Files.createDirectories(projectDir);
+        Tuning.apply(key -> "import.dd2vtt.lightFlicker".equals(key) ? "0" : null);
+        try {
+            DmProject project = new Dd2vttImportService().importToProject(dd2vtt, projectDir);
+            assertFalse(project.getLighting().getLights().get(0).getFlicker().isEnabled());
+        } finally {
+            Tuning.reset();
+        }
+    }
+
+    private Path writeSampleDd2vtt() throws Exception {
         Path sourceDir = tempDir.resolve("usb");
         Files.createDirectories(sourceDir);
 
@@ -58,20 +91,6 @@ class Dd2vttImportServiceTest {
                 }
                 """;
         Files.writeString(dd2vtt, json);
-
-        Path projectDir = tempDir.resolve("project");
-        Files.createDirectories(projectDir);
-
-        Dd2vttImportService service = new Dd2vttImportService();
-        DmProject project = service.importToProject(dd2vtt, projectDir);
-
-        assertEquals("dd2vtt", project.getMap().getSourceType());
-        assertEquals(Boolean.TRUE, project.getMap().getImageLayersLocked());
-        assertNull(project.getMap().getSourcePath());
-        assertTrue(Files.notExists(projectDir.resolve("imports").resolve("encounter").resolve("encounter.dd2vtt")));
-        assertFalse(project.getImageLayers().isEmpty());
-        assertEquals(1, project.getWalls().size());
-        assertEquals(1, project.getLighting().getLights().size());
-        assertEquals(1, project.getInteractables().size());
+        return dd2vtt;
     }
 }

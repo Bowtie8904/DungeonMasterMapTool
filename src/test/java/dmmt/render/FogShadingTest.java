@@ -97,6 +97,49 @@ class FogShadingTest {
     }
 
     @Test
+    void separateRevealAndHideSpeedsAndLinearEasingMatchesStepAdvance() {
+        float[] shown = {1f, 0f};
+        float[] oldTarget = shown.clone();
+        float[] target = {0f, 1f};
+        float[] from = shown.clone();
+        float[] progress = {1f, 1f};
+        FogShading.retarget(shown, oldTarget, target, from, progress);
+
+        FogShading.advance(shown, target, from, progress, 0.5f, 0.25f, false);
+
+        assertArrayEquals(new float[]{0.5f, 0.25f}, shown, 1e-6f);
+        FogShading.advance(shown, target, from, progress, 0.5f, 0.25f, false);
+        assertEquals(0f, shown[0]);
+        assertEquals(0.5f, shown[1], 1e-6f);
+    }
+
+    @Test
+    void smoothEasingStartsSlowAndTakesTheSameTime() {
+        float[] shown = {1f};
+        float[] target = {0f};
+        float[] from = {1f};
+        float[] progress = {0f};
+
+        FogShading.advance(shown, target, from, progress, 0.25f, 0.25f, true);
+        assertTrue(shown[0] > 0.75f, "eased fade starts slower than linear: " + shown[0]);
+        for (int i = 0; i < 3; i++) {
+            FogShading.advance(shown, target, from, progress, 0.25f, 0.25f, true);
+        }
+        assertTrue(FogShading.reached(shown, target));
+    }
+
+    @Test
+    void downsampledOpacityClearsPixelsWithMostlyRevealedCells() {
+        BitSet revealed = block(4, 0, 0, 1, 1);
+        revealed.set(2);
+        revealed.set(3);
+
+        float[] fog = FogShading.downsampledOpacity(revealed, 4, 4, 2);
+
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f}, fog);
+    }
+
+    @Test
     void pixelEncodesOpacityAsAlpha() {
         assertEquals(0, FogShading.pixel(0f));
         assertEquals(0xFF000000, FogShading.pixel(1f));

@@ -41,8 +41,13 @@ public final class AppSettings {
         this.file = file;
         if (Files.isRegularFile(file)) {
             reload();
+            if (!values.keySet().containsAll(knownKeys())) {
+                // Writes newly added settings with their defaults so the file always lists every setting.
+                save();
+            }
         } else {
             importLegacyPreferences();
+            applyRuntimeSettings();
             save();
         }
     }
@@ -129,16 +134,22 @@ public final class AppSettings {
         put(key, String.valueOf(value));
     }
 
-    // ---- textures ----
+    // ---- textures and tuning values ----
 
     /** Pushes the texture section of this file into {@link OverlayTextures}. */
     public void applyTextureSettings() {
-        OverlayTextures.applySettings(key -> {
-            synchronized (this) {
-                String value = values.get(key);
-                return value == null || value.isBlank() ? null : value;
-            }
-        });
+        OverlayTextures.applySettings(this::lookup);
+    }
+
+    /** Loads the {@link Tuning} values and texture defaults from this file; called whenever the file is (re)read. */
+    private void applyRuntimeSettings() {
+        Tuning.apply(this::lookup);
+        applyTextureSettings();
+    }
+
+    private synchronized String lookup(String key) {
+        String value = values.get(key);
+        return value == null || value.isBlank() ? null : value;
     }
 
     /** True once if the file was edited by hand since the last check; the new values are already loaded. */
@@ -181,6 +192,7 @@ public final class AppSettings {
         } catch (IOException | RuntimeException e) {
             System.err.println("Could not read settings file " + file + ": " + e.getMessage());
         }
+        applyRuntimeSettings();
     }
 
     private synchronized void save() {
@@ -215,8 +227,10 @@ public final class AppSettings {
         StringBuilder out = new StringBuilder();
         out.append("# Dungeon Master Map Tool settings\n");
         out.append("# Edit this file with any text editor. Lines are 'key = value'; lines starting with # are comments.\n");
-        out.append("# Texture settings are picked up when the application window regains focus; everything else\n");
-        out.append("# is read at startup. Delete a line to fall back to the built-in default. Invalid values are ignored.\n");
+        out.append("# Edits made while the application runs are picked up when its window regains focus; entries marked\n");
+        out.append("# 'Restart required' (and the window/panel/player/fog/text values the app itself changes) are read at startup.\n");
+        out.append("# Delete a line to fall back to the built-in default. Invalid values are ignored, numbers are clamped to their range.\n");
+        out.append("# Every entry is explained in docs/SETTINGS.md of the project.\n");
 
         Set<String> written = new java.util.HashSet<>();
         for (Section section : sections()) {
@@ -250,9 +264,10 @@ public final class AppSettings {
 
     private static List<Section> sections() {
         List<Section> sections = new ArrayList<>();
-        sections.add(new Section("Window and panels", List.of(
+        sections.add(new Section(Tuning.WINDOW, List.of(
                 new Entry("ui.sidebarVisible", "true", "Show the sidebar (true/false)."),
-                new Entry("ui.controlsExpanded", "true", "Show the toolbar controls (true/false)."))));
+                new Entry("ui.controlsExpanded", "true", "Show the toolbar controls (true/false)."),
+                new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."))));
 
         List<Entry> panels = new ArrayList<>();
         for (String id : SECTION_IDS) {
@@ -260,34 +275,36 @@ public final class AppSettings {
         }
         sections.add(new Section("Collapsible sidebar sections (true = expanded)", panels));
 
-        sections.add(new Section("Player screen", List.of(
+        sections.add(new Section(Tuning.PLAYER, List.of(
                 new Entry("player.screenIndex", "0", "Index of the monitor used for the player view."),
                 new Entry("player.tileInches", "1.0", "Physical size of one grid tile on the player screen, in inches."),
                 new Entry("player.screenDiagonalInches.0", null, "Screen diagonal per monitor index in inches, e.g. player.screenDiagonalInches.1 = 27."))));
 
-        sections.add(new Section("Fog and lighting", List.of(
-                new Entry("fog.cellsPerGrid", String.valueOf(FogService.DEFAULT_CELLS_PER_GRID), "Fog cells per grid cell (edge sharpness of fog of war)."),
-                new Entry("fog.softness", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_FOG_SOFTNESS), "Width of the soft fog edge in grid tiles (0 = hard edge, max 1)."),
+        sections.add(new Section(Tuning.FOG, List.of(
+                new Entry("fog.cellsPerGrid", String.valueOf(FogService.DEFAULT_CELLS_PER_GRID), "Fog cells per grid cell (edge sharpness of fog of war), fog.cellsPerGrid.min to fog.cellsPerGrid.max."),
+                new Entry("fog.softness", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_FOG_SOFTNESS), "Width of the soft fog edge in grid tiles (0 = hard edge, max fog.softness.max)."),
                 new Entry("fog.fadeAnimation", "true", "Fade fog in and out when it is revealed or hidden (true/false)."),
-                new Entry("lighting.tint", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_LIGHT_TINT), "Strength of the light colour tint over lit areas (0-1)."))));
+                new Entry("lighting.tint", String.valueOf(dmmt.render.CanvasMapRenderer.DEFAULT_LIGHT_TINT), "Strength of the light colour tint over lit areas (0 to lighting.tint.max)."))));
 
-        sections.add(new Section("Performance (frames per second, 1-240)", List.of(
-                new Entry("render.targetFps", "60", "Frame rate while interacting with the map."),
+        sections.add(new Section(Tuning.FRAME_RATES, List.of(
+                new Entry("render.targetFps", "60", "Frame rate while interacting with the map (1 to render.maxFps)."),
                 new Entry("render.animationFps", "30", "Frame rate while only effect textures or light flicker move (capped by targetFps)."),
-                new Entry("render.idleFps", "10", "Frame rate when nothing moves and there was no input for a second."))));
+                new Entry("render.idleFps", "10", "Frame rate when nothing moves and there was no input for input.recentInputMs."))));
 
-        sections.add(new Section("Auto-save", List.of(
+        sections.add(new Section(Tuning.AUTOSAVE, List.of(
                 new Entry("autosave.enabled", "true", "Save the project automatically (true/false)."),
                 new Entry("autosave.minutes", "2", "Minutes between automatic saves."))));
 
-        sections.add(new Section("Text defaults", List.of(
+        sections.add(new Section(Tuning.TEXT, List.of(
                 new Entry("text.fontSize", String.valueOf(dmmt.model.DmProject.DEFAULT_TEXT_SIZE), "Default font size of new text labels."),
                 new Entry("text.textColor", dmmt.model.DmProject.DEFAULT_TEXT_COLOR, "Default text colour."),
                 new Entry("text.backgroundColor", dmmt.model.DmProject.TRANSPARENT, "Default text background colour."),
                 new Entry("text.borderColor", dmmt.model.DmProject.TRANSPARENT, "Default text border colour."))));
 
-        sections.add(new Section("Import", List.of(
+        sections.add(new Section(Tuning.IMPORT, List.of(
                 new Entry("import.lastDirectory", "", "Folder last used when importing a map image."))));
+
+        mergeTuning(sections);
 
         List<Entry> textures = new ArrayList<>();
         textures.add(new Entry("texture.tileCells", "4", "Effect textures: size of one texture tile in grid cells (smaller = finer pattern)."));
@@ -300,6 +317,38 @@ public final class AppSettings {
         sections.add(new Section("Effect textures. Per texture: color and opacity (start values when picked), softEdges "
                 + "(fade out at the shape edge), and animated layers", textures));
         return sections;
+    }
+
+    /** Adds the {@link Tuning} values to the section of the same title, or as new sections in definition order. */
+    private static void mergeTuning(List<Section> sections) {
+        Map<String, List<Entry>> extra = new LinkedHashMap<>();
+        for (Tuning.Setting<?> setting : Tuning.all()) {
+            extra.computeIfAbsent(setting.section(), k -> new ArrayList<>())
+                    .add(new Entry(setting.key(), setting.defaultText(), setting.comment()));
+        }
+        for (int i = 0; i < sections.size(); i++) {
+            Section section = sections.get(i);
+            List<Entry> more = extra.remove(section.title());
+            if (more != null) {
+                List<Entry> merged = new ArrayList<>(section.entries());
+                merged.addAll(more);
+                sections.set(i, new Section(section.title(), merged));
+            }
+        }
+        extra.forEach((title, entries) -> sections.add(new Section(title, entries)));
+    }
+
+    /** Keys of every setting that has a default value (and is therefore always written to the file). */
+    static Set<String> knownKeys() {
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        for (Section section : sections()) {
+            for (Entry entry : section.entries()) {
+                if (entry.defaultValue() != null) {
+                    keys.add(entry.key());
+                }
+            }
+        }
+        return keys;
     }
 
     private static String textureComment(String key) {

@@ -1,5 +1,7 @@
 package dmmt.render;
 
+import dmmt.service.Tuning;
+
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -25,17 +27,25 @@ import java.util.Properties;
 /**
  * Builds a multi-resolution tile pyramid for images that are too large for a single GPU texture.
  * Level 0 is full resolution; each further level halves width and height (2x2 box filter).
- * Levels below {@link Meta#overviewLevel()} are stored as {@value #TILE_SIZE} px tiles, the overview
- * level (first level that fits into {@value #MAX_OVERVIEW_SIZE} px) is stored as a single image.
+ * Levels below {@link Meta#overviewLevel()} are stored as {@link #tileSize()} px tiles, the overview
+ * level (first level that fits into {@link #maxOverviewSize()} px) is stored as a single image.
+ * Tile size, overview size and JPEG quality come from the {@code cache.*} settings ({@link Tuning}).
  */
 public final class ImagePyramidBuilder {
-    public static final int TILE_SIZE = 1024;
-    public static final int MAX_OVERVIEW_SIZE = 4096;
     static final int FORMAT_VERSION = 1;
     static final String META_FILE = "pyramid.properties";
-    private static final float JPEG_QUALITY = 0.92f;
 
     private ImagePyramidBuilder() {
+    }
+
+    /** Edge length of pyramid tiles (setting cache.imageTileSize). */
+    public static int tileSize() {
+        return Tuning.CACHE_TILE_SIZE.get();
+    }
+
+    /** Largest image edge drawn without a pyramid (setting cache.overviewMaxSize). */
+    public static int maxOverviewSize() {
+        return Tuning.CACHE_OVERVIEW_SIZE.get();
     }
 
     public record Meta(int width, int height, int overviewLevel, int tileSize, String format) {
@@ -63,10 +73,11 @@ public final class ImagePyramidBuilder {
         return size;
     }
 
-    /** Number of halvings needed until the image fits into {@link #MAX_OVERVIEW_SIZE}; 0 = no pyramid needed. */
+    /** Number of halvings needed until the image fits into {@link #maxOverviewSize()}; 0 = no pyramid needed. */
     public static int overviewLevel(int width, int height) {
         int level = 0;
-        while (Math.max(width, height) > MAX_OVERVIEW_SIZE) {
+        int max = maxOverviewSize();
+        while (Math.max(width, height) > max) {
             width = (width + 1) / 2;
             height = (height + 1) / 2;
             level++;
@@ -134,7 +145,7 @@ public final class ImagePyramidBuilder {
         }
         boolean alpha = image.getColorModel().hasAlpha();
         Meta meta = new Meta(image.getWidth(), image.getHeight(),
-                overviewLevel(image.getWidth(), image.getHeight()), TILE_SIZE, alpha ? "png" : "jpg");
+                overviewLevel(image.getWidth(), image.getHeight()), tileSize(), alpha ? "png" : "jpg");
         Files.createDirectories(dir);
         Files.deleteIfExists(dir.resolve(META_FILE));
 
@@ -217,7 +228,7 @@ public final class ImagePyramidBuilder {
             try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
                 ImageWriteParam param = writer.getDefaultWriteParam();
                 param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                param.setCompressionQuality(JPEG_QUALITY);
+                param.setCompressionQuality(Tuning.CACHE_JPEG_QUALITY.get().floatValue());
                 writer.setOutput(out);
                 writer.write(null, new IIOImage(image, null, null), param);
             } finally {

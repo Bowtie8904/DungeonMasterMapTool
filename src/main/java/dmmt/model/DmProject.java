@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import dmmt.lighting.TimeOfDayPreset;
+import dmmt.service.Tuning;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +72,7 @@ public class DmProject {
         @Builder.Default
         private String type = "none";
         @Builder.Default
-        private double intensity = 0.4;
+        private double intensity = Tuning.WEATHER_DEFAULT_INTENSITY.get();
     }
 
     /** Text settings last used on this map; {@code null} until text has been used here. */
@@ -285,7 +286,7 @@ public class DmProject {
         private double x;
         private double y;
         @Builder.Default
-        private double range = 300;
+        private double range = Tuning.LIGHT_DEFAULT_RANGE.get();
         @Builder.Default
         private String color = "#FFD9A0";
         @Builder.Default
@@ -308,9 +309,9 @@ public class DmProject {
         @Builder.Default
         private boolean enabled = false;
         @Builder.Default
-        private double strength = 0.18;
+        private double strength = Tuning.LIGHT_DEFAULT_FLICKER.get();
         @Builder.Default
-        private double speed = 1.5;
+        private double speed = Tuning.LIGHT_DEFAULT_FLICKER_SPEED.get();
     }
 
     @Data

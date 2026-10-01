@@ -212,8 +212,10 @@ public class Dd2vttImportService {
                     .castsShadows(node.path("shadows").asBoolean(true))
                     // Map lamps light the scene but must not uncover fog on their own.
                     .revealMode(DmProject.RevealMode.NONE)
-                    // dd2vtt has no flicker data; map lamps default to the Torch flicker preset.
-                    .flicker(DmProject.Flicker.builder().enabled(true).strength(0.22).speed(1.4).build())
+                    // dd2vtt has no flicker data; map lamps default to the Torch flicker preset (depth 0 = off).
+                    .flicker(DmProject.Flicker.builder().enabled(Tuning.DD2VTT_LIGHT_FLICKER.get() > 0)
+                            .strength(Tuning.DD2VTT_LIGHT_FLICKER.get())
+                            .speed(Tuning.DD2VTT_LIGHT_FLICKER_SPEED.get()).build())
                     .build());
         }
     }

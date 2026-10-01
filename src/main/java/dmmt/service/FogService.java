@@ -4,8 +4,6 @@ import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 
 public class FogService {
-    public static final int MIN_CELLS_PER_GRID = 5;
-    public static final int MAX_CELLS_PER_GRID = 30;
     public static final int DEFAULT_CELLS_PER_GRID = 10;
     private static final double MIN_CELL_SIZE = 2;
     private static final double MAX_CELL_SIZE = 50;
@@ -15,12 +13,22 @@ public class FogService {
     /** Global fog resolution (fog cells per map grid cell along each axis); applies to every project. */
     private static volatile int cellsPerGrid = DEFAULT_CELLS_PER_GRID;
 
+    /** Lowest fog cells per grid cell (setting fog.cellsPerGrid.min). */
+    public static int minCellsPerGrid() {
+        return Math.min(Tuning.FOG_CELLS_MIN.get(), Tuning.FOG_CELLS_MAX.get());
+    }
+
+    /** Highest fog cells per grid cell (setting fog.cellsPerGrid.max). */
+    public static int maxCellsPerGrid() {
+        return Math.max(Tuning.FOG_CELLS_MIN.get(), Tuning.FOG_CELLS_MAX.get());
+    }
+
     public static int getCellsPerGrid() {
         return cellsPerGrid;
     }
 
     public static void setCellsPerGrid(int value) {
-        cellsPerGrid = Math.max(MIN_CELLS_PER_GRID, Math.min(MAX_CELLS_PER_GRID, value));
+        cellsPerGrid = Math.max(minCellsPerGrid(), Math.min(maxCellsPerGrid(), value));
     }
 
     /** Creates the fog mask if needed and grows it to cover all map content. Migrates legacy rect reveals. */

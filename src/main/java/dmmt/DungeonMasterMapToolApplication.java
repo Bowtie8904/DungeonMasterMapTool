@@ -17,6 +17,7 @@ import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
 import dmmt.service.RoomFillService;
 import dmmt.service.ProjectService;
+import dmmt.service.Tuning;
 import dmmt.ui.CollapsibleSection;
 import dmmt.ui.Dialogs;
 import dmmt.ui.HandoutWindow;
@@ -130,16 +131,16 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_LIGHT_TINT = "lighting.tint";
     private static final String PREF_AUTOSAVE_ENABLED = "autosave.enabled";
     private static final String PREF_AUTOSAVE_MINUTES = "autosave.minutes";
-    private static final int[] AUTOSAVE_MINUTE_OPTIONS = {1, 2, 5, 10};
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
     private static List<Image> appIcons;
 
+    /** Loaded first: it applies the tuning values that the field initializers below already read. */
+    private final AppSettings preferences = AppSettings.load();
     private final ProjectService projectService = new ProjectService();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
     private final MapRotationService rotationService = new MapRotationService();
     private final LightingEngine lightingEngine = new LightingEngine();
     private final CanvasMapRenderer renderer = new CanvasMapRenderer(lightingEngine);
-    private final AppSettings preferences = AppSettings.load();
 
     private DmProject project;
     private Path projectFile;
@@ -171,10 +172,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox toolChip;
     private FontIcon toolChipIcon;
     private Label toolChipLabel;
-    private static final double RIGHT_CLICK_MAX_MOVE_PX = 5;
     private boolean rightClickCancelCandidate;
     private double rightPressScreenX;
-    private double rightPressScreenY;    private final DoubleProperty brushSize = new SimpleDoubleProperty(1.5);
+    private double rightPressScreenY;
+    private final DoubleProperty brushSize = new SimpleDoubleProperty(Tuning.BRUSH_DEFAULT.get());
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
     private boolean showScaleTestSquare;
@@ -199,7 +200,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private long metricsNanosMax;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
-    private double brushSizeTiles = 1.5;
+    private double brushSizeTiles = Tuning.BRUSH_DEFAULT.get();
     private boolean fogDragging;
     private double fogDragStartWorldX;
     private double fogDragStartWorldY;
@@ -213,16 +214,14 @@ public class DungeonMasterMapToolApplication extends Application {
     private long roomBarrierSignature;
     private RoomFillService.Result roomPreview;
     private boolean hoverInsideCanvas;
-    /** Presses on the same door closer together than this are treated as mechanical switch bounce. */
-    private static final long DOOR_CHATTER_NANOS = 60_000_000L;
     private String lastDoorToggleId;
     private long lastDoorToggleNanos;
     private double hoverWorldX;
     private double hoverWorldY;
     private boolean syncingControls;
     private ContextMenu activeLightMenu;
-    private String overlayColor = "#55AA33";
-    private double overlayAlpha = 0.4;
+    private String overlayColor = Tuning.EFFECT_DEFAULT_COLOR.get();
+    private double overlayAlpha = Tuning.EFFECT_DEFAULT_OPACITY.get();
     private boolean overlayPlayerVisible = true;
     private String overlayTexture = OverlayTextures.NONE;
     private ComboBox<String> overlayTextureBox;
@@ -235,7 +234,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private double overlayStartX;
     private double overlayStartY;
     private boolean draggingOverlay;
-    private static final double PEN_WIDTH_CELLS = 0.06;
     private boolean resizingOverlay;
     private DmProject.OverlayShape overlayDragBefore;
     private DmProject.OverlayShape overlayStyleBefore;
@@ -248,8 +246,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_TEXT_COLOR = "text.textColor";
     private static final String PREF_TEXT_BACKGROUND = "text.backgroundColor";
     private static final String PREF_TEXT_BORDER = "text.borderColor";
-    private static final double TEXT_MIN_SIZE = 40;
-    private static final double TEXT_AUTO_MAX_CELLS = 12;
     private static final int TEXT_HANDLE_COUNT = 8;
     private TextBoxEditor textEditor;
     private String selectedTextId;
@@ -274,9 +270,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton textAutoSizeToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
-    private static final double PLAYER_ZOOM_MIN_STEP = -2;
-    private static final double PLAYER_ZOOM_MAX_STEP = 2;
-    private static final double PLAYER_ZOOM_CURSOR_PULL = 0.4;
     private Slider playerZoomSlider;
     private Label playerZoomValue;
     private Label ambientBrightnessValue;
@@ -285,7 +278,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ComboBox<WeatherType> weatherBox;
     private Slider weatherIntensitySlider;
     private Label weatherIntensityValue;
-    private double weatherIntensityCommitted = WeatherEffects.DEFAULT_INTENSITY;
+    private double weatherIntensityCommitted = WeatherEffects.defaultIntensity();
     private ToggleButton freezePlayerButton;
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
@@ -331,7 +324,6 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private final Deque<HistoryAction> undoStack = new ArrayDeque<>();
     private final Deque<HistoryAction> redoStack = new ArrayDeque<>();
-    private static final int MAX_HISTORY = 100;
 
     /** Pre-scaled copies of the app icon so window title bar and taskbar get a smooth image at their size. */
     private static List<Image> appIcons() {
@@ -429,7 +421,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         installDmInteractions();
 
-        Scene scene = new Scene(root, 1500, 920, Color.BLACK);
+        Scene scene = new Scene(root, Tuning.DM_WINDOW_WIDTH.get(), Tuning.DM_WINDOW_HEIGHT.get(), Color.BLACK);
         scene.getStylesheets().add(Icons.STYLESHEET);
         // Clicks inside the popup never reach this scene, so any click here is "outside" the menu.
         scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> hideLightMenu());
@@ -505,10 +497,14 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
                 autoSaveIfDirty();
+            } else if (preferences.pollExternalChange()) {
+                // The reload already applied tuning values and texture settings edited by hand.
+                status("Settings reloaded from " + preferences.getFile().getFileName()
+                        + " (entries marked 'Restart required' apply after a restart)");
             }
         });
         javafx.animation.Timeline autoSaveTicker = new javafx.animation.Timeline(
-                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(10), e -> autoSaveTick()));
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(Tuning.AUTOSAVE_CHECK_SECONDS.get()), e -> autoSaveTick()));
         autoSaveTicker.setCycleCount(javafx.animation.Animation.INDEFINITE);
         autoSaveTicker.play();
 
@@ -533,11 +529,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 boolean fogFading = renderer.isFogAnimating() || playerRenderer.isFogAnimating();
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
-                boolean recentInput = now - lastInputNanos < 1_000_000_000L || laserActive || !laserTrail.isEmpty()
+                boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || !laserTrail.isEmpty()
                         || fogFading;
                 int fps = PerformanceMode.isEnabled()
-                        ? recentInput ? Math.min(PerformanceMode.INTERACTION_FPS, targetFps)
-                        : animated ? PerformanceMode.TEXTURE_ANIMATION_FPS : Math.min(PerformanceMode.IDLE_FPS, idleFps)
+                        ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
+                        : animated ? PerformanceMode.textureAnimationFps() : Math.min(PerformanceMode.idleFps(), idleFps)
                         : recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
                 // 10% slack so vsync jitter does not push a frame to the next tick.
                 long minInterval = (long) (900_000_000L / fps);
@@ -607,11 +603,11 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- DM controls panel (right side) ----
 
     private Region createControlsPanel(Stage stage) {
-        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.max(0.2, Math.round(newValue.doubleValue() * 2) / 2.0));
+        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.max(Tuning.BRUSH_MIN.get(), Math.round(newValue.doubleValue() * 2) / 2.0));
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
             String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";
-            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description + exitHint);
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description() + exitHint);
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
@@ -875,7 +871,8 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textSpacer, copyText, pasteText, deleteText);
 
         textSizeSpinner = new Spinner<>();
-        textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(6, 400, DmProject.DEFAULT_TEXT_SIZE, 2));
+        textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(textMinFont(), textMaxFont(),
+                Math.max(textMinFont(), Math.min(textMaxFont(), DmProject.DEFAULT_TEXT_SIZE)), 2));
         textSizeSpinner.setEditable(true);
         textSizeSpinner.setPrefWidth(84);
         Icons.tooltip(textSizeSpinner, "Font size — applies to the selected text while typing, or to new text; "
@@ -884,7 +881,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (!focused) {
                 try {
                     int typed = (int) Math.round(Double.parseDouble(textSizeSpinner.getEditor().getText().replace(',', '.')));
-                    textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, typed)));
+                    textSizeSpinner.getValueFactory().setValue(clampFontSize(typed));
                 } catch (NumberFormatException ex) {
                     textSizeSpinner.getEditor().setText(String.valueOf(textSizeSpinner.getValue()));
                 }
@@ -999,14 +996,16 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         HBox screenRow = row(Icons.icon(MaterialDesignM.MONITOR_SHARE), playerScreenSelector);
 
-        screenInchesSpinner = createDoubleSpinner(10, 120, loadScreenDiagonal(), 0.5, 84);
+        screenInchesSpinner = createDoubleSpinner(diagonalMin(), diagonalMax(), loadScreenDiagonal(), 0.5, 84);
         Icons.tooltip(screenInchesSpinner, "Diagonal of the player screen in inches (used for the 1-inch grid)");
         screenInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (!syncingControls && newValue != null) {
                 preferences.putDouble(PREF_SCREEN_DIAGONAL_PREFIX + selectedScreenIndex(), newValue);
             }
         });
-        tileInchesSpinner = createDoubleSpinner(0.25, 3, preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 84);
+        tileInchesSpinner = createDoubleSpinner(Math.min(Tuning.PLAYER_TILE_INCHES_MIN.get(), Tuning.PLAYER_TILE_INCHES_MAX.get()),
+                Math.max(Tuning.PLAYER_TILE_INCHES_MIN.get(), Tuning.PLAYER_TILE_INCHES_MAX.get()),
+                preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 84);
         Icons.tooltip(tileInchesSpinner, "Size of one map tile on the player screen in inches");
         tileInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue != null) {
@@ -1019,7 +1018,7 @@ public class DungeonMasterMapToolApplication extends Application {
         scaleGrid.addRow(0, mutedLabel("Screen diagonal (in)"), screenInchesSpinner);
         scaleGrid.addRow(1, mutedLabel("Tile size (in)"), tileInchesSpinner);
 
-        playerZoomSlider = new Slider(PLAYER_ZOOM_MIN_STEP, PLAYER_ZOOM_MAX_STEP, 0);
+        playerZoomSlider = new Slider(Tuning.PLAYER_ZOOM_MIN_STEP.get(), Tuning.PLAYER_ZOOM_MAX_STEP.get(), 0);
         playerZoomSlider.setMajorTickUnit(0.05);
         playerZoomSlider.setMinorTickCount(0);
         playerZoomSlider.setSnapToTicks(true);
@@ -1111,7 +1110,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** A brush size slider; all brush sliders share one value. */
     private HBox brushSlider() {
-        Slider slider = new Slider(0.2, 8, brushSize.get());
+        Slider slider = new Slider(Math.min(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()), Math.max(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()), brushSize.get());
         slider.setMajorTickUnit(0.2);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
@@ -1135,7 +1134,7 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private HBox fogSharpnessSlider() {
         int initial = FogService.getCellsPerGrid();
-        Slider slider = new Slider(FogService.MIN_CELLS_PER_GRID, FogService.MAX_CELLS_PER_GRID, initial);
+        Slider slider = new Slider(FogService.minCellsPerGrid(), FogService.maxCellsPerGrid(), initial);
         slider.setMajorTickUnit(1);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
@@ -1182,7 +1181,7 @@ public class DungeonMasterMapToolApplication extends Application {
             preferences.putBoolean(PREF_FOG_FADE, fade.isSelected());
             lastInputNanos = System.nanoTime();
         });
-        Slider slider = new Slider(0, CanvasMapRenderer.MAX_FOG_SOFTNESS, CanvasMapRenderer.getFogSoftness());
+        Slider slider = new Slider(0, CanvasMapRenderer.maxFogSoftness(), CanvasMapRenderer.getFogSoftness());
         slider.setBlockIncrement(0.05);
         HBox.setHgrow(slider, Priority.ALWAYS);
         slider.setPrefWidth(90);
@@ -1209,7 +1208,7 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private HBox lightTintSlider() {
         double initial = CanvasMapRenderer.getLightTint();
-        Slider slider = new Slider(CanvasMapRenderer.MIN_LIGHT_TINT, CanvasMapRenderer.MAX_LIGHT_TINT, initial);
+        Slider slider = new Slider(CanvasMapRenderer.MIN_LIGHT_TINT, CanvasMapRenderer.maxLightTint(), initial);
         slider.setMajorTickUnit(0.01);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
@@ -1300,7 +1299,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         Slider slider = new Slider(WeatherEffects.MIN_INTENSITY, WeatherEffects.MAX_INTENSITY,
-                WeatherEffects.DEFAULT_INTENSITY);
+                WeatherEffects.defaultIntensity());
         slider.setMajorTickUnit(0.05);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
@@ -1329,7 +1328,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         slider.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
-                slider.setValue(WeatherEffects.DEFAULT_INTENSITY);
+                slider.setValue(WeatherEffects.defaultIntensity());
                 commitWeatherIntensity();
             }
         });
@@ -1513,7 +1512,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case LIGHT_ADD, LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     Icons.cursor(activeTool.icon, 0.5, 0.5);
             case LIGHT_REMOVE -> hoverInsideCanvas && pickNearestLight(hoverWorldX, hoverWorldY,
-                    24 / Math.max(0.01, project.getViews().getDmCamera().getZoom())) != null
+                    Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, project.getViews().getDmCamera().getZoom())) != null
                     ? Icons.cursor(MaterialDesignL.LIGHTBULB_OFF_OUTLINE, 0.5, 0.5)
                     : Cursor.DEFAULT;
             default -> Cursor.CROSSHAIR;
@@ -1551,7 +1550,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (renderer.isWallLayerVisible() && pickInteractableBadge(worldX, worldY) != null) {
             return Cursor.HAND;
         }
-        if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
+        if (pickNearestLight(worldX, worldY, Tuning.LIGHT_PICK_RADIUS.get() / zoom) != null) {
             return Cursor.HAND;
         }
         if (renderer.isWallLayerVisible() && pickInteractableLine(worldX, worldY) != null) {
@@ -1575,7 +1574,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         DmProject.ImageLayer layer = isImageLayerLocked() ? null : pickTopmostLayer(worldX, worldY);
         if (layer != null
-                && distance(worldX, worldY, layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight()) < 16 / zoom) {
+                && distance(worldX, worldY, layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight()) < Tuning.LAYER_HANDLE_RADIUS.get() / zoom) {
             return Cursor.SE_RESIZE;
         }
         return layer != null ? Cursor.OPEN_HAND : Cursor.DEFAULT;
@@ -1674,7 +1673,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.setOnScroll(event -> {
             if (event.isControlDown()) {
                 if (event.getDeltaY() != 0 && playerZoomSlider != null) {
-                    double delta = Math.log(1.1) / Math.log(2);
+                    double delta = Math.log(Tuning.PLAYER_ZOOM_WHEEL_FACTOR.get()) / Math.log(2);
                     double oldStep = playerZoomSlider.getValue();
                     CanvasMapRenderer.WorldRect box = getPlayerViewportRect();
                     CanvasMapRenderer.WorldPoint cursor = renderer.screenToWorld(
@@ -1690,7 +1689,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         double anchoredX = cursor.x() + (playerCamera.getX() - cursor.x()) * ratio;
                         double anchoredY = cursor.y() + (playerCamera.getY() - cursor.y()) * ratio;
                         // When zooming in, also pull the box centre towards the cursor so the target ends up centred.
-                        double pull = ratio < 1 ? PLAYER_ZOOM_CURSOR_PULL : 0;
+                        double pull = ratio < 1 ? Tuning.PLAYER_ZOOM_CURSOR_PULL.get() : 0;
                         playerCamera.setX(anchoredX + (cursor.x() - anchoredX) * pull);
                         playerCamera.setY(anchoredY + (cursor.y() - anchoredY) * pull);
                     }
@@ -1698,8 +1697,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             DmProject.CameraState camera = project.getViews().getDmCamera();
-            double factor = event.getDeltaY() > 0 ? 1.1 : 0.9;
-            double newZoom = clamp(camera.getZoom() * factor, 0.1, 6.0);
+            double wheel = Tuning.DM_ZOOM_WHEEL_FACTOR.get();
+            double factor = event.getDeltaY() > 0 ? wheel : 1 / wheel;
+            double newZoom = clamp(camera.getZoom() * factor, Math.min(Tuning.DM_ZOOM_MIN.get(), Tuning.DM_ZOOM_MAX.get()),
+                    Math.max(Tuning.DM_ZOOM_MIN.get(), Tuning.DM_ZOOM_MAX.get()));
             CanvasMapRenderer.WorldPoint before = renderer.screenToWorld(
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
             camera.setZoom(newZoom);
@@ -1735,7 +1736,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 rightClickCancelCandidate = pingArmed || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
-                DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
+                DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
                 if (light != null) {
                     selectedLight = light;
                     selectedLayer = null;
@@ -1778,12 +1779,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 LightPreset preset = LightPreset.forTool(activeTool);
                 addLightAt(world.x(), world.y(), preset);
                 setActiveTool(EditorTool.SELECT);
-                status("Added " + preset.label().toLowerCase() + ". Drag it to move; right-click for range, flicker, color and fog reveal.");
+                String name = activeTool == EditorTool.LIGHT_ADD ? "torch" : activeTool.label.toLowerCase();
+                status("Added " + name + ". Drag it to move; right-click for range, flicker, color and fog reveal.");
                 return;
             }
 
             if (activeTool == EditorTool.LIGHT_REMOVE) {
-                DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
+                DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
                 if (hit == null) {
                     status("No light there — click directly on the light you want to remove.");
                     return;
@@ -1859,7 +1861,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 // Debounce only mouse switch chatter (a few ms); real human double-clicks toggle twice.
                 long nowNanos = System.nanoTime();
                 boolean chatter = door.getId() != null && door.getId().equals(lastDoorToggleId)
-                        && nowNanos - lastDoorToggleNanos < DOOR_CHATTER_NANOS;
+                        && nowNanos - lastDoorToggleNanos < (Tuning.DOOR_DEBOUNCE_MS.get() * 1_000_000L);
                 if (!chatter) {
                     toggleInteractable(door);
                     lastDoorToggleId = door.getId();
@@ -1872,7 +1874,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            selectedLight = pickNearestLight(world.x(), world.y(), 24 / Math.max(0.01, camera.getZoom()));
+            selectedLight = pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
             if (selectedLight != null) {
                 draggingLight = true;
                 dragOffsetX = world.x() - selectedLight.getX();
@@ -1927,7 +1929,7 @@ public class DungeonMasterMapToolApplication extends Application {
             double handleX = selectedLayer.getX() + selectedLayer.getWidth();
             double handleY = selectedLayer.getY() + selectedLayer.getHeight();
             double handleDistance = distance(world.x(), world.y(), handleX, handleY);
-            if (handleDistance < 16 / Math.max(0.01, camera.getZoom())) {
+            if (handleDistance < Tuning.LAYER_HANDLE_RADIUS.get() / Math.max(0.01, camera.getZoom())) {
                 resizingLayer = true;
             } else {
                 draggingLayer = true;
@@ -2074,7 +2076,7 @@ public class DungeonMasterMapToolApplication extends Application {
             if (event.getButton() == MouseButton.SECONDARY && rightClickCancelCandidate) {
                 rightClickCancelCandidate = false;
                 if (panningDmCamera && Math.hypot(event.getX() - rightPressScreenX, event.getY() - rightPressScreenY)
-                        <= RIGHT_CLICK_MAX_MOVE_PX) {
+                        <= Tuning.RIGHT_CLICK_MAX_MOVE.get()) {
                     DmProject.CameraState camera = project.getViews().getDmCamera();
                     camera.setX(startCameraX);
                     camera.setY(startCameraY);
@@ -2353,7 +2355,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         new CanvasMapRenderer.LaserPoint(last.x(), last.y(), now));
             }
         }
-        laserTrail.removeIf(p -> now - p.millis() > CanvasMapRenderer.LASER_TRAIL_MILLIS);
+        laserTrail.removeIf(p -> now - p.millis() > CanvasMapRenderer.laserTrailMillis());
     }
 
     private void drawLaser(GraphicsContext gc, Canvas canvas, DmProject.CameraState camera, double dotRadius) {
@@ -2391,7 +2393,7 @@ public class DungeonMasterMapToolApplication extends Application {
         );
         long toolsStart = FrameProfiler.start();
         pruneLaserTrail();
-        drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), 6);
+        drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), Tuning.LASER_DM_DOT.get());
         drawSelectionHandle(fogGc);
         updateEffectStyleControls();
         drawOverlaySelection(fogGc);
@@ -2444,7 +2446,7 @@ public class DungeonMasterMapToolApplication extends Application {
         );
         if (!frozen) {
             drawLaser(playerFogCanvas.getGraphicsContext2D(), playerFogCanvas, getEffectivePlayerCamera(),
-                    Math.max(6, 0.15 * playerPixelsPerInch()));
+                    Math.max(Tuning.LASER_PLAYER_DOT_MIN.get(), Tuning.LASER_PLAYER_DOT_INCHES.get() * playerPixelsPerInch()));
         }
         if (showScaleTestSquare) {
             drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
@@ -2742,7 +2744,9 @@ public class DungeonMasterMapToolApplication extends Application {
         button.getItems().add(enabled);
         button.getItems().add(new SeparatorMenuItem());
         ToggleGroup group = new ToggleGroup();
-        for (int minutes : AUTOSAVE_MINUTE_OPTIONS) {
+        int[] minuteOptions = Tuning.AUTOSAVE_MINUTE_OPTIONS.get().stream()
+                .mapToInt(v -> (int) Math.round(v)).distinct().toArray();
+        for (int minutes : minuteOptions) {
             RadioMenuItem item = new RadioMenuItem("Every " + minutes + (minutes == 1 ? " minute" : " minutes"));
             item.setToggleGroup(group);
             item.setSelected(minutes == autoSaveMinutes());
@@ -3101,7 +3105,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.Interactable pickInteractableLine(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
         DmProject.Interactable nearest = null;
-        double best = 10 / zoom;
+        double best = Tuning.WALL_PICK_RADIUS.get() / zoom;
         for (DmProject.Interactable interactable : project.getInteractables()) {
             double d = pointToSegmentDistance(worldX, worldY, interactable.getX1(), interactable.getY1(), interactable.getX2(), interactable.getY2());
             if (d <= best) {
@@ -3122,7 +3126,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return badge;
         }
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
-        if (pickNearestLight(worldX, worldY, 24 / zoom) != null) {
+        if (pickNearestLight(worldX, worldY, Tuning.LIGHT_PICK_RADIUS.get() / zoom) != null) {
             return null;
         }
         return pickInteractableLine(worldX, worldY);
@@ -3171,7 +3175,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .x(worldX)
                 .y(worldY)
                 .createdAtMillis(System.currentTimeMillis())
-                .durationMillis(1200)
+                .durationMillis(Tuning.PING_DURATION_MS.get())
                 .build());
     }
 
@@ -3691,7 +3695,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void eraseWallAt(double worldX, double worldY, double zoom) {
-        double tolerance = 10 / Math.max(0.01, zoom);
+        double tolerance = Tuning.WALL_PICK_RADIUS.get() / Math.max(0.01, zoom);
         DmProject.WallSegment nearest = null;
         double best = tolerance;
         for (DmProject.WallSegment wall : project.getWalls()) {
@@ -3730,7 +3734,7 @@ public class DungeonMasterMapToolApplication extends Application {
         List<Screen> screens = Screen.getScreens();
         int index = Math.max(0, Math.min(selectedScreenIndex(), screens.size() - 1));
         double stored = preferences.getDouble(PREF_SCREEN_DIAGONAL_PREFIX + index, 0);
-        if (stored >= 10) {
+        if (stored >= diagonalMin()) {
             return stored;
         }
         Screen screen = screens.isEmpty() ? Screen.getPrimary() : screens.get(index);
@@ -3739,14 +3743,15 @@ public class DungeonMasterMapToolApplication extends Application {
         double physicalHeight = bounds.getHeight() * screen.getOutputScaleY();
         double dpi = Math.max(48, screen.getDpi());
         double guess = Math.hypot(physicalWidth, physicalHeight) / dpi;
-        return Math.max(10, Math.min(120, Math.round(guess * 2) / 2.0));
+        return Math.max(diagonalMin(), Math.min(diagonalMax(), Math.round(guess * 2) / 2.0));
     }
 
     /** Player-canvas pixels (device-independent) per physical inch on the selected screen. */
     private double playerPixelsPerInch() {
         Screen screen = resolveSelectedPlayerScreen();
         Rectangle2D bounds = screen.getBounds();
-        double diagonal = screenInchesSpinner == null || screenInchesSpinner.getValue() == null ? 27 : screenInchesSpinner.getValue();
+        double diagonal = screenInchesSpinner == null || screenInchesSpinner.getValue() == null
+                ? Tuning.PLAYER_DIAGONAL_FALLBACK.get() : screenInchesSpinner.getValue();
         return Math.hypot(bounds.getWidth(), bounds.getHeight()) / Math.max(1, diagonal);
     }
 
@@ -3764,8 +3769,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void applyScaleTo(DmProject.CameraState camera, DmProject target, double ppi) {
         double cell = Math.max(1, target.getMap().getGrid().getPixelsPerCell());
-        double step = clamp(target.getViews().getPlayerZoomStep(), PLAYER_ZOOM_MIN_STEP, PLAYER_ZOOM_MAX_STEP);
-        double zoom = clamp(ppi * tileInchesSpinner.getValue() * Math.pow(2, step) / cell, 0.02, 48);
+        double step = clamp(target.getViews().getPlayerZoomStep(), Tuning.PLAYER_ZOOM_MIN_STEP.get(), Tuning.PLAYER_ZOOM_MAX_STEP.get());
+        double zoom = clamp(ppi * tileInchesSpinner.getValue() * Math.pow(2, step) / cell,
+                Math.min(Tuning.PLAYER_ZOOM_MIN.get(), Tuning.PLAYER_ZOOM_MAX.get()), Math.max(Tuning.PLAYER_ZOOM_MIN.get(), Tuning.PLAYER_ZOOM_MAX.get()));
         if (Math.abs(camera.getZoom() - zoom) > 1e-4) {
             camera.setZoom(zoom);
         }
@@ -3785,24 +3791,44 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private static int clampFps(int fps) {
-        return Math.max(1, Math.min(240, fps));
+        return Math.max(1, Math.min(Tuning.MAX_FPS.get(), fps));
+    }
+
+    private static double diagonalMin() {
+        return Math.min(Tuning.PLAYER_DIAGONAL_MIN.get(), Tuning.PLAYER_DIAGONAL_MAX.get());
+    }
+
+    private static double diagonalMax() {
+        return Math.max(Tuning.PLAYER_DIAGONAL_MIN.get(), Tuning.PLAYER_DIAGONAL_MAX.get());
+    }
+
+    private static int textMinFont() {
+        return Math.min(Tuning.TEXT_MIN_FONT.get(), Tuning.TEXT_MAX_FONT.get());
+    }
+
+    private static int textMaxFont() {
+        return Math.max(Tuning.TEXT_MIN_FONT.get(), Tuning.TEXT_MAX_FONT.get());
+    }
+
+    private static int clampFontSize(int size) {
+        return Math.max(textMinFont(), Math.min(textMaxFont(), size));
     }
 
     private GridPane frameRateGrid() {
         GridPane grid = new GridPane();
         grid.setHgap(8);
         grid.setVgap(4);
-        grid.addRow(0, mutedLabel("Target FPS"), fpsSpinner(PREF_FPS_TARGET, targetFps, 10, 240,
+        grid.addRow(0, mutedLabel("Target FPS"), fpsSpinner(PREF_FPS_TARGET, targetFps, Math.min(10, Tuning.MAX_FPS.get()), Tuning.MAX_FPS.get(),
                 "Frame rate while you interact with the map (mouse, keyboard, laser). Applies to DM and player view.",
                 value -> targetFps = value));
-        grid.addRow(1, mutedLabel("Animation FPS"), fpsSpinner(PREF_FPS_ANIMATION, animationFps, 1, 240,
+        grid.addRow(1, mutedLabel("Animation FPS"), fpsSpinner(PREF_FPS_ANIMATION, animationFps, 1, Tuning.MAX_FPS.get(),
                 "Frame rate of effect textures and light flicker. Flicker never updates faster than this, even while you interact (never above the target FPS).",
                 value -> {
                     animationFps = value;
                     CanvasMapRenderer.setAnimationFps(value);
                 }));
-        grid.addRow(2, mutedLabel("Idle FPS"), fpsSpinner(PREF_FPS_IDLE, idleFps, 1, 60,
-                "Frame rate when nothing moves and there was no input for a second. Lower saves CPU.",
+        grid.addRow(2, mutedLabel("Idle FPS"), fpsSpinner(PREF_FPS_IDLE, idleFps, 1, Math.min(60, Tuning.MAX_FPS.get()),
+                "Frame rate when nothing moves and there was no input for a moment. Lower saves CPU.",
                 value -> idleFps = value));
         return grid;
     }
@@ -3975,7 +4001,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .type(type)
                 .x(worldX)
                 .y(worldY)
-                .strokeWidth("pen".equals(type) ? PEN_WIDTH_CELLS * pixelsPerCell : brushSizeTiles * pixelsPerCell)
+                .strokeWidth("pen".equals(type) ? Tuning.PEN_WIDTH_CELLS.get() * pixelsPerCell : brushSizeTiles * pixelsPerCell)
                 .color(overlayColor)
                 .alpha(overlayAlpha)
                 .playerVisible(overlayPlayerVisible)
@@ -4045,7 +4071,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private DmProject.OverlayShape pickOverlay(double worldX, double worldY, double zoom) {
         List<DmProject.OverlayShape> overlays = project.getOverlays();
-        double tolerance = 6 / Math.max(0.01, zoom);
+        double tolerance = Tuning.SHAPE_PICK_RADIUS.get() / Math.max(0.01, zoom);
         for (int i = overlays.size() - 1; i >= 0; i--) {
             DmProject.OverlayShape shape = overlays.get(i);
             boolean hit = switch (shape.getType() == null ? "" : shape.getType()) {
@@ -4118,7 +4144,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private boolean isOnOverlayHandle(DmProject.OverlayShape shape, double worldX, double worldY, double zoom) {
         double[] handle = overlayHandle(shape);
-        return handle != null && distance(worldX, worldY, handle[0], handle[1]) < 12 / Math.max(0.01, zoom);
+        return handle != null && distance(worldX, worldY, handle[0], handle[1]) < Tuning.SHAPE_HANDLE_RADIUS.get() / Math.max(0.01, zoom);
     }
 
     /** Stretches the shape so that its bottom-right handle follows the mouse; always derived from the state before the drag. */
@@ -4351,7 +4377,7 @@ public class DungeonMasterMapToolApplication extends Application {
         double cell = project.getMap().getGrid().getPixelsPerCell();
         int emptySize = editingTextId != null && editingTextId.equals(box.getId())
                 ? textEditor.typingSize() : textSizeSpinner.getValue();
-        renderer.fitTextBox(box, TEXT_AUTO_MAX_CELLS * cell, emptySize);
+        renderer.fitTextBox(box, Tuning.TEXT_AUTO_MAX_CELLS.get() * cell, emptySize);
     }
 
     private void setTextAutoSize(boolean enabled) {
@@ -4464,7 +4490,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private int pickTextHandle(DmProject.TextBox box, double worldX, double worldY, double zoom) {
-        double reach = 9 / Math.max(0.01, zoom);
+        double reach = Tuning.TEXT_HANDLE_RADIUS.get() / Math.max(0.01, zoom);
         int best = -1;
         double bestDistance = reach;
         for (int handle = 0; handle < TEXT_HANDLE_COUNT; handle++) {
@@ -4501,16 +4527,16 @@ public class DungeonMasterMapToolApplication extends Application {
         double right = left + original.getWidth();
         double bottom = top + original.getHeight();
         if (moveLeft) {
-            left = Math.min(worldX, right - TEXT_MIN_SIZE);
+            left = Math.min(worldX, right - Tuning.TEXT_MIN_BOX.get());
         }
         if (moveRight) {
-            right = Math.max(worldX, left + TEXT_MIN_SIZE);
+            right = Math.max(worldX, left + Tuning.TEXT_MIN_BOX.get());
         }
         if (moveTop) {
-            top = Math.min(worldY, bottom - TEXT_MIN_SIZE);
+            top = Math.min(worldY, bottom - Tuning.TEXT_MIN_BOX.get());
         }
         if (moveBottom) {
-            bottom = Math.max(worldY, top + TEXT_MIN_SIZE);
+            bottom = Math.max(worldY, top + Tuning.TEXT_MIN_BOX.get());
         }
         box.setAutoSize(false);
         box.setX(left);
@@ -4595,8 +4621,8 @@ public class DungeonMasterMapToolApplication extends Application {
             box.setAutoSize(true);
             fitTextBox(box);
         } else {
-            box.setWidth(Math.max(TEXT_MIN_SIZE, box.getWidth()));
-            box.setHeight(Math.max(TEXT_MIN_SIZE, box.getHeight()));
+            box.setWidth(Math.max(Tuning.TEXT_MIN_BOX.get(), box.getWidth()));
+            box.setHeight(Math.max(Tuning.TEXT_MIN_BOX.get(), box.getHeight()));
         }
         beginTextEdit(box, true);
     }
@@ -4934,7 +4960,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         syncingControls = true;
         try {
-            textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, settings.getFontSize())));
+            textSizeSpinner.getValueFactory().setValue(clampFontSize(settings.getFontSize()));
             textColorPicker.setValue(CanvasMapRenderer.parseColor(settings.getTextColor()));
             textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(settings.getBackgroundColor()));
             textBorderPicker.setValue(CanvasMapRenderer.parseColor(settings.getBorderColor()));
@@ -4949,7 +4975,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             if (!box.getRuns().isEmpty()) {
                 DmProject.TextRun last = box.getRuns().get(box.getRuns().size() - 1);
-                textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, last.getFontSize())));
+                textSizeSpinner.getValueFactory().setValue(clampFontSize(last.getFontSize()));
                 textColorPicker.setValue(CanvasMapRenderer.parseColor(last.getColor()));
             }
             textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(box.getBackgroundColor()));
@@ -4963,7 +4989,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void syncTextStyleControls(int size, String color) {
         syncingControls = true;
         try {
-            textSizeSpinner.getValueFactory().setValue(Math.max(6, Math.min(400, size)));
+            textSizeSpinner.getValueFactory().setValue(clampFontSize(size));
             textColorPicker.setValue(CanvasMapRenderer.parseColor(color));
         } finally {
             syncingControls = false;
@@ -5046,7 +5072,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Topmost selectable item under the point, in the same priority order as single selection. */
     private String pickGroupKey(double worldX, double worldY, double zoom) {
-        DmProject.LightSource light = pickNearestLight(worldX, worldY, 24 / Math.max(0.01, zoom));
+        DmProject.LightSource light = pickNearestLight(worldX, worldY, Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, zoom));
         if (light != null) {
             return groupKey("light", light.getId());
         }
@@ -5072,7 +5098,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         return selectedLayer != null && !isImageLayerLocked()
                 && distance(worldX, worldY, selectedLayer.getX() + selectedLayer.getWidth(),
-                selectedLayer.getY() + selectedLayer.getHeight()) < 16 / Math.max(0.01, zoom);
+                selectedLayer.getY() + selectedLayer.getHeight()) < Tuning.LAYER_HANDLE_RADIUS.get() / Math.max(0.01, zoom);
     }
 
     /** Handles Select-tool presses for group selection; returns true when the press was consumed. */
@@ -5318,7 +5344,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void selectInMarquee() {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
-        if (Math.abs(marqueeCurrentX - marqueeStartX) < 4 / zoom && Math.abs(marqueeCurrentY - marqueeStartY) < 4 / zoom) {
+        if (Math.abs(marqueeCurrentX - marqueeStartX) < Tuning.MARQUEE_MIN_DRAG.get() / zoom
+                && Math.abs(marqueeCurrentY - marqueeStartY) < Tuning.MARQUEE_MIN_DRAG.get() / zoom) {
             return;
         }
         groupKeys.clear();
@@ -5411,23 +5438,6 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- Light context menu ----
 
-    private static final double[] LIGHT_RANGE_TILES = {1, 2, 3, 4, 6, 8, 12, 16, 24, 100};
-    private static final String[][] LIGHT_COLORS = {
-            {"Warm torch", "#FFB35C"},
-            {"Candle", "#FFD9A0"},
-            {"Neutral", "#FFF4E0"},
-            {"Moonlight", "#A8C8FF"},
-            {"Arcane", "#C08CFF"},
-            {"Fire", "#FF6A3D"}
-    };
-    private static final Object[][] FLICKER_PRESETS = {
-            {"Off", 0.0, 0.0},
-            {"Candle", 0.12, 2.5},
-            {"Torch", 0.22, 1.4},
-            {"Strong torch", 0.35, 1.8},
-            {"Slow pulse", 0.3, 0.35}
-    };
-
     private void showLightContextMenu(DmProject.LightSource light, double screenX, double screenY) {
         String id = light.getId();
         ContextMenu menu = new ContextMenu();
@@ -5456,7 +5466,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Menu rangeMenu = new Menu("Range");
         ToggleGroup rangeGroup = new ToggleGroup();
         double cell = project.getMap().getGrid().getPixelsPerCell();
-        for (double tiles : LIGHT_RANGE_TILES) {
+        for (double tiles : Tuning.LIGHT_MENU_RANGES.get()) {
             RadioMenuItem item = new RadioMenuItem((tiles == Math.floor(tiles) ? String.valueOf((int) tiles) : String.valueOf(tiles)) + " tiles");
             item.setToggleGroup(rangeGroup);
             item.setSelected(Math.abs(light.getRange() - tiles * cell) < 0.5);
@@ -5466,10 +5476,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
         Menu flickerMenu = new Menu("Flicker");
         ToggleGroup flickerGroup = new ToggleGroup();
-        for (Object[] preset : FLICKER_PRESETS) {
-            String name = (String) preset[0];
-            double strength = (Double) preset[1];
-            double speed = (Double) preset[2];
+        for (Tuning.Choice<double[]> preset : Tuning.LIGHT_MENU_FLICKER.get()) {
+            String name = preset.name();
+            double strength = preset.value()[0];
+            double speed = preset.value()[1];
             boolean off = strength <= 0;
             DmProject.Flicker current = light.getFlicker();
             boolean selected = off
@@ -5492,21 +5502,22 @@ public class DungeonMasterMapToolApplication extends Application {
 
         Menu colorMenu = new Menu("Color");
         ToggleGroup colorGroup = new ToggleGroup();
-        for (String[] option : LIGHT_COLORS) {
-            RadioMenuItem item = new RadioMenuItem(option[0]);
+        for (Tuning.Choice<String> option : Tuning.LIGHT_MENU_COLORS.get()) {
+            String color = option.value();
+            RadioMenuItem item = new RadioMenuItem(option.name());
             item.setToggleGroup(colorGroup);
-            item.setSelected(option[1].equalsIgnoreCase(light.getColor()));
-            javafx.scene.shape.Rectangle swatch = new javafx.scene.shape.Rectangle(12, 12, Color.web(option[1]));
+            item.setSelected(color.equalsIgnoreCase(light.getColor()));
+            javafx.scene.shape.Rectangle swatch = new javafx.scene.shape.Rectangle(12, 12, Color.web(color));
             item.setGraphic(swatch);
-            item.setOnAction(e -> updateLight(id, "Change light color", l -> l.setColor(option[1])));
+            item.setOnAction(e -> updateLight(id, "Change light color", l -> l.setColor(color)));
             colorMenu.getItems().add(item);
         }
 
         Menu brightnessMenu = new Menu("Brightness");
         ToggleGroup brightnessGroup = new ToggleGroup();
-        for (Object[] option : new Object[][]{{"Dim", 0.4}, {"Normal", 0.75}, {"Bright", 1.0}}) {
-            double value = (double) option[1];
-            RadioMenuItem item = new RadioMenuItem((String) option[0]);
+        for (Tuning.Choice<double[]> option : Tuning.LIGHT_MENU_BRIGHTNESS.get()) {
+            double value = option.value()[0];
+            RadioMenuItem item = new RadioMenuItem(option.name());
             item.setToggleGroup(brightnessGroup);
             item.setSelected(Math.abs(light.getIntensity() - value) < 0.05);
             item.setOnAction(e -> updateLight(id, "Change light brightness", l -> l.setIntensity(value)));
@@ -5646,8 +5657,14 @@ public class DungeonMasterMapToolApplication extends Application {
         return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 
+    /** Map library folder: setting library.folder, default 'dmmap-projects' next to the application. */
     private Path resolveProjectsRoot() throws IOException {
-        return resolveApplicationHome().resolve("dmmap-projects");
+        Path home = resolveApplicationHome();
+        String configured = Tuning.LIBRARY_FOLDER.get();
+        if (configured == null || configured.isBlank()) {
+            return home.resolve("dmmap-projects");
+        }
+        return home.resolve(configured.trim()).toAbsolutePath().normalize();
     }
 
     private void applyInitialImportDirectory(FileChooser chooser) {
@@ -5769,13 +5786,45 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private record LightPreset(String label, double rangeTiles, String color, boolean flicker,
-                               double flickerStrength, double flickerSpeed) {
-        static final LightPreset TORCH = new LightPreset("Torch", 6, "#FFB35C", true, 0.22, 1.4);
-        static final LightPreset CANDLE = new LightPreset("Candle", 2, "#FFD98A", true, 0.12, 2.5);
-        static final LightPreset LANTERN = new LightPreset("Lantern", 8, "#FFF4E0", true, 0.22, 1.4);
-        static final LightPreset CAMPFIRE = new LightPreset("Campfire", 12, "#FF8A3D", true, 0.35, 1.8);
-        static final LightPreset MAGIC = new LightPreset("Magic light", 12, "#CFE4FF", false, 0.0, 0.0);
+    /** Light placed by a light tool; the values come from the {@code lightPreset.<id>.*} settings. */
+    private record LightPreset(String id) {
+        static final LightPreset TORCH = new LightPreset("torch");
+        static final LightPreset CANDLE = new LightPreset("candle");
+        static final LightPreset LANTERN = new LightPreset("lantern");
+        static final LightPreset CAMPFIRE = new LightPreset("campfire");
+        static final LightPreset MAGIC = new LightPreset("magic");
+
+        private Tuning.LightPresetSettings settings() {
+            return Tuning.lightPreset(id);
+        }
+
+        double rangeTiles() {
+            return settings().rangeTiles().get();
+        }
+
+        String color() {
+            return settings().color().get();
+        }
+
+        boolean flicker() {
+            return settings().flicker().get() > 0;
+        }
+
+        double flickerStrength() {
+            return flicker() ? settings().flicker().get() : Tuning.LIGHT_DEFAULT_FLICKER.get();
+        }
+
+        double flickerSpeed() {
+            double speed = settings().flickerSpeed().get();
+            return flicker() && speed > 0 ? speed : Tuning.LIGHT_DEFAULT_FLICKER_SPEED.get();
+        }
+
+        /** E.g. "6 tiles, flickering" for tool tooltips. */
+        String summary() {
+            double tiles = rangeTiles();
+            String range = tiles == Math.rint(tiles) ? String.valueOf((long) tiles) : String.valueOf(tiles);
+            return range + (tiles == 1 ? " tile" : " tiles") + (flicker() ? ", flickering" : ", steady");
+        }
 
         static LightPreset forTool(EditorTool tool) {
             return switch (tool) {
@@ -5820,7 +5869,7 @@ public class DungeonMasterMapToolApplication extends Application {
         historyVersion++;
         undoStack.push(action);
         redoStack.clear();
-        while (undoStack.size() > MAX_HISTORY) {
+        while (undoStack.size() > Tuning.HISTORY_MAX_STEPS.get()) {
             undoStack.removeLast();
         }
     }
@@ -5926,8 +5975,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 .revealMode(source.getRevealMode())
                 .flicker(DmProject.Flicker.builder()
                         .enabled(source.getFlicker() != null && source.getFlicker().isEnabled())
-                        .strength(source.getFlicker() != null ? source.getFlicker().getStrength() : 0.18)
-                        .speed(source.getFlicker() != null ? source.getFlicker().getSpeed() : 1.5)
+                        .strength(source.getFlicker() != null ? source.getFlicker().getStrength() : Tuning.LIGHT_DEFAULT_FLICKER.get())
+                        .speed(source.getFlicker() != null ? source.getFlicker().getSpeed() : Tuning.LIGHT_DEFAULT_FLICKER_SPEED.get())
                         .build())
                 .build();
     }
@@ -5974,11 +6023,11 @@ public class DungeonMasterMapToolApplication extends Application {
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
-        LIGHT_ADD("Add light", "click the map to place a torch (6 tiles, torch flicker)", MaterialDesignL.LIGHTBULB_ON, false, false),
-        LIGHT_CANDLE("Candle", "click the map to place a candle (2 tiles)", MaterialDesignC.CANDLE, false, false),
-        LIGHT_LANTERN("Lantern", "click the map to place a lantern (8 tiles)", MaterialDesignL.LAMP, false, false),
-        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (12 tiles)", MaterialDesignC.CAMPFIRE, false, false),
-        LIGHT_MAGIC("Magic light", "click the map to place a steady magical light (12 tiles)", MaterialDesignA.AUTO_FIX, false, false),
+        LIGHT_ADD("Add light", "click the map to place a torch (%s)", MaterialDesignL.LIGHTBULB_ON, false, false),
+        LIGHT_CANDLE("Candle", "click the map to place a candle (%s)", MaterialDesignC.CANDLE, false, false),
+        LIGHT_LANTERN("Lantern", "click the map to place a lantern (%s)", MaterialDesignL.LAMP, false, false),
+        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (%s)", MaterialDesignC.CAMPFIRE, false, false),
+        LIGHT_MAGIC("Magic light", "click the map to place a magical light (%s)", MaterialDesignA.AUTO_FIX, false, false),
         LIGHT_REMOVE("Remove light", "click a light to remove it", MaterialDesignL.LIGHTBULB_OFF_OUTLINE, false, false);
 
         private final String label;
@@ -5993,6 +6042,11 @@ public class DungeonMasterMapToolApplication extends Application {
             this.icon = icon;
             this.reveal = reveal;
             this.rect = rect;
+        }
+
+        /** Tooltip text; light tools include the range of their preset setting. */
+        String description() {
+            return isLightPlaceTool() ? String.format(description, LightPreset.forTool(this).summary()) : description;
         }
 
         boolean isAoeTool() {

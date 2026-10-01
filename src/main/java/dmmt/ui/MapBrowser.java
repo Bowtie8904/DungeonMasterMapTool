@@ -4,6 +4,7 @@ import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import dmmt.service.MapTreeFilter;
 import dmmt.service.ThumbnailService;
+import dmmt.service.Tuning;
 import javafx.animation.PauseTransition;
 import javafx.css.PseudoClass;
 import javafx.scene.control.Button;
@@ -576,7 +577,7 @@ public class MapBrowser extends VBox {
         private final FontIcon placeholder = new FontIcon(MaterialDesignM.MAP_OUTLINE);
         private final ImageView thumbnailView = new ImageView();
         private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView);
-        private final PauseTransition autoExpand = new PauseTransition(Duration.millis(700));
+        private final PauseTransition autoExpand = new PauseTransition(Duration.millis(Tuning.LIBRARY_AUTO_EXPAND_MS.get()));
         private TreeItem<Entry> observedItem;
         private final javafx.beans.value.ChangeListener<Boolean> expandedListener =
                 (observable, oldValue, newValue) -> updateFolderIcon();

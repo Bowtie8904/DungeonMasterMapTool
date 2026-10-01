@@ -310,28 +310,29 @@ Closing the handout window stops showing it and discards the images. Handouts ar
 
 - The base layer (background, grid, images) is drawn on its own canvas, the light map is cached and only recomputed when needed, and the frame rate drops automatically when nothing moves (see the `render.*` settings).
 - **Performance readout** in the status bar: actual/limit fps, average and worst render time, heap usage and the two slowest render parts (the tooltip lists all).
-- **Performance mode** toggle (bottom-left): a temporary override for weaker machines. It lowers light-map resolution, slows texture animation, disables flicker, uses coarser tiles and merges fog cells, without touching your data or other settings.
+- **Performance mode** toggle (bottom-left): a temporary override for weaker machines. It lowers light-map resolution, slows texture animation, disables flicker, uses coarser tiles and merges fog cells, without touching your data or other settings. How much it reduces is configurable with the `performance.*` settings (see [docs/SETTINGS.md](docs/SETTINGS.md#performance-mode)).
 - The **Animations** toggle in the Effects section disables texture animation per map.
 
 ### 16. Settings file
 
-Global preferences are stored in `dmmt-settings.ini` next to the jar as plain `key = value` lines with `#` comments. The file is created with every setting and its default, and unknown keys are preserved. Invalid values fall back to defaults. Delete a line to restore its default.
+Global preferences are stored in `dmmt-settings.ini` next to the jar as plain `key = value` lines with `#` comments. The file is created with every setting and its default; settings added by a newer version are appended with their defaults at startup, and unknown keys are preserved. Invalid values fall back to defaults and numbers are clamped to their allowed range. Delete a line to restore its default.
 
-Highlights (see `dmmt-settings.default.ini` for the complete reference):
+**Every entry is documented in [docs/SETTINGS.md](docs/SETTINGS.md)** (default, range, when it applies, what it does, and search keywords). `dmmt-settings.default.ini` is a copy of a freshly created file.
+
+Highlights:
 
 | Key | Meaning |
 |-----|---------|
-| `player.screenIndex`, `player.tileInches`, `player.screenDiagonalInches.<n>` | Player monitor and 1-inch calibration |
-| `fog.cellsPerGrid` | Fog sharpness |
-| `lighting.tint` | Light colour tint strength |
-| `render.targetFps`, `render.animationFps`, `render.idleFps` | Frame rates |
-| `autosave.enabled`, `autosave.minutes` | Auto-save |
-| `text.*` | Default text style |
-| `ui.*` | Sidebar and section state |
+| `player.screenIndex`, `player.tileInches`, `player.screenDiagonalInches.<n>`, `player.zoom.*` | Player monitor, 1-inch calibration and player zoom |
+| `fog.cellsPerGrid`, `fog.softness`, `fog.revealSeconds`, `fog.hideSeconds`, `fog.fadeEasing` | Fog sharpness, soft edges and fade animation |
+| `lighting.*`, `lightPreset.*`, `lightMenu.*`, `timeOfDay.*` | Lighting, light tool presets, light menu choices, time-of-day darkness |
+| `render.*`, `performance.*` | Frame rates and performance mode |
+| `input.*`, `dm.zoom.*` | Click tolerances and DM zoom |
+| `weather.*`, `ping.*`, `laser.*` | Weather particles, ping and laser pointer look |
+| `cache.*`, `library.folder` | Memory/disk caches and map library location |
 | `texture.<kind>.*` | Per-texture colour, opacity, soft edges, light emission and animation layers |
 
-Texture settings are picked up when the window regains focus; everything else at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
-
+Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
 ### 17. Keyboard and mouse reference
 
 | Input | Action |

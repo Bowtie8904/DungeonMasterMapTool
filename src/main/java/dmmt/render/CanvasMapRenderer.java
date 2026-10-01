@@ -8,6 +8,7 @@ import dmmt.lighting.VisibilityService;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.service.FogService;
+import dmmt.service.Tuning;
 import dmmt.ui.Icons;
 import javafx.geometry.VPos;
 import javafx.scene.canvas.GraphicsContext;
@@ -38,19 +39,14 @@ import java.util.Map;
 import java.util.Objects;
 
 public class CanvasMapRenderer {
-    /** Light map is computed at 1/LIGHT_MAP_SCALE of screen resolution and smoothed when scaled up. */
-    private static final int LIGHT_MAP_SCALE = 4;
+    /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
     private static int lightMapScale() {
-        return PerformanceMode.isEnabled() ? PerformanceMode.LIGHT_MAP_SCALE : LIGHT_MAP_SCALE;
+        return PerformanceMode.isEnabled() ? PerformanceMode.lightMapScale() : Tuning.LIGHT_MAP_SCALE.get();
     }
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
-    private static final double DM_FOG_ALPHA = 0.58;
-    private static final double DM_DARKNESS_FACTOR = 0.65;
-    private static final Color WALL_COLOR = Color.web("#ff2a2a", 0.9);
     public static final double MIN_LIGHT_TINT = 0.0;
-    public static final double MAX_LIGHT_TINT = 0.3;
     public static final double DEFAULT_LIGHT_TINT = 0.08;
 
     /** Global strength of the light colour tint over lit areas; applies to every light in every project. */
@@ -68,32 +64,37 @@ public class CanvasMapRenderer {
         animationFps = Math.max(1, fps);
     }
 
+    /** Highest light tint (setting lighting.tint.max). */
+    public static double maxLightTint() {
+        return Tuning.LIGHT_TINT_MAX.get();
+    }
+
     public static double getLightTint() {
         return lightTint;
     }
 
     public static void setLightTint(double value) {
-        lightTint = Math.max(MIN_LIGHT_TINT, Math.min(MAX_LIGHT_TINT, value));
+        lightTint = Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
     }
 
-    public static final double MAX_FOG_SOFTNESS = 1.0;
     public static final double DEFAULT_FOG_SOFTNESS = 0.3;
-    /** Seconds a fog cell needs to fade completely in or out. */
-    public static final double FOG_FADE_SECONDS = 0.5;
-    /** Fade time when the change comes from a light, so moving lights do not trail behind. */
-    public static final double FOG_LIGHT_FADE_SECONDS = 0.16;
 
     /** Width of the soft fog edge in grid tiles (0 = hard edge); applies to every project. */
     private static volatile double fogSoftness = DEFAULT_FOG_SOFTNESS;
     /** Whether fog fades when it is revealed or hidden; applies to every project. */
     private static volatile boolean fogFadeEnabled = true;
 
+    /** Widest soft fog edge in grid tiles (setting fog.softness.max). */
+    public static double maxFogSoftness() {
+        return Tuning.FOG_SOFTNESS_MAX.get();
+    }
+
     public static double getFogSoftness() {
         return fogSoftness;
     }
 
     public static void setFogSoftness(double tiles) {
-        fogSoftness = Math.max(0, Math.min(MAX_FOG_SOFTNESS, tiles));
+        fogSoftness = Math.max(0, Math.min(maxFogSoftness(), tiles));
     }
 
     public static boolean isFogFadeEnabled() {
@@ -122,8 +123,10 @@ public class CanvasMapRenderer {
     private float[] fogTarget;
     private int[] fogPixels;
     private long fogLastAdvanceNanos;
+    private float[] fogFrom;
+    private float[] fogProgress;
     private boolean fogAnimating;
-    private double fogFadeSeconds = FOG_FADE_SECONDS;
+    private boolean fogLightFade;
     private long fogLightChangesSeen;
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
     private boolean wallLayerVisible = true;
@@ -305,14 +308,14 @@ public class CanvasMapRenderer {
         }
         double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
-            seconds = Math.floor(seconds * PerformanceMode.TEXTURE_ANIMATION_FPS) / PerformanceMode.TEXTURE_ANIMATION_FPS;
+            seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
         }
         WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
     }
 
     private void drawGrid(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera) {
         double cell = Math.max(5.0, project.getMap().getGrid().getPixelsPerCell());
-        gc.setStroke(Color.color(1, 1, 1, 0.08));
+        gc.setStroke(Color.color(1, 1, 1, Tuning.GRID_OPACITY.get()));
         gc.setLineWidth(1);
 
         WorldPoint topLeft = screenToWorld(0, 0, width, height, camera);
@@ -362,7 +365,6 @@ public class CanvasMapRenderer {
         return complete;
     }
 
-    private static final double HIDDEN_SHAPE_VISIBILITY = 0.35;
 
     /**
      * AOE shapes sit above the map and below fog. Shapes that do not emit light are drawn before the lighting
@@ -386,7 +388,7 @@ public class CanvasMapRenderer {
             } catch (IllegalArgumentException ex) {
                 base = Color.web("#55AA33");
             }
-            double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * (dmOnly ? HIDDEN_SHAPE_VISIBILITY : 1.0);
+            double alpha = Math.max(0.05, Math.min(1.0, shape.getAlpha())) * (dmOnly ? Tuning.HIDDEN_SHAPE_OPACITY.get() : 1.0);
             Color fill = base.deriveColor(0, 1, 1, alpha);
             Color edge = base.deriveColor(0, 1, 1, Math.min(1.0, alpha + 0.35));
             gc.setFill(fill);
@@ -396,7 +398,7 @@ public class CanvasMapRenderer {
             String type = shape.getType() == null ? "" : shape.getType();
             String texture = OverlayTextures.normalize(shape.getTexture());
             if (OverlayTextures.isAnimated(texture)) {
-                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? HIDDEN_SHAPE_VISIBILITY : 1.0, width, height, camera);
+                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? Tuning.HIDDEN_SHAPE_OPACITY.get() : 1.0, width, height, camera);
                 gc.setLineDashes(null);
                 continue;
             }
@@ -495,7 +497,7 @@ public class CanvasMapRenderer {
         double zoom = camera.getZoom();
         double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
-            seconds = Math.floor(seconds * PerformanceMode.TEXTURE_ANIMATION_FPS) / PerformanceMode.TEXTURE_ANIMATION_FPS;
+            seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
         }
         double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
@@ -951,7 +953,7 @@ public class CanvasMapRenderer {
     private void drawLighting(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera, boolean playerMode) {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
-        double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : DM_DARKNESS_FACTOR);
+        double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         if (darkness < 0.01) {
             return;
         }
@@ -1302,7 +1304,7 @@ public class CanvasMapRenderer {
     }
 
     private void drawWalls(GraphicsContext gc, List<DmProject.WallSegment> walls, double width, double height, DmProject.CameraState camera) {
-        gc.setStroke(WALL_COLOR);
+        gc.setStroke(Color.web(Tuning.WALL_COLOR.get(), Tuning.WALL_OPACITY.get()));
         gc.setLineWidth(2);
         for (DmProject.WallSegment wall : walls) {
             gc.strokeLine(
@@ -1327,9 +1329,9 @@ public class CanvasMapRenderer {
 
     private static Color interactableColor(DmProject.Interactable interactable) {
         if (isWindow(interactable)) {
-            return isOpen(interactable) ? Color.DEEPSKYBLUE : Color.web("#3b6fd8");
+            return Color.web(isOpen(interactable) ? Tuning.WINDOW_OPEN_COLOR.get() : Tuning.WINDOW_CLOSED_COLOR.get());
         }
-        return isOpen(interactable) ? Color.LIMEGREEN : Color.web("#e0473c");
+        return Color.web(isOpen(interactable) ? Tuning.DOOR_OPEN_COLOR.get() : Tuning.DOOR_CLOSED_COLOR.get());
     }
 
     private void drawInteractableBadges(GraphicsContext gc, List<DmProject.Interactable> interactables, double width, double height,
@@ -1386,16 +1388,19 @@ public class CanvasMapRenderer {
     private void drawPings(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera) {
         long now = System.currentTimeMillis();
         project.getActivePings().removeIf(p -> now - p.getCreatedAtMillis() > p.getDurationMillis());
+        Color color = Color.web(Tuning.PING_COLOR.get());
+        double startRadius = Tuning.PING_START_RADIUS.get();
+        double grow = Tuning.PING_GROW.get();
         for (DmProject.PingEvent ping : project.getActivePings()) {
             double progress = Math.min(1.0, (now - ping.getCreatedAtMillis()) / (double) ping.getDurationMillis());
             double alpha = 1.0 - progress;
-            double radius = 10 + 50 * progress;
+            double radius = startRadius + grow * progress;
             double x = worldToScreenX(ping.getX(), width, camera);
             double y = worldToScreenY(ping.getY(), height, camera);
-            gc.setStroke(Color.color(1, 0.9, 0.2, alpha));
+            gc.setStroke(Color.color(color.getRed(), color.getGreen(), color.getBlue(), alpha));
             gc.setLineWidth(3);
             gc.strokeOval(x - radius, y - radius, radius * 2, radius * 2);
-            gc.setFill(Color.color(1, 0.9, 0.2, alpha * 0.7));
+            gc.setFill(Color.color(color.getRed(), color.getGreen(), color.getBlue(), alpha * 0.7));
             gc.fillOval(x - 6, y - 6, 12, 12);
         }
     }
@@ -1404,7 +1409,10 @@ public class CanvasMapRenderer {
     public record LaserPoint(double x, double y, long millis) {
     }
 
-    public static final long LASER_TRAIL_MILLIS = 500;
+    /** How long the laser trail stays visible (setting laser.trailMs). */
+    public static long laserTrailMillis() {
+        return Tuning.LASER_TRAIL_MS.get();
+    }
 
     /** Draws the laser trail (oldest first) and, if {@code dotActive}, the bright dot at the newest point. */
     public void drawLaser(GraphicsContext gc, List<LaserPoint> trail, boolean dotActive, double dotRadius,
@@ -1413,16 +1421,21 @@ public class CanvasMapRenderer {
             return;
         }
         long now = System.currentTimeMillis();
+        double trailMillis = Math.max(1, laserTrailMillis());
+        Color color = Color.web(Tuning.LASER_COLOR.get());
+        double red = color.getRed();
+        double green = color.getGreen();
+        double blue = color.getBlue();
         gc.save();
         gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
         for (int i = 1; i < trail.size(); i++) {
             LaserPoint a = trail.get(i - 1);
             LaserPoint b = trail.get(i);
-            double alpha = 1.0 - Math.min(1.0, (now - b.millis()) / (double) LASER_TRAIL_MILLIS);
+            double alpha = 1.0 - Math.min(1.0, (now - b.millis()) / trailMillis);
             if (alpha <= 0) {
                 continue;
             }
-            gc.setStroke(Color.color(1, 0.1, 0.1, alpha * 0.8));
+            gc.setStroke(Color.color(red, green, blue, alpha * 0.8));
             gc.setLineWidth(Math.max(1.5, dotRadius * 1.4 * alpha));
             gc.strokeLine(worldToScreenX(a.x(), width, camera), worldToScreenY(a.y(), height, camera),
                     worldToScreenX(b.x(), width, camera), worldToScreenY(b.y(), height, camera));
@@ -1431,11 +1444,11 @@ public class CanvasMapRenderer {
             LaserPoint p = trail.get(trail.size() - 1);
             double x = worldToScreenX(p.x(), width, camera);
             double y = worldToScreenY(p.y(), height, camera);
-            gc.setFill(Color.color(1, 0.1, 0.1, 0.35));
+            gc.setFill(Color.color(red, green, blue, 0.35));
             gc.fillOval(x - dotRadius * 2, y - dotRadius * 2, dotRadius * 4, dotRadius * 4);
-            gc.setFill(Color.color(1, 0.12, 0.1, 1));
+            gc.setFill(Color.color(red, green, blue, 1));
             gc.fillOval(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
-            gc.setFill(Color.color(1, 0.8, 0.8, 0.9));
+            gc.setFill(color.interpolate(Color.WHITE, 0.75).deriveColor(0, 1, 1, 0.9));
             gc.fillOval(x - dotRadius * 0.4, y - dotRadius * 0.4, dotRadius * 0.8, dotRadius * 0.8);
         }
         gc.restore();
@@ -1446,7 +1459,7 @@ public class CanvasMapRenderer {
             return;
         }
         gc.save();
-        gc.setGlobalAlpha(playerMode ? 1.0 : DM_FOG_ALPHA);
+        gc.setGlobalAlpha(playerMode ? 1.0 : Tuning.FOG_DM_OPACITY.get());
         gc.setFill(Color.BLACK);
         FogMask mask = project.getFog().getMask();
         if (mask == null) {
@@ -1481,7 +1494,7 @@ public class CanvasMapRenderer {
     /** Fog cells merged per fog image pixel; performance mode draws the fog at the lowest fog resolution. */
     private static int fogDownsample() {
         return PerformanceMode.isEnabled()
-                ? Math.max(1, FogService.getCellsPerGrid() / FogService.MIN_CELLS_PER_GRID)
+                ? Math.max(1, FogService.getCellsPerGrid() / FogService.minCellsPerGrid())
                 : 1;
     }
 
@@ -1516,7 +1529,7 @@ public class CanvasMapRenderer {
                 && fogImageMaskVersion == mask.getVersion()
                 && fogImageLiveVersion == liveVersion
                 && fogImageRadius == radius) {
-            advanceFog(cols, rows);
+            advanceFog(imgCols);
             return;
         }
         if (fogImage == null || (int) fogImage.getWidth() != imgCols || (int) fogImage.getHeight() != imgRows) {
@@ -1524,59 +1537,32 @@ public class CanvasMapRenderer {
         }
         BitSet revealed = mask.copyBits();
         revealed.or(lightingEngine.getLiveReveal());
-        if (factor == 1) {
-            float[] target = FogShading.fogOpacity(revealed, cols, rows, radius);
-            boolean fade = fogFadeEnabled && !PerformanceMode.isEnabled() && sameGeometry
-                    && fogShown != null && fogShown.length == target.length;
+        float[] target = factor == 1
+                ? FogShading.fogOpacity(revealed, cols, rows, radius)
+                : FogShading.downsampledOpacity(revealed, cols, rows, factor);
+        boolean fadeAllowed = fogFadeEnabled && (!PerformanceMode.isEnabled() || PerformanceMode.fogFade());
+        boolean fade = fadeAllowed && sameGeometry && fogShown != null && fogTarget != null
+                && fogShown.length == target.length && fogTarget.length == target.length;
+        long lightChanges = lightingEngine.getLightRevealChanges();
+        fogLightFade = lightChanges != fogLightChangesSeen;
+        fogLightChangesSeen = lightChanges;
+        if (fade) {
+            FogShading.retarget(fogShown, fogTarget, target, fogFrom, fogProgress);
             fogTarget = target;
-            long lightChanges = lightingEngine.getLightRevealChanges();
-            fogFadeSeconds = lightChanges != fogLightChangesSeen ? FOG_LIGHT_FADE_SECONDS : FOG_FADE_SECONDS;
-            fogLightChangesSeen = lightChanges;
-            if (fade) {
-                // Keep the clock of a running fade, otherwise a target that changes every frame never advances.
-                if (!fogAnimating) {
-                    fogLastAdvanceNanos = System.nanoTime();
-                }
-                fogAnimating = true;
-            } else {
-                fogShown = target.clone();
-                fogAnimating = false;
-                uploadFogRows(cols, 0, rows - 1);
+            // Keep the clock of a running fade, otherwise a target that changes every frame never advances.
+            if (!fogAnimating) {
+                fogLastAdvanceNanos = System.nanoTime();
             }
-            fogImageMask = mask;
-            fogImageMaskVersion = mask.getVersion();
-            fogImageLiveVersion = liveVersion;
-            fogImageFactor = factor;
-            fogImageRadius = radius;
-            fogImageOriginX = mask.getOriginX();
-            fogImageOriginY = mask.getOriginY();
-            fogImageCellSize = mask.getCellSize();
-            if (fade) {
-                advanceFog(cols, rows);
-            }
-            return;
+            fogAnimating = true;
+        } else {
+            fogTarget = target;
+            fogShown = target.clone();
+            fogFrom = target.clone();
+            fogProgress = new float[target.length];
+            Arrays.fill(fogProgress, 1f);
+            fogAnimating = false;
+            uploadFogRows(imgCols, 0, imgRows - 1);
         }
-        fogShown = null;
-        fogTarget = null;
-        fogAnimating = false;
-        int[] pixels = new int[imgCols * imgRows];
-        Arrays.fill(pixels, 0xFF000000);
-        {
-            int[] counts = new int[pixels.length];
-            for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < cols * rows; idx = revealed.nextSetBit(idx + 1)) {
-                counts[(idx / cols / factor) * imgCols + (idx % cols) / factor]++;
-            }
-            for (int r = 0; r < imgRows; r++) {
-                int blockRows = Math.min(factor, rows - r * factor);
-                for (int c = 0; c < imgCols; c++) {
-                    int blockCells = blockRows * Math.min(factor, cols - c * factor);
-                    if (counts[r * imgCols + c] * 2 >= blockCells) {
-                        pixels[r * imgCols + c] = 0;
-                    }
-                }
-            }
-        }
-        fogImage.getPixelWriter().setPixels(0, 0, imgCols, imgRows, PixelFormat.getIntArgbInstance(), pixels, 0, imgCols);
         fogImageMask = mask;
         fogImageMaskVersion = mask.getVersion();
         fogImageLiveVersion = liveVersion;
@@ -1585,20 +1571,31 @@ public class CanvasMapRenderer {
         fogImageOriginX = mask.getOriginX();
         fogImageOriginY = mask.getOriginY();
         fogImageCellSize = mask.getCellSize();
+        if (fade) {
+            advanceFog(imgCols);
+        }
     }
 
-    /** Moves the shown fog towards the target by the time elapsed since the last call (idempotent within a frame). */
-    private void advanceFog(int cols, int rows) {
+    /**
+     * Moves the shown fog towards the target by the time elapsed since the last call (idempotent within a frame).
+     * Reveal and hide use their own fade times (fog.revealSeconds / fog.hideSeconds); changes caused by lights use
+     * fog.lightFadeSeconds so moving lights do not trail behind.
+     */
+    private void advanceFog(int cols) {
         if (fogShown == null || fogTarget == null || !fogAnimating) {
             return;
         }
         long now = System.nanoTime();
-        double seconds = Math.min(0.1, (now - fogLastAdvanceNanos) / 1_000_000_000.0);
+        double seconds = Math.min(Tuning.FOG_FADE_MAX_STEP.get(), (now - fogLastAdvanceNanos) / 1_000_000_000.0);
         if (seconds <= 0) {
             return;
         }
         fogLastAdvanceNanos = now;
-        int[] changed = FogShading.advance(fogShown, fogTarget, (float) (seconds / fogFadeSeconds));
+        double revealSeconds = fogLightFade ? Tuning.FOG_LIGHT_FADE_SECONDS.get() : Tuning.FOG_REVEAL_SECONDS.get();
+        double hideSeconds = fogLightFade ? Tuning.FOG_LIGHT_FADE_SECONDS.get() : Tuning.FOG_HIDE_SECONDS.get();
+        boolean smooth = "smooth".equals(Tuning.FOG_FADE_EASING.get());
+        int[] changed = FogShading.advance(fogShown, fogTarget, fogFrom, fogProgress,
+                (float) (seconds / revealSeconds), (float) (seconds / hideSeconds), smooth);
         if (changed == null) {
             fogAnimating = false;
             return;

@@ -1,24 +1,25 @@
 package dmmt.lighting;
 
-/** Global ambient lighting presets. Darkness is the overlay alpha used in the player view. */
+import dmmt.service.Tuning;
+
+/**
+ * Global ambient lighting presets. Darkness is the overlay alpha used in the player view. Darkness and ambient
+ * colour come from the {@code timeOfDay.<preset>.*} settings ({@link Tuning}).
+ */
 public enum TimeOfDayPreset {
-    DAY("Day", 0.0, 0.0, 0.0, 0.0),
-    DAWN("Dawn", 0.35, 0.22, 0.16, 0.30),
-    DUSK("Dusk", 0.55, 0.20, 0.09, 0.12),
-    NIGHT("Night", 0.86, 0.01, 0.02, 0.08);
+    DAY("Day"),
+    DAWN("Dawn"),
+    DUSK("Dusk"),
+    NIGHT("Night");
 
     private final String label;
-    private final double darkness;
-    private final double red;
-    private final double green;
-    private final double blue;
 
-    TimeOfDayPreset(String label, double darkness, double red, double green, double blue) {
+    TimeOfDayPreset(String label) {
         this.label = label;
-        this.darkness = darkness;
-        this.red = red;
-        this.green = green;
-        this.blue = blue;
+    }
+
+    private Tuning.TimeOfDaySettings settings() {
+        return Tuning.timeOfDay(name());
     }
 
     public String label() {
@@ -26,7 +27,7 @@ public enum TimeOfDayPreset {
     }
 
     public double darkness() {
-        return darkness;
+        return settings().darkness().get();
     }
 
     /**
@@ -35,7 +36,7 @@ public enum TimeOfDayPreset {
      */
     public double darkness(double brightness) {
         double b = clampBrightness(brightness);
-        return Math.max(0.0, Math.min(1.0, darkness * (1.0 - b)));
+        return Math.max(0.0, Math.min(1.0, darkness() * (1.0 - b)));
     }
 
     /** Ambient brightness adjustment range; 0 means the preset's default darkness. */
@@ -50,15 +51,15 @@ public enum TimeOfDayPreset {
     }
 
     public double red() {
-        return red;
+        return settings().red().get();
     }
 
     public double green() {
-        return green;
+        return settings().green().get();
     }
 
     public double blue() {
-        return blue;
+        return settings().blue().get();
     }
 
     public static TimeOfDayPreset from(String name) {

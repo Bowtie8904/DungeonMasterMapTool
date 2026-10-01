@@ -113,6 +113,77 @@ public final class FogShading {
         return Arrays.equals(shown, target);
     }
 
+    /**
+     * Starts a new fade for every cell whose target changes: it fades from its currently shown value. Cells whose
+     * target stays the same keep their running fade.
+     */
+    public static void retarget(float[] shown, float[] oldTarget, float[] newTarget, float[] from, float[] progress) {
+        for (int i = 0; i < shown.length; i++) {
+            if (newTarget[i] != oldTarget[i]) {
+                from[i] = shown[i];
+                progress[i] = 0f;
+            }
+        }
+    }
+
+    /**
+     * Advances every fading cell from {@code from} towards {@code target}. A step of 1 is a complete fade between
+     * clear and fully fogged; {@code revealStep} applies when a cell gets clearer, {@code hideStep} when it gets
+     * darker. Without easing the result equals {@link #advance(float[], float[], float)}; with {@code smooth} the
+     * fade starts and ends slowly (smoothstep) but takes the same time.
+     *
+     * @return {@code {firstChangedIndex, lastChangedIndex}} or {@code null} when nothing changed
+     */
+    public static int[] advance(float[] shown, float[] target, float[] from, float[] progress,
+                                float revealStep, float hideStep, boolean smooth) {
+        int first = -1;
+        int last = -1;
+        for (int i = 0; i < shown.length; i++) {
+            float t = target[i];
+            if (shown[i] == t) {
+                continue;
+            }
+            float f = from[i];
+            float distance = Math.abs(t - f);
+            float p = distance <= 0f ? 1f : progress[i] + (t < f ? revealStep : hideStep) / distance;
+            if (p >= 1f) {
+                progress[i] = 1f;
+                shown[i] = t;
+            } else {
+                progress[i] = p;
+                float eased = smooth ? p * p * (3f - 2f * p) : p;
+                shown[i] = f + (t - f) * eased;
+            }
+            if (first < 0) {
+                first = i;
+            }
+            last = i;
+        }
+        return first < 0 ? null : new int[]{first, last};
+    }
+
+    /**
+     * Hard-edged fog opacity of a fog image whose pixels each merge {@code factor x factor} mask cells: a pixel is
+     * clear when at least half of its cells are revealed.
+     */
+    public static float[] downsampledOpacity(BitSet revealed, int cols, int rows, int factor) {
+        int imgCols = (cols + factor - 1) / factor;
+        int imgRows = (rows + factor - 1) / factor;
+        int[] counts = new int[imgCols * imgRows];
+        for (int idx = revealed.nextSetBit(0); idx >= 0 && idx < cols * rows; idx = revealed.nextSetBit(idx + 1)) {
+            counts[(idx / cols / factor) * imgCols + (idx % cols) / factor]++;
+        }
+        float[] values = new float[counts.length];
+        for (int r = 0; r < imgRows; r++) {
+            int blockRows = Math.min(factor, rows - r * factor);
+            for (int c = 0; c < imgCols; c++) {
+                int blockCells = blockRows * Math.min(factor, cols - c * factor);
+                values[r * imgCols + c] = counts[r * imgCols + c] * 2 >= blockCells ? 0f : 1f;
+            }
+        }
+        return values;
+    }
+
     /** Fog opacity 0..1 as black ARGB pixel. */
     public static int pixel(float opacity) {
         int alpha = Math.round(Math.max(0f, Math.min(1f, opacity)) * 255f);

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.service.Tuning;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
@@ -79,8 +80,8 @@ public final class Icons {
 
     public static void tooltip(Control control, String text) {
         Tooltip tooltip = tooltip(text);
-        PauseTransition delay = new PauseTransition(Duration.millis(300));
-        PauseTransition duration = new PauseTransition(Duration.seconds(12));
+        PauseTransition delay = new PauseTransition(Duration.millis(Tuning.TOOLTIP_DELAY_MS.get()));
+        PauseTransition duration = new PauseTransition(Duration.seconds(Tuning.TOOLTIP_DURATION_SECONDS.get()));
         duration.setOnFinished(event -> tooltip.hide());
         delay.setOnFinished(event -> {
             if (!control.isHover() || control.getScene() == null) {
@@ -106,8 +107,8 @@ public final class Icons {
 
     public static Tooltip tooltip(String text) {
         Tooltip tooltip = new Tooltip(text);
-        tooltip.setShowDelay(Duration.millis(300));
-        tooltip.setShowDuration(Duration.seconds(12));
+        tooltip.setShowDelay(Duration.millis(Tuning.TOOLTIP_DELAY_MS.get()));
+        tooltip.setShowDuration(Duration.seconds(Tuning.TOOLTIP_DURATION_SECONDS.get()));
         tooltip.setWrapText(true);
         tooltip.setMaxWidth(300);
         return tooltip;

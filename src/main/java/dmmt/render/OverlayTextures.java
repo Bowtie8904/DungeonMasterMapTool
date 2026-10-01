@@ -1,5 +1,6 @@
 package dmmt.render;
 
+import dmmt.service.Tuning;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
@@ -123,12 +124,11 @@ public final class OverlayTextures {
     public static final List<String> KINDS = List.copyOf(DEFINITIONS.keySet());
 
     // One tile per texture+colour. Must exceed the number of combinations drawn per frame, otherwise the LRU cache
-    // thrashes and every frame regenerates tiles.
-    private static final int MAX_CACHED = 128;
+    // thrashes and every frame regenerates tiles (setting cache.textureTiles).
     private static final Map<String, Image> CACHE = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
-            return size() > MAX_CACHED;
+            return size() > Tuning.CACHE_TEXTURE_TILES.get();
         }
     };
 
@@ -306,7 +306,7 @@ public final class OverlayTextures {
     }
 
     public static int featherPasses() {
-        return PerformanceMode.isEnabled() ? Math.min(featherPasses, PerformanceMode.MAX_FEATHER_PASSES) : featherPasses;
+        return PerformanceMode.isEnabled() ? Math.min(featherPasses, PerformanceMode.maxFeatherPasses()) : featherPasses;
     }
 
     /** Built-in values of every configurable setting, keyed by settings-file key, in file order. */

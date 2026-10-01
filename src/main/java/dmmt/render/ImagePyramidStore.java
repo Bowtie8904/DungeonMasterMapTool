@@ -1,5 +1,6 @@
 package dmmt.render;
 
+import dmmt.service.Tuning;
 import javafx.geometry.Point2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
@@ -31,14 +32,11 @@ import java.util.stream.Stream;
 
 /**
  * Shared (DM, player and frozen player renderer) cache of map images. Images up to
- * {@link ImagePyramidBuilder#MAX_OVERVIEW_SIZE} px are drawn directly; larger images are drawn
+ * {@link ImagePyramidBuilder#maxOverviewSize()} px are drawn directly; larger images are drawn
  * from a downscaled overview plus full-resolution tiles of a disk-cached pyramid, loaded on demand.
  * All public methods must be called on the JavaFX application thread.
  */
 public final class ImagePyramidStore {
-    private static final int MAX_CACHED_TILES = 96;
-    private static final int MAX_QUEUED_TILE_LOADS = 48;
-    private static final Duration CACHE_RETENTION = Duration.ofDays(60);
     private static ImagePyramidStore shared;
 
     private final Path cacheRoot;
@@ -156,20 +154,31 @@ public final class ImagePyramidStore {
 
     /** Downscales oversized images so they fit into a GPU texture (a null texture crashes the canvas). */
     private static Image loadCapped(Path file) {
-        Image image = new Image(file.toUri().toString(), ImagePyramidBuilder.MAX_OVERVIEW_SIZE,
-                ImagePyramidBuilder.MAX_OVERVIEW_SIZE, true, true, false);
+        Image image = new Image(file.toUri().toString(), ImagePyramidBuilder.maxOverviewSize(),
+                ImagePyramidBuilder.maxOverviewSize(), true, true, false);
         return image.isError() || image.getWidth() <= 0 ? null : image;
     }
 
     static String cacheKey(Path file) {
         try {
             Path abs = file.toAbsolutePath().normalize();
-            String id = abs + "|" + Files.size(abs) + "|" + Files.getLastModifiedTime(abs).toMillis();
+            String id = abs + "|" + Files.size(abs) + "|" + Files.getLastModifiedTime(abs).toMillis() + buildOptions();
             byte[] hash = MessageDigest.getInstance("SHA-1").digest(id.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash, 0, 12);
         } catch (IOException | NoSuchAlgorithmException ex) {
             return Integer.toHexString(file.toAbsolutePath().toString().hashCode());
         }
+    }
+
+    /** Non-default pyramid settings become part of the cache key, so changing them builds a new cache. */
+    private static String buildOptions() {
+        StringBuilder options = new StringBuilder();
+        for (Tuning.Setting<?> setting : java.util.List.of(Tuning.CACHE_TILE_SIZE, Tuning.CACHE_OVERVIEW_SIZE, Tuning.CACHE_JPEG_QUALITY)) {
+            if (!setting.get().equals(setting.defaultValue())) {
+                options.append('|').append(setting.key()).append('=').append(setting.get());
+            }
+        }
+        return options.toString();
     }
 
     private static void touch(Path dir) {
@@ -184,7 +193,7 @@ public final class ImagePyramidStore {
         if (!Files.isDirectory(cacheRoot)) {
             return;
         }
-        Instant cutoff = Instant.now().minus(CACHE_RETENTION);
+        Instant cutoff = Instant.now().minus(Duration.ofDays(Tuning.CACHE_RETENTION_DAYS.get()));
         try (Stream<Path> dirs = Files.list(cacheRoot)) {
             dirs.filter(Files::isDirectory).forEach(dir -> {
                 try {
@@ -231,7 +240,7 @@ public final class ImagePyramidStore {
         if (pending.add(key)) {
             loadQueue.offerFirst(key);
             // Newest requests win; drop stale ones (e.g. after fast panning).
-            while (loadQueue.size() > MAX_QUEUED_TILE_LOADS) {
+            while (loadQueue.size() > Tuning.CACHE_TILE_QUEUE.get()) {
                 TileKey stale = loadQueue.pollLast();
                 if (stale == null) {
                     break;
@@ -252,7 +261,7 @@ public final class ImagePyramidStore {
             }
             tiles.put(done.key(), done.image());
             changes.incrementAndGet();
-            if (tiles.size() > MAX_CACHED_TILES) {
+            while (tiles.size() > Tuning.CACHE_IMAGE_TILES.get()) {
                 var it = tiles.entrySet().iterator();
                 it.next();
                 it.remove();
@@ -319,7 +328,7 @@ public final class ImagePyramidStore {
                     ? 0
                     : (int) Math.floor(Math.log(1.0 / screenPixelsPerSourcePixel) / Math.log(2));
             if (PerformanceMode.isEnabled()) {
-                level += PerformanceMode.IMAGE_LEVEL_BIAS;
+                level += PerformanceMode.imageLevelBias();
             }
             if (level >= meta.overviewLevel()) {
                 return true;

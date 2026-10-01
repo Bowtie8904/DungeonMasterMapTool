@@ -1,5 +1,7 @@
 package dmmt.lighting;
 
+import dmmt.service.Tuning;
+
 import java.util.Arrays;
 
 /**
@@ -7,7 +9,6 @@ import java.util.Arrays;
  * Segments are passed as flat arrays: [x1, y1, x2, y2, x1, y1, ...].
  */
 public class VisibilityService {
-    private static final int CIRCLE_RAYS = 96;
     private static final double ANGLE_EPSILON = 0.0001;
 
     public record Polygon(double[] xs, double[] ys) {
@@ -22,11 +23,12 @@ public class VisibilityService {
         }
         double[] nearby = filterSegments(lightX, lightY, range, segments);
         int segmentCount = nearby.length / 4;
+        int rays = Tuning.SHADOW_RAYS.get();
 
-        double[] angles = new double[CIRCLE_RAYS + segmentCount * 6];
+        double[] angles = new double[rays + segmentCount * 6];
         int angleCount = 0;
-        for (int i = 0; i < CIRCLE_RAYS; i++) {
-            angles[angleCount++] = -Math.PI + (2 * Math.PI * i) / CIRCLE_RAYS;
+        for (int i = 0; i < rays; i++) {
+            angles[angleCount++] = -Math.PI + (2 * Math.PI * i) / rays;
         }
         for (int s = 0; s < segmentCount; s++) {
             for (int p = 0; p < 2; p++) {
@@ -53,10 +55,11 @@ public class VisibilityService {
     }
 
     public Polygon circle(double lightX, double lightY, double range) {
-        double[] xs = new double[CIRCLE_RAYS];
-        double[] ys = new double[CIRCLE_RAYS];
-        for (int i = 0; i < CIRCLE_RAYS; i++) {
-            double angle = (2 * Math.PI * i) / CIRCLE_RAYS;
+        int rays = Tuning.SHADOW_RAYS.get();
+        double[] xs = new double[rays];
+        double[] ys = new double[rays];
+        for (int i = 0; i < rays; i++) {
+            double angle = (2 * Math.PI * i) / rays;
             xs[i] = lightX + Math.cos(angle) * range;
             ys[i] = lightY + Math.sin(angle) * range;
         }
