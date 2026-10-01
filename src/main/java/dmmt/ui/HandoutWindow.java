@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import lombok.Getter;
 import dmmt.ui.HandoutLayout.Rect;
 import dmmt.ui.HandoutLayout.Size;
 import javafx.geometry.Insets;
@@ -65,6 +66,7 @@ public final class HandoutWindow {
     private final Set<Image> selection = Collections.newSetFromMap(new IdentityHashMap<>());
     /** Images the players see while shown; null means all of them. */
     private Set<Image> showOnly;
+    @Getter
     private int rotation = lastRotation;
     private boolean shown;
 
@@ -191,10 +193,6 @@ public final class HandoutWindow {
             }
         }
         return visible;
-    }
-
-    public int getRotation() {
-        return rotation;
     }
 
     /** Called by the application when the player window opens or closes. */

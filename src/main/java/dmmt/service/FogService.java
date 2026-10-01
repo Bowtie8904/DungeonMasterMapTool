@@ -2,6 +2,7 @@ package dmmt.service;
 
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import lombok.Getter;
 
 public class FogService {
     public static final int DEFAULT_CELLS_PER_GRID = 10;
@@ -11,6 +12,7 @@ public class FogService {
     private static final double DEFAULT_HEIGHT = 1080;
 
     /** Global fog resolution (fog cells per map grid cell along each axis); applies to every project. */
+    @Getter
     private static volatile int cellsPerGrid = DEFAULT_CELLS_PER_GRID;
 
     /** Lowest fog cells per grid cell (setting fog.cellsPerGrid.min). */
@@ -21,10 +23,6 @@ public class FogService {
     /** Highest fog cells per grid cell (setting fog.cellsPerGrid.max). */
     public static int maxCellsPerGrid() {
         return Math.max(Tuning.FOG_CELLS_MIN.get(), Tuning.FOG_CELLS_MAX.get());
-    }
-
-    public static int getCellsPerGrid() {
-        return cellsPerGrid;
     }
 
     public static void setCellsPerGrid(int value) {

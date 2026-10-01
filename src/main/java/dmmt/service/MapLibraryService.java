@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import lombok.Getter;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -36,6 +37,7 @@ public class MapLibraryService {
             "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
             "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9");
 
+    @Getter
     private final Path root;
     private final ProjectService projectService;
     private MultiLevelService multiLevels;
@@ -80,10 +82,6 @@ public class MapLibraryService {
     public MapLibraryService(Path root, ProjectService projectService) {
         this.root = root.toAbsolutePath().normalize();
         this.projectService = projectService;
-    }
-
-    public Path getRoot() {
-        return root;
     }
 
     public synchronized MultiLevelService multiLevels() {

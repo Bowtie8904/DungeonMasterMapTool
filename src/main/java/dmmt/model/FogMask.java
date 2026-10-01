@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dmmt.lighting.PolygonRaster;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Base64;
@@ -18,12 +20,25 @@ import java.util.zip.Inflater;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FogMask {
+    @Getter
+    @Setter
     private double originX;
+    @Getter
+    @Setter
     private double originY;
+    @Getter
+    @Setter
     private double cellSize = 15;
+    @Getter
+    @Setter
     private int cols;
+    @Getter
+    @Setter
     private int rows;
     private BitSet revealed = new BitSet();
+    /** Increments whenever the mask content or geometry changes; used for render caching. */
+    @Getter
+    @JsonIgnore
     private long version;
 
     public FogMask() {
@@ -35,46 +50,6 @@ public class FogMask {
         this.cellSize = cellSize;
         this.cols = Math.max(1, cols);
         this.rows = Math.max(1, rows);
-    }
-
-    public double getOriginX() {
-        return originX;
-    }
-
-    public void setOriginX(double originX) {
-        this.originX = originX;
-    }
-
-    public double getOriginY() {
-        return originY;
-    }
-
-    public void setOriginY(double originY) {
-        this.originY = originY;
-    }
-
-    public double getCellSize() {
-        return cellSize;
-    }
-
-    public void setCellSize(double cellSize) {
-        this.cellSize = cellSize;
-    }
-
-    public int getCols() {
-        return cols;
-    }
-
-    public void setCols(int cols) {
-        this.cols = cols;
-    }
-
-    public int getRows() {
-        return rows;
-    }
-
-    public void setRows(int rows) {
-        this.rows = rows;
     }
 
     @JsonProperty("revealed")
@@ -122,12 +97,6 @@ public class FogMask {
         }
         revealed = BitSet.valueOf(out.toByteArray());
         version++;
-    }
-
-    /** Increments whenever the mask content or geometry changes; used for render caching. */
-    @JsonIgnore
-    public long getVersion() {
-        return version;
     }
 
     @JsonIgnore

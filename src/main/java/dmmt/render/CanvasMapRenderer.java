@@ -1,5 +1,7 @@
 package dmmt.render;
 
+import lombok.Setter;
+import lombok.Getter;
 import dmmt.lighting.LightFlicker;
 import dmmt.lighting.LightingEngine;
 import dmmt.lighting.PolygonRaster;
@@ -73,28 +75,23 @@ public class CanvasMapRenderer {
     public static final double DEFAULT_LIGHT_TINT = 0.08;
 
     /** Global strength of the light colour tint over lit areas; applies to every light in every project. */
+    @Getter
     private static volatile double lightTint = DEFAULT_LIGHT_TINT;
 
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
 
     /** Global switch for moving effect textures and weather (ui.effectAnimations). */
+    @Setter
     private static volatile boolean effectAnimationsEnabled = true;
-
-    public static void setEffectAnimationsEnabled(boolean enabled) {
-        effectAnimationsEnabled = enabled;
-    }
 
     public static boolean effectAnimationsOn() {
         return effectAnimationsEnabled;
     }
 
     /** Global light flicker switch (ui.lightFlicker); independent of the per-map effect animations toggle. */
+    @Setter
     private static volatile boolean lightFlickerEnabled = true;
-
-    public static void setLightFlickerEnabled(boolean enabled) {
-        lightFlickerEnabled = enabled;
-    }
 
     /** Light flicker only runs when the global light flicker toggle is on and performance mode is off. */
     public static boolean flickerOn(DmProject project) {
@@ -110,10 +107,6 @@ public class CanvasMapRenderer {
         return Tuning.LIGHT_TINT_MAX.get();
     }
 
-    public static double getLightTint() {
-        return lightTint;
-    }
-
     public static void setLightTint(double value) {
         lightTint = Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
     }
@@ -121,8 +114,11 @@ public class CanvasMapRenderer {
     public static final double DEFAULT_FOG_SOFTNESS = 0.3;
 
     /** Width of the soft fog edge in grid tiles (0 = hard edge); applies to every project. */
+    @Getter
     private static volatile double fogSoftness = DEFAULT_FOG_SOFTNESS;
     /** Whether fog fades when it is revealed or hidden; applies to every project. */
+    @Getter
+    @Setter
     private static volatile boolean fogFadeEnabled = true;
 
     /** Widest soft fog edge in grid tiles (setting fog.softness.max). */
@@ -130,20 +126,8 @@ public class CanvasMapRenderer {
         return Tuning.FOG_SOFTNESS_MAX.get();
     }
 
-    public static double getFogSoftness() {
-        return fogSoftness;
-    }
-
     public static void setFogSoftness(double tiles) {
         fogSoftness = Math.max(0, Math.min(maxFogSoftness(), tiles));
-    }
-
-    public static boolean isFogFadeEnabled() {
-        return fogFadeEnabled;
-    }
-
-    public static void setFogFadeEnabled(boolean enabled) {
-        fogFadeEnabled = enabled;
     }
 
     private final ImagePyramidStore imageStore = ImagePyramidStore.shared();
@@ -166,6 +150,7 @@ public class CanvasMapRenderer {
     private long fogLastAdvanceNanos;
     private float[] fogFrom;
     private float[] fogProgress;
+    @Getter
     private boolean fogAnimating;
     private BitSet fogPrevRevealed;
     private int fogActiveFirst;
@@ -173,28 +158,19 @@ public class CanvasMapRenderer {
     private boolean fogLightFade;
     private long fogLightChangesSeen;
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
+    @Getter
+    @Setter
     private boolean wallLayerVisible = true;
 
     private final Text measureText = new Text();
     private final Map<Integer, Font> fontCache = new HashMap<>();
     private final Map<String, CachedTextLayout> textLayouts = new HashMap<>();
     /** DM view only: the box being edited in the in-place editor, which draws it itself. */
+    @Setter
     private String editingTextBoxId;
 
     public CanvasMapRenderer(LightingEngine lightingEngine) {
         this.lightingEngine = lightingEngine;
-    }
-
-    public void setEditingTextBoxId(String id) {
-        this.editingTextBoxId = id;
-    }
-
-    public boolean isWallLayerVisible() {
-        return wallLayerVisible;
-    }
-
-    public void setWallLayerVisible(boolean wallLayerVisible) {
-        this.wallLayerVisible = wallLayerVisible;
     }
 
     /** Remembers what a base canvas currently shows, so it is only redrawn when that changes. */
@@ -891,15 +867,12 @@ public class CanvasMapRenderer {
         return c * c * (3 - 2 * c);
     }
 
+    @Getter
     private static volatile int textQuarterTurns;
 
     /** Global rotation of all text boxes on the player view in 90-degree clockwise steps; the DM view is never rotated. */
     public static void setTextQuarterTurns(int quarterTurns) {
         textQuarterTurns = TextBoxGeometry.normalize(quarterTurns);
-    }
-
-    public static int getTextQuarterTurns() {
-        return textQuarterTurns;
     }
 
     public static final double TEXT_BOX_PADDING = 12;
@@ -1728,10 +1701,6 @@ public class CanvasMapRenderer {
     }
 
     /** True while fog cells are still fading; the render loop then keeps a high frame rate. */
-    public boolean isFogAnimating() {
-        return fogAnimating;
-    }
-
     /** Soft edge width in fog cells; performance mode (merged cells) always uses hard edges. */
     private static int fogSoftRadius(int factor) {
         return factor == 1 ? (int) Math.round(fogSoftness * FogService.getCellsPerGrid()) : 0;

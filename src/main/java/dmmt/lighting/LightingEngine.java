@@ -1,5 +1,6 @@
 package dmmt.lighting;
 
+import lombok.Getter;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.service.FogService;
@@ -26,9 +27,13 @@ public class LightingEngine {
     private double[] blockingSegments = new double[0];
     private double lastMaskCellSize = Double.NaN;
 
+    @Getter
     private BitSet liveReveal = new BitSet();
     private String liveRevealKey = "";
+    @Getter
     private long liveRevealVersion;
+    /** Counts fog changes caused by lights (live or persistent reveals); lets the renderer fade them faster. */
+    @Getter
     private long lightRevealChanges;
 
     public void update(DmProject project) {
@@ -124,19 +129,6 @@ public class LightingEngine {
 
     public VisibilityService.Polygon polygonFor(DmProject.LightSource light) {
         return visibility(light).polygon;
-    }
-
-    public BitSet getLiveReveal() {
-        return liveReveal;
-    }
-
-    /** Counts fog changes caused by lights (live or persistent reveals); lets the renderer fade them faster. */
-    public long getLightRevealChanges() {
-        return lightRevealChanges;
-    }
-
-    public long getLiveRevealVersion() {
-        return liveRevealVersion;
     }
 
     private CachedVisibility visibility(DmProject.LightSource light) {

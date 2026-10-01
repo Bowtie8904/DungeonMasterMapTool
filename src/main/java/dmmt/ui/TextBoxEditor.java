@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import lombok.Setter;
 import dmmt.model.DmProject;
 import javafx.application.Platform;
 import javafx.scene.control.IndexRange;
@@ -35,8 +36,11 @@ public final class TextBoxEditor {
     private String typingColor = DmProject.DEFAULT_TEXT_COLOR;
     private boolean loading;
     private boolean caretSyncScheduled;
+    @Setter
     private Runnable onContentChanged = () -> { };
+    @Setter
     private BiConsumer<Integer, String> onCaretStyleChanged = (size, color) -> { };
+    @Setter
     private Runnable onFinish = () -> { };
     private String lastBoxStyle = "";
     private String background = DmProject.DEFAULT_TEXT_BACKGROUND;
@@ -74,19 +78,6 @@ public final class TextBoxEditor {
 
     public InlineCssTextArea node() {
         return area;
-    }
-
-    public void setOnContentChanged(Runnable handler) {
-        this.onContentChanged = handler;
-    }
-
-    /** Called with the size and color under the caret (or selection start) after the caret moved. */
-    public void setOnCaretStyleChanged(BiConsumer<Integer, String> handler) {
-        this.onCaretStyleChanged = handler;
-    }
-
-    public void setOnFinish(Runnable handler) {
-        this.onFinish = handler;
     }
 
     public void show(List<DmProject.TextRun> runs, int fontSize, String color) {

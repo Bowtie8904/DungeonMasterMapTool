@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import lombok.Getter;
 import dmmt.render.OverlayTextures;
 
 import java.io.IOException;
@@ -32,6 +33,7 @@ public final class AppSettings {
 
     private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player", "performance"};
 
+    @Getter
     private final Path file;
     private final Map<String, String> values = new LinkedHashMap<>();
     private long lastKnownModified;
@@ -71,10 +73,6 @@ public final class AppSettings {
             // fall through to the working directory
         }
         return Path.of(System.getProperty("user.dir")).resolve(FILE_NAME).toAbsolutePath();
-    }
-
-    public Path getFile() {
-        return file;
     }
 
     // ---- typed access (mirrors java.util.prefs.Preferences) ----
