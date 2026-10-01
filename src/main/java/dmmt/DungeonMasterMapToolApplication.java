@@ -168,6 +168,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private MapLibraryService mapLibrary;
     private MapBrowser mapBrowser;
     private ToggleButton pingToggle;
+    private ToggleButton laserToggle;
     private ToggleButton wallLayerToggle;
     private ToggleButton imageLockToggle;
     private HBox imageUnlockBanner;
@@ -316,6 +317,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean pingArmed;
     private final java.util.ArrayList<CanvasMapRenderer.LaserPoint> laserTrail = new java.util.ArrayList<>();
     private boolean laserActive;
+    private boolean laserToolActive;
     private double dragOffsetX;
     private double dragOffsetY;
     private double lastMouseX;
@@ -464,6 +466,10 @@ public class DungeonMasterMapToolApplication extends Application {
             if (scene.getFocusOwner() instanceof TextInputControl) {
                 return;
             }
+            if (laserToolActive && event.getCode() != KeyCode.ESCAPE && event.getCode() != KeyCode.P
+                    && event.getCode() != KeyCode.L) {
+                return;
+            }
             if (event.isControlDown() && event.getCode() == KeyCode.C) {
                 if (copySelection()) {
                     event.consume();
@@ -477,6 +483,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (event.getCode() == KeyCode.P) {
                 setPingArmed(true);
+                return;
+            }
+            if (event.getCode() == KeyCode.L && !event.isControlDown() && !event.isAltDown() && !event.isMetaDown()) {
+                setLaserToolActive(!laserToolActive);
+                event.consume();
                 return;
             }
             if (event.getCode() == KeyCode.ESCAPE) {
@@ -534,7 +545,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED
                     || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED_TARGET
                     || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED_TARGET);
-            if (hoverOnly && PerformanceMode.isEnabled() && activeTool == EditorTool.SELECT && !pingArmed) {
+            if (hoverOnly && PerformanceMode.isEnabled() && activeTool == EditorTool.SELECT && !pingArmed && !laserToolActive) {
                 return;
             }
             lastInputNanos = System.nanoTime();
@@ -546,7 +557,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 boolean fogFading = renderer.isFogAnimating() || playerRenderer.isFogAnimating();
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
-                boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || !laserTrail.isEmpty()
+                boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || laserToolActive || !laserTrail.isEmpty()
                         || fogFading;
                 int fps = PerformanceMode.isEnabled()
                         ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
@@ -632,13 +643,17 @@ public class DungeonMasterMapToolApplication extends Application {
         // Tools
         pingToggle = Icons.toggle(MaterialDesignC.CROSSHAIRS_GPS, "Ping (P) — click the map to flash a marker for the players");
         pingToggle.setOnAction(e -> setPingArmed(pingToggle.isSelected()));
+        laserToggle = Icons.toggle(MaterialDesignL.LASER_POINTER,
+                "Laser pointer (L) — shows a laser dot to the players that follows your cursor until you leave the tool. "
+                        + "Holding the middle mouse button does the same briefly with any tool. No other interaction while it is active");
+        laserToggle.setOnAction(e -> setLaserToolActive(laserToggle.isSelected()));
         wallLayerToggle = Icons.toggle(MaterialDesignL.LAYERS_OUTLINE,
                 "Show / hide the wall layer (wall lines, doors and windows) in the DM view — lights stay visible");
         wallLayerToggle.setSelected(renderer.isWallLayerVisible());
         wallLayerToggle.setOnAction(e -> setWallLayerVisible(wallLayerToggle.isSelected()));
         Region toolSpacer = new Region();
         HBox.setHgrow(toolSpacer, Priority.ALWAYS);
-        HBox toolsRow = row(toolButtons.get(EditorTool.SELECT), pingToggle, toolSpacer,
+        HBox toolsRow = row(toolButtons.get(EditorTool.SELECT), pingToggle, laserToggle, toolSpacer,
                 Icons.button(MaterialDesignU.UNDO, "Undo (Ctrl+Z)", this::undo),
                 Icons.button(MaterialDesignR.REDO, "Redo (Ctrl+Y)", this::redo));
 
@@ -1517,7 +1532,11 @@ public class DungeonMasterMapToolApplication extends Application {
         if (toolChip == null) {
             return;
         }
-        if (pingArmed) {
+        if (laserToolActive) {
+            toolChipIcon.setIconCode(MaterialDesignL.LASER_POINTER);
+            toolChipLabel.setText("Laser pointer");
+            toolChip.setVisible(true);
+        } else if (pingArmed) {
             toolChipIcon.setIconCode(MaterialDesignC.CROSSHAIRS_GPS);
             toolChipLabel.setText("Ping — click the map");
             toolChip.setVisible(true);
@@ -1530,7 +1549,31 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
+    private void setLaserToolActive(boolean active) {
+        if (active) {
+            setPingArmed(false);
+            setActiveTool(EditorTool.SELECT);
+        }
+        laserToolActive = active;
+        if (laserToggle != null && laserToggle.isSelected() != active) {
+            laserToggle.setSelected(active);
+        }
+        if (active) {
+            status("Laser pointer: move the mouse to point at the map.");
+            if (hoverInsideCanvas) {
+                addLaserPoint(hoverWorldX, hoverWorldY);
+            }
+        } else {
+            laserTrail.clear();
+        }
+        updateToolChip();
+        updateCanvasCursor();
+    }
+
     private void setPingArmed(boolean armed) {
+        if (armed && laserToolActive) {
+            setLaserToolActive(false);
+        }
         pingArmed = armed;
         if (pingToggle != null && pingToggle.isSelected() != armed) {
             pingToggle.setSelected(armed);
@@ -1543,6 +1586,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private Cursor toolCursor() {
+        if (laserToolActive) {
+            return Cursor.CROSSHAIR;
+        }
         if (pingArmed) {
             return Icons.cursor(MaterialDesignC.CROSSHAIRS_GPS, 0.5, 0.5);
         }
@@ -1575,7 +1621,7 @@ public class DungeonMasterMapToolApplication extends Application {
             cursor = textResizeCursor(resizingTextHandle);
         } else if (resizingLayer || resizingOverlay) {
             cursor = Cursor.SE_RESIZE;
-        } else if (pingArmed || activeTool != EditorTool.SELECT) {
+        } else if (pingArmed || laserToolActive || activeTool != EditorTool.SELECT) {
             cursor = toolCursor();
         } else {
             cursor = hoverInsideCanvas ? selectHoverCursor(hoverWorldX, hoverWorldY) : Cursor.DEFAULT;
@@ -1758,9 +1804,17 @@ public class DungeonMasterMapToolApplication extends Application {
 
         dmCanvas.setOnMouseMoved(event -> {
             updateHover(event.getX(), event.getY());
+            if (laserToolActive) {
+                addLaserPoint(hoverWorldX, hoverWorldY);
+            }
             updateCanvasCursor();
         });
-        dmCanvas.setOnMouseExited(event -> hoverInsideCanvas = false);
+        dmCanvas.setOnMouseExited(event -> {
+            hoverInsideCanvas = false;
+            if (laserToolActive && !event.isPrimaryButtonDown()) {
+                laserTrail.clear();
+            }
+        });
 
         // Runs after the press/release handlers below have updated the drag state.
         dmCanvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
@@ -1779,7 +1833,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
 
             if (event.getButton() == MouseButton.SECONDARY) {
-                rightClickCancelCandidate = pingArmed || activeTool != EditorTool.SELECT;
+                rightClickCancelCandidate = pingArmed || laserToolActive || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
                 DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
@@ -1821,6 +1875,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             if (event.getButton() != MouseButton.PRIMARY) {
+                return;
+            }
+
+            if (laserToolActive) {
+                addLaserPoint(world.x(), world.y());
                 return;
             }
 
@@ -1991,6 +2050,11 @@ public class DungeonMasterMapToolApplication extends Application {
             DmProject.CameraState camera = project.getViews().getDmCamera();
             CanvasMapRenderer.WorldPoint world = renderer.screenToWorld(
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
+
+            if (laserToolActive && !panningDmCamera) {
+                addLaserPoint(world.x(), world.y());
+                return;
+            }
 
             if (laserActive) {
                 if (event.isMiddleButtonDown()) {
@@ -2398,7 +2462,7 @@ public class DungeonMasterMapToolApplication extends Application {
     /** Drops expired trail points; while the button is held the newest point stays so the dot remains visible. */
     private void pruneLaserTrail() {
         long now = System.currentTimeMillis();
-        if (laserActive && !laserTrail.isEmpty()) {
+        if ((laserActive || laserToolActive) && !laserTrail.isEmpty()) {
             CanvasMapRenderer.LaserPoint last = laserTrail.get(laserTrail.size() - 1);
             if (now - last.millis() > 50) {
                 laserTrail.set(laserTrail.size() - 1,
@@ -2412,7 +2476,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (laserTrail.isEmpty()) {
             return;
         }
-        renderer.drawLaser(gc, laserTrail, laserActive, dotRadius, canvas.getWidth(), canvas.getHeight(), camera);
+        renderer.drawLaser(gc, laserTrail, laserActive || laserToolActive, dotRadius, canvas.getWidth(), canvas.getHeight(), camera);
     }
 
     private void renderDm() {
@@ -3195,7 +3259,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private String hoveredInteractableId() {
-        if (!hoverInsideCanvas || pingArmed || activeTool != EditorTool.SELECT
+        if (!hoverInsideCanvas || pingArmed || laserToolActive || activeTool != EditorTool.SELECT
                 || panningDmCamera || draggingLight || draggingLayer || draggingOverlay || resizingOverlay || draggingPlayerViewport || resizingLayer) {
             return null;
         }
@@ -3329,6 +3393,7 @@ public class DungeonMasterMapToolApplication extends Application {
             restoreFog(fogBeforeSnapshot);
         }
         setPingArmed(false);
+        setLaserToolActive(false);
         setActiveTool(EditorTool.SELECT);
     }
 
@@ -3360,6 +3425,9 @@ public class DungeonMasterMapToolApplication extends Application {
         toolButtons.forEach((key, button) -> button.setSelected(key == activeTool));
         if (pingArmed) {
             setPingArmed(false);
+        }
+        if (laserToolActive && tool != null && tool != EditorTool.SELECT) {
+            setLaserToolActive(false);
         }
         updateToolChip();
         updateCanvasCursor();
