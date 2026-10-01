@@ -225,8 +225,8 @@ public final class LevelListDialog {
         Runnable addLibraryMaps = () -> {
             Set<Path> taken = new HashSet<>();
             for (Row row : list.getItems()) {
-                if (row.source instanceof MultiLevelService.LibraryMap map) {
-                    taken.add(map.mapFile().toAbsolutePath().normalize());
+                if (row.source instanceof MultiLevelService.LibraryMap(_, Path mapFile)) {
+                    taken.add(mapFile.toAbsolutePath().normalize());
                 }
             }
             List<MapLibraryService.Entry> picked = LibraryMapPicker.show(dialogWindow[0], library, taken);
@@ -347,8 +347,8 @@ public final class LevelListDialog {
             List<MultiLevelService.PlanItem> plan = new ArrayList<>();
             List<MultiLevelService.Extraction> extractions = new ArrayList<>();
             for (Row row : list.getItems()) {
-                if (row.movedOut() && row.source instanceof MultiLevelService.Existing existing) {
-                    extractions.add(new MultiLevelService.Extraction(existing.levelId(), row.movedOutAs));
+                if (row.movedOut() && row.source instanceof MultiLevelService.Existing(String levelId)) {
+                    extractions.add(new MultiLevelService.Extraction(levelId, row.movedOutAs));
                 } else {
                     plan.add(new MultiLevelService.PlanItem(row.source, row.name));
                 }
@@ -369,13 +369,13 @@ public final class LevelListDialog {
     private static boolean confirmChanges(Window owner, List<Row> initial, List<Row> rows, int active, List<Row> movedOut) {
         Set<String> listed = new HashSet<>();
         for (Row row : rows) {
-            if (row.source instanceof MultiLevelService.Existing existing) {
-                listed.add(existing.levelId());
+            if (row.source instanceof MultiLevelService.Existing(String levelId)) {
+                listed.add(levelId);
             }
         }
         List<String> deleted = initial.stream()
-                .filter(row -> row.source instanceof MultiLevelService.Existing existing
-                        && !listed.contains(existing.levelId()))
+                .filter(row -> row.source instanceof MultiLevelService.Existing(String levelId)
+                        && !listed.contains(levelId))
                 .map(row -> row.name).toList();
         StringBuilder message = new StringBuilder();
         if (!deleted.isEmpty()) {
@@ -550,10 +550,12 @@ public final class LevelListDialog {
             HBox.setHgrow(detail, Priority.ALWAYS);
             Ikon ikon = row.movedOut() ? MaterialDesignL.LAYERS_MINUS
                     : row.existing() ? MaterialDesignL.LAYERS_OUTLINE
-                    : row.source instanceof MultiLevelService.ForeignLevel ? MaterialDesignL.LAYERS_PLUS
-                    : row.source instanceof MultiLevelService.Dd2vtt ? MaterialDesignF.FILE_IMPORT_OUTLINE
-                    : row.source instanceof MultiLevelService.LibraryMap ? MaterialDesignM.MAP_OUTLINE
-                    : MaterialDesignP.PLUS_BOX_OUTLINE;
+                    : switch (row.source) {
+                        case MultiLevelService.ForeignLevel _ -> MaterialDesignL.LAYERS_PLUS;
+                        case MultiLevelService.Dd2vtt _ -> MaterialDesignF.FILE_IMPORT_OUTLINE;
+                        case MultiLevelService.LibraryMap _ -> MaterialDesignM.MAP_OUTLINE;
+                        case MultiLevelService.Existing _, MultiLevelService.Empty _ -> MaterialDesignP.PLUS_BOX_OUTLINE;
+                    };
             HBox box = new HBox(8, number, Icons.icon(ikon), name, detail);
             box.setStyle("-fx-alignment: center-left;");
             setText(null);

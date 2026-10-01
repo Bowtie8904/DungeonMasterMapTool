@@ -153,7 +153,7 @@ public final class TextBoxEditor {
             String color = style == null ? typingColor : style.color;
             String piece = text.substring(position, position + span.getLength());
             position += span.getLength();
-            DmProject.TextRun last = runs.isEmpty() ? null : runs.get(runs.size() - 1);
+            DmProject.TextRun last = runs.isEmpty() ? null : runs.getLast();
             if (last != null && last.getFontSize() == size && last.getColor().equalsIgnoreCase(color)) {
                 last.setText(last.getText() + piece);
             } else {

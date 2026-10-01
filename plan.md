@@ -2,7 +2,7 @@
 
 ## 1) Chosen Technology Stack
 
-- **Language/runtime:** Java 17+ (compiled with release 17, JavaFX 21)
+- **Language/runtime:** Java 25+ (compiled with release 25, JavaFX 25; shaded jar sets `Enable-Native-Access: ALL-UNNAMED`)
 - **UI/rendering:** JavaFX + Canvas, custom dark CSS theme, Ikonli (Material Design Icons 2) for icons
 - **Build/deps:** Maven
 - **Codegen:** Lombok (DTOs/models/boilerplate reduction)
@@ -709,10 +709,10 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 - **v3.1:** Tuning constants moved into the settings file, fog fade with separate reveal/hide times and easing, settings reference `docs/SETTINGS.md` (3.25).
 - **v3.0:** Per-map player zoom slider (3.3).
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
-- **v3.6 (current):** Multilevel map refinements (3.32.1): drag & drop merging in the library, move levels out / dissolve, collapse single-level maps, map-wide DM zoom, level previews in the switcher, drag & drop level dialog, automatic multilevel grouping on batch import.
+- **v3.7 (current):** Migrated to Java 25 (LTS): release 25, JavaFX 25.0.4, Lombok 1.18.48, RichTextFX 0.11.7 (0.11.4 fails to load on JavaFX 22+), Ikonli 12.4.0, shade plugin 3.6.2; CI uses JDK 25; shaded jar manifest sets `Enable-Native-Access: ALL-UNNAMED` to silence JavaFX native-access warnings. `MultiLevelService` / `LevelListDialog` handle the sealed `Source` with exhaustive pattern `switch`es and record patterns, `getLast()` replaces `get(size() - 1)`, and the Windows app image and the documented jar launch use `-XX:+UseCompactObjectHeaders` (lower memory use).`n- **v3.6:** Multilevel map refinements (3.32.1): drag & drop merging in the library, move levels out / dissolve, collapse single-level maps, map-wide DM zoom, level previews in the switcher, drag & drop level dialog, automatic multilevel grouping on batch import.
 - **v3.5:** Multilevel maps (3.32): import several dd2vtt levels or merge library maps into one map with per-level fog/cameras, shared map-wide settings and a level switcher overlay.
 - **v3.4:** Pushing a `v*` tag builds Windows (app image zip), Linux and macOS (shaded jars; each jar bundles the JavaFX natives of the OS it was built on) and creates a GitHub release with those files attached. Default settings file removed from the Windows package.
-- **v3.3:** GitHub Actions workflow (`.github/workflows/build.yml`): on push/PR to master it runs `mvn verify` (all tests) on `windows-latest` with JDK 17 and uploads the `DungeonMasterMapTool-windows` artifact: a zip of a jpackage app image (`DungeonMasterMapTool.exe` with a bundled trimmed Java runtime, no Java install needed; plus the README). README shows build/tech badges.
+- **v3.3:** GitHub Actions workflow (`.github/workflows/build.yml`): on push/PR to master it runs `mvn verify` (all tests) on `windows-latest` with JDK 25 and uploads the `DungeonMasterMapTool-windows` artifact: a zip of a jpackage app image (`DungeonMasterMapTool.exe` with a bundled trimmed Java runtime, no Java install needed; plus the README). README shows build/tech badges.
 - **v3.2:** Recent maps list below the map browser (3.31).
 - **v2.8:** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
 - **v2.7:** Per-map toggle to disable effect animations (3.8).

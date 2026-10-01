@@ -71,7 +71,7 @@ public final class TextLayout {
                     tokens.add(current);
                 }
                 List<Piece> pieces = current.pieces;
-                Piece last = pieces.isEmpty() ? null : pieces.get(pieces.size() - 1);
+                Piece last = pieces.isEmpty() ? null : pieces.getLast();
                 if (last != null && last.fontSize == size && last.color.equals(color)) {
                     pieces.set(pieces.size() - 1, new Piece(last.text + c, size, color));
                 } else {

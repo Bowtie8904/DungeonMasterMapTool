@@ -2,8 +2,8 @@
 
 [![Build](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml/badge.svg)](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml)
 [![Latest release](https://img.shields.io/github/v/release/Bowtie8904/DungeonMasterMapTool?label=release)](https://github.com/Bowtie8904/DungeonMasterMapTool/releases/latest)
-![Java 17](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
-![JavaFX 21](https://img.shields.io/badge/JavaFX-21-blue)
+![Java 25](https://img.shields.io/badge/Java-25-orange?logo=openjdk&logoColor=white)
+![JavaFX 25](https://img.shields.io/badge/JavaFX-25-blue)
 ![Maven](https://img.shields.io/badge/build-Maven-C71A36?logo=apachemaven&logoColor=white)
 
 A desktop application for tabletop game masters who run in-person sessions with a **TV or monitor lying flat on the table**. Import a battle map, control everything from your own screen (DM view) and show players a clean, live view (player view) on a second display, with fog of war, dynamic lighting, effects, handouts and more.
@@ -63,14 +63,14 @@ Game masters of D&D, Pathfinder and similar tabletop RPGs who play **in person**
 Get the [latest release](https://github.com/Bowtie8904/DungeonMasterMapTool/releases/latest):
 
 - **Windows:** download `DungeonMasterMapTool-windows.zip`, unzip it and run `DungeonMasterMapTool.exe`. Java is bundled, nothing else to install.
-- **Linux / macOS:** download `DungeonMasterMapTool-linux.jar` or `DungeonMasterMapTool-macos.jar` (Apple Silicon) and run it with `java -jar <file>` (Java 17 or newer required).
+- **Linux / macOS:** download `DungeonMasterMapTool-linux.jar` or `DungeonMasterMapTool-macos.jar` (Apple Silicon) and run it with `java -XX:+UseCompactObjectHeaders -jar <file>` (Java 25 or newer required; the flag is optional and lowers memory use).
 
 ## Requirements
 
 | What | Details |
 |------|---------|
 | Operating system | Windows (primary target), macOS or Linux with JavaFX support |
-| Java | **JDK 17 or newer** (the build uses release 17) |
+| Java | **JDK 25 or newer** (the build uses release 25) |
 | Build tool | [Apache Maven](https://maven.apache.org/) 3.8+ (or use the `.mvn` wrapper folder if present) |
 | Displays | One screen is enough; a **second screen** is needed for the player view |
 | Memory | 2 GB free RAM recommended; large maps (>4096 px) use a disk cache |
@@ -84,7 +84,7 @@ mvn javafx:run
 
 # or build a runnable "fat" jar and start it
 mvn package
-java -jar target\DungeonMasterMapTool-1.0-SNAPSHOT-all.jar
+java -XX:+UseCompactObjectHeaders -jar target\DungeonMasterMapTool-1.0-SNAPSHOT-all.jar
 
 # run the unit tests
 mvn test
@@ -102,8 +102,8 @@ Data locations:
 
 | Area | Technology |
 |------|------------|
-| Language / runtime | Java 17 |
-| UI and rendering | JavaFX 21 (Canvas rendering, custom dark CSS theme) |
+| Language / runtime | Java 25 (LTS) |
+| UI and rendering | JavaFX 25 (Canvas rendering, custom dark CSS theme) |
 | Icons | Ikonli with Material Design Icons 2 |
 | Rich text editing | RichTextFX |
 | Geometry / line of sight | JTS Topology Suite |

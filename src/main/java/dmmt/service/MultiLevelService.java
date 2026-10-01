@@ -400,9 +400,9 @@ public class MultiLevelService {
                     createdDirs.add(levelDir);
                     Files.createDirectories(levelDir);
                     DmProject project;
-                    if (item.source() instanceof Dd2vtt dd2vtt) {
-                        level.setOriginalName(MapLibraryService.stripExtension(dd2vtt.file().getFileName().toString()));
-                        project = importService.importToProject(dd2vtt.file(), levelDir);
+                    if (item.source() instanceof Dd2vtt(Path dd2vttFile)) {
+                        level.setOriginalName(MapLibraryService.stripExtension(dd2vttFile.getFileName().toString()));
+                        project = importService.importToProject(dd2vttFile, levelDir);
                     } else {
                         project = DmProject.builder().build();
                         project.getMap().setSourceType("custom");
@@ -441,32 +441,41 @@ public class MultiLevelService {
             }
             for (int i = 0; i < plan.size(); i++) {
                 PlanItem item = plan.get(i);
-                if (item.source() instanceof LibraryMap map) {
-                    if (progress != null) {
-                        progress.report(++done, total, item.name());
+                switch (item.source()) {
+                    case LibraryMap map -> {
+                        if (progress != null) {
+                            progress.report(++done, total, item.name());
+                        }
+                        MultiLevelManifest.Level level = newLevel(item.name());
+                        level.setOriginalName(MapLibraryService.stripExtension(map.mapFile().getFileName().toString()));
+                        Path levelFile = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
+                        undoMoves.add(0, moveLibraryMap(map, levelFile));
+                        if (!Files.isDirectory(map.entryPath())) {
+                            looseOriginals.add(map.mapFile());
+                        }
+                        moved.put(map.mapFile().toAbsolutePath().normalize(), levelFile);
+                        created.set(i, level);
                     }
-                    MultiLevelManifest.Level level = newLevel(item.name());
-                    level.setOriginalName(MapLibraryService.stripExtension(map.mapFile().getFileName().toString()));
-                    Path levelFile = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
-                    undoMoves.add(0, moveLibraryMap(map, levelFile));
-                    if (!Files.isDirectory(map.entryPath())) {
-                        looseOriginals.add(map.mapFile());
+                    case ForeignLevel(Path foreignManifest, String foreignLevelId) -> {
+                        if (progress != null) {
+                            progress.report(++done, total, item.name());
+                        }
+                        Path sourceManifest = foreignManifest.toAbsolutePath().normalize();
+                        MultiLevelManifest.Level sourceLevel = foreign.get(sourceManifest).findLevel(foreignLevelId);
+                        MultiLevelManifest.Level level = newLevel(item.name());
+                        level.setOriginalName(sourceLevel.getOriginalName());
+                        Path from = levelFile(sourceManifest, sourceLevel);
+                        Path to = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
+                        undoMoves.add(0, movePackage(from.getParent(), from, to));
+                        moved.put(from, to);
+                        created.set(i, level);
                     }
-                    moved.put(map.mapFile().toAbsolutePath().normalize(), levelFile);
-                    created.set(i, level);
-                } else if (item.source() instanceof ForeignLevel source) {
-                    if (progress != null) {
-                        progress.report(++done, total, item.name());
+                    case Existing _ -> {
                     }
-                    Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
-                    MultiLevelManifest.Level sourceLevel = foreign.get(sourceManifest).findLevel(source.levelId());
-                    MultiLevelManifest.Level level = newLevel(item.name());
-                    level.setOriginalName(sourceLevel.getOriginalName());
-                    Path from = levelFile(sourceManifest, sourceLevel);
-                    Path to = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
-                    undoMoves.add(0, movePackage(from.getParent(), from, to));
-                    moved.put(from, to);
-                    created.set(i, level);
+                    case Dd2vtt _ -> {
+                    }
+                    case Empty _ -> {
+                    }
                 }
             }
             for (Extraction extraction : extractions) {
@@ -483,8 +492,8 @@ public class MultiLevelService {
 
             for (int i = 0; i < plan.size(); i++) {
                 PlanItem item = plan.get(i);
-                if (item.source() instanceof Existing existing) {
-                    MultiLevelManifest.Level level = manifest.findLevel(existing.levelId());
+                if (item.source() instanceof Existing(String levelId)) {
+                    MultiLevelManifest.Level level = manifest.findLevel(levelId);
                     level.setName(cleanLevelName(item.name(), i));
                     levels.add(level);
                     kept.add(level.getId());
@@ -699,17 +708,16 @@ public class MultiLevelService {
     private static Path firstLevelFile(Path manifestFile, MultiLevelManifest manifest, List<PlanItem> plan,
                                        List<MultiLevelManifest.Level> created, Map<Path, MultiLevelManifest> foreign) {
         PlanItem first = plan.get(0);
-        if (first.source() instanceof Existing existing) {
-            return levelFile(manifestFile, manifest.findLevel(existing.levelId()));
-        }
-        if (first.source() instanceof LibraryMap map) {
-            return map.mapFile();
-        }
-        if (first.source() instanceof ForeignLevel source) {
-            Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
-            return levelFile(sourceManifest, foreign.get(sourceManifest).findLevel(source.levelId()));
-        }
-        return levelFile(manifestFile, created.get(0));
+        return switch (first.source()) {
+            case Existing(String levelId) -> levelFile(manifestFile, manifest.findLevel(levelId));
+            case LibraryMap(_, Path mapFile) -> mapFile;
+            case ForeignLevel(Path foreignManifest, String foreignLevelId) -> {
+                Path sourceManifest = foreignManifest.toAbsolutePath().normalize();
+                yield levelFile(sourceManifest, foreign.get(sourceManifest).findLevel(foreignLevelId));
+            }
+            case Dd2vtt _ -> levelFile(manifestFile, created.get(0));
+            case Empty _ -> levelFile(manifestFile, created.get(0));
+        };
     }
 
     /** Undo of one map move; {@code false} if the map could not be put back. */
@@ -729,14 +737,16 @@ public class MultiLevelService {
         Set<String> seen = new HashSet<>();
         Path dir = manifestFile.getParent();
         for (PlanItem item : plan) {
-            if (item.source() instanceof Existing existing) {
-                if (manifest.findLevel(existing.levelId()) == null) {
+            switch (item.source()) {
+            case Existing(String levelId) -> {
+                if (manifest.findLevel(levelId) == null) {
                     throw new IOException("A level of the map no longer exists.");
                 }
-                if (!seen.add(existing.levelId())) {
+                if (!seen.add(levelId)) {
                     throw new IOException("A level is listed twice.");
                 }
-            } else if (item.source() instanceof LibraryMap map) {
+            }
+            case LibraryMap map -> {
                 Path entry = map.entryPath().toAbsolutePath().normalize();
                 if (!Files.exists(map.mapFile())) {
                     throw new IOException("\"" + item.name() + "\" no longer exists.");
@@ -750,19 +760,26 @@ public class MultiLevelService {
                 if (!seen.add(entry.toString())) {
                     throw new IOException("\"" + item.name() + "\" is listed twice.");
                 }
-            } else if (item.source() instanceof ForeignLevel source) {
-                Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
+            }
+            case ForeignLevel(Path foreignManifest, String foreignLevelId) -> {
+                Path sourceManifest = foreignManifest.toAbsolutePath().normalize();
                 if (sourceManifest.equals(manifestFile.toAbsolutePath().normalize())) {
                     throw new IOException("\"" + item.name() + "\" already belongs to this multilevel map.");
                 }
                 if (!Files.isRegularFile(sourceManifest)) {
                     throw new IOException("\"" + item.name() + "\" no longer exists.");
                 }
-                if (!seen.add(sourceManifest + "#" + source.levelId())) {
+                if (!seen.add(sourceManifest + "#" + foreignLevelId)) {
                     throw new IOException("\"" + item.name() + "\" is listed twice.");
                 }
-            } else if (item.source() instanceof Dd2vtt dd2vtt && !Files.isRegularFile(dd2vtt.file())) {
-                throw new IOException(dd2vtt.file().getFileName() + " no longer exists.");
+            }
+            case Dd2vtt(Path file) -> {
+                if (!Files.isRegularFile(file)) {
+                    throw new IOException(file.getFileName() + " no longer exists.");
+                }
+            }
+            case Empty _ -> {
+            }
             }
         }
         for (Extraction extraction : extractions) {

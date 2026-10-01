@@ -2530,7 +2530,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void pruneLaserTrail() {
         long now = System.currentTimeMillis();
         if ((laserActive || laserToolActive) && !laserTrail.isEmpty()) {
-            CanvasMapRenderer.LaserPoint last = laserTrail.get(laserTrail.size() - 1);
+            CanvasMapRenderer.LaserPoint last = laserTrail.getLast();
             if (now - last.millis() > 50) {
                 laserTrail.set(laserTrail.size() - 1,
                         new CanvasMapRenderer.LaserPoint(last.x(), last.y(), now));
@@ -4859,7 +4859,7 @@ public class DungeonMasterMapToolApplication extends Application {
             default -> {
                 List<Double> points = shape.getPoints();
                 double lastX = points.get(points.size() - 2);
-                double lastY = points.get(points.size() - 1);
+                double lastY = points.getLast();
                 if (distance(lastX, lastY, worldX, worldY) >= Math.max(2, shape.getStrokeWidth() / 8.0)) {
                     points.add(worldX);
                     points.add(worldY);

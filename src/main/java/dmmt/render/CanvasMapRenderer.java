@@ -800,7 +800,7 @@ public class CanvasMapRenderer {
             return null;
         }
         long key = points.size() * 31L + Double.doubleToLongBits(shape.getStrokeWidth())
-                + Double.doubleToLongBits(points.get(points.size() - 1)) * 17L;
+                + Double.doubleToLongBits(points.getLast()) * 17L;
         String id = shape.getId() == null ? "" : shape.getId();
         BrushOutline outline = brushOutlines.get(id);
         if (outline == null || outline.key() != key) {
@@ -1031,10 +1031,10 @@ public class CanvasMapRenderer {
     public void fitTextBox(DmProject.TextBox box, double maxWidth, int emptyFontSize) {
         TextLayout.Metrics metrics = new FxMetrics();
         List<DmProject.TextRun> runs = box.getRuns();
-        int lastSize = runs.isEmpty() ? emptyFontSize : runs.get(runs.size() - 1).getFontSize();
+        int lastSize = runs.isEmpty() ? emptyFontSize : runs.getLast().getFontSize();
         TextLayout.Result layout = TextLayout.layout(runs, Math.max(1, maxWidth - 2 * TEXT_BOX_PADDING), metrics);
         double textHeight = layout.totalHeight();
-        String lastText = runs.isEmpty() ? "" : runs.get(runs.size() - 1).getText();
+        String lastText = runs.isEmpty() ? "" : runs.getLast().getText();
         if (textHeight == 0 || (lastText != null && lastText.endsWith("\n"))) {
             textHeight += metrics.lineHeight(lastSize);
         }
@@ -1321,7 +1321,7 @@ public class CanvasMapRenderer {
         List<Double> points = shape.getPoints();
         h = 31 * h + points.size();
         if (!points.isEmpty()) {
-            h = 31 * h + Double.hashCode(points.get(points.size() - 1));
+            h = 31 * h + Double.hashCode(points.getLast());
             h = 31 * h + Double.hashCode(points.get(points.size() - 2));
         }
         return h;
@@ -1667,7 +1667,7 @@ public class CanvasMapRenderer {
                     worldToScreenX(b.x(), width, camera), worldToScreenY(b.y(), height, camera));
         }
         if (dotActive) {
-            LaserPoint p = trail.get(trail.size() - 1);
+            LaserPoint p = trail.getLast();
             double x = worldToScreenX(p.x(), width, camera);
             double y = worldToScreenY(p.y(), height, camera);
             gc.setFill(Color.color(red, green, blue, 0.35));
