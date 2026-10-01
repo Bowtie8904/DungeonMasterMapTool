@@ -40,12 +40,64 @@ public final class FogShading {
         return values;
     }
 
+    /**
+     * Same values as {@link #fogOpacity} but only for the inclusive cell rectangle {@code c0..c1 x r0..r1}, returned
+     * row by row. Only works on a window around the rectangle, so small changes stay cheap on large masks.
+     */
+    public static float[] fogOpacityRegion(BitSet revealed, int cols, int rows, int radius,
+                                           int c0, int r0, int c1, int r1) {
+        int w = c1 - c0 + 1;
+        int h = r1 - r0 + 1;
+        float[] out = new float[w * h];
+        if (radius <= 0) {
+            for (int r = 0; r < h; r++) {
+                for (int c = 0; c < w; c++) {
+                    out[r * w + c] = revealed.get((r0 + r) * cols + c0 + c) ? 0f : 1f;
+                }
+            }
+            return out;
+        }
+        int margin = radius + 2;
+        int wc0 = Math.max(0, c0 - margin);
+        int wr0 = Math.max(0, r0 - margin);
+        int wc1 = Math.min(cols - 1, c1 + margin);
+        int wr1 = Math.min(rows - 1, r1 + margin);
+        int ww = wc1 - wc0 + 1;
+        int wh = wr1 - wr0 + 1;
+        float[] d = new float[ww * wh];
+        for (int r = 0; r < wh; r++) {
+            for (int c = 0; c < ww; c++) {
+                d[r * ww + c] = revealed.get((wr0 + r) * cols + wc0 + c) ? Float.MAX_VALUE : 0f;
+            }
+        }
+        chamfer(d, ww, wh);
+        for (int r = 0; r < h; r++) {
+            for (int c = 0; c < w; c++) {
+                out[r * w + c] = opacityForDistance(d[(r0 + r - wr0) * ww + (c0 + c - wc0)], radius);
+            }
+        }
+        return out;
+    }
+
+    private static float opacityForDistance(float d, int radius) {
+        if (d <= 0f) {
+            return 1f;
+        }
+        float t = Math.min(1f, Math.max(0f, (d - 0.5f) / radius));
+        return 1f - t * t * (3f - 2f * t);
+    }
+
     /** Approximate distance (in cells) of every cell to the nearest fogged cell; 0 for fogged cells. */
     static float[] distanceToFog(BitSet revealed, int cols, int rows) {
         float[] d = new float[cols * rows];
         for (int i = 0; i < d.length; i++) {
             d[i] = revealed.get(i) ? Float.MAX_VALUE : 0f;
         }
+        chamfer(d, cols, rows);
+        return d;
+    }
+
+    private static void chamfer(float[] d, int cols, int rows) {
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
                 int i = row * cols + col;
@@ -84,7 +136,15 @@ public final class FogShading {
                 d[i] = best;
             }
         }
-        return d;
+    }
+
+    public static boolean reached(float[] shown, float[] target, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (shown[i] != target[i]) {
+                return false;
+            }
+        }
+        return true;
     }
     /**
      * Moves every value of {@code shown} towards {@code target} by at most {@code step}.
@@ -136,9 +196,15 @@ public final class FogShading {
      */
     public static int[] advance(float[] shown, float[] target, float[] from, float[] progress,
                                 float revealStep, float hideStep, boolean smooth) {
+        return advance(shown, target, from, progress, revealStep, hideStep, smooth, 0, shown.length);
+    }
+
+    /** Like the full variant but only touches indices {@code start} (inclusive) to {@code end} (exclusive). */
+    public static int[] advance(float[] shown, float[] target, float[] from, float[] progress,
+                                float revealStep, float hideStep, boolean smooth, int start, int end) {
         int first = -1;
         int last = -1;
-        for (int i = 0; i < shown.length; i++) {
+        for (int i = start; i < end; i++) {
             float t = target[i];
             if (shown[i] == t) {
                 continue;

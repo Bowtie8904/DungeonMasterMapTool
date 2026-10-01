@@ -167,6 +167,9 @@ public class CanvasMapRenderer {
     private float[] fogFrom;
     private float[] fogProgress;
     private boolean fogAnimating;
+    private BitSet fogPrevRevealed;
+    private int fogActiveFirst;
+    private int fogActiveEnd;
     private boolean fogLightFade;
     private long fogLightChangesSeen;
     /** DM-only wall layer: wall lines, door/window lines and their icon badges. */
@@ -1763,15 +1766,27 @@ public class CanvasMapRenderer {
         }
         BitSet revealed = mask.copyBits();
         revealed.or(lightingEngine.getLiveReveal());
-        float[] target = factor == 1
-                ? FogShading.fogOpacity(revealed, cols, rows, radius)
-                : FogShading.downsampledOpacity(revealed, cols, rows, factor);
         boolean fadeAllowed = fogFadeEnabled && (!PerformanceMode.isEnabled() || PerformanceMode.fogFade());
-        boolean fade = fadeAllowed && sameGeometry && fogShown != null && fogTarget != null
-                && fogShown.length == target.length && fogTarget.length == target.length;
         long lightChanges = lightingEngine.getLightRevealChanges();
         fogLightFade = lightChanges != fogLightChangesSeen;
         fogLightChangesSeen = lightChanges;
+        if (factor == 1 && sameGeometry && fogImageRadius == radius && fogPrevRevealed != null
+                && fogShown != null && fogTarget != null && fogShown.length == cols * rows
+                && fogTarget.length == cols * rows) {
+            updateFogRegion(revealed, cols, rows, radius, fadeAllowed);
+            fogPrevRevealed = revealed;
+            fogImageMaskVersion = mask.getVersion();
+            fogImageLiveVersion = liveVersion;
+            if (fogAnimating) {
+                advanceFog(imgCols);
+            }
+            return;
+        }
+        float[] target = factor == 1
+                ? FogShading.fogOpacity(revealed, cols, rows, radius)
+                : FogShading.downsampledOpacity(revealed, cols, rows, factor);
+        boolean fade = fadeAllowed && sameGeometry && fogShown != null && fogTarget != null
+                && fogShown.length == target.length && fogTarget.length == target.length;
         if (fade) {
             FogShading.retarget(fogShown, fogTarget, target, fogFrom, fogProgress);
             fogTarget = target;
@@ -1780,6 +1795,8 @@ public class CanvasMapRenderer {
                 fogLastAdvanceNanos = System.nanoTime();
             }
             fogAnimating = true;
+            fogActiveFirst = 0;
+            fogActiveEnd = target.length;
         } else {
             fogTarget = target;
             fogShown = target.clone();
@@ -1789,6 +1806,7 @@ public class CanvasMapRenderer {
             fogAnimating = false;
             uploadFogRows(imgCols, 0, imgRows - 1);
         }
+        fogPrevRevealed = revealed;
         fogImageMask = mask;
         fogImageMaskVersion = mask.getVersion();
         fogImageLiveVersion = liveVersion;
@@ -1821,13 +1839,80 @@ public class CanvasMapRenderer {
         double hideSeconds = fogLightFade ? Tuning.FOG_LIGHT_FADE_SECONDS.get() : Tuning.FOG_HIDE_SECONDS.get();
         boolean smooth = "smooth".equals(Tuning.FOG_FADE_EASING.get());
         int[] changed = FogShading.advance(fogShown, fogTarget, fogFrom, fogProgress,
-                (float) (seconds / revealSeconds), (float) (seconds / hideSeconds), smooth);
+                (float) (seconds / revealSeconds), (float) (seconds / hideSeconds), smooth, fogActiveFirst, fogActiveEnd);
         if (changed == null) {
             fogAnimating = false;
             return;
         }
         uploadFogRows(cols, changed[0] / cols, changed[1] / cols);
-        fogAnimating = !FogShading.reached(fogShown, fogTarget);
+        fogAnimating = !FogShading.reached(fogShown, fogTarget, fogActiveFirst, fogActiveEnd);
+    }
+
+    /** Updates target, fade state and pixels only around the cells that changed since the last frame. */
+    private void updateFogRegion(BitSet revealed, int cols, int rows, int radius, boolean fadeAllowed) {
+        BitSet diff = (BitSet) fogPrevRevealed.clone();
+        diff.xor(revealed);
+        int total = cols * rows;
+        int minC = Integer.MAX_VALUE;
+        int minR = Integer.MAX_VALUE;
+        int maxC = -1;
+        int maxR = -1;
+        for (int idx = diff.nextSetBit(0); idx >= 0 && idx < total; idx = diff.nextSetBit(idx + 1)) {
+            int r = idx / cols;
+            int c = idx - r * cols;
+            minC = Math.min(minC, c);
+            maxC = Math.max(maxC, c);
+            minR = Math.min(minR, r);
+            maxR = Math.max(maxR, r);
+        }
+        if (maxC < 0) {
+            return;
+        }
+        int reach = radius > 0 ? radius + 1 : 0;
+        int c0 = Math.max(0, minC - reach);
+        int r0 = Math.max(0, minR - reach);
+        int c1 = Math.min(cols - 1, maxC + reach);
+        int r1 = Math.min(rows - 1, maxR + reach);
+        float[] values = FogShading.fogOpacityRegion(revealed, cols, rows, radius, c0, r0, c1, r1);
+        int w = c1 - c0 + 1;
+        boolean startedFade = false;
+        boolean immediate = false;
+        for (int r = r0; r <= r1; r++) {
+            int base = r * cols;
+            for (int c = c0; c <= c1; c++) {
+                int i = base + c;
+                float nv = values[(r - r0) * w + (c - c0)];
+                if (nv == fogTarget[i]) {
+                    continue;
+                }
+                fogTarget[i] = nv;
+                if (fadeAllowed) {
+                    fogFrom[i] = fogShown[i];
+                    fogProgress[i] = 0f;
+                    startedFade = true;
+                } else {
+                    fogShown[i] = nv;
+                    fogFrom[i] = nv;
+                    fogProgress[i] = 1f;
+                    immediate = true;
+                }
+            }
+        }
+        if (immediate) {
+            uploadFogRows(cols, r0, r1);
+        }
+        if (startedFade) {
+            // Keep the clock of a running fade, otherwise a target that changes every frame never advances.
+            if (!fogAnimating) {
+                fogLastAdvanceNanos = System.nanoTime();
+                fogActiveFirst = r0 * cols;
+                fogActiveEnd = (r1 + 1) * cols;
+            } else {
+                fogActiveFirst = Math.min(fogActiveFirst, r0 * cols);
+                fogActiveEnd = Math.max(fogActiveEnd, (r1 + 1) * cols);
+            }
+            fogAnimating = true;
+        }
     }
 
     private void uploadFogRows(int cols, int firstRow, int lastRow) {

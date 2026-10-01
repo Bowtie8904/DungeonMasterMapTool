@@ -12,6 +12,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FogShadingTest {
 
+    @Test
+    void regionOpacityMatchesFullComputation() {
+        BitSet revealed = block(60, 10, 12, 45, 40);
+        float[] full = FogShading.fogOpacity(revealed, 60, 60, 4);
+        float[] region = FogShading.fogOpacityRegion(revealed, 60, 60, 4, 8, 10, 30, 25);
+
+        for (int r = 0; r < 16; r++) {
+            for (int c = 0; c < 23; c++) {
+                assertEquals(full[(10 + r) * 60 + 8 + c], region[r * 23 + c], 1e-6f);
+            }
+        }
+    }
+
     private static BitSet block(int cols, int x0, int y0, int x1, int y1) {
         BitSet bits = new BitSet();
         for (int y = y0; y <= y1; y++) {
