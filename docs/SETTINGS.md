@@ -487,6 +487,14 @@ section; it is independent of the map rotation and applies to every map.
 
 *Keywords:* text rotation, rotate text, label rotation, text orientation
 
+### `text.dmHiddenOpacity`
+**Default:** `0.85` · **Range:** 0 to 1 · **Applies:** live
+
+Text boxes hidden from the players are still drawn in the DM view, with their opacity multiplied by this factor. Kept
+high so the text stays readable; `0` hides them for the DM too.
+
+*Keywords:* hidden text, DM only, invisible to players, secret note
+
 ### `text.minFontSize`
 **Default:** `6` · **Range:** 1 to 100 · **Applies:** restart
 

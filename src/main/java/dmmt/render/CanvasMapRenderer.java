@@ -858,7 +858,7 @@ public class CanvasMapRenderer {
             double centerY = worldToScreenY(TextBoxGeometry.centerY(box), height, camera);
             gc.save();
             if (!playerMode && !box.isPlayerVisible()) {
-                gc.setGlobalAlpha(Tuning.HIDDEN_SHAPE_OPACITY.get());
+                gc.setGlobalAlpha(Tuning.HIDDEN_TEXT_OPACITY.get());
             }
             gc.translate(centerX, centerY);
             gc.rotate(90.0 * turns);

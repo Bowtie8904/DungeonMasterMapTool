@@ -371,7 +371,9 @@ public class DmProject {
 
     public static final String TRANSPARENT = "#00000000";
     public static final int DEFAULT_TEXT_SIZE = 32;
-    public static final String DEFAULT_TEXT_COLOR = "#FFFFFF";
+    public static final String DEFAULT_TEXT_COLOR = "#1E1E1E";
+    /** Neutral light background that stays readable on both dark and light maps. */
+    public static final String DEFAULT_TEXT_BACKGROUND = "#EEEEEE";
 
     @Data
     @Builder
@@ -386,9 +388,9 @@ public class DmProject {
         private double height;
         @Builder.Default
         private List<TextRun> runs = new ArrayList<>();
-        /** "#RRGGBBAA"; fully transparent by default. */
+        /** "#RRGGBBAA"; a neutral light gray by default. */
         @Builder.Default
-        private String backgroundColor = TRANSPARENT;
+        private String backgroundColor = DEFAULT_TEXT_BACKGROUND;
         @Builder.Default
         private String borderColor = TRANSPARENT;
         /** When set, the box width and height follow its text instead of being fixed. */
@@ -421,7 +423,7 @@ public class DmProject {
         @Builder.Default
         private String textColor = DEFAULT_TEXT_COLOR;
         @Builder.Default
-        private String backgroundColor = TRANSPARENT;
+        private String backgroundColor = DEFAULT_TEXT_BACKGROUND;
         @Builder.Default
         private String borderColor = TRANSPARENT;
         /** When set, the box width and height follow its text instead of being fixed. */

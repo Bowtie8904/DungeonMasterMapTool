@@ -961,8 +961,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 applyTextColor(toHex(textColorPicker.getValue()));
             }
         });
-        textBackgroundPicker = new ColorPicker(Color.TRANSPARENT);
-        Icons.tooltip(textBackgroundPicker, "Text box background color (transparent by default)");
+        textBackgroundPicker = new ColorPicker(Color.web(DmProject.DEFAULT_TEXT_BACKGROUND));
+        Icons.tooltip(textBackgroundPicker, "Text box background color (light gray by default)");
         textBackgroundPicker.setOnAction(e -> {
             if (!syncingControls) {
                 applyTextBoxStyle("Change text background", b -> b.setBackgroundColor(toRgba(textBackgroundPicker.getValue())));
@@ -5184,7 +5184,7 @@ public class DungeonMasterMapToolApplication extends Application {
             settings = DmProject.TextSettings.builder()
                     .fontSize(preferences.getInt(PREF_TEXT_FONT_SIZE, DmProject.DEFAULT_TEXT_SIZE))
                     .textColor(preferences.get(PREF_TEXT_COLOR, DmProject.DEFAULT_TEXT_COLOR))
-                    .backgroundColor(preferences.get(PREF_TEXT_BACKGROUND, DmProject.TRANSPARENT))
+                    .backgroundColor(preferences.get(PREF_TEXT_BACKGROUND, DmProject.DEFAULT_TEXT_BACKGROUND))
                     .borderColor(preferences.get(PREF_TEXT_BORDER, DmProject.TRANSPARENT))
                     .build();
         }

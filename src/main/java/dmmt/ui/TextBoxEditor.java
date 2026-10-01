@@ -39,7 +39,7 @@ public final class TextBoxEditor {
     private BiConsumer<Integer, String> onCaretStyleChanged = (size, color) -> { };
     private Runnable onFinish = () -> { };
     private String lastBoxStyle = "";
-    private String background = DmProject.TRANSPARENT;
+    private String background = DmProject.DEFAULT_TEXT_BACKGROUND;
     private String border = DmProject.TRANSPARENT;
     private double topExtra;
 

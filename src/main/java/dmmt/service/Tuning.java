@@ -335,6 +335,8 @@ public final class Tuning {
 
     // ---- Text ----
 
+    public static final Setting<Double> HIDDEN_TEXT_OPACITY = decimal(TEXT, "text.dmHiddenOpacity", 0.85, 0, 1, false,
+            "Opacity of text boxes hidden from players, as drawn in the DM view.");
     public static final Setting<Integer> TEXT_MIN_FONT = integer(TEXT, "text.minFontSize", 6, 1, 100, true,
             "Smallest font size of the font size field.");
     public static final Setting<Integer> TEXT_MAX_FONT = integer(TEXT, "text.maxFontSize", 400, 10, 2000, true,
