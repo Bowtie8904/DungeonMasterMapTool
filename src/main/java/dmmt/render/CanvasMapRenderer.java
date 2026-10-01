@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.IntStream;
 
 public class CanvasMapRenderer {
     /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
@@ -1106,6 +1107,7 @@ public class CanvasMapRenderer {
         Arrays.fill(buffer.lit, 0f);
 
         int[] lightRgb = new int[lights.size() + emitters.size()];
+        List<LightRaster> rasters = new java.util.ArrayList<>();
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             lightRgb[li] = parseRgb(light.getColor());
@@ -1126,31 +1128,17 @@ public class CanvasMapRenderer {
             VisibilityService.Polygon polygon = lightingEngine.polygonFor(light);
             double[] xs = new double[polygon.size()];
             double[] ys = new double[polygon.size()];
+            double minY = Double.POSITIVE_INFINITY;
+            double maxY = Double.NEGATIVE_INFINITY;
             for (int i = 0; i < xs.length; i++) {
                 xs[i] = worldToScreenX(polygon.xs()[i], width, camera) / lightMapScale();
                 ys[i] = worldToScreenY(polygon.ys()[i], height, camera) / lightMapScale();
+                minY = Math.min(minY, ys[i]);
+                maxY = Math.max(maxY, ys[i]);
             }
-            final int lightIndex = li;
-            final float[] lit = buffer.lit;
-            final int[] source = buffer.source;
-            PolygonRaster.fill(xs, ys, bw, bh, (row, colStart, colEnd) -> {
-                double dy = row + 0.5 - ly;
-                int base = row * bw;
-                for (int col = colStart; col <= colEnd; col++) {
-                    double dx = col + 0.5 - lx;
-                    double d = Math.sqrt(dx * dx + dy * dy) / radius;
-                    if (d >= 1.0) {
-                        continue;
-                    }
-                    float value = (float) (falloff(d) * brightness);
-                    int idx = base + col;
-                    if (value > lit[idx]) {
-                        lit[idx] = value;
-                        source[idx] = lightIndex;
-                    }
-                }
-            });
+            rasters.add(new LightRaster(li, xs, ys, lx, ly, radius, brightness, minY, maxY));
         }
+        rasterizeLights(buffer, rasters, bw, bh);
 
         double ppc = project.getMap().getGrid().getPixelsPerCell();
         for (int ei = 0; ei < emitters.size(); ei++) {
@@ -1165,27 +1153,83 @@ public class CanvasMapRenderer {
         double ambG = preset.green() * 255;
         double ambB = preset.blue() * 255;
         int[] argb = buffer.argb;
-        for (int i = 0; i < argb.length; i++) {
-            double l = buffer.lit[i];
-            double dark = darkness * (1.0 - l);
-            double glow = l > 0 ? glowStrength * l : 0;
-            double a = Math.min(1.0, dark + glow);
-            if (a <= 0.002) {
-                argb[i] = 0;
-                continue;
+        final float[] litArr = buffer.lit;
+        final int[] sourceArr = buffer.source;
+        final double fDarkness = darkness;
+        IntStream.range(0, bh).parallel().forEach(row -> {
+            for (int i = row * bw, end = i + bw; i < end; i++) {
+                double l = litArr[i];
+                double dark = fDarkness * (1.0 - l);
+                double glow = l > 0 ? glowStrength * l : 0;
+                double a = Math.min(1.0, dark + glow);
+                if (a <= 0.002) {
+                    argb[i] = 0;
+                    continue;
+                }
+                int rgb = l > 0 ? lightRgb[sourceArr[i]] : 0;
+                double r = (ambR * dark + ((rgb >> 16) & 0xFF) * glow) / (dark + glow);
+                double g = (ambG * dark + ((rgb >> 8) & 0xFF) * glow) / (dark + glow);
+                double b = (ambB * dark + (rgb & 0xFF) * glow) / (dark + glow);
+                argb[i] = ((int) Math.round(a * 255) << 24)
+                        | ((int) Math.round(r) << 16)
+                        | ((int) Math.round(g) << 8)
+                        | (int) Math.round(b);
             }
-            int rgb = l > 0 ? lightRgb[buffer.source[i]] : 0;
-            double r = (ambR * dark + ((rgb >> 16) & 0xFF) * glow) / (dark + glow);
-            double g = (ambG * dark + ((rgb >> 8) & 0xFF) * glow) / (dark + glow);
-            double b = (ambB * dark + (rgb & 0xFF) * glow) / (dark + glow);
-            argb[i] = ((int) Math.round(a * 255) << 24)
-                    | ((int) Math.round(r) << 16)
-                    | ((int) Math.round(g) << 8)
-                    | (int) Math.round(b);
-        }
+        });
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         gc.setImageSmoothing(true);
         gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
+    }
+
+    private record LightRaster(int index, double[] xs, double[] ys, double lx, double ly, double radius,
+                               double brightness, double minY, double maxY) {
+    }
+
+    /**
+     * Rasterises all lights into the light map. Rows are split into bands that are filled in parallel; inside a
+     * band the lights run in their original order so the result is identical to a sequential pass.
+     */
+    private static void rasterizeLights(LightBuffer buffer, List<LightRaster> rasters, int bw, int bh) {
+        if (rasters.isEmpty()) {
+            return;
+        }
+        final float[] lit = buffer.lit;
+        final int[] source = buffer.source;
+        int bandHeight = Math.max(8, (bh + 31) / 32);
+        int bands = (bh + bandHeight - 1) / bandHeight;
+        IntStream.range(0, bands).parallel().forEach(band -> {
+            int first = band * bandHeight;
+            int end = Math.min(bh, first + bandHeight);
+            for (LightRaster r : rasters) {
+                if (r.maxY() < first || r.minY() >= end) {
+                    continue;
+                }
+                double invR2 = 1.0 / (r.radius() * r.radius());
+                double lx = r.lx();
+                double ly = r.ly();
+                double brightness = r.brightness();
+                int lightIndex = r.index();
+                PolygonRaster.fill(r.xs(), r.ys(), bw, first, end, (row, colStart, colEnd) -> {
+                    double dy = row + 0.5 - ly;
+                    double dy2 = dy * dy;
+                    int base = row * bw;
+                    for (int col = colStart; col <= colEnd; col++) {
+                        double dx = col + 0.5 - lx;
+                        double d2 = (dx * dx + dy2) * invR2;
+                        if (d2 >= 1.0) {
+                            continue;
+                        }
+                        double f = d2 <= 0.25 ? 1.0 : falloff(Math.sqrt(d2));
+                        float value = (float) (f * brightness);
+                        int idx = base + col;
+                        if (value > lit[idx]) {
+                            lit[idx] = value;
+                            source[idx] = lightIndex;
+                        }
+                    }
+                });
+            }
+        });
     }
 
     private static long shapeLightKey(DmProject.OverlayShape shape) {

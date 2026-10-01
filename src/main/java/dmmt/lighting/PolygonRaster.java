@@ -17,8 +17,13 @@ public final class PolygonRaster {
     }
 
     public static void fill(double[] xs, double[] ys, int cols, int rows, SpanConsumer consumer) {
+        fill(xs, ys, cols, 0, rows, consumer);
+    }
+
+    /** Like {@link #fill(double[], double[], int, int, SpanConsumer)} but only emits rows in [firstRow, endRow). */
+    public static void fill(double[] xs, double[] ys, int cols, int firstRow, int endRow, SpanConsumer consumer) {
         int n = xs.length;
-        if (n < 3 || cols <= 0 || rows <= 0) {
+        if (n < 3 || cols <= 0 || endRow <= firstRow) {
             return;
         }
         double minY = Double.POSITIVE_INFINITY;
@@ -27,8 +32,8 @@ public final class PolygonRaster {
             minY = Math.min(minY, y);
             maxY = Math.max(maxY, y);
         }
-        int rowStart = Math.max(0, (int) Math.floor(minY));
-        int rowEnd = Math.min(rows - 1, (int) Math.floor(maxY));
+        int rowStart = Math.max(firstRow, (int) Math.floor(minY));
+        int rowEnd = Math.min(endRow - 1, (int) Math.floor(maxY));
         double[] crossings = new double[n];
         for (int row = rowStart; row <= rowEnd; row++) {
             double y = row + 0.5;
