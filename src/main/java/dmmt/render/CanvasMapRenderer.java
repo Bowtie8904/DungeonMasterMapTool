@@ -46,6 +46,18 @@ public class CanvasMapRenderer {
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
     private static final Font VIEWPORT_TITLE_FONT = Font.font("System", FontWeight.BOLD, 12);
+    private static final double VIEWPORT_RESET_WIDTH = 46;
+    private static final double VIEWPORT_RESET_MIN_BAR = 190;
+    private static final double VIEWPORT_ZOOM_MIN_BAR = 130;
+
+    /** Zoom text (e.g. "125%") and whether it differs from normal zoom; shown in the player viewport's title bar. */
+    private String viewportZoomLabel = "";
+    private boolean viewportZoomChanged;
+
+    public void setViewportZoom(String label, boolean changed) {
+        viewportZoomLabel = label;
+        viewportZoomChanged = changed;
+    }
     public static final double MIN_LIGHT_TINT = 0.0;
     public static final double DEFAULT_LIGHT_TINT = 0.08;
 
@@ -1716,6 +1728,25 @@ public class CanvasMapRenderer {
         gc.setTextAlign(TextAlignment.LEFT);
         gc.setTextBaseline(VPos.CENTER);
         gc.fillText("Player view", x + 8, barY + barHeight / 2.0);
+        if (w >= VIEWPORT_ZOOM_MIN_BAR) {
+            boolean button = w >= VIEWPORT_RESET_MIN_BAR;
+            double right = x + w - 6;
+            if (button) {
+                double bw = VIEWPORT_RESET_WIDTH;
+                double bh = barHeight - 6;
+                double bx = right - bw;
+                double by = barY + 3;
+                gc.setFill(Color.color(1, 1, 1, viewportZoomChanged ? 0.35 : 0.12));
+                gc.fillRoundRect(bx, by, bw, bh, 6, 6);
+                gc.setFill(viewportZoomChanged ? Color.WHITE : Color.color(1, 1, 1, 0.55));
+                gc.setTextAlign(TextAlignment.CENTER);
+                gc.fillText("Reset", bx + bw / 2.0, barY + barHeight / 2.0);
+                right = bx - 8;
+            }
+            gc.setFill(Color.WHITE);
+            gc.setTextAlign(TextAlignment.RIGHT);
+            gc.fillText(viewportZoomLabel, right, barY + barHeight / 2.0);
+        }
         gc.restore();
     }
 
@@ -1730,6 +1761,23 @@ public class CanvasMapRenderer {
         double w = rect.width() * camera.getZoom();
         return screenX >= x - 1 && screenX <= x + w + 1
                 && screenY >= y - VIEWPORT_TITLE_BAR_HEIGHT && screenY <= y + 1;
+    }
+
+    /** True if the screen point lies on the zoom reset button in the player viewport's title bar. */
+    public boolean isOnViewportResetButton(WorldRect rect, double screenX, double screenY,
+                                           double width, double height, DmProject.CameraState camera) {
+        if (rect == null) {
+            return false;
+        }
+        double x = worldToScreenX(rect.x(), width, camera);
+        double y = worldToScreenY(rect.y(), height, camera);
+        double w = rect.width() * camera.getZoom();
+        if (w < VIEWPORT_RESET_MIN_BAR) {
+            return false;
+        }
+        double right = x + w - 6;
+        return screenX >= right - VIEWPORT_RESET_WIDTH && screenX <= right
+                && screenY >= y - VIEWPORT_TITLE_BAR_HEIGHT + 3 && screenY <= y - 3;
     }
 
     private ImagePyramidStore.MapImage resolveImage(String path, Path projectFile) {

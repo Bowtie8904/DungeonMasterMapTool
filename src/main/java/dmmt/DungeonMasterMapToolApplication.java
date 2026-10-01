@@ -1073,7 +1073,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerZoomSlider.setPrefWidth(90);
         HBox.setHgrow(playerZoomSlider, Priority.ALWAYS);
         Icons.tooltip(playerZoomSlider, "Player view zoom for this map (saved with the map). 0 = calibrated tile size; "
-                + "lower zooms out, higher zooms in. Double-click to reset.");
+                + "lower zooms out, higher zooms in. Double-click to reset (also via the Reset button in the player view box on the map).");
         playerZoomValue = new Label(formatPlayerZoom(0));
         playerZoomValue.getStyleClass().add("value-label");
         playerZoomSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
@@ -1587,6 +1587,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private Cursor selectHoverCursor(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
+        if (isOnPlayerViewportResetButton(worldX, worldY)) {
+            return Cursor.HAND;
+        }
         if (isOnPlayerViewportTitleBar(worldX, worldY)) {
             return Cursor.MOVE;
         }
@@ -1887,6 +1890,10 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             // The viewport grab bar sits on top of everything else, like a window title bar.
+            if (isOnPlayerViewportResetButton(world.x(), world.y())) {
+                resetPlayerZoom();
+                return;
+            }
             if (isOnPlayerViewportTitleBar(world.x(), world.y())) {
                 CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
                 draggingPlayerViewport = true;
@@ -2409,6 +2416,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void renderDm() {
+        double playerZoomStep = project.getViews().getPlayerZoomStep();
+        renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
@@ -3207,6 +3216,24 @@ public class DungeonMasterMapToolApplication extends Application {
                 worldWidth,
                 worldHeight
         );
+    }
+
+    private boolean isOnPlayerViewportResetButton(double worldX, double worldY) {
+        CanvasMapRenderer.WorldRect rect = getPlayerViewportRect();
+        if (playerStage == null || rect == null || dmCanvas == null) {
+            return false;
+        }
+        DmProject.CameraState dmCamera = project.getViews().getDmCamera();
+        double w = dmCanvas.getWidth();
+        double h = dmCanvas.getHeight();
+        return renderer.isOnViewportResetButton(rect,
+                renderer.worldToScreenX(worldX, w, dmCamera), renderer.worldToScreenY(worldY, h, dmCamera),
+                w, h, dmCamera);
+    }
+
+    private void resetPlayerZoom() {
+        playerZoomSlider.setValue(0);
+        status("Player view zoom reset to normal (100%).");
     }
 
     /** True if the world point is on the player viewport's grab bar (only when the player window is open). */
