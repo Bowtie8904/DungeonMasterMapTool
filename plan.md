@@ -82,7 +82,7 @@ Desktop tool for tabletop dungeon masters that:
 - Pan/camera movement via drag and/or keybind.
 - Render overlays (fog, lights, shapes) with editing controls.
 - Show player viewport rectangle when player screen is active. It looks like an application window: fully transparent interior with a cyan border and a thicker "Player view" title bar above the top edge. Only the title bar can be grabbed to drag the viewport (Select tool); it takes click priority over everything beneath it.
-- Provide a map-rotation menu action to rotate the entire map in **90-degree steps** (0/90/180/270).
+- Provide a map-rotation menu action to rotate the entire map in **90-degree steps** (0/90/180/270). An image layer's x/y/width/height is its on-screen footprint (swapped at 90/270); the renderer and thumbnails draw the unrotated image with swapped sides at 90/270 so non-square maps are not stretched.
 - Layout: **map browser sidebar** on the left (see 3.15), map canvas in the center, compact **DM controls overlay** on the right (see 3.16), slim status bar at the bottom.
 - Remember the last dd2vtt import directory and reopen that location for the next import (source file) dialog.
 

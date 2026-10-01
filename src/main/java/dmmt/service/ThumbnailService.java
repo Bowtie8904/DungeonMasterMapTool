@@ -91,9 +91,11 @@ public class ThumbnailService {
             double centerY = layer.getY() + layer.getHeight() / 2.0;
             AffineTransform rotation = AffineTransform.getRotateInstance(Math.toRadians(layer.getRotationDeg()),
                     centerX, centerY);
-            double[] corners = {layer.getX(), layer.getY(), layer.getX() + layer.getWidth(), layer.getY(),
-                    layer.getX() + layer.getWidth(), layer.getY() + layer.getHeight(),
-                    layer.getX(), layer.getY() + layer.getHeight()};
+            double dw = drawWidth(layer);
+            double dh = drawHeight(layer);
+            double left = centerX - dw / 2.0;
+            double top = centerY - dh / 2.0;
+            double[] corners = {left, top, left + dw, top, left + dw, top + dh, left, top + dh};
             rotation.transform(corners, 0, corners, 0, 4);
             for (int i = 0; i < corners.length; i += 2) {
                 minX = Math.min(minX, corners[i]);
@@ -122,16 +124,18 @@ public class ThumbnailService {
             g.translate(-minX, -minY);
             boolean drawn = false;
             for (DmProject.ImageLayer layer : layers) {
-                BufferedImage source = readScaled(resolve(layer.getPath(), mapFile),
-                        layer.getWidth() * scale, layer.getHeight() * scale);
+                double dw = drawWidth(layer);
+                double dh = drawHeight(layer);
+                BufferedImage source = readScaled(resolve(layer.getPath(), mapFile), dw * scale, dh * scale);
                 if (source == null) {
                     continue;
                 }
+                double centerX = layer.getX() + layer.getWidth() / 2.0;
+                double centerY = layer.getY() + layer.getHeight() / 2.0;
                 AffineTransform saved = g.getTransform();
-                g.rotate(Math.toRadians(layer.getRotationDeg()),
-                        layer.getX() + layer.getWidth() / 2.0, layer.getY() + layer.getHeight() / 2.0);
-                g.drawImage(source, (int) Math.round(layer.getX()), (int) Math.round(layer.getY()),
-                        (int) Math.round(layer.getWidth()), (int) Math.round(layer.getHeight()), null);
+                g.rotate(Math.toRadians(layer.getRotationDeg()), centerX, centerY);
+                g.drawImage(source, (int) Math.round(centerX - dw / 2.0), (int) Math.round(centerY - dh / 2.0),
+                        (int) Math.round(dw), (int) Math.round(dh), null);
                 g.setTransform(saved);
                 drawn = true;
             }
@@ -139,6 +143,19 @@ public class ThumbnailService {
         } finally {
             g.dispose();
         }
+    }
+
+    /** The layer rectangle is the on-screen footprint; at 90/270 degrees the unrotated image has swapped sides. */
+    private static boolean sideways(DmProject.ImageLayer layer) {
+        return Math.round(layer.getRotationDeg() / 90.0) % 2 != 0;
+    }
+
+    private static double drawWidth(DmProject.ImageLayer layer) {
+        return sideways(layer) ? layer.getHeight() : layer.getWidth();
+    }
+
+    private static double drawHeight(DmProject.ImageLayer layer) {
+        return sideways(layer) ? layer.getWidth() : layer.getHeight();
     }
 
     private static Path resolve(String path, Path mapFile) {

@@ -359,7 +359,11 @@ public class CanvasMapRenderer {
             double centerY = sy + sh / 2.0;
             gc.translate(centerX, centerY);
             gc.rotate(layer.getRotationDeg());
-            complete &= image.draw(gc, -sw / 2.0, -sh / 2.0, sw, sh);
+            // The layer rectangle is the on-screen footprint; at 90/270 degrees the unrotated image is drawn with swapped sides.
+            boolean sideways = Math.round(layer.getRotationDeg() / 90.0) % 2 != 0;
+            double dw = sideways ? sh : sw;
+            double dh = sideways ? sw : sh;
+            complete &= image.draw(gc, -dw / 2.0, -dh / 2.0, dw, dh);
             gc.restore();
         }
         return complete;
