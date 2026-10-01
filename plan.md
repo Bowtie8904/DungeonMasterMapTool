@@ -438,6 +438,12 @@ Desktop tool for tabletop dungeon masters that:
 - Default text boxes: neutral opaque background and dark text for visibility on any map.
 - Lighting tab: a "Fog reveal" row with three buttons (Keep revealed / Only while lit / Don't reveal) that set the reveal mode of all selected lights in one undo step; disabled while no light is selected (also available per light in the right-click menu, see 3.6).
 
+## 3.31 Recent Maps (implemented)
+
+- Small **Recent maps** list at the bottom of the map browser sidebar, below the library tree: a history of the maps that were opened, most recent first, up to `ui.recentMaps.max` entries (default 5, 1 to 30). Shows at most 5 rows, then scrolls.
+- **Double-click** (or Enter) opens a map from the list, same flow as the tree (current map is auto-saved first). The open map is highlighted; the tooltip shows the full path.
+- A map is recorded whenever it becomes the open map (`MapBrowser.updateCurrentMap`). Persisted in the settings file as `ui.recentMaps` (paths separated by `|`); maps that no longer exist on disk are dropped. Logic lives in `RecentMaps` (unit tested).
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -644,7 +650,9 @@ Desktop tool for tabletop dungeon masters that:
 - **v3.1:** Tuning constants moved into the settings file, fog fade with separate reveal/hide times and easing, settings reference `docs/SETTINGS.md` (3.25).
 - **v3.0:** Per-map player zoom slider (3.3).
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
-- **v2.8 (current):** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
+- **v3.3 (current):** GitHub Actions workflow (`.github/workflows/build.yml`): on push/PR to master it runs `mvn verify` (all tests) on `windows-latest` with JDK 17 and uploads the `DungeonMasterMapTool-windows` artifact (shaded jar, default settings, README). README shows build/tech badges.
+- **v3.2:** Recent maps list below the map browser (3.31).
+- **v2.8:** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).
 - **v2.7:** Per-map toggle to disable effect animations (3.8).
 - **v2.7:** Ctrl+C / Ctrl+V for lights, effect shapes and text boxes incl. multi-selection and across maps (3.28); ambient weather per map (3.29).
 - **v2.6:** Global preferences moved to an editable settings file next to the jar, including texture defaults (3.25).

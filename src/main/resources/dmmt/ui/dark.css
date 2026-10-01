@@ -480,6 +480,40 @@
     -fx-background-color: transparent;
 }
 
+.recent-maps-box {
+    -fx-padding: 6 0 0 0;
+}
+
+.recent-maps {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.recent-maps:focused {
+    -fx-background-color: transparent;
+}
+
+.recent-maps .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -dm-text;
+    -fx-padding: 4 6;
+    -fx-background-radius: 6;
+}
+
+.recent-maps .list-cell:filled:hover {
+    -fx-background-color: #2a2e36;
+}
+
+.recent-maps .list-cell:filled:selected {
+    -fx-background-color: #3a3325;
+}
+
+.recent-maps .list-cell:open-map {
+    -fx-text-fill: -dm-accent;
+    -fx-font-weight: bold;
+}
+
 .tree-cell {
     -fx-background-color: transparent;
     -fx-text-fill: -dm-text;

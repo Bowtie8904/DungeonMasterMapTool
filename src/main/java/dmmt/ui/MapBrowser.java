@@ -3,6 +3,7 @@ package dmmt.ui;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import dmmt.service.MapTreeFilter;
+import dmmt.service.RecentMaps;
 import dmmt.service.ThumbnailService;
 import dmmt.service.Tuning;
 import javafx.animation.PauseTransition;
@@ -10,6 +11,8 @@ import javafx.css.PseudoClass;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.SeparatorMenuItem;
@@ -96,6 +99,8 @@ public class MapBrowser extends VBox {
 
     private static final double THUMB_WIDTH = 48;
     private static final double THUMB_HEIGHT = 32;
+    private static final double RECENT_CELL_HEIGHT = 26;
+    private static final int RECENT_VISIBLE_ROWS = 5;
     private static final PseudoClass OPEN_MAP = PseudoClass.getPseudoClass("open-map");
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
 
@@ -114,13 +119,16 @@ public class MapBrowser extends VBox {
         return thread;
     });
     private HBox actions;
+    private final RecentMaps recentMaps;
+    private final ListView<Path> recentList = new ListView<>();
     private Entry scannedRoot;
     private TreeItem<Entry> draggedItem;
     private ContextMenu openMenu;
 
-    public MapBrowser(MapLibraryService library, Host host) {
+    public MapBrowser(MapLibraryService library, Host host, RecentMaps recentMaps) {
         this.library = library;
         this.host = host;
+        this.recentMaps = recentMaps;
         getStyleClass().add("sidebar");
         setPrefWidth(270);
         setMinWidth(200);
@@ -192,8 +200,37 @@ public class MapBrowser extends VBox {
         noResults.setVisible(false);
         noResults.setManaged(false);
 
-        getChildren().addAll(titleRow, actions, currentCard, searchBox, noResults, tree, hint);
+        getChildren().addAll(titleRow, actions, currentCard, searchBox, noResults, tree, hint, buildRecentBox());
         refresh();
+    }
+
+    private VBox buildRecentBox() {
+        Label caption = new Label("RECENT MAPS");
+        caption.getStyleClass().add("caption");
+        recentList.getStyleClass().add("recent-maps");
+        recentList.setFixedCellSize(RECENT_CELL_HEIGHT);
+        recentList.setPlaceholder(new Label("No maps opened yet"));
+        recentList.setCellFactory(view -> new RecentCell());
+        recentList.setOnKeyPressed(event -> {
+            Path selected = recentList.getSelectionModel().getSelectedItem();
+            if (event.getCode() == KeyCode.ENTER && selected != null) {
+                host.openMap(selected);
+                event.consume();
+            }
+        });
+        VBox box = new VBox(4, caption, recentList);
+        box.getStyleClass().add("recent-maps-box");
+        return box;
+    }
+
+    private void updateRecentList() {
+        recentList.getItems().setAll(recentMaps.existing());
+        recentList.refresh();
+        int rows = Math.max(1, Math.min(recentList.getItems().size(), RECENT_VISIBLE_ROWS));
+        double height = rows * RECENT_CELL_HEIGHT + 2;
+        recentList.setPrefHeight(height);
+        recentList.setMinHeight(height);
+        recentList.setMaxHeight(height);
     }
 
     /** Adds a control to the row of map actions (new / import / save). */
@@ -293,7 +330,9 @@ public class MapBrowser extends VBox {
             currentMapName.getStyleClass().add("unsaved");
         } else {
             currentMapName.setText(displayName(current));
+            recentMaps.record(current);
         }
+        updateRecentList();
         tree.refresh();
     }
 
@@ -354,8 +393,8 @@ public class MapBrowser extends VBox {
     }
 
     /** The cached thumbnail, or {@code null} while it is loading (a background load is started) or missing. */
-    private Image thumbnailFor(Entry entry) {
-        Path key = entry.mapFile().toAbsolutePath().normalize();
+    private Image thumbnailFor(Path mapFile) {
+        Path key = mapFile.toAbsolutePath().normalize();
         Thumbnail cached = thumbnails.get(key);
         if (cached != null) {
             return cached.image();
@@ -377,10 +416,26 @@ public class MapBrowser extends VBox {
                     loadingThumbnails.remove(key);
                     thumbnails.put(key, new Thumbnail(loaded, stamp));
                     tree.refresh();
+                    recentList.refresh();
                 });
             });
         }
         return null;
+    }
+
+    /** Tooltip with the map name and a larger preview of its thumbnail (when loaded). */
+    private static Tooltip previewTooltip(String text, Image image) {
+        Tooltip tooltip = Icons.tooltip(text);
+        if (image != null) {
+            ImageView large = new ImageView(image);
+            large.setPreserveRatio(true);
+            large.setSmooth(true);
+            large.setFitWidth(Math.min(256, image.getWidth()));
+            large.setFitHeight(Math.min(256, image.getHeight()));
+            tooltip.setGraphic(large);
+            tooltip.setContentDisplay(ContentDisplay.TOP);
+        }
+        return tooltip;
     }
 
     private static TreeItem<Entry> findItem(TreeItem<Entry> item, Path path) {
@@ -572,6 +627,34 @@ public class MapBrowser extends VBox {
         return !dragged.isFolder() || !target.startsWith(dragged.path().toAbsolutePath().normalize());
     }
 
+    private final class RecentCell extends ListCell<Path> {
+        RecentCell() {
+            setOnMouseClicked(event -> {
+                if (getItem() != null && event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+                    host.openMap(getItem());
+                    event.consume();
+                }
+            });
+        }
+
+        @Override
+        protected void updateItem(Path path, boolean empty) {
+            super.updateItem(path, empty);
+            if (empty || path == null) {
+                setText(null);
+                setTooltip(null);
+                pseudoClassStateChanged(OPEN_MAP, false);
+                return;
+            }
+            setText(displayName(path));
+            Path current = host.currentMapFile();
+            boolean open = current != null && current.toAbsolutePath().normalize().equals(path);
+            setTooltip(previewTooltip(displayName(path) + (open ? " (open)" : "") + "\nDouble-click to open",
+                    thumbnailFor(path)));
+            pseudoClassStateChanged(OPEN_MAP, open);
+        }
+    }
+
     private final class LibraryCell extends TreeCell<Entry> {
         private final FontIcon icon = new FontIcon();
         private final FontIcon placeholder = new FontIcon(MaterialDesignM.MAP_OUTLINE);
@@ -688,21 +771,11 @@ public class MapBrowser extends VBox {
                 setTooltip(null);
             } else {
                 pseudoClassStateChanged(OPEN_MAP, isOpenMap(entry));
-                Image image = thumbnailFor(entry);
+                Image image = thumbnailFor(entry.mapFile());
                 thumbnailView.setImage(image);
                 placeholder.setVisible(image == null);
-                Tooltip tooltip = Icons.tooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
-                        + "\nDouble-click to open");
-                if (image != null) {
-                    ImageView large = new ImageView(image);
-                    large.setPreserveRatio(true);
-                    large.setSmooth(true);
-                    large.setFitWidth(Math.min(256, image.getWidth()));
-                    large.setFitHeight(Math.min(256, image.getHeight()));
-                    tooltip.setGraphic(large);
-                    tooltip.setContentDisplay(ContentDisplay.TOP);
-                }
-                setTooltip(tooltip);
+                setTooltip(previewTooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
+                        + "\nDouble-click to open", image));
                 setGraphic(thumbnailBox);
                 return;
             }

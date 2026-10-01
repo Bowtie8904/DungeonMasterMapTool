@@ -269,7 +269,9 @@ public final class AppSettings {
                 new Entry("ui.controlsExpanded", "true", "Show the toolbar controls (true/false)."),
                 new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."),
                 new Entry("ui.effectAnimations", "true", "Animate effect textures and weather on all maps (true/false)."),
-                new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."))));
+                new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."),
+                new Entry("ui.recentMaps.max", "5", "Number of maps kept in the recent maps list below the map library (1 to 30)."),
+                new Entry("ui.recentMaps", null, "Recently opened maps, most recent first, separated by '|' (managed by the app)."))));
 
         List<Entry> panels = new ArrayList<>();
         for (String id : SECTION_IDS) {

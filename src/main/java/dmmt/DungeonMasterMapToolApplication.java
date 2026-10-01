@@ -16,6 +16,7 @@ import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
 import dmmt.service.RoomFillService;
+import dmmt.service.RecentMaps;
 import dmmt.service.ProjectService;
 import dmmt.service.Tuning;
 import dmmt.ui.CollapsibleSection;
@@ -403,7 +404,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmFogCanvas.heightProperty().bind(center.heightProperty());
         root.setCenter(center);
 
-        mapBrowser = new MapBrowser(mapLibrary, createBrowserHost());
+        mapBrowser = new MapBrowser(mapLibrary, createBrowserHost(), new RecentMaps(preferences));
         mapBrowser.addAction(createAutoSaveMenu());
         root.setLeft(mapBrowser);
 

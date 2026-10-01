@@ -98,6 +98,17 @@ Global switch for moving effect textures and weather on all maps (animations tog
 
 Global light flicker switch (circle-flash toggle in the Lighting section, next to Remove light). Off = no light flickers; on = each light flickers according to its own flicker setting. Independent of the per-map effect animations toggle; performance mode always disables flicker.
 
+### `ui.recentMaps.max`
+**Default:** `5` · **Range:** 1 to 30 · **Applies:** restart
+
+How many maps the **Recent maps** list below the map library keeps. Older entries drop off the end.
+
+*Keywords:* recent maps, history, last opened, recently used
+
+### `ui.recentMaps`
+**Default:** empty · **Values:** full map file paths separated by `|` · **Applies:** managed by the app
+
+The recent maps history, most recent first. The app updates it whenever a map is opened; maps that no longer exist are removed automatically.
 *Keywords:* performance mode, slow computer, laptop, low end, speed, lag, battery
 
 ### `window.dmWidth`
