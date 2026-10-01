@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build and test
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Create Windows app image
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force jpackage-input | Out-Null
+          Copy-Item target/DungeonMasterMapTool-*-all.jar jpackage-input/DungeonMasterMapTool.jar
+          jpackage --type app-image `
+            --name DungeonMasterMapTool `
+            --input jpackage-input `
+            --main-jar DungeonMasterMapTool.jar `
+            --main-class dmmt.DungeonMasterMapToolLauncher `
+            --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported `
+            --dest dist
+          if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
+          Copy-Item README.md dist/DungeonMasterMapTool/
+          Compress-Archive -Path dist/DungeonMasterMapTool -DestinationPath DungeonMasterMapTool-windows.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DungeonMasterMapTool-windows
+          path: DungeonMasterMapTool-windows.zip
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+
+  # The shaded jar bundles the JavaFX natives of the OS it is built on, so each OS needs its own jar.
+  jars:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build jar
+        run: mvn --batch-mode --no-transfer-progress package -DskipTests
+
+      - name: Rename jar
+        run: cp target/DungeonMasterMapTool-*-all.jar DungeonMasterMapTool-${{ matrix.name }}.jar
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: DungeonMasterMapTool-${{ matrix.name }}-jar
+          path: DungeonMasterMapTool-${{ matrix.name }}.jar
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, jars]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-files/*
+          generate_release_notes: true

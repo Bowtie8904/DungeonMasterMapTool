@@ -1,5 +1,11 @@
 # Dungeon Master Map Tool
 
+[![Build](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml/badge.svg)](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/Bowtie8904/DungeonMasterMapTool?label=release)](https://github.com/Bowtie8904/DungeonMasterMapTool/releases/latest)
+![Java 17](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
+![JavaFX 21](https://img.shields.io/badge/JavaFX-21-blue)
+![Maven](https://img.shields.io/badge/build-Maven-C71A36?logo=apachemaven&logoColor=white)
+
 A desktop application for tabletop game masters who run in-person sessions with a **TV or monitor lying flat on the table**. Import a battle map, control everything from your own screen (DM view) and show players a clean, live view (player view) on a second display, with fog of war, dynamic lighting, effects, handouts and more.
 
 ![DM view overview](docs/images/dm-view-overview.png)
@@ -8,6 +14,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 
 - [What it does](#what-it-does)
 - [Who it is for](#who-it-is-for)
+- [Download](#download)
 - [Requirements](#requirements)
 - [Build and run](#build-and-run)
 - [Technology stack](#technology-stack)
@@ -48,6 +55,13 @@ Everything you need is copied into the app's own project storage on import, so o
 ## Who it is for
 
 Game masters of D&D, Pathfinder and similar tabletop RPGs who play **in person** with a horizontal display (TV, monitor or projector) as the battle map and want to keep control (fog, lights, secrets) on a separate screen. Also useful for anyone who wants a light, offline alternative to online virtual tabletops.
+
+## Download
+
+Get the [latest release](https://github.com/Bowtie8904/DungeonMasterMapTool/releases/latest):
+
+- **Windows:** download `DungeonMasterMapTool-windows.zip`, unzip it and run `DungeonMasterMapTool.exe`. Java is bundled, nothing else to install.
+- **Linux / macOS:** download `DungeonMasterMapTool-linux.jar` or `DungeonMasterMapTool-macos.jar` (Apple Silicon) and run it with `java -jar <file>` (Java 17 or newer required).
 
 ## Requirements
 
@@ -123,6 +137,7 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - **Toolbar:** New map, Import dd2vtt, Import folder, Save, Auto-save toggle (with interval), New folder, Refresh, Rotate left, Rotate right.
 - **Search bar:** case-insensitive live filter on map and folder names. A matching map is shown with its parent folders, a matching folder with its content. `Esc` or the clear button restores the tree.
 - **Open a map:** double-click or press `Enter`. The current map is auto-saved first.
+- **Recent maps:** the list below the tree shows the maps you opened last (most recent first, size set by `ui.recentMaps.max`). Double-click one to open it again.
 - **Move:** drag & drop maps or folders onto a folder (or onto a map to use its folder). Hovering a collapsed folder while dragging expands it.
 - **Context menu on a map:** Open, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, New folder, Rename, Delete.
 - **Keyboard:** `F2` rename, `Delete` delete (always with confirmation; folders state how many maps they contain), `Enter` open.
