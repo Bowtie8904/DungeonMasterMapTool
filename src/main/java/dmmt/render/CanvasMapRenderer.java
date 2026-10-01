@@ -419,6 +419,7 @@ public class CanvasMapRenderer {
                               boolean playerMode, boolean emitting) {
         double zoom = camera.getZoom();
         brushOutlines.keySet().retainAll(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
+        softEffects.retain(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
         for (DmProject.OverlayShape shape : project.getOverlays()) {
             if (playerMode && !shape.isPlayerVisible()) {
                 continue;
@@ -446,7 +447,7 @@ public class CanvasMapRenderer {
             String type = shape.getType() == null ? "" : shape.getType();
             String texture = OverlayTextures.normalize(shape.getTexture());
             if (OverlayTextures.isAnimated(texture)) {
-                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? Tuning.HIDDEN_SHAPE_OPACITY.get() : 1.0, width, height, camera);
+                drawTexturedShape(gc, project, shape, type, texture, base, edge, dmOnly ? Tuning.HIDDEN_SHAPE_OPACITY.get() : 1.0, width, height, camera, playerMode);
                 gc.setLineDashes(null);
                 continue;
             }
@@ -593,7 +594,7 @@ public class CanvasMapRenderer {
     /** Scrolls the texture layers over the shape; each layer is a tiled ImagePattern anchored to world origin plus a drift. */
     private void drawTexturedShape(GraphicsContext gc, DmProject project, DmProject.OverlayShape shape, String type,
                                    String texture, Color base, Color edge, double visibility, double width, double height,
-                                   DmProject.CameraState camera) {
+                                   DmProject.CameraState camera, boolean playerMode) {
         double zoom = camera.getZoom();
         double seconds = effectAnimationsEnabled ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
@@ -615,11 +616,13 @@ public class CanvasMapRenderer {
             default -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getStrokeWidth());
         };
         double feather = featherWorld * zoom;
-        if (soft) {
-            // A pass narrower than ~2 px is invisible, so small or zoomed-out shapes need fewer passes.
-            passes = Math.max(1, Math.min(passes, (int) Math.ceil(feather / 2)));
-        }
         boolean chasm = OverlayTextures.CHASM.equals(texture);
+        if (soft && !chasm) {
+            softEffects.draw(gc, shape, type, tile, OverlayTextures.layers(texture), alpha, seconds, tileWorld,
+                    featherWorld, passes, playerMode, width, height, camera);
+            drawShapeBorder(gc, shape, type, edge, width, height, camera);
+            return;
+        }
         gc.save();
         if (chasm && "brush".equals(type)) {
             double rimWorld = Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * shape.getStrokeWidth());
@@ -783,6 +786,7 @@ public class CanvasMapRenderer {
     }
 
     private final Map<String, BrushOutline> brushOutlines = new HashMap<>();
+    private final SoftEffectRenderer softEffects = new SoftEffectRenderer();
 
     /**
      * Outlines the final area covered by a freehand stroke: the stroked path is merged into one area (so movement
