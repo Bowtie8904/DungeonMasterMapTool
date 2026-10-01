@@ -620,8 +620,7 @@ public class DungeonMasterMapToolApplication extends Application {
         brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.max(Tuning.BRUSH_MIN.get(), Math.round(newValue.doubleValue() * 2) / 2.0));
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
-            String exitHint = tool == EditorTool.SELECT ? "" : " (Esc or right-click to exit)";
-            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description() + exitHint);
+            ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description());
             button.setToggleGroup(toolGroup);
             button.setOnAction(e -> setActiveTool(button.isSelected() ? tool : EditorTool.SELECT));
             toolButtons.put(tool, button);
@@ -884,10 +883,10 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         Button rotateTextLeft = Icons.button(MaterialDesignR.ROTATE_LEFT,
-                "Rotate all text boxes 90° counter-clockwise (global setting, independent of the map rotation)",
+                "Rotate all text boxes 90° counter-clockwise on the player view only (the DM view is not affected)",
                 () -> rotateTexts(-1));
         Button rotateTextRight = Icons.button(MaterialDesignR.ROTATE_RIGHT,
-                "Rotate all text boxes 90° clockwise (global setting, independent of the map rotation)",
+                "Rotate all text boxes 90° clockwise on the player view only (the DM view is not affected)",
                 () -> rotateTexts(1));
         textPlayerToggle = Icons.toggle(MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
                 "Players see the selected text box - turn off for DM-only notes");
@@ -3323,18 +3322,18 @@ public class DungeonMasterMapToolApplication extends Application {
         updateToolChip();
         updateCanvasCursor();
         switch (activeTool) {
-            case SELECT -> status("Select: click a door/window icon to open or close it; drag lights, layers and the player viewport. Right-click a light for options.");
+            case SELECT -> status("Select: click a door/window icon to open or close it; drag lights, layers and the player viewport. Right-click an element for options.");
             case REVEAL_BRUSH -> status("Reveal brush: paint to uncover the map.");
             case HIDE_BRUSH -> status("Hide brush: paint to cover the map with fog.");
             case REVEAL_RECT -> status("Reveal rectangle: drag to uncover an area.");
             case HIDE_RECT -> status("Hide rectangle: drag to cover an area with fog.");
-            case REVEAL_ROOM -> status("Reveal room: click inside a room to uncover it (Shift+click covers it). Esc or right-click to exit.");
+            case REVEAL_ROOM -> status("Reveal room: click inside a room to uncover it (Shift+click covers it).");
             case AOE_CIRCLE -> status("Circle effect: drag from the center outward.");
             case AOE_RECT -> status("Box effect: drag from corner to corner.");
             case AOE_BRUSH -> status("Draw effect: paint a freeform area (brush size sets thickness).");
             case AOE_PEN -> status("Pen: draw a thin freehand line in the selected color.");
             case AOE_LINE -> status("Line: drag to draw a straight line (brush size and color, no texture).");
-            case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it. Esc or right-click to exit.");
+            case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it.");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
@@ -5989,13 +5988,6 @@ public class DungeonMasterMapToolApplication extends Application {
             return flicker() && speed > 0 ? speed : Tuning.LIGHT_DEFAULT_FLICKER_SPEED.get();
         }
 
-        /** E.g. "6 tiles, flickering" for tool tooltips. */
-        String summary() {
-            double tiles = rangeTiles();
-            String range = tiles == Math.rint(tiles) ? String.valueOf((long) tiles) : String.valueOf(tiles);
-            return range + (tiles == 1 ? " tile" : " tiles") + (flicker() ? ", flickering" : ", steady");
-        }
-
         static LightPreset forTool(EditorTool tool) {
             return switch (tool) {
                 case LIGHT_CANDLE -> CANDLE;
@@ -6171,7 +6163,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private enum EditorTool {
-        SELECT("Select & move", "drag lights, effects, image layers and the player viewport; right-click a light for settings (Esc)",
+        SELECT("Select & move", "click doors and windows, drag lights, effects, text boxes, image layers and the player viewport; right-click an element for its options",
                 MaterialDesignC.CURSOR_DEFAULT, false, false),
         REVEAL_BRUSH("Reveal brush", "paint to remove fog", MaterialDesignE.ERASER, true, false),
         HIDE_BRUSH("Fog brush", "paint fog back over the map", MaterialDesignB.BRUSH, false, false),
@@ -6193,11 +6185,11 @@ public class DungeonMasterMapToolApplication extends Application {
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
-        LIGHT_ADD("Add light", "click the map to place a torch (%s)", MaterialDesignL.LIGHTBULB_ON, false, false),
-        LIGHT_CANDLE("Candle", "click the map to place a candle (%s)", MaterialDesignC.CANDLE, false, false),
-        LIGHT_LANTERN("Lantern", "click the map to place a lantern (%s)", MaterialDesignL.LAMP, false, false),
-        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (%s)", MaterialDesignC.CAMPFIRE, false, false),
-        LIGHT_MAGIC("Magic light", "click the map to place a magical light (%s)", MaterialDesignA.AUTO_FIX, false, false);
+        LIGHT_ADD("Add light", "click the map to place a torch", MaterialDesignL.LIGHTBULB_ON, false, false),
+        LIGHT_CANDLE("Candle", "click the map to place a candle", MaterialDesignC.CANDLE, false, false),
+        LIGHT_LANTERN("Lantern", "click the map to place a lantern", MaterialDesignL.LAMP, false, false),
+        LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire", MaterialDesignC.CAMPFIRE, false, false),
+        LIGHT_MAGIC("Magic light", "click the map to place a magical light", MaterialDesignA.AUTO_FIX, false, false);
 
         private final String label;
         private final String description;
@@ -6213,9 +6205,8 @@ public class DungeonMasterMapToolApplication extends Application {
             this.rect = rect;
         }
 
-        /** Tooltip text; light tools include the range of their preset setting. */
         String description() {
-            return isLightPlaceTool() ? String.format(description, LightPreset.forTool(this).summary()) : description;
+            return description;
         }
 
         boolean isAoeTool() {
