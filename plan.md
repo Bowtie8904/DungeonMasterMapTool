@@ -100,7 +100,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Fast map/project switcher UI.
 - If player view is frozen, switching/opening in DM view must not affect player output until unfreeze/swap action.
-- Maps are switched from the **map browser** (3.15): double-clicking a map auto-saves the current map and opens the chosen one.
+- Maps are switched from the **map browser** (3.15): double-clicking a map auto-saves the current map and opens the chosen one. A dimmed overlay with a spinner and "Loading <map>..." (or "Importing <file>..." for a single dd2vtt import, which opens the map afterwards; batch imports show none) covers the DM canvas while the switch runs, so slow loads of large maps give visible feedback.
 - **Freeze** snapshots the *entire* project for the player window (map, fog, lights, effects, camera) using a separate renderer/lighting engine, so players see the old map exactly as it was regardless of DM edits or map switches. Unfreezing makes the player view jump to the currently open map and its staged viewport.
 - Frozen state is session-only (not saved in `.dmmap`).
 

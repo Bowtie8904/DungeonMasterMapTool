@@ -183,6 +183,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.WallSegment draftWall;
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
+    private StackPane mapCenter;
+    private StackPane loadingOverlay;
     private String savedFingerprint;
     private long historyVersion;
     private long lastAutoSaveNanos = System.nanoTime();
@@ -369,6 +371,7 @@ public class DungeonMasterMapToolApplication extends Application {
         initTextEditor();
         StackPane center = new StackPane(dmBaseCanvas, dmCanvas, dmFogCanvas, textEditor.node());
         center.setMinSize(0, 0);
+        mapCenter = center;
         Region controls = createControlsPanel(stage);
         StackPane.setAlignment(controls, Pos.TOP_RIGHT);
         StackPane.setMargin(controls, new Insets(10));
@@ -2585,27 +2588,38 @@ public class DungeonMasterMapToolApplication extends Application {
         Path sourcePath = source.toPath();
         String sourceName = source.getName();
         MapLocationDialog.Selection target = selection.get();
-        leaveCurrentMap(() -> runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
-            Path targetPath = mapLibrary.newMapFile(target.folder(), target.name());
-            Path projectDir = targetPath.getParent();
-            Files.createDirectories(projectDir);
-            try {
-                DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
-                projectService.save(targetPath, imported);
-                return new LoadedProject(imported, targetPath);
-            } catch (IOException | RuntimeException ex) {
-                try {
-                    MapLibraryService.deleteRecursive(projectDir);
-                } catch (IOException ignored) {
-                }
-                throw ex;
+        leaveCurrentMap(() -> {
+            if (ioBusy) {
+                status("Still working on the previous file operation.");
+                return;
             }
-        }, loaded -> {
-            switchProject(loaded.project(), loaded.file());
-            mapBrowser.refresh();
-            mapBrowser.select(loaded.file());
-            status("Imported " + sourceName + " as " + MapBrowser.displayName(loaded.file()) + ".");
-        }));
+            setMapLoading(true, "Importing " + sourceName + "...");
+            runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
+                Path targetPath = mapLibrary.newMapFile(target.folder(), target.name());
+                Path projectDir = targetPath.getParent();
+                Files.createDirectories(projectDir);
+                try {
+                    DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
+                    projectService.save(targetPath, imported);
+                    return new LoadedProject(imported, targetPath);
+                } catch (IOException | RuntimeException ex) {
+                    try {
+                        MapLibraryService.deleteRecursive(projectDir);
+                    } catch (IOException ignored) {
+                    }
+                    throw ex;
+                }
+            }, loaded -> {
+                try {
+                    switchProject(loaded.project(), loaded.file());
+                    mapBrowser.refresh();
+                    mapBrowser.select(loaded.file());
+                    status("Imported " + sourceName + " as " + MapBrowser.displayName(loaded.file()) + ".");
+                } finally {
+                    setMapLoading(false, null);
+                }
+            }, ex -> setMapLoading(false, null));
+        });
     }
 
     private void handleImportDd2vttFolder(Path suggestedFolder) {
@@ -3896,16 +3910,47 @@ public class DungeonMasterMapToolApplication extends Application {
             status("Could not switch map: " + ex.getMessage());
             return;
         }
+        if (ioBusy) {
+            status("Still working on the previous file operation.");
+            return;
+        }
+        setMapLoading(true, "Loading " + MapBrowser.displayName(file) + "...");
         runInBackground("Loading map...", "Could not switch map: ", () -> {
             if (snapshot != null) {
                 projectService.save(current, snapshot);
             }
             return new LoadedProject(projectService.load(file), file);
         }, loaded -> {
-            switchProject(loaded.project(), loaded.file());
-            status("Switched to " + MapBrowser.displayName(file)
-                    + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
-        });
+            try {
+                switchProject(loaded.project(), loaded.file());
+                status("Switched to " + MapBrowser.displayName(file)
+                        + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
+            } finally {
+                setMapLoading(false, null);
+            }
+        }, ex -> setMapLoading(false, null));
+    }
+
+    /** Shows or hides a spinner over the DM canvas while a map is being switched. */
+    private void setMapLoading(boolean loading, String message) {
+        if (loadingOverlay == null) {
+            javafx.scene.control.ProgressIndicator spinner = new javafx.scene.control.ProgressIndicator();
+            spinner.setPrefSize(56, 56);
+            Label label = new Label();
+            label.setStyle("-fx-text-fill: white; -fx-font-size: 14px;");
+            VBox box = new VBox(12, spinner, label);
+            box.setAlignment(Pos.CENTER);
+            loadingOverlay = new StackPane(box);
+            loadingOverlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.55);");
+            loadingOverlay.setVisible(false);
+            loadingOverlay.setUserData(label);
+            mapCenter.getChildren().add(loadingOverlay);
+        }
+        if (loading) {
+            ((Label) loadingOverlay.getUserData()).setText(message);
+        }
+        loadingOverlay.setVisible(loading);
+        loadingOverlay.toFront();
     }
 
     // ---- Effects (AOE overlays) ----
