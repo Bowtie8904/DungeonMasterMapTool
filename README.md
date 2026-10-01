@@ -22,6 +22,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
   1. [Window layout](#1-window-layout)
   2. [Map library (left sidebar)](#2-map-library-left-sidebar)
   3. [Creating and importing maps](#3-creating-and-importing-maps)
+     - [Multilevel maps](#multilevel-maps-buildings-with-several-floors)
   4. [Navigating the map](#4-navigating-the-map)
   5. [Player view (second screen)](#5-player-view-second-screen)
   6. [Fog of war](#6-fog-of-war)
@@ -48,6 +49,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
 - **Handouts**: paste images from the clipboard and show them on the player screen.
 - Organises maps in a **folder library** with thumbnails, search, drag & drop and auto-save.
+- **Multilevel maps**: several floors of a building (e.g. Dungeon Alchemist level exports) shown as one map, with quick up/down level switching.
 - Full **undo/redo**.
 
 Everything you need is copied into the app's own project storage on import, so original files (for example on a USB drive) are not needed afterwards.
@@ -134,18 +136,19 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - **Folders** group maps (campaign, cities, wilderness, ...). They can be nested, expanded and collapsed.
 - Each map is shown by **name only**, with a **thumbnail** (hover for a larger preview). Thumbnails show only the map images (never fog, lights or effects) at the current rotation.
 - The currently open map is highlighted, and its name is shown at the top.
-- **Toolbar:** New map, Import dd2vtt, Import folder, Save, Auto-save toggle (with interval), New folder, Refresh, Rotate left, Rotate right.
+- **Toolbar:** New map, Import dd2vtt, Import folder, Import multilevel map, Save, Auto-save toggle (with interval), New folder, Refresh, Rotate left, Rotate right.
 - **Search bar:** case-insensitive live filter on map and folder names. A matching map is shown with its parent folders, a matching folder with its content. `Esc` or the clear button restores the tree.
 - **Open a map:** double-click or press `Enter`. The current map is auto-saved first.
 - **Recent maps:** the list below the tree shows the maps you opened last (most recent first, size set by `ui.recentMaps.max`). Double-click one to open it again.
 - **Move:** drag & drop maps or folders onto a folder (or onto a map to use its folder). Hovering a collapsed folder while dragging expands it.
-- **Context menu on a map:** Open, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, New folder, Rename, Delete.
+- **Select several maps** with `Ctrl+click` / `Shift+click` (used to merge them into a multilevel map).
+- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map (or *Merge N maps into a multilevel map* when several maps are selected), Delete. **On a multilevel map:** Open, Manage levels, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
 - **Keyboard:** `F2` rename, `Delete` delete (always with confirmation; folders state how many maps they contain), `Enter` open.
 - **Duplicate** creates `Name (Copy)`, `Name (Copy 2)`, ...
 - **Rename** renames the package folder and file on disk. Names cannot be empty, contain `<>:"/\|?*`, be reserved Windows names, or duplicate a name in the same folder.
 - Leaving an unsaved new map asks **Save / Discard / Cancel**.
 
-On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `assets`, `imports` and `thumbnail.png` (hidden in the tree).
+On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `assets`, `imports` and `thumbnail.png` (hidden in the tree). A multilevel map is a package `<folder>/<Map Name>/<Map Name>.dmlevels` with one ordinary map package per level below `levels/` (also hidden in the tree).
 
 ### 3. Creating and importing maps
 
@@ -171,6 +174,35 @@ On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `asse
 3. Position and scale layers, then draw walls if you want line-of-sight lighting (see [Map building](#11-map-building)).
 4. Click **Save** and choose a folder and name in the location dialog.
 5. This tool has no capability of maintaining map object assets. It is meant to be used with map images created via some other tool. You will not be able to start with a blank canvas and create a full map in this tool.
+
+#### Multilevel maps (buildings with several floors)
+
+Dungeon Alchemist can export every floor of a multi-story building as its own dd2vtt file. A **multilevel map** keeps all those floors together: the library shows it as **one map** (with a layers badge; the tooltip shows the number of levels and a preview of the level opened last), and you switch floors while playing.
+
+**Create one**
+
+- **Import:** click **Import multilevel map** in the library toolbar (or right-click a folder → *Import multilevel map here*) and select all level files at once. The level dialog lists them **lowest level at the top**, sorted by file name and with suggested level names (e.g. `haus_00 … haus_03` → *Level 00 … Level 03*). Reorder, rename, remove or add levels, click **Next**, then pick the folder and name (pre-filled with the part all file names share).
+- **Merge existing maps:** select several maps in the library (`Ctrl+click`), right-click → *Merge N maps into a multilevel map…* (or *Make multilevel map…* on a single map). The maps are **moved** into the new multilevel map and no longer appear on their own; their fog, lights, effects and cameras are kept. File names do not have to match — set the order in the dialog.
+
+**Switch levels**
+
+- For multilevel maps with two or more levels, a small switcher appears at the top left of the map: **▼** one level down, a dropdown to jump to any level (lowest at the top), **▲** one level up, the position (`2 / 4`) and a pencil button to manage the levels.
+- `Page Up` / `Page Down` go one level up / down.
+- The open level is saved before switching; only the open level is kept in memory.
+- Saving remembers the open level; reopening the map returns to it. A map opened for the first time starts on the lowest level.
+
+**What is per level and what is shared**
+
+- **Per level:** fog of war, cameras (DM and player view position/zoom), image layers, walls, doors/windows, lights, effects and text boxes.
+- **Shared by all levels** (changing it on any level changes it for all): time of day, ambient brightness, weather, image layer lock, fog on/off, map rotation, player zoom offset, text layer visibility and the last used text settings.
+
+**Manage levels** (right-click the multilevel map → *Manage levels…*, or the pencil in the switcher)
+
+- **Insert** levels anywhere: new entries are added below the selected level, from dd2vtt files, from existing library maps (moved in) or as an empty level.
+- **Reorder** with the arrow buttons (`Alt+↑` / `Alt+↓`), **rename** a level (`F2` or double-click), **remove** a level (`Delete`). Removing levels asks for confirmation when you click **Apply**.
+- Removing the **last** level asks for confirmation and deletes the whole multilevel map.
+- If the open level is removed, the nearest remaining level is opened (preferring the level below).
+- Renaming, duplicating, moving and deleting the whole multilevel map work like for any other map in the library.
 
 ### 4. Navigating the map
 
@@ -359,6 +391,7 @@ Most values apply when the window regains focus after you saved the file; entrie
 | Middle mouse (hold) | Laser pointer |
 | `P` | Ping tool |
 | `Ctrl+S` | Save |
+| `Page Up` / `Page Down` | One level up / down (multilevel maps) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste text box (in the handout window: paste image) |
 | `Delete` / `Backspace` | Delete selected layer, light, text box or effect |

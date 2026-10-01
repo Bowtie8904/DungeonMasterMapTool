@@ -55,6 +55,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Handout upgrades: multiple pasted images shown together in an auto-fitted grid, per-image delete (3.27)
 - [x] Copy/paste of lights, effect shapes and text boxes (Ctrl+C / Ctrl+V), also across maps (3.28)
 - [x] Subtle ambient weather per map: rain, snow, mist, dust motes, embers (3.29)
+- [x] Multilevel maps: several levels (e.g. building floors from Dungeon Alchemist) shown as one map with a level switcher (3.32)
 
 ## 4) Core Functional Requirements
 
@@ -447,6 +448,28 @@ Desktop tool for tabletop dungeon masters that:
 - **Double-click** (or Enter) opens a map from the list, same flow as the tree (current map is auto-saved first). The open map is highlighted; the tooltip shows the full path.
 - A map is recorded whenever it becomes the open map (`MapBrowser.updateCurrentMap`). Persisted in the settings file as `ui.recentMaps` (paths separated by `|`); maps that no longer exist on disk are dropped. Logic lives in `RecentMaps` (unit tested).
 
+## 3.32 Multilevel Maps (implemented)
+
+Dungeon Alchemist can build multi-storey buildings and export every level as its own dd2vtt. A **multilevel map** groups such levels into one map of the library.
+
+- **Library:** a multilevel map is shown as **one map** in the map browser (layers badge on the thumbnail, tooltip "Multilevel map · N levels"). Open, rename, duplicate, move (drag & drop), delete and search work on the whole multilevel map like on any other map. The recent maps list records the multilevel map (not a single level).
+- **Storage (map package):** `<folder>/<Name>/<Name>.dmlevels` (manifest JSON) + `levels/<levelId>/level.dmmap` (+ `assets\...`, `thumbnail.png`) per level + `thumbnail.png` of the whole map. Each level is a normal `.dmmap` map package, so all map features work per level unchanged. Level folders are named by a stable random id, so reordering/renaming levels never moves files. A directory containing a `.dmlevels` file is always a multilevel map package (never a folder).
+- **Manifest** (`MultiLevelManifest`): `schemaVersion`, `levels` (ordered **lowest level first**: `id`, `name`, `folder`), `currentLevelId` (last opened level, `null` = never opened) and `shared` (map-wide settings).
+- **Level order:** index 0 is the lowest level. All lists (level dropdown, level dialog) show the **lowest level at the top**. "Up" = next higher level.
+- **Opening:** opens the level stored in `currentLevelId`; a multilevel map that was never opened starts on the lowest level. Saving (manual, auto-save, switching level/map, app exit) stores the current level and updates `currentLevelId`.
+- **Only one level is in memory** at a time (the open level, like a normal map). Switching level saves the current level (background thread, loading spinner "Loading <level>..."), then loads the other one; undo/redo history is cleared like on a map switch; the player view follows unless it is frozen (freeze keeps the old level on the player screen).
+- **Per level:** fog of war (mask), DM and player camera, lights, walls, doors/windows, effects, text boxes, grid, image layers. A level that was never opened starts with its cameras centred on the level.
+- **Shared by all levels** (`shared` in the manifest): time of day + ambient brightness per preset, weather (type + intensity), image layer lock, fog on/off, map rotation, player zoom, text layer visibility and last-used text settings. The open level holds the live values; on every save they are written to the manifest, and whenever a level is loaded they are applied to it (rotation: the level is rotated by the difference to the shared rotation). So changing any of them on one level applies to all levels. When a multilevel map is created, the shared settings are taken from the lowest level.
+- **Level switcher overlay:** small floating panel at the top-left of the DM canvas (separate from the tool panel), only shown while a multilevel map with **2 or more levels** is open: *Level down* button, dropdown with all level names (lowest first, the current one selected), *Level up* button, the position (`2 / 4`) and a *Manage levels* button. Down/up are disabled on the lowest/highest level. Shortcuts: `Page Down` = level down, `Page Up` = level up. The window title and the browser's "open map" label show `Map name — Level name` / `Map name · Level name`.
+- **Creating a multilevel map**
+  - *Import multilevel map* (map browser toolbar button and folder context menu "Import multilevel map here…"): pick several `.dd2vtt`/`.uvtt` files (multi-select). The **level dialog** opens with the files in natural name order (numbers compared numerically, e.g. `_2` before `_10`); level names are the file names minus the part all files share (underscores read as spaces), or "Level N" if nothing is left. The levels can be reordered, renamed, removed and more can be added. Then the location dialog asks for the name (pre-filled with the shared part of the file names) and folder. Import runs in the background with progress in the status bar; if any file fails, nothing is created. The new map is opened afterwards (the current map is saved / asks Save-Discard-Cancel first like a normal import).
+  - *Merge maps*: select several maps in the library tree (`Ctrl`/`Shift`+click) and choose "Merge N maps into a multilevel map…" in the context menu; a single selected map offers "Make multilevel map…" (it becomes a multilevel map with one level, more can be added). The level dialog shows the selected maps (natural name order), then the location dialog asks for name/folder (default: shared part of the names — with a suffix such as " (multilevel)" if that name is taken — and the folder of the first map). The original maps are **moved** into the multilevel map (they disappear as separate maps; fog, lights etc. are kept). Multilevel maps cannot be merged into another one. If the open map is merged, it is saved first and the new multilevel map is opened on that level. If a change fails, moved maps are put back and nothing is deleted (loose originals and removed levels are only deleted after the new manifest was saved).
+- **Level dialog** (`LevelListDialog`, used for creating and for *Manage levels*): list of levels (lowest at the top) with buttons *Move up* / *Move down*, *Rename* (also double-click / F2), *Remove*, and the insert actions *Add dd2vtt files…*, *Add library maps…* (picker with search over all ordinary maps of the library; multilevel maps are not offered) and *Add empty level*. New entries are inserted **directly below the selected entry** (or at the end if nothing is selected), so levels can be inserted at any position. Changes are applied on OK; removing existing levels asks for confirmation on OK (listing the levels to delete). Removing the **last** level asks for confirmation that the whole multilevel map will be deleted.
+- **Manage levels** (map context menu and the overlay button): opens the level dialog for an existing multilevel map. If it is the open map, the current level is saved first; if the current level was removed, the nearest remaining level is opened; if all levels were removed, the multilevel map is deleted and an empty new map is shown.
+- **Renaming:** the multilevel map is renamed from the library like any map (package folder + manifest file). Individual levels are renamed in the level dialog (names: same rules as map names; duplicates are allowed).
+- **Thumbnail:** the map browser thumbnail/tooltip shows the **last opened level** (the level's thumbnail is copied to the package `thumbnail.png` on every save), or the lowest level if the map was never opened.
+- Implementation: `dmmt.model.MultiLevelManifest`, `dmmt.service.MultiLevelService` (create/apply level plans, load/save level with shared settings, thumbnails, natural sort and default names; unit-tested), `MapLibraryService` (package detection, rename/copy/move of `.dmlevels` packages), `dmmt.ui.LevelListDialog`, `MapBrowser` (multi-selection, menus), level switcher in the application.
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -635,6 +658,12 @@ Desktop tool for tabletop dungeon masters that:
 4. Copy/paste of lights, effects and text across maps (3.28).
 5. Ambient weather (3.29), with unit tests for `WeatherEffects`.
 
+## Phase 9 - Multilevel Maps
+
+1. Multilevel map package format + `MultiLevelService` (create, apply level plan, shared settings, thumbnails) with unit tests (3.32).
+2. Library integration: package detection, rename/copy/move, multi-selection merge, import multilevel map.
+3. Level dialog (reorder, rename, insert anywhere, remove, delete-last confirmation) and level switcher overlay.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -653,7 +682,8 @@ Desktop tool for tabletop dungeon masters that:
 - **v3.1:** Tuning constants moved into the settings file, fog fade with separate reveal/hide times and easing, settings reference `docs/SETTINGS.md` (3.25).
 - **v3.0:** Per-map player zoom slider (3.3).
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
-- **v3.4 (current):** Pushing a `v*` tag builds Windows (app image zip), Linux and macOS (shaded jars; each jar bundles the JavaFX natives of the OS it was built on) and creates a GitHub release with those files attached. Default settings file removed from the Windows package.
+- **v3.5 (current):** Multilevel maps (3.32): import several dd2vtt levels or merge library maps into one map with per-level fog/cameras, shared map-wide settings and a level switcher overlay.
+- **v3.4:** Pushing a `v*` tag builds Windows (app image zip), Linux and macOS (shaded jars; each jar bundles the JavaFX natives of the OS it was built on) and creates a GitHub release with those files attached. Default settings file removed from the Windows package.
 - **v3.3:** GitHub Actions workflow (`.github/workflows/build.yml`): on push/PR to master it runs `mvn verify` (all tests) on `windows-latest` with JDK 17 and uploads the `DungeonMasterMapTool-windows` artifact: a zip of a jpackage app image (`DungeonMasterMapTool.exe` with a bundled trimmed Java runtime, no Java install needed; plus the README). README shows build/tech badges.
 - **v3.2:** Recent maps list below the map browser (3.31).
 - **v2.8:** Line effect tool and right-click show/hide menu with hidden badge for effect shapes (3.8).

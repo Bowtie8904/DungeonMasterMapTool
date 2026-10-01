@@ -4,6 +4,7 @@ import dmmt.lighting.LightingEngine;
 import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.model.MultiLevelManifest;
 import dmmt.render.CanvasMapRenderer;
 import dmmt.render.FrameProfiler;
 import dmmt.render.OverlayTextures;
@@ -15,6 +16,7 @@ import dmmt.service.Dd2vttImportService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
+import dmmt.service.MultiLevelService;
 import dmmt.service.RoomFillService;
 import dmmt.service.RecentMaps;
 import dmmt.service.ProjectService;
@@ -23,6 +25,7 @@ import dmmt.ui.CollapsibleSection;
 import dmmt.ui.Dialogs;
 import dmmt.ui.HandoutWindow;
 import dmmt.ui.Icons;
+import dmmt.ui.LevelListDialog;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
 import dmmt.render.TextBoxGeometry;
@@ -101,6 +104,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.Deque;
@@ -148,6 +152,16 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private DmProject project;
     private Path projectFile;
+    /** Manifest of the open multilevel map ({@code projectFile} is then the open level's file), else {@code null}. */
+    private Path multiLevelFile;
+    private MultiLevelManifest multiLevelManifest;
+    private String currentLevelId;
+    private HBox levelSwitcher;
+    private ComboBox<MultiLevelManifest.Level> levelSelector;
+    private Button levelDownButton;
+    private Button levelUpButton;
+    private Label levelPositionLabel;
+    private boolean syncingLevelSelector;
 
     private Canvas dmBaseCanvas;
     private final CanvasMapRenderer.BaseLayerState dmBaseState = new CanvasMapRenderer.BaseLayerState();
@@ -395,7 +409,10 @@ public class DungeonMasterMapToolApplication extends Application {
         imageUnlockBanner = createImageUnlockBanner();
         StackPane.setAlignment(imageUnlockBanner, Pos.TOP_CENTER);
         StackPane.setMargin(imageUnlockBanner, new Insets(58, 0, 0, 0));
-        center.getChildren().addAll(chip, imageUnlockBanner, controls);
+        levelSwitcher = createLevelSwitcher();
+        StackPane.setAlignment(levelSwitcher, Pos.TOP_LEFT);
+        StackPane.setMargin(levelSwitcher, new Insets(10));
+        center.getChildren().addAll(chip, imageUnlockBanner, levelSwitcher, controls);
         dmBaseCanvas.widthProperty().bind(center.widthProperty());
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
@@ -470,6 +487,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (laserToolActive && event.getCode() != KeyCode.ESCAPE && event.getCode() != KeyCode.P
                     && event.getCode() != KeyCode.L) {
+                return;
+            }
+            if ((event.getCode() == KeyCode.PAGE_UP || event.getCode() == KeyCode.PAGE_DOWN) && multiLevelFile != null) {
+                stepLevel(event.getCode() == KeyCode.PAGE_UP ? 1 : -1);
+                event.consume();
                 return;
             }
             if (event.isControlDown() && event.getCode() == KeyCode.C) {
@@ -1725,7 +1747,28 @@ public class DungeonMasterMapToolApplication extends Application {
 
             @Override
             public Path currentMapFile() {
-                return projectFile;
+                return openMapFile();
+            }
+
+            @Override
+            public String currentLevelName() {
+                MultiLevelManifest.Level level = currentLevel();
+                return level == null ? null : level.getName();
+            }
+
+            @Override
+            public void importMultiLevelMap(Path suggestedFolder) {
+                handleImportMultiLevel(suggestedFolder);
+            }
+
+            @Override
+            public void mergeIntoMultiLevelMap(List<MapLibraryService.Entry> maps) {
+                handleMergeIntoMultiLevel(maps);
+            }
+
+            @Override
+            public void manageLevels(Path manifestFile) {
+                handleManageLevels(manifestFile);
             }
 
             @Override
@@ -2796,7 +2839,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void openMapFromLibrary(Path file) {
-        if (projectFile != null && file.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize())) {
+        Path open = openMapFile();
+        if (open != null && file.toAbsolutePath().normalize().equals(open.toAbsolutePath().normalize())) {
             status("That map is already open.");
             return;
         }
@@ -2822,7 +2866,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void saveCurrentThen(Runnable next) {
-        Path target = projectFile;
+        SaveTarget target = currentSaveTarget();
         DmProject savedProject = project;
         DmProject snapshot;
         long version = historyVersion;
@@ -2833,7 +2877,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         runInBackground("Saving...", "Save failed: ", () -> {
-            projectService.save(target, snapshot);
+            saveTo(target, snapshot);
             return target;
         }, saved -> {
             if (project == savedProject) {
@@ -2841,11 +2885,40 @@ public class DungeonMasterMapToolApplication extends Application {
                 markSaved(snapshot, version);
             }
             mapBrowser.invalidateThumbnails();
-            status("Saved " + MapBrowser.displayName(saved) + ".");
+            status("Saved " + saved.displayName() + ".");
             if (next != null) {
                 next.run();
             }
         });
+    }
+
+    /** Where the open map is saved: a plain map file, or a level of a multilevel map. */
+    private record SaveTarget(Path file, Path manifest, String levelId) {
+        String displayName() {
+            return MapBrowser.displayName(manifest != null ? manifest : file);
+        }
+    }
+
+    private SaveTarget currentSaveTarget() {
+        return projectFile == null ? null : new SaveTarget(projectFile, multiLevelFile, currentLevelId);
+    }
+
+    /** Blocking save (background thread); a level also stores the shared settings of its multilevel map. */
+    private void saveTo(SaveTarget target, DmProject snapshot) throws IOException {
+        if (target.manifest() != null) {
+            mapLibrary.multiLevels().saveLevel(target.manifest(), target.levelId(), snapshot);
+        } else {
+            projectService.save(target.file(), snapshot);
+        }
+    }
+
+    /** The open map as the library knows it: the multilevel map's manifest, else the map file. */
+    private Path openMapFile() {
+        return multiLevelFile != null ? multiLevelFile : projectFile;
+    }
+
+    private MultiLevelManifest.Level currentLevel() {
+        return multiLevelManifest == null ? null : multiLevelManifest.findLevel(currentLevelId);
     }
 
     private String fingerprintOrNull(DmProject candidate) {
@@ -2924,7 +2997,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         lastAutoSaveNanos = System.nanoTime();
-        Path target = projectFile;
+        SaveTarget target = currentSaveTarget();
         DmProject savedProject = project;
         long version = historyVersion;
         DmProject snapshot;
@@ -2935,7 +3008,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         runInBackground("Auto-saving...", "Auto-save failed: ", () -> {
-            projectService.save(target, snapshot);
+            saveTo(target, snapshot);
             return target;
         }, saved -> {
             if (project == savedProject) {
@@ -2953,7 +3026,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         try {
-            projectService.save(projectFile, projectService.copy(project));
+            saveTo(currentSaveTarget(), projectService.copy(project));
         } catch (IOException | RuntimeException ex) {
             status("Auto-save failed: " + ex.getMessage());
         }
@@ -2996,7 +3069,8 @@ public class DungeonMasterMapToolApplication extends Application {
         });
     }
 
-    private record LibraryOutcome(MapLibraryService.Result result, Path openMapMovedTo, DmProject reloadedOpenMap) {
+    private record LibraryOutcome(MapLibraryService.Result result, Path openMapMovedTo, DmProject reloadedOpenMap,
+                                  Path manifestMovedTo) {
     }
 
     /**
@@ -3006,6 +3080,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private void runLibraryOperation(String busyMessage, Path affectedPath, MapBrowser.LibraryOperation operation,
                                      Consumer<MapLibraryService.Result> onDone) {
         Path openFile = projectFile == null ? null : projectFile.toAbsolutePath().normalize();
+        Path openManifest = multiLevelFile == null ? null : multiLevelFile.toAbsolutePath().normalize();
+        SaveTarget saveTarget = currentSaveTarget();
         boolean touchesOpenMap = openFile != null && affectedPath != null
                 && openFile.startsWith(affectedPath.toAbsolutePath().normalize());
         DmProject savedProject = project;
@@ -3022,12 +3098,13 @@ public class DungeonMasterMapToolApplication extends Application {
         DmProject toSave = snapshot;
         runInBackground(busyMessage, "Library operation failed: ", () -> {
             if (toSave != null) {
-                projectService.save(openFile, toSave);
+                saveTo(saveTarget, toSave);
             }
             MapLibraryService.Result result = operation.run();
             Path movedTo = touchesOpenMap ? movedLocation(result, openFile) : null;
             DmProject reloaded = movedTo != null ? projectService.load(movedTo) : null;
-            return new LibraryOutcome(result, movedTo, reloaded);
+            Path manifestMovedTo = touchesOpenMap && openManifest != null ? movedLocation(result, openManifest) : null;
+            return new LibraryOutcome(result, movedTo, reloaded, manifestMovedTo);
         }, outcome -> {
             if (touchesOpenMap && project == savedProject) {
                 if (toSave != null) {
@@ -3035,6 +3112,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 if (outcome.openMapMovedTo() != null) {
                     projectFile = outcome.openMapMovedTo();
+                    if (outcome.manifestMovedTo() != null) {
+                        multiLevelFile = outcome.manifestMovedTo();
+                    }
                     adoptCopiedAssetPaths(outcome.reloadedOpenMap());
                 } else if (!Files.exists(openFile)) {
                     switchProject(freshProject(), null);
@@ -3070,8 +3150,16 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void updateWindowTitle() {
         if (primaryStage != null) {
-            primaryStage.setTitle("Dungeon Master Map Tool — "
-                    + (projectFile == null ? "Unsaved new map" : MapBrowser.displayName(projectFile)));
+            String name;
+            if (projectFile == null) {
+                name = "Unsaved new map";
+            } else if (multiLevelFile != null) {
+                MultiLevelManifest.Level level = currentLevel();
+                name = MapBrowser.displayName(multiLevelFile) + (level == null ? "" : " — " + level.getName());
+            } else {
+                name = MapBrowser.displayName(projectFile);
+            }
+            primaryStage.setTitle("Dungeon Master Map Tool — " + name);
         }
     }
 
@@ -3091,7 +3179,17 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private record LoadedProject(DmProject project, Path file) {
+    private record LoadedProject(DmProject project, Path file, LevelContext level) {
+        LoadedProject(DmProject project, Path file) {
+            this(project, file, null);
+        }
+    }
+
+    /** The multilevel map a loaded level belongs to. */
+    private record LevelContext(Path manifestFile, MultiLevelManifest manifest, String levelId) {
+        static LevelContext of(Path manifestFile, MultiLevelService.LoadedLevel loaded) {
+            return new LevelContext(manifestFile.toAbsolutePath().normalize(), loaded.manifest(), loaded.level().getId());
+        }
     }
 
     private interface IoWork<T> {
@@ -3737,10 +3835,18 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- Project switching & control sync ----
 
     private void switchProject(DmProject next, Path file) {
+        switchProject(next, file, null);
+    }
+
+    private void switchProject(DmProject next, Path file, LevelContext level) {
         commitTextEdit();
         project = next;
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
+        multiLevelFile = level == null ? null : level.manifestFile();
+        multiLevelManifest = level == null ? null : level.manifest();
+        currentLevelId = level == null ? null : level.levelId();
+        updateLevelSwitcher();
         new FogService().ensureMask(project);
         centerUnsetCameras(project);
         lightingEngine.reset();
@@ -4038,11 +4144,27 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- Map switching ----
 
     private void switchToMap(Path file) {
-        if (projectFile != null && file.toAbsolutePath().normalize().equals(projectFile.toAbsolutePath().normalize())) {
+        switchToMap(file, null);
+    }
+
+    /**
+     * Saves the open map and opens {@code file}. For a multilevel map {@code levelId} picks the level ({@code null}:
+     * the level opened last, else the lowest one).
+     */
+    private void switchToMap(Path file, String levelId) {
+        Path target = file.toAbsolutePath().normalize();
+        boolean multiLevel = MultiLevelService.isMultiLevelFile(target);
+        if (multiLevel) {
+            if (multiLevelFile != null && target.equals(multiLevelFile.toAbsolutePath().normalize())
+                    && (levelId == null || levelId.equals(currentLevelId))) {
+                status("That level is already open.");
+                return;
+            }
+        } else if (projectFile != null && target.equals(projectFile.toAbsolutePath().normalize())) {
             status("That map is already open.");
             return;
         }
-        Path current = projectFile;
+        SaveTarget current = currentSaveTarget();
         DmProject snapshot;
         try {
             snapshot = current == null ? null : projectService.copy(project);
@@ -4052,23 +4174,377 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (ioBusy) {
             status("Still working on the previous file operation.");
+            updateLevelSwitcher();
             return;
         }
-        setMapLoading(true, "Loading " + MapBrowser.displayName(file) + "...");
-        runInBackground("Loading map...", "Could not switch map: ", () -> {
+        boolean sameMultiLevel = multiLevel && multiLevelFile != null
+                && target.equals(multiLevelFile.toAbsolutePath().normalize());
+        MultiLevelManifest.Level wanted = sameMultiLevel ? multiLevelManifest.findLevel(levelId) : null;
+        String loadingName = wanted != null ? wanted.getName() : MapBrowser.displayName(file);
+        setMapLoading(true, "Loading " + loadingName + "...");
+        runInBackground(sameMultiLevel ? "Switching level..." : "Loading map...", "Could not switch map: ", () -> {
             if (snapshot != null) {
-                projectService.save(current, snapshot);
+                saveTo(current, snapshot);
+            }
+            if (multiLevel) {
+                MultiLevelService.LoadedLevel loaded = mapLibrary.multiLevels().loadLevel(target, levelId);
+                return new LoadedProject(loaded.project(), loaded.levelFile(), LevelContext.of(target, loaded));
             }
             return new LoadedProject(projectService.load(file), file);
         }, loaded -> {
             try {
-                switchProject(loaded.project(), loaded.file());
-                status("Switched to " + MapBrowser.displayName(file)
-                        + (frozenPlayerProject != null ? ". Player view is still frozen on the previous map." : "."));
+                switchProject(loaded.project(), loaded.file(), loaded.level());
+                String frozenNote = frozenPlayerProject != null
+                        ? ". Player view is still frozen on the previous " + (sameMultiLevel ? "level." : "map.") : ".";
+                if (sameMultiLevel) {
+                    MultiLevelManifest.Level level = currentLevel();
+                    status("Switched to " + (level == null ? "level" : level.getName()) + frozenNote);
+                } else {
+                    status("Switched to " + MapBrowser.displayName(file) + frozenNote);
+                }
+                if (multiLevel) {
+                    mapBrowser.invalidateThumbnails();
+                }
             } finally {
                 setMapLoading(false, null);
             }
-        }, ex -> setMapLoading(false, null));
+        }, ex -> {
+            setMapLoading(false, null);
+            updateLevelSwitcher();
+        });
+    }
+
+    // ---- Multilevel maps ----
+
+    private HBox createLevelSwitcher() {
+        FontIcon icon = Icons.icon(MaterialDesignL.LAYERS_TRIPLE_OUTLINE);
+        icon.getStyleClass().add("level-switcher-icon");
+        levelDownButton = Icons.button(MaterialDesignA.ARROW_DOWN_BOLD, "One level down (Page Down)", () -> stepLevel(-1));
+        levelUpButton = Icons.button(MaterialDesignA.ARROW_UP_BOLD, "One level up (Page Up)", () -> stepLevel(1));
+        levelSelector = new ComboBox<>();
+        levelSelector.getStyleClass().add("level-selector");
+        levelSelector.setPrefWidth(190);
+        levelSelector.setVisibleRowCount(12);
+        Icons.tooltip(levelSelector, "Go to a level (lowest level at the top)");
+        levelSelector.setCellFactory(view -> new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(MultiLevelManifest.Level item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getName());
+            }
+        });
+        levelSelector.setButtonCell(new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(MultiLevelManifest.Level item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getName());
+            }
+        });
+        levelSelector.setOnAction(event -> {
+            MultiLevelManifest.Level level = levelSelector.getValue();
+            if (!syncingLevelSelector && level != null && !level.getId().equals(currentLevelId)) {
+                switchLevel(level.getId());
+            }
+        });
+        levelPositionLabel = new Label();
+        levelPositionLabel.getStyleClass().add("level-position");
+        Button manage = Icons.button(MaterialDesignP.PENCIL_OUTLINE, "Manage levels: add, remove, rename, reorder",
+                () -> {
+                    if (multiLevelFile != null) {
+                        handleManageLevels(multiLevelFile);
+                    }
+                });
+        HBox box = new HBox(6, icon, levelDownButton, levelSelector, levelUpButton, levelPositionLabel, manage);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.getStyleClass().add("level-switcher");
+        box.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        box.setVisible(false);
+        return box;
+    }
+
+    /** Shows the level switcher for multilevel maps with at least two levels and syncs it with the open level. */
+    private void updateLevelSwitcher() {
+        if (levelSwitcher == null) {
+            return;
+        }
+        List<MultiLevelManifest.Level> levels = multiLevelManifest == null ? List.of() : multiLevelManifest.getLevels();
+        levelSwitcher.setVisible(multiLevelFile != null && levels.size() >= 2);
+        int index = multiLevelManifest == null ? -1 : multiLevelManifest.indexOf(currentLevelId);
+        syncingLevelSelector = true;
+        try {
+            levelSelector.getItems().setAll(levels);
+            levelSelector.getSelectionModel().select(index);
+        } finally {
+            syncingLevelSelector = false;
+        }
+        levelDownButton.setDisable(index <= 0);
+        levelUpButton.setDisable(index < 0 || index >= levels.size() - 1);
+        levelPositionLabel.setText(index < 0 ? "" : (index + 1) + " / " + levels.size());
+    }
+
+    /** {@code +1} goes one level up, {@code -1} one level down. */
+    private void stepLevel(int delta) {
+        if (multiLevelManifest == null) {
+            return;
+        }
+        List<MultiLevelManifest.Level> levels = multiLevelManifest.getLevels();
+        int index = multiLevelManifest.indexOf(currentLevelId) + delta;
+        if (index < 0 || index >= levels.size()) {
+            status(delta > 0 ? "This is the highest level." : "This is the lowest level.");
+            return;
+        }
+        switchLevel(levels.get(index).getId());
+    }
+
+    private void switchLevel(String levelId) {
+        if (multiLevelFile == null) {
+            return;
+        }
+        commitTextEdit();
+        switchToMap(multiLevelFile, levelId);
+    }
+
+    private List<Path> pickDd2vttFiles(javafx.stage.Window owner) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Select the levels (DD2VTT)");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Universal VTT", "*.dd2vtt", "*.uvtt"));
+        applyInitialImportDirectory(chooser);
+        List<File> selected = chooser.showOpenMultipleDialog(owner);
+        if (selected == null || selected.isEmpty()) {
+            return List.of();
+        }
+        rememberImportDirectory(selected.get(0).toPath().getParent());
+        return selected.stream().map(File::toPath).toList();
+    }
+
+    private void handleImportMultiLevel(Path suggestedFolder) {
+        List<Path> files = new ArrayList<>(pickDd2vttFiles(primaryStage));
+        if (files.isEmpty()) {
+            return;
+        }
+        files.sort((a, b) -> MultiLevelService.NATURAL_ORDER.compare(LevelListDialog.stem(a), LevelListDialog.stem(b)));
+        List<String> stems = files.stream().map(LevelListDialog::stem).toList();
+        List<String> names = MultiLevelService.defaultLevelNames(stems);
+        List<LevelListDialog.Row> rows = new ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            rows.add(new LevelListDialog.Row(new MultiLevelService.Dd2vtt(files.get(i)), names.get(i),
+                    "Import " + files.get(i).getFileName()));
+        }
+        Optional<List<MultiLevelService.PlanItem>> plan = LevelListDialog.show(primaryStage, mapLibrary,
+                "Import multilevel map", "Order the levels — the lowest level is at the top",
+                MaterialDesignL.LAYERS_PLUS, "Next", rows, false, this::pickDd2vttFiles);
+        if (plan.isEmpty() || plan.get().isEmpty()) {
+            return;
+        }
+        Path folder = suggestedFolder != null ? suggestedFolder : mapLibrary.getRoot();
+        Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary,
+                "Import multilevel map", MaterialDesignL.LAYERS_PLUS, "Import",
+                unusedMapName(folder, MultiLevelService.commonName(stems)), suggestedFolder);
+        if (selection.isEmpty()) {
+            return;
+        }
+        MapLocationDialog.Selection target = selection.get();
+        leaveCurrentMap(() -> runLevelPlan(null, target.folder(), target.name(), plan.get(), true));
+    }
+
+    private void handleMergeIntoMultiLevel(List<MapLibraryService.Entry> maps) {
+        if (maps.isEmpty()) {
+            return;
+        }
+        List<MapLibraryService.Entry> sorted = new ArrayList<>(maps);
+        sorted.sort((a, b) -> MultiLevelService.NATURAL_ORDER.compare(a.name(), b.name()));
+        List<String> mapNames = sorted.stream().map(MapLibraryService.Entry::name).toList();
+        List<String> names = MultiLevelService.defaultLevelNames(mapNames);
+        List<LevelListDialog.Row> rows = new ArrayList<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            rows.add(LevelListDialog.libraryRow(mapLibrary, sorted.get(i), names.get(i)));
+        }
+        Optional<List<MultiLevelService.PlanItem>> plan = LevelListDialog.show(primaryStage, mapLibrary,
+                "Create multilevel map", "Order the levels — the lowest level is at the top.\n"
+                        + "The maps are moved into the new multilevel map.",
+                MaterialDesignL.LAYERS_PLUS, "Next", rows, false, this::pickDd2vttFiles);
+        if (plan.isEmpty() || plan.get().isEmpty()) {
+            return;
+        }
+        Path folder = sorted.get(0).containingFolder();
+        Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary,
+                "Create multilevel map", MaterialDesignL.LAYERS_PLUS, "Create",
+                unusedMapName(folder, MultiLevelService.commonName(mapNames)), folder);
+        if (selection.isEmpty()) {
+            return;
+        }
+        runLevelPlan(null, selection.get().folder(), selection.get().name(), plan.get(), false);
+    }
+
+    private void handleManageLevels(Path manifestFile) {
+        MultiLevelManifest manifest;
+        try {
+            manifest = mapLibrary.multiLevels().loadManifest(manifestFile);
+        } catch (IOException | RuntimeException ex) {
+            Dialogs.error(primaryStage, "Could not read the multilevel map", ex.getMessage());
+            return;
+        }
+        boolean open = multiLevelFile != null
+                && multiLevelFile.toAbsolutePath().normalize().equals(manifestFile.toAbsolutePath().normalize());
+        List<LevelListDialog.Row> rows = new ArrayList<>();
+        for (MultiLevelManifest.Level level : manifest.getLevels()) {
+            String detail = open && level.getId().equals(currentLevelId) ? "Open level" : null;
+            rows.add(new LevelListDialog.Row(new MultiLevelService.Existing(level.getId()), level.getName(), detail));
+        }
+        Optional<List<MultiLevelService.PlanItem>> plan = LevelListDialog.show(primaryStage, mapLibrary,
+                "Manage levels", MapBrowser.displayName(manifestFile) + " — the lowest level is at the top",
+                MaterialDesignL.LAYERS_TRIPLE_OUTLINE, "Apply", rows, true, this::pickDd2vttFiles);
+        if (plan.isEmpty()) {
+            return;
+        }
+        runLevelPlan(manifestFile, null, null, plan.get(), false);
+    }
+
+    /** {@code name}, or a variation of it that is still free in {@code folder}. */
+    private String unusedMapName(Path folder, String name) {
+        List<String> candidates = new ArrayList<>(List.of(name, name + " (multilevel)"));
+        for (int i = 2; i < 100; i++) {
+            candidates.add(name + " " + i);
+        }
+        for (String candidate : candidates) {
+            try {
+                mapLibrary.newMapFile(folder, candidate);
+                return candidate;
+            } catch (IOException ex) {
+                // taken or invalid: try the next one
+            }
+        }
+        return name;
+    }
+
+    private record LevelPlanOutcome(MultiLevelService.ApplyResult result, LoadedProject loaded,
+                                    MultiLevelManifest manifest) {
+    }
+
+    /**
+     * Creates a multilevel map ({@code manifestFile == null}) or changes its levels in the background. If the open map
+     * is involved it is saved first and afterwards re-targeted: the open level stays open (undo history kept), a
+     * removed open level is replaced by the nearest remaining one, an open map merged into the multilevel map
+     * continues as its level, and a deleted multilevel map leaves an empty map.
+     */
+    private void runLevelPlan(Path manifestFile, Path folder, String name, List<MultiLevelService.PlanItem> plan,
+                              boolean openResult) {
+        if (ioBusy) {
+            status("Still working on the previous file operation.");
+            return;
+        }
+        Path manifest = manifestFile == null ? null : manifestFile.toAbsolutePath().normalize();
+        Path openFile = projectFile == null ? null : projectFile.toAbsolutePath().normalize();
+        boolean openIsThisMap = manifest != null && multiLevelFile != null
+                && manifest.equals(multiLevelFile.toAbsolutePath().normalize());
+        boolean openIsMergedIn = multiLevelFile == null && openFile != null && plan.stream()
+                .anyMatch(item -> item.source() instanceof MultiLevelService.LibraryMap map
+                        && map.mapFile().toAbsolutePath().normalize().equals(openFile));
+        SaveTarget saveTarget = currentSaveTarget();
+        String openLevelId = currentLevelId;
+        DmProject savedProject = project;
+        long version = historyVersion;
+        DmProject snapshot = null;
+        if (openIsThisMap || openIsMergedIn) {
+            try {
+                snapshot = projectService.copy(project);
+            } catch (IOException ex) {
+                status("Could not save the open map: " + ex.getMessage());
+                return;
+            }
+        }
+        DmProject toSave = snapshot;
+        boolean creating = manifest == null;
+        String busy = creating ? "Creating multilevel map..." : "Updating levels...";
+        // The open map may be replaced afterwards, so it must not be edited while the change runs.
+        boolean blockEditing = (creating && openResult) || openIsThisMap || openIsMergedIn;
+        if (blockEditing) {
+            setMapLoading(true, creating ? "Creating multilevel map..." : "Updating levels...");
+        }
+        runInBackground(busy, creating ? "Could not create the multilevel map: " : "Could not change the levels: ", () -> {
+            if (toSave != null) {
+                saveTo(saveTarget, toSave);
+            }
+            MultiLevelService levels = mapLibrary.multiLevels();
+            MultiLevelService.Progress progress = (index, total, levelName) -> Platform.runLater(
+                    () -> status((creating ? "Creating" : "Updating") + " level " + index + "/" + total + ": " + levelName + "..."));
+            MultiLevelService.ApplyResult result = creating
+                    ? levels.create(folder, name, plan, progress)
+                    : levels.apply(manifest, plan, progress);
+            Path resultFile = result.manifestFile();
+            if (resultFile == null) {
+                return new LevelPlanOutcome(result, null, null);
+            }
+            String loadId = null;
+            boolean load = false;
+            if (openIsThisMap && result.removedLevelIds().contains(openLevelId)) {
+                load = true;
+            } else if (openIsMergedIn) {
+                Path levelFile = movedLocation(new MapLibraryService.Result(result.movedMaps(), null), openFile);
+                MultiLevelManifest current = levels.loadManifest(resultFile);
+                for (MultiLevelManifest.Level level : current.getLevels()) {
+                    if (levelFile != null && MultiLevelService.levelFile(resultFile, level).equals(levelFile.toAbsolutePath().normalize())) {
+                        loadId = level.getId();
+                    }
+                }
+                load = true;
+            } else if (openResult) {
+                load = true;
+            }
+            if (load) {
+                MultiLevelService.LoadedLevel loaded = levels.loadLevel(resultFile, loadId);
+                return new LevelPlanOutcome(result, new LoadedProject(loaded.project(), loaded.levelFile(),
+                        LevelContext.of(resultFile, loaded)), loaded.manifest());
+            }
+            return new LevelPlanOutcome(result, null, levels.loadManifest(resultFile));
+        }, outcome -> {
+            try {
+                Path resultFile = outcome.result().manifestFile();
+                if (toSave != null && project == savedProject) {
+                    markSaved(toSave, version);
+                }
+                if (outcome.loaded() != null) {
+                    switchProject(outcome.loaded().project(), outcome.loaded().file(), outcome.loaded().level());
+                } else if (openIsThisMap && project == savedProject) {
+                    if (resultFile == null) {
+                        switchProject(freshProject(), null);
+                    } else {
+                        multiLevelManifest = outcome.manifest();
+                        updateLevelSwitcher();
+                        updateWindowTitle();
+                        mapBrowser.updateCurrentMap();
+                    }
+                }
+                if (frozenPlayerProjectFile != null) {
+                    Path frozenMoved = movedLocation(new MapLibraryService.Result(outcome.result().movedMaps(), null),
+                            frozenPlayerProjectFile.toAbsolutePath().normalize());
+                    if (frozenMoved != null) {
+                        frozenPlayerProjectFile = frozenMoved;
+                    }
+                }
+                mapBrowser.refresh();
+                mapBrowser.invalidateThumbnails();
+                if (resultFile != null) {
+                    mapBrowser.select(resultFile);
+                }
+                if (resultFile == null) {
+                    status("Deleted the multilevel map " + MapBrowser.displayName(manifest) + ".");
+                } else if (creating) {
+                    int count = outcome.manifest() == null ? plan.size() : outcome.manifest().getLevels().size();
+                    status("Created the multilevel map " + MapBrowser.displayName(resultFile) + " with " + count
+                            + (count == 1 ? " level." : " levels."));
+                } else {
+                    status("Updated the levels of " + MapBrowser.displayName(resultFile) + ".");
+                }
+            } finally {
+                setMapLoading(false, null);
+            }
+        }, ex -> {
+            setMapLoading(false, null);
+            Dialogs.error(primaryStage, creating ? "Could not create the multilevel map" : "Could not change the levels",
+                    ex.getMessage());
+            mapBrowser.refresh();
+        });
     }
 
     /** Shows or hides a spinner over the DM canvas while a map is being switched. */

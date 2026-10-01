@@ -38,6 +38,7 @@ public class MapLibraryService {
 
     private final Path root;
     private final ProjectService projectService;
+    private MultiLevelService multiLevels;
 
     public enum Kind { FOLDER, MAP }
 
@@ -52,6 +53,11 @@ public class MapLibraryService {
 
         public boolean isMap() {
             return kind == Kind.MAP;
+        }
+
+        /** A multilevel map ({@code .dmlevels} package). */
+        public boolean isMultiLevel() {
+            return kind == Kind.MAP && MultiLevelService.isMultiLevelFile(mapFile);
         }
 
         /** The folder this entry lives in (for the library root: the root itself). */
@@ -80,7 +86,17 @@ public class MapLibraryService {
         return root;
     }
 
+    public synchronized MultiLevelService multiLevels() {
+        if (multiLevels == null) {
+            multiLevels = new MultiLevelService(this, projectService, new Dd2vttImportService());
+        }
+        return multiLevels;
+    }
+
     public byte[] loadOrCreateThumbnail(Path mapFile) throws IOException {
+        if (MultiLevelService.isMultiLevelFile(mapFile)) {
+            return multiLevels().loadOrCreateThumbnail(mapFile);
+        }
         return projectService.loadOrCreateThumbnail(mapFile);
     }
 
@@ -115,7 +131,8 @@ public class MapLibraryService {
                     if (hasLooseMaps && ASSET_FOLDERS.contains(fileName.toLowerCase(Locale.ROOT))) {
                         continue;
                     }
-                    Path packagedMap = findPackagedMap(child);
+                    Path multiLevel = MultiLevelService.findManifest(child);
+                    Path packagedMap = multiLevel != null ? multiLevel : findPackagedMap(child);
                     if (packagedMap != null) {
                         maps.add(new Entry(Kind.MAP, fileName, child, packagedMap, List.of()));
                     } else {
@@ -160,7 +177,7 @@ public class MapLibraryService {
         }
         for (Path sub : subdirectories) {
             try (Stream<Path> walk = Files.walk(sub, 4)) {
-                if (walk.anyMatch(MapLibraryService::isMapFile)) {
+                if (walk.anyMatch(path -> isMapFile(path) || MultiLevelService.isMultiLevelFile(path))) {
                     return null;
                 }
             }
@@ -234,6 +251,18 @@ public class MapLibraryService {
         return folder.resolve(clean).resolve(clean + EXTENSION);
     }
 
+    /** Where a new multilevel map named {@code name} inside {@code folder} is saved. Fails if the name is taken. */
+    public Path newMultiLevelFile(Path folder, String name) throws IOException {
+        Path mapFile = newMapFile(folder, name);
+        String clean = mapFile.getParent().getFileName().toString();
+        return mapFile.getParent().resolve(clean + MultiLevelService.EXTENSION);
+    }
+
+    /** {@code .dmmap} or {@code .dmlevels}, depending on the kind of map. */
+    private static String extensionOf(Path mapFile) {
+        return MultiLevelService.isMultiLevelFile(mapFile) ? MultiLevelService.EXTENSION : EXTENSION;
+    }
+
     // ---- Operations ----
 
     public Path createFolder(Path parent, String name) throws IOException {
@@ -288,9 +317,11 @@ public class MapLibraryService {
         moveAllowingCaseChange(entry.path(), destination);
         if (entry.isMap()) {
             Path oldFileInNewDir = destination.resolve(entry.mapFile().getFileName());
-            Path renamedFile = destination.resolve(clean + EXTENSION);
+            Path renamedFile = destination.resolve(clean + extensionOf(entry.mapFile()));
             moveAllowingCaseChange(oldFileInNewDir, renamedFile);
-            moved = Map.of(entry.mapFile(), renamedFile);
+            Map<Path, Path> renamed = new LinkedHashMap<>(moved);
+            renamed.put(entry.mapFile(), renamedFile);
+            moved = renamed;
         }
         return Result.moved(moved);
     }
@@ -308,7 +339,7 @@ public class MapLibraryService {
         Path destination = folder.resolve(copyName);
         copyRecursive(entry.path(), destination);
         Path copiedFile = destination.resolve(entry.mapFile().getFileName());
-        Path renamedFile = destination.resolve(copyName + EXTENSION);
+        Path renamedFile = destination.resolve(copyName + extensionOf(entry.mapFile()));
         Files.move(copiedFile, renamedFile);
         return new Result(Map.of(), renamedFile);
     }
@@ -366,12 +397,13 @@ public class MapLibraryService {
 
     private Map<Path, Path> mapFilesUnder(Entry entry, Path from, Path to) throws IOException {
         Map<Path, Path> moved = new LinkedHashMap<>();
-        if (entry.isMap()) {
+        if (entry.isMap() && !entry.isMultiLevel()) {
             moved.put(entry.mapFile(), to.resolve(from.relativize(entry.mapFile())));
             return moved;
         }
+        // Folders and multilevel maps: every map file below (incl. the levels) moves along.
         try (Stream<Path> walk = Files.walk(from)) {
-            walk.filter(MapLibraryService::isMapFile)
+            walk.filter(path -> isMapFile(path) || MultiLevelService.isMultiLevelFile(path) && Files.isRegularFile(path))
                     .forEach(file -> moved.put(file, to.resolve(from.relativize(file))));
         }
         return moved;

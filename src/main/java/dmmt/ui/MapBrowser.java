@@ -3,6 +3,7 @@ package dmmt.ui;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import dmmt.service.MapTreeFilter;
+import dmmt.service.MultiLevelService;
 import dmmt.service.RecentMaps;
 import dmmt.service.ThumbnailService;
 import dmmt.service.Tuning;
@@ -15,6 +16,7 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
@@ -41,6 +43,7 @@ import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 
@@ -78,7 +81,22 @@ public class MapBrowser extends VBox {
 
         void openMap(Path mapFile);
 
+        /** The open map: the {@code .dmmap} file, or the {@code .dmlevels} manifest of an open multilevel map. */
         Path currentMapFile();
+
+        /** Name of the open level of a multilevel map, {@code null} for ordinary maps. */
+        default String currentLevelName() {
+            return null;
+        }
+
+        /** Imports several dd2vtt files as the levels of one multilevel map. */
+        void importMultiLevelMap(Path suggestedFolder);
+
+        /** Merges library maps into a new multilevel map (the maps are moved into it). */
+        void mergeIntoMultiLevelMap(java.util.List<Entry> maps);
+
+        /** Opens the level dialog of a multilevel map. */
+        void manageLevels(Path manifestFile);
 
         /**
          * Runs a library operation in the background. The host saves the open map first if it lives under
@@ -93,8 +111,8 @@ public class MapBrowser extends VBox {
         MapLibraryService.Result run() throws IOException;
     }
 
-    /** A loaded thumbnail (or {@code null} image if the map has none) and the file stamp it was loaded for. */
-    private record Thumbnail(Image image, long stamp) {
+    /** A loaded thumbnail (or {@code null} image if the map has none), the file stamp it was loaded for and, for multilevel maps, the number of levels. */
+    private record Thumbnail(Image image, long stamp, int levels) {
     }
 
     private static final double THUMB_WIDTH = 48;
@@ -151,6 +169,9 @@ public class MapBrowser extends VBox {
                         () -> host.importMap(selectedFolder())),
                 Icons.button(MaterialDesignF.FOLDER_DOWNLOAD_OUTLINE, "Import all maps from a folder",
                         () -> host.importMapFolder(selectedFolder())),
+                Icons.button(MaterialDesignL.LAYERS_PLUS,
+                        "Import a multilevel map: several .dd2vtt levels (e.g. building floors) as one map",
+                        () -> host.importMultiLevelMap(selectedFolder())),
                 Icons.button(MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save the open map (Ctrl+S)", host::saveMap));
         actions.getStyleClass().add("toolbar-row");
         this.actions = actions;
@@ -171,6 +192,7 @@ public class MapBrowser extends VBox {
         currentCard.setStyle("-fx-alignment: center-left;");
 
         tree.setShowRoot(true);
+        tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         tree.setCellFactory(view -> new LibraryCell());
         VBox.setVgrow(tree, Priority.ALWAYS);
         tree.setOnKeyPressed(event -> {
@@ -191,7 +213,7 @@ public class MapBrowser extends VBox {
             }
         });
 
-        Label hint = new Label("Double-click to open · drag to move · right-click for more");
+        Label hint = new Label("Double-click to open · drag to move · Ctrl+click to select several · right-click for more");
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
 
@@ -315,6 +337,7 @@ public class MapBrowser extends VBox {
         for (TreeItem<Entry> parent = item.getParent(); parent != null; parent = parent.getParent()) {
             parent.setExpanded(true);
         }
+        tree.getSelectionModel().clearSelection();
         tree.getSelectionModel().select(item);
         int row = tree.getRow(item);
         if (row >= 0) {
@@ -329,7 +352,8 @@ public class MapBrowser extends VBox {
             currentMapName.setText("Unsaved new map");
             currentMapName.getStyleClass().add("unsaved");
         } else {
-            currentMapName.setText(displayName(current));
+            String level = host.currentLevelName();
+            currentMapName.setText(displayName(current) + (level == null ? "" : " · " + level));
             recentMaps.record(current);
         }
         updateRecentList();
@@ -383,6 +407,11 @@ public class MapBrowser extends VBox {
     private static long stamp(Path mapFile) {
         try {
             Path file = ThumbnailService.thumbnailFile(mapFile);
+            if (MultiLevelService.isMultiLevelFile(mapFile)) {
+                // Level names/order live in the manifest, the picture in the thumbnail: either may change.
+                long manifest = Files.getLastModifiedTime(mapFile).toMillis();
+                return Files.isRegularFile(file) ? Math.max(manifest, Files.getLastModifiedTime(file).toMillis()) : manifest;
+            }
             if (ThumbnailService.isPackage(mapFile) && Files.isRegularFile(file)) {
                 return Files.getLastModifiedTime(file).toMillis();
             }
@@ -390,6 +419,12 @@ public class MapBrowser extends VBox {
         } catch (IOException exception) {
             return -1;
         }
+    }
+
+    /** Number of levels of a multilevel map (once its thumbnail was loaded), else 0. */
+    private int levelCount(Path mapFile) {
+        Thumbnail cached = thumbnails.get(mapFile.toAbsolutePath().normalize());
+        return cached == null ? 0 : cached.levels();
     }
 
     /** The cached thumbnail, or {@code null} while it is loading (a background load is started) or missing. */
@@ -402,6 +437,7 @@ public class MapBrowser extends VBox {
         if (loadingThumbnails.add(key)) {
             thumbnailLoader.execute(() -> {
                 Image image = null;
+                int levels = 0;
                 try {
                     byte[] png = library.loadOrCreateThumbnail(key);
                     if (png != null) {
@@ -410,11 +446,19 @@ public class MapBrowser extends VBox {
                 } catch (IOException | RuntimeException ignored) {
                     // No thumbnail: the placeholder stays.
                 }
+                if (MultiLevelService.isMultiLevelFile(key)) {
+                    try {
+                        levels = library.multiLevels().loadManifest(key).getLevels().size();
+                    } catch (IOException | RuntimeException ignored) {
+                        // the tooltip just has no level count
+                    }
+                }
                 Image loaded = image;
+                int levelCount = levels;
                 long stamp = stamp(key);
                 Platform.runLater(() -> {
                     loadingThumbnails.remove(key);
-                    thumbnails.put(key, new Thumbnail(loaded, stamp));
+                    thumbnails.put(key, new Thumbnail(loaded, stamp, levelCount));
                     tree.refresh();
                     recentList.refresh();
                 });
@@ -456,6 +500,17 @@ public class MapBrowser extends VBox {
     private Path selectedPath() {
         TreeItem<Entry> item = tree.getSelectionModel().getSelectedItem();
         return item == null || item.getValue() == null ? null : item.getValue().path();
+    }
+
+    /** The selected ordinary (not multilevel) maps, in tree order. */
+    private java.util.List<Entry> selectedPlainMaps() {
+        java.util.List<Entry> maps = new java.util.ArrayList<>();
+        for (TreeItem<Entry> item : tree.getSelectionModel().getSelectedItems()) {
+            if (item != null && item.getValue() != null && item.getValue().isMap() && !item.getValue().isMultiLevel()) {
+                maps.add(item.getValue());
+            }
+        }
+        return maps;
     }
 
     private boolean isRoot(Entry entry) {
@@ -574,12 +629,32 @@ public class MapBrowser extends VBox {
             entry = tree.getRoot().getValue();
         }
         Entry target = entry;
-        if (entry.isMap()) {
+        if (entry.isMultiLevel()) {
+            menu.getItems().addAll(
+                    item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
+                    item("Manage levels…", MaterialDesignL.LAYERS_TRIPLE_OUTLINE, () -> host.manageLevels(target.mapFile())),
+                    new SeparatorMenuItem(),
+                    item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
+                    item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
+                    new SeparatorMenuItem(),
+                    danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+        } else if (entry.isMap()) {
+            java.util.List<Entry> mergeable = selectedPlainMaps();
+            if (!mergeable.contains(entry)) {
+                mergeable = java.util.List.of(entry);
+            }
+            java.util.List<Entry> toMerge = mergeable;
+            MenuItem merge = toMerge.size() > 1
+                    ? item("Merge " + toMerge.size() + " maps into a multilevel map…", MaterialDesignL.LAYERS_PLUS,
+                    () -> host.mergeIntoMultiLevelMap(toMerge))
+                    : item("Make multilevel map…", MaterialDesignL.LAYERS_PLUS,
+                    () -> host.mergeIntoMultiLevelMap(toMerge));
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                     item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
+                    merge,
                     new SeparatorMenuItem(),
                     danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
         } else {
@@ -588,6 +663,8 @@ public class MapBrowser extends VBox {
                     item("Import maps here…", MaterialDesignF.FILE_IMPORT_OUTLINE, () -> host.importMap(target.path())),
                     item("Import folder here…", MaterialDesignF.FOLDER_DOWNLOAD_OUTLINE,
                             () -> host.importMapFolder(target.path())),
+                    item("Import multilevel map here…", MaterialDesignL.LAYERS_PLUS,
+                            () -> host.importMultiLevelMap(target.path())),
                     item("New folder…", MaterialDesignF.FOLDER_PLUS_OUTLINE, () -> createFolder(target.path())));
             if (!isRoot(entry)) {
                 menu.getItems().addAll(
@@ -659,7 +736,8 @@ public class MapBrowser extends VBox {
         private final FontIcon icon = new FontIcon();
         private final FontIcon placeholder = new FontIcon(MaterialDesignM.MAP_OUTLINE);
         private final ImageView thumbnailView = new ImageView();
-        private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView);
+        private final FontIcon multiLevelBadge = new FontIcon(MaterialDesignL.LAYERS_TRIPLE);
+        private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView, multiLevelBadge);
         private final PauseTransition autoExpand = new PauseTransition(Duration.millis(Tuning.LIBRARY_AUTO_EXPAND_MS.get()));
         private TreeItem<Entry> observedItem;
         private final javafx.beans.value.ChangeListener<Boolean> expandedListener =
@@ -671,6 +749,9 @@ public class MapBrowser extends VBox {
             thumbnailBox.setPrefSize(THUMB_WIDTH, THUMB_HEIGHT);
             thumbnailBox.setMaxSize(THUMB_WIDTH, THUMB_HEIGHT);
             placeholder.getStyleClass().add("map-icon");
+            multiLevelBadge.getStyleClass().add("multilevel-badge");
+            StackPane.setAlignment(multiLevelBadge, javafx.geometry.Pos.BOTTOM_RIGHT);
+            multiLevelBadge.setVisible(false);
             thumbnailView.setFitWidth(THUMB_WIDTH);
             thumbnailView.setFitHeight(THUMB_HEIGHT);
             thumbnailView.setPreserveRatio(true);
@@ -687,7 +768,8 @@ public class MapBrowser extends VBox {
                 if (openMenu != null) {
                     openMenu.hide();
                 }
-                if (getTreeItem() != null) {
+                if (getTreeItem() != null && !tree.getSelectionModel().getSelectedItems().contains(getTreeItem())) {
+                    tree.getSelectionModel().clearSelection();
                     tree.getSelectionModel().select(getTreeItem());
                 }
                 openMenu = buildMenu(isEmpty() ? null : getItem());
@@ -774,7 +856,14 @@ public class MapBrowser extends VBox {
                 Image image = thumbnailFor(entry.mapFile());
                 thumbnailView.setImage(image);
                 placeholder.setVisible(image == null);
-                setTooltip(previewTooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "")
+                boolean multiLevel = entry.isMultiLevel();
+                multiLevelBadge.setVisible(multiLevel);
+                String kind = "";
+                if (multiLevel) {
+                    int levels = levelCount(entry.mapFile());
+                    kind = "\nMultilevel map" + (levels > 0 ? " · " + levels + (levels == 1 ? " level" : " levels") : "");
+                }
+                setTooltip(previewTooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "") + kind
                         + "\nDouble-click to open", image));
                 setGraphic(thumbnailBox);
                 return;

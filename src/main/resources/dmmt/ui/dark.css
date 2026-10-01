@@ -664,6 +664,32 @@
     -fx-font-size: 11px;
 }
 
+/* Level switcher of multilevel maps (top left of the map) */
+.level-switcher {
+    -fx-background-color: rgba(22, 24, 28, 0.92);
+    -fx-background-radius: 8;
+    -fx-border-color: #363b44;
+    -fx-border-radius: 8;
+    -fx-padding: 4 6 4 10;
+}
+
+.level-switcher-icon {
+    -fx-icon-color: -dm-accent;
+    -fx-icon-size: 18px;
+}
+
+.level-position {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 11px;
+    -fx-min-width: 34;
+}
+
+.multilevel-badge {
+    -fx-icon-color: #f3f4f6;
+    -fx-icon-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.9), 3, 0.6, 0, 0);
+}
+
 /* ---------- Dialogs ---------- */
 
 .dialog-pane {
