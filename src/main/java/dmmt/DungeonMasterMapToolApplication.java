@@ -424,7 +424,11 @@ public class DungeonMasterMapToolApplication extends Application {
 
         installDmInteractions();
 
-        Scene scene = new Scene(root, Tuning.DM_WINDOW_WIDTH.get(), Tuning.DM_WINDOW_HEIGHT.get(), Color.BLACK);
+        // Clamp to the usable screen area (minus room for window decorations) so small displays never get an oversized window.
+        javafx.geometry.Rectangle2D screenArea = javafx.stage.Screen.getPrimary().getVisualBounds();
+        double initialWidth = Math.min(Tuning.DM_WINDOW_WIDTH.get(), screenArea.getWidth() - 16);
+        double initialHeight = Math.min(Tuning.DM_WINDOW_HEIGHT.get(), screenArea.getHeight() - 40);
+        Scene scene = new Scene(root, initialWidth, initialHeight, Color.BLACK);
         scene.getStylesheets().add(Icons.STYLESHEET);
         // Clicks inside the popup never reach this scene, so any click here is "outside" the menu.
         scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> hideLightMenu());
