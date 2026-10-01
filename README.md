@@ -140,9 +140,10 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - **Search bar:** case-insensitive live filter on map and folder names. A matching map is shown with its parent folders, a matching folder with its content. `Esc` or the clear button restores the tree.
 - **Open a map:** double-click or press `Enter`. The current map is auto-saved first.
 - **Recent maps:** the list below the tree shows the maps you opened last (most recent first, size set by `ui.recentMaps.max`). Double-click one to open it again.
-- **Move:** drag & drop maps or folders onto a folder (or onto a map to use its folder). Hovering a collapsed folder while dragging expands it.
-- **Select several maps** with `Ctrl+click` / `Shift+click` (used to merge them into a multilevel map).
-- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map (or *Merge N maps into a multilevel map* when several maps are selected), Delete. **On a multilevel map:** Open, Manage levels, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
+- **Move:** drag & drop maps or folders onto a folder (or onto empty space for the library root). Hovering a collapsed folder while dragging expands it. Folders dropped onto a map go to that map's folder. With several entries selected, dragging any of them moves **all selected entries** (entries inside a selected folder travel with it); entries that cannot be moved (name taken, folder into itself) are skipped and listed afterwards.
+- **Merge by drag & drop:** drop a map **onto another map** to build a multilevel map. The target turns green and shows what happens: map onto map → *Create a multilevel map*; map onto a multilevel map (or a multilevel map onto a map) → *Add to the multilevel map*; multilevel map onto a multilevel map → *Merge the levels into this map* (the map you drop onto keeps its name and shared settings, the dragged one gives up its levels and disappears). The level dialog opens first so you can set the order. Dragging **several selected maps** onto a map adds all of them in one go; if multilevel maps are involved, the target keeps its name and settings when it is a multilevel map, otherwise the first dragged multilevel map does.
+- **Select several maps** with `Ctrl+click` / `Shift+click` (used to merge them into a multilevel map, or to drag them all at once).
+- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map (or *Merge N maps into a multilevel map* when several maps are selected), Delete. **On a multilevel map:** Open, Manage levels, Dissolve into separate maps, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
 - **Keyboard:** `F2` rename, `Delete` delete (always with confirmation; folders state how many maps they contain), `Enter` open.
 - **Duplicate** creates `Name (Copy)`, `Name (Copy 2)`, ...
 - **Rename** renames the package folder and file on disk. Names cannot be empty, contain `<>:"/\|?*`, be reserved Windows names, or duplicate a name in the same folder.
@@ -165,6 +166,10 @@ On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `asse
 
 - Select several files in the chooser, or use **Import folder…** to import every `.dd2vtt`/`.uvtt` found in a folder and its sub-folders.
 - The location dialog asks only for the target folder. Maps are named after their files; duplicates get a suffix (`Name (2)`).
+- Files in the same folder that look like the **levels of one building** are imported automatically as **one multilevel map**, ordered by level number:
+  - names that differ only by a level number, optionally followed by a room name: `haus_00 … haus_03`, `Inn 1`, `Inn 2`, `tower_upper_02_barracks … tower_upper_10` (levels are named `Level 02 – barracks` etc.);
+  - a file without a number whose name is the start of such a series (`tower` next to `tower_upper_…`) becomes the lowest level, and the multilevel map is named after it.
+  - Series with a repeated number (`Market 1 day`, `Market 1 night`) and merely similar names (`Goblin Cave`, `Goblin Camp`) stay separate maps — merge them afterwards if needed.
 - Import runs in the background with progress in the status bar (`Importing 3/12: name...`). The open map is not switched. Failed maps are removed again, the batch continues, and a final dialog lists failures.
 
 **Create a custom map**
@@ -182,25 +187,29 @@ Dungeon Alchemist can export every floor of a multi-story building as its own dd
 **Create one**
 
 - **Import:** click **Import multilevel map** in the library toolbar (or right-click a folder → *Import multilevel map here*) and select all level files at once. The level dialog lists them **lowest level at the top**, sorted by file name and with suggested level names (e.g. `haus_00 … haus_03` → *Level 00 … Level 03*). Reorder, rename, remove or add levels, click **Next**, then pick the folder and name (pre-filled with the part all file names share).
-- **Merge existing maps:** select several maps in the library (`Ctrl+click`), right-click → *Merge N maps into a multilevel map…* (or *Make multilevel map…* on a single map). The maps are **moved** into the new multilevel map and no longer appear on their own; their fog, lights, effects and cameras are kept. File names do not have to match — set the order in the dialog.
+- **Batch import:** files numbered like levels are grouped automatically (see *Batch import* above).
+- **Merge existing maps:** drag a map onto another map, or select several maps in the library (`Ctrl+click`) and right-click → *Merge N maps into a multilevel map…* (or *Make multilevel map…* on a single map). The maps are **moved** into the new multilevel map and no longer appear on their own; their fog, lights, effects and cameras are kept. File names do not have to match — set the order in the dialog.
 
 **Switch levels**
 
-- For multilevel maps with two or more levels, a small switcher appears at the top left of the map: **▼** one level down, a dropdown to jump to any level (lowest at the top), **▲** one level up, the position (`2 / 4`) and a pencil button to manage the levels.
+- For multilevel maps with two or more levels, a small switcher appears at the top left of the map: a dropdown to jump to any level (lowest at the top; hovering an entry shows a preview of that level), then **▼** one level down and **▲** one level up, the position (`2 / 4`) and a pencil button to manage the levels.
 - `Page Up` / `Page Down` go one level up / down.
 - The open level is saved before switching; only the open level is kept in memory.
 - Saving remembers the open level; reopening the map returns to it. A map opened for the first time starts on the lowest level.
 
 **What is per level and what is shared**
 
-- **Per level:** fog of war, cameras (DM and player view position/zoom), image layers, walls, doors/windows, lights, effects and text boxes.
-- **Shared by all levels** (changing it on any level changes it for all): time of day, ambient brightness, weather, image layer lock, fog on/off, map rotation, player zoom offset, text layer visibility and the last used text settings.
+- **Per level:** fog of war, camera positions and the player view zoom, image layers, walls, doors/windows, lights, effects and text boxes.
+- **Shared by all levels** (changing it on any level changes it for all): time of day, ambient brightness, weather, image layer lock, fog on/off, map rotation, DM view zoom, player zoom offset, text layer visibility and the last used text settings.
 
 **Manage levels** (right-click the multilevel map → *Manage levels…*, or the pencil in the switcher)
 
 - **Insert** levels anywhere: new entries are added below the selected level, from dd2vtt files, from existing library maps (moved in) or as an empty level.
-- **Reorder** with the arrow buttons (`Alt+↑` / `Alt+↓`), **rename** a level (`F2` or double-click), **remove** a level (`Delete`). Removing levels asks for confirmation when you click **Apply**.
-- Removing the **last** level asks for confirmation and deletes the whole multilevel map.
+- **Reorder** by dragging levels in the list (or `Alt+↑` / `Alt+↓`).
+- **Right-click a level** to rename it (`F2` or double-click), delete it (`Delete`), or **move it out as a separate map**. Moving out asks for the map name, pre-filled with the level's original file/map name (or `<multilevel map> <level>`); the map is placed next to the multilevel map and keeps the shared settings it had. *Keep in the multilevel map* undoes this before you click **Apply**.
+- **Apply** summarizes what happens (deleted levels, levels moved out) and asks for confirmation.
+- A multilevel map left with **one level** becomes an ordinary map with the same name. Removing the **last** level asks for confirmation and deletes the whole multilevel map.
+- **Dissolve** (right-click the multilevel map → *Dissolve into separate maps…*) turns every level into a separate map next to it; nothing is deleted.
 - If the open level is removed, the nearest remaining level is opened (preferring the level below).
 - Renaming, duplicating, moving and deleting the whole multilevel map work like for any other map in the library.
 

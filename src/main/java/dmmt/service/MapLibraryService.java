@@ -258,6 +258,31 @@ public class MapLibraryService {
         return mapFile.getParent().resolve(clean + MultiLevelService.EXTENSION);
     }
 
+    /** Like {@link #newMapFile}, but a taken name becomes {@code Name (2)}, {@code Name (3)}, ...; invalid characters are replaced. */
+    public Path uniqueNewMapFile(Path folder, String rawName) throws IOException {
+        String name = cleanName(sanitizeName(rawName));
+        String candidate = name;
+        for (int n = 2; ; n++) {
+            try {
+                return newMapFile(folder, candidate);
+            } catch (IOException taken) {
+                if (n > 9999 || taken.getMessage() == null || !taken.getMessage().contains("already exists")) {
+                    throw taken;
+                }
+                candidate = name + " (" + n + ")";
+            }
+        }
+    }
+
+    private static String sanitizeName(String raw) {
+        StringBuilder out = new StringBuilder();
+        for (char c : raw.toCharArray()) {
+            out.append(c < 32 || "<>:\"/\\|?*".indexOf(c) >= 0 ? '_' : c);
+        }
+        String text = out.toString().trim();
+        return text.length() > 100 ? text.substring(0, 100).trim() : text;
+    }
+
     /** {@code .dmmap} or {@code .dmlevels}, depending on the kind of map. */
     private static String extensionOf(Path mapFile) {
         return MultiLevelService.isMultiLevelFile(mapFile) ? MultiLevelService.EXTENSION : EXTENSION;

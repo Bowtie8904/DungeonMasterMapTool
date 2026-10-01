@@ -78,6 +78,27 @@ class BatchImportServiceTest {
     }
 
     @Test
+    void filesNumberedLikeLevelsBecomeOneMultilevelMap() throws Exception {
+        Path ground = write(source, "inn_00.dd2vtt", "{\"pixels_per_grid\":100}");
+        Path hall = write(source, "hall.dd2vtt", "{\"pixels_per_grid\":100}");
+        Path upper = write(source, "inn_01.dd2vtt", "{\"pixels_per_grid\":100}");
+        List<Integer> steps = new ArrayList<>();
+
+        BatchImportService.Result result = service.importAll(List.of(upper, hall, ground), libraryRoot,
+                (index, total, name) -> steps.add(index));
+
+        assertEquals(3, result.total());
+        assertTrue(result.failures().isEmpty());
+        Path manifest = libraryRoot.resolve("inn").resolve("inn.dmlevels");
+        assertEquals(List.of(manifest, libraryRoot.resolve("hall").resolve("hall.dmmap")), result.imported());
+        assertEquals(List.of(1, 2, 3), steps);
+        ProjectService projectService = new ProjectService();
+        MultiLevelService levels = new MapLibraryService(libraryRoot, projectService).multiLevels();
+        assertEquals(List.of("inn_00", "inn_01"), levels.loadManifest(manifest).getLevels().stream()
+                .map(dmmt.model.MultiLevelManifest.Level::getOriginalName).toList());
+    }
+
+    @Test
     void failedMapIsRemovedAndDoesNotStopTheBatch() throws Exception {
         Path bad = write(source, "bad.dd2vtt", "this is not json");
         Path good = write(source, "good.dd2vtt", "{\"pixels_per_grid\":100}");

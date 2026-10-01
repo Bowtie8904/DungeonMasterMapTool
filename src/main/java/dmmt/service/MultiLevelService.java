@@ -33,11 +33,30 @@ public class MultiLevelService {
     public static final String LEVEL_FILE = "level" + MapLibraryService.EXTENSION;
 
     /** Where a level comes from in a {@link PlanItem}. */
-    public sealed interface Source permits Existing, Dd2vtt, LibraryMap, Empty {
+    public sealed interface Source permits Existing, Dd2vtt, LibraryMap, ForeignLevel, Empty {
     }
 
     /** A level that already belongs to the multilevel map. */
     public record Existing(String levelId) implements Source {
+    }
+
+    /** A level of another multilevel map that is moved over (merging two multilevel maps). */
+    public record ForeignLevel(Path manifestFile, String levelId) implements Source {
+    }
+
+    /** A level that is moved out of the multilevel map and becomes an ordinary map named {@code mapName} next to it. */
+    public record Extraction(String levelId, String mapName) {
+    }
+
+    /** A level file's multilevel map and level id. */
+    public record LevelRef(Path manifestFile, String levelId) {
+    }
+
+    /** Files that belong together: several files form a multilevel map (with default level names), a single file an ordinary map. */
+    public record ImportGroup(String name, List<Path> files, List<String> levelNames) {
+        public boolean multiLevel() {
+            return files.size() > 1;
+        }
     }
 
     /** A dd2vtt / uvtt file that is imported as a new level. */
@@ -62,10 +81,13 @@ public class MultiLevelService {
     }
 
     /**
-     * @param manifestFile the multilevel map, {@code null} if it was deleted because no level was left
-     * @param movedMaps    library map file -> level file for every map that was moved into the multilevel map
+     * @param manifestFile the multilevel map, {@code null} if it was deleted (no level left) or collapsed
+     * @param collapsedMap the ordinary map it became when only one level was left, else {@code null}
+     * @param movedMaps    old map file -> new map file for every map/level that changed place (library map -> level,
+     *                     level of another multilevel map -> level, level -> ordinary map, last level -> collapsed map)
      */
-    public record ApplyResult(Path manifestFile, Map<Path, Path> movedMaps, List<String> removedLevelIds) {
+    public record ApplyResult(Path manifestFile, Path collapsedMap, Map<Path, Path> movedMaps,
+                              List<String> removedLevelIds) {
     }
 
     /** A loaded level, ready to be shown. */
@@ -198,6 +220,7 @@ public class MultiLevelService {
                 .fogEnabled(project.getFog().isEnabled())
                 .rotationQuarterTurns(Math.floorMod(project.getMap().getRotationQuarterTurns(), 4))
                 .playerZoomStep(project.getViews().getPlayerZoomStep())
+                .dmZoom(project.getViews().getDmCamera().getZoom())
                 .textLayerVisible(project.isTextLayerVisible())
                 .lastTextSettings(text == null ? null : DmProject.TextSettings.builder()
                         .fontSize(text.getFontSize())
@@ -230,6 +253,9 @@ public class MultiLevelService {
         }
         project.getFog().setEnabled(shared.isFogEnabled());
         project.getViews().setPlayerZoomStep(shared.getPlayerZoomStep());
+        if (shared.getDmZoom() != null && shared.getDmZoom() > 0) {
+            project.getViews().getDmCamera().setZoom(shared.getDmZoom());
+        }
         project.setTextLayerVisible(shared.isTextLayerVisible());
         if (shared.getLastTextSettings() != null) {
             DmProject.TextSettings text = shared.getLastTextSettings();
@@ -283,10 +309,10 @@ public class MultiLevelService {
 
     // ---- Creating and changing the level list ----
 
-    /** Creates a new multilevel map named {@code name} in {@code folder} from the planned levels. */
+    /** Creates a new multilevel map named {@code name} in {@code folder} from the planned levels (at least two). */
     public ApplyResult create(Path folder, String name, List<PlanItem> plan, Progress progress) throws IOException {
-        if (plan.isEmpty()) {
-            throw new IOException("A multilevel map needs at least one level.");
+        if (plan.size() < 2) {
+            throw new IOException("A multilevel map needs at least two levels.");
         }
         for (PlanItem item : plan) {
             if (item.source() instanceof Existing) {
@@ -297,7 +323,7 @@ public class MultiLevelService {
         Path dir = manifestFile.getParent();
         Files.createDirectories(dir);
         try {
-            return apply(manifestFile, plan, progress);
+            return apply(manifestFile, plan, List.of(), progress);
         } catch (MapsLeftBehindException ex) {
             // Maps that could not be moved back are still in the package: keep it so nothing is lost.
             throw ex;
@@ -311,19 +337,53 @@ public class MultiLevelService {
         }
     }
 
-    /**
-     * Makes the levels of a multilevel map match {@code plan}: new levels are imported/moved in, existing levels are
-     * renamed and reordered, levels missing from the plan are deleted. An empty plan deletes the whole map.
-     * New levels are created first; if that fails nothing has changed.
-     */
+    /** Splits a multilevel map into ordinary maps next to it (one per level) and removes the multilevel map. */
+    public ApplyResult dissolve(Path manifestFile, Progress progress) throws IOException {
+        MultiLevelManifest manifest = loadManifest(manifestFile);
+        List<Extraction> extractions = new ArrayList<>();
+        for (MultiLevelManifest.Level level : manifest.getLevels()) {
+            extractions.add(new Extraction(level.getId(), suggestedMapName(manifestFile, level)));
+        }
+        return apply(manifestFile, List.of(), extractions, progress);
+    }
+
+    /** Name for a level that becomes an ordinary map: its original name, else {@code <map name> <level name>}. */
+    public static String suggestedMapName(Path manifestFile, MultiLevelManifest.Level level) {
+        if (level.getOriginalName() != null && !level.getOriginalName().isBlank()) {
+            return level.getOriginalName().trim();
+        }
+        return MapLibraryService.stripExtension(manifestFile.getFileName().toString()) + " " + level.getName();
+    }
+
     public ApplyResult apply(Path manifestFile, List<PlanItem> plan, Progress progress) throws IOException {
+        return apply(manifestFile, plan, List.of(), progress);
+    }
+
+    /**
+     * Makes the levels of a multilevel map match {@code plan}: new levels are imported/moved in (also levels of other
+     * multilevel maps), existing levels are renamed and reordered, {@code extractions} become ordinary maps next to
+     * the multilevel map, and levels in neither list are deleted. With no level left the map is deleted, with one
+     * level left it becomes an ordinary map. Everything up to saving the new manifest is rolled back on failure.
+     */
+    public ApplyResult apply(Path manifestFile, List<PlanItem> plan, List<Extraction> extractions, Progress progress)
+            throws IOException {
         manifestFile = manifestFile.toAbsolutePath().normalize();
         Path dir = manifestFile.getParent();
+        Path folder = dir.getParent();
         MultiLevelManifest manifest = Files.isRegularFile(manifestFile) ? loadManifest(manifestFile)
                 : MultiLevelManifest.builder().build();
-        validatePlan(manifestFile, manifest, plan);
+        validatePlan(manifestFile, manifest, plan, extractions);
+        Map<Path, MultiLevelManifest> foreign = new LinkedHashMap<>();
+        for (PlanItem item : plan) {
+            if (item.source() instanceof ForeignLevel level) {
+                Path file = level.manifestFile().toAbsolutePath().normalize();
+                if (!foreign.containsKey(file)) {
+                    foreign.put(file, loadManifest(file));
+                }
+            }
+        }
 
-        int total = (int) plan.stream().filter(item -> !(item.source() instanceof Existing)).count();
+        int total = (int) plan.stream().filter(item -> !(item.source() instanceof Existing)).count() + extractions.size();
         int done = 0;
         List<MultiLevelManifest.Level> created = new ArrayList<>(plan.size());
         List<Path> createdDirs = new ArrayList<>();
@@ -341,6 +401,7 @@ public class MultiLevelService {
                     Files.createDirectories(levelDir);
                     DmProject project;
                     if (item.source() instanceof Dd2vtt dd2vtt) {
+                        level.setOriginalName(MapLibraryService.stripExtension(dd2vtt.file().getFileName().toString()));
                         project = importService.importToProject(dd2vtt.file(), levelDir);
                     } else {
                         project = DmProject.builder().build();
@@ -367,14 +428,16 @@ public class MultiLevelService {
         List<Path> looseOriginals = new ArrayList<>();
         List<MultiLevelManifest.Level> levels = new ArrayList<>(plan.size());
         Set<String> kept = new HashSet<>();
+        Set<String> extractedIds = new HashSet<>();
+        Map<Path, Path> extractedMaps = new LinkedHashMap<>();
         List<MultiLevelManifest.Level> removed;
         List<String> removedIds;
-        String current;
+        MultiLevelManifest.SharedSettings sharedBefore = manifest.getShared();
         try {
             // Taken before anything is moved, so a map that cannot be read fails the change without side effects.
             MultiLevelManifest.SharedSettings shared = manifest.getShared();
             if (shared == null && !plan.isEmpty()) {
-                shared = captureShared(projectService.load(firstLevelFile(manifestFile, manifest, plan, created)));
+                shared = captureShared(projectService.load(firstLevelFile(manifestFile, manifest, plan, created, foreign)));
             }
             for (int i = 0; i < plan.size(); i++) {
                 PlanItem item = plan.get(i);
@@ -383,6 +446,7 @@ public class MultiLevelService {
                         progress.report(++done, total, item.name());
                     }
                     MultiLevelManifest.Level level = newLevel(item.name());
+                    level.setOriginalName(MapLibraryService.stripExtension(map.mapFile().getFileName().toString()));
                     Path levelFile = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
                     undoMoves.add(0, moveLibraryMap(map, levelFile));
                     if (!Files.isDirectory(map.entryPath())) {
@@ -390,7 +454,31 @@ public class MultiLevelService {
                     }
                     moved.put(map.mapFile().toAbsolutePath().normalize(), levelFile);
                     created.set(i, level);
+                } else if (item.source() instanceof ForeignLevel source) {
+                    if (progress != null) {
+                        progress.report(++done, total, item.name());
+                    }
+                    Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
+                    MultiLevelManifest.Level sourceLevel = foreign.get(sourceManifest).findLevel(source.levelId());
+                    MultiLevelManifest.Level level = newLevel(item.name());
+                    level.setOriginalName(sourceLevel.getOriginalName());
+                    Path from = levelFile(sourceManifest, sourceLevel);
+                    Path to = dir.resolve(level.getFolder()).resolve(LEVEL_FILE);
+                    undoMoves.add(0, movePackage(from.getParent(), from, to));
+                    moved.put(from, to);
+                    created.set(i, level);
                 }
+            }
+            for (Extraction extraction : extractions) {
+                MultiLevelManifest.Level level = manifest.findLevel(extraction.levelId());
+                if (progress != null) {
+                    progress.report(++done, total, extraction.mapName());
+                }
+                Path from = levelFile(manifestFile, level);
+                Path mapFile = library.uniqueNewMapFile(folder, extraction.mapName());
+                undoMoves.add(0, movePackage(from.getParent(), from, mapFile));
+                extractedIds.add(level.getId());
+                extractedMaps.put(from, mapFile);
             }
 
             for (int i = 0; i < plan.size(); i++) {
@@ -404,12 +492,12 @@ public class MultiLevelService {
                     levels.add(created.get(i));
                 }
             }
-            removed = manifest.getLevels().stream().filter(level -> !kept.contains(level.getId())).toList();
+            removed = manifest.getLevels().stream()
+                    .filter(level -> !kept.contains(level.getId()) && !extractedIds.contains(level.getId())).toList();
             removedIds = removed.stream().map(MultiLevelManifest.Level::getId).toList();
-            current = nextCurrentLevel(manifest, kept);
             if (!levels.isEmpty()) {
+                manifest.setCurrentLevelId(nextCurrentLevel(manifest, kept));
                 manifest.setLevels(levels);
-                manifest.setCurrentLevelId(current);
                 manifest.setShared(shared);
                 saveManifest(manifestFile, manifest);
             }
@@ -432,6 +520,7 @@ public class MultiLevelService {
         }
 
         // From here on the new state is saved; clean-up failures no longer lose anything.
+        moved.putAll(extractedMaps);
         for (Path loose : looseOriginals) {
             try {
                 Files.deleteIfExists(loose);
@@ -439,9 +528,18 @@ public class MultiLevelService {
                 // a leftover copy of a map that is now a level
             }
         }
-        if (levels.isEmpty()) {
-            MapLibraryService.deleteRecursive(dir);
-            return new ApplyResult(null, moved, removedIds);
+        for (Path mapFile : extractedMaps.values()) {
+            // Outside the multilevel map the level keeps the look it had inside.
+            try {
+                DmProject project = projectService.load(mapFile);
+                applyShared(sharedBefore, project);
+                projectService.save(mapFile, project);
+            } catch (IOException | RuntimeException ignored) {
+                // the map just keeps its own settings
+            }
+        }
+        for (Map.Entry<Path, MultiLevelManifest> source : foreign.entrySet()) {
+            releaseTakenLevels(source.getKey(), source.getValue(), moved);
         }
         for (MultiLevelManifest.Level level : removed) {
             Path levelDir = dir.resolve(level.getFolder()).normalize();
@@ -453,6 +551,20 @@ public class MultiLevelService {
                 }
             }
         }
+        if (levels.isEmpty()) {
+            try {
+                MapLibraryService.deleteRecursive(dir);
+            } catch (IOException ignored) {
+                // every level is gone or moved out already; a leftover file only wastes disk space
+            }
+            return new ApplyResult(null, null, moved, removedIds);
+        }
+        if (levels.size() == 1) {
+            Path collapsed = collapseQuietly(manifestFile, moved);
+            if (collapsed != null) {
+                return new ApplyResult(null, collapsed, moved, removedIds);
+            }
+        }
         Path thumbnailLevel = levelFile(manifestFile, manifest.startLevel());
         try {
             projectService.loadOrCreateThumbnail(thumbnailLevel);
@@ -460,12 +572,132 @@ public class MultiLevelService {
             // the level just has no thumbnail
         }
         writePackageThumbnail(manifestFile, thumbnailLevel);
-        return new ApplyResult(manifestFile, moved, removedIds);
+        return new ApplyResult(manifestFile, null, moved, removedIds);
     }
 
-    /** The file the lowest planned level is read from (before library maps are moved). */
+    /** Removes the levels another multilevel map gave away; it collapses or is deleted when 1 / 0 levels are left. */
+    private void releaseTakenLevels(Path sourceManifest, MultiLevelManifest before, Map<Path, Path> moved) {
+        try {
+            Set<String> left = new HashSet<>();
+            List<MultiLevelManifest.Level> remaining = new ArrayList<>();
+            for (MultiLevelManifest.Level level : before.getLevels()) {
+                if (Files.isRegularFile(levelFile(sourceManifest, level))) {
+                    remaining.add(level);
+                    left.add(level.getId());
+                }
+            }
+            if (remaining.isEmpty()) {
+                MapLibraryService.deleteRecursive(sourceManifest.getParent());
+                return;
+            }
+            String current = nextCurrentLevel(before, left);
+            before.setLevels(remaining);
+            before.setCurrentLevelId(current);
+            saveManifest(sourceManifest, before);
+            if (remaining.size() == 1) {
+                collapseQuietly(sourceManifest, moved);
+            } else {
+                writePackageThumbnail(sourceManifest, levelFile(sourceManifest, before.startLevel()));
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // the other multilevel map keeps its (now shorter) list of levels
+        }
+    }
+
+    /** {@link #collapse}, recording the move; {@code null} (map unchanged) if it failed. */
+    private Path collapseQuietly(Path manifestFile, Map<Path, Path> moved) {
+        try {
+            MultiLevelManifest manifest = loadManifest(manifestFile);
+            Path levelFile = levelFile(manifestFile, manifest.getLevels().get(0));
+            Path mapFile = collapse(manifestFile, manifest);
+            relocate(moved, levelFile, mapFile);
+            return mapFile;
+        } catch (IOException | RuntimeException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Turns a multilevel map with a single level into an ordinary map of the same name at the same place
+     * (shared settings applied). Returns the new map file.
+     */
+    private Path collapse(Path manifestFile, MultiLevelManifest manifest) throws IOException {
+        MultiLevelManifest.Level level = manifest.getLevels().get(0);
+        Path levelFile = levelFile(manifestFile, level);
+        DmProject project = projectService.load(levelFile);
+        applyShared(manifest.getShared(), project);
+        projectService.save(levelFile, project);
+
+        Path dir = manifestFile.getParent();
+        String name = MapLibraryService.stripExtension(manifestFile.getFileName().toString());
+        Path renamedLevelFile = levelFile.resolveSibling(name + MapLibraryService.EXTENSION);
+        Files.move(levelFile, renamedLevelFile);
+        Path old = dir.resolveSibling(dir.getFileName() + ".collapsing-" + System.nanoTime());
+        try {
+            Files.move(dir, old);
+        } catch (IOException | RuntimeException ex) {
+            Files.move(renamedLevelFile, levelFile);
+            throw ex;
+        }
+        Path levelDirInOld = old.resolve(level.getFolder());
+        try {
+            Files.move(levelDirInOld, dir);
+        } catch (IOException | RuntimeException ex) {
+            Files.move(old, dir);
+            Files.move(renamedLevelFile, levelFile);
+            throw ex;
+        }
+        try {
+            MapLibraryService.deleteRecursive(old);
+        } catch (IOException ignored) {
+            // leftover of the old package; the map itself is complete
+        }
+        return dir.resolve(name + MapLibraryService.EXTENSION);
+    }
+
+    /** Records {@code from -> to}; earlier moves that ended at {@code from} now end at {@code to}. */
+    private static void relocate(Map<Path, Path> moved, Path from, Path to) {
+        Path key = from.toAbsolutePath().normalize();
+        boolean chained = false;
+        for (Map.Entry<Path, Path> entry : moved.entrySet()) {
+            if (entry.getValue().toAbsolutePath().normalize().equals(key)) {
+                entry.setValue(to);
+                chained = true;
+            }
+        }
+        if (!chained) {
+            moved.put(key, to);
+        }
+    }
+
+    /** Where a level file lives: its multilevel map and level id, or {@code null} if it is no level. */
+    public LevelRef locateLevel(Path file) {
+        try {
+            Path levelFile = file.toAbsolutePath().normalize();
+            Path levelDir = levelFile.getParent();
+            Path levelsDir = levelDir == null ? null : levelDir.getParent();
+            if (levelsDir == null || levelsDir.getFileName() == null
+                    || !LEVELS_DIR.equals(levelsDir.getFileName().toString())) {
+                return null;
+            }
+            Path manifestFile = findManifest(levelsDir.getParent());
+            if (manifestFile == null) {
+                return null;
+            }
+            for (MultiLevelManifest.Level level : loadManifest(manifestFile).getLevels()) {
+                if (levelFile(manifestFile, level).equals(levelFile)) {
+                    return new LevelRef(manifestFile.toAbsolutePath().normalize(), level.getId());
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // not readable: treat as no level
+        }
+        return null;
+    }
+
+    /** The file the lowest planned level is read from (before anything is moved). */
     private static Path firstLevelFile(Path manifestFile, MultiLevelManifest manifest, List<PlanItem> plan,
-                                       List<MultiLevelManifest.Level> created) {
+                                       List<MultiLevelManifest.Level> created, Map<Path, MultiLevelManifest> foreign) {
         PlanItem first = plan.get(0);
         if (first.source() instanceof Existing existing) {
             return levelFile(manifestFile, manifest.findLevel(existing.levelId()));
@@ -473,10 +705,14 @@ public class MultiLevelService {
         if (first.source() instanceof LibraryMap map) {
             return map.mapFile();
         }
+        if (first.source() instanceof ForeignLevel source) {
+            Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
+            return levelFile(sourceManifest, foreign.get(sourceManifest).findLevel(source.levelId()));
+        }
         return levelFile(manifestFile, created.get(0));
     }
 
-    /** Undo of one library map move; {@code false} if the map could not be put back. */
+    /** Undo of one map move; {@code false} if the map could not be put back. */
     private interface Undo {
         boolean run();
     }
@@ -488,7 +724,8 @@ public class MultiLevelService {
         }
     }
 
-    private void validatePlan(Path manifestFile, MultiLevelManifest manifest, List<PlanItem> plan) throws IOException {
+    private void validatePlan(Path manifestFile, MultiLevelManifest manifest, List<PlanItem> plan,
+                              List<Extraction> extractions) throws IOException {
         Set<String> seen = new HashSet<>();
         Path dir = manifestFile.getParent();
         for (PlanItem item : plan) {
@@ -513,8 +750,31 @@ public class MultiLevelService {
                 if (!seen.add(entry.toString())) {
                     throw new IOException("\"" + item.name() + "\" is listed twice.");
                 }
+            } else if (item.source() instanceof ForeignLevel source) {
+                Path sourceManifest = source.manifestFile().toAbsolutePath().normalize();
+                if (sourceManifest.equals(manifestFile.toAbsolutePath().normalize())) {
+                    throw new IOException("\"" + item.name() + "\" already belongs to this multilevel map.");
+                }
+                if (!Files.isRegularFile(sourceManifest)) {
+                    throw new IOException("\"" + item.name() + "\" no longer exists.");
+                }
+                if (!seen.add(sourceManifest + "#" + source.levelId())) {
+                    throw new IOException("\"" + item.name() + "\" is listed twice.");
+                }
             } else if (item.source() instanceof Dd2vtt dd2vtt && !Files.isRegularFile(dd2vtt.file())) {
                 throw new IOException(dd2vtt.file().getFileName() + " no longer exists.");
+            }
+        }
+        for (Extraction extraction : extractions) {
+            if (manifest.findLevel(extraction.levelId()) == null) {
+                throw new IOException("A level of the map no longer exists.");
+            }
+            if (!seen.add(extraction.levelId())) {
+                throw new IOException("A level cannot stay and be moved out at the same time.");
+            }
+            String problem = levelNameProblem(extraction.mapName());
+            if (problem != null) {
+                throw new IOException(problem);
             }
         }
     }
@@ -540,34 +800,10 @@ public class MultiLevelService {
     /** Moves a library map into a level folder; returns an undo that puts it back. Loose originals stay in place. */
     private Undo moveLibraryMap(LibraryMap map, Path levelFile) throws IOException {
         Path levelDir = levelFile.getParent();
-        Files.createDirectories(levelDir.getParent());
         if (Files.isDirectory(map.entryPath())) {
-            Path oldFile = levelDir.resolve(map.mapFile().getFileName());
-            Undo undo = () -> {
-                try {
-                    if (Files.exists(levelFile) && !Files.exists(oldFile)) {
-                        Files.move(levelFile, oldFile);
-                    }
-                    Files.move(levelDir, map.entryPath());
-                    return true;
-                } catch (IOException | RuntimeException ex) {
-                    return false;
-                }
-            };
-            Files.move(map.entryPath(), levelDir);
-            if (!oldFile.getFileName().toString().equals(LEVEL_FILE)) {
-                try {
-                    Files.move(oldFile, levelFile);
-                } catch (IOException | RuntimeException ex) {
-                    if (!undo.run()) {
-                        throw new MapsLeftBehindException("\"" + map.mapFile().getFileName()
-                                + "\" could not be moved back from \"" + levelDir + "\".", ex);
-                    }
-                    throw ex;
-                }
-            }
-            return undo;
+            return movePackage(map.entryPath(), map.mapFile(), levelFile);
         }
+        Files.createDirectories(levelDir.getParent());
         // Loose maps share their folder with other files, so they are re-saved with their assets copied in.
         DmProject project = projectService.load(map.mapFile());
         Path base = map.mapFile().toAbsolutePath().getParent();
@@ -585,6 +821,40 @@ public class MultiLevelService {
         }
         // The original stays until the change is saved, so removing the copy loses nothing.
         return () -> deleteQuietly(levelDir);
+    }
+
+    /**
+     * Moves the map package {@code fromDir} (containing {@code fromFile}) so that its map file ends up at
+     * {@code toFile}; returns an undo that puts it back.
+     */
+    private static Undo movePackage(Path fromDir, Path fromFile, Path toFile) throws IOException {
+        Path toDir = toFile.getParent();
+        Path movedFile = toDir.resolve(fromDir.relativize(fromFile).toString());
+        Files.createDirectories(toDir.getParent());
+        Undo undo = () -> {
+            try {
+                if (Files.exists(toFile) && !Files.exists(movedFile)) {
+                    Files.move(toFile, movedFile);
+                }
+                Files.move(toDir, fromDir);
+                return true;
+            } catch (IOException | RuntimeException ex) {
+                return false;
+            }
+        };
+        Files.move(fromDir, toDir);
+        if (!movedFile.getFileName().toString().equals(toFile.getFileName().toString())) {
+            try {
+                Files.move(movedFile, toFile);
+            } catch (IOException | RuntimeException ex) {
+                if (!undo.run()) {
+                    throw new MapsLeftBehindException("\"" + fromFile.getFileName()
+                            + "\" could not be moved back from \"" + toDir + "\".", ex);
+                }
+                throw ex;
+            }
+        }
+        return undo;
     }
 
     /** Removes a level copy of a loose map; the original is still in place, so a failure loses nothing. */
@@ -675,6 +945,126 @@ public class MultiLevelService {
     /** Underscores read as spaces, runs of spaces collapsed. */
     private static String normalizeName(String name) {
         return name.replace('_', ' ').replaceAll("\\s+", " ").trim();
+    }
+
+    /** Name ending in a number: {@code haus_03}, {@code Inn2}. */
+    private static final java.util.regex.Pattern TRAILING_NUMBER =
+            java.util.regex.Pattern.compile("^(.*?)[\\s\\-.]*(\\d+)$");
+    /** Number followed by a digit-free room label: {@code tower upper levels 02 barracks}. */
+    private static final java.util.regex.Pattern LABELLED_NUMBER =
+            java.util.regex.Pattern.compile("^(.+?)[\\s\\-.]+(\\d+)[\\s\\-.]+(\\D*\\p{L}\\D*)$");
+
+    /** A file name split into level parts: shared {@code prefix}, level {@code number} and optional {@code label}. */
+    private record LevelFileName(String prefix, String number, String label) {
+        java.math.BigInteger value() {
+            return new java.math.BigInteger(number);
+        }
+    }
+
+    private static LevelFileName parseLevelFileName(String normalizedName) {
+        java.util.regex.Matcher trailing = TRAILING_NUMBER.matcher(normalizedName);
+        if (trailing.matches()) {
+            String prefix = trimSeparators(trailing.group(1));
+            return prefix.isEmpty() ? null : new LevelFileName(prefix, trailing.group(2), "");
+        }
+        java.util.regex.Matcher labelled = LABELLED_NUMBER.matcher(normalizedName);
+        if (labelled.matches()) {
+            String prefix = trimSeparators(labelled.group(1));
+            return prefix.isEmpty() ? null
+                    : new LevelFileName(prefix, labelled.group(2), trimSeparators(labelled.group(3)));
+        }
+        return null;
+    }
+
+    /**
+     * Groups import files that look like the levels of one building (same folder, case-insensitive): files sharing the
+     * part before a level number, optionally followed by a room label ({@code haus_00 … haus_03},
+     * {@code turm_upper_02_barracks … turm_upper_10}), at least two of them and all numbers distinct. A file without a
+     * number whose whole name starts that shared part ({@code turm}) joins as the lowest level, if it fits exactly one
+     * group. Every other file is a group of its own. Groups keep the order in which their first file appears.
+     */
+    public static List<ImportGroup> groupLevelFiles(List<Path> files) {
+        Map<String, List<Path>> numbered = new LinkedHashMap<>();
+        Map<Path, LevelFileName> parsed = new java.util.HashMap<>();
+        List<Path> unnumbered = new ArrayList<>();
+        for (Path file : files) {
+            LevelFileName name = parseLevelFileName(normalizeName(MapLibraryService.stripExtension(file.getFileName().toString())));
+            if (name == null) {
+                unnumbered.add(file);
+            } else {
+                parsed.put(file, name);
+                numbered.computeIfAbsent(folderKey(file) + name.prefix().toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(file);
+            }
+        }
+        Map<String, List<Path>> valid = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Path>> entry : numbered.entrySet()) {
+            long distinct = entry.getValue().stream().map(file -> parsed.get(file).value()).distinct().count();
+            if (entry.getValue().size() > 1 && distinct == entry.getValue().size()) {
+                valid.put(entry.getKey(), entry.getValue());
+            }
+        }
+        Map<String, Path> bases = new java.util.HashMap<>();
+        for (Path file : unnumbered) {
+            String name = normalizeName(MapLibraryService.stripExtension(file.getFileName().toString())).toLowerCase(Locale.ROOT);
+            if (name.isEmpty()) {
+                continue;
+            }
+            String folder = folderKey(file);
+            List<String> matches = valid.keySet().stream()
+                    .filter(key -> key.startsWith(folder))
+                    .filter(key -> {
+                        String prefix = key.substring(folder.length());
+                        return prefix.equals(name) || prefix.startsWith(name + " ");
+                    }).toList();
+            if (matches.size() == 1) {
+                String key = matches.get(0);
+                Path current = bases.get(key);
+                if (current == null || current.getFileName().toString().length() < file.getFileName().toString().length()) {
+                    bases.put(key, file);
+                }
+            }
+        }
+        Map<Path, String> groupOf = new java.util.HashMap<>();
+        valid.forEach((key, members) -> members.forEach(file -> groupOf.put(file, key)));
+        bases.forEach((key, file) -> groupOf.put(file, key));
+        List<ImportGroup> groups = new ArrayList<>();
+        Set<String> emitted = new HashSet<>();
+        for (Path file : files) {
+            String key = groupOf.get(file);
+            if (key == null) {
+                String name = MapLibraryService.stripExtension(file.getFileName().toString());
+                groups.add(new ImportGroup(name, List.of(file), List.of(name)));
+            } else if (emitted.add(key)) {
+                groups.add(levelGroup(valid.get(key), bases.get(key), parsed));
+            }
+        }
+        return groups;
+    }
+
+    private static String folderKey(Path file) {
+        return file.toAbsolutePath().normalize().getParent() + "|";
+    }
+
+    private static ImportGroup levelGroup(List<Path> members, Path base, Map<Path, LevelFileName> parsed) {
+        List<Path> ordered = new ArrayList<>(members);
+        ordered.sort(Comparator.comparing(file -> parsed.get(file).value()));
+        List<Path> groupFiles = new ArrayList<>();
+        List<String> levelNames = new ArrayList<>();
+        LevelFileName lowest = parsed.get(ordered.get(0));
+        if (base != null) {
+            groupFiles.add(base);
+            java.math.BigInteger below = lowest.value().subtract(java.math.BigInteger.ONE);
+            levelNames.add(below.signum() < 0 ? "Base"
+                    : "Level " + String.format("%0" + lowest.number().length() + "d", below));
+        }
+        for (Path file : ordered) {
+            LevelFileName name = parsed.get(file);
+            groupFiles.add(file);
+            levelNames.add("Level " + name.number() + (name.label().isEmpty() ? "" : " – " + name.label()));
+        }
+        String groupName = base != null ? normalizeName(MapLibraryService.stripExtension(base.getFileName().toString()))
+                : parsed.get(members.get(0)).prefix();
+        return new ImportGroup(groupName, groupFiles, levelNames);
     }
 
     /** Length of the longest common prefix that ends at a word boundary in every name. */

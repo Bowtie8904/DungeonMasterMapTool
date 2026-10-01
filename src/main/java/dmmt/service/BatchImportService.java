@@ -44,15 +44,39 @@ public class BatchImportService {
         }
     }
 
+    /**
+     * Imports the files into {@code targetFolder}. Files that look like the levels of one building become one
+     * multilevel map each (see {@link MultiLevelService#groupLevelFiles}); the rest become ordinary maps.
+     * {@code imported} lists the created map / multilevel map files.
+     */
     public Result importAll(List<Path> sources, Path targetFolder, Progress progress) {
         List<Path> imported = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
         int total = sources.size();
-        for (int i = 0; i < total; i++) {
-            Path source = sources.get(i);
+        int[] index = {0};
+        for (MultiLevelService.ImportGroup group : MultiLevelService.groupLevelFiles(sources)) {
+            if (group.multiLevel()) {
+                int first = index[0];
+                try {
+                    imported.add(importMultiLevel(group, targetFolder, (levelIndex, levelTotal, levelName) -> {
+                        index[0] = first + levelIndex;
+                        if (progress != null) {
+                            progress.report(index[0], total, group.name() + " · " + levelName);
+                        }
+                    }));
+                } catch (IOException | RuntimeException ex) {
+                    String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+                    for (Path file : group.files()) {
+                        failures.add(new Failure(file, reason));
+                    }
+                }
+                index[0] = first + group.files().size();
+                continue;
+            }
+            Path source = group.files().get(0);
             String baseName = MapLibraryService.stripExtension(source.getFileName().toString());
             if (progress != null) {
-                progress.report(i + 1, total, baseName);
+                progress.report(++index[0], total, baseName);
             }
             try {
                 imported.add(importOne(source, targetFolder, baseName));
@@ -62,6 +86,17 @@ public class BatchImportService {
             }
         }
         return new Result(imported, failures, total);
+    }
+
+    private Path importMultiLevel(MultiLevelService.ImportGroup group, Path targetFolder,
+                                  MultiLevelService.Progress progress) throws IOException {
+        List<String> levelNames = group.levelNames();
+        List<MultiLevelService.PlanItem> plan = new ArrayList<>();
+        for (int i = 0; i < group.files().size(); i++) {
+            plan.add(new MultiLevelService.PlanItem(new MultiLevelService.Dd2vtt(group.files().get(i)), levelNames.get(i)));
+        }
+        String name = uniqueMapFile(targetFolder, group.name()).getParent().getFileName().toString();
+        return library.multiLevels().create(targetFolder, name, plan, progress).manifestFile();
     }
 
     private Path importOne(Path source, Path targetFolder, String baseName) throws IOException {
@@ -82,26 +117,6 @@ public class BatchImportService {
 
     /** {@code Name}, or {@code Name (2)}, {@code Name (3)}, ... when the name is already taken. */
     Path uniqueMapFile(Path folder, String rawName) throws IOException {
-        String name = MapLibraryService.cleanName(sanitize(rawName));
-        String candidate = name;
-        for (int n = 2; ; n++) {
-            try {
-                return library.newMapFile(folder, candidate);
-            } catch (IOException taken) {
-                if (n > 9999 || !taken.getMessage().contains("already exists")) {
-                    throw taken;
-                }
-                candidate = name + " (" + n + ")";
-            }
-        }
-    }
-
-    private static String sanitize(String raw) {
-        StringBuilder out = new StringBuilder();
-        for (char c : raw.toCharArray()) {
-            out.append(c < 32 || "<>:\"/\\|?*".indexOf(c) >= 0 ? '_' : c);
-        }
-        String text = out.toString().trim();
-        return text.length() > 100 ? text.substring(0, 100).trim() : text;
+        return library.uniqueNewMapFile(folder, rawName);
     }
 }

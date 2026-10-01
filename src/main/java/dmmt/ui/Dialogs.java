@@ -80,6 +80,19 @@ public final class Dialogs {
         return dialog.showAndWait();
     }
 
+    /** Confirmation for non-destructive but significant actions; the action is the default button. */
+    public static boolean confirm(Window owner, String title, String header, Ikon ikon, String message, String actionLabel) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        style(dialog, owner, title, header, ikon, false);
+        Label content = new Label(message);
+        content.setWrapText(true);
+        content.setMaxWidth(380);
+        dialog.getDialogPane().setContent(content);
+        ButtonType action = new ButtonType(actionLabel, ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, action);
+        return dialog.showAndWait().orElse(ButtonType.CANCEL) == action;
+    }
+
     /** Confirmation for destructive actions; Cancel is the default button. */
     public static boolean confirmDanger(Window owner, String title, String header, String message, String actionLabel) {
         Dialog<ButtonType> dialog = new Dialog<>();

@@ -690,6 +690,38 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.9), 3, 0.6, 0, 0);
 }
 
+/* A map dragged onto another map: merge / add into a multilevel map. */
+.tree-cell:merge-target {
+    -fx-background-color: #23362c;
+    -fx-border-color: #5fd08a;
+    -fx-border-radius: 6;
+    -fx-border-width: 1.5;
+    -fx-text-fill: #9ff0bd;
+}
+
+.tree-cell .merge-drop-badge,
+.tree-cell:open-map .merge-drop-badge {
+    -fx-icon-color: #5fd08a;
+    -fx-icon-size: 22px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.95), 4, 0.7, 0, 0);
+}
+
+/* Level dialog: drop position while reordering, levels that are moved out. */
+.level-list .list-cell:drop-before {
+    -fx-border-color: -dm-accent transparent transparent transparent;
+    -fx-border-width: 2 0 0 0;
+}
+
+.level-list .list-cell:drop-after {
+    -fx-border-color: transparent transparent -dm-accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.level-list .list-cell:moved-out .label {
+    -fx-opacity: 0.6;
+    -fx-font-style: italic;
+}
+
 /* ---------- Dialogs ---------- */
 
 .dialog-pane {

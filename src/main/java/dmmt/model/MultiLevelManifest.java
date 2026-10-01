@@ -69,6 +69,8 @@ public class MultiLevelManifest {
         private String name;
         /** Level package folder relative to the manifest, e.g. {@code levels/ab12cd34}. */
         private String folder;
+        /** Name of the dd2vtt file / library map the level came from; {@code null} for levels created empty. */
+        private String originalName;
     }
 
     /** Settings that are the same on every level of the map. */
@@ -89,6 +91,8 @@ public class MultiLevelManifest {
         private int rotationQuarterTurns = 0;
         @Builder.Default
         private double playerZoomStep = 0;
+        /** DM camera zoom; {@code null} in manifests written before it was shared. */
+        private Double dmZoom;
         @Builder.Default
         private boolean textLayerVisible = true;
         private DmProject.TextSettings lastTextSettings;

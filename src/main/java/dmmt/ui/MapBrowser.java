@@ -99,6 +99,16 @@ public class MapBrowser extends VBox {
         void manageLevels(Path manifestFile);
 
         /**
+         * Maps were dropped onto another map ({@code dragged} never contains {@code target}): ordinary maps only
+         * create a multilevel map; otherwise everything is added to / merged into the target if it is a multilevel
+         * map, else into the first dragged multilevel map. The host shows the level dialog first.
+         */
+        void dropMapOnMap(java.util.List<Entry> dragged, Entry target);
+
+        /** Splits a multilevel map into separate maps (after a confirmation). */
+        void dissolveMultiLevel(Path manifestFile);
+
+        /**
          * Runs a library operation in the background. The host saves the open map first if it lives under
          * {@code affectedPath} and fixes up its own references afterwards. {@code onDone} runs on the FX thread.
          */
@@ -121,6 +131,12 @@ public class MapBrowser extends VBox {
     private static final int RECENT_VISIBLE_ROWS = 5;
     private static final PseudoClass OPEN_MAP = PseudoClass.getPseudoClass("open-map");
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
+    private static final PseudoClass MERGE_TARGET = PseudoClass.getPseudoClass("merge-target");
+
+    /** What dropping a dragged library entry onto a cell does. */
+    private enum DropAction {
+        MOVE, CREATE_MULTILEVEL, ADD_TO_MULTILEVEL, MERGE_MULTILEVEL
+    }
 
     private final MapLibraryService library;
     private final Host host;
@@ -140,7 +156,7 @@ public class MapBrowser extends VBox {
     private final RecentMaps recentMaps;
     private final ListView<Path> recentList = new ListView<>();
     private Entry scannedRoot;
-    private TreeItem<Entry> draggedItem;
+    private java.util.List<Entry> draggedEntries;
     private ContextMenu openMenu;
 
     public MapBrowser(MapLibraryService library, Host host, RecentMaps recentMaps) {
@@ -468,7 +484,7 @@ public class MapBrowser extends VBox {
     }
 
     /** Tooltip with the map name and a larger preview of its thumbnail (when loaded). */
-    private static Tooltip previewTooltip(String text, Image image) {
+    public static Tooltip previewTooltip(String text, Image image) {
         Tooltip tooltip = Icons.tooltip(text);
         if (image != null) {
             ImageView large = new ImageView(image);
@@ -633,6 +649,8 @@ public class MapBrowser extends VBox {
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
                     item("Manage levels…", MaterialDesignL.LAYERS_TRIPLE_OUTLINE, () -> host.manageLevels(target.mapFile())),
+                    item("Dissolve into separate maps…", MaterialDesignL.LAYERS_OFF_OUTLINE,
+                            () -> host.dissolveMultiLevel(target.mapFile())),
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                     item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
@@ -704,6 +722,121 @@ public class MapBrowser extends VBox {
         return !dragged.isFolder() || !target.startsWith(dragged.path().toAbsolutePath().normalize());
     }
 
+    /** Dropping maps onto another map merges them; anything else dropped somewhere moves it to that folder. */
+    private DropAction dropAction(java.util.List<Entry> dragged, Entry target) {
+        if (dragged == null || dragged.isEmpty()) {
+            return null;
+        }
+        boolean onlyMaps = dragged.stream().allMatch(Entry::isMap);
+        if (target != null && target.isMap() && onlyMaps) {
+            java.util.List<Entry> others = othersThan(dragged, target);
+            if (others.isEmpty()) {
+                return null;
+            }
+            boolean anyMulti = others.stream().anyMatch(Entry::isMultiLevel);
+            if (!anyMulti && !target.isMultiLevel()) {
+                return DropAction.CREATE_MULTILEVEL;
+            }
+            return anyMulti && (target.isMultiLevel() || others.stream().filter(Entry::isMultiLevel).count() > 1)
+                    ? DropAction.MERGE_MULTILEVEL : DropAction.ADD_TO_MULTILEVEL;
+        }
+        Path folder = dropFolder(target);
+        return dragged.stream().anyMatch(entry -> canDrop(entry, folder)) ? DropAction.MOVE : null;
+    }
+
+    /** The dragged maps without {@code target}. */
+    private static java.util.List<Entry> othersThan(java.util.List<Entry> dragged, Entry target) {
+        if (target == null || target.mapFile() == null) {
+            return dragged;
+        }
+        Path targetFile = target.mapFile().toAbsolutePath().normalize();
+        return dragged.stream()
+                .filter(entry -> entry.mapFile() == null || !entry.mapFile().toAbsolutePath().normalize().equals(targetFile))
+                .toList();
+    }
+
+    private static String dropHint(DropAction action, java.util.List<Entry> dragged, Entry target) {
+        int count = othersThan(dragged, target).size();
+        String maps = count > 1 ? " (" + count + " maps)" : "";
+        return switch (action) {
+            case CREATE_MULTILEVEL -> "Create a multilevel map" + maps;
+            case ADD_TO_MULTILEVEL -> "Add to the multilevel map" + maps;
+            case MERGE_MULTILEVEL -> "Merge into a multilevel map" + maps;
+            case MOVE -> null;
+        };
+    }
+
+    /**
+     * What a drag starting at {@code item} carries: all selected entries if {@code item} is selected (in tree order,
+     * without the library root and without entries inside another selected folder), else just {@code item}.
+     */
+    private java.util.List<Entry> draggedSelection(TreeItem<Entry> item) {
+        java.util.List<TreeItem<Entry>> selected = new java.util.ArrayList<>(tree.getSelectionModel().getSelectedItems());
+        if (!selected.contains(item)) {
+            return item.getValue() == null || isRoot(item.getValue()) ? java.util.List.of() : java.util.List.of(item.getValue());
+        }
+        selected.removeIf(candidate -> candidate == null || candidate.getValue() == null || isRoot(candidate.getValue()));
+        selected.sort(java.util.Comparator.comparingInt(tree::getRow));
+        java.util.List<Entry> entries = new java.util.ArrayList<>();
+        for (TreeItem<Entry> candidate : selected) {
+            Path path = candidate.getValue().path().toAbsolutePath().normalize();
+            boolean insideSelectedFolder = selected.stream().anyMatch(other -> other != candidate
+                    && other.getValue().isFolder()
+                    && path.startsWith(other.getValue().path().toAbsolutePath().normalize()));
+            if (!insideSelectedFolder) {
+                entries.add(candidate.getValue());
+            }
+        }
+        return entries;
+    }
+
+    /** Moves several entries into {@code targetFolder}; ones that cannot be moved are skipped and listed afterwards. */
+    private void moveAll(java.util.List<Entry> entries, Path targetFolder) {
+        java.util.List<Entry> movable = entries.stream().filter(entry -> canDrop(entry, targetFolder)).toList();
+        if (movable.size() == 1 && entries.size() == 1) {
+            move(movable.get(0), targetFolder);
+            return;
+        }
+        java.util.List<String> skipped = new java.util.ArrayList<>();
+        for (Entry entry : entries) {
+            if (!movable.contains(entry) && entry.isFolder()
+                    && targetFolder.toAbsolutePath().normalize().startsWith(entry.path().toAbsolutePath().normalize())) {
+                skipped.add(entry.name() + ": a folder cannot be moved into itself.");
+            }
+        }
+        java.util.List<Path> destinations = new java.util.ArrayList<>();
+        // The open map may be among them: the library root makes the host save it first and follow the move.
+        host.runLibraryOperation("Moving " + movable.size() + " items…", library.getRoot(), () -> {
+            java.util.Map<Path, Path> moved = new java.util.LinkedHashMap<>();
+            for (Entry entry : movable) {
+                try {
+                    moved.putAll(library.move(entry, targetFolder).movedMaps());
+                    destinations.add(targetFolder.resolve(entry.path().getFileName()));
+                } catch (IOException | RuntimeException ex) {
+                    skipped.add(entry.name() + ": " + ex.getMessage());
+                }
+            }
+            return new MapLibraryService.Result(moved, null);
+        }, result -> {
+            for (Entry entry : movable) {
+                if (entry.isFolder()) {
+                    remapExpanded(entry.path(), targetFolder.resolve(entry.path().getFileName()));
+                }
+            }
+            expandedFolders.add(targetFolder.toAbsolutePath().normalize());
+            refresh();
+            if (!destinations.isEmpty()) {
+                Entry first = movable.get(0);
+                Path firstMap = first.isMap() ? result.movedMaps().get(first.mapFile().toAbsolutePath().normalize()) : null;
+                select(firstMap != null ? firstMap : destinations.get(0));
+            }
+            if (!skipped.isEmpty()) {
+                Dialogs.error(window(), skipped.size() + (skipped.size() == 1 ? " item was" : " items were")
+                        + " not moved", String.join("\n", skipped));
+            }
+        });
+    }
+
     private final class RecentCell extends ListCell<Path> {
         RecentCell() {
             setOnMouseClicked(event -> {
@@ -737,7 +870,8 @@ public class MapBrowser extends VBox {
         private final FontIcon placeholder = new FontIcon(MaterialDesignM.MAP_OUTLINE);
         private final ImageView thumbnailView = new ImageView();
         private final FontIcon multiLevelBadge = new FontIcon(MaterialDesignL.LAYERS_TRIPLE);
-        private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView, multiLevelBadge);
+        private final FontIcon dropBadge = new FontIcon(MaterialDesignL.LAYERS_PLUS);
+        private final StackPane thumbnailBox = new StackPane(placeholder, thumbnailView, multiLevelBadge, dropBadge);
         private final PauseTransition autoExpand = new PauseTransition(Duration.millis(Tuning.LIBRARY_AUTO_EXPAND_MS.get()));
         private TreeItem<Entry> observedItem;
         private final javafx.beans.value.ChangeListener<Boolean> expandedListener =
@@ -752,6 +886,8 @@ public class MapBrowser extends VBox {
             multiLevelBadge.getStyleClass().add("multilevel-badge");
             StackPane.setAlignment(multiLevelBadge, javafx.geometry.Pos.BOTTOM_RIGHT);
             multiLevelBadge.setVisible(false);
+            dropBadge.getStyleClass().add("merge-drop-badge");
+            dropBadge.setVisible(false);
             thumbnailView.setFitWidth(THUMB_WIDTH);
             thumbnailView.setFitHeight(THUMB_HEIGHT);
             thumbnailView.setPreserveRatio(true);
@@ -782,48 +918,83 @@ public class MapBrowser extends VBox {
                 if (entry == null || isRoot(entry) || event.getButton() != MouseButton.PRIMARY) {
                     return;
                 }
-                draggedItem = getTreeItem();
+                draggedEntries = draggedSelection(getTreeItem());
+                if (draggedEntries.isEmpty()) {
+                    return;
+                }
                 Dragboard dragboard = startDragAndDrop(TransferMode.MOVE);
                 ClipboardContent content = new ClipboardContent();
                 content.putString(entry.path().toString());
                 dragboard.setContent(content);
-                dragboard.setDragView(snapshot(null, null));
+                if (draggedEntries.size() > 1) {
+                    Label count = new Label(draggedEntries.size() + " items");
+                    count.setStyle("-fx-background-color: #3d3424; -fx-text-fill: white; -fx-padding: 4 10;"
+                            + " -fx-background-radius: 10;");
+                    dragboard.setDragView(count.snapshot(null, null));
+                } else {
+                    dragboard.setDragView(snapshot(null, null));
+                }
                 event.consume();
             });
             setOnDragOver(event -> {
-                if (draggedItem != null && canDrop(draggedItem.getValue(), dropFolder(isEmpty() ? null : getItem()))) {
+                if (draggedEntries != null && dropAction(draggedEntries, isEmpty() ? null : getItem()) != null) {
                     event.acceptTransferModes(TransferMode.MOVE);
                 }
                 event.consume();
             });
             setOnDragEntered(event -> {
-                if (draggedItem != null && canDrop(draggedItem.getValue(), dropFolder(isEmpty() ? null : getItem()))) {
+                DropAction action = draggedEntries == null ? null : dropAction(draggedEntries, isEmpty() ? null : getItem());
+                if (action == DropAction.MOVE) {
                     pseudoClassStateChanged(DROP_TARGET, true);
                     TreeItem<Entry> item = getTreeItem();
                     if (item != null && item.getValue() != null && item.getValue().isFolder() && !item.isExpanded()) {
                         autoExpand.setOnFinished(finished -> item.setExpanded(true));
                         autoExpand.playFromStart();
                     }
+                } else if (action != null) {
+                    pseudoClassStateChanged(MERGE_TARGET, true);
+                    dropBadge.setIconCode(action == DropAction.MERGE_MULTILEVEL ? MaterialDesignC.CALL_MERGE
+                            : MaterialDesignL.LAYERS_PLUS);
+                    dropBadge.setVisible(true);
+                    setText(getItem().name() + "  —  " + dropHint(action, draggedEntries, getItem()));
                 }
             });
             setOnDragExited(event -> {
                 pseudoClassStateChanged(DROP_TARGET, false);
+                clearMergeMark();
                 autoExpand.stop();
             });
             setOnDragDropped(event -> {
                 boolean success = false;
-                if (draggedItem != null) {
-                    Entry dragged = draggedItem.getValue();
-                    Path target = dropFolder(isEmpty() ? null : getItem());
-                    if (canDrop(dragged, target)) {
-                        move(dragged, target);
+                if (draggedEntries != null) {
+                    java.util.List<Entry> dragged = draggedEntries;
+                    Entry targetEntry = isEmpty() ? null : getItem();
+                    DropAction action = dropAction(dragged, targetEntry);
+                    if (action == DropAction.MOVE) {
+                        moveAll(dragged, dropFolder(targetEntry));
+                        success = true;
+                    } else if (action != null) {
+                        clearMergeMark();
+                        java.util.List<Entry> others = othersThan(dragged, targetEntry);
+                        // After the drag gesture has finished: the host opens a modal dialog.
+                        Platform.runLater(() -> host.dropMapOnMap(others, targetEntry));
                         success = true;
                     }
                 }
                 event.setDropCompleted(success);
                 event.consume();
             });
-            setOnDragDone(event -> draggedItem = null);
+            setOnDragDone(event -> draggedEntries = null);
+        }
+
+        private void clearMergeMark() {
+            pseudoClassStateChanged(MERGE_TARGET, false);
+            if (dropBadge.isVisible()) {
+                dropBadge.setVisible(false);
+                if (getItem() != null) {
+                    setText(getItem().name());
+                }
+            }
         }
 
         @Override
@@ -835,6 +1006,8 @@ public class MapBrowser extends VBox {
             }
             pseudoClassStateChanged(OPEN_MAP, false);
             pseudoClassStateChanged(DROP_TARGET, false);
+            pseudoClassStateChanged(MERGE_TARGET, false);
+            dropBadge.setVisible(false);
             icon.getStyleClass().removeAll("folder-icon", "map-icon");
             if (empty || entry == null) {
                 setText(null);

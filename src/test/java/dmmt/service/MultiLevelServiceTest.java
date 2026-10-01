@@ -188,11 +188,195 @@ class MultiLevelServiceTest {
         MultiLevelManifest manifest = service.loadManifest(manifestFile);
         MultiLevelManifest.Level ground = manifest.getLevels().get(0);
         MultiLevelManifest.Level first = manifest.getLevels().get(1);
+        service.apply(manifestFile, List.of(
+                item(new MultiLevelService.Existing(ground.getId()), "Ground"),
+                item(new MultiLevelService.Existing(first.getId()), "First"),
+                item(new MultiLevelService.Empty(), "Roof")), null);
         service.saveLevel(manifestFile, first.getId(), service.loadLevel(manifestFile, first.getId()).project());
+        String roof = service.loadManifest(manifestFile).getLevels().get(2).getId();
 
-        service.apply(manifestFile, List.of(item(new MultiLevelService.Existing(ground.getId()), "Ground")), null);
+        service.apply(manifestFile, List.of(
+                item(new MultiLevelService.Existing(ground.getId()), "Ground"),
+                item(new MultiLevelService.Existing(roof), "Roof")), null);
 
         assertEquals(ground.getId(), service.loadManifest(manifestFile).getCurrentLevelId());
+    }
+
+    @Test
+    void oneLevelLeftTurnsTheMultilevelMapIntoAnOrdinaryMap() throws IOException {
+        Path manifestFile = createTower().manifestFile();
+        MultiLevelManifest manifest = service.loadManifest(manifestFile);
+        MultiLevelManifest.Level first = manifest.getLevels().get(1);
+        Path firstFile = MultiLevelService.levelFile(manifestFile, first);
+        DmProject ground = service.loadLevel(manifestFile, manifest.getLevels().get(0).getId()).project();
+        ground.getLighting().setTimeOfDayPreset("NIGHT");
+        service.saveLevel(manifestFile, manifest.getLevels().get(0).getId(), ground);
+
+        MultiLevelService.ApplyResult result = service.apply(manifestFile,
+                List.of(item(new MultiLevelService.Existing(first.getId()), "First")), null);
+
+        Path collapsed = root.resolve("Tower").resolve("Tower.dmmap");
+        assertNull(result.manifestFile());
+        assertEquals(collapsed, result.collapsedMap());
+        assertEquals(collapsed, result.movedMaps().get(firstFile));
+        assertTrue(Files.isRegularFile(collapsed));
+        assertFalse(Files.exists(manifestFile));
+        assertFalse(Files.exists(collapsed.resolveSibling(MultiLevelService.LEVELS_DIR)));
+        assertEquals("NIGHT", projectService.load(collapsed).getLighting().getTimeOfDayPreset());
+        MapLibraryService.Entry entry = library.scan().children().get(0);
+        assertFalse(entry.isMultiLevel());
+        assertEquals(collapsed, entry.mapFile());
+    }
+
+    @Test
+    void movedOutLevelsBecomeMapsNextToTheMultilevelMap() throws IOException {
+        Path manifestFile = service.create(root, "Tower", List.of(
+                item(new MultiLevelService.Dd2vtt(dd2vtt("tower_00", 40, 20)), "Ground"),
+                item(new MultiLevelService.Dd2vtt(dd2vtt("tower_01", 30, 30)), "First"),
+                item(new MultiLevelService.Empty(), "Roof")), null).manifestFile();
+        MultiLevelManifest manifest = service.loadManifest(manifestFile);
+        MultiLevelManifest.Level ground = manifest.getLevels().get(0);
+        MultiLevelManifest.Level first = manifest.getLevels().get(1);
+        MultiLevelManifest.Level roof = manifest.getLevels().get(2);
+        assertEquals("tower_01", MultiLevelService.suggestedMapName(manifestFile, first));
+        assertEquals("Tower Roof", MultiLevelService.suggestedMapName(manifestFile, roof));
+        DmProject groundProject = service.loadLevel(manifestFile, ground.getId()).project();
+        groundProject.getLighting().setTimeOfDayPreset("DUSK");
+        service.saveLevel(manifestFile, ground.getId(), groundProject);
+
+        MultiLevelService.ApplyResult result = service.apply(manifestFile, List.of(
+                        item(new MultiLevelService.Existing(ground.getId()), "Ground"),
+                        item(new MultiLevelService.Existing(roof.getId()), "Roof")),
+                List.of(new MultiLevelService.Extraction(first.getId(), "tower_01")), null);
+
+        Path extracted = root.resolve("tower_01").resolve("tower_01.dmmap");
+        assertEquals(manifestFile, result.manifestFile());
+        assertEquals(extracted, result.movedMaps().get(MultiLevelService.levelFile(manifestFile, first)));
+        assertTrue(Files.isRegularFile(extracted));
+        assertTrue(Files.isRegularFile(extracted.resolveSibling(
+                projectService.load(extracted).getMap().getImagePath().replace('\\', '/'))));
+        assertEquals("DUSK", projectService.load(extracted).getLighting().getTimeOfDayPreset());
+        assertEquals(2, service.loadManifest(manifestFile).getLevels().size());
+        assertEquals(2, library.scan().children().size());
+    }
+
+    @Test
+    void dissolveSplitsEveryLevelIntoItsOwnMap() throws IOException {
+        Path manifestFile = createTower().manifestFile();
+
+        MultiLevelService.ApplyResult result = service.dissolve(manifestFile, null);
+
+        assertNull(result.manifestFile());
+        assertFalse(Files.exists(manifestFile.getParent()));
+        assertTrue(Files.isRegularFile(root.resolve("tower_00").resolve("tower_00.dmmap")));
+        assertTrue(Files.isRegularFile(root.resolve("tower_01").resolve("tower_01.dmmap")));
+        assertEquals(2, result.movedMaps().size());
+        assertEquals(2, library.scan().children().size());
+    }
+
+    @Test
+    void mergingMultilevelMapsTakesTheLevelsOfTheOtherMap() throws IOException {
+        Path tower = createTower().manifestFile();
+        Path cave = service.create(root, "Cave", List.of(
+                item(new MultiLevelService.Empty(), "Upper"),
+                item(new MultiLevelService.Empty(), "Lower")), null).manifestFile();
+        MultiLevelManifest towerManifest = service.loadManifest(tower);
+        MultiLevelManifest caveManifest = service.loadManifest(cave);
+        List<MultiLevelService.PlanItem> plan = new ArrayList<>(keepAll(towerManifest));
+        for (MultiLevelManifest.Level level : caveManifest.getLevels()) {
+            plan.add(item(new MultiLevelService.ForeignLevel(cave, level.getId()), level.getName()));
+        }
+
+        MultiLevelService.ApplyResult result = service.apply(tower, plan, null);
+
+        assertEquals(tower, result.manifestFile());
+        assertFalse(Files.exists(cave.getParent()));
+        assertEquals(List.of("Ground", "First", "Upper", "Lower"),
+                service.loadManifest(tower).getLevels().stream().map(MultiLevelManifest.Level::getName).toList());
+        assertEquals(1, library.scan().children().size());
+        Path lowerBefore = MultiLevelService.levelFile(cave, caveManifest.getLevels().get(1));
+        MultiLevelService.LevelRef ref = service.locateLevel(result.movedMaps().get(lowerBefore));
+        assertEquals(tower, ref.manifestFile());
+    }
+
+    @Test
+    void takingAllButOneLevelCollapsesTheOtherMultilevelMap() throws IOException {
+        Path tower = createTower().manifestFile();
+        Path cave = service.create(root, "Cave", List.of(
+                item(new MultiLevelService.Empty(), "Upper"),
+                item(new MultiLevelService.Empty(), "Lower")), null).manifestFile();
+        MultiLevelManifest.Level upper = service.loadManifest(cave).getLevels().get(0);
+        List<MultiLevelService.PlanItem> plan = new ArrayList<>(keepAll(service.loadManifest(tower)));
+        plan.add(item(new MultiLevelService.ForeignLevel(cave, upper.getId()), "Upper"));
+
+        service.apply(tower, plan, null);
+
+        assertFalse(Files.exists(cave));
+        assertTrue(Files.isRegularFile(root.resolve("Cave").resolve("Cave.dmmap")));
+        assertEquals(3, service.loadManifest(tower).getLevels().size());
+    }
+
+    @Test
+    void dmZoomIsSharedBetweenLevels() throws IOException {
+        Path manifestFile = createTower().manifestFile();
+        MultiLevelManifest manifest = service.loadManifest(manifestFile);
+        DmProject ground = service.loadLevel(manifestFile, manifest.getLevels().get(0).getId()).project();
+        ground.getViews().getDmCamera().setZoom(2.5);
+        service.saveLevel(manifestFile, manifest.getLevels().get(0).getId(), ground);
+
+        DmProject first = service.loadLevel(manifestFile, manifest.getLevels().get(1).getId()).project();
+        assertEquals(2.5, first.getViews().getDmCamera().getZoom(), 1e-9);
+    }
+
+    @Test
+    void groupsFilesThatDifferOnlyByATrailingNumber() {
+        Path dir = Path.of("maps");
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(
+                dir.resolve("haus der sieben waagen_01.dd2vtt"),
+                dir.resolve("Cave.dd2vtt"),
+                dir.resolve("haus der sieben waagen_10.dd2vtt"),
+                dir.resolve("Haus der sieben Waagen_00.dd2vtt"),
+                dir.resolve("Inn 2.dd2vtt")));
+
+        assertEquals(3, groups.size());
+        assertEquals("haus der sieben waagen", groups.get(0).name());
+        assertEquals(List.of("Haus der sieben Waagen_00.dd2vtt", "haus der sieben waagen_01.dd2vtt",
+                        "haus der sieben waagen_10.dd2vtt"),
+                groups.get(0).files().stream().map(file -> file.getFileName().toString()).toList());
+        assertEquals(List.of("Level 00", "Level 01", "Level 10"), groups.get(0).levelNames());
+        assertTrue(groups.get(0).multiLevel());
+        assertEquals("Cave", groups.get(1).name());
+        assertFalse(groups.get(1).multiLevel());
+        assertEquals("Inn 2", groups.get(2).name());
+        assertFalse(groups.get(2).multiLevel());
+    }
+
+    @Test
+    void groupsLabelledLevelsAndTheirBaseFile() {
+        Path dir = Path.of("maps");
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(
+                dir.resolve("gottloser turm.dd2vtt"),
+                dir.resolve("gottloser_turm_upper_levels_10.dd2vtt"),
+                dir.resolve("gottloser_turm_upper_levels_02_barracks.dd2vtt"),
+                dir.resolve("gottloser_turm_upper_levels_03_office.dd2vtt"),
+                dir.resolve("Goblin Cave.dd2vtt"),
+                dir.resolve("Goblin Camp.dd2vtt"),
+                dir.resolve("Market 1 day.dd2vtt"),
+                dir.resolve("Market 1 night.dd2vtt"),
+                dir.resolve("other").resolve("gottloser turm.dd2vtt")));
+
+        assertEquals(6, groups.size());
+        MultiLevelService.ImportGroup tower = groups.get(0);
+        assertEquals("gottloser turm", tower.name());
+        assertEquals(List.of("gottloser turm.dd2vtt", "gottloser_turm_upper_levels_02_barracks.dd2vtt",
+                        "gottloser_turm_upper_levels_03_office.dd2vtt", "gottloser_turm_upper_levels_10.dd2vtt"),
+                tower.files().stream().map(file -> file.getFileName().toString()).toList());
+        assertEquals(List.of("Level 01", "Level 02 – barracks", "Level 03 – office", "Level 10"), tower.levelNames());
+        assertEquals("Goblin Cave", groups.get(1).name());
+        assertEquals("Goblin Camp", groups.get(2).name());
+        assertEquals("Market 1 day", groups.get(3).name());
+        assertEquals("Market 1 night", groups.get(4).name());
+        assertFalse(groups.get(5).multiLevel());
     }
 
     @Test
@@ -273,8 +457,17 @@ class MultiLevelServiceTest {
     void multilevelMapsCannotBeMergedIntoAnotherOne() throws IOException {
         Path tower = createTower().manifestFile();
         assertThrows(IOException.class, () -> service.create(root, "Castle", List.of(
+                item(new MultiLevelService.Empty(), "Hall"),
                 item(new MultiLevelService.LibraryMap(tower.getParent(), tower), "Tower")), null));
         assertTrue(Files.exists(tower));
+        assertFalse(Files.exists(root.resolve("Castle")));
+    }
+
+    @Test
+    void aNewMultilevelMapNeedsTwoLevels() {
+        assertThrows(IOException.class, () -> service.create(root, "Castle",
+                List.of(item(new MultiLevelService.Empty(), "Hall")), null));
+        assertFalse(Files.exists(root.resolve("Castle")));
     }
 
     @Test
