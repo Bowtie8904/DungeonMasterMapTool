@@ -41,8 +41,18 @@ import java.util.stream.IntStream;
 
 public class CanvasMapRenderer {
     /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
-    private static int lightMapScale() {
-        return PerformanceMode.isEnabled() ? PerformanceMode.lightMapScale() : Tuning.LIGHT_MAP_SCALE.get();
+    private int activeLightMapScale = 4;
+
+    /** Light map divisor of the frame being drawn: the configured one, raised on large canvases to fit the pixel budget. */
+    private int lightMapScale() {
+        return activeLightMapScale;
+    }
+
+    private static int lightMapScaleFor(double width, double height) {
+        int base = PerformanceMode.isEnabled() ? PerformanceMode.lightMapScale() : Tuning.LIGHT_MAP_SCALE.get();
+        double budget = Math.max(1, Tuning.LIGHT_MAP_MAX_PIXELS.get());
+        int forBudget = (int) Math.ceil(Math.sqrt(Math.max(1, width * height) / budget));
+        return Math.max(base, forBudget);
     }
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
@@ -1047,6 +1057,7 @@ public class CanvasMapRenderer {
         if (darkness < 0.01) {
             return;
         }
+        activeLightMapScale = lightMapScaleFor(width, height);
         int bw = Math.max(1, (int) Math.ceil(width / lightMapScale()));
         int bh = Math.max(1, (int) Math.ceil(height / lightMapScale()));
         LightBuffer buffer = playerMode ? playerLightBuffer : dmLightBuffer;

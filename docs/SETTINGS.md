@@ -820,6 +820,15 @@ The lighting (darkness and light circles) is computed at 1/N of the screen resol
 
 *Keywords:* light quality, shadow resolution, lighting performance, light map, blur
 
+### `lighting.lightMapMaxPixels`
+**Default:** `20000` · **Range:** 1000 to 8000000 · **Applies:** live
+
+Upper limit for the number of pixels in one light map. On large screens (for example a 4K player display) the light
+map divisor from `lighting.lightMapScale` is raised until the light map fits this budget, so big canvases do not make
+lighting much slower. Raise it for sharper lighting on big screens, lower it for more speed.
+
+*Keywords:* light quality, lighting performance, 4K, large screen, pixel budget, light map
+
 ### `lighting.shadowRays`
 **Default:** `96` · **Range:** 8 to 1024 · **Applies:** restart
 

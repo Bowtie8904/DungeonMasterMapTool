@@ -375,6 +375,8 @@ public final class Tuning {
             "Share of the time-of-day darkness shown in the DM view (players get all of it).");
     public static final Setting<Integer> LIGHT_MAP_SCALE = integer(LIGHTS, "lighting.lightMapScale", 4, 1, 32, false,
             "Light map resolution divisor: the lighting is computed at 1/N of the screen resolution.");
+    public static final Setting<Integer> LIGHT_MAP_MAX_PIXELS = integer(LIGHTS, "lighting.lightMapMaxPixels", 20000, 1000, 8000000, false,
+            "Pixel budget of one light map: on large screens the divisor is raised until the light map has at most this many pixels.");
     public static final Setting<Integer> SHADOW_RAYS = integer(LIGHTS, "lighting.shadowRays", 96, 8, 1024, true,
             "Rays per light for line of sight and shadows; more gives rounder light circles.");
 
