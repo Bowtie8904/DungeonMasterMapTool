@@ -866,9 +866,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 setTextLayerVisible(textLayerToggle.isSelected());
             }
         });
-        Button copyText = Icons.button(MaterialDesignC.CONTENT_COPY, "Copy the selected lights, effects and text boxes (Ctrl+C)", this::copySelection);
-        Button pasteText = Icons.button(MaterialDesignC.CONTENT_PASTE,
-                "Paste the copied items at the cursor, also into another map (Ctrl+V)", this::pasteSelection);
         Button deleteText = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
         Region textSpacer = new Region();
         HBox.setHgrow(textSpacer, Priority.ALWAYS);
@@ -895,7 +892,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         b -> b.setPlayerVisible(value));
             }
         });
-        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textPlayerToggle, textSpacer, copyText, pasteText, deleteText);
+        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textPlayerToggle, textSpacer, deleteText);
 
         textSizeSpinner = new Spinner<>();
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(textMinFont(), textMaxFont(),
