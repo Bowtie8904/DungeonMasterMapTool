@@ -63,7 +63,7 @@ class MapRotationServiceTest {
         assertEquals(20.0, project.getOverlays().get(1).getPoints().get(3), 0.0001);
     }
     @Test
-    void rotatesTextBoxesAndRoundTrips() {
+    void rotatesTextBoxPositionsOnlyAndRoundTrips() {
         DmProject project = DmProject.builder().build();
         project.getImageLayers().add(DmProject.ImageLayer.builder().id("base").x(0).y(0).width(100).height(50).build());
         project.getTextBoxes().add(DmProject.TextBox.builder().id("t").x(10).y(5).width(20).height(10).build());
@@ -72,8 +72,8 @@ class MapRotationServiceTest {
         service.rotateClockwise(project);
 
         DmProject.TextBox box = project.getTextBoxes().get(0);
-        assertEquals(10, box.getWidth(), 0.0001);
-        assertEquals(20, box.getHeight(), 0.0001);
+        assertEquals(20, box.getWidth(), 0.0001);
+        assertEquals(10, box.getHeight(), 0.0001);
         assertEquals(65, box.getX() + box.getWidth() / 2, 0.0001);
         assertEquals(-5, box.getY() + box.getHeight() / 2, 0.0001);
 

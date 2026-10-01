@@ -373,7 +373,8 @@ Desktop tool for tabletop dungeon masters that:
 - Text boxes are drawn above map, lighting and effects but **below fog**, so fog hides them from players.
 - **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in the settings file (3.25). Selecting the Text tool loads the map's settings, or the global ones when the map has none.
 - `Ctrl+C` copies the selection, `Ctrl+V` pastes it at the mouse position (or the view center) — also into a different map opened afterwards (see 3.28; text boxes are part of the copied items).
-- Text boxes rotate with the map (box rectangle turns, text stays upright) and persist in the save file (`textBoxes`, `textLayerVisible`, `lastTextSettings`).
+- **Global text rotation (player view only):** two rotate buttons (left/right, 90-degree steps) in the *Text* section turn all text boxes (box and text, around the box center) on the **player view only**, e.g. so they face players at a table; the DM view always shows them upright so they stay readable and editable. It is independent of the map rotation (map rotation only moves box positions, never their size or orientation), applies to every map and is persisted globally as `text.rotation` (0/90/180/270) in the settings file (`dmmt.render.TextBoxGeometry`).
+- Text boxes persist in the save file (`textBoxes`, `textLayerVisible`, `lastTextSettings`).
 ## 3.25 Settings File
 
 - All global preferences (sidebar/section state, player screen, tile inches, fog sharpness, light tint, auto-save, text defaults, last import folder) live in `dmmt-settings.ini` **next to the jar** (working directory when run from an IDE; override with `-Ddmmt.settings=<path>`). Nothing is stored in `java.util.prefs` any more; on first start existing values are imported once from the old preferences.
@@ -669,3 +670,5 @@ Desktop tool for tabletop dungeon masters that:
   - Ping visibility and timing behavior.
   - Custom map drag/drop + resize + save/reload fidelity.
   - Ctrl+S persistence across all active tool states.
+
+- **Window sizing:** the DM window's initial size (`Tuning.DM_WINDOW_WIDTH/HEIGHT`) is clamped to the primary screen's visual bounds so it never exceeds the screen on small laptops.

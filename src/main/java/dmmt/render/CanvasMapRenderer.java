@@ -778,6 +778,17 @@ public class CanvasMapRenderer {
         return c * c * (3 - 2 * c);
     }
 
+    private static volatile int textQuarterTurns;
+
+    /** Global rotation of all text boxes on the player view in 90-degree clockwise steps; the DM view is never rotated. */
+    public static void setTextQuarterTurns(int quarterTurns) {
+        textQuarterTurns = TextBoxGeometry.normalize(quarterTurns);
+    }
+
+    public static int getTextQuarterTurns() {
+        return textQuarterTurns;
+    }
+
     public static final double TEXT_BOX_PADDING = 12;
     public static final double TEXT_BOX_CORNER_RADIUS = 12;
     public static final double TEXT_BOX_BORDER_WIDTH = 6;
@@ -791,17 +802,29 @@ public class CanvasMapRenderer {
         double zoom = camera.getZoom();
         textLayouts.keySet().retainAll(project.getTextBoxes().stream().map(DmProject.TextBox::getId).toList());
         TextLayout.Metrics metrics = new FxMetrics();
+        int turns = playerMode ? textQuarterTurns : 0;
         for (DmProject.TextBox box : project.getTextBoxes()) {
             if (!playerMode && box.getId() != null && box.getId().equals(editingTextBoxId)) {
                 continue;
             }
-            double sx = worldToScreenX(box.getX(), width, camera);
-            double sy = worldToScreenY(box.getY(), height, camera);
-            double sw = box.getWidth() * zoom;
-            double sh = box.getHeight() * zoom;
-            if (sx > width || sy > height || sx + sw < 0 || sy + sh < 0) {
+            double[] footprint = TextBoxGeometry.bounds(box, turns);
+            double fx = worldToScreenX(footprint[0], width, camera);
+            double fy = worldToScreenY(footprint[1], height, camera);
+            if (fx > width || fy > height || fx + (footprint[2] - footprint[0]) * zoom < 0
+                    || fy + (footprint[3] - footprint[1]) * zoom < 0) {
                 continue;
             }
+            double innerWidth = box.getWidth() - 2 * TEXT_BOX_PADDING;
+            double sw = box.getWidth() * zoom;
+            double sh = box.getHeight() * zoom;
+            double centerX = worldToScreenX(TextBoxGeometry.centerX(box), width, camera);
+            double centerY = worldToScreenY(TextBoxGeometry.centerY(box), height, camera);
+            gc.save();
+            gc.translate(centerX, centerY);
+            gc.rotate(90.0 * turns);
+            gc.translate(-sw / 2, -sh / 2);
+            double sx = 0;
+            double sy = 0;
             double arc = Math.min(TEXT_BOX_CORNER_RADIUS, Math.min(box.getWidth(), box.getHeight()) / 2.0) * zoom * 2;
             Color background = parseColor(box.getBackgroundColor());
             Color border = parseColor(box.getBorderColor());
@@ -818,8 +841,8 @@ public class CanvasMapRenderer {
                 gc.setLineWidth(lineWidth);
                 gc.strokeRoundRect(sx + inset, sy + inset, sw - lineWidth, sh - lineWidth, innerArc, innerArc);
             }
-            double innerWidth = box.getWidth() - 2 * TEXT_BOX_PADDING;
             if (innerWidth <= 0) {
+                gc.restore();
                 continue;
             }
             TextLayout.Result layout = layoutFor(box, innerWidth, metrics);
@@ -841,6 +864,7 @@ public class CanvasMapRenderer {
                     gc.fillText(fragment.text(), fragment.x(), line.y() + line.baseline());
                 }
             }
+            gc.restore();
             gc.restore();
         }
     }

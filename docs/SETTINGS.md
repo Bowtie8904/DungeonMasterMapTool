@@ -469,6 +469,14 @@ Default border colour of new text boxes (`00` opacity = no border).
 
 *Keywords:* text border, outline, frame, label border, default text
 
+### `text.rotation`
+**Default:** `0` · **Values:** 0, 90, 180, 270 · **Applies:** managed by the app
+
+Global rotation of all text boxes on the player view only (the DM view stays upright; box and text turn clockwise around the box centre). Set with the rotate buttons in the Text
+section; it is independent of the map rotation and applies to every map.
+
+*Keywords:* text rotation, rotate text, label rotation, text orientation
+
 ### `text.minFontSize`
 **Default:** `6` · **Range:** 1 to 100 · **Applies:** restart
 

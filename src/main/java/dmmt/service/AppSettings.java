@@ -299,7 +299,8 @@ public final class AppSettings {
                 new Entry("text.fontSize", String.valueOf(dmmt.model.DmProject.DEFAULT_TEXT_SIZE), "Default font size of new text labels."),
                 new Entry("text.textColor", dmmt.model.DmProject.DEFAULT_TEXT_COLOR, "Default text colour."),
                 new Entry("text.backgroundColor", dmmt.model.DmProject.TRANSPARENT, "Default text background colour."),
-                new Entry("text.borderColor", dmmt.model.DmProject.TRANSPARENT, "Default text border colour."))));
+                new Entry("text.borderColor", dmmt.model.DmProject.TRANSPARENT, "Default text border colour."),
+                new Entry("text.rotation", "0", "Global rotation of all text boxes on the player view in degrees: 0, 90, 180 or 270 (independent of the map rotation)."))));
 
         sections.add(new Section(Tuning.IMPORT, List.of(
                 new Entry("import.lastDirectory", "", "Folder last used when importing a map image."))));
