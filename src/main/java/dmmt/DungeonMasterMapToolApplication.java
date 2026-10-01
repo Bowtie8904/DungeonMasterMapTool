@@ -878,7 +878,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         overlayLightToggle = Icons.toggle(MaterialDesignL.LIGHTBULB_ON_OUTLINE,
-                "Effect emits light in its color (visible when the map is dark) — also changes the selected effect. Defaults per texture are set in the settings file");
+                "Effect emits light in its color (visible when the map is dark) — also changes the selected effect. Works for every texture; picking a texture applies its default from the settings file");
         overlayLightToggle.setSelected(overlayEmitsLight);
         overlayLightToggle.setOnAction(e -> {
             if (syncingControls) {
@@ -4406,10 +4406,9 @@ public class DungeonMasterMapToolApplication extends Application {
         DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
         boolean pen = activeTool == EditorTool.AOE_PEN || activeTool == EditorTool.AOE_LINE
                 || selected != null && ("pen".equals(selected.getType()) || "line".equals(selected.getType()));
-        boolean noLight = pen || !OverlayTextures.defaultEmitsLight(overlayTexture);
         overlayTextureBox.setDisable(pen);
         overlayBorderToggle.setDisable(pen);
-        overlayLightToggle.setDisable(noLight);
+        overlayLightToggle.setDisable(pen);
     }
 
     private void translateOverlay(DmProject.OverlayShape shape, double dx, double dy) {

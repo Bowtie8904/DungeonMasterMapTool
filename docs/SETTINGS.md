@@ -1249,7 +1249,8 @@ Default opacity (0.05 to 1) given to a new effect when this texture is picked.
 
 #### `texture.<kind>.emitsLight`
 `true` makes new effects with this texture glow and light up their surroundings in the effect colour (fire, lava,
-holy light); it can still be switched per effect.
+holy light). It is only the default applied when the texture is picked: the bulb toggle can switch light on or off
+for any effect (also textures set to `false` and flat colour) at any time.
 
 *Keywords:* glowing effect, light source, emissive, fire light, lava glow
 

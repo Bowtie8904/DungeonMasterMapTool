@@ -424,7 +424,7 @@ public class CanvasMapRenderer {
             if (playerMode && !shape.isPlayerVisible()) {
                 continue;
             }
-            if ((shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())) != emitting) {
+            if (emitsLight(shape) != emitting) {
                 continue;
             }
             if (!overlayTouchesScreen(shape, width, height, camera)) {
@@ -1160,8 +1160,7 @@ public class CanvasMapRenderer {
         List<DmProject.OverlayShape> emitters = new java.util.ArrayList<>();
         List<Double> emitterFlickers = new java.util.ArrayList<>();
         for (DmProject.OverlayShape shape : project.getOverlays()) {
-            if (shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())
-                    && (!playerMode || shape.isPlayerVisible())) {
+            if (emitsLight(shape) && (!playerMode || shape.isPlayerVisible())) {
                 String texture = OverlayTextures.normalize(shape.getTexture());
                 double flicker = flickerOn(project)
                         ? LightFlicker.amount(shape.getId(), OverlayTextures.lightFlicker(texture),
@@ -1306,6 +1305,11 @@ public class CanvasMapRenderer {
                 });
             }
         });
+    }
+
+    /** Pen and line strokes are annotations and never emit light. */
+    private static boolean emitsLight(DmProject.OverlayShape shape) {
+        return shape.isEmitsLight() && !"pen".equals(shape.getType()) && !"line".equals(shape.getType());
     }
 
     private static long shapeLightKey(DmProject.OverlayShape shape) {
