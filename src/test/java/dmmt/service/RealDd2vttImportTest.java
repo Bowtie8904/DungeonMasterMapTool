@@ -6,9 +6,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,16 +19,7 @@ class RealDd2vttImportTest {
 
     @Test
     void importsProjectRootDd2vttFile() throws Exception {
-        Path repoRoot = Path.of(System.getProperty("user.dir"));
-        List<Path> dd2vttFiles;
-        try (Stream<Path> stream = Files.list(repoRoot)) {
-            dd2vttFiles = stream
-                    .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".dd2vtt"))
-                    .collect(Collectors.toList());
-        }
-
-        assertFalse(dd2vttFiles.isEmpty(), "No .dd2vtt file found in project root.");
-        Path source = dd2vttFiles.get(0);
+        Path source = Path.of(getClass().getResource("/test-map.dd2vtt").toURI());
         Path projectDir = tempDir.resolve("imported-project");
         Files.createDirectories(projectDir);
 
