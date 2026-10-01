@@ -55,9 +55,27 @@ public class CanvasMapRenderer {
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
 
-    /** Light flicker only runs when the map allows animations and performance mode is off. */
+    /** Global switch for moving effect textures and weather (ui.effectAnimations). */
+    private static volatile boolean effectAnimationsEnabled = true;
+
+    public static void setEffectAnimationsEnabled(boolean enabled) {
+        effectAnimationsEnabled = enabled;
+    }
+
+    public static boolean effectAnimationsOn() {
+        return effectAnimationsEnabled;
+    }
+
+    /** Global light flicker switch (ui.lightFlicker); independent of the per-map effect animations toggle. */
+    private static volatile boolean lightFlickerEnabled = true;
+
+    public static void setLightFlickerEnabled(boolean enabled) {
+        lightFlickerEnabled = enabled;
+    }
+
+    /** Light flicker only runs when the global light flicker toggle is on and performance mode is off. */
     public static boolean flickerOn(DmProject project) {
-        return project.isEffectAnimations() && !PerformanceMode.isEnabled();
+        return lightFlickerEnabled && !PerformanceMode.isEnabled();
     }
 
     public static void setAnimationFps(int fps) {
@@ -306,7 +324,7 @@ public class CanvasMapRenderer {
         if (type == WeatherType.NONE) {
             return;
         }
-        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
+        double seconds = effectAnimationsEnabled ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
             seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
         }
@@ -499,7 +517,7 @@ public class CanvasMapRenderer {
                                    String texture, Color base, Color edge, double visibility, double width, double height,
                                    DmProject.CameraState camera) {
         double zoom = camera.getZoom();
-        double seconds = project.isEffectAnimations() ? System.nanoTime() / 1_000_000_000.0 : 0;
+        double seconds = effectAnimationsEnabled ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
             seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
         }

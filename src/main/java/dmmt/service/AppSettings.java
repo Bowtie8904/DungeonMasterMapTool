@@ -267,7 +267,9 @@ public final class AppSettings {
         sections.add(new Section(Tuning.WINDOW, List.of(
                 new Entry("ui.sidebarVisible", "true", "Show the sidebar (true/false)."),
                 new Entry("ui.controlsExpanded", "true", "Show the toolbar controls (true/false)."),
-                new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."))));
+                new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."),
+                new Entry("ui.effectAnimations", "true", "Animate effect textures and weather on all maps (true/false)."),
+                new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."))));
 
         List<Entry> panels = new ArrayList<>();
         for (String id : SECTION_IDS) {

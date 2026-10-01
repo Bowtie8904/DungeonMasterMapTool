@@ -88,6 +88,16 @@ Whether **performance mode** (the toggle at the bottom left of the DM window) is
 quality for speed on weak machines; what exactly it reduces is configured in the [Performance mode](#performance-mode)
 section.
 
+### `ui.effectAnimations`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** managed by the app
+
+Global switch for moving effect textures and weather on all maps (animations toggle in the Effects section). Independent of `ui.lightFlicker`.
+
+### `ui.lightFlicker`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** managed by the app
+
+Global light flicker switch (circle-flash toggle in the Lighting section, next to Remove light). Off = no light flickers; on = each light flickers according to its own flicker setting. Independent of the per-map effect animations toggle; performance mode always disables flicker.
+
 *Keywords:* performance mode, slow computer, laptop, low end, speed, lag, battery
 
 ### `window.dmWidth`

@@ -57,8 +57,6 @@ public class DmProject {
 
     @Builder.Default
     private boolean textLayerVisible = true;
-    @Builder.Default
-    private boolean effectAnimations = true;
 
     @Builder.Default
     private WeatherState weather = WeatherState.builder().build();

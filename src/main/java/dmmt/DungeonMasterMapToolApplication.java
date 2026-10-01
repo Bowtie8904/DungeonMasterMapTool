@@ -125,6 +125,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final int DEFAULT_FPS_IDLE = 10;
     private static final String PREF_SIDEBAR_VISIBLE = "ui.sidebarVisible";
     private static final String PREF_PERFORMANCE_MODE = "ui.performanceMode";
+    private static final String PREF_LIGHT_FLICKER = "ui.lightFlicker";
+    private static final String PREF_EFFECT_ANIMATIONS = "ui.effectAnimations";
     private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
     private static final String PREF_FOG_SOFTNESS = "fog.softness";
@@ -271,6 +273,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker textBorderPicker;
     private ToggleButton textLayerToggle;
     private ToggleButton effectAnimationsToggle;
+    private ToggleButton lightFlickerToggle;
     private ToggleButton textPlayerToggle;
     private ToggleButton textAutoSizeToggle;
     private Button removeLightButton;
@@ -690,6 +693,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 "Remove the selected lights (Del) — select lights first by clicking one or dragging a box around them",
                 this::removeSelectedLights);
         removeLightButton.setDisable(true);
+        lightFlickerToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
+                "Light flicker for all maps. Off = no light flickers; on = every light flickers according to its own flicker setting. "
+                        + "Independent of the effect animations toggle; always off in performance mode");
+        lightFlickerToggle.setSelected(preferences.getBoolean(PREF_LIGHT_FLICKER, true));
+        CanvasMapRenderer.setLightFlickerEnabled(lightFlickerToggle.isSelected());
+        lightFlickerToggle.setOnAction(e -> {
+            boolean on = lightFlickerToggle.isSelected();
+            CanvasMapRenderer.setLightFlickerEnabled(on);
+            preferences.putBoolean(PREF_LIGHT_FLICKER, on);
+            status(on ? "Light flicker on." : "Light flicker off.");
+            renderDm();
+            renderPlayer();
+        });
         HBox lightRow = row(
                 toolButtons.get(EditorTool.LIGHT_ADD),
                 toolButtons.get(EditorTool.LIGHT_CANDLE),
@@ -698,7 +714,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 toolButtons.get(EditorTool.LIGHT_MAGIC),
                 Icons.separator(),
                 removeLightButton);
-        HBox timeRow = row(timeSegment);
+        Region timeSpacer = new Region();
+        HBox.setHgrow(timeSpacer, Priority.ALWAYS);
+        HBox timeRow = row(timeSegment, timeSpacer, lightFlickerToggle);
         Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
         lightHint.getStyleClass().add("muted");
         lightHint.setWrapText(true);
@@ -848,17 +866,16 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         effectAnimationsToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
-                "Animate effect textures and light flicker on this map (turn off to improve performance)");
-        effectAnimationsToggle.setSelected(true);
+                "Animate effect textures and weather on all maps (light flicker has its own toggle in the Lighting section; turn off to improve performance)");
+        effectAnimationsToggle.setSelected(preferences.getBoolean(PREF_EFFECT_ANIMATIONS, true));
+        CanvasMapRenderer.setEffectAnimationsEnabled(effectAnimationsToggle.isSelected());
         effectAnimationsToggle.setOnAction(e -> {
-            if (!syncingControls) {
-                project.setEffectAnimations(effectAnimationsToggle.isSelected());
-                if (frozenPlayerProject != null) {
-                    frozenPlayerProject.setEffectAnimations(effectAnimationsToggle.isSelected());
-                }
-                renderDm();
-                renderPlayer();
-            }
+            boolean on = effectAnimationsToggle.isSelected();
+            CanvasMapRenderer.setEffectAnimationsEnabled(on);
+            preferences.putBoolean(PREF_EFFECT_ANIMATIONS, on);
+            status(on ? "Effect animations on." : "Effect animations off.");
+            renderDm();
+            renderPlayer();
         });
         HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, overlayLightToggle, effectAnimationsToggle);
         HBox effectBrushRow = row(brushSlider());
@@ -2500,14 +2517,12 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** True when the map has flickering lights or moving effect textures and animations are enabled. */
     private static boolean hasAnimation(DmProject candidate) {
-        if (!candidate.isEffectAnimations()) {
-            return false;
-        }
+        boolean animated = CanvasMapRenderer.effectAnimationsOn();
         boolean flicker = CanvasMapRenderer.flickerOn(candidate);
-        if (candidate.getWeather() != null && WeatherType.from(candidate.getWeather().getType()) != WeatherType.NONE) {
+        if (animated && candidate.getWeather() != null && WeatherType.from(candidate.getWeather().getType()) != WeatherType.NONE) {
             return true;
         }
-        return candidate.getOverlays().stream().anyMatch(o -> OverlayTextures.isMoving(o.getTexture())
+        return candidate.getOverlays().stream().anyMatch(o -> animated && OverlayTextures.isMoving(o.getTexture())
                 || flicker && o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
                 || flicker && candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
                 && l.getFlicker() != null && l.getFlicker().isEnabled() && l.getFlicker().getStrength() > 0);
@@ -3695,9 +3710,6 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (textLayerToggle != null) {
                 textLayerToggle.setSelected(project.isTextLayerVisible());
-                if (effectAnimationsToggle != null) {
-                    effectAnimationsToggle.setSelected(project.isEffectAnimations());
-                }
             }
         } finally {
             syncingControls = false;
