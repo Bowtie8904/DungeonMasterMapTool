@@ -273,6 +273,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton effectAnimationsToggle;
     private ToggleButton textPlayerToggle;
     private ToggleButton textAutoSizeToggle;
+    private Button removeLightButton;
+    private Button deleteTextButton;
+    private Button deleteEffectButton;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
     private Slider playerZoomSlider;
@@ -684,6 +687,10 @@ public class DungeonMasterMapToolApplication extends Application {
             timeButtons.put(preset, button);
             timeSegment.getChildren().add(button);
         }
+        removeLightButton = Icons.button(MaterialDesignL.LIGHTBULB_OFF_OUTLINE,
+                "Remove the selected lights (Del) — select lights first by clicking one or dragging a box around them",
+                this::removeSelectedLights);
+        removeLightButton.setDisable(true);
         HBox lightRow = row(
                 toolButtons.get(EditorTool.LIGHT_ADD),
                 toolButtons.get(EditorTool.LIGHT_CANDLE),
@@ -691,7 +698,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 toolButtons.get(EditorTool.LIGHT_CAMPFIRE),
                 toolButtons.get(EditorTool.LIGHT_MAGIC),
                 Icons.separator(),
-                toolButtons.get(EditorTool.LIGHT_REMOVE));
+                removeLightButton);
         HBox timeRow = row(timeSegment);
         Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
         lightHint.getStyleClass().add("muted");
@@ -752,14 +759,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect visibility", selected.getId(), s -> s.setPlayerVisible(overlayPlayerVisible));
             }
         });
-        Button deleteEffect = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected effect (Del)",
+        deleteEffectButton = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected effect (Del)",
                 this::deleteSelectedOverlay);
         Button clearEffects = Icons.button(MaterialDesignD.DELETE_SWEEP_OUTLINE, "Remove all effects", this::clearOverlays);
         clearEffects.getStyleClass().add("danger");
         Region effectSpacer = new Region();
         HBox.setHgrow(effectSpacer, Priority.ALWAYS);
         HBox effectToolsRow = row(toolButtons.get(EditorTool.AOE_CIRCLE), toolButtons.get(EditorTool.AOE_RECT),
-                toolButtons.get(EditorTool.AOE_BRUSH), toolButtons.get(EditorTool.AOE_PEN), toolButtons.get(EditorTool.AOE_LINE), effectSpacer, deleteEffect, clearEffects);
+                toolButtons.get(EditorTool.AOE_BRUSH), toolButtons.get(EditorTool.AOE_PEN), toolButtons.get(EditorTool.AOE_LINE), effectSpacer, deleteEffectButton, clearEffects);
         HBox effectStyleRow = row(overlayColorPicker, overlayAlphaSlider, overlayPlayerToggle);
         overlayTextureBox = new ComboBox<>();
         overlayTextureBox.getItems().addAll(OverlayTextures.KINDS);
@@ -866,7 +873,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 setTextLayerVisible(textLayerToggle.isSelected());
             }
         });
-        Button deleteText = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
+        deleteTextButton = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected text box (Del)", this::deleteSelectedText);
         Region textSpacer = new Region();
         HBox.setHgrow(textSpacer, Priority.ALWAYS);
         textAutoSizeToggle = Icons.toggle(MaterialDesignA.ARROW_EXPAND_ALL,
@@ -892,7 +899,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         b -> b.setPlayerVisible(value));
             }
         });
-        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textPlayerToggle, textSpacer, deleteText);
+        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textPlayerToggle, textSpacer, deleteTextButton);
 
         textSizeSpinner = new Spinner<>();
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(textMinFont(), textMaxFont(),
@@ -1535,10 +1542,6 @@ public class DungeonMasterMapToolApplication extends Application {
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
             case LIGHT_ADD, LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     Icons.cursor(activeTool.icon, 0.5, 0.5);
-            case LIGHT_REMOVE -> hoverInsideCanvas && pickNearestLight(hoverWorldX, hoverWorldY,
-                    Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, project.getViews().getDmCamera().getZoom())) != null
-                    ? Icons.cursor(MaterialDesignL.LIGHTBULB_OFF_OUTLINE, 0.5, 0.5)
-                    : Cursor.DEFAULT;
             default -> Cursor.CROSSHAIR;
         };
     }
@@ -1815,18 +1818,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 setActiveTool(EditorTool.SELECT);
                 String name = activeTool == EditorTool.LIGHT_ADD ? "torch" : activeTool.label.toLowerCase();
                 status("Added " + name + ". Drag it to move; right-click for range, flicker, color and fog reveal.");
-                return;
-            }
-
-            if (activeTool == EditorTool.LIGHT_REMOVE) {
-                DmProject.LightSource hit = pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
-                if (hit == null) {
-                    status("No light there — click directly on the light you want to remove.");
-                    return;
-                }
-                removeLight(hit.getId());
-                setActiveTool(EditorTool.SELECT);
-                status("Removed light.");
                 return;
             }
 
@@ -2432,6 +2423,7 @@ public class DungeonMasterMapToolApplication extends Application {
         drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), Tuning.LASER_DM_DOT.get());
         drawSelectionHandle(fogGc);
         updateEffectStyleControls();
+        updateSelectionControls();
         drawOverlaySelection(fogGc);
         drawTextSelection(fogGc);
         drawGroupSelection(fogGc);
@@ -3348,7 +3340,6 @@ public class DungeonMasterMapToolApplication extends Application {
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
             case LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     status(activeTool.label + ": click the map where the light should go.");
-            case LIGHT_REMOVE -> status("Remove light: click the light you want to remove.");
         }
     }
 
@@ -4268,6 +4259,28 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     /** The texture, border and light controls do not apply to pen lines; light also needs a light-emitting texture. */
+    /** Enables buttons that act on a selection only while such an element is selected. */
+    private void updateSelectionControls() {
+        if (removeLightButton == null || textPlayerToggle == null) {
+            return;
+        }
+        removeLightButton.setDisable(selectedLightIds().isEmpty());
+        deleteEffectButton.setDisable(findOverlay(selectedOverlayId) == null);
+        DmProject.TextBox text = findTextBox(selectedTextId);
+        deleteTextButton.setDisable(text == null);
+        textAutoSizeToggle.setDisable(text == null);
+        textPlayerToggle.setDisable(text == null);
+        if (text == null && (textPlayerToggle.isSelected() || textAutoSizeToggle.isSelected())) {
+            syncingControls = true;
+            try {
+                textPlayerToggle.setSelected(false);
+                textAutoSizeToggle.setSelected(false);
+            } finally {
+                syncingControls = false;
+            }
+        }
+    }
+
     private void updateEffectStyleControls() {
         if (overlayTextureBox == null) {
             return;
@@ -5717,6 +5730,51 @@ public class DungeonMasterMapToolApplication extends Application {
         light.setFlicker(copy.getFlicker());
     }
 
+    private java.util.List<String> selectedLightIds() {
+        pruneGroup();
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (String key : groupKeys) {
+            if (key.startsWith("light:")) {
+                ids.add(keyId(key));
+            }
+        }
+        if (ids.isEmpty() && selectedLight != null && findLightById(selectedLight.getId()) != null) {
+            ids.add(selectedLight.getId());
+        }
+        return ids;
+    }
+
+    private void removeSelectedLights() {
+        java.util.List<String> ids = selectedLightIds();
+        if (ids.isEmpty()) {
+            return;
+        }
+        if (ids.size() == 1) {
+            removeLight(ids.get(0));
+            return;
+        }
+        java.util.List<DmProject.LightSource> backups = new java.util.ArrayList<>();
+        for (String id : ids) {
+            backups.add(cloneLight(findLightById(id)));
+        }
+        executeWithHistory(
+                "Remove lights",
+                () -> {
+                    project.getLighting().getLights().removeIf(l -> ids.contains(l.getId()));
+                    groupKeys.removeIf(key -> key.startsWith("light:"));
+                    selectedLight = null;
+                },
+                () -> {
+                    for (DmProject.LightSource backup : backups) {
+                        if (findLightById(backup.getId()) == null) {
+                            project.getLighting().getLights().add(cloneLight(backup));
+                        }
+                    }
+                }
+        );
+        status("Removed " + ids.size() + " lights.");
+    }
+
     private void removeLight(String id) {
         DmProject.LightSource light = findLightById(id);
         if (light == null) {
@@ -6139,8 +6197,7 @@ public class DungeonMasterMapToolApplication extends Application {
         LIGHT_CANDLE("Candle", "click the map to place a candle (%s)", MaterialDesignC.CANDLE, false, false),
         LIGHT_LANTERN("Lantern", "click the map to place a lantern (%s)", MaterialDesignL.LAMP, false, false),
         LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire (%s)", MaterialDesignC.CAMPFIRE, false, false),
-        LIGHT_MAGIC("Magic light", "click the map to place a magical light (%s)", MaterialDesignA.AUTO_FIX, false, false),
-        LIGHT_REMOVE("Remove light", "click a light to remove it", MaterialDesignL.LIGHTBULB_OFF_OUTLINE, false, false);
+        LIGHT_MAGIC("Magic light", "click the map to place a magical light (%s)", MaterialDesignA.AUTO_FIX, false, false);
 
         private final String label;
         private final String description;
@@ -6170,7 +6227,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isLightTool() {
-            return this == LIGHT_REMOVE || isLightPlaceTool();
+            return isLightPlaceTool();
         }
 
         boolean isLightPlaceTool() {
