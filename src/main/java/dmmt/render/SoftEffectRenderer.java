@@ -31,6 +31,9 @@ final class SoftEffectRenderer {
         private int[] pixels = new int[0];
         private int capW;
         private int capH;
+        private long key;
+        private int w;
+        private int h;
 
         void ensure(int w, int h) {
             if (image != null && w <= capW && h <= capH) {
@@ -58,11 +61,12 @@ final class SoftEffectRenderer {
 
     /**
      * Draws one soft textured shape. {@code featherWorld} and {@code passes} have the same meaning as for the inset
-     * passes of the vector path; the mask is their continuous equivalent.
+     * passes of the vector path; the mask is their continuous equivalent. {@code maxScale} caps the image resolution
+     * relative to the screen. The image is only recomputed when the animation time, the view or the shape changed.
      */
     void draw(GraphicsContext gc, DmProject.OverlayShape shape, String type, Image tile, List<OverlayTextures.Layer> layers,
               double alpha, double seconds, double tileWorld, double featherWorld, int passes, boolean playerMode,
-              double canvasW, double canvasH, DmProject.CameraState camera) {
+              double maxScale, double canvasW, double canvasH, DmProject.CameraState camera) {
         if (shape.getId() == null || layers.isEmpty()) {
             return;
         }
@@ -101,78 +105,34 @@ final class SoftEffectRenderer {
             density = Math.max(density, TILE / tileScreen[l]);
         }
         // Texels are magnified when zoomed in, so the image never needs more pixels than the texture has.
-        double scale = Math.max(0.05, Math.min(1.0, density));
+        double scale = Math.max(0.05, Math.min(Math.min(1.0, maxScale), density));
         int ow = Math.max(1, (int) Math.ceil((sx1 - sx0) * scale));
         int oh = Math.max(1, (int) Math.ceil((sy1 - sy0) * scale));
-        Output out = (playerMode ? playerOutputs : dmOutputs).computeIfAbsent(shape.getId(), k -> new Output());
-        out.ensure(ow, oh);
-        int[] tex = texels(tile);
-        int[] pixels = out.pixels;
-        float[] m = mask.alpha();
-        int mw = mask.w();
-        int mh = mask.h();
-        double cell = mask.cell();
-        double mox = mask.originX();
-        double moy = mask.originY();
         double inv = 1.0 / scale;
+        Output out = (playerMode ? playerOutputs : dmOutputs).computeIfAbsent(shape.getId(), k -> new Output());
+        int[] tex = texels(tile);
 
-        IntStream.range(0, oh).parallel().forEach(j -> {
-            double sy = sy0 + (j + 0.5) * inv;
-            double my = ((sy - halfH) / zoom + camY - moy) / cell - 0.5;
-            int row = j * ow;
-            for (int i = 0; i < ow; i++) {
-                double sx = sx0 + (i + 0.5) * inv;
-                double mx = ((sx - halfW) / zoom + camX - mox) / cell - 0.5;
-                double a = sampleMask(m, mw, mh, mx, my);
-                if (a <= 0) {
-                    pixels[row + i] = 0;
-                    continue;
-                }
-                double outA = 0;
-                double outR = 0;
-                double outG = 0;
-                double outB = 0;
-                for (int l = 0; l < layerCount; l++) {
-                    double la = Math.min(0.999, layerAlpha[l] * a);
-                    if (la <= 0) {
-                        continue;
-                    }
-                    double u = (sx - layerOx[l]) / tileScreen[l] * TILE - 0.5;
-                    double v = (sy - layerOy[l]) / tileScreen[l] * TILE - 0.5;
-                    int x0 = (int) Math.floor(u);
-                    int y0 = (int) Math.floor(v);
-                    double fx = u - x0;
-                    double fy = v - y0;
-                    x0 = Math.floorMod(x0, TILE);
-                    y0 = Math.floorMod(y0, TILE);
-                    int x1 = x0 + 1 == TILE ? 0 : x0 + 1;
-                    int y1 = y0 + 1 == TILE ? 0 : y0 + 1;
-                    int c00 = tex[y0 * TILE + x0];
-                    int c10 = tex[y0 * TILE + x1];
-                    int c01 = tex[y1 * TILE + x0];
-                    int c11 = tex[y1 * TILE + x1];
-                    double w00 = (1 - fx) * (1 - fy);
-                    double w10 = fx * (1 - fy);
-                    double w01 = (1 - fx) * fy;
-                    double w11 = fx * fy;
-                    double sa = (w00 * (c00 >>> 24) + w10 * (c10 >>> 24) + w01 * (c01 >>> 24) + w11 * (c11 >>> 24)) * la;
-                    double sr = (w00 * ((c00 >> 16) & 0xFF) + w10 * ((c10 >> 16) & 0xFF) + w01 * ((c01 >> 16) & 0xFF) + w11 * ((c11 >> 16) & 0xFF)) * la;
-                    double sg = (w00 * ((c00 >> 8) & 0xFF) + w10 * ((c10 >> 8) & 0xFF) + w01 * ((c01 >> 8) & 0xFF) + w11 * ((c11 >> 8) & 0xFF)) * la;
-                    double sb = (w00 * (c00 & 0xFF) + w10 * (c10 & 0xFF) + w01 * (c01 & 0xFF) + w11 * (c11 & 0xFF)) * la;
-                    double keep = 1 - sa / 255.0;
-                    outA = sa + outA * keep;
-                    outR = sr + outR * keep;
-                    outG = sg + outG * keep;
-                    outB = sb + outB * keep;
-                }
-                int ia = Math.min(255, (int) (outA + 0.5));
-                pixels[row + i] = (ia << 24)
-                        | (Math.min(ia, (int) (outR + 0.5)) << 16)
-                        | (Math.min(ia, (int) (outG + 0.5)) << 8)
-                        | Math.min(ia, (int) (outB + 0.5));
-            }
-        });
-        out.image.getPixelWriter().setPixels(0, 0, ow, oh, PixelFormat.getIntArgbPreInstance(), pixels, 0, ow);
+        long key = mask.key();
+        key = 31 * key + Double.hashCode(seconds);
+        key = 31 * key + Double.hashCode(zoom);
+        key = 31 * key + Double.hashCode(camX);
+        key = 31 * key + Double.hashCode(camY);
+        key = 31 * key + Double.hashCode(canvasW);
+        key = 31 * key + Double.hashCode(canvasH);
+        key = 31 * key + Double.hashCode(alpha);
+        key = 31 * key + Double.hashCode(scale);
+        key = 31 * key + Double.hashCode(tileWorld);
+        key = 31 * key + System.identityHashCode(tex);
+        key = 31 * key + layers.hashCode();
+        if (out.image == null || out.key != key || out.w != ow || out.h != oh) {
+            out.ensure(ow, oh);
+            out.key = key;
+            out.w = ow;
+            out.h = oh;
+            composite(out.pixels, ow, oh, sx0, sy0, inv, mask, tex, layerCount, tileScreen, layerOx, layerOy, layerAlpha,
+                    zoom, camX, camY, halfW, halfH);
+            out.image.getPixelWriter().setPixels(0, 0, ow, oh, PixelFormat.getIntArgbPreInstance(), out.pixels, 0, ow);
+        }
         gc.save();
         gc.setGlobalAlpha(1);
         gc.setImageSmoothing(true);
@@ -180,21 +140,100 @@ final class SoftEffectRenderer {
         gc.restore();
     }
 
-    private static double sampleMask(float[] m, int w, int h, double x, double y) {
-        int x0 = (int) Math.floor(x);
-        int y0 = (int) Math.floor(y);
-        if (x0 < -1 || y0 < -1 || x0 >= w || y0 >= h) {
-            return 0;
+    private static void composite(int[] pixels, int ow, int oh, double sx0, double sy0, double inv, Mask mask, int[] tex,
+                                  int layerCount, double[] tileScreen, double[] layerOx, double[] layerOy,
+                                  double[] layerAlpha, double zoom, double camX, double camY, double halfW, double halfH) {
+        float[] m = mask.alpha();
+        int mw = mask.w();
+        int mh = mask.h();
+        double cell = mask.cell();
+        // Mask and texture coordinates are linear in the output column, so each row only adds a step per pixel.
+        double mx0 = ((sx0 + 0.5 * inv - halfW) / zoom + camX - mask.originX()) / cell - 0.5;
+        double mdx = inv / zoom / cell;
+        double[] u0 = new double[layerCount];
+        double[] du = new double[layerCount];
+        for (int l = 0; l < layerCount; l++) {
+            u0[l] = (sx0 + 0.5 * inv - layerOx[l]) / tileScreen[l] * TILE - 0.5;
+            du[l] = inv / tileScreen[l] * TILE;
         }
-        double fx = x - x0;
-        double fy = y - y0;
-        double a00 = maskAt(m, w, h, x0, y0);
-        double a10 = maskAt(m, w, h, x0 + 1, y0);
-        double a01 = maskAt(m, w, h, x0, y0 + 1);
-        double a11 = maskAt(m, w, h, x0 + 1, y0 + 1);
-        return (a00 * (1 - fx) + a10 * fx) * (1 - fy) + (a01 * (1 - fx) + a11 * fx) * fy;
+        IntStream.range(0, oh).parallel().forEach(j -> {
+            double sy = sy0 + (j + 0.5) * inv;
+            double my = ((sy - halfH) / zoom + camY - mask.originY()) / cell - 0.5;
+            int row = j * ow;
+            int my0 = (int) Math.floor(my);
+            double fmy = my - my0;
+            if (my0 < -1 || my0 >= mh) {
+                java.util.Arrays.fill(pixels, row, row + ow, 0);
+                return;
+            }
+            int[] ty0 = new int[layerCount];
+            int[] ty1 = new int[layerCount];
+            int[] wy = new int[layerCount];
+            for (int l = 0; l < layerCount; l++) {
+                double v = (sy - layerOy[l]) / tileScreen[l] * TILE - 0.5;
+                int y0 = (int) Math.floor(v);
+                wy[l] = (int) ((v - y0) * 256);
+                y0 = Math.floorMod(y0, TILE);
+                ty0[l] = y0 * TILE;
+                ty1[l] = (y0 + 1 == TILE ? 0 : y0 + 1) * TILE;
+            }
+            for (int i = 0; i < ow; i++) {
+                double mx = mx0 + i * mdx;
+                int mxi = (int) Math.floor(mx);
+                double a;
+                if (mxi < -1 || mxi >= mw) {
+                    a = 0;
+                } else {
+                    double fmx = mx - mxi;
+                    double a00 = maskAt(m, mw, mh, mxi, my0);
+                    double a10 = maskAt(m, mw, mh, mxi + 1, my0);
+                    double a01 = maskAt(m, mw, mh, mxi, my0 + 1);
+                    double a11 = maskAt(m, mw, mh, mxi + 1, my0 + 1);
+                    a = (a00 + (a10 - a00) * fmx) * (1 - fmy) + (a01 + (a11 - a01) * fmx) * fmy;
+                }
+                if (a <= 0.002) {
+                    pixels[row + i] = 0;
+                    continue;
+                }
+                int outA = 0;
+                int outR = 0;
+                int outG = 0;
+                int outB = 0;
+                for (int l = 0; l < layerCount; l++) {
+                    int la = (int) (Math.min(0.999, layerAlpha[l] * a) * 256);
+                    if (la <= 0) {
+                        continue;
+                    }
+                    double u = u0[l] + i * du[l];
+                    int x0 = (int) Math.floor(u);
+                    int wx = (int) ((u - x0) * 256);
+                    x0 = Math.floorMod(x0, TILE);
+                    int x1 = x0 + 1 == TILE ? 0 : x0 + 1;
+                    int c00 = tex[ty0[l] + x0];
+                    int c10 = tex[ty0[l] + x1];
+                    int c01 = tex[ty1[l] + x0];
+                    int c11 = tex[ty1[l] + x1];
+                    int wyl = wy[l];
+                    int w11 = wx * wyl;
+                    int w10 = (wx << 8) - w11;
+                    int w01 = (wyl << 8) - w11;
+                    int w00 = 65536 - w10 - w01 - w11;
+                    // Bilinear sample in 16.16 fixed point, then scaled by the layer alpha (x/256).
+                    int sa = (int) (((long) (w00 * (c00 >>> 24) + w10 * (c10 >>> 24) + w01 * (c01 >>> 24) + w11 * (c11 >>> 24)) * la) >>> 24);
+                    int sr = (int) (((long) (w00 * ((c00 >> 16) & 0xFF) + w10 * ((c10 >> 16) & 0xFF) + w01 * ((c01 >> 16) & 0xFF) + w11 * ((c11 >> 16) & 0xFF)) * la) >>> 24);
+                    int sg = (int) (((long) (w00 * ((c00 >> 8) & 0xFF) + w10 * ((c10 >> 8) & 0xFF) + w01 * ((c01 >> 8) & 0xFF) + w11 * ((c11 >> 8) & 0xFF)) * la) >>> 24);
+                    int sb = (int) (((long) (w00 * (c00 & 0xFF) + w10 * (c10 & 0xFF) + w01 * (c01 & 0xFF) + w11 * (c11 & 0xFF)) * la) >>> 24);
+                    int keep = 255 - sa;
+                    outA = sa + (outA * keep + 127) / 255;
+                    outR = sr + (outR * keep + 127) / 255;
+                    outG = sg + (outG * keep + 127) / 255;
+                    outB = sb + (outB * keep + 127) / 255;
+                }
+                int ia = Math.min(255, outA);
+                pixels[row + i] = (ia << 24) | (Math.min(ia, outR) << 16) | (Math.min(ia, outG) << 8) | Math.min(ia, outB);
+            }
+        });
     }
-
     private static double maskAt(float[] m, int w, int h, int x, int y) {
         return x < 0 || y < 0 || x >= w || y >= h ? 0 : m[y * w + x];
     }

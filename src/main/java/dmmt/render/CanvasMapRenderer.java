@@ -618,8 +618,10 @@ public class CanvasMapRenderer {
         double feather = featherWorld * zoom;
         boolean chasm = OverlayTextures.CHASM.equals(texture);
         if (soft && !chasm) {
-            softEffects.draw(gc, shape, type, tile, OverlayTextures.layers(texture), alpha, seconds, tileWorld,
-                    featherWorld, passes, playerMode, width, height, camera);
+            // Soft effects are cached images: stepping the clock at the animation rate lets frames above it reuse them.
+            double softSeconds = Math.floor(seconds * animationFps) / animationFps;
+            softEffects.draw(gc, shape, type, tile, OverlayTextures.layers(texture), alpha, softSeconds, tileWorld,
+                    featherWorld, passes, playerMode, Tuning.EFFECT_SOFT_RESOLUTION.get(), width, height, camera);
             drawShapeBorder(gc, shape, type, edge, width, height, camera);
             return;
         }

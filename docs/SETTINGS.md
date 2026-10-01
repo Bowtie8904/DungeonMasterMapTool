@@ -793,6 +793,15 @@ can tell them apart. `0` hides them for the DM too.
 
 *Keywords:* hidden effect, DM only, invisible to players, secret area, trap
 
+### `effects.softResolution`
+**Default:** `0.5` · **Range:** 0.1 to 1 · **Applies:** live
+
+Soft-edged effects (fire, smoke, mist, holy, ...) are composited on the CPU into an image at this fraction of the screen
+resolution and smoothly scaled up. `0.5` computes a quarter of the pixels of `1`; the textures are soft noise, so the
+difference is hard to see. Lower it if busy maps use a lot of CPU, raise it to `1` for the crispest flames.
+
+*Keywords:* effect quality, fire, smoke, CPU usage, effect performance, blurry effects
+
 ---
 
 ## Lights

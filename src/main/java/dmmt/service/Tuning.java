@@ -332,6 +332,8 @@ public final class Tuning {
             "Line width of the Pen tool in grid cells.");
     public static final Setting<Double> HIDDEN_SHAPE_OPACITY = decimal(EDITING, "effects.dmHiddenOpacity", 0.35, 0, 1, false,
             "Opacity factor of effects hidden from players, as drawn in the DM view.");
+    public static final Setting<Double> EFFECT_SOFT_RESOLUTION = decimal(EDITING, "effects.softResolution", 0.5, 0.1, 1, false,
+            "Resolution of soft effects (fire, smoke, ...) relative to the screen; lower is faster and slightly blurrier.");
 
     // ---- Text ----
 
