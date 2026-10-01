@@ -395,6 +395,9 @@ public class DmProject {
         private String borderColor = TRANSPARENT;
         /** When set, the box width and height follow its text instead of being fixed. */
         private boolean autoSize;
+        /** When false, only the DM sees the box. */
+        @Builder.Default
+        private boolean playerVisible = true;
     }
 
     /** A stretch of text with one font size and color; line breaks are "\n" inside the text. */

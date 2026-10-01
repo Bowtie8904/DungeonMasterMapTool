@@ -811,6 +811,9 @@ public class CanvasMapRenderer {
             if (!playerMode && box.getId() != null && box.getId().equals(editingTextBoxId)) {
                 continue;
             }
+            if (playerMode && !box.isPlayerVisible()) {
+                continue;
+            }
             double[] footprint = TextBoxGeometry.bounds(box, turns);
             double fx = worldToScreenX(footprint[0], width, camera);
             double fy = worldToScreenY(footprint[1], height, camera);
@@ -824,6 +827,9 @@ public class CanvasMapRenderer {
             double centerX = worldToScreenX(TextBoxGeometry.centerX(box), width, camera);
             double centerY = worldToScreenY(TextBoxGeometry.centerY(box), height, camera);
             gc.save();
+            if (!playerMode && !box.isPlayerVisible()) {
+                gc.setGlobalAlpha(Tuning.HIDDEN_SHAPE_OPACITY.get());
+            }
             gc.translate(centerX, centerY);
             gc.rotate(90.0 * turns);
             gc.translate(-sw / 2, -sh / 2);
@@ -870,6 +876,31 @@ public class CanvasMapRenderer {
             }
             gc.restore();
             gc.restore();
+        }
+        if (!playerMode) {
+            drawHiddenTextBadges(gc, project, width, height, camera);
+        }
+    }
+
+    /** Crossed-out eye at the center of every text box that players cannot see. */
+    private void drawHiddenTextBadges(GraphicsContext gc, DmProject project, double width, double height,
+                                      DmProject.CameraState camera) {
+        double r = 11;
+        for (DmProject.TextBox box : project.getTextBoxes()) {
+            if (box.isPlayerVisible() || (box.getId() != null && box.getId().equals(editingTextBoxId))) {
+                continue;
+            }
+            double cx = worldToScreenX(box.getX() + box.getWidth() / 2.0, width, camera);
+            double cy = worldToScreenY(box.getY() + box.getHeight() / 2.0, height, camera);
+            if (cx < -r || cy < -r || cx > width + r || cy > height + r) {
+                continue;
+            }
+            gc.setFill(Color.color(0.1, 0.1, 0.12, 0.8));
+            gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+            Image glyph = Icons.image(MaterialDesignE.EYE_OFF_OUTLINE, 14, Color.web("#dddddd"));
+            if (glyph != null) {
+                gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
+            }
         }
     }
 

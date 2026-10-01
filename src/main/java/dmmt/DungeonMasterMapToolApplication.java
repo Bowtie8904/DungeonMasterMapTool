@@ -271,6 +271,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ColorPicker textBorderPicker;
     private ToggleButton textLayerToggle;
     private ToggleButton effectAnimationsToggle;
+    private ToggleButton textPlayerToggle;
     private ToggleButton textAutoSizeToggle;
     private ToggleButton fogToggleButton;
     private Slider ambientBrightnessSlider;
@@ -884,7 +885,17 @@ public class DungeonMasterMapToolApplication extends Application {
         Button rotateTextRight = Icons.button(MaterialDesignR.ROTATE_RIGHT,
                 "Rotate all text boxes 90Â° clockwise (global setting, independent of the map rotation)",
                 () -> rotateTexts(1));
-        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textSpacer, copyText, pasteText, deleteText);
+        textPlayerToggle = Icons.toggle(MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
+                "Players see the selected text box - turn off for DM-only notes");
+        textPlayerToggle.setSelected(true);
+        textPlayerToggle.setOnAction(e -> {
+            if (!syncingControls && findTextBox(selectedTextId) != null) {
+                boolean value = textPlayerToggle.isSelected();
+                executeTextChange(value ? "Show text box to players" : "Hide text box from players", selectedTextId,
+                        b -> b.setPlayerVisible(value));
+            }
+        });
+        HBox textToolsRow = row(toolButtons.get(EditorTool.TEXT), textLayerToggle, textAutoSizeToggle, textPlayerToggle, textSpacer, copyText, pasteText, deleteText);
 
         textSizeSpinner = new Spinner<>();
         textSizeSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(textMinFont(), textMaxFont(),
@@ -1757,6 +1768,16 @@ public class DungeonMasterMapToolApplication extends Application {
                     selectedLight = light;
                     selectedLayer = null;
                     showLightContextMenu(light, event.getScreenX(), event.getScreenY());
+                    return;
+                }
+                DmProject.TextBox textBox = rightClickCancelCandidate ? null : pickTextBox(world.x(), world.y());
+                if (textBox != null) {
+                    selectedTextId = textBox.getId();
+                    selectedOverlayId = null;
+                    selectedLayer = null;
+                    selectedLight = null;
+                    syncTextControls(textBox);
+                    showTextContextMenu(textBox, event.getScreenX(), event.getScreenY());
                     return;
                 }
                 DmProject.OverlayShape shape = rightClickCancelCandidate ? null : pickOverlay(world.x(), world.y(), camera.getZoom());
@@ -4407,6 +4428,30 @@ public class DungeonMasterMapToolApplication extends Application {
         textEditor.setOnFinish(this::commitTextEdit);
     }
 
+    private void showTextContextMenu(DmProject.TextBox box, double screenX, double screenY) {
+        String id = box.getId();
+        ContextMenu menu = new ContextMenu();
+        CheckMenuItem visible = new CheckMenuItem("Visible to players");
+        visible.setSelected(box.isPlayerVisible());
+        visible.setOnAction(e -> {
+            boolean value = visible.isSelected();
+            executeTextChange(value ? "Show text box to players" : "Hide text box from players", id, b -> b.setPlayerVisible(value));
+            DmProject.TextBox current = findTextBox(id);
+            if (current != null) {
+                syncTextControls(current);
+            }
+        });
+        menu.getItems().add(visible);
+        hideLightMenu();
+        activeLightMenu = menu;
+        menu.setOnHidden(e -> {
+            if (activeLightMenu == menu) {
+                activeLightMenu = null;
+            }
+        });
+        menu.show(dmCanvas, screenX, screenY);
+    }
+
     private DmProject.TextBox findTextBox(String id) {
         if (id == null) {
             return null;
@@ -4429,6 +4474,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .backgroundColor(source.getBackgroundColor())
                 .borderColor(source.getBorderColor())
                 .autoSize(source.isAutoSize())
+                .playerVisible(source.isPlayerVisible())
                 .build();
     }
 
@@ -4709,6 +4755,7 @@ public class DungeonMasterMapToolApplication extends Application {
         syncingControls = true;
         try {
             textAutoSizeToggle.setSelected(box.isAutoSize());
+            textPlayerToggle.setSelected(box.isPlayerVisible());
         } finally {
             syncingControls = false;
         }
@@ -5048,6 +5095,7 @@ public class DungeonMasterMapToolApplication extends Application {
             textBackgroundPicker.setValue(CanvasMapRenderer.parseColor(box.getBackgroundColor()));
             textBorderPicker.setValue(CanvasMapRenderer.parseColor(box.getBorderColor()));
             textAutoSizeToggle.setSelected(box.isAutoSize());
+            textPlayerToggle.setSelected(box.isPlayerVisible());
         } finally {
             syncingControls = false;
         }

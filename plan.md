@@ -369,6 +369,7 @@ Desktop tool for tabletop dungeon masters that:
 - Rich text: **font size** and **text color** can be changed before typing (applies to newly typed text) and after typing (applies to the selected text; with a box selected but not being edited, to all of its text). Editing uses an in-place editor scaled with the map zoom, so what is typed is what is drawn.
 - Box style: **background color** (transparent by default), **border color** (transparent by default), rounded corners. Colors may carry opacity (custom color dialog); "no fill" / "no border" buttons reset to transparent.
 - Select tool: click a box to select, drag to move, drag one of the 8 handles to resize, `Delete` removes it. Create/edit/move/resize/style/delete are undoable.
+- **Per-box visibility (like effect shapes):** a *Players see* toggle in the Text section and a right-click menu (*Visible to players*) on a text box hide a single box from the player view; the DM still sees it dimmed with a crossed-out eye badge. Undoable, copied with the box, saved as `playerVisible` (default true).
 - **Text layer** toggle hides/shows all text boxes in both DM and player views (saved with the map). Choosing the Text tool shows the layer again.
 - Text boxes are drawn above map, lighting and effects but **below fog**, so fog hides them from players.
 - **Last used settings** (font size, text color, background, border) are stored per map (`lastTextSettings`) and, as fallback, globally in the settings file (3.25). Selecting the Text tool loads the map's settings, or the global ones when the map has none.
