@@ -735,14 +735,15 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox lightRow = row(
                 toolButtons.get(EditorTool.LIGHT_ADD),
                 toolButtons.get(EditorTool.LIGHT_CANDLE),
-                toolButtons.get(EditorTool.LIGHT_LANTERN),
                 toolButtons.get(EditorTool.LIGHT_CAMPFIRE),
                 toolButtons.get(EditorTool.LIGHT_MAGIC),
                 Icons.separator(),
-                removeLightButton);
-        Region timeSpacer = new Region();
-        HBox.setHgrow(timeSpacer, Priority.ALWAYS);
-        HBox timeRow = row(timeSegment, timeSpacer, lightFlickerToggle);
+                removeLightButton,
+                Icons.separator(),
+                lightFlickerToggle);
+        HBox timeRow = row(timeSegment, Icons.separator(),
+                lightPowerButton(MaterialDesignL.LIGHTBULB_ON_OUTLINE, "Turn on the selected lights", true),
+                lightPowerButton(MaterialDesignL.LIGHTBULB_OUTLINE, "Turn off the selected lights", false));
         Label lightHint = new Label("Right-click a light for range, color, flicker and on/off.");
         lightHint.getStyleClass().add("muted");
         lightHint.setWrapText(true);
@@ -1613,7 +1614,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case TEXT -> Cursor.TEXT;
             case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
-            case LIGHT_ADD, LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
+            case LIGHT_ADD, LIGHT_CANDLE, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     Icons.cursor(activeTool.icon, 0.5, 0.5);
             default -> Cursor.CROSSHAIR;
         };
@@ -3458,7 +3459,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
             case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
-            case LIGHT_CANDLE, LIGHT_LANTERN, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
+            case LIGHT_CANDLE, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     status(activeTool.label + ": click the map where the light should go.");
         }
     }
@@ -5870,6 +5871,35 @@ public class DungeonMasterMapToolApplication extends Application {
         return button;
     }
 
+    private Button lightPowerButton(Ikon icon, String text, boolean on) {
+        Button button = Icons.button(icon, text + " (select lights first by clicking one or dragging a box around them)",
+                () -> setSelectedLightsEnabled(on));
+        button.setDisable(true);
+        lightRevealButtons.add(button);
+        return button;
+    }
+
+    private void setSelectedLightsEnabled(boolean on) {
+        java.util.List<DmProject.LightSource> before = new java.util.ArrayList<>();
+        java.util.List<DmProject.LightSource> after = new java.util.ArrayList<>();
+        for (String id : selectedLightIds()) {
+            DmProject.LightSource light = findLightById(id);
+            if (light != null && light.isEnabled() != on) {
+                before.add(cloneLight(light));
+                DmProject.LightSource changed = cloneLight(light);
+                changed.setEnabled(on);
+                after.add(changed);
+            }
+        }
+        if (after.isEmpty()) {
+            return;
+        }
+        executeWithFogHistory(on ? "Turn lights on" : "Turn lights off",
+                () -> after.forEach(this::applyLightState),
+                () -> before.forEach(this::applyLightState));
+        status("Turned " + after.size() + (after.size() == 1 ? " light " : " lights ") + (on ? "on." : "off."));
+    }
+
     private void setSelectedLightsReveal(DmProject.RevealMode mode) {
         java.util.List<DmProject.LightSource> before = new java.util.ArrayList<>();
         java.util.List<DmProject.LightSource> after = new java.util.ArrayList<>();
@@ -6109,7 +6139,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private record LightPreset(String id) {
         static final LightPreset TORCH = new LightPreset("torch");
         static final LightPreset CANDLE = new LightPreset("candle");
-        static final LightPreset LANTERN = new LightPreset("lantern");
         static final LightPreset CAMPFIRE = new LightPreset("campfire");
         static final LightPreset MAGIC = new LightPreset("magic");
 
@@ -6141,7 +6170,6 @@ public class DungeonMasterMapToolApplication extends Application {
         static LightPreset forTool(EditorTool tool) {
             return switch (tool) {
                 case LIGHT_CANDLE -> CANDLE;
-                case LIGHT_LANTERN -> LANTERN;
                 case LIGHT_CAMPFIRE -> CAMPFIRE;
                 case LIGHT_MAGIC -> MAGIC;
                 default -> TORCH;
@@ -6337,7 +6365,6 @@ public class DungeonMasterMapToolApplication extends Application {
         WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
         LIGHT_ADD("Add light", "click the map to place a torch", MaterialDesignL.LIGHTBULB_ON, false, false),
         LIGHT_CANDLE("Candle", "click the map to place a candle", MaterialDesignC.CANDLE, false, false),
-        LIGHT_LANTERN("Lantern", "click the map to place a lantern", MaterialDesignL.LAMP, false, false),
         LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire", MaterialDesignC.CAMPFIRE, false, false),
         LIGHT_MAGIC("Magic light", "click the map to place a magical light", MaterialDesignA.AUTO_FIX, false, false);
 
@@ -6372,7 +6399,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isLightPlaceTool() {
-            return this == LIGHT_ADD || this == LIGHT_CANDLE || this == LIGHT_LANTERN
+            return this == LIGHT_ADD || this == LIGHT_CANDLE
                     || this == LIGHT_CAMPFIRE || this == LIGHT_MAGIC;
         }
 

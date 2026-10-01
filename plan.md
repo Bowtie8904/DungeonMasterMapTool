@@ -93,7 +93,9 @@ Desktop tool for tabletop dungeon masters that:
 - Borderless fullscreen mode.
 - Adjustable world-to-screen scale so each tile is approximately **1 inch** physical size.
 - Player window mirrors a movable camera rectangle controlled from DM view.
-- **Player zoom slider** (Player view section): per-map, saved in `.dmmap` (`views.playerZoomStep`). 0 = calibrated tile size; the zoom factor is `2^step` (range -2..+2, i.e. 25%-400%). Negative zooms out, positive zooms in. The DM-view player viewport box always reflects the resulting zoom. Double-click resets to 0. **Ctrl + mouse wheel** over the DM view changes the player zoom (same 10% per notch as the plain wheel does for the DM view zoom). If the cursor is inside the player viewport box, the zoom is anchored on the cursor (the box moves so the point under the cursor keeps its place within the box); when zooming in, the box centre is additionally pulled towards the cursor so the target ends up centred after a few notches.- Freeze mode: player view remains fixed while DM prepares another map/view.- While frozen, DM can still move the player viewport rectangle; on unfreeze, player view immediately jumps to that staged rectangle.- Player view must stay visually clean: DM-only helper/debug geometry (wall guides, door/window state lines, viewport handles) is never rendered there.
+- **Player zoom slider** (Player view section): per-map, saved in `.dmmap` (`views.playerZoomStep`). 0 = calibrated tile size; the zoom factor is `2^step` (range -2..+2, i.e. 25%-400%). Negative zooms out, positive zooms in. The DM-view player viewport box always reflects the resulting zoom. Double-click resets to 0. **Ctrl + mouse wheel** over the DM view changes the player zoom (same 10% per notch as the plain wheel does for the DM view zoom). If the cursor is inside the player viewport box, the zoom is anchored on the cursor (the box moves so the point under the cursor keeps its place within the box); when zooming in, the box centre is additionally pulled towards the cursor so the target ends up centred after a few notches.
+
+- Freeze mode: player view remains fixed while DM prepares another map/view.- While frozen, DM can still move the player viewport rectangle; on unfreeze, player view immediately jumps to that staged rectangle.- Player view must stay visually clean: DM-only helper/debug geometry (wall guides, door/window state lines, viewport handles) is never rendered there.
 - **Wall layer (DM only):** all walls (imported dd2vtt walls and manually drawn walls) are drawn as red lines. A **wall layer toggle** next to the wall tools in the Map building section shows/hides the wall lines together with the door/window lines and icon badges (shown by default at startup, session-only). While hidden, doors/windows cannot be clicked; choosing a wall tool shows the layer again. Lights and light tokens are not part of the wall layer and are always shown.
 
 ## 3.4 Map Switching
@@ -345,9 +347,8 @@ Desktop tool for tabletop dungeon masters that:
 - The Lighting section gets a row of **preset buttons** (icon + tooltip): each one arms a one-shot place tool like **Add light** (click the map to drop the light, then back to Select; `Esc` cancels). No configuration needed before placing.
 - Built-in presets (range in tiles, flicker preset, colour):
   - **Candle** - 2 tiles, Candle flicker, warm yellow
-  - **Torch** - 8 tiles, Torch flicker, warm orange (`#FFB35C`, same as today's Add light default)
-  - **Lantern** - 12 tiles, Torch flicker, warm white
-  - **Campfire** - 16 tiles, Strong torch, orange
+  - **Torch** - 6 tiles, Torch flicker, warm orange (`#FFB35C`, same as today's Add light default)
+  - **Campfire** - 8 tiles, Strong torch, orange (the former Lantern preset was removed to keep the row narrow; Campfire takes its place and radius)
   - **Magic light** - 12 tiles, no flicker, cold white/blue
 - Placed lights use fog reveal mode **Only while lit** (`WHILE_LIT`, like DM-added lights today), are blocked by walls and are ordinary lights afterwards: movable, editable via right-click, removable, undoable, saved in `.dmmap` (no new save fields).
 - The existing **Add light** button stays and places a Torch.
@@ -436,6 +437,8 @@ Desktop tool for tabletop dungeon masters that:
 - Loading spinner without the opaque box behind it; the semi-transparent dimming overlay stays (see 3.4).
 - Handout dialog: right-click option "Show only this image to players", multi-select, and a button to show only the selected images (see 3.27).
 - Default text boxes: neutral opaque background and dark text for visibility on any map.
+- Lighting tab: the light flicker toggle sits at the end of the first row (after Remove light) to keep the time-of-day row narrow.
+- Lighting tab: the time-of-day row has **Turn on** / **Turn off** buttons (after the day-time presets, behind a separator) that switch all selected lights on or off in one undo step; disabled while no light is selected.
 - Lighting tab: a "Fog reveal" row with three buttons (Keep revealed / Only while lit / Don't reveal) that set the reveal mode of all selected lights in one undo step; disabled while no light is selected (also available per light in the right-click menu, see 3.6).
 
 ## 3.31 Recent Maps (implemented)

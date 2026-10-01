@@ -401,12 +401,11 @@ public final class Tuning {
     static {
         lightPreset("torch", "Torch (Add light)", 6, "#FFB35C", 0.22, 1.4);
         lightPreset("candle", "Candle", 2, "#FFD98A", 0.12, 2.5);
-        lightPreset("lantern", "Lantern", 8, "#FFF4E0", 0.22, 1.4);
-        lightPreset("campfire", "Campfire", 12, "#FF8A3D", 0.35, 1.8);
+        lightPreset("campfire", "Campfire", 8, "#FF8A3D", 0.35, 1.8);
         lightPreset("magic", "Magic light", 12, "#CFE4FF", 0, 0);
     }
 
-    /** Preset ids: torch, candle, lantern, campfire, magic. */
+    /** Preset ids: torch, candle, campfire, magic. */
     public static LightPresetSettings lightPreset(String id) {
         LightPresetSettings preset = LIGHT_PRESETS.get(id);
         if (preset == null) {
