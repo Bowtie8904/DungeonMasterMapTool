@@ -34,6 +34,7 @@ jobs:
             --input jpackage-input `
             --main-jar DungeonMasterMapTool.jar `
             --main-class dmmt.DungeonMasterMapToolLauncher `
+            --icon packaging/icon.ico `
             --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported `
             --dest dist
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
