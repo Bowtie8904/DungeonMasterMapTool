@@ -81,7 +81,7 @@ public class CanvasMapRenderer {
     /** Seconds a fog cell needs to fade completely in or out. */
     public static final double FOG_FADE_SECONDS = 0.5;
     /** Fade time when the change comes from a light, so moving lights do not trail behind. */
-    public static final double FOG_LIGHT_FADE_SECONDS = 0.06;
+    public static final double FOG_LIGHT_FADE_SECONDS = 0.16;
 
     /** Width of the soft fog edge in grid tiles (0 = hard edge); applies to every project. */
     private static volatile double fogSoftness = DEFAULT_FOG_SOFTNESS;
@@ -1533,7 +1533,10 @@ public class CanvasMapRenderer {
             fogFadeSeconds = lightChanges != fogLightChangesSeen ? FOG_LIGHT_FADE_SECONDS : FOG_FADE_SECONDS;
             fogLightChangesSeen = lightChanges;
             if (fade) {
-                fogLastAdvanceNanos = System.nanoTime();
+                // Keep the clock of a running fade, otherwise a target that changes every frame never advances.
+                if (!fogAnimating) {
+                    fogLastAdvanceNanos = System.nanoTime();
+                }
                 fogAnimating = true;
             } else {
                 fogShown = target.clone();
