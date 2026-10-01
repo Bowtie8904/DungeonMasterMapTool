@@ -239,6 +239,12 @@
     -fx-background-insets: 0;
 }
 
+/* The progress indicator has an inner region that also carries the style class "spinner"; keep it box-free. */
+.progress-indicator > .spinner {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
 .combo-box:focused, .spinner:focused, .color-picker:focused {
     -fx-border-color: -dm-accent;
 }
