@@ -31,8 +31,11 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -43,6 +46,7 @@ public final class HandoutWindow {
 
     private static final List<String> IMAGE_EXTENSIONS = List.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp");
     private static final Color SELECTION_COLOR = Color.web("#4da3ff");
+    private static final Color SHOWN_COLOR = Color.web("#46c46b");
 
     // Remembered for the whole session and reused for the next handout.
     private static int lastRotation;
@@ -53,11 +57,14 @@ public final class HandoutWindow {
     private final Label emptyLabel;
     private final ToggleButton showToggle;
     private final Button deleteButton;
+    private final ToggleButton showSelectedToggle;
     private final Button clearButton;
     private final BooleanSupplier playerWindowOpen;
     private final Runnable onChange;
     private final List<Image> images = new ArrayList<>();
-    private int selected = -1;
+    private final Set<Image> selection = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Images the players see while shown; null means all of them. */
+    private Set<Image> showOnly;
     private int rotation = lastRotation;
     private boolean shown;
 
@@ -79,10 +86,12 @@ public final class HandoutWindow {
         preview.setOnMousePressed(event -> {
             preview.requestFocus();
             int hit = hitTest(event.getX(), event.getY());
-            if (event.getButton() == MouseButton.PRIMARY || event.getButton() == MouseButton.SECONDARY) {
-                select(hit);
-            }
-            if (event.getButton() == MouseButton.SECONDARY && hit >= 0) {
+            if (event.getButton() == MouseButton.PRIMARY) {
+                click(hit, event.isShortcutDown() || event.isShiftDown());
+            } else if (event.getButton() == MouseButton.SECONDARY && hit >= 0) {
+                if (!selection.contains(images.get(hit))) {
+                    click(hit, false);
+                }
                 showContextMenu(event.getScreenX(), event.getScreenY());
             }
         });
@@ -93,8 +102,16 @@ public final class HandoutWindow {
 
         showToggle = Icons.toggle(MaterialDesignE.EYE, "Show to players");
         showToggle.setOnAction(e -> setShown(showToggle.isSelected()));
-        deleteButton = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected image (Delete)",
+        deleteButton = Icons.button(MaterialDesignD.DELETE_OUTLINE, "Delete the selected images (Delete)",
                 this::deleteSelected);
+        showSelectedToggle = Icons.toggle(MaterialDesignE.EYE_CHECK_OUTLINE, "Show only the selected images to the players");
+        showSelectedToggle.setOnAction(e -> {
+            if (showSelectedToggle.isSelected()) {
+                showSelectedOnly();
+            } else {
+                setShown(false);
+            }
+        });
         clearButton = Icons.button(MaterialDesignD.DELETE_SWEEP_OUTLINE, "Remove all images", this::clearAll);
 
         Region spacer = new Region();
@@ -103,9 +120,9 @@ public final class HandoutWindow {
                 Icons.button(MaterialDesignC.CONTENT_PASTE, "Add an image from the clipboard (Ctrl+V)", this::paste),
                 deleteButton, clearButton,
                 Icons.separator(),
-                Icons.button(MaterialDesignR.ROTATE_LEFT, "Rotate left by 90 degrees", () -> rotate(-1)),
-                Icons.button(MaterialDesignR.ROTATE_RIGHT, "Rotate right by 90 degrees", () -> rotate(1)),
-                spacer, showToggle);
+                Icons.button(MaterialDesignR.ROTATE_LEFT, "Rotate the handout left by 90 degrees (player view only)", () -> rotate(-1)),
+                Icons.button(MaterialDesignR.ROTATE_RIGHT, "Rotate the handout right by 90 degrees (player view only)", () -> rotate(1)),
+                spacer, showSelectedToggle, showToggle);
         controls.setAlignment(Pos.CENTER_LEFT);
 
         VBox root = new VBox(8, previewPane, hint, controls);
@@ -118,7 +135,11 @@ public final class HandoutWindow {
             if (event.isShortcutDown() && event.getCode() == KeyCode.V) {
                 paste();
                 event.consume();
-            } else if (event.getCode() == KeyCode.DELETE && selected >= 0) {
+            } else if (event.isShortcutDown() && event.getCode() == KeyCode.A) {
+                selection.addAll(images);
+                refreshState();
+                event.consume();
+            } else if (event.getCode() == KeyCode.DELETE && !selection.isEmpty()) {
                 deleteSelected();
                 event.consume();
             }
@@ -129,7 +150,8 @@ public final class HandoutWindow {
         stage.initOwner(owner);
         stage.setOnHidden(event -> {
             images.clear();
-            selected = -1;
+            selection.clear();
+            showOnly = null;
             shown = false;
             onClosed.run();
         });
@@ -154,12 +176,21 @@ public final class HandoutWindow {
     }
 
     public boolean isShownToPlayers() {
-        return shown && !images.isEmpty();
+        return shown && !getImages().isEmpty();
     }
 
-    /** Copy of the current images in display order. */
+    /** Copy of the images the players currently see, in display order. */
     public List<Image> getImages() {
-        return List.copyOf(images);
+        if (showOnly == null) {
+            return List.copyOf(images);
+        }
+        List<Image> visible = new ArrayList<>();
+        for (Image image : images) {
+            if (showOnly.contains(image)) {
+                visible.add(image);
+            }
+        }
+        return visible;
     }
 
     public int getRotation() {
@@ -177,6 +208,7 @@ public final class HandoutWindow {
 
     private void setShown(boolean value) {
         shown = value && !images.isEmpty() && playerWindowOpen.getAsBoolean();
+        showOnly = null;
         refreshState();
         onChange.run();
     }
@@ -188,24 +220,65 @@ public final class HandoutWindow {
         onChange.run();
     }
 
-    private void select(int index) {
-        selected = index;
+    /** Plain click selects only the clicked image (or nothing); Ctrl/Shift+click adds or removes it. */
+    private void click(int index, boolean additive) {
+        if (index < 0) {
+            if (!additive) {
+                selection.clear();
+            }
+        } else {
+            Image image = images.get(index);
+            if (additive) {
+                if (!selection.remove(image)) {
+                    selection.add(image);
+                }
+            } else {
+                selection.clear();
+                selection.add(image);
+            }
+        }
         refreshState();
     }
 
     private void showContextMenu(double screenX, double screenY) {
-        MenuItem delete = new MenuItem("Delete", Icons.icon(MaterialDesignD.DELETE_OUTLINE));
+        int count = selection.size();
+        MenuItem showOnlyItem = new MenuItem(count == 1 ? "Show only this image to players"
+                : "Show only the " + count + " selected images to players", Icons.icon(MaterialDesignE.EYE_CHECK_OUTLINE));
+        showOnlyItem.setDisable(!playerWindowOpen.getAsBoolean());
+        showOnlyItem.setOnAction(e -> showSelectedOnly());
+        MenuItem delete = new MenuItem(count == 1 ? "Delete" : "Delete " + count + " images",
+                Icons.icon(MaterialDesignD.DELETE_OUTLINE));
         delete.setOnAction(e -> deleteSelected());
-        ContextMenu menu = new ContextMenu(delete);
+        ContextMenu menu = new ContextMenu(showOnlyItem, delete);
         menu.show(preview, screenX, screenY);
     }
 
-    private void deleteSelected() {
-        if (selected < 0 || selected >= images.size()) {
+    /** Shows exactly the selected images to the players, hiding the rest of the handout. */
+    private void showSelectedOnly() {
+        if (selection.isEmpty() || !playerWindowOpen.getAsBoolean()) {
             return;
         }
-        images.remove(selected);
-        selected = -1;
+        Set<Image> subset = Collections.newSetFromMap(new IdentityHashMap<>());
+        subset.addAll(selection);
+        showOnly = subset.size() == images.size() ? null : subset;
+        shown = true;
+        refreshState();
+        onChange.run();
+    }
+
+    private void deleteSelected() {
+        if (selection.isEmpty()) {
+            return;
+        }
+        images.removeAll(selection);
+        if (showOnly != null) {
+            showOnly.removeAll(selection);
+            if (showOnly.isEmpty()) {
+                showOnly = null;
+                shown = false;
+            }
+        }
+        selection.clear();
         afterImagesChanged();
     }
 
@@ -214,7 +287,8 @@ public final class HandoutWindow {
             return;
         }
         images.clear();
-        selected = -1;
+        selection.clear();
+        showOnly = null;
         afterImagesChanged();
     }
 
@@ -250,7 +324,7 @@ public final class HandoutWindow {
             return;
         }
         images.addAll(pasted);
-        selected = -1;
+        selection.clear();
         refreshState();
         onChange.run();
     }
@@ -268,25 +342,45 @@ public final class HandoutWindow {
         Icons.tooltip(showToggle, !hasImages ? "Paste an image first"
                 : !playerOpen ? "Open the player window first"
                 : "Show the handout to the players (off returns to the map)");
-        deleteButton.setDisable(selected < 0);
+        deleteButton.setDisable(selection.isEmpty());
+        boolean subsetShown = shown && showOnly != null;
+        showSelectedToggle.setDisable(!subsetShown && (selection.isEmpty() || !playerOpen));
+        showSelectedToggle.setSelected(subsetShown);
+        Icons.tooltip(showSelectedToggle, subsetShown ? "Stop showing the selected images (returns to the map)"
+                : selection.isEmpty() ? "Select one or more images first"
+                : !playerOpen ? "Open the player window first"
+                : "Show only the selected images to the players (the rest of the handout stays hidden)");
         clearButton.setDisable(!hasImages);
         emptyLabel.setVisible(!hasImages);
         if (hasImages) {
-            hint.setText(images.size() == 1 ? "Paste more images to show them together. Click an image to select it."
-                    : images.size() + " images. Click an image to select it; Delete or right-click removes it.");
+            String base = images.size() == 1 ? "Paste more images to show them together. Click an image to select it."
+                    : images.size() + " images. Click to select, Ctrl+click for several; right-click for more, Delete removes.";
+            hint.setText(shown && showOnly != null
+                    ? "Showing " + getImages().size() + " of " + images.size() + " images to the players (green frames). " + base
+                    : base);
         }
         drawPreview();
     }
 
     private int hitTest(double x, double y) {
-        List<Rect> rects = layout(preview.getWidth(), preview.getHeight(), images, rotation);
-        return HandoutLayout.hitTest(rects, x, y, rotation, preview.getWidth(), preview.getHeight());
+        List<Rect> rects = layout(preview.getWidth(), preview.getHeight(), images, 0);
+        return HandoutLayout.hitTest(rects, x, y, 0, preview.getWidth(), preview.getHeight());
     }
 
     private void drawPreview() {
         GraphicsContext gc = preview.getGraphicsContext2D();
         gc.clearRect(0, 0, preview.getWidth(), preview.getHeight());
-        drawBoard(gc, images, rotation, preview.getWidth(), preview.getHeight(), selected);
+        Set<Integer> selectedIndexes = new java.util.HashSet<>();
+        Set<Integer> shownIndexes = new java.util.HashSet<>();
+        for (int i = 0; i < images.size(); i++) {
+            if (selection.contains(images.get(i))) {
+                selectedIndexes.add(i);
+            }
+            if (shown && showOnly != null && showOnly.contains(images.get(i))) {
+                shownIndexes.add(i);
+            }
+        }
+        draw(gc, images, 0, preview.getWidth(), preview.getHeight(), selectedIndexes, shownIndexes);
     }
 
     private static List<Rect> layout(double width, double height, List<Image> images, int rotation) {
@@ -304,6 +398,11 @@ public final class HandoutWindow {
      */
     public static void drawBoard(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
                                  int selectedIndex) {
+        draw(gc, images, rotation, width, height, selectedIndex < 0 ? Set.of() : Set.of(selectedIndex), Set.of());
+    }
+
+    private static void draw(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
+                             Set<Integer> selectedIndexes, Set<Integer> shownIndexes) {
         if (images.isEmpty()) {
             return;
         }
@@ -317,12 +416,23 @@ public final class HandoutWindow {
             Rect r = rects.get(i);
             gc.drawImage(images.get(i), r.x(), r.y(), r.width(), r.height());
         }
-        if (selectedIndex >= 0 && selectedIndex < rects.size()) {
-            Rect r = rects.get(selectedIndex);
-            gc.setStroke(SELECTION_COLOR);
-            gc.setLineWidth(3);
-            gc.strokeRect(r.x() + 1.5, r.y() + 1.5, r.width() - 3, r.height() - 3);
+        gc.setLineWidth(3);
+        for (int i : shownIndexes) {
+            if (i < rects.size()) {
+                Rect r = rects.get(i);
+                gc.setStroke(SHOWN_COLOR);
+                gc.strokeRect(r.x() + 1.5, r.y() + 1.5, r.width() - 3, r.height() - 3);
+            }
         }
+        for (int i : selectedIndexes) {
+            if (i < rects.size()) {
+                Rect r = rects.get(i);
+                gc.setStroke(SELECTION_COLOR);
+                gc.setLineDashes(shownIndexes.contains(i) ? new double[]{8, 6} : null);
+                gc.strokeRect(r.x() + 1.5, r.y() + 1.5, r.width() - 3, r.height() - 3);
+            }
+        }
+        gc.setLineDashes((double[]) null);
         gc.restore();
     }
 }

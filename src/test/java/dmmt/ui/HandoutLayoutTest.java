@@ -106,4 +106,18 @@ class HandoutLayoutTest {
         assertTrue(hitRight >= 0 && hitLeft >= 0 && hitRight != hitLeft);
         assertEquals(-1, HandoutLayout.hitTest(rects, 5, 5, 90, 1920, 1080));
     }
+
+    @Test
+    void slimImageSitsNextToAStackOfWideImages() {
+        List<Rect> rects = HandoutLayout.compute(
+                List.of(new Size(1600, 900), new Size(1600, 900), new Size(300, 1200)), 1920, 1080);
+        assertEquals(3, rects.size());
+        assertEquals(rects.get(0).width(), rects.get(1).width(), 1e-6);
+        assertTrue(rects.get(0).y() < rects.get(1).y());
+        assertTrue(rects.get(2).x() >= rects.get(0).x() + rects.get(0).width() - 1e-6
+                || rects.get(2).x() + rects.get(2).width() <= rects.get(0).x() + 1e-6);
+        assertTrue(rects.get(2).height() > rects.get(0).height() * 1.5);
+        assertNoOverlap(rects);
+        assertInside(rects, 1920, 1080);
+    }
 }
