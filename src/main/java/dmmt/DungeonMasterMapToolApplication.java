@@ -278,6 +278,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton textPlayerToggle;
     private ToggleButton textAutoSizeToggle;
     private Button removeLightButton;
+    private final java.util.List<Button> lightRevealButtons = new java.util.ArrayList<>();
     private Button deleteTextButton;
     private Button deleteEffectButton;
     private ToggleButton fogToggleButton;
@@ -721,6 +722,15 @@ public class DungeonMasterMapToolApplication extends Application {
             renderDm();
             renderPlayer();
         });
+        Label revealLabel = new Label("Fog reveal");
+        revealLabel.getStyleClass().add("muted");
+        HBox revealRow = row(revealLabel,
+                lightRevealButton(MaterialDesignM.MAP_CHECK_OUTLINE, "Keep revealed", DmProject.RevealMode.PERSISTENT,
+                        "the fog they uncover stays revealed"),
+                lightRevealButton(MaterialDesignM.MAP_MARKER_RADIUS_OUTLINE, "Only while lit", DmProject.RevealMode.WHILE_LIT,
+                        "they reveal the fog only while they are on and lighting it"),
+                lightRevealButton(MaterialDesignM.MAP_MARKER_OFF_OUTLINE, "Don't reveal", DmProject.RevealMode.NONE,
+                        "they do not reveal any fog"));
         HBox lightRow = row(
                 toolButtons.get(EditorTool.LIGHT_ADD),
                 toolButtons.get(EditorTool.LIGHT_CANDLE),
@@ -1110,7 +1120,7 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
                 new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather", weatherRow),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
@@ -4370,7 +4380,9 @@ public class DungeonMasterMapToolApplication extends Application {
         if (removeLightButton == null || textPlayerToggle == null) {
             return;
         }
-        removeLightButton.setDisable(selectedLightIds().isEmpty());
+        boolean lightsSelected = !selectedLightIds().isEmpty();
+        removeLightButton.setDisable(!lightsSelected);
+        lightRevealButtons.forEach(button -> button.setDisable(!lightsSelected));
         deleteEffectButton.setDisable(findOverlay(selectedOverlayId) == null);
         DmProject.TextBox text = findTextBox(selectedTextId);
         deleteTextButton.setDisable(text == null);
@@ -5848,6 +5860,37 @@ public class DungeonMasterMapToolApplication extends Application {
             ids.add(selectedLight.getId());
         }
         return ids;
+    }
+
+    private Button lightRevealButton(Ikon icon, String name, DmProject.RevealMode mode, String effect) {
+        Button button = Icons.button(icon, "Set the selected lights to \"" + name + "\": " + effect
+                + " (select lights first by clicking one or dragging a box around them)", () -> setSelectedLightsReveal(mode));
+        button.setDisable(true);
+        lightRevealButtons.add(button);
+        return button;
+    }
+
+    private void setSelectedLightsReveal(DmProject.RevealMode mode) {
+        java.util.List<DmProject.LightSource> before = new java.util.ArrayList<>();
+        java.util.List<DmProject.LightSource> after = new java.util.ArrayList<>();
+        for (String id : selectedLightIds()) {
+            DmProject.LightSource light = findLightById(id);
+            DmProject.RevealMode current = light == null || light.getRevealMode() == null
+                    ? DmProject.RevealMode.WHILE_LIT : light.getRevealMode();
+            if (light != null && current != mode) {
+                before.add(cloneLight(light));
+                DmProject.LightSource changed = cloneLight(light);
+                changed.setRevealMode(mode);
+                after.add(changed);
+            }
+        }
+        if (after.isEmpty()) {
+            return;
+        }
+        executeWithFogHistory("Change light reveal mode",
+                () -> after.forEach(this::applyLightState),
+                () -> before.forEach(this::applyLightState));
+        status("Changed the fog reveal of " + after.size() + (after.size() == 1 ? " light." : " lights."));
     }
 
     private void removeSelectedLights() {
