@@ -426,6 +426,9 @@ public class CanvasMapRenderer {
             if ((shape.isEmitsLight() && OverlayTextures.isAnimated(shape.getTexture())) != emitting) {
                 continue;
             }
+            if (!overlayTouchesScreen(shape, width, height, camera)) {
+                continue;
+            }
             boolean dmOnly = !playerMode && !shape.isPlayerVisible();
             Color base;
             try {
@@ -477,6 +480,58 @@ public class CanvasMapRenderer {
             }
             gc.setLineDashes(null);
         }
+    }
+
+    /** False when the shape (including stroke, border and soft edge) lies completely outside the canvas. */
+    private boolean overlayTouchesScreen(DmProject.OverlayShape shape, double width, double height,
+                                         DmProject.CameraState camera) {
+        double zoom = camera.getZoom();
+        double minX;
+        double maxX;
+        double minY;
+        double maxY;
+        String type = shape.getType() == null ? "" : shape.getType();
+        double margin = 8;
+        switch (type) {
+            case "circle" -> {
+                double cx = worldToScreenX(shape.getX(), width, camera);
+                double cy = worldToScreenY(shape.getY(), height, camera);
+                double r = shape.getRadius() * zoom;
+                minX = cx - r;
+                maxX = cx + r;
+                minY = cy - r;
+                maxY = cy + r;
+            }
+            case "rect" -> {
+                minX = worldToScreenX(shape.getX(), width, camera);
+                minY = worldToScreenY(shape.getY(), height, camera);
+                maxX = minX + shape.getWidth() * zoom;
+                maxY = minY + shape.getHeight() * zoom;
+            }
+            case "brush", "pen", "line" -> {
+                List<Double> points = shape.getPoints();
+                if (points.size() < 2) {
+                    return true;
+                }
+                minX = Double.MAX_VALUE;
+                minY = Double.MAX_VALUE;
+                maxX = -Double.MAX_VALUE;
+                maxY = -Double.MAX_VALUE;
+                for (int i = 0; i + 1 < points.size(); i += 2) {
+                    double sx = worldToScreenX(points.get(i), width, camera);
+                    double sy = worldToScreenY(points.get(i + 1), height, camera);
+                    minX = Math.min(minX, sx);
+                    maxX = Math.max(maxX, sx);
+                    minY = Math.min(minY, sy);
+                    maxY = Math.max(maxY, sy);
+                }
+                margin += Math.max(2, shape.getStrokeWidth() * zoom) / 2;
+            }
+            default -> {
+                return true;
+            }
+        }
+        return maxX + margin >= 0 && minX - margin <= width && maxY + margin >= 0 && minY - margin <= height;
     }
 
     /** Small crossed-out eye on every shape that players cannot see, so hidden shapes stand out in the DM view. */
@@ -560,6 +615,10 @@ public class CanvasMapRenderer {
             default -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getStrokeWidth());
         };
         double feather = featherWorld * zoom;
+        if (soft) {
+            // A pass narrower than ~2 px is invisible, so small or zoomed-out shapes need fewer passes.
+            passes = Math.max(1, Math.min(passes, (int) Math.ceil(feather / 2)));
+        }
         boolean chasm = OverlayTextures.CHASM.equals(texture);
         gc.save();
         if (chasm && "brush".equals(type)) {
@@ -1333,36 +1392,49 @@ public class CanvasMapRenderer {
         int colEnd = Math.min(bw - 1, (int) Math.ceil(x1 + glow));
         int rowStart = Math.max(0, (int) Math.floor(y0 - glow));
         int rowEnd = Math.min(bh - 1, (int) Math.ceil(y1 + glow));
-        for (int row = rowStart; row <= rowEnd; row++) {
+        final double[] fpx = px;
+        final double[] fpy = py;
+        final double fInner = inner;
+        final double fx0 = x0;
+        final double fy0 = y0;
+        final double fx1 = x1;
+        final double fy1 = y1;
+        final double fGlow = glow;
+        final double fStrength = strength;
+        final int fColStart = colStart;
+        final int fColEnd = colEnd;
+        IntStream.rangeClosed(rowStart, rowEnd).parallel().forEach(row -> {
             double y = row + 0.5;
-            for (int col = colStart; col <= colEnd; col++) {
+            for (int col = fColStart; col <= fColEnd; col++) {
                 double x = col + 0.5;
                 double d;
-                if (px == null) {
-                    double dx = Math.max(Math.max(x0 - x, 0), x - x1);
-                    double dy = Math.max(Math.max(y0 - y, 0), y - y1);
-                    d = Math.hypot(dx, dy);
-                } else if (px.length == 1) {
-                    d = Math.max(0, Math.hypot(x - px[0], y - py[0]) - inner);
+                if (fpx == null) {
+                    double dx = Math.max(Math.max(fx0 - x, 0), x - fx1);
+                    double dy = Math.max(Math.max(fy0 - y, 0), y - fy1);
+                    d = Math.sqrt(dx * dx + dy * dy);
+                } else if (fpx.length == 1) {
+                    double dx = x - fpx[0];
+                    double dy = y - fpy[0];
+                    d = Math.max(0, Math.sqrt(dx * dx + dy * dy) - fInner);
                 } else {
                     double best = Double.MAX_VALUE;
-                    for (int i = 0; i + 1 < px.length; i++) {
-                        best = Math.min(best, segmentDistance(x, y, px[i], py[i], px[i + 1], py[i + 1]));
+                    for (int i = 0; i + 1 < fpx.length; i++) {
+                        best = Math.min(best, segmentDistance(x, y, fpx[i], fpy[i], fpx[i + 1], fpy[i + 1]));
                     }
-                    d = Math.max(0, best - inner);
+                    d = Math.max(0, best - fInner);
                 }
-                if (d >= glow) {
+                if (d >= fGlow) {
                     continue;
                 }
-                double t = d / glow;
-                float value = (float) (strength * (1 - t * t * (3 - 2 * t)));
+                double t = d / fGlow;
+                float value = (float) (fStrength * (1 - t * t * (3 - 2 * t)));
                 int idx = row * bw + col;
                 if (value > buffer.lit[idx]) {
                     buffer.lit[idx] = value;
                     buffer.source[idx] = sourceIndex;
                 }
             }
-        }
+        });
     }
 
     private static double segmentDistance(double x, double y, double ax, double ay, double bx, double by) {
