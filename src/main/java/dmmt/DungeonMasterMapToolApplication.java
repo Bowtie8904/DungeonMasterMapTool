@@ -2291,6 +2291,8 @@ public class DungeonMasterMapToolApplication extends Application {
         Scene scene = new Scene(root, 1280, 720, Color.BLACK);
 
         playerStage = new Stage(StageStyle.UNDECORATED);
+        // An owned window gets no taskbar button of its own on Windows
+        playerStage.initOwner(primaryStage);
         playerStage.setTitle("Player View");
         playerStage.getIcons().setAll(appIcons());
         playerStage.setScene(scene);

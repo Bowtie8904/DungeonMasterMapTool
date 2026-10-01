@@ -16,7 +16,7 @@ Desktop tool for tabletop dungeon masters that:
 
 1. Imports universal-export **dd2vtt** maps (e.g., from Dungeon Alchemist).
 2. Provides smooth DM-side map navigation (zoom, pan, camera controls).
-3. Supports optional borderless fullscreen **player view** on a second display.
+3. Supports optional borderless fullscreen **player view** on a second display (owned by the DM window, so it has no taskbar button of its own).
 4. Supports fog of war, lighting, and overlay drawing workflows fast enough for live sessions on a mid-range laptop.
 5. Supports creating custom maps from imported images while keeping full feature parity with imported dd2vtt maps.
 
