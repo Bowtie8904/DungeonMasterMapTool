@@ -1951,20 +1951,59 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (event.isAltDown()) {
                 event.consume();
-                if (event.getDeltaY() == 0 || !activeTool.supportsBrushSize() || fogDragging
+                if (event.getDeltaY() == 0 || fogDragging
                         || draftOverlay != null || pingArmed || laserActive || laserToolActive) {
+                    return;
+                }
+                if (activeTool == EditorTool.SELECT) {
+                    if (interactionInProgress() || draggingGroup || marqueeActive) {
+                        return;
+                    }
+                    java.util.List<String> ids = selectedLightIds();
+                    if (ids.isEmpty()) {
+                        return;
+                    }
+                    double cell = project.getMap().getGrid().getPixelsPerCell();
+                    java.util.List<DmProject.LightSource> before = new java.util.ArrayList<>();
+                    java.util.List<DmProject.LightSource> after = new java.util.ArrayList<>();
+                    double minRadius = Double.POSITIVE_INFINITY;
+                    double maxRadius = Double.NEGATIVE_INFINITY;
+                    for (String id : ids) {
+                        DmProject.LightSource light = findLightById(id);
+                        double radius = Math.max(cell, light.getRange() + Math.copySign(cell, event.getDeltaY()));
+                        minRadius = Math.min(minRadius, radius);
+                        maxRadius = Math.max(maxRadius, radius);
+                        if (!same(radius, light.getRange())) {
+                            before.add(cloneLight(light));
+                            DmProject.LightSource changed = cloneLight(light);
+                            changed.setRange(radius);
+                            after.add(changed);
+                        }
+                    }
+                    if (!after.isEmpty()) {
+                        executeWithFogHistory("Change light range",
+                                () -> after.forEach(this::applyLightState),
+                                () -> before.forEach(this::applyLightState));
+                        status("Change light range.");
+                    }
+                    updateHover(event.getX(), event.getY());
+                    String label = ids.size() == 1
+                            ? String.format(Locale.ROOT, "Light radius: %.1f tiles", minRadius / cell)
+                            : String.format(Locale.ROOT, "Light radii: %.1f-%.1f tiles (%d lights)",
+                                    minRadius / cell, maxRadius / cell, ids.size());
+                    showSizeLabel(label, event.getX(), event.getY());
+                    renderDm();
+                    return;
+                }
+                if (!activeTool.supportsBrushSize()) {
                     return;
                 }
                 double size = Math.round((brushSize.get() + Math.copySign(0.1, event.getDeltaY())) * 1e10) / 1e10;
                 brushSize.set(clamp(size, Math.min(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()),
                         Math.max(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get())));
                 updateHover(event.getX(), event.getY());
-                brushSizeLabel.setText(String.format(Locale.ROOT, "Brush: %.1f tiles", brushSize.get()));
-                brushSizeLabel.setVisible(true);
-                brushLabelCursorX = event.getX();
-                brushLabelCursorY = event.getY();
-                positionBrushSizeLabel();
-                brushSizeLabelTimeout.playFromStart();
+                showSizeLabel(String.format(Locale.ROOT, "Brush: %.1f tiles", brushSize.get()),
+                        event.getX(), event.getY());
                 renderDm();
                 return;
             }
@@ -3589,6 +3628,15 @@ public class DungeonMasterMapToolApplication extends Application {
         if (brushSizeLabel != null) {
             brushSizeLabel.setVisible(false);
         }
+    }
+
+    private void showSizeLabel(String text, double x, double y) {
+        brushSizeLabel.setText(text);
+        brushSizeLabel.setVisible(true);
+        brushLabelCursorX = x;
+        brushLabelCursorY = y;
+        positionBrushSizeLabel();
+        brushSizeLabelTimeout.playFromStart();
     }
 
     private void positionBrushSizeLabel() {
@@ -7106,7 +7154,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private enum EditorTool {
-        SELECT("Select & move", "click doors and windows, drag lights, effects, text boxes, image layers and the player viewport; right-click an element for its options",
+        SELECT("Select & move", "click doors and windows, drag lights, effects, text boxes, image layers and the player viewport; right-click an element for its options; Alt + mouse wheel adjusts each selected light's radius by 1 tile",
                 MaterialDesignC.CURSOR_DEFAULT, false, false),
         REVEAL_BRUSH("Reveal brush", "paint to remove fog", MaterialDesignE.ERASER, true, false),
         HIDE_BRUSH("Fog brush", "paint fog back over the map", MaterialDesignB.BRUSH, false, false),

@@ -260,6 +260,7 @@ The *Lighting* section controls lights and ambience.
 
 - **Add light** and **Remove light** are one-shot tools: arm the tool, then click the map (place / remove the clicked light). The tool returns to Select afterwards. `Esc` cancels.
 - **Presets** (place with one click): Candle (2 tiles), Torch (8), Lantern (12), Campfire (16), Magic light (12). Ranges are in tiles and scale with the grid.
+- Select one or more lights, then use **Alt + mouse wheel** over the map to change each radius independently by **1 tile per notch** (minimum 1 tile per light, no upper cap). Mixed selections change only lights. A temporary DM-only radius label follows the cursor. Each notch is one undo step for all changed lights, including fog reveals; neither camera moves. Ignored during dragging/drawing; Ctrl + wheel still zooms the player view.
 - Drag lights with the Select tool. **Right-click** a light for its menu:
   - *Light on* (off lights cast nothing and reveal nothing),
   - **Fog reveal mode:** *Keep revealed* (the lit area stays revealed), *Only while lit* (default for DM-added lights), *Don't reveal* (default for imported lamps),
@@ -404,7 +405,7 @@ Most values apply when the window regains focus after you saved the file; entrie
 | Right-drag | Pan |
 | Mouse wheel | Zoom around the cursor |
 | `Ctrl` + mouse wheel | Zoom the player view (also takes precedence when `Alt` is held) |
-| `Alt` + mouse wheel (map canvas only) | Adjust fog brush / Draw / Line size by 0.1 tiles; ignored during strokes. Other tools do nothing, without zooming |
+| `Alt` + mouse wheel (map canvas only) | Adjust each selected light's radius by 1 tile, or fog brush / Draw / Line size by 0.1 tiles; ignored during the respective drag/stroke. Other tools do nothing, without zooming |
 | Middle mouse (hold) | Laser pointer |
 | `P` | Ping tool |
 | `Ctrl+S` | Save |

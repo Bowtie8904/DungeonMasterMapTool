@@ -2,6 +2,7 @@ package dmmt;
 
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.lighting.LightingEngine;
 import dmmt.render.HistoryFeedback;
 import dmmt.service.AppSettings;
 import dmmt.service.Tuning;
@@ -123,6 +124,189 @@ class ContextualBrushSizeTest {
                 assertFalse(f.label.isVisible());
                 set(f.app, "draftOverlay", null);
             }
+        });
+    }
+
+    @Test
+    void selectedLightRadiusChangesByOneGridTileWithoutMovingCamerasOrChangingBrushSize() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.tool("SELECT");
+            f.project.getMap().getGrid().setPixelsPerCell(75);
+            var light = DmProject.LightSource.builder().id("selected").range(187.5).build();
+            var other = DmProject.LightSource.builder().id("other").range(300).build();
+            f.project.getLighting().getLights().addAll(java.util.List.of(light, other));
+            set(f.app, "selectedLight", light);
+            var dmBefore = copy(f.project.getViews().getDmCamera());
+            var playerBefore = copy(f.project.getViews().getPlayerCamera());
+            double brushBefore = f.size.get();
+            assertTrue(f.scroll(40, false, true).isConsumed());
+            assertEquals(262.5, light.getRange());
+            assertEquals("Light radius: 3.5 tiles", f.label.getText());
+            assertTrue(f.label.isVisible());
+            f.scroll(-40, false, true);
+            assertEquals(187.5, light.getRange());
+            f.scroll(-40, false, true);
+            assertEquals(112.5, light.getRange());
+            f.scroll(-40, false, true);
+            assertEquals(75, light.getRange());
+            int historySize = ((Deque<?>) get(f.app, "undoStack")).size();
+            f.scroll(-40, false, true);
+            assertEquals(75, light.getRange());
+            assertEquals(historySize, ((Deque<?>) get(f.app, "undoStack")).size());
+            light.setRange(16 * 75);
+            f.scroll(40, false, true);
+            assertEquals(17 * 75, light.getRange());
+            assertEquals(300, other.getRange());
+            assertEquals(dmBefore, f.project.getViews().getDmCamera());
+            assertEquals(playerBefore, f.project.getViews().getPlayerCamera());
+            assertEquals(brushBefore, f.size.get());
+            invoke(f.app, "undo");
+            assertEquals(16 * 75, light.getRange());
+            invoke(f.app, "redo");
+            assertEquals(17 * 75, light.getRange());
+        });
+    }
+
+    @Test
+    void multipleLightsChangeIndependentlyAsOneUndoStepAndMixedSelectionIsPreserved() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.tool("SELECT");
+            f.project.getMap().getGrid().setPixelsPerCell(75);
+            var small = DmProject.LightSource.builder().id("small").range(75).build();
+            var large = DmProject.LightSource.builder().id("large").range(337.5).build();
+            var other = DmProject.LightSource.builder().id("other").range(600).build();
+            f.project.getLighting().getLights().addAll(java.util.List.of(small, large, other));
+            var layer = DmProject.ImageLayer.builder().id("image").width(100).height(100).build();
+            f.project.getImageLayers().add(layer);
+            for (var light : java.util.List.of(small, large)) {
+                set(f.app, "selectedLight", light);
+                invoke(f.app, "seedGroupFromSingleSelection");
+            }
+            set(f.app, "selectedLayer", layer);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            invoke(f.app, "clearSingleSelection");
+            var selection = java.util.Set.copyOf((java.util.Set<?>) get(f.app, "groupKeys"));
+            var dmBefore = copy(f.project.getViews().getDmCamera());
+            var playerBefore = copy(f.project.getViews().getPlayerCamera());
+            double brushBefore = f.size.get();
+            f.scroll(-40, false, true);
+            assertEquals(75, small.getRange());
+            assertEquals(262.5, large.getRange());
+            assertEquals("Light radii: 1.0-3.5 tiles (2 lights)", f.label.getText());
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            invoke(f.app, "undo");
+            assertEquals(75, small.getRange());
+            assertEquals(337.5, large.getRange());
+            invoke(f.app, "redo");
+            assertEquals(75, small.getRange());
+            assertEquals(262.5, large.getRange());
+            f.scroll(40, false, true);
+            assertEquals(150, small.getRange());
+            assertEquals(337.5, large.getRange());
+            assertEquals(2, ((Deque<?>) get(f.app, "undoStack")).size());
+            invoke(f.app, "undo");
+            assertEquals(75, small.getRange());
+            assertEquals(262.5, large.getRange());
+            assertEquals(600, other.getRange());
+            assertEquals(100, layer.getWidth());
+            assertEquals(0, layer.getX());
+            assertEquals(selection, get(f.app, "groupKeys"));
+            assertEquals(dmBefore, f.project.getViews().getDmCamera());
+            assertEquals(playerBefore, f.project.getViews().getPlayerCamera());
+            assertEquals(brushBefore, f.size.get());
+            set(f.app, "draggingGroup", true);
+            int historySize = ((Deque<?>) get(f.app, "undoStack")).size();
+            f.scroll(40, false, true);
+            assertEquals(75, small.getRange());
+            assertEquals(262.5, large.getRange());
+            assertEquals(historySize, ((Deque<?>) get(f.app, "undoStack")).size());
+        });
+    }
+
+    @Test
+    void lightWheelIgnoresGesturesAndOtherToolsAndRetainsZoomPrecedence() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.tool("SELECT");
+            var light = DmProject.LightSource.builder().id("selected").range(300).build();
+            f.project.getLighting().getLights().add(light);
+            set(f.app, "selectedLight", light);
+            for (String flag : new String[]{"draggingLight", "draggingGroup", "marqueeActive", "fogDragging",
+                    "panningDmCamera", "pingArmed", "laserActive", "laserToolActive"}) {
+                set(f.app, flag, true);
+                assertTrue(f.scroll(40, false, true).isConsumed());
+                assertEquals(300, light.getRange());
+                assertFalse(f.label.isVisible());
+                set(f.app, flag, false);
+            }
+            f.scroll(0, false, true);
+            f.tool("LIGHT_ADD");
+            f.scroll(40, false, true);
+            assertEquals(300, light.getRange());
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            f.tool("SELECT");
+            Slider playerZoom = new Slider(-2, 2, 0);
+            set(f.app, "playerZoomSlider", playerZoom);
+            f.scroll(40, true, true);
+            assertTrue(playerZoom.getValue() > 0);
+            assertEquals(300, light.getRange());
+            assertFalse(f.label.isVisible());
+            double zoom = f.project.getViews().getDmCamera().getZoom();
+            f.scroll(40, false, false);
+            assertTrue(f.project.getViews().getDmCamera().getZoom() > zoom);
+            assertEquals(300, light.getRange());
+            f.project.getLighting().getLights().clear();
+            f.scroll(40, false, true);
+            assertEquals(300, light.getRange());
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+        });
+    }
+
+    @Test
+    void lightRadiusUndoRedoRestoresPersistentFogRevealsAndLeavesFrozenMapUnchanged() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.tool("SELECT");
+            f.project.getMap().getGrid().setPixelsPerCell(50);
+            f.project.getImageLayers().add(DmProject.ImageLayer.builder()
+                    .id("base").x(-300).y(-300).width(600).height(600).build());
+            f.project.getFog().setEnabled(true);
+            var light = DmProject.LightSource.builder().id("selected").x(0).y(0).range(100)
+                    .revealMode(DmProject.RevealMode.PERSISTENT).build();
+            var second = DmProject.LightSource.builder().id("second").x(200).y(0).range(50)
+                    .revealMode(DmProject.RevealMode.PERSISTENT).build();
+            f.project.getLighting().getLights().addAll(java.util.List.of(light, second));
+            set(f.app, "selectedLight", light);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            set(f.app, "selectedLight", second);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            invoke(f.app, "clearSingleSelection");
+            LightingEngine engine = (LightingEngine) get(f.app, "lightingEngine");
+            engine.update(f.project);
+            FogMask mask = f.project.getFog().getMask();
+            var before = mask.copyBits();
+            DmProject frozen = DmProject.builder().build();
+            var frozenLight = DmProject.LightSource.builder().id("selected").range(100).build();
+            frozen.getLighting().getLights().add(frozenLight);
+            set(f.app, "frozenPlayerProject", frozen);
+            f.scroll(40, false, true);
+            var after = mask.copyBits();
+            assertTrue(after.cardinality() > before.cardinality());
+            assertEquals(150, light.getRange());
+            assertEquals(100, second.getRange());
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            invoke(f.app, "undo");
+            assertEquals(100, light.getRange());
+            assertEquals(50, second.getRange());
+            assertEquals(before, mask.copyBits());
+            invoke(f.app, "redo");
+            assertEquals(150, light.getRange());
+            assertEquals(100, second.getRange());
+            assertEquals(after, mask.copyBits());
+            assertSame(frozen, get(f.app, "frozenPlayerProject"));
+            assertEquals(100, frozenLight.getRange());
         });
     }
 
