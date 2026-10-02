@@ -337,6 +337,7 @@ public final class AppSettings {
         sections.add(new Section(Tuning.PLAYER, List.of(
                 new Entry("player.screenIndex", "0", "Index of the monitor used for the player view."),
                 new Entry("player.tileInches", "1.0", "Physical size of one grid tile on the player screen, in inches."),
+                new Entry("player.showGrid", "false", "Show grid lines over the player map (true/false); does not affect the DM view."),
                 new Entry("player.screenDiagonalInches.0", null, "Screen diagonal per monitor index in inches, e.g. player.screenDiagonalInches.1 = 27."))));
 
         sections.add(new Section(Tuning.FOG, List.of(

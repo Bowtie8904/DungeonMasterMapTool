@@ -50,6 +50,34 @@ class AppSettingsTest {
     }
 
     @Test
+    void playerGridDefaultsOffAndPersistsBothToggleStates() throws IOException {
+        Path file = dir.resolve("settings.ini");
+        AppSettings settings = new AppSettings(file);
+        assertFalse(settings.getBoolean("player.showGrid", false));
+        assertTrue(Files.readString(file).contains("player.showGrid = false"));
+
+        settings.putBoolean("player.showGrid", true);
+        AppSettings reloaded = new AppSettings(file);
+        assertTrue(reloaded.getBoolean("player.showGrid", false));
+
+        reloaded.putBoolean("player.showGrid", false);
+        assertFalse(new AppSettings(file).getBoolean("player.showGrid", true));
+    }
+
+    @Test
+    void gridOpacityEditsApplyImmediatelyAndPersist() {
+        Path file = dir.resolve("settings.ini");
+        AppSettings settings = new AppSettings(file);
+        for (double opacity : new double[]{0.0, 0.42, 1.0}) {
+            settings.applyEdit(Tuning.GRID_OPACITY.key(), String.valueOf(opacity));
+            assertEquals(opacity, Tuning.GRID_OPACITY.get(), 1e-9);
+            AppSettings reloaded = new AppSettings(file);
+            assertEquals(opacity, reloaded.getDouble(Tuning.GRID_OPACITY.key(), -1), 1e-9);
+            assertEquals(opacity, Tuning.GRID_OPACITY.get(), 1e-9);
+        }
+    }
+
+    @Test
     void handEditsAreMergedAndTexturesOverridden() throws IOException {
         Path file = dir.resolve("settings.ini");
         AppSettings settings = new AppSettings(file);

@@ -183,6 +183,16 @@ every tile exactly one inch wide, so miniatures fit the grid. Set in the Player 
 
 *Keywords:* calibration, inch, 1 inch grid, miniature scale, tile size, physical size, scale
 
+### `player.showGrid`
+**Default:** `false` · **Range:** true / false · **Applies:** managed by the app
+
+Show map-aligned grid lines over the player map images, below lighting, effects and fog. Controlled by the **Show grid**
+icon on the second row of the Player view DM controls, beside the grid-opacity slider. Applies to all maps, including the frozen player view, and is
+remembered across restarts. Does not change the DM view, calibration, or grid lines baked into map images.
+The line opacity is controlled by `ui.gridOpacity`.
+
+*Keywords:* grid, grid lines, map overlay, player screen, show grid, hide grid, battle map
+
 ### `player.screenDiagonalInches.<n>`
 **Default:** none (estimated) · **Range:** `player.screenDiagonal.min` to `player.screenDiagonal.max` · **Applies:** managed by the app
 
@@ -1202,7 +1212,9 @@ Colour of **closed windows** in the DM view (line, badge ring and icon).
 ### `ui.gridOpacity`
 **Default:** `0.08` · **Range:** 0 to 1 · **Applies:** live
 
-Opacity of the grid lines drawn over the map (when the grid is shown), in the DM and the player view.
+Opacity of the player grid overlay and the DM background grid. Adjust with the 0-100% slider beside the grid toggle
+on the second row of the Player view DM controls. The percentage is shown alongside the slider; changes apply
+immediately and are remembered across maps and restarts. Does not affect grid lines baked into map images.
 
 *Keywords:* grid, grid lines, grid visibility, square grid, battle map grid
 

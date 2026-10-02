@@ -180,6 +180,10 @@ public class CanvasMapRenderer {
         private boolean valid;
     }
 
+    public enum GridMode {
+        BACKGROUND, OVERLAY, HIDDEN
+    }
+
     /**
      * Draws background, grid and map images on their own canvas below the animated one. Nothing here moves
      * with light flicker or effect animations, so the canvas is only redrawn when the view, the layers or
@@ -194,8 +198,21 @@ public class CanvasMapRenderer {
             double height,
             DmProject.CameraState camera
     ) {
+        renderBase(gc, state, project, projectFile, width, height, camera, GridMode.BACKGROUND);
+    }
+
+    public void renderBase(
+            GraphicsContext gc,
+            BaseLayerState state,
+            DmProject project,
+            Path projectFile,
+            double width,
+            double height,
+            DmProject.CameraState camera,
+            GridMode gridMode
+    ) {
         long imageVersion = imageStore.changeVersion();
-        long signature = baseSignature(project, projectFile, width, height, camera);
+        long signature = baseSignature(project, projectFile, width, height, camera, gridMode);
         if (state.valid && state.signature == signature && state.imageVersion == imageVersion) {
             return;
         }
@@ -207,8 +224,13 @@ public class CanvasMapRenderer {
             gc.setFill(Color.web("#cccccc"));
             gc.fillText("Open or import a map to begin.", 20, 30);
         } else {
-            drawGrid(gc, project, width, height, camera);
+            if (gridMode == GridMode.BACKGROUND) {
+                drawGrid(gc, project, width, height, camera);
+            }
             complete = drawLayers(gc, project, projectFile, width, height, camera);
+            if (gridMode == GridMode.OVERLAY) {
+                drawGrid(gc, project, width, height, camera);
+            }
         }
         FrameProfiler.lap("base redraw", profileStart);
         state.signature = signature;
@@ -217,12 +239,14 @@ public class CanvasMapRenderer {
         state.valid = complete;
     }
 
-    private static long baseSignature(DmProject project, Path projectFile, double width, double height,
-                                      DmProject.CameraState camera) {
+    static long baseSignature(DmProject project, Path projectFile, double width, double height,
+                              DmProject.CameraState camera, GridMode gridMode) {
         long hash = 1125899906842597L;
         hash = 31 * hash + Double.hashCode(width);
         hash = 31 * hash + Double.hashCode(height);
         hash = 31 * hash + (PerformanceMode.isEnabled() ? 1 : 0);
+        hash = 31 * hash + gridMode.ordinal();
+        hash = 31 * hash + Double.hashCode(Tuning.GRID_OPACITY.get());
         if (project == null) {
             return hash;
         }
@@ -2033,7 +2057,6 @@ public class CanvasMapRenderer {
         }
     }
 }
-
 
 
 

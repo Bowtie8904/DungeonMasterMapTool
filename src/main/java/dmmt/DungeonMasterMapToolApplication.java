@@ -194,6 +194,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox imageUnlockBanner;
     private ToggleButton playerWindowToggle;
     private ToggleButton playerGridToggle;
+    private Slider gridOpacitySlider;
     private HBox toolChip;
     private FontIcon toolChipIcon;
     private Label toolChipLabel;
@@ -1091,7 +1092,24 @@ public class DungeonMasterMapToolApplication extends Application {
             preferences.putBoolean(PREF_PLAYER_SHOW_GRID, showPlayerGrid);
             status(showPlayerGrid ? "Player grid shown." : "Player grid hidden.");
         });
-        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, playerGridToggle, handoutButton);
+        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
+        gridOpacitySlider = new Slider(Tuning.GRID_OPACITY.min(), Tuning.GRID_OPACITY.max(), Tuning.GRID_OPACITY.get());
+        gridOpacitySlider.setMajorTickUnit(0.01);
+        gridOpacitySlider.setMinorTickCount(0);
+        gridOpacitySlider.setSnapToTicks(true);
+        gridOpacitySlider.setBlockIncrement(0.01);
+        gridOpacitySlider.setPrefWidth(90);
+        HBox.setHgrow(gridOpacitySlider, Priority.ALWAYS);
+        Icons.tooltip(gridOpacitySlider, "Grid opacity (0-100%, shared with the DM background grid)");
+        Label gridOpacityValue = new Label(Math.round(gridOpacitySlider.getValue() * 100) + "%");
+        gridOpacityValue.getStyleClass().add("value-label");
+        gridOpacitySlider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            gridOpacityValue.setText(Math.round(newValue.doubleValue() * 100) + "%");
+            if (!syncingControls) {
+                preferences.applyEdit(Tuning.GRID_OPACITY.key(), String.valueOf(newValue.doubleValue()));
+            }
+        });
+        HBox playerGridRow = row(playerGridToggle, gridOpacitySlider, gridOpacityValue);
 
         playerScreenSelector = new ComboBox<>();
         playerScreenSelector.setMaxWidth(Double.MAX_VALUE);
@@ -1171,7 +1189,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         textToolsRow, textSizeRow, textBoxColorRow),
                 new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
                 new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
-                        playerRow, screenRow, scaleGrid, playerZoomRow),
+                        playerRow, playerGridRow, screenRow, scaleGrid, playerZoomRow),
                 new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
                         frameRateGrid()));
 
@@ -1236,6 +1254,15 @@ public class DungeonMasterMapToolApplication extends Application {
         showPlayerGrid = preferences.getBoolean(PREF_PLAYER_SHOW_GRID, false);
         if (playerGridToggle != null) {
             playerGridToggle.setSelected(showPlayerGrid);
+        }
+        if (gridOpacitySlider != null) {
+            boolean wasSyncing = syncingControls;
+            syncingControls = true;
+            try {
+                gridOpacitySlider.setValue(Tuning.GRID_OPACITY.get());
+            } finally {
+                syncingControls = wasSyncing;
+            }
         }
     }
 
