@@ -786,21 +786,23 @@ on large maps.
 ### `brush.defaultSizeTiles`
 **Default:** `1.5` · **Range:** 0.1 to 200 · **Applies:** restart
 
-Brush size in grid tiles when the application starts (fog brushes and freehand effects).
+Brush size in grid tiles when the application starts (fog brushes, Draw and Line). Both sidebar sliders and
+**Alt + mouse wheel** over the map edit the same size; each wheel notch changes it by 0.1 tiles. The cursor preview
+uses this exact size, without half-tile rounding. Circle and Box are drag-sized; Pen ignores brush size.
 
 *Keywords:* brush size, default brush, fog brush, paint size
 
 ### `brush.minTiles`
 **Default:** `0.2` · **Range:** 0.05 to 10 · **Applies:** restart
 
-Smallest value of the brush size slider in tiles.
+Smallest brush size in tiles, enforced by the sidebar sliders and Alt + mouse wheel.
 
 *Keywords:* brush size limit, small brush, fine brush, slider range
 
 ### `brush.maxTiles`
 **Default:** `8` · **Range:** 0.5 to 200 · **Applies:** restart
 
-Largest value of the brush size slider in tiles. Raise it to reveal large areas faster.
+Largest brush size in tiles, enforced by the sidebar sliders and Alt + mouse wheel. Raise it to reveal large areas faster.
 
 *Keywords:* brush size limit, big brush, large brush, slider range
 

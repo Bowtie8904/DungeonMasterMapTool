@@ -242,7 +242,7 @@ Controls are in the *Player view* section.
 The *Fog of war* section:
 
 - **Fog on/off** toggle: hides or shows fog without losing what is revealed. Fog tools only work while fog is on.
-- **Reveal brush / Hide brush:** paint fog away or back. The brush size slider covers 0.5–8 tiles and a circular preview follows the cursor.
+- **Reveal brush / Hide brush:** paint fog away or back. The shared brush size slider defaults to 0.2–8 tiles and a circular preview follows the cursor. **Alt + mouse wheel** over the map changes size by 0.1 tiles per notch.
 - **Reveal area / Hide area:** drag a rectangle (dashed preview).
 - **Reveal room:** one click floods the room under the cursor, bounded by walls and doors/windows (regardless of whether they are open). **Shift+click** hides the room instead. A hover preview outlines the region before you click, so you see immediately if it is not enclosed. The tool stays armed for several rooms in a row.
 - **Reveal all / Hide all.**
@@ -303,7 +303,7 @@ Draw areas of effect that both DM and players see (below fog, above map and ligh
 - **Light emission** (bulb) toggle: the effect glows and lights up dark maps (fire, lava, lightning, arcane, holy light, radiation, portal and force by default). It can be switched on or off for any effect afterwards, whatever the texture default.
 - **Animations** toggle (per map): freezes all textures to a static frame to save performance.
 - **Players see:** hides a shape from the player view (shown dashed and dimmed with a crossed-out eye for the DM). Right-click any shape with Select for a *Visible to players* menu item.
-- **Brush size** slider for Draw, Line and the fog brush.
+- **Brush size** slider for Draw, Line and the fog brush. **Alt + mouse wheel** over the map adjusts this same size by 0.1 tiles per notch within the configured limits, updating both sliders and the preview immediately. A small DM-only size label follows the cursor and disappears after 0.9 seconds. Neither camera moves, and no content or undo history changes. Adjustments are ignored during a stroke; Circle and Box remain drag-sized and Pen remains fixed-width.
 
 **Editing**
 
@@ -402,6 +402,8 @@ Most values apply when the window regains focus after you saved the file; entrie
 | Right-click (no drag) | Same as `Esc` while a tool is active; opens context menus in Select |
 | Right-drag | Pan |
 | Mouse wheel | Zoom around the cursor |
+| `Ctrl` + mouse wheel | Zoom the player view (also takes precedence when `Alt` is held) |
+| `Alt` + mouse wheel (map canvas only) | Adjust fog brush / Draw / Line size by 0.1 tiles; ignored during strokes. Other tools do nothing, without zooming |
 | Middle mouse (hold) | Laser pointer |
 | `P` | Ping tool |
 | `Ctrl+S` | Save |

@@ -32,6 +32,7 @@ import dmmt.ui.SettingsWindow;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
+import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
@@ -97,6 +98,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import javafx.util.Duration;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -202,6 +204,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private double rightPressScreenX;
     private double rightPressScreenY;
     private final DoubleProperty brushSize = new SimpleDoubleProperty(Tuning.BRUSH_DEFAULT.get());
+    private Label brushSizeLabel;
+    private final PauseTransition brushSizeLabelTimeout = new PauseTransition(Duration.millis(900));
+    private double brushLabelCursorX;
+    private double brushLabelCursorY;
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
     private boolean showPlayerGrid = preferences.getBoolean(PREF_PLAYER_SHOW_GRID, false);
@@ -230,7 +236,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private long metricsNanosMax;
     private DmProject.LightSource selectedLight;
     private EditorTool activeTool = EditorTool.SELECT;
-    private double brushSizeTiles = Tuning.BRUSH_DEFAULT.get();
     private boolean fogDragging;
     private double fogDragStartWorldX;
     private double fogDragStartWorldY;
@@ -422,10 +427,13 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setAlignment(levelSwitcher, Pos.TOP_LEFT);
         StackPane.setMargin(levelSwitcher, new Insets(10));
         center.getChildren().addAll(chip, imageUnlockBanner, levelSwitcher, controls);
+        center.getChildren().add(createBrushSizeLabel());
         dmBaseCanvas.widthProperty().bind(center.widthProperty());
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
         dmCanvas.heightProperty().bind(center.heightProperty());
+        dmCanvas.widthProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
+        dmCanvas.heightProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
         dmFogCanvas.widthProperty().bind(center.widthProperty());
         dmFogCanvas.heightProperty().bind(center.heightProperty());
         root.setCenter(center);
@@ -667,7 +675,8 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- DM controls panel (right side) ----
 
     private Region createControlsPanel(Stage stage) {
-        brushSize.addListener((obs, oldValue, newValue) -> brushSizeTiles = Math.max(Tuning.BRUSH_MIN.get(), Math.round(newValue.doubleValue() * 2) / 2.0));
+        brushSize.set(clamp(brushSize.get(), Math.min(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()),
+                Math.max(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get())));
         ToggleGroup toolGroup = new ToggleGroup();
         for (EditorTool tool : EditorTool.values()) {
             ToggleButton button = Icons.toggle(tool.icon, tool.label + " — " + tool.description());
@@ -1291,13 +1300,14 @@ public class DungeonMasterMapToolApplication extends Application {
     /** A brush size slider; all brush sliders share one value. */
     private HBox brushSlider() {
         Slider slider = new Slider(Math.min(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()), Math.max(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()), brushSize.get());
-        slider.setMajorTickUnit(0.2);
+        slider.setMajorTickUnit(0.1);
         slider.setMinorTickCount(0);
         slider.setSnapToTicks(true);
+        slider.setBlockIncrement(0.1);
         slider.valueProperty().bindBidirectional(brushSize);
         HBox.setHgrow(slider, Priority.ALWAYS);
         slider.setPrefWidth(90);
-        Icons.tooltip(slider, "Brush size in tiles");
+        Icons.tooltip(slider, "Brush size in tiles — Alt + mouse wheel over the map with a fog brush, Draw or Line");
         Label value = new Label();
         value.getStyleClass().add("value-label");
         value.textProperty().bind(brushSize.asString("%.1f t"));
@@ -1937,6 +1947,25 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 return;
             }
+            if (event.isAltDown()) {
+                event.consume();
+                if (event.getDeltaY() == 0 || !activeTool.supportsBrushSize() || fogDragging
+                        || draftOverlay != null || pingArmed || laserActive || laserToolActive) {
+                    return;
+                }
+                double size = Math.round((brushSize.get() + Math.copySign(0.1, event.getDeltaY())) * 1e10) / 1e10;
+                brushSize.set(clamp(size, Math.min(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get()),
+                        Math.max(Tuning.BRUSH_MIN.get(), Tuning.BRUSH_MAX.get())));
+                updateHover(event.getX(), event.getY());
+                brushSizeLabel.setText(String.format(Locale.ROOT, "Brush: %.1f tiles", brushSize.get()));
+                brushSizeLabel.setVisible(true);
+                brushLabelCursorX = event.getX();
+                brushLabelCursorY = event.getY();
+                positionBrushSizeLabel();
+                brushSizeLabelTimeout.playFromStart();
+                renderDm();
+                return;
+            }
             DmProject.CameraState camera = project.getViews().getDmCamera();
             double wheel = Tuning.DM_ZOOM_WHEEL_FACTOR.get();
             double factor = event.getDeltaY() > 0 ? wheel : 1 / wheel;
@@ -1953,6 +1982,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
         dmCanvas.setOnMouseMoved(event -> {
             updateHover(event.getX(), event.getY());
+            brushLabelCursorX = event.getX();
+            brushLabelCursorY = event.getY();
+            positionBrushSizeLabel();
             if (laserToolActive) {
                 addLaserPoint(hoverWorldX, hoverWorldY);
             }
@@ -1960,6 +1992,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         dmCanvas.setOnMouseExited(event -> {
             hoverInsideCanvas = false;
+            hideBrushSizeLabel();
             if (laserToolActive && !event.isPrimaryButtonDown()) {
                 laserTrail.clear();
             }
@@ -1974,6 +2007,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> Platform.runLater(this::updateCanvasCursor));
 
         dmCanvas.setOnMousePressed(event -> {
+            hideBrushSizeLabel();
             commitTextEdit();
             lastMouseX = event.getX();
             lastMouseY = event.getY();
@@ -3535,6 +3569,35 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- Tools & fog editing ----
 
+    private Label createBrushSizeLabel() {
+        brushSizeLabel = new Label();
+        brushSizeLabel.setManaged(false);
+        brushSizeLabel.setMouseTransparent(true);
+        brushSizeLabel.setVisible(false);
+        brushSizeLabel.setStyle("-fx-background-color: rgba(0,0,0,0.75); -fx-text-fill: white; "
+                + "-fx-padding: 4 8; -fx-background-radius: 4;");
+        brushSizeLabelTimeout.setOnFinished(event -> brushSizeLabel.setVisible(false));
+        return brushSizeLabel;
+    }
+
+    private void hideBrushSizeLabel() {
+        brushSizeLabelTimeout.stop();
+        if (brushSizeLabel != null) {
+            brushSizeLabel.setVisible(false);
+        }
+    }
+
+    private void positionBrushSizeLabel() {
+        if (brushSizeLabel == null || !brushSizeLabel.isVisible()) {
+            return;
+        }
+        double width = Math.min(brushSizeLabel.prefWidth(-1), dmCanvas.getWidth());
+        double height = Math.min(brushSizeLabel.prefHeight(width), dmCanvas.getHeight());
+        brushSizeLabel.resize(width, height);
+        brushSizeLabel.relocate(clamp(brushLabelCursorX + 16, 0, dmCanvas.getWidth() - width),
+                clamp(brushLabelCursorY + 20, 0, dmCanvas.getHeight() - height));
+    }
+
     private void updateHover(double screenX, double screenY) {
         CanvasMapRenderer.WorldPoint world = renderer.screenToWorld(
                 screenX, screenY, dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
@@ -3608,6 +3671,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setActiveTool(EditorTool tool) {
+        hideBrushSizeLabel();
         commitTextEdit();
         clearGroup();
         if (draftText != null) {
@@ -3663,7 +3727,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private double brushRadiusWorld() {
-        return brushSizeTiles * project.getMap().getGrid().getPixelsPerCell() / 2.0;
+        return brushSize.get() * project.getMap().getGrid().getPixelsPerCell() / 2.0;
     }
 
     private void paintBrushSegment(FogMask mask, double fromX, double fromY, double toX, double toY) {
@@ -4901,7 +4965,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .type(type)
                 .x(worldX)
                 .y(worldY)
-                .strokeWidth("pen".equals(type) ? Tuning.PEN_WIDTH_CELLS.get() * pixelsPerCell : brushSizeTiles * pixelsPerCell)
+                .strokeWidth("pen".equals(type) ? Tuning.PEN_WIDTH_CELLS.get() * pixelsPerCell : brushSize.get() * pixelsPerCell)
                 .color(overlayColor)
                 .alpha(overlayAlpha)
                 .playerVisible(overlayPlayerVisible)
@@ -7096,7 +7160,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         String description() {
-            return description;
+            return description + (supportsBrushSize() ? "; Alt + mouse wheel over the map adjusts brush size" : "");
+        }
+
+        boolean supportsBrushSize() {
+            return this == REVEAL_BRUSH || this == HIDE_BRUSH || this == AOE_BRUSH || this == AOE_LINE;
         }
 
         boolean isAoeTool() {

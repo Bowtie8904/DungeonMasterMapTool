@@ -80,6 +80,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 3.2 DM View
 
 - Zoom in/out around cursor focus.
+- **Alt + mouse wheel over the map canvas:** adjust the shared brush size by 0.1 grid tiles per notch for Reveal brush, Fog brush, Draw and Line, clamped to `brush.minTiles` / `brush.maxTiles`. Both sidebar sliders and the cursor preview update immediately without moving either camera, editing content or adding undo history. Ordinary wheel still zooms the DM view; Ctrl + wheel takes precedence even with Alt held. Unsupported tools consume Alt + wheel without zooming (Circle and Box stay drag-sized; Pen stays fixed-width). Ignore contextual changes during a fog stroke or effect draw. Sidebars, dialogs and text editors are excluded. A mouse-transparent, canvas-bounded DM-only `Brush: 2.5 tiles` label follows the cursor while adjusting and for 0.9 seconds afterwards; it disappears on canvas exit, drawing or tool change.
 - Pan/camera movement via drag and/or keybind.
 - Render overlays (fog, lights, shapes) with editing controls.
 - Show player viewport rectangle when player screen is active. It looks like an application window: fully transparent interior with a cyan border and a thicker "Player view" title bar above the top edge. Only the title bar can be grabbed to drag the viewport (Select tool); it takes click priority over everything beneath it. The bar also shows the current player zoom (e.g. "125%", right-aligned) and, when the box is wide enough, a **Reset** button that sets the player zoom back to normal (100%, step 0); the button is dimmed while the zoom is already normal.
@@ -112,7 +113,7 @@ Desktop tool for tabletop dungeon masters that:
 
 - Fog toggle on/off without losing reveal state.
 - Reveal/hide via:
-  - brush (size configurable, 0.5-8 tiles, circular cursor preview)
+  - brush (size configurable, default range 0.2-8 tiles, circular cursor preview; Alt + wheel adjusts by 0.1 tiles)
   - rectangular area drag tool (dashed preview while dragging)
   - Reveal All / Hide All
 - Fog tools only act while fog is enabled; the **Select** tool (default, `Esc`) is used for dragging lights, layers and the player viewport.
