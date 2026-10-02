@@ -230,6 +230,7 @@ Controls are in the *Player view* section.
 
 - **Player window** toggle: opens a borderless fullscreen window on the chosen monitor. Use the **screen selector** to pick the exact monitor.
 - **1-inch calibration:** enter the physical **screen diagonal** of the player monitor (stored per screen) and the **tile size in inches** (default 1). The zoom is derived automatically so each grid tile measures that size. The **1 in test square** toggle shows a square on the player screen so you can verify it with a ruler.
+- **Show grid** (grid icon beside the 1-inch test-square button): toggles grid lines over the player map, below lighting, effects and fog. Off by default and remembered across maps and restarts (`player.showGrid`). Works while frozen without changing the DM view. Grid lines already baked into the map image cannot be hidden.
 - **Freeze:** snapshots the *entire* project (map, fog, lights, effects, camera) for the players. You can switch maps or edit freely while they keep seeing the old state. You can still move the player viewport; on **unfreeze** the player view jumps to the current map and the staged rectangle.
 - The player view never shows DM helpers: wall guides, door state lines, badges, viewport handles, selection outlines or text-box editing.
 - **Handout** button: see [Handouts](#13-handouts).
@@ -350,6 +351,8 @@ Show images such as NPC portraits or letters to your players.
 4. **Rotate left/right** in 90° steps so the handout faces the intended player around the table. Rotation applies to the whole arrangement.
 5. Click an image to select it, then press `Delete` or use the right-click **Delete** or **Delete selected**. **Clear all** removes everything. The selection highlight is never shown to players.
 6. Switch on **Show to players**. The player screen then shows only the handout on black. Switch it off and the player view returns to the live or frozen map. It is disabled without images or an open player window.
+
+Enable **Mirror for opposite side** using the opposing vertical arrows icon toggle beside the rotation buttons to show two copies facing opposite sides of the table, with one rotated 180 degrees (text is not reflected). The layout is recalculated to fit each half, rather than shrinking the full-screen arrangement. At 0/180 degrees the copies occupy the top and bottom halves; rotate to 90/270 degrees for left and right halves. Both copies show the same images, including when showing only a selection. The DM preview stays unrotated and selectable. Mirroring is off by default and is not saved.
 
 Closing the handout window stops showing it and discards the images. Handouts are session-only and never saved.
 

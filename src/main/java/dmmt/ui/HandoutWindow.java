@@ -3,6 +3,7 @@ package dmmt.ui;
 import lombok.Getter;
 import dmmt.ui.HandoutLayout.Rect;
 import dmmt.ui.HandoutLayout.Size;
+import dmmt.ui.HandoutLayout.Panel;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -29,6 +30,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -68,6 +70,8 @@ public final class HandoutWindow {
     private Set<Image> showOnly;
     @Getter
     private int rotation = lastRotation;
+    @Getter
+    private boolean mirrored;
     private boolean shown;
 
     public HandoutWindow(Stage owner, java.util.List<Image> icons, BooleanSupplier playerWindowOpen,
@@ -116,6 +120,12 @@ public final class HandoutWindow {
         });
         clearButton = Icons.button(MaterialDesignD.DELETE_SWEEP_OUTLINE, "Remove all images", this::clearAll);
 
+        ToggleButton mirrorToggle = Icons.toggle(MaterialDesignS.SWAP_VERTICAL,
+                "Mirror for opposite side: show two copies facing opposite sides of the table (player view only)");
+        mirrorToggle.setOnAction(e -> {
+            mirrored = mirrorToggle.isSelected();
+            onChange.run();
+        });
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox controls = new HBox(6,
@@ -124,7 +134,7 @@ public final class HandoutWindow {
                 Icons.separator(),
                 Icons.button(MaterialDesignR.ROTATE_LEFT, "Rotate the handout left by 90 degrees (player view only)", () -> rotate(-1)),
                 Icons.button(MaterialDesignR.ROTATE_RIGHT, "Rotate the handout right by 90 degrees (player view only)", () -> rotate(1)),
-                spacer, showSelectedToggle, showToggle);
+                mirrorToggle, spacer, showSelectedToggle, showToggle);
         controls.setAlignment(Pos.CENTER_LEFT);
 
         VBox root = new VBox(8, previewPane, hint, controls);
@@ -390,22 +400,43 @@ public final class HandoutWindow {
         return HandoutLayout.compute(sizes, space.width(), space.height());
     }
 
-    /**
-     * Draws all images in the best-fitting grid, rotated in 90-degree steps as a whole. {@code selectedIndex}
-     * (or -1) gets a highlight border; the player screen passes -1.
-     */
+    /** Draws the arrangement with an optional selection border (-1 means none). */
     public static void drawBoard(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
                                  int selectedIndex) {
         draw(gc, images, rotation, width, height, selectedIndex < 0 ? Set.of() : Set.of(selectedIndex), Set.of());
     }
 
-    private static void draw(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
-                             Set<Integer> selectedIndexes, Set<Integer> shownIndexes) {
-        if (images.isEmpty()) {
+    /** Reflows the player arrangement for each half before drawing opposite-facing copies. */
+    public static void drawBoard(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
+                                 boolean mirrored) {
+        List<Panel> panels = HandoutLayout.outputPanels(width, height, rotation, mirrored);
+        if (images.isEmpty() || panels.isEmpty()) {
             return;
         }
-        Size space = HandoutLayout.layoutSize(width, height, rotation);
+        Panel first = panels.getFirst();
+        List<Rect> rects = layout(first.bounds().width(), first.bounds().height(), images, first.rotation());
+        for (Panel panel : panels) {
+            gc.save();
+            gc.translate(panel.bounds().x(), panel.bounds().y());
+            drawArrangement(gc, images, panel.rotation(), panel.bounds().width(), panel.bounds().height(),
+                    rects, Set.of(), Set.of());
+            gc.restore();
+        }
+    }
+
+    private static void draw(GraphicsContext gc, List<Image> images, int rotation, double width, double height,
+                             Set<Integer> selectedIndexes, Set<Integer> shownIndexes) {
+        if (images.isEmpty() || width <= 0 || height <= 0) {
+            return;
+        }
         List<Rect> rects = layout(width, height, images, rotation);
+        drawArrangement(gc, images, rotation, width, height, rects, selectedIndexes, shownIndexes);
+    }
+
+    private static void drawArrangement(GraphicsContext gc, List<Image> images, int rotation, double width,
+                                        double height, List<Rect> rects, Set<Integer> selectedIndexes,
+                                        Set<Integer> shownIndexes) {
+        Size space = HandoutLayout.layoutSize(width, height, rotation);
         gc.save();
         gc.translate(width / 2, height / 2);
         gc.rotate(rotation);

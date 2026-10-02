@@ -69,6 +69,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignG;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignI;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
@@ -124,6 +125,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_PLAYER_SCREEN_INDEX = "player.screenIndex";
     private static final String PREF_SCREEN_DIAGONAL_PREFIX = "player.screenDiagonalInches.";
     private static final String PREF_TILE_INCHES = "player.tileInches";
+    private static final String PREF_PLAYER_SHOW_GRID = "player.showGrid";
     private static final String PREF_FPS_TARGET = "render.targetFps";
     private static final String PREF_FPS_ANIMATION = "render.animationFps";
     private static final String PREF_FPS_IDLE = "render.idleFps";
@@ -191,6 +193,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton imageLockToggle;
     private HBox imageUnlockBanner;
     private ToggleButton playerWindowToggle;
+    private ToggleButton playerGridToggle;
     private HBox toolChip;
     private FontIcon toolChipIcon;
     private Label toolChipLabel;
@@ -200,6 +203,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private final DoubleProperty brushSize = new SimpleDoubleProperty(Tuning.BRUSH_DEFAULT.get());
     private Spinner<Double> screenInchesSpinner;
     private Spinner<Double> tileInchesSpinner;
+    private boolean showPlayerGrid = preferences.getBoolean(PREF_PLAYER_SHOW_GRID, false);
     private boolean showScaleTestSquare;
     private HandoutWindow handoutWindow;
     private DmProject.WallSegment draftWall;
@@ -557,6 +561,7 @@ public class DungeonMasterMapToolApplication extends Application {
             } else if (preferences.pollExternalChange()) {
                 // The reload already applied tuning values and texture settings edited by hand.
                 applySectionVisibility();
+                applyPlayerGridSetting();
                 status("Settings reloaded from " + preferences.getFile().getFileName()
                         + " (entries marked 'Restart required' apply after a restart)");
             }
@@ -1078,7 +1083,15 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         Button handoutButton = Icons.button(MaterialDesignI.IMAGE_FRAME,
                 "Handout — paste images from the clipboard and show them to the players", () -> openHandoutWindow(stage));
-        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, handoutButton);
+        playerGridToggle = Icons.toggle(MaterialDesignG.GRID,
+                "Show grid over the player map (does not remove grid lines baked into the image)");
+        playerGridToggle.setSelected(showPlayerGrid);
+        playerGridToggle.setOnAction(e -> {
+            showPlayerGrid = playerGridToggle.isSelected();
+            preferences.putBoolean(PREF_PLAYER_SHOW_GRID, showPlayerGrid);
+            status(showPlayerGrid ? "Player grid shown." : "Player grid hidden.");
+        });
+        HBox playerRow = row(playerWindowToggle, freezePlayerButton, scaleTest, playerGridToggle, handoutButton);
 
         playerScreenSelector = new ComboBox<>();
         playerScreenSelector.setMaxWidth(Double.MAX_VALUE);
@@ -1213,7 +1226,17 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void openSettings() {
-        SettingsWindow.show(primaryStage, preferences, this::applySectionVisibility);
+        SettingsWindow.show(primaryStage, preferences, () -> {
+            applySectionVisibility();
+            applyPlayerGridSetting();
+        });
+    }
+
+    private void applyPlayerGridSetting() {
+        showPlayerGrid = preferences.getBoolean(PREF_PLAYER_SHOW_GRID, false);
+        if (playerGridToggle != null) {
+            playerGridToggle.setSelected(showPlayerGrid);
+        }
     }
 
     /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */
@@ -2630,7 +2653,7 @@ public class DungeonMasterMapToolApplication extends Application {
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
             HandoutWindow.drawBoard(gc, handoutWindow.getImages(), handoutWindow.getRotation(),
-                    playerCanvas.getWidth(), playerCanvas.getHeight(), -1);
+                    playerCanvas.getWidth(), playerCanvas.getHeight(), handoutWindow.isMirrored());
             return;
         }
         boolean frozen = frozenPlayerProject != null;
@@ -2638,7 +2661,8 @@ public class DungeonMasterMapToolApplication extends Application {
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
         playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
-                getEffectivePlayerCamera());
+                getEffectivePlayerCamera(), showPlayerGrid
+                        ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
         playerView.render(
                 gc,
                 shown,
@@ -7082,4 +7106,3 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 }
-

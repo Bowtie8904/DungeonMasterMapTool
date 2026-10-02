@@ -120,4 +120,86 @@ class HandoutLayoutTest {
         assertNoOverlap(rects);
         assertInside(rects, 1920, 1080);
     }
+
+    @Test
+    void normalOutputUsesTheWholeScreenAtEveryRotation() {
+        for (int rotation : List.of(0, 90, 180, 270)) {
+            var panels = HandoutLayout.outputPanels(1920, 1080, rotation, false);
+            assertEquals(1, panels.size());
+            assertEquals(new Rect(0, 0, 1920, 1080), panels.getFirst().bounds());
+            assertEquals(rotation, panels.getFirst().rotation());
+        }
+        assertTrue(HandoutLayout.outputPanels(0, 1080, 0, true).isEmpty());
+        assertTrue(HandoutLayout.outputPanels(1920, 0, 0, false).isEmpty());
+    }
+
+    @Test
+    void mirroredPanelsCoverTheScreenAndFaceOppositeSidesAtEveryRotation() {
+        for (Size screen : List.of(new Size(1920, 1080), new Size(1080, 1920), new Size(801, 601))) {
+            for (int rotation : List.of(0, 90, 180, 270)) {
+                var panels = HandoutLayout.outputPanels(screen.width(), screen.height(), rotation, true);
+                assertEquals(2, panels.size());
+                List<Rect> bounds = panels.stream().map(HandoutLayout.Panel::bounds).toList();
+                assertInside(bounds, screen.width(), screen.height());
+                assertNoOverlap(bounds);
+                assertEquals(screen.width() * screen.height(), area(bounds), 1e-6);
+                assertEquals(rotation, panels.getFirst().rotation());
+                assertEquals((rotation + 180) % 360, panels.getLast().rotation());
+                Size full = HandoutLayout.layoutSize(screen.width(), screen.height(), rotation);
+                for (var panel : panels) {
+                    Size space = HandoutLayout.layoutSize(panel.bounds().width(), panel.bounds().height(),
+                            panel.rotation());
+                    assertEquals(full.width(), space.width(), 1e-6);
+                    assertEquals(full.height() / 2, space.height(), 1e-6);
+                }
+            }
+        }
+        assertEquals(new Rect(0, 540, 1920, 540),
+                HandoutLayout.outputPanels(1920, 1080, 0, true).getFirst().bounds());
+        assertEquals(new Rect(0, 0, 960, 1080),
+                HandoutLayout.outputPanels(1920, 1080, 90, true).getFirst().bounds());
+        assertEquals(HandoutLayout.outputPanels(1920, 1080, 270, true),
+                HandoutLayout.outputPanels(1920, 1080, -90, true));
+    }
+
+    @Test
+    void mirroredOutputReflowsInsteadOfShrinkingTheFullScreenLayout() {
+        List<Size> images = List.of(new Size(3000, 1000), new Size(3000, 1000));
+        List<Rect> full = HandoutLayout.compute(images, 1920, 1080);
+        assertTrue(full.get(1).y() > full.get(0).y());
+
+        var panel = HandoutLayout.outputPanels(1920, 1080, 0, true).getFirst();
+        Size space = HandoutLayout.layoutSize(panel.bounds().width(), panel.bounds().height(), panel.rotation());
+        List<Rect> half = HandoutLayout.compute(images, space.width(), space.height());
+        assertTrue(half.get(1).x() > half.get(0).x());
+        assertEquals(half.get(0).y(), half.get(1).y(), 1e-6);
+        assertInside(half, space.width(), space.height());
+        assertNoOverlap(half);
+        assertTrue(area(half) > area(full) / 4);
+    }
+
+    @Test
+    void mirroredLayoutsKeepMixedImagesInsideEachHalfWithoutDistortion() {
+        List<Size> images = List.of(new Size(1600, 900), new Size(300, 1200), new Size(1000, 1000));
+        for (int rotation : List.of(0, 90, 180, 270)) {
+            List<Rect> firstLayout = null;
+            for (var panel : HandoutLayout.outputPanels(1920, 1080, rotation, true)) {
+                Size space = HandoutLayout.layoutSize(panel.bounds().width(), panel.bounds().height(),
+                        panel.rotation());
+                List<Rect> rects = HandoutLayout.compute(images, space.width(), space.height());
+                assertEquals(images.size(), rects.size());
+                assertInside(rects, space.width(), space.height());
+                assertNoOverlap(rects);
+                for (int i = 0; i < images.size(); i++) {
+                    assertEquals(images.get(i).width() / images.get(i).height(),
+                            rects.get(i).width() / rects.get(i).height(), 1e-6);
+                }
+                if (firstLayout == null) {
+                    firstLayout = rects;
+                } else {
+                    assertEquals(firstLayout, rects);
+                }
+            }
+        }
+    }
 }

@@ -12,6 +12,9 @@ public final class HandoutLayout {
     public record Size(double width, double height) {
     }
 
+    public record Panel(Rect bounds, int rotation) {
+    }
+
     public record Rect(double x, double y, double width, double height) {
         public boolean contains(double px, double py) {
             return px >= x && px <= x + width && py >= y && py <= y + height;
@@ -28,6 +31,38 @@ public final class HandoutLayout {
     /** Space in which the arrangement is computed: width and height swap for 90/270 degree rotations. */
     public static Size layoutSize(double width, double height, int rotation) {
         return rotation % 180 != 0 ? new Size(height, width) : new Size(width, height);
+    }
+
+    /** Player output regions; the second copy faces the opposite side without reflecting the images. */
+    public static List<Panel> outputPanels(double width, double height, int rotation, boolean mirrored) {
+        if (width <= 0 || height <= 0) {
+            return List.of();
+        }
+        int angle = Math.floorMod(rotation, 360);
+        if (!mirrored) {
+            return List.of(new Panel(new Rect(0, 0, width, height), angle));
+        }
+        Rect first;
+        Rect second;
+        switch (angle) {
+            case 90 -> {
+                first = new Rect(0, 0, width / 2, height);
+                second = new Rect(width / 2, 0, width / 2, height);
+            }
+            case 180 -> {
+                first = new Rect(0, 0, width, height / 2);
+                second = new Rect(0, height / 2, width, height / 2);
+            }
+            case 270 -> {
+                first = new Rect(width / 2, 0, width / 2, height);
+                second = new Rect(0, 0, width / 2, height);
+            }
+            default -> {
+                first = new Rect(0, height / 2, width, height / 2);
+                second = new Rect(0, 0, width, height / 2);
+            }
+        }
+        return List.of(new Panel(first, angle), new Panel(second, (angle + 180) % 360));
     }
 
     private static final int MAX_EXACT_IMAGES = 12;
