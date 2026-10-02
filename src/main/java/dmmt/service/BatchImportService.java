@@ -54,7 +54,17 @@ public class BatchImportService {
         List<Failure> failures = new ArrayList<>();
         int total = sources.size();
         int[] index = {0};
-        for (MultiLevelService.ImportGroup group : MultiLevelService.groupLevelFiles(sources)) {
+        boolean autoMerge = Tuning.IMPORT_AUTO_MERGE_MULTILEVEL.get();
+        List<MultiLevelService.ImportGroup> groups = new ArrayList<>();
+        if (autoMerge) {
+            groups.addAll(MultiLevelService.groupLevelFiles(sources));
+        } else {
+            for (Path source : sources) {
+                String name = MapLibraryService.stripExtension(source.getFileName().toString());
+                groups.add(new MultiLevelService.ImportGroup(name, List.of(source), List.of(name)));
+            }
+        }
+        for (MultiLevelService.ImportGroup group : groups) {
             if (group.multiLevel()) {
                 int first = index[0];
                 try {

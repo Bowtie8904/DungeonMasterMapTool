@@ -99,6 +99,21 @@ class BatchImportServiceTest {
     }
 
     @Test
+    void autoMergeCanBeDisabled() throws Exception {
+        Path ground = write(source, "inn_00.dd2vtt", "{\"pixels_per_grid\":100}");
+        Path upper = write(source, "inn_01.dd2vtt", "{\"pixels_per_grid\":100}");
+        Tuning.apply(key -> "import.autoMergeMultiLevel".equals(key) ? "false" : null);
+        try {
+            BatchImportService.Result result = service.importAll(List.of(ground, upper), libraryRoot, null);
+
+            assertEquals(List.of(libraryRoot.resolve("inn_00").resolve("inn_00.dmmap"),
+                    libraryRoot.resolve("inn_01").resolve("inn_01.dmmap")), result.imported());
+        } finally {
+            Tuning.apply(key -> null);
+        }
+    }
+
+    @Test
     void failedMapIsRemovedAndDoesNotStopTheBatch() throws Exception {
         Path bad = write(source, "bad.dd2vtt", "this is not json");
         Path good = write(source, "good.dd2vtt", "{\"pixels_per_grid\":100}");

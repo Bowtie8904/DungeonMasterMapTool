@@ -575,6 +575,15 @@ Flicker speed of lights imported from dd2vtt/uvtt files (`1` = normal speed). No
 
 *Keywords:* dd2vtt, uvtt, Dungeondraft, imported lights, flicker speed
 
+### `import.autoMergeMultiLevel`
+**Default:** `true` · **Applies:** live (next import)
+
+Whether a batch import (several files or *Import folder…*) automatically merges files that look like the levels of
+one building (`haus_00 … haus_03`, `Inn 1`, `Inn 2`) into one multilevel map. With `false` every file becomes its own
+ordinary map; you can still merge them later in the library.
+
+*Keywords:* multilevel, merge, auto merge, batch import, levels, floors, import folder
+
 ---
 
 ## DM view navigation

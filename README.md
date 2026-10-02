@@ -166,7 +166,7 @@ On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `asse
 
 - Select several files in the chooser, or use **Import folder…** to import every `.dd2vtt`/`.uvtt` found in a folder and its sub-folders.
 - The location dialog asks only for the target folder. Maps are named after their files; duplicates get a suffix (`Name (2)`).
-- Files in the same folder that look like the **levels of one building** are imported automatically as **one multilevel map**, ordered by level number:
+- Files in the same folder that look like the **levels of one building** are imported automatically as **one multilevel map** (unless you set `import.autoMergeMultiLevel=false`, see [docs/SETTINGS.md](docs/SETTINGS.md#importautomergemultilevel); then every file becomes its own map), ordered by level number:
   - names that differ only by a level number, optionally followed by a room name: `haus_00 … haus_03`, `Inn 1`, `Inn 2`, `tower_upper_02_barracks … tower_upper_10` (levels are named `Level 02 – barracks` etc.);
   - a file without a number whose name is the start of such a series (`tower` next to `tower_upper_…`) becomes the lowest level, and the multilevel map is named after it.
   - Series with a repeated number (`Market 1 day`, `Market 1 night`) and merely similar names (`Goblin Cave`, `Goblin Camp`) stay separate maps — merge them afterwards if needed.

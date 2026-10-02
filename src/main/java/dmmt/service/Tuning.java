@@ -598,6 +598,8 @@ public final class Tuning {
             "Flicker depth given to lights imported from dd2vtt/uvtt files (0 = flicker off).");
     public static final Setting<Double> DD2VTT_LIGHT_FLICKER_SPEED = decimal(IMPORT, "import.dd2vtt.lightFlickerSpeed", 1.4, 0.05, 20, false,
             "Flicker speed given to lights imported from dd2vtt/uvtt files.");
+    public static final Setting<Boolean> IMPORT_AUTO_MERGE_MULTILEVEL = bool(IMPORT, "import.autoMergeMultiLevel", true, false,
+            "Batch imports merge files that look like the levels of one building into a multilevel map (false = every file becomes its own map).");
 
     // ---- Storage and caches ----
 
