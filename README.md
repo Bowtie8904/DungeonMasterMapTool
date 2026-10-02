@@ -361,6 +361,7 @@ Closing the handout window stops showing it and discards the images. Handouts ar
 - `Ctrl+S` or the **Save** button saves the project as `.dmmap`. It stores image layers, walls, doors/windows states, fog mask, lights, time of day and ambient brightness, effects, text boxes and cameras.
 - **Auto-save** is on by default for maps that already exist on disk: every 2 minutes (1, 2, 5 or 10 selectable) when there are changes, plus when the window loses focus or on close. It runs in the background and is postponed during a drag. The status bar shows "Auto-saved HH:mm". New, never-saved maps are not auto-saved.
 - **Undo `Ctrl+Z` / Redo `Ctrl+Y`** covers layer moves, rotation, lights (add, remove, move, settings), doors and windows, fog edits, effects, text boxes, walls, time of day and ambient brightness. Undo history is per session. Both views update immediately.
+- The status bar names the undone/redone action. A fading cyan outline marks affected content in the current DM viewport for about one second: resulting bounds after moving/resizing, restored objects, former locations of removed objects, or the changed door/window. Fog feedback follows the affected region's outline. Global changes without a local target show only the status message. Feedback never moves the camera or changes selection; the next undo/redo replaces it, and map/level changes clear it. It is not saved or shown in thumbnails or live/frozen player output.
 - Saved projects stay loadable even when the original import files are gone.
 
 ### 15. Performance

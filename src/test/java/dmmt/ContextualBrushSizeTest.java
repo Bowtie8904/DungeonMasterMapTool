@@ -1,6 +1,8 @@
 package dmmt;
 
 import dmmt.model.DmProject;
+import dmmt.model.FogMask;
+import dmmt.render.HistoryFeedback;
 import dmmt.service.AppSettings;
 import dmmt.service.Tuning;
 import javafx.animation.PauseTransition;
@@ -9,6 +11,7 @@ import javafx.beans.property.DoubleProperty;
 import javafx.event.ActionEvent;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
@@ -17,6 +20,7 @@ import javafx.scene.input.PickResult;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.paint.Color;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -172,6 +176,87 @@ class ContextualBrushSizeTest {
             assertFalse(f.label.isVisible());
             f.scroll(0, false, true);
             assertFalse(f.label.isVisible());
+        });
+    }
+
+    @Test
+    void undoRedoFeedbackPreservesHistorySelectionAndFrozenDataAndUsesResultingScreenBounds() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            Label status = new Label();
+            set(f.app, "statusLabel", status);
+            var layer = DmProject.ImageLayer.builder().id("image").width(20).height(20).build();
+            f.project.getImageLayers().add(layer);
+            set(f.app, "selectedLayer", layer);
+            DmProject frozen = DmProject.builder().build();
+            frozen.getImageLayers().add(DmProject.ImageLayer.builder().id("frozen").x(-40).width(20).height(20).build());
+            set(f.app, "frozenPlayerProject", frozen);
+            invoke(f.app, "executeWithHistory", new Class<?>[]{String.class, Runnable.class, Runnable.class},
+                    "Move layer", (Runnable) () -> layer.setX(100), (Runnable) () -> layer.setX(0));
+            HistoryFeedback feedback = (HistoryFeedback) get(f.app, "historyFeedback");
+            assertFalse(feedback.active(System.nanoTime()));
+            invoke(f.app, "undo");
+            assertEquals("Undid: Move layer", status.getText());
+            assertEquals(0, layer.getX());
+            assertEquals(1, ((Deque<?>) get(f.app, "redoStack")).size());
+            invoke(f.app, "redo");
+            assertEquals("Redid: Move layer", status.getText());
+            assertEquals(100, layer.getX());
+            assertSame(layer, get(f.app, "selectedLayer"));
+            assertSame(frozen, get(f.app, "frozenPlayerProject"));
+            assertEquals(-40, frozen.getImageLayers().getFirst().getX());
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            assertTrue(((Deque<?>) get(f.app, "redoStack")).isEmpty());
+
+            Canvas canvas = new Canvas(400, 300);
+            feedback.draw(canvas.getGraphicsContext2D(), 400, 300, f.project.getViews().getDmCamera(), System.nanoTime());
+            SnapshotParameters parameters = new SnapshotParameters();
+            parameters.setFill(Color.TRANSPARENT);
+            var pixels = canvas.snapshot(parameters, null).getPixelReader();
+            assertTrue(pixels.getColor(310, 150).getOpacity() > 0.1);
+            assertEquals(0, pixels.getColor(210, 150).getOpacity());
+            assertEquals(0, pixels.getColor(399, 299).getOpacity());
+            assertEquals(0, f.project.getViews().getDmCamera().getX());
+            assertEquals(1, f.project.getViews().getDmCamera().getZoom());
+            invoke(f.app, "redo"); // An empty redo still replaces the old feedback.
+            assertEquals("Nothing to redo.", status.getText());
+            assertFalse(feedback.active(System.nanoTime()));
+        });
+    }
+
+    @Test
+    void fogFeedbackDrawsRegionEdgesNotInternalCellsOrMapBoundsAndClipsOffscreenTargets() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            var mask = new FogMask(-200, -150, 10, 40, 30);
+            f.project.getFog().setMask(mask);
+            var before = HistoryFeedback.capture(f.project, true);
+            mask.applyCells(new int[]{5 * 40 + 5, 5 * 40 + 6, 6 * 40 + 5}, true);
+            HistoryFeedback feedback = new HistoryFeedback();
+            long now = System.nanoTime();
+            feedback.show(before, HistoryFeedback.capture(f.project, true), now);
+            Canvas canvas = new Canvas(400, 300);
+            feedback.draw(canvas.getGraphicsContext2D(), 400, 300, f.project.getViews().getDmCamera(), now);
+            SnapshotParameters parameters = new SnapshotParameters();
+            parameters.setFill(Color.TRANSPARENT);
+            var pixels = canvas.snapshot(parameters, null).getPixelReader();
+            assertTrue(pixels.getColor(55, 50).getOpacity() > 0.1); // Top boundary.
+            assertTrue(pixels.getColor(60, 65).getOpacity() > 0.1); // Concave boundary of the L.
+            assertEquals(0, pixels.getColor(60, 55).getOpacity()); // No internal cell edge.
+            assertEquals(0, pixels.getColor(200, 150).getOpacity());
+            assertEquals(0, pixels.getColor(0, 0).getOpacity()); // No whole-map rectangle.
+
+            before = HistoryFeedback.capture(f.project, true);
+            f.project.getLighting().getLights().add(DmProject.LightSource.builder().id("offscreen").x(10000).build());
+            feedback.show(before, HistoryFeedback.capture(f.project, true), now);
+            canvas.getGraphicsContext2D().clearRect(0, 0, 400, 300);
+            feedback.draw(canvas.getGraphicsContext2D(), 400, 300, f.project.getViews().getDmCamera(), now);
+            pixels = canvas.snapshot(parameters, null).getPixelReader();
+            for (int y = 0; y < 300; y++) {
+                for (int x = 0; x < 400; x++) {
+                    assertEquals(0, pixels.getColor(x, y).getOpacity());
+                }
+            }
         });
     }
 

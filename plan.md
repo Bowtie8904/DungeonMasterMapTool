@@ -218,6 +218,9 @@ Desktop tool for tabletop dungeon masters that:
 - Undo must update both DM and player views immediately after action rollback.
 - Undo state is session-local (not required to persist across app restarts in v1).
 - Add `Ctrl+Y` redo support as part of the same command-history system.
+- Keep the existing shortcuts, command semantics and "Undid/Redid: <action>" status messages. After undo/redo, briefly outline affected visible content in the DM viewport for approximately one second: resulting bounds for moves/resizes, restored objects, former locations for removals, and the specific portal for door/window changes. Fog outlines follow the changed cells, not an unnecessarily map-sized rectangle.
+- Global actions without a meaningful local target (e.g. time of day or whole-map rotation) show the status message only. Never pan, zoom or switch maps for feedback. A new undo/redo replaces the previous highlight, and map/level switching clears it.
+- Feedback is transient DM UI only: it does not change selection, intercept input, edit project data or history, persist in saves/thumbnails, or reach live/frozen player output.
 
 ## 3.13 Custom Map Builder
 

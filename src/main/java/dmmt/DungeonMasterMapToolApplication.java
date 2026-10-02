@@ -7,6 +7,7 @@ import dmmt.model.FogMask;
 import dmmt.model.MultiLevelManifest;
 import dmmt.render.CanvasMapRenderer;
 import dmmt.render.FrameProfiler;
+import dmmt.render.HistoryFeedback;
 import dmmt.render.OverlayTextures;
 import dmmt.render.PerformanceMode;
 import dmmt.render.WeatherEffects;
@@ -367,6 +368,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private final Deque<HistoryAction> undoStack = new ArrayDeque<>();
     private final Deque<HistoryAction> redoStack = new ArrayDeque<>();
+    private final HistoryFeedback historyFeedback = new HistoryFeedback();
 
     /** Pre-scaled copies of the app icon so window title bar and taskbar get a smooth image at their size. */
     private static List<Image> appIcons() {
@@ -602,7 +604,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || laserToolActive || !laserTrail.isEmpty()
-                        || fogFading;
+                        || fogFading || historyFeedback.active(now);
                 int fps = PerformanceMode.isEnabled()
                         ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
                         : animated ? PerformanceMode.textureAnimationFps() : Math.min(PerformanceMode.idleFps(), idleFps)
@@ -2700,6 +2702,8 @@ public class DungeonMasterMapToolApplication extends Application {
         drawTextSelection(fogGc);
         drawGroupSelection(fogGc);
         drawToolPreview(fogGc);
+        historyFeedback.draw(fogGc, dmCanvas.getWidth(), dmCanvas.getHeight(),
+                project.getViews().getDmCamera(), System.nanoTime());
         updateTextEditorPlacement();
         FrameProfiler.lap("dm tools/ui", toolsStart);
     }
@@ -4030,6 +4034,7 @@ public class DungeonMasterMapToolApplication extends Application {
         fogDragging = false;
         undoStack.clear();
         redoStack.clear();
+        historyFeedback.clear();
         savedFingerprint = fingerprintOrNull(project);
         syncControlsFromProject();
         if (activeTool == EditorTool.TEXT) {
@@ -6332,31 +6337,8 @@ public class DungeonMasterMapToolApplication extends Application {
             if (shape == null) {
                 return null;
             }
-            switch (shape.getType() == null ? "" : shape.getType()) {
-                case "circle":
-                    return new double[]{shape.getX() - shape.getRadius(), shape.getY() - shape.getRadius(),
-                            shape.getX() + shape.getRadius(), shape.getY() + shape.getRadius()};
-                case "rect":
-                    return new double[]{shape.getX(), shape.getY(),
-                            shape.getX() + shape.getWidth(), shape.getY() + shape.getHeight()};
-                default:
-                    List<Double> points = shape.getPoints();
-                    if (points.size() < 2) {
-                        return null;
-                    }
-                    double pad = shape.getStrokeWidth() / 2.0;
-                    double minX = Double.MAX_VALUE;
-                    double minY = Double.MAX_VALUE;
-                    double maxX = -Double.MAX_VALUE;
-                    double maxY = -Double.MAX_VALUE;
-                    for (int i = 0; i + 1 < points.size(); i += 2) {
-                        minX = Math.min(minX, points.get(i));
-                        maxX = Math.max(maxX, points.get(i));
-                        minY = Math.min(minY, points.get(i + 1));
-                        maxY = Math.max(maxY, points.get(i + 1));
-                    }
-                    return new double[]{minX - pad, minY - pad, maxX + pad, maxY + pad};
-            }
+            HistoryFeedback.Target bounds = HistoryFeedback.overlayBounds(shape);
+            return bounds == null ? null : new double[]{bounds.x1(), bounds.y1(), bounds.x2(), bounds.y2()};
         }
         DmProject.ImageLayer layer = isImageLayerLocked() ? null : findLayerById(id);
         return layer == null ? null
@@ -6993,26 +6975,32 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void undo() {
         commitTextEdit();
+        historyFeedback.clear();
         if (undoStack.isEmpty()) {
             status("Nothing to undo.");
             return;
         }
         HistoryAction action = undoStack.pop();
         historyVersion++;
+        HistoryFeedback.Snapshot before = HistoryFeedback.capture(project, renderer.isWallLayerVisible());
         action.undo.run();
+        historyFeedback.show(before, HistoryFeedback.capture(project, renderer.isWallLayerVisible()), System.nanoTime());
         redoStack.push(action);
         status("Undid: " + action.label);
     }
 
     private void redo() {
         commitTextEdit();
+        historyFeedback.clear();
         if (redoStack.isEmpty()) {
             status("Nothing to redo.");
             return;
         }
         HistoryAction action = redoStack.pop();
         historyVersion++;
+        HistoryFeedback.Snapshot before = HistoryFeedback.capture(project, renderer.isWallLayerVisible());
         action.redo.run();
+        historyFeedback.show(before, HistoryFeedback.capture(project, renderer.isWallLayerVisible()), System.nanoTime());
         undoStack.push(action);
         status("Redid: " + action.label);
     }
