@@ -28,6 +28,7 @@ import dmmt.ui.Icons;
 import dmmt.ui.LevelListDialog;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
+import dmmt.ui.SettingsWindow;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
@@ -205,6 +206,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
     private StackPane mapCenter;
+    private final java.util.Map<String, CollapsibleSection> dmSections = new java.util.LinkedHashMap<>();
     private StackPane loadingOverlay;
     private String savedFingerprint;
     private long historyVersion;
@@ -451,7 +453,8 @@ public class DungeonMasterMapToolApplication extends Application {
         metricsLabel.setMinWidth(430);
         metricsTooltip = Icons.tooltip("Waiting for the first frames...");
         javafx.scene.control.Tooltip.install(metricsLabel, metricsTooltip);
-        HBox statusBar = new HBox(sidebarToggle, performanceToggle, metricsLabel, statusLabel);
+        Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings", this::openSettings);
+        HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel);
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
 
@@ -553,6 +556,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 autoSaveIfDirty();
             } else if (preferences.pollExternalChange()) {
                 // The reload already applied tuning values and texture settings edited by hand.
+                applySectionVisibility();
                 status("Settings reloaded from " + preferences.getFile().getFileName()
                         + " (entries marked 'Restart required' apply after a restart)");
             }
@@ -1158,7 +1162,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
                         frameRateGrid()));
 
-        ScrollPane scroll = new ScrollPane(sections);
+        String[] sectionIds = {"tools", "fog", "lighting", "weather", "effects", "text", "building", "player", "performance"};
+        for (int i = 0; i < sectionIds.length; i++) {
+            dmSections.put(sectionIds[i], (CollapsibleSection) sections.getChildren().get(i));
+        }
+        applySectionVisibility();
+
+        // Reports the content's preferred height so hiding or collapsing sections resizes the panel in the same layout pass.
+        ScrollPane scroll = new ScrollPane(sections) {
+            @Override
+            protected double computePrefHeight(double width) {
+                return sections.prefHeight(Math.max(0, width - 2)) + 2;
+            }
+        };
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
@@ -1180,7 +1196,9 @@ public class DungeonMasterMapToolApplication extends Application {
         if (!preferences.getBoolean(PREF_CONTROLS_EXPANDED, true)) {
             collapse.fire();
         }
-        HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, collapse);
+        Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings: all options that are not part of the DM controls, "
+                + "and which tabs of these controls are shown", this::openSettings);
+        HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, settingsButton, collapse);
         titleRow.getStyleClass().add("panel-header");
 
         VBox panel = new VBox(titleRow, scroll);
@@ -1192,6 +1210,20 @@ public class DungeonMasterMapToolApplication extends Application {
         setActiveTool(EditorTool.SELECT);
         syncControlsFromProject();
         return panel;
+    }
+
+    private void openSettings() {
+        SettingsWindow.show(primaryStage, preferences, this::applySectionVisibility);
+    }
+
+    /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */
+    private void applySectionVisibility() {
+        java.util.Set<String> hidden = preferences.hiddenSections();
+        dmSections.forEach((id, section) -> {
+            boolean show = !hidden.contains(id);
+            section.setVisible(show);
+            section.setManaged(show);
+        });
     }
 
     private HBox row(javafx.scene.Node... nodes) {
@@ -6340,7 +6372,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Menu rangeMenu = new Menu("Range");
         ToggleGroup rangeGroup = new ToggleGroup();
         double cell = project.getMap().getGrid().getPixelsPerCell();
-        for (double tiles : Tuning.LIGHT_MENU_RANGES.get()) {
+        for (double tiles : Tuning.lightMenuRanges()) {
             RadioMenuItem item = new RadioMenuItem((tiles == Math.floor(tiles) ? String.valueOf((int) tiles) : String.valueOf(tiles)) + " tiles");
             item.setToggleGroup(rangeGroup);
             item.setSelected(Math.abs(light.getRange() - tiles * cell) < 0.5);
@@ -6350,7 +6382,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         Menu flickerMenu = new Menu("Flicker");
         ToggleGroup flickerGroup = new ToggleGroup();
-        for (Tuning.Choice<double[]> preset : Tuning.LIGHT_MENU_FLICKER.get()) {
+        for (Tuning.Choice<double[]> preset : Tuning.lightMenuFlicker()) {
             String name = preset.name();
             double strength = preset.value()[0];
             double speed = preset.value()[1];
@@ -6376,7 +6408,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         Menu colorMenu = new Menu("Color");
         ToggleGroup colorGroup = new ToggleGroup();
-        for (Tuning.Choice<String> option : Tuning.LIGHT_MENU_COLORS.get()) {
+        for (Tuning.Choice<String> option : Tuning.lightMenuColors()) {
             String color = option.value();
             RadioMenuItem item = new RadioMenuItem(option.name());
             item.setToggleGroup(colorGroup);
@@ -6389,8 +6421,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
         Menu brightnessMenu = new Menu("Brightness");
         ToggleGroup brightnessGroup = new ToggleGroup();
-        for (Tuning.Choice<double[]> option : Tuning.LIGHT_MENU_BRIGHTNESS.get()) {
-            double value = option.value()[0];
+        for (Tuning.Choice<Double> option : Tuning.lightMenuBrightness()) {
+            double value = option.value();
             RadioMenuItem item = new RadioMenuItem(option.name());
             item.setToggleGroup(brightnessGroup);
             item.setSelected(Math.abs(light.getIntensity() - value) < 0.05);

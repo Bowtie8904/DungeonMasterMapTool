@@ -59,6 +59,10 @@ common synonyms to make searching easier.
 - **First start / migration:** when no settings file exists yet, values stored by older versions of the application
   (Java preferences: last import folder, player screen and calibration, sidebar and section states, fog sharpness,
   light tint, auto-save and text defaults) are copied into the new file once.
+- **Settings window:** every setting that has no control in the DM controls can also be changed in the application: click the
+  cog button (DM controls header or status bar). Settings are grouped by category, can be found with the search field
+  (name, key or description), explain themselves in tooltips, can be reset to their default individually, and are
+  applied immediately (except entries marked *restart required*). Which DM controls tabs are shown is set there too. Related entries are grouped in collapsible blocks (collapsed by default) inside each category, for example *Player zoom*, *Map image cache*, one block per time of day, weather type, light preset or effect texture (with *Layer* and *Light emission* blocks inside). Numbers are edited with spinners. The search also finds the *Keywords* of this document.
 - Keys the application does not know are kept in an *Other* section at the end of the file.
 
 ---
@@ -104,6 +108,13 @@ Global light flicker switch (circle-flash toggle in the Lighting section, next t
 How many maps the **Recent maps** list below the map library keeps. Older entries drop off the end.
 
 *Keywords:* recent maps, history, last opened, recently used
+
+### `ui.sections.hidden`
+**Default:** empty · **Values:** comma separated tab ids: `tools`, `fog`, `lighting`, `weather`, `effects`, `text`, `building`, `player`, `performance` · **Applies:** live (also changed from the settings window)
+
+Tabs of the DM controls overlay that are **completely hidden**. A DM who never uses effects or never changes the frame rate can remove those tabs to keep the overlay short. Hidden tabs keep all their settings and data; only their controls disappear from the overlay. Empty = every tab is shown. Easiest to change in **Settings** (cog button in the DM controls header or in the status bar) under *DM controls tabs*.
+
+*Keywords:* hide tab, hide section, remove section, sidebar tabs, overlay, declutter, DM controls, show hide
 
 ### `ui.recentMaps`
 **Default:** empty · **Values:** full map file paths separated by `|` · **Applies:** managed by the app
@@ -884,38 +895,20 @@ the tool tooltips show the configured range after a restart.
 *Keywords:* torch, candle, lantern, campfire, magic light, light tool, light preset, light radius, light range, light
 colour, flicker, add light
 
-### `lightMenu.rangeTiles`
-**Default:** `1, 2, 3, 4, 6, 8, 12, 16, 24, 100` · **Format:** comma separated tiles, each 0.1 to 10000 · **Applies:** live
+### Light right-click menu: `lightMenu.*`
 
-Range choices in the **Range** submenu of a light's right-click menu. The current range is checked if it matches one
-of the choices.
+The submenus of a light's right-click menu have a **fixed set of entries**; you can change their values but not add or
+remove entries. All values are **live**.
 
-*Keywords:* light range menu, context menu, radius choices, light distance
+- **`lightMenu.range1`**, `lightMenu.range2`, `lightMenu.range3`, `lightMenu.range4`, `lightMenu.range5`, `lightMenu.range6`, `lightMenu.range7`, `lightMenu.range8`, `lightMenu.range9`, `lightMenu.range10` – the ten choices of the **Range** submenu, in tiles (0.1 to 10000). Defaults: 1, 2, 3, 4, 6, 8, 12, 16, 24, 100.
+- **`lightMenu.color.warmTorch`**, **`lightMenu.color.candle`**, **`lightMenu.color.neutral`**, **`lightMenu.color.moonlight`**, **`lightMenu.color.arcane`**, **`lightMenu.color.fire`** – colours `#RRGGBB` of the **Color** submenu entries (defaults `#FFB35C`, `#FFD9A0`, `#FFF4E0`, `#A8C8FF`, `#C08CFF`, `#FF6A3D`).
+- **`lightMenu.flicker.candle.depth`** / `lightMenu.flicker.candle.speed`, **`lightMenu.flicker.torch.depth`** / `lightMenu.flicker.torch.speed`, **`lightMenu.flicker.strongTorch.depth`** / `lightMenu.flicker.strongTorch.speed`, **`lightMenu.flicker.slowPulse.depth`** / `lightMenu.flicker.slowPulse.speed` – depth (0.01 to 1) and speed (0.05 to 20, `1` = normal) of the **Flicker** submenu entries; the *Off* entry is fixed. Defaults: 0.12/2.5, 0.22/1.4, 0.35/1.8, 0.3/0.35.
+- **`lightMenu.brightness.dim`**, **`lightMenu.brightness.normal`**, **`lightMenu.brightness.bright`** – brightness (0 to 1) of the **Brightness** submenu entries (defaults 0.4, 0.75, 1).
 
-### `lightMenu.colors`
-**Default:** `Warm torch=#FFB35C; Candle=#FFD9A0; Neutral=#FFF4E0; Moonlight=#A8C8FF; Arcane=#C08CFF; Fire=#FF6A3D` · **Applies:** live
+Older versions stored these as the lists `lightMenu.rangeTiles`, `lightMenu.colors`, `lightMenu.flicker` and
+`lightMenu.brightness`; those keys are ignored and removed from the file at startup.
 
-Colour choices in the **Color** submenu of a light's right-click menu, as `Name=#RRGGBB` entries separated by `;`.
-Add your own, for example `; Hellfire=#FF2200`. If one entry is invalid the whole list falls back to the default.
-
-*Keywords:* light colour menu, context menu, colour choices, moonlight, fire, arcane
-
-### `lightMenu.flicker`
-**Default:** `Off=0/0; Candle=0.12/2.5; Torch=0.22/1.4; Strong torch=0.35/1.8; Slow pulse=0.3/0.35` · **Applies:** live
-
-Flicker choices in the **Flicker** submenu, as `Name=depth/speed` entries separated by `;`. A depth of `0` switches
-flicker off. Use a depth between 0 and 1; speed `1` = normal (both are clamped to 0–20). If one entry is invalid the
-whole list falls back to the default.
-
-*Keywords:* flicker menu, context menu, candle flicker, torch flicker, pulse, flickering light
-
-### `lightMenu.brightness`
-**Default:** `Dim=0.4; Normal=0.75; Bright=1` · **Applies:** live
-
-Brightness choices in the **Brightness** submenu, as `Name=value` entries (value 0 to 1) separated by `;`. If one
-entry is invalid the whole list falls back to the default.
-
-*Keywords:* light brightness, intensity, dim light, bright light, context menu
+*Keywords:* light menu, context menu, light range menu, colour choices, moonlight, fire, arcane, flicker menu, candle flicker, torch flicker, pulse, light brightness, intensity, dim light, bright light
 
 ### `light.defaultRange`
 **Default:** `300` · **Range:** 1 to 100000 · **Applies:** live

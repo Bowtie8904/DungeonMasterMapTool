@@ -124,7 +124,7 @@ Maps are saved in a versioned JSON format (`.dmmap`) that is identical for impor
 
 - **Left:** the collapsible **map browser** (library and map actions).
 - **Centre:** the **map canvas**. A floating **tool chip** at the top names the active tool ("Esc or right-click to exit").
-- **Right:** the **DM controls** overlay, made of collapsible sections: *Tools, Fog of war, Lighting, Effects, Text, Map building, Player view, Performance*. Collapsed/expanded state is remembered. The whole panel can be collapsed and scrolls in small windows.
+- **Right:** the **DM controls** overlay, made of collapsible sections: *Tools, Fog of war, Lighting, Effects, Text, Map building, Player view, Performance*. Collapsed/expanded state is remembered. The whole panel can be collapsed and scrolls in small windows. Tabs you never use can be hidden completely in the **Settings** window (see [Settings file](#16-settings-file)).
 - **Bottom:** a slim status bar with messages (auto-save, import progress, errors) and the performance toggle and readout.
 
 ### 2. Map library (left sidebar)
@@ -370,6 +370,8 @@ Closing the handout window stops showing it and discards the images. Handouts ar
 - The **Animations** toggle in the Effects section disables texture animation per map.
 
 ### 16. Settings file
+
+**Settings window:** click the **cog button** in the DM controls header (or in the status bar at the bottom) to open the settings window. It lists every setting that has no control in the DM controls (zoom limits, click tolerances, fog fade times, light and weather presets, effect texture defaults, caches, colours, ...), grouped by category. Pick a category on the left (related categories sit next to each other; related settings are grouped in collapsible blocks, e.g. player zoom, map image cache, one block per time of day, weather type, light preset or effect texture) or type into the **search field** (matches names, keys, descriptions and the keywords of docs/SETTINGS.md, e.g. "sunset", "battery" or "slow computer"; several words must all match). Hover a setting for a tooltip with what it does, its range and its default; the arrow button restores the default. Changes are saved to the settings file and apply immediately, except entries marked *restart required*. The first category, **DM controls tabs**, lets you hide whole tabs (e.g. Effects or Performance) from the DM controls overlay if you never use them.
 
 Global preferences are stored in `dmmt-settings.ini` next to the jar as plain `key = value` lines with `#` comments. The file is created with every setting and its default; settings added by a newer version are appended with their defaults at startup, and unknown keys are preserved. Invalid values fall back to defaults and numbers are clamped to their allowed range. Delete a line to restore its default.
 

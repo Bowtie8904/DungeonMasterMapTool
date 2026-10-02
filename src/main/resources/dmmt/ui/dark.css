@@ -778,3 +778,47 @@
 .text-box-editor.styled-text-area .selection {
     -fx-fill: rgba(80, 140, 255, 0.55);
 }
+
+/* ---------- Settings window ---------- */
+
+.settings-window {
+    -fx-background-color: -dm-bg;
+}
+
+.settings-row {
+    -fx-background-color: -dm-surface;
+    -fx-background-radius: 6;
+    -fx-padding: 8 10;
+}
+
+.settings-title {
+    -fx-font-weight: bold;
+}
+
+.settings-key {
+    -fx-text-fill: -dm-muted;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 11px;
+}
+
+.settings-category {
+    -fx-text-fill: -dm-accent;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 0 2 2;
+}
+
+.settings-group-header {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10;
+    -fx-cursor: hand;
+}
+
+.settings-group-header:hover {
+    -fx-background-color: -dm-surface-3;
+}
+
+.settings-group-title {
+    -fx-font-weight: bold;
+}

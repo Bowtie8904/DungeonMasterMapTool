@@ -48,6 +48,9 @@ public final class Tuning {
     public record Choice<V>(String name, V value) {
     }
 
+    /** How a setting is edited in the settings window. */
+    public enum Kind { INTEGER, DECIMAL, BOOLEAN, COLOR, CHOICE, TEXT, LIST }
+
     /** One configurable value. */
     public static final class Setting<T> {
         private final String key;
@@ -58,6 +61,10 @@ public final class Tuning {
         private final Function<String, T> parser;
         private final T defaultValue;
         private volatile T value;
+        private Kind kind = Kind.TEXT;
+        private double min = Double.NaN;
+        private double max = Double.NaN;
+        private List<String> options = List.of();
 
         private Setting(String section, String key, String defaultText, boolean restart, String comment,
                         Function<String, T> parser) {
@@ -74,6 +81,42 @@ public final class Tuning {
 
         public T get() {
             return value;
+        }
+
+        private Setting<T> meta(Kind kind, double min, double max, String... options) {
+            this.kind = kind;
+            this.min = min;
+            this.max = max;
+            this.options = List.of(options);
+            return this;
+        }
+
+        public Kind kind() {
+            return kind;
+        }
+
+        /** Lowest allowed number, NaN if the setting is not a number. */
+        public double min() {
+            return min;
+        }
+
+        /** Highest allowed number, NaN if the setting is not a number. */
+        public double max() {
+            return max;
+        }
+
+        /** The allowed values of a {@link Kind#CHOICE} setting. */
+        public List<String> options() {
+            return options;
+        }
+
+        /** True if {@code raw} can be parsed into a value of this setting. */
+        public boolean isValid(String raw) {
+            try {
+                return raw != null && parser.apply(raw.trim()) != null;
+            } catch (RuntimeException e) {
+                return false;
+            }
         }
 
         public T defaultValue() {
@@ -120,7 +163,7 @@ public final class Tuning {
 
     private static Setting<Integer> integer(String section, String key, int def, int min, int max, boolean restart, String comment) {
         return new Setting<>(section, key, String.valueOf(def), restart, comment + " (" + min + " to " + max + ")",
-                text -> (int) Math.max(min, Math.min(max, Math.round(Double.parseDouble(text)))));
+                text -> (int) Math.max(min, Math.min(max, Math.round(Double.parseDouble(text))))).meta(Kind.INTEGER, min, max);
     }
 
     private static Setting<Double> decimal(String section, String key, double def, double min, double max, boolean restart, String comment) {
@@ -131,7 +174,7 @@ public final class Tuning {
                         throw new IllegalArgumentException(text);
                     }
                     return Math.max(min, Math.min(max, v));
-                });
+                }).meta(Kind.DECIMAL, min, max);
     }
 
     private static Setting<Boolean> bool(String section, String key, boolean def, boolean restart, String comment) {
@@ -143,11 +186,12 @@ public final class Tuning {
                 return false;
             }
             throw new IllegalArgumentException(text);
-        });
+        }).meta(Kind.BOOLEAN, Double.NaN, Double.NaN);
     }
 
     private static Setting<String> color(String section, String key, String def, boolean restart, String comment) {
-        return new Setting<>(section, key, def, restart, comment + " (#RRGGBB)", Tuning::parseColor);
+        return new Setting<>(section, key, def, restart, comment + " (#RRGGBB)", Tuning::parseColor)
+                .meta(Kind.COLOR, Double.NaN, Double.NaN);
     }
 
     private static Setting<String> choice(String section, String key, String def, boolean restart, String comment, String... options) {
@@ -158,11 +202,12 @@ public final class Tuning {
                 }
             }
             throw new IllegalArgumentException(text);
-        });
+        }).meta(Kind.CHOICE, Double.NaN, Double.NaN, options);
     }
 
     private static Setting<String> text(String section, String key, String def, boolean restart, String comment) {
-        return new Setting<>(section, key, def, restart, comment, text -> text);
+        return new Setting<>(section, key, def, restart, comment, text -> text)
+                .meta(Kind.TEXT, Double.NaN, Double.NaN);
     }
 
     private static Setting<List<Double>> numbers(String section, String key, String def, double min, double max, boolean restart, String comment) {
@@ -177,44 +222,7 @@ public final class Tuning {
                 throw new IllegalArgumentException(text);
             }
             return Collections.unmodifiableList(values);
-        });
-    }
-
-    /** Entries {@code Name=value; Name=value}; {@code value} is parsed by {@code valueParser}. */
-    private static <V> Setting<List<Choice<V>>> choices(String section, String key, String def, boolean restart, String comment,
-                                                       Function<String, V> valueParser) {
-        return new Setting<>(section, key, def, restart, comment, text -> {
-            List<Choice<V>> values = new ArrayList<>();
-            for (String part : text.split(";")) {
-                if (part.isBlank()) {
-                    continue;
-                }
-                int eq = part.indexOf('=');
-                String name = part.substring(0, eq).trim();
-                if (name.isEmpty()) {
-                    throw new IllegalArgumentException(part);
-                }
-                values.add(new Choice<>(name, valueParser.apply(part.substring(eq + 1).trim())));
-            }
-            if (values.isEmpty()) {
-                throw new IllegalArgumentException(text);
-            }
-            return Collections.unmodifiableList(values);
-        });
-    }
-
-    private static Function<String, double[]> numberTuple(int count, double min, double max) {
-        return text -> {
-            String[] parts = text.split("/");
-            if (parts.length != count) {
-                throw new IllegalArgumentException(text);
-            }
-            double[] values = new double[count];
-            for (int i = 0; i < count; i++) {
-                values[i] = Math.max(min, Math.min(max, Double.parseDouble(parts[i].trim())));
-            }
-            return values;
-        };
+        }).meta(Kind.LIST, Double.NaN, Double.NaN);
     }
 
     static String parseColor(String text) {
@@ -414,20 +422,70 @@ public final class Tuning {
         return preset;
     }
 
-    public static final Setting<List<Double>> LIGHT_MENU_RANGES = numbers(LIGHTS, "lightMenu.rangeTiles",
-            "1, 2, 3, 4, 6, 8, 12, 16, 24, 100", 0.1, 10000, false,
-            "Range choices (in tiles) of the light right-click menu.");
-    public static final Setting<List<Choice<String>>> LIGHT_MENU_COLORS = choices(LIGHTS, "lightMenu.colors",
-            "Warm torch=#FFB35C; Candle=#FFD9A0; Neutral=#FFF4E0; Moonlight=#A8C8FF; Arcane=#C08CFF; Fire=#FF6A3D", false,
-            "Colour choices of the light right-click menu: Name=#RRGGBB separated by ';'.", Tuning::parseColor);
-    public static final Setting<List<Choice<double[]>>> LIGHT_MENU_FLICKER = choices(LIGHTS, "lightMenu.flicker",
-            "Off=0/0; Candle=0.12/2.5; Torch=0.22/1.4; Strong torch=0.35/1.8; Slow pulse=0.3/0.35", false,
-            "Flicker choices of the light right-click menu: Name=depth/speed separated by ';' (depth 0 = off).",
-            numberTuple(2, 0, 20));
-    public static final Setting<List<Choice<double[]>>> LIGHT_MENU_BRIGHTNESS = choices(LIGHTS, "lightMenu.brightness",
-            "Dim=0.4; Normal=0.75; Bright=1", false,
-            "Brightness choices of the light right-click menu: Name=value (0-1) separated by ';'.",
-            numberTuple(1, 0, 1));
+    // The right-click menu of a light has a fixed set of entries; only their values can be changed, so no entry can
+    // be added that the code does not know about.
+    private static final List<Setting<Double>> LIGHT_MENU_RANGES = new ArrayList<>();
+    private static final Map<String, Setting<String>> LIGHT_MENU_COLORS = new LinkedHashMap<>();
+    private static final Map<String, Setting<Double>[]> LIGHT_MENU_FLICKER = new LinkedHashMap<>();
+    private static final Map<String, Setting<Double>> LIGHT_MENU_BRIGHTNESS = new LinkedHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    private static void lightMenuEntries() {
+        double[] ranges = {1, 2, 3, 4, 6, 8, 12, 16, 24, 100};
+        for (int i = 0; i < ranges.length; i++) {
+            LIGHT_MENU_RANGES.add(decimal(LIGHTS, "lightMenu.range" + (i + 1), ranges[i], 0.1, 10000, false,
+                    "Range choice " + (i + 1) + " of the Range submenu of a light's right-click menu, in tiles."));
+        }
+        String[][] colors = {{"warmTorch", "Warm torch", "#FFB35C"}, {"candle", "Candle", "#FFD9A0"},
+                {"neutral", "Neutral", "#FFF4E0"}, {"moonlight", "Moonlight", "#A8C8FF"},
+                {"arcane", "Arcane", "#C08CFF"}, {"fire", "Fire", "#FF6A3D"}};
+        for (String[] c : colors) {
+            LIGHT_MENU_COLORS.put(c[1], color(LIGHTS, "lightMenu.color." + c[0], c[2], false,
+                    "Colour of the '" + c[1] + "' entry of the Color submenu of a light's right-click menu."));
+        }
+        Object[][] flickers = {{"candle", "Candle", 0.12, 2.5}, {"torch", "Torch", 0.22, 1.4},
+                {"strongTorch", "Strong torch", 0.35, 1.8}, {"slowPulse", "Slow pulse", 0.3, 0.35}};
+        for (Object[] f : flickers) {
+            String p = "lightMenu.flicker." + f[0] + ".";
+            LIGHT_MENU_FLICKER.put((String) f[1], new Setting[]{
+                    decimal(LIGHTS, p + "depth", (double) f[2], 0.01, 1, false,
+                            "Flicker depth of the '" + f[1] + "' entry of the Flicker submenu (the 'Off' entry is fixed)."),
+                    decimal(LIGHTS, p + "speed", (double) f[3], 0.05, 20, false,
+                            "Flicker speed of the '" + f[1] + "' entry of the Flicker submenu (1 = normal).")});
+        }
+        Object[][] brightness = {{"dim", "Dim", 0.4}, {"normal", "Normal", 0.75}, {"bright", "Bright", 1.0}};
+        for (Object[] b : brightness) {
+            LIGHT_MENU_BRIGHTNESS.put((String) b[1], decimal(LIGHTS, "lightMenu.brightness." + b[0], (double) b[2], 0, 1, false,
+                    "Brightness of the '" + b[1] + "' entry of the Brightness submenu of a light's right-click menu."));
+        }
+    }
+
+    static {
+        lightMenuEntries();
+    }
+
+    /** Range choices (in tiles) of the light right-click menu. */
+    public static List<Double> lightMenuRanges() {
+        return LIGHT_MENU_RANGES.stream().map(Setting::get).toList();
+    }
+
+    /** Colour choices (name and #RRGGBB) of the light right-click menu. */
+    public static List<Choice<String>> lightMenuColors() {
+        return LIGHT_MENU_COLORS.entrySet().stream().map(e -> new Choice<>(e.getKey(), e.getValue().get())).toList();
+    }
+
+    /** Flicker choices (name and depth/speed) of the light right-click menu, starting with the fixed 'Off'. */
+    public static List<Choice<double[]>> lightMenuFlicker() {
+        List<Choice<double[]>> list = new ArrayList<>();
+        list.add(new Choice<>("Off", new double[]{0, 0}));
+        LIGHT_MENU_FLICKER.forEach((name, s) -> list.add(new Choice<>(name, new double[]{s[0].get(), s[1].get()})));
+        return list;
+    }
+
+    /** Brightness choices (name and value 0-1) of the light right-click menu. */
+    public static List<Choice<Double>> lightMenuBrightness() {
+        return LIGHT_MENU_BRIGHTNESS.entrySet().stream().map(e -> new Choice<>(e.getKey(), e.getValue().get())).toList();
+    }
     public static final Setting<Double> LIGHT_DEFAULT_RANGE = decimal(LIGHTS, "light.defaultRange", 300, 1, 100000, false,
             "Range in map pixels of a light whose saved data has no range.");
     public static final Setting<Double> LIGHT_DEFAULT_FLICKER = decimal(LIGHTS, "light.defaultFlicker", 0.18, 0, 1, false,

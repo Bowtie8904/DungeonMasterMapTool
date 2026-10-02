@@ -31,6 +31,37 @@ public final class AppSettings {
     private record Section(String title, List<Entry> entries) {
     }
 
+    public static final String HIDDEN_SECTIONS_KEY = "ui.sections.hidden";
+
+    /** One tab of the DM controls panel; its id is used in {@value #HIDDEN_SECTIONS_KEY} and ui.section.<id>.expanded. */
+    public record SidebarSection(String id, String title, String description) {
+    }
+
+    public static final List<SidebarSection> SIDEBAR_SECTIONS = List.of(
+            new SidebarSection("tools", "Tools", "Select tool, fog brushes, rectangles and room fill."),
+            new SidebarSection("fog", "Fog of war", "Fog sharpness, softness and fade animation."),
+            new SidebarSection("lighting", "Lighting", "Light tools, time of day, ambient brightness and light tint."),
+            new SidebarSection("weather", "Weather", "Rain, snow, mist, dust and embers."),
+            new SidebarSection("effects", "Effects", "Area effect shapes, pen, line, textures and colours."),
+            new SidebarSection("text", "Text", "Text boxes, font size and colours."),
+            new SidebarSection("building", "Map building", "Walls, doors and windows."),
+            new SidebarSection("player", "Player view", "Player screen, calibration and player zoom."),
+            new SidebarSection("performance", "Performance", "Frame rate settings."));
+
+    /**
+     * Kind of editor and limits of one setting, used by the settings window. {@code group} is the collapsible block
+     * inside the category, nested levels separated by "/" (null = not grouped); {@code label} is the short name shown
+     * inside that group; {@code keywords} are extra search words.
+     */
+    public record SettingInfo(String key, String category, String group, String label, String description, String keywords, Tuning.Kind kind, String defaultValue,
+                              double min, double max, List<String> options, boolean restart,
+                              java.util.function.Predicate<String> validator) {
+    }
+
+    /** Keys of older versions that were replaced by individual settings; dropped from the file at startup. */
+    private static final Set<String> OBSOLETE_KEYS = Set.of("lightMenu.rangeTiles", "lightMenu.colors", "lightMenu.flicker",
+            "lightMenu.brightness");
+
     private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player", "performance"};
 
     @Getter
@@ -43,7 +74,8 @@ public final class AppSettings {
         this.file = file;
         if (Files.isRegularFile(file)) {
             reload();
-            if (!values.keySet().containsAll(knownKeys())) {
+            boolean removed = values.keySet().removeAll(OBSOLETE_KEYS);
+            if (removed || !values.keySet().containsAll(knownKeys())) {
                 // Writes newly added settings with their defaults so the file always lists every setting.
                 save();
             }
@@ -118,6 +150,29 @@ public final class AppSettings {
             values.put(key, value.replace('\r', ' ').replace('\n', ' '));
         }
         save();
+    }
+
+    /** Ids of the DM controls tabs the user chose to hide. */
+    public synchronized Set<String> hiddenSections() {
+        Set<String> hidden = new java.util.LinkedHashSet<>();
+        for (String id : get(HIDDEN_SECTIONS_KEY, "").split(",")) {
+            String trimmed = id.trim().toLowerCase(java.util.Locale.ROOT);
+            if (SIDEBAR_SECTIONS.stream().anyMatch(s -> s.id().equals(trimmed))) {
+                hidden.add(trimmed);
+            }
+        }
+        return hidden;
+    }
+
+    public void setHiddenSections(Set<String> ids) {
+        List<String> ordered = SIDEBAR_SECTIONS.stream().map(SidebarSection::id).filter(ids::contains).toList();
+        put(HIDDEN_SECTIONS_KEY, String.join(",", ordered));
+    }
+
+    /** Stores a value edited in the settings window (null restores the default) and applies it right away. */
+    public synchronized void applyEdit(String key, String value) {
+        put(key, value);
+        applyRuntimeSettings();
     }
 
     public void putInt(String key, int value) {
@@ -268,6 +323,8 @@ public final class AppSettings {
                 new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."),
                 new Entry("ui.effectAnimations", "true", "Animate effect textures and weather on all maps (true/false)."),
                 new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."),
+                new Entry(HIDDEN_SECTIONS_KEY, "", "DM controls tabs that are hidden from the overlay, comma separated ids: "
+                        + String.join(", ", SIDEBAR_SECTIONS.stream().map(SidebarSection::id).toList()) + ". Empty = all tabs shown."),
                 new Entry("ui.recentMaps.max", "5", "Number of maps kept in the recent maps list below the map library (1 to 30)."),
                 new Entry("ui.recentMaps", null, "Recently opened maps, most recent first, separated by '|' (managed by the app)."))));
 
@@ -339,6 +396,240 @@ public final class AppSettings {
             }
         }
         extra.forEach((title, entries) -> sections.add(new Section(title, entries)));
+    }
+
+    /** Every setting that can be changed in the settings window, i.e. all settings that have no control in the DM controls. */
+    public static List<SettingInfo> editableSettings() {
+        List<SettingInfo> list = new ArrayList<>();
+        for (Tuning.Setting<?> s : Tuning.all()) {
+            Placement place = placement(s.key());
+            list.add(new SettingInfo(s.key(), s.section(), place.group(), label(s.key(), place.skip()), s.comment(), keywords(s.key()), s.kind(), s.defaultText(), s.min(), s.max(),
+                    s.options(), s.requiresRestart(), s::isValid));
+        }
+        list.add(new SettingInfo("ui.recentMaps.max", Tuning.WINDOW, null, "Recent maps max",
+                "Number of maps kept in the recent maps list below the map library (1 to 30). Restart required.", keywords("ui.recentMaps.max"), Tuning.Kind.INTEGER, "5", 1, 30,
+                List.of(), true, text -> isNumber(text, true)));
+        for (Entry entry : textureEntries()) {
+            Tuning.Kind kind = inferKind(entry.defaultValue());
+            String description = entry.comment() == null ? "Effect texture setting." : entry.comment().trim();
+            String[] parts = entry.key().split("\\.");
+            if (parts.length >= 3 && !description.startsWith("Texture")) {
+                description = "Texture '" + parts[1] + "': " + description;
+            }
+            Placement place = placement(entry.key());
+            list.add(new SettingInfo(entry.key(), TEXTURES_CATEGORY, place.group(), label(entry.key(), place.skip()), description,
+                    keywords(entry.key()), kind, entry.defaultValue(),
+                    Double.NaN, Double.NaN, List.of(), false, text -> validForKind(kind, text)));
+        }
+        list.sort(java.util.Comparator.comparingInt(i -> categoryRank(i.category())));
+        return list;
+    }
+
+    private static final String TEXTURES_CATEGORY = "Effect textures";
+
+    /** Order of the categories in the settings window: related categories are next to each other. */
+    private static final List<String> CATEGORY_ORDER = List.of(Tuning.WINDOW, Tuning.UI, Tuning.DM_VIEW, Tuning.INPUT,
+            Tuning.PLAYER, Tuning.EDITING, TEXTURES_CATEGORY, Tuning.TEXT, Tuning.FOG, Tuning.LIGHTS, Tuning.TIME_OF_DAY,
+            Tuning.WEATHER, Tuning.PING, Tuning.FRAME_RATES, Tuning.PERFORMANCE_MODE, Tuning.AUTOSAVE, Tuning.IMPORT,
+            Tuning.STORAGE);
+
+    private static int categoryRank(String category) {
+        int index = CATEGORY_ORDER.indexOf(category);
+        return index < 0 ? CATEGORY_ORDER.size() : index;
+    }
+
+    /** Where a setting is shown inside its category; {@code skip} leading key segments are implied by the group. */
+    private record Placement(String group, int skip) {
+    }
+
+    private static final Map<String, String> LIGHT_PRESET_NAMES = Map.of("torch", "Torch (Add light tool)",
+            "candle", "Candle", "campfire", "Campfire", "magic", "Magic light");
+
+    private static Placement placement(String key) {
+        String[] parts = key.split("\\.");
+        String kind = parts.length > 1 ? parts[1] : "";
+        switch (parts[0]) {
+            case "window":
+                return new Placement("Main window", 1);
+            case "player":
+                return key.startsWith("player.zoom.") ? new Placement("Player zoom", 2) : new Placement("Calibration limits", 1);
+            case "dm":
+                return new Placement("DM view zoom", 1);
+            case "input":
+                if (key.matches("input\\.(lightPickRadiusPx|layerHandleRadiusPx|shapeHandleRadiusPx|textHandleRadiusPx|wallPickRadiusPx|shapePickRadiusPx)")) {
+                    return new Placement("Pick and grab distances", 1);
+                }
+                return key.matches("input\\.(marqueeMinDragPx|rightClickMaxMovePx)")
+                        ? new Placement("Drag and click", 1) : new Placement("Input timing", 1);
+            case "ping":
+                return new Placement("Ping", 1);
+            case "laser":
+                return new Placement("Laser pointer", 1);
+            case "brush":
+                return new Placement("Brush", 1);
+            case "effects":
+                return new Placement("Effect shapes", 1);
+            case "text":
+                if (key.matches("text\\.(minFontSize|maxFontSize)")) {
+                    return new Placement("Font size limits", 1);
+                }
+                return key.matches("text\\.(autoMaxWidthCells|minBoxSize)") ? new Placement("Text box size", 1) : new Placement(null, 0);
+            case "fog":
+                if (key.matches("fog\\.(revealSeconds|hideSeconds|lightFadeSeconds|fadeMaxStepSeconds|fadeEasing)")) {
+                    return new Placement("Fog fade", 1);
+                }
+                return key.equals("fog.dmOpacity") ? new Placement(null, 0) : new Placement("Slider limits", 1);
+            case "lighting":
+                return new Placement("Light quality", 1);
+            case "lightPreset":
+                return new Placement("Light tool presets/" + LIGHT_PRESET_NAMES.getOrDefault(kind, capitalize(kind)), 2);
+            case "lightMenu":
+                if (key.startsWith("lightMenu.range")) {
+                    return new Placement("Right-click menu/Range choices", 1);
+                }
+                if (key.startsWith("lightMenu.color.")) {
+                    return new Placement("Right-click menu/Colour choices", 2);
+                }
+                return key.startsWith("lightMenu.flicker.") ? new Placement("Right-click menu/Flicker choices", 2)
+                        : new Placement("Right-click menu/Brightness choices", 2);
+            case "light":
+                return new Placement("Light defaults", 1);
+            case "timeOfDay":
+                return new Placement(capitalize(kind), 2);
+            case "weather":
+                return parts.length == 3 ? new Placement(capitalize(kind), 2) : new Placement(null, 0);
+            case "performance":
+                return key.matches("performance\\.(interactionFps|idleFps|animationFps)")
+                        ? new Placement("Frame rates", 1) : new Placement("Quality reductions", 1);
+            case "autosave":
+                return new Placement("Auto-save timing", 1);
+            case "import":
+                return new Placement("dd2vtt lights", 2);
+            case "cache":
+                return key.equals("cache.textureTiles") ? new Placement(null, 0) : new Placement("Map image cache", 1);
+            case "ui":
+                if (key.matches("ui\\.tooltip\\w+")) {
+                    return new Placement("Tooltips", 1);
+                }
+                if (key.matches("ui\\.wall\\w+")) {
+                    return new Placement("Walls", 1);
+                }
+                return key.matches("ui\\.(door|window)\\w+") ? new Placement("Doors and windows", 1) : new Placement(null, 0);
+            case "texture":
+                if (parts.length == 2) {
+                    return kind.equals("tileCells") ? new Placement(null, 0) : new Placement("Soft edges", 1);
+                }
+                if (parts.length >= 4 && parts[2].startsWith("layer")) {
+                    return new Placement(capitalize(kind) + "/" + capitalize(parts[2]), 3);
+                }
+                return parts[2].equals("emitsLight") || parts[2].startsWith("light")
+                        ? new Placement(capitalize(kind) + "/Light emission", 2) : new Placement(capitalize(kind), 2);
+            default:
+                return new Placement(null, 0);
+        }
+    }
+
+    // ---- search keywords ----
+
+    private static final String KEYWORDS_RESOURCE = "/dmmt/settings-keywords.properties";
+    private static java.util.Properties keywordTable;
+
+    /**
+     * Search words of a setting from {@value #KEYWORDS_RESOURCE} (the keywords of docs/SETTINGS.md). The table has a
+     * line per key; generic lines use {@code *} for one key segment and a trailing {@code .*} for the rest.
+     */
+    static synchronized String keywords(String key) {
+        if (keywordTable == null) {
+            keywordTable = new java.util.Properties();
+            try (java.io.InputStream in = AppSettings.class.getResourceAsStream(KEYWORDS_RESOURCE)) {
+                if (in != null) {
+                    keywordTable.load(new java.io.InputStreamReader(in, StandardCharsets.UTF_8));
+                }
+            } catch (IOException e) {
+                // search then only uses names and descriptions
+            }
+        }
+        String exact = keywordTable.getProperty(key);
+        if (exact != null) {
+            return exact;
+        }
+        String best = null;
+        for (String pattern : keywordTable.stringPropertyNames()) {
+            if (pattern.contains("*") && key.matches(patternRegex(pattern)) && (best == null || pattern.length() > best.length())) {
+                best = pattern;
+            }
+        }
+        return best == null ? "" : keywordTable.getProperty(best);
+    }
+
+    private static String patternRegex(String pattern) {
+        boolean rest = pattern.endsWith(".*");
+        String head = rest ? pattern.substring(0, pattern.length() - 2) : pattern;
+        String regex = java.util.Arrays.stream(head.split("\\."))
+                .map(part -> part.contains("*") ? java.util.regex.Pattern.quote(part).replace("*", "\\E[^.]*\\Q") : java.util.regex.Pattern.quote(part))
+                .collect(java.util.stream.Collectors.joining("\\."));
+        return rest ? regex + "\\..+" : regex;
+    }
+    private static String capitalize(String text) {
+        String words = text.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replaceAll("([a-zA-Z])(\\d)", "$1 $2").toLowerCase(java.util.Locale.ROOT);
+        return Character.toUpperCase(words.charAt(0)) + words.substring(1);
+    }
+
+    private static String label(String key, int skip) {
+        String[] parts = key.split("\\.");
+        List<String> words = new ArrayList<>();
+        for (int i = Math.min(skip, parts.length - 1); i < parts.length; i++) {
+            words.add(parts[i].replaceAll("([a-z0-9])([A-Z])", "$1 $2").replaceAll("([a-zA-Z])(\\d)", "$1 $2")
+                    .toLowerCase(java.util.Locale.ROOT));
+        }
+        String joined = String.join(" › ", words);
+        return Character.toUpperCase(joined.charAt(0)) + joined.substring(1);
+    }
+
+
+    private static List<Entry> textureEntries() {
+        List<Entry> entries = new ArrayList<>();
+        entries.add(new Entry("texture.tileCells", "4", "Effect textures: size of one texture tile in grid cells (smaller = finer pattern)."));
+        for (Map.Entry<String, String> e : OverlayTextures.settingsDefaults().entrySet()) {
+            if (!e.getKey().equals("texture.tileCells")) {
+                entries.add(new Entry(e.getKey(), e.getValue(), textureComment(e.getKey())));
+            }
+        }
+        return entries;
+    }
+
+    private static Tuning.Kind inferKind(String value) {
+        if ("true".equals(value) || "false".equals(value)) {
+            return Tuning.Kind.BOOLEAN;
+        }
+        if (value.matches("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?")) {
+            return Tuning.Kind.COLOR;
+        }
+        return isNumber(value, false) ? Tuning.Kind.DECIMAL : Tuning.Kind.TEXT;
+    }
+
+    private static boolean isNumber(String text, boolean integerOnly) {
+        try {
+            String trimmed = text.trim();
+            if (integerOnly) {
+                Integer.parseInt(trimmed);
+            } else {
+                return Double.isFinite(Double.parseDouble(trimmed.replace(",", ".")));
+            }
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static boolean validForKind(Tuning.Kind kind, String text) {
+        return switch (kind) {
+            case BOOLEAN -> "true".equalsIgnoreCase(text.trim()) || "false".equalsIgnoreCase(text.trim());
+            case COLOR -> text.trim().matches("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?");
+            case INTEGER -> isNumber(text, true);
+            case DECIMAL -> isNumber(text, false);
+            default -> !text.isBlank();
+        };
     }
 
     /** Keys of every setting that has a default value (and is therefore always written to the file). */

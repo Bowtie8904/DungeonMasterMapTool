@@ -111,20 +111,92 @@ class AppSettingsTest {
     }
 
     @Test
-    void listSettingsParseNamedChoices() {
+    void lightMenuEntriesAreFixedButEditable() {
         Tuning.apply(key -> switch (key) {
-            case "lightMenu.colors" -> "Blood=#AA0000; Ice=#99CCFF";
-            case "lightMenu.flicker" -> "Off=0/0; Wild=0.9/3";
-            case "lightMenu.rangeTiles" -> "2, 5";
+            case "lightMenu.color.moonlight" -> "#99CCFF";
+            case "lightMenu.flicker.torch.speed" -> "3";
+            case "lightMenu.range1" -> "2";
             case "autosave.minuteOptions" -> "not a number";
             default -> null;
         });
 
-        assertEquals(2, Tuning.LIGHT_MENU_COLORS.get().size());
-        assertEquals("Ice", Tuning.LIGHT_MENU_COLORS.get().get(1).name());
-        assertEquals("#99CCFF", Tuning.LIGHT_MENU_COLORS.get().get(1).value());
-        assertEquals(3, Tuning.LIGHT_MENU_FLICKER.get().get(1).value()[1], 1e-9);
-        assertEquals(java.util.List.of(2.0, 5.0), Tuning.LIGHT_MENU_RANGES.get());
+        assertEquals(6, Tuning.lightMenuColors().size());
+        assertEquals("Moonlight", Tuning.lightMenuColors().get(3).name());
+        assertEquals("#99CCFF", Tuning.lightMenuColors().get(3).value());
+        assertEquals("Off", Tuning.lightMenuFlicker().get(0).name());
+        assertEquals(3, Tuning.lightMenuFlicker().get(2).value()[1], 1e-9);
+        assertEquals(10, Tuning.lightMenuRanges().size());
+        assertEquals(2.0, Tuning.lightMenuRanges().get(0));
+        assertEquals(3, Tuning.lightMenuBrightness().size());
         assertEquals(Tuning.AUTOSAVE_MINUTE_OPTIONS.defaultValue(), Tuning.AUTOSAVE_MINUTE_OPTIONS.get());
+    }
+
+    @Test
+    void obsoleteLightMenuKeysAreDroppedFromTheFile() throws IOException {
+        Path file = dir.resolve("settings.ini");
+        Files.writeString(file, "lightMenu.colors = Blood=#AA0000\n");
+        new AppSettings(file);
+        assertFalse(Files.readString(file).contains("lightMenu.colors"));
+    }
+
+    @Test
+    void settingsAreGroupedAndRelatedCategoriesAreAdjacent() {
+        java.util.List<AppSettings.SettingInfo> infos = AppSettings.editableSettings();
+        java.util.List<String> categories = infos.stream().map(AppSettings.SettingInfo::category).distinct().toList();
+        assertEquals(categories.size(), categories.stream().distinct().count());
+        assertEquals(1, categories.indexOf("Effect textures") - categories.indexOf("Editing, brush and effects"));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("timeOfDay.dawn.red") && "Dawn".equals(i.group())));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("lightPreset.torch.color")
+                && "Light tool presets/Torch (Add light tool)".equals(i.group())));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("texture.fire.layer1.speedX") && "Fire/Layer 1".equals(i.group())));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("cache.imageTiles") && "Map image cache".equals(i.group())));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("player.zoom.min") && "Player zoom".equals(i.group())));
+    }
+
+    @Test
+    void everyGroupHasAtLeastTwoSettings() {
+        java.util.Map<String, Long> counts = AppSettings.editableSettings().stream().filter(i -> i.group() != null)
+                .collect(java.util.stream.Collectors.groupingBy(i -> i.category() + "/" + i.group(), java.util.stream.Collectors.counting()));
+        counts.forEach((group, count) -> assertTrue(count >= 2, group + " has only " + count + " setting"));
+    }
+
+    @Test
+    void everySettingHasSearchKeywordsFromTheDocumentation() {
+        for (AppSettings.SettingInfo info : AppSettings.editableSettings()) {
+            assertFalse(info.keywords().isBlank(), "no keywords for " + info.key());
+        }
+        assertTrue(AppSettings.keywords("texture.fire.layer2.scale").contains("scroll speed"));
+        assertTrue(AppSettings.keywords("timeOfDay.dusk.red").contains("sunset"));
+    }
+
+    @Test
+    void hiddenSectionsArePersistedAndUnknownIdsIgnored() {
+        Path file = dir.resolve("settings.ini");
+        AppSettings settings = new AppSettings(file);
+        assertTrue(settings.hiddenSections().isEmpty());
+        settings.setHiddenSections(java.util.Set.of("effects", "performance", "bogus"));
+        assertEquals(java.util.Set.of("effects", "performance"), new AppSettings(file).hiddenSections());
+        settings.setHiddenSections(java.util.Set.of());
+        assertTrue(new AppSettings(file).hiddenSections().isEmpty());
+    }
+
+    @Test
+    void editedSettingsApplyImmediatelyAndResetToDefault() {
+        AppSettings settings = new AppSettings(dir.resolve("settings.ini"));
+        settings.applyEdit(Tuning.DM_ZOOM_MAX.key(), "3");
+        assertEquals(3.0, Tuning.DM_ZOOM_MAX.get());
+        settings.applyEdit(Tuning.DM_ZOOM_MAX.key(), null);
+        assertEquals(Tuning.DM_ZOOM_MAX.defaultValue(), Tuning.DM_ZOOM_MAX.get());
+    }
+
+    @Test
+    void editableSettingsDescribeEverySettingOnce() {
+        java.util.List<AppSettings.SettingInfo> infos = AppSettings.editableSettings();
+        assertEquals(infos.size(), infos.stream().map(AppSettings.SettingInfo::key).distinct().count());
+        assertTrue(infos.size() > 100);
+        for (AppSettings.SettingInfo info : infos) {
+            assertTrue(info.validator().test(info.defaultValue()) || info.defaultValue().isEmpty(), info.key());
+        }
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("texture.fire.color") && i.kind() == Tuning.Kind.COLOR));
     }
 }
