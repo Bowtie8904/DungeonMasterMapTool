@@ -333,6 +333,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private double groupLastY;
     private Map<String, double[]> groupStartPositions;
     private FogMask.Snapshot groupFogBefore;
+    private final java.util.Set<KeyCode> nudgeArrowKeys = java.util.EnumSet.noneOf(KeyCode.class);
+    private Map<String, double[]> nudgeStartPositions;
+    private FogMask.Snapshot nudgeFogBefore;
+    private boolean canvasMouseDown;
     private boolean marqueeActive;
     private double marqueeStartX;
     private double marqueeStartY;
@@ -482,7 +486,10 @@ public class DungeonMasterMapToolApplication extends Application {
         Scene scene = new Scene(root, initialWidth, initialHeight, Color.BLACK);
         scene.getStylesheets().add(Icons.STYLESHEET);
         // Clicks inside the popup never reach this scene, so any click here is "outside" the menu.
-        scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> hideLightMenu());
+        scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            finishNudge();
+            hideLightMenu();
+        });
         scene.setOnKeyPressed(event -> {
             if (event.isControlDown() && event.getCode() == KeyCode.S) {
                 handleSave();
@@ -538,6 +545,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                finishNudge();
                 pruneGroup();
                 if (!groupKeys.isEmpty()) {
                     deleteGroup();
@@ -568,6 +576,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         stage.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
+                finishNudge();
                 autoSaveIfDirty();
             } else if (preferences.pollExternalChange()) {
                 // The reload already applied tuning values and texture settings edited by hand.
@@ -1900,6 +1909,35 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void installDmInteractions() {
+        dmCanvas.setFocusTraversable(true);
+        dmCanvas.setOnKeyPressed(this::handleNudgePressed);
+        dmCanvas.setOnKeyReleased(event -> {
+            if (nudgeArrowKeys.remove(event.getCode())) {
+                event.consume();
+                if (nudgeArrowKeys.isEmpty()) {
+                    finishNudge();
+                }
+            }
+        });
+        dmCanvas.focusedProperty().addListener((obs, was, focused) -> {
+            if (!focused) {
+                finishNudge();
+            }
+        });
+        dmCanvas.sceneProperty().addListener((obs, oldScene, scene) -> {
+            if (scene != null) {
+                installNudgeFocusListener(scene);
+            }
+        });
+        if (dmCanvas.getScene() != null) {
+            installNudgeFocusListener(dmCanvas.getScene());
+        }
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            finishNudge();
+            canvasMouseDown = true;
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event ->
+                canvasMouseDown = event.isPrimaryButtonDown() || event.isSecondaryButtonDown() || event.isMiddleButtonDown());
         dmCanvas.setOnDragOver(event -> {
             Dragboard board = event.getDragboard();
             if (board.hasFiles() && board.getFiles().stream().anyMatch(this::isImageFile)) {
@@ -1924,6 +1962,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnScroll(event -> {
+            finishNudge();
             if (event.isControlDown()) {
                 if (event.getDeltaY() != 0 && playerZoomSlider != null) {
                     double delta = Math.log(Tuning.PLAYER_ZOOM_WHEEL_FACTOR.get()) / Math.log(2);
@@ -2704,6 +2743,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void renderDm() {
+        if (nudgeStartPositions != null && !nudgeStartPositions.keySet().equals(selectedMovementKeys())) {
+            finishNudge();
+        }
         double playerZoomStep = project.getViews().getPlayerZoomStep();
         renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
@@ -3035,6 +3077,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleSave() {
+        finishNudge();
         if (projectFile == null) {
             saveNewMap(null);
         } else {
@@ -3160,6 +3203,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 || draggingPlayerViewport || panningDmCamera || draftWall != null || draftOverlay != null;
     }
 
+    private void installNudgeFocusListener(Scene scene) {
+        scene.focusOwnerProperty().addListener((obs, oldOwner, owner) -> {
+            if (owner != dmCanvas) {
+                finishNudge();
+            }
+        });
+    }
+
     private boolean hasUnsavedChanges() {
         if (projectFile == null || project == null) {
             return false;
@@ -3170,7 +3221,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Background save of a map that already exists on disk; postponed during drags, skipped while another save runs. */
     private void autoSaveIfDirty() {
-        if (!autoSaveEnabled() || projectFile == null || ioBusy || interactionInProgress() || !hasUnsavedChanges()) {
+        if (!autoSaveEnabled() || projectFile == null || ioBusy || interactionInProgress()
+                || nudgeStartPositions != null || !hasUnsavedChanges()) {
             return;
         }
         lastAutoSaveNanos = System.nanoTime();
@@ -3672,6 +3724,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setImageLayerLocked(boolean locked) {
+        finishNudge();
         project.getMap().setImageLayersLocked(locked);
         if (locked) {
             selectedLayer = null;
@@ -3839,6 +3892,7 @@ public class DungeonMasterMapToolApplication extends Application {
      * snapshots so undo/redo restores the exact fog state.
      */
     private void executeWithFogHistory(String label, Runnable doAction, Runnable undoAction) {
+        finishNudge();
         FogMask.Snapshot before = snapshotFog();
         doAction.run();
         recordWithFog(label, before, doAction, undoAction);
@@ -4055,6 +4109,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void switchProject(DmProject next, Path file, LevelContext level) {
+        finishNudge();
         commitTextEdit();
         project = next;
         project.getViews().setPlayerFrozen(false);
@@ -6110,6 +6165,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void clearGroup() {
+        finishNudge();
         groupKeys.clear();
         draggingGroup = false;
         marqueeActive = false;
@@ -6118,6 +6174,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void clearSingleSelection() {
+        finishNudge();
         selectedLight = null;
         selectedTextId = null;
         selectedOverlayId = null;
@@ -6239,8 +6296,12 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private Map<String, double[]> captureGroupPositions() {
+        return capturePositions(groupKeys);
+    }
+
+    private Map<String, double[]> capturePositions(java.util.Set<String> keys) {
         Map<String, double[]> positions = new java.util.LinkedHashMap<>();
-        for (String key : groupKeys) {
+        for (String key : keys) {
             double[] position = groupPosition(key);
             if (position != null) {
                 positions.put(key, position);
@@ -6295,13 +6356,20 @@ public class DungeonMasterMapToolApplication extends Application {
         if (before == null) {
             return;
         }
-        Map<String, double[]> after = captureGroupPositions();
+        recordPositionMove(before, capturePositions(before.keySet()), fogBefore);
+    }
+
+    private void recordPositionMove(Map<String, double[]> before, Map<String, double[]> after,
+                                    FogMask.Snapshot fogBefore) {
         boolean changed = before.entrySet().stream().anyMatch(e -> {
             double[] now = after.get(e.getKey());
             return now != null && (!same(e.getValue()[0], now[0]) || !same(e.getValue()[1], now[1]));
         });
         if (!changed) {
-            return;
+            FogMask.Snapshot fogAfter = fogBefore == null ? null : snapshotFog();
+            if (fogAfter == null || fogBefore.sameBits(fogAfter)) {
+                return;
+            }
         }
         Runnable redo = () -> after.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
         Runnable undo = () -> before.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
@@ -6309,6 +6377,79 @@ public class DungeonMasterMapToolApplication extends Application {
             recordWithFog("Move selection", fogBefore, redo, undo);
         } else {
             recordHistory("Move selection", redo, undo);
+        }
+    }
+
+    private java.util.Set<String> selectedMovementKeys() {
+        java.util.Set<String> keys = new java.util.LinkedHashSet<>(groupKeys);
+        if (keys.isEmpty()) {
+            if (selectedLight != null) {
+                keys.add(groupKey("light", selectedLight.getId()));
+            }
+            if (selectedTextId != null) {
+                keys.add(groupKey("text", selectedTextId));
+            }
+            if (selectedOverlayId != null) {
+                keys.add(groupKey("overlay", selectedOverlayId));
+            }
+            if (selectedLayer != null) {
+                keys.add(groupKey("layer", selectedLayer.getId()));
+            }
+        }
+        keys.removeIf(key -> groupBounds(key) == null);
+        return keys;
+    }
+
+    private void handleNudgePressed(javafx.scene.input.KeyEvent event) {
+        KeyCode code = event.getCode();
+        if (code != KeyCode.UP && code != KeyCode.DOWN && code != KeyCode.LEFT && code != KeyCode.RIGHT) {
+            return;
+        }
+        if (dmCanvas.getScene() == null || dmCanvas.getScene().getFocusOwner() != dmCanvas
+                || (dmCanvas.getScene().getWindow() != null && !dmCanvas.getScene().getWindow().isFocused())
+                || event.isControlDown() || event.isAltDown() || event.isMetaDown()
+                || editingTextId != null
+                || (textEditor != null && textEditor.isShowing())
+                || interactionInProgress() || draggingGroup || marqueeActive || canvasMouseDown
+                || pingArmed || laserActive || laserToolActive) {
+            return;
+        }
+        java.util.Set<String> keys = selectedMovementKeys();
+        if (nudgeStartPositions != null && !nudgeStartPositions.keySet().equals(keys)) {
+            finishNudge();
+        }
+        if (keys.isEmpty()) {
+            return;
+        }
+        if (nudgeStartPositions == null) {
+            nudgeStartPositions = capturePositions(keys);
+            nudgeFogBefore = keys.stream().anyMatch(key -> key.startsWith("light:")) ? snapshotFog() : null;
+        }
+        nudgeArrowKeys.add(code);
+        double step = project.getMap().getGrid().getPixelsPerCell() * (event.isShiftDown() ? 1.0 : 0.1);
+        double dx = code == KeyCode.LEFT ? -step : code == KeyCode.RIGHT ? step : 0;
+        double dy = code == KeyCode.UP ? -step : code == KeyCode.DOWN ? step : 0;
+        for (String key : keys) {
+            double[] position = groupPosition(key);
+            moveGroupItemTo(key, position[0] + dx, position[1] + dy);
+        }
+        // Rotation transforms the model itself; world axes already match the displayed DM axes.
+        lightingEngine.update(project);
+        historyVersion++;
+        lastInputNanos = System.nanoTime();
+        renderDm();
+        renderPlayer();
+        event.consume();
+    }
+
+    private void finishNudge() {
+        Map<String, double[]> before = nudgeStartPositions;
+        FogMask.Snapshot fogBefore = nudgeFogBefore;
+        nudgeStartPositions = null;
+        nudgeFogBefore = null;
+        nudgeArrowKeys.clear();
+        if (before != null) {
+            recordPositionMove(before, capturePositions(before.keySet()), fogBefore);
         }
     }
 
@@ -7008,6 +7149,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void executeWithHistory(String label, Runnable doAction, Runnable undoAction) {
+        finishNudge();
         doAction.run();
         pushHistory(new HistoryAction(label, doAction, undoAction));
     }
@@ -7022,6 +7164,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void undo() {
+        finishNudge();
         commitTextEdit();
         historyFeedback.clear();
         if (undoStack.isEmpty()) {
@@ -7038,6 +7181,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void redo() {
+        finishNudge();
         commitTextEdit();
         historyFeedback.clear();
         if (redoStack.isEmpty()) {

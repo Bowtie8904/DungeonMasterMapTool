@@ -414,6 +414,10 @@ Most values apply when the window regains focus after you saved the file; entrie
 | `Ctrl+C` / `Ctrl+V` | Copy / paste text box (in the handout window: paste image) |
 | `Delete` / `Backspace` | Delete selected layer, light, text box or effect |
 | `Ctrl+click` | Add or remove an item from the selection |
+| Arrow keys (focused map canvas only) | Nudge selected movable objects by 0.1 grid tile in the displayed direction, ignoring mouse snapping |
+| `Shift` + arrow keys (focused map canvas only) | Nudge by 1 grid tile |
 | `Shift+click` (Reveal room) | Hide the room |
 | `Shift` (wall tool) | Free wall placement without snap |
 | `Enter` / `F2` / `Delete` (map browser) | Open / rename / delete |
+
+Arrow-key nudges move lights, effects, text boxes and unlocked image layers together without changing selection or the active tool. Holding arrows repeats; a continuous gesture is one undo step (including persistent fog reveals), ending when all arrows are released, focus leaves the canvas or selection changes. Locked images, walls and doors/windows do not move. Nudging is disabled during mouse drags, drawing and geometry editing; arrows in text editors, controls, the map library and dialogs retain their normal behaviour. Both views update immediately, except that a frozen player view remains frozen.

@@ -18,6 +18,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.input.PickResult;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -465,6 +467,286 @@ class ContextualBrushSizeTest {
                 (Slider) fogRow.getChildren().get(1), (Slider) effectRow.getChildren().get(1));
     }
 
+    @Test
+    void arrowsNudgeEveryMovableKindWithExactStepsIgnoringSnapAndRotation() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            set(f.app, "snapLayersToGrid", true);
+            f.project.getMap().getGrid().setPixelsPerCell(75);
+            var layer = DmProject.ImageLayer.builder().id("layer").x(13).y(17).width(100).height(100).build();
+            var light = DmProject.LightSource.builder().id("light").x(13).y(17).build();
+            var text = DmProject.TextBox.builder().id("text").x(13).y(17).build();
+            f.project.getImageLayers().add(layer);
+            f.project.getLighting().getLights().add(light);
+            f.project.getTextBoxes().add(text);
+            for (String kind : new String[]{"layer", "light", "text", "circle", "rect", "brush", "pen", "line"}) {
+                invoke(f.app, "clearSingleSelection");
+                DmProject.OverlayShape shape = null;
+                if (kind.equals("layer")) {
+                    set(f.app, "selectedLayer", layer);
+                } else if (kind.equals("light")) {
+                    set(f.app, "selectedLight", light);
+                } else if (kind.equals("text")) {
+                    set(f.app, "selectedTextId", text.getId());
+                } else {
+                    shape = DmProject.OverlayShape.builder().id(kind).type(kind).x(13).y(17)
+                            .width(30).height(30).radius(15)
+                            .points(new java.util.ArrayList<>(java.util.List.of(13.0, 17.0, 43.0, 47.0))).build();
+                    f.project.getOverlays().add(shape);
+                    set(f.app, "selectedOverlayId", shape.getId());
+                }
+                String key = (shape == null ? kind : "overlay") + ":" + kind;
+                for (int rotation = 0; rotation < 4; rotation++) {
+                    f.project.getMap().setRotationQuarterTurns(rotation);
+                    assertTrue(f.press(KeyCode.UP, false).isConsumed());
+                    f.release(KeyCode.UP);
+                    double[] position = (double[]) invoke(f.app, "groupPosition", new Class<?>[]{String.class}, key);
+                    assertArrayEquals(new double[]{13, 9.5}, position, 1e-9);
+                    invoke(f.app, "undo");
+                    assertArrayEquals(new double[]{13, 17},
+                            (double[]) invoke(f.app, "groupPosition", new Class<?>[]{String.class}, key), 1e-9);
+                }
+                f.press(KeyCode.RIGHT, true);
+                f.release(KeyCode.RIGHT);
+                assertArrayEquals(new double[]{88, 17},
+                        (double[]) invoke(f.app, "groupPosition", new Class<?>[]{String.class}, key), 1e-9);
+                invoke(f.app, "undo");
+                if (shape != null) {
+                    assertEquals(java.util.List.of(13.0, 17.0, 43.0, 47.0), shape.getPoints());
+                }
+            }
+        });
+    }
+
+    @Test
+    void overlappingRepeatedArrowsMoveMixedGroupAsOneGestureAndKeepGeometryAndSelection() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            var layer = DmProject.ImageLayer.builder().id("layer").x(5).y(7).width(100).height(100).build();
+            var light = DmProject.LightSource.builder().id("light").x(25).y(37).build();
+            var shape = DmProject.OverlayShape.builder().id("effect").type("brush").x(45).y(67)
+                    .points(new java.util.ArrayList<>(java.util.List.of(45.0, 67.0, 75.0, 97.0))).build();
+            f.project.getImageLayers().add(layer);
+            f.project.getLighting().getLights().add(light);
+            f.project.getOverlays().add(shape);
+            set(f.app, "selectedLayer", layer);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            set(f.app, "selectedLight", light);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            set(f.app, "selectedOverlayId", shape.getId());
+            invoke(f.app, "seedGroupFromSingleSelection");
+            invoke(f.app, "clearSingleSelection");
+            var keys = java.util.Set.copyOf((java.util.Set<?>) get(f.app, "groupKeys"));
+            for (int i = 0; i < 3; i++) {
+                f.press(KeyCode.RIGHT, false);
+            }
+            assertFalse(f.press(KeyCode.A, false).isConsumed());
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            f.press(KeyCode.DOWN, true);
+            f.release(KeyCode.RIGHT);
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            f.press(KeyCode.DOWN, false);
+            f.release(KeyCode.DOWN);
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            assertEquals(35, layer.getX());
+            assertEquals(117, layer.getY());
+            assertEquals(20, light.getX() - layer.getX());
+            assertEquals(30, light.getY() - layer.getY());
+            assertEquals(java.util.List.of(75.0, 177.0, 105.0, 207.0), shape.getPoints());
+            assertEquals(keys, get(f.app, "groupKeys"));
+            invoke(f.app, "undo");
+            assertEquals(5, layer.getX());
+            assertEquals(7, layer.getY());
+            assertEquals(25, light.getX());
+            assertEquals(java.util.List.of(45.0, 67.0, 75.0, 97.0), shape.getPoints());
+            invoke(f.app, "redo");
+            assertEquals(35, layer.getX());
+            f.press(KeyCode.LEFT, false);
+            f.release(KeyCode.LEFT);
+            assertEquals(2, ((Deque<?>) get(f.app, "undoStack")).size());
+        });
+    }
+
+    @Test
+    void nudgingLeavesLockedLayersAndNormalControlArrowsAloneAndBlocksActiveGestures() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+            var layer = DmProject.ImageLayer.builder().id("layer").width(100).height(100).build();
+            var light = DmProject.LightSource.builder().id("light").build();
+            f.project.getImageLayers().add(layer);
+            f.project.getLighting().getLights().add(light);
+            set(f.app, "selectedLayer", layer);
+            f.project.getMap().setImageLayersLocked(true);
+            assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+            assertEquals(0, layer.getX());
+            set(f.app, "selectedLight", light);
+            for (String flag : new String[]{"draggingLight", "draggingLayer", "resizingLayer", "draggingOverlay",
+                    "resizingOverlay", "draggingText", "draggingPlayerViewport", "panningDmCamera",
+                    "draggingGroup", "marqueeActive", "fogDragging", "canvasMouseDown",
+                    "pingArmed", "laserActive", "laserToolActive"}) {
+                set(f.app, flag, true);
+                assertFalse(f.press(KeyCode.RIGHT, false).isConsumed(), flag);
+                assertEquals(0, light.getX(), flag);
+                set(f.app, flag, false);
+            }
+            set(f.app, "resizingTextHandle", 0);
+            assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+            set(f.app, "resizingTextHandle", -1);
+            set(f.app, "editingTextId", "light");
+            assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+            set(f.app, "editingTextId", null);
+            for (String draft : new String[]{"draftOverlay", "draftWall", "draftText"}) {
+                Object value = switch (draft) {
+                    case "draftOverlay" -> DmProject.OverlayShape.builder().build();
+                    case "draftWall" -> DmProject.WallSegment.builder().build();
+                    default -> DmProject.TextBox.builder().build();
+                };
+                set(f.app, draft, value);
+                assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+                set(f.app, draft, null);
+            }
+            for (Node control : new Node[]{f.fogSlider, new TextArea(), new javafx.scene.control.ComboBox<>(),
+                    new javafx.scene.control.TreeView<>()}) {
+                if (control.getParent() == null) {
+                    f.root.getChildren().add(control);
+                }
+                control.requestFocus();
+                assertFalse(f.press(KeyCode.RIGHT, false).isConsumed());
+                assertEquals(0, light.getX());
+            }
+            f.canvas.requestFocus();
+            assertTrue(f.press(KeyCode.RIGHT, false).isConsumed());
+            f.release(KeyCode.RIGHT);
+            assertEquals(10, light.getX());
+            assertEquals(0, layer.getX());
+            assertSame(layer, get(f.app, "selectedLayer"));
+        });
+    }
+
+    @Test
+    void focusLossSelectionChangeAndUndoFinishHeldArrowGestures() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            var first = DmProject.LightSource.builder().id("first").build();
+            var second = DmProject.LightSource.builder().id("second").x(50).build();
+            f.project.getLighting().getLights().addAll(java.util.List.of(first, second));
+            set(f.app, "selectedLight", first);
+            f.press(KeyCode.RIGHT, false);
+            f.fogSlider.requestFocus();
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            f.canvas.requestFocus();
+            f.press(KeyCode.RIGHT, false);
+            set(f.app, "selectedLight", second);
+            invoke(f.app, "renderDm");
+            assertEquals(2, ((Deque<?>) get(f.app, "undoStack")).size());
+            f.press(KeyCode.RIGHT, false);
+            invoke(f.app, "undo");
+            assertEquals(50, second.getX());
+            assertEquals(20, first.getX());
+            assertNull(get(f.app, "nudgeStartPositions"));
+            invoke(f.app, "undo");
+            assertEquals(10, first.getX());
+        });
+    }
+
+    @Test
+    void nudgeHistoryIncludesPersistentFogEvenWhenGestureReturnsToStartAndRespectsFreeze() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            f.project.getImageLayers().add(DmProject.ImageLayer.builder()
+                    .id("base").x(-300).y(-300).width(600).height(600).build());
+            f.project.getFog().setEnabled(true);
+            var light = DmProject.LightSource.builder().id("light").range(60)
+                    .revealMode(DmProject.RevealMode.PERSISTENT).build();
+            f.project.getLighting().getLights().add(light);
+            set(f.app, "selectedLight", light);
+            LightingEngine engine = (LightingEngine) get(f.app, "lightingEngine");
+            engine.update(f.project);
+            FogMask mask = f.project.getFog().getMask();
+            var before = mask.copyBits();
+            DmProject frozen = DmProject.builder().build();
+            set(f.app, "frozenPlayerProject", frozen);
+            f.press(KeyCode.RIGHT, true);
+            var after = mask.copyBits();
+            assertTrue(after.cardinality() > before.cardinality());
+            f.press(KeyCode.LEFT, true);
+            f.release(KeyCode.RIGHT);
+            f.release(KeyCode.LEFT);
+            assertEquals(0, light.getX());
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            invoke(f.app, "undo");
+            assertEquals(before, mask.copyBits());
+            engine.update(f.project);
+            assertEquals(before, mask.copyBits());
+            invoke(f.app, "redo");
+            assertEquals(after, mask.copyBits());
+            assertSame(frozen, get(f.app, "frozenPlayerProject"));
+            assertTrue(frozen.getLighting().getLights().isEmpty());
+        });
+    }
+
+    @Test
+    void routedArrowsRespectCanvasFocusAndMixedLockedSelectionsAndPositionsPersistAfterRotation() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.canvas.requestFocus();
+            var layer = DmProject.ImageLayer.builder().id("layer").x(12).y(15).width(100).height(200).build();
+            var light = DmProject.LightSource.builder().id("light").x(25).y(35).build();
+            f.project.getImageLayers().add(layer);
+            f.project.getLighting().getLights().add(light);
+            set(f.app, "selectedLayer", layer);
+            set(f.app, "selectedLight", light);
+            invoke(f.app, "seedGroupFromSingleSelection");
+            invoke(f.app, "clearSingleSelection");
+            invoke(f.app, "setImageLayerLocked", new Class<?>[]{boolean.class}, true);
+            var rotations = new dmmt.service.MapRotationService();
+            for (int turn = 0; turn < 4; turn++) {
+                rotations.rotateClockwise(f.project);
+                double x = light.getX();
+                double y = light.getY();
+                double layerX = layer.getX();
+                double layerY = layer.getY();
+                javafx.event.Event.fireEvent(f.canvas, new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.UP,
+                        false, false, false, false));
+                assertEquals(x, light.getX(), 1e-9);
+                assertEquals(y - 10, light.getY(), 1e-9);
+                assertEquals(layerX, layer.getX(), 1e-9);
+                assertEquals(layerY, layer.getY(), 1e-9);
+                f.release(KeyCode.UP);
+            }
+            var text = new TextArea();
+            f.root.getChildren().add(text);
+            text.requestFocus();
+            double x = light.getX();
+            javafx.event.Event.fireEvent(text, new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.RIGHT,
+                    false, false, false, false));
+            assertEquals(x, light.getX());
+            f.canvas.requestFocus();
+            for (KeyEvent modified : new KeyEvent[]{
+                    new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.RIGHT, false, true, false, false),
+                    new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.RIGHT, false, false, true, false),
+                    new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.RIGHT, false, false, false, true)}) {
+                f.canvas.getOnKeyPressed().handle(modified);
+                assertFalse(modified.isConsumed());
+                assertEquals(x, light.getX());
+            }
+            var service = new dmmt.service.ProjectService();
+            Path file = temp.resolve("nudged.dmmap");
+            service.save(file, f.project);
+            DmProject loaded = service.load(file);
+            assertEquals(light.getX(), loaded.getLighting().getLights().getFirst().getX());
+            assertEquals(light.getY(), loaded.getLighting().getLights().getFirst().getY());
+            assertEquals(layer.getX(), loaded.getImageLayers().getFirst().getX());
+            assertTrue(loaded.getMap().imageLayersLockedOrDefault());
+        });
+    }
+
     private void onFx(CheckedRunnable action) throws Exception {
         String original = System.getProperty(AppSettings.SYSTEM_PROPERTY);
         FutureTask<Void> task = new FutureTask<>(() -> {
@@ -497,6 +779,17 @@ class ContextualBrushSizeTest {
             ScrollEvent event = wheel(canvas, delta, ctrl, alt);
             canvas.getOnScroll().handle(event);
             return event;
+        }
+
+        KeyEvent press(KeyCode code, boolean shift) {
+            KeyEvent event = new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code, shift, false, false, false);
+            canvas.getOnKeyPressed().handle(event);
+            return event;
+        }
+
+        void release(KeyCode code) {
+            canvas.getOnKeyReleased().handle(new KeyEvent(KeyEvent.KEY_RELEASED, "", "", code,
+                    false, false, false, false));
         }
     }
 
