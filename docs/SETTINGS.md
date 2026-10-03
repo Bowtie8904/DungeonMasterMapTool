@@ -205,6 +205,37 @@ often wrong for TVs (the estimate is rounded to half inches and limited to the f
 
 *Keywords:* screen size, diagonal, TV size, monitor size, calibration, DPI, inches
 
+### `player.viewportEdgeScroll.enabled`
+**Default:** `true` · **Range:** true / false · **Applies:** live
+
+Automatically pan the DM camera while dragging the player viewport title bar near an unobstructed map edge.
+Hovering alone and other object drags never scroll. Controls and sidebars are excluded from the interaction area;
+scrolling continues at capped speed beyond an edge, including outside the DM window, while the drag remains active.
+Scrolling pauses over control overlays and resumes on return during the same drag. Release, cancellation,
+focus loss, map/level changes and player-window closure stop it. Frozen player output remains unchanged; only the
+staged viewport moves. The complete drag is one undo step, without changing zoom or rotation.
+Available in the settings window's Player screen category.
+
+*Keywords:* viewport, title bar, auto pan, edge scrolling, continuous drag, player camera, freeze
+
+### `player.viewportEdgeScroll.zonePx`
+**Default:** `40` · **Range:** 1 to 300 · **Applies:** live
+
+Edge-zone width in logical pixels, measured from the unobstructed map interaction area. Speed increases linearly
+from zero at the inner boundary to the maximum at the edge, staying at the maximum beyond it. On small interaction areas each zone is limited to
+half the corresponding dimension.
+
+*Keywords:* viewport, edge zone, margin, auto pan, drag, logical pixels
+
+### `player.viewportEdgeScroll.maxSpeedPxPerSecond`
+**Default:** `600` · **Range:** 1 to 3000 · **Applies:** live
+
+Maximum DM camera scrolling speed in logical pixels per second. Combined diagonal speed has the same cap.
+Elapsed time and DM zoom convert this to world movement, so speed is independent of frame rate and zoom.
+Scrolling keeps interaction rendering active even when the cursor is stationary; normal idle throttling resumes afterwards.
+
+*Keywords:* viewport, edge scrolling, auto pan speed, diagonal, frame rate, zoom
+
 ### `player.zoom.minStep`
 **Default:** `-2` · **Range:** -6 to 0 · **Applies:** restart
 
@@ -776,7 +807,7 @@ colour.
 ## Editing, brush and effects
 
 ### `history.maxSteps`
-**Default:** `100` · **Range:** 1 to 10000 · **Applies:** live
+**Default:** `10` · **Range:** 1 to 10000 · **Applies:** live
 
 Number of undo steps kept (`Ctrl+Z`). Older steps are dropped. Higher values use more memory, especially for fog edits
 on large maps.

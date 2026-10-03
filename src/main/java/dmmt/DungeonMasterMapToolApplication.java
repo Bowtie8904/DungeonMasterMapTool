@@ -218,6 +218,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
     private StackPane mapCenter;
+    private Region dmControls;
     private final java.util.Map<String, CollapsibleSection> dmSections = new java.util.LinkedHashMap<>();
     private StackPane loadingOverlay;
     private String savedFingerprint;
@@ -359,6 +360,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private double lastMouseY;
     private double viewportDragOffsetX;
     private double viewportDragOffsetY;
+    private double viewportDragSceneX;
+    private double viewportDragSceneY;
+    private long viewportScrollNanos;
+    private javafx.scene.control.Tooltip viewportTitleTooltip;
+    private boolean viewportTitleTooltipInstalled;
     private double startCameraX;
     private double startCameraY;
     private double startPlayerCameraX;
@@ -421,6 +427,7 @@ public class DungeonMasterMapToolApplication extends Application {
         center.setMinSize(0, 0);
         mapCenter = center;
         Region controls = createControlsPanel(stage);
+        dmControls = controls;
         StackPane.setAlignment(controls, Pos.TOP_RIGHT);
         StackPane.setMargin(controls, new Insets(10));
         HBox chip = createToolChip();
@@ -577,6 +584,7 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
                 finishNudge();
+                finishPlayerViewportDrag();
                 autoSaveIfDirty();
             } else if (preferences.pollExternalChange()) {
                 // The reload already applied tuning values and texture settings edited by hand.
@@ -608,12 +616,16 @@ public class DungeonMasterMapToolApplication extends Application {
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
+                boolean viewportScrolling = playerViewportScrollVelocity().magnitude() > 0;
+                if (!viewportScrolling) {
+                    viewportScrollNanos = 0;
+                }
                 // Frame rates are configurable: target while interacting, animation for moving effects, idle otherwise.
                 boolean fogFading = renderer.isFogAnimating() || playerRenderer.isFogAnimating();
                 boolean animated = hasAnimation(project)
                         || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
                 boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || laserToolActive || !laserTrail.isEmpty()
-                        || fogFading || historyFeedback.active(now);
+                        || fogFading || historyFeedback.active(now) || viewportScrolling;
                 int fps = PerformanceMode.isEnabled()
                         ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
                         : animated ? PerformanceMode.textureAnimationFps() : Math.min(PerformanceMode.idleFps(), idleFps)
@@ -628,6 +640,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 long section = FrameProfiler.start();
                 lightingEngine.update(project);
                 applyPlayerScale();
+                updatePlayerViewportDrag(now);
                 if (frozenPlayerProject != null) {
                     playerLightingEngine.update(frozenPlayerProject);
                 }
@@ -1909,6 +1922,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void installDmInteractions() {
+        viewportTitleTooltip = Icons.tooltip("Drag the Player view title bar to move the player viewport. "
+                + "Hold near a map edge to scroll across the map.");
         dmCanvas.setFocusTraversable(true);
         dmCanvas.setOnKeyPressed(this::handleNudgePressed);
         dmCanvas.setOnKeyReleased(event -> {
@@ -1922,6 +1937,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
                 finishNudge();
+                finishPlayerViewportDrag();
             }
         });
         dmCanvas.sceneProperty().addListener((obs, oldScene, scene) -> {
@@ -2062,6 +2078,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
         dmCanvas.setOnMouseMoved(event -> {
             updateHover(event.getX(), event.getY());
+            showViewportTitleTooltip(activeTool == EditorTool.SELECT
+                    && isOnPlayerViewportTitleBar(hoverWorldX, hoverWorldY));
             brushLabelCursorX = event.getX();
             brushLabelCursorY = event.getY();
             positionBrushSizeLabel();
@@ -2071,6 +2089,7 @@ public class DungeonMasterMapToolApplication extends Application {
             updateCanvasCursor();
         });
         dmCanvas.setOnMouseExited(event -> {
+            showViewportTitleTooltip(false);
             hoverInsideCanvas = false;
             hideBrushSizeLabel();
             if (laserToolActive && !event.isPrimaryButtonDown()) {
@@ -2096,6 +2115,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
 
             if (event.getButton() == MouseButton.SECONDARY) {
+                finishPlayerViewportDrag();
                 rightClickCancelCandidate = pingArmed || laserToolActive || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
@@ -2219,6 +2239,10 @@ public class DungeonMasterMapToolApplication extends Application {
             if (isOnPlayerViewportTitleBar(world.x(), world.y())) {
                 CanvasMapRenderer.WorldRect playerRect = getPlayerViewportRect();
                 draggingPlayerViewport = true;
+                viewportDragSceneX = event.getSceneX();
+                viewportDragSceneY = event.getSceneY();
+                viewportScrollNanos = 0;
+                showViewportTitleTooltip(false);
                 viewportDragOffsetX = world.x() - playerRect.x();
                 viewportDragOffsetY = world.y() - playerRect.y();
                 startPlayerCameraX = project.getViews().getPlayerCamera().getX();
@@ -2309,6 +2333,19 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnMouseDragged(event -> {
+            if (draggingPlayerViewport) {
+                if (!event.isPrimaryButtonDown()) {
+                    finishPlayerViewportDrag();
+                    return;
+                }
+                viewportDragSceneX = event.getSceneX();
+                viewportDragSceneY = event.getSceneY();
+                if (playerViewportScrollVelocity().magnitude() == 0) {
+                    viewportScrollNanos = 0;
+                }
+                movePlayerViewportToCursor(event.getX(), event.getY());
+                return;
+            }
             updateHover(event.getX(), event.getY());
             DmProject.CameraState camera = project.getViews().getDmCamera();
             CanvasMapRenderer.WorldPoint world = renderer.screenToWorld(
@@ -2415,16 +2452,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (draggingPlayerViewport && playerStage != null) {
-                DmProject.CameraState playerCam = project.getViews().getPlayerCamera();
-                CanvasMapRenderer.WorldRect rect = getPlayerViewportRect();
-                if (rect != null) {
-                    playerCam.setX(world.x() - viewportDragOffsetX + rect.width() / 2.0);
-                    playerCam.setY(world.y() - viewportDragOffsetY + rect.height() / 2.0);
-                }
-                return;
-            }
-
             if (selectedLight != null && draggingLight) {
                 selectedLight.setX(world.x() - dragOffsetX);
                 selectedLight.setY(world.y() - dragOffsetY);
@@ -2444,6 +2471,9 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnMouseReleased(event -> {
+            if (event.getButton() == MouseButton.PRIMARY) {
+                finishPlayerViewportDrag();
+            }
             if (event.getButton() == MouseButton.MIDDLE) {
                 laserActive = false;
                 return;
@@ -2562,27 +2592,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (draggingPlayerViewport && playerStage != null) {
-                DmProject.CameraState playerCam = project.getViews().getPlayerCamera();
-                if (!same(startPlayerCameraX, playerCam.getX()) || !same(startPlayerCameraY, playerCam.getY())) {
-                    double beforeX = startPlayerCameraX;
-                    double beforeY = startPlayerCameraY;
-                    double afterX = playerCam.getX();
-                    double afterY = playerCam.getY();
-                    executeWithHistory(
-                            "Move player viewport",
-                            () -> {
-                                playerCam.setX(afterX);
-                                playerCam.setY(afterY);
-                            },
-                            () -> {
-                                playerCam.setX(beforeX);
-                                playerCam.setY(beforeY);
-                            }
-                    );
-                }
-            }
-
             if (draggingLight && selectedLight != null) {
                 if (!same(startLightX, selectedLight.getX()) || !same(startLightY, selectedLight.getY())) {
                     String lightId = selectedLight.getId();
@@ -2671,7 +2680,8 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setTitle("Player View");
         playerStage.getIcons().setAll(appIcons());
         playerStage.setScene(scene);
-        playerStage.setOnCloseRequest(event -> {
+        playerStage.setOnHidden(event -> {
+            finishPlayerViewportDrag();
             playerStage = null;
             playerCanvas = null;
             playerBaseCanvas = null;
@@ -2708,6 +2718,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void closePlayerWindow() {
+        finishPlayerViewportDrag();
         if (playerStage != null) {
             playerStage.close();
             playerStage = null;
@@ -3207,6 +3218,7 @@ public class DungeonMasterMapToolApplication extends Application {
         scene.focusOwnerProperty().addListener((obs, oldOwner, owner) -> {
             if (owner != dmCanvas) {
                 finishNudge();
+                finishPlayerViewportDrag();
             }
         });
     }
@@ -3606,6 +3618,121 @@ public class DungeonMasterMapToolApplication extends Application {
         return hovered == null ? null : hovered.getId();
     }
 
+    private void showViewportTitleTooltip(boolean enabled) {
+        if (enabled == viewportTitleTooltipInstalled) {
+            return;
+        }
+        viewportTitleTooltipInstalled = enabled;
+        if (enabled) {
+            javafx.scene.control.Tooltip.install(dmCanvas, viewportTitleTooltip);
+        } else {
+            javafx.scene.control.Tooltip.uninstall(dmCanvas, viewportTitleTooltip);
+            viewportTitleTooltip.hide();
+        }
+    }
+
+    private Rectangle2D playerViewportInteractionArea() {
+        double right = dmCanvas.getWidth();
+        double top = 0;
+        if (dmControls != null && dmControls.isVisible()) {
+            var bounds = dmCanvas.sceneToLocal(dmControls.localToScene(dmControls.getBoundsInLocal()));
+            right = clamp(bounds.getMinX(), 0, right);
+        }
+        for (javafx.scene.Node overlay : new javafx.scene.Node[]{toolChip, imageUnlockBanner, levelSwitcher}) {
+            if (overlay != null && overlay.isVisible()) {
+                var bounds = dmCanvas.sceneToLocal(overlay.localToScene(overlay.getBoundsInLocal()));
+                if (bounds.getMinX() < right && bounds.getMaxX() > 0) {
+                    top = Math.max(top, bounds.getMaxY());
+                }
+            }
+        }
+        top = clamp(top, 0, dmCanvas.getHeight());
+        return new Rectangle2D(0, top, right, dmCanvas.getHeight() - top);
+    }
+
+    private javafx.geometry.Point2D playerViewportScrollVelocity() {
+        if (!draggingPlayerViewport || playerStage == null || activeTool != EditorTool.SELECT
+                || !Tuning.PLAYER_VIEWPORT_EDGE_SCROLL.get() || ioBusy
+                || (primaryStage != null && !primaryStage.isFocused())) {
+            return javafx.geometry.Point2D.ZERO;
+        }
+        var cursor = dmCanvas.sceneToLocal(viewportDragSceneX, viewportDragSceneY);
+        if (dmControls != null && dmControls.isVisible()
+                && dmCanvas.sceneToLocal(dmControls.localToScene(dmControls.getBoundsInLocal())).contains(cursor)) {
+            return javafx.geometry.Point2D.ZERO;
+        }
+        // Mouse drags are captured by the canvas, so the event target does not identify overlays beneath the cursor.
+        if (mapCenter != null) {
+            for (javafx.scene.Node overlay : mapCenter.getChildren()) {
+                if (overlay == dmCanvas || overlay.isMouseTransparent() || !overlay.isVisible()) {
+                    continue;
+                }
+                var bounds = dmCanvas.sceneToLocal(overlay.localToScene(overlay.getBoundsInLocal()));
+                if (bounds.contains(cursor)) {
+                    return javafx.geometry.Point2D.ZERO;
+                }
+            }
+        }
+        return dmmt.ui.ViewportEdgeScroll.velocity(playerViewportInteractionArea(), cursor.getX(), cursor.getY(),
+                Tuning.PLAYER_VIEWPORT_EDGE_ZONE.get(), Tuning.PLAYER_VIEWPORT_EDGE_SPEED.get());
+    }
+
+    private void updatePlayerViewportDrag(long now) {
+        if (!draggingPlayerViewport || playerStage == null) {
+            viewportScrollNanos = 0;
+            return;
+        }
+        var velocity = playerViewportScrollVelocity();
+        if (velocity.magnitude() > 0) {
+            if (viewportScrollNanos != 0) {
+                double seconds = (now - viewportScrollNanos) / 1_000_000_000.0;
+                var camera = project.getViews().getDmCamera();
+                camera.setX(camera.getX() + velocity.getX() * seconds / camera.getZoom());
+                camera.setY(camera.getY() + velocity.getY() * seconds / camera.getZoom());
+            }
+            viewportScrollNanos = now;
+        } else {
+            viewportScrollNanos = 0;
+        }
+        var cursor = dmCanvas.sceneToLocal(viewportDragSceneX, viewportDragSceneY);
+        movePlayerViewportToCursor(cursor.getX(), cursor.getY());
+    }
+
+    private void movePlayerViewportToCursor(double x, double y) {
+        var rect = getPlayerViewportRect();
+        if (rect == null) {
+            return;
+        }
+        updateHover(x, y);
+        var playerCamera = project.getViews().getPlayerCamera();
+        playerCamera.setX(hoverWorldX - viewportDragOffsetX + rect.width() / 2.0);
+        playerCamera.setY(hoverWorldY - viewportDragOffsetY + rect.height() / 2.0);
+    }
+
+    private void finishPlayerViewportDrag() {
+        viewportScrollNanos = 0;
+        if (!draggingPlayerViewport) {
+            return;
+        }
+        draggingPlayerViewport = false;
+        var playerCamera = project.getViews().getPlayerCamera();
+        if (!same(startPlayerCameraX, playerCamera.getX()) || !same(startPlayerCameraY, playerCamera.getY())) {
+            double beforeX = startPlayerCameraX;
+            double beforeY = startPlayerCameraY;
+            double afterX = playerCamera.getX();
+            double afterY = playerCamera.getY();
+            executeWithHistory("Move player viewport",
+                    () -> {
+                        playerCamera.setX(afterX);
+                        playerCamera.setY(afterY);
+                    },
+                    () -> {
+                        playerCamera.setX(beforeX);
+                        playerCamera.setY(beforeY);
+                    });
+        }
+    }
+
     private CanvasMapRenderer.WorldRect getPlayerViewportRect() {
         if (playerCanvas == null || playerStage == null) {
             return null;
@@ -3767,6 +3894,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void cancelActiveTool() {
+        finishPlayerViewportDrag();
         if (fogDragging) {
             restoreFog(fogBeforeSnapshot);
         }
@@ -3776,6 +3904,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setActiveTool(EditorTool tool) {
+        finishPlayerViewportDrag();
         hideBrushSizeLabel();
         commitTextEdit();
         clearGroup();
@@ -4110,6 +4239,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void switchProject(DmProject next, Path file, LevelContext level) {
         finishNudge();
+        finishPlayerViewportDrag();
         commitTextEdit();
         project = next;
         project.getViews().setPlayerFrozen(false);
@@ -7165,6 +7295,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void undo() {
         finishNudge();
+        finishPlayerViewportDrag();
         commitTextEdit();
         historyFeedback.clear();
         if (undoStack.isEmpty()) {
@@ -7182,6 +7313,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void redo() {
         finishNudge();
+        finishPlayerViewportDrag();
         commitTextEdit();
         historyFeedback.clear();
         if (redoStack.isEmpty()) {

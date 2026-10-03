@@ -218,7 +218,7 @@ Dungeon Alchemist can export every floor of a multi-story building as its own dd
 - **Zoom:** mouse wheel, centred on the cursor.
 - **Pan:** right-drag (or drag with a suitable tool).
 - **Rotate the whole map** in 90° steps with the rotate buttons in the sidebar. Image layers, walls, fog, lights, effects, text boxes and both cameras rotate consistently and the rotation is saved.
-- **Player viewport rectangle:** when the player window is open, the DM view shows a window-like rectangle (cyan border with a "Player view" title bar) representing what the players see. Drag it by its title bar with the Select tool.
+- **Player viewport rectangle:** when the player window is open, the DM view shows a window-like rectangle (cyan border with a "Player view" title bar) representing what the players see. Drag it by its title bar with the Select tool. Hold the cursor near or beyond an unobstructed map edge to pan the DM view continuously, even with a stationary cursor or outside the DM window; the grabbed point stays under the cursor. Speed increases toward the edge (default 40-pixel zone, up to 600 logical pixels/second) and stays capped beyond it, with controlled diagonal movement at corners. Scrolling pauses over control overlays, and stops on release, cancellation, focus loss, map/level changes or player-window closure. The whole drag is one undo step; while frozen, only the staged viewport moves. Neither zoom nor map rotation changes. Enabled by default; disable or tune it in **Settings > Player screen** (`player.viewportEdgeScroll.*`).
 
 Large images (> 4096 px) are rendered at full resolution through an on-disk tile pyramid built in the background the first time a map is opened.
 

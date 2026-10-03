@@ -21,8 +21,13 @@ import javafx.scene.input.PickResult;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.stage.Stage;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -745,6 +750,224 @@ class ContextualBrushSizeTest {
             assertEquals(layer.getX(), loaded.getImageLayers().getFirst().getX());
             assertTrue(loaded.getMap().imageLayersLockedOrDefault());
         });
+    }
+
+    @Test
+    void stationaryViewportDragUsesElapsedTimeAndZoomKeepsAnchorAndFrozenOutputAndOneUndoStep() throws Exception {
+        onFx(() -> {
+            for (double zoom : new double[]{0.5, 1, 2}) {
+                for (int fps : new int[]{10, 30, 60}) {
+                    Fixture f = fixture();
+                    f.project.getViews().getDmCamera().setZoom(zoom);
+                    f.project.getMap().setRotationQuarterTurns(1);
+                    beginViewportDrag(f);
+                    DmProject frozen = DmProject.builder().build();
+                    var frozenCamera = copy(frozen.getViews().getPlayerCamera());
+                    set(f.app, "frozenPlayerProject", frozen);
+                    set(f.app, "frozenPlayerCamera", frozenCamera);
+                    f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, 400, 150, true));
+                    tickViewport(f, 1_000_000_000L);
+                    double playerStart = f.project.getViews().getPlayerCamera().getX();
+                    for (int frame = 1; frame <= fps; frame++) {
+                        tickViewport(f, 1_000_000_000L + Math.round(frame * 1_000_000_000.0 / fps));
+                        assertViewportAnchor(f, 400, 150);
+                    }
+                    assertEquals(600 / zoom, f.project.getViews().getDmCamera().getX(), 1e-7);
+                    assertEquals(playerStart + 600 / zoom, f.project.getViews().getPlayerCamera().getX(), 1e-7);
+                    assertEquals(0, f.project.getViews().getDmCamera().getY());
+                    assertEquals(zoom, f.project.getViews().getDmCamera().getZoom());
+                    assertEquals(1, f.project.getViews().getPlayerCamera().getZoom());
+                    assertEquals(1, f.project.getMap().getRotationQuarterTurns());
+                    assertSame(frozen, get(f.app, "frozenPlayerProject"));
+                    assertEquals(copy(DmProject.builder().build().getViews().getPlayerCamera()), frozenCamera);
+                    assertEquals(frozenCamera, frozen.getViews().getPlayerCamera());
+                    assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+                    f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, 400, 150, false));
+                    assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+                    assertEquals(0L, get(f.app, "viewportScrollNanos"));
+                    assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+                    double finalPlayerX = f.project.getViews().getPlayerCamera().getX();
+                    tickViewport(f, 20_000_000_000L);
+                    assertEquals(finalPlayerX, f.project.getViews().getPlayerCamera().getX());
+                    invoke(f.app, "undo");
+                    assertEquals(0, f.project.getViews().getPlayerCamera().getX());
+                    invoke(f.app, "redo");
+                    assertEquals(finalPlayerX, f.project.getViews().getPlayerCamera().getX());
+                    var service = new dmmt.service.ProjectService();
+                    Path saved = temp.resolve("viewport.dmmap");
+                    service.save(saved, f.project);
+                    assertEquals(finalPlayerX, service.load(saved).getViews().getPlayerCamera().getX());
+                }
+            }
+        });
+    }
+
+    @Test
+    void viewportScrollingIsDragOnlySuspendsAtControlsAndStopsOnCancellationFocusAndClosure() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            set(f.app, "viewportDragSceneX", 400.0);
+            set(f.app, "viewportDragSceneY", 150.0);
+            tickViewport(f, 1_000_000_000L);
+            assertEquals(0, f.project.getViews().getDmCamera().getX());
+            beginViewportDrag(f);
+            Region controls = new Region();
+            controls.resizeRelocate(300, 0, 100, 200);
+            f.root.getChildren().add(controls);
+            set(f.app, "dmControls", controls);
+            HBox chip = new HBox();
+            chip.resizeRelocate(120, 0, 100, 40);
+            f.root.getChildren().add(chip);
+            set(f.app, "toolChip", chip);
+            var area = (javafx.geometry.Rectangle2D) invoke(f.app, "playerViewportInteractionArea");
+            assertEquals(new javafx.geometry.Rectangle2D(0, 40, 300, 260), area);
+            set(f.app, "viewportDragSceneX", 290.0);
+            set(f.app, "viewportDragSceneY", 150.0);
+            tickViewport(f, 1_000_000_000L);
+            tickViewport(f, 2_000_000_000L);
+            assertEquals(450, f.project.getViews().getDmCamera().getX(), 1e-9);
+            for (double[] point : new double[][]{{310, 150}, {200, 150}}) {
+                set(f.app, "viewportDragSceneX", point[0]);
+                set(f.app, "viewportDragSceneY", point[1]);
+                tickViewport(f, 10_000_000_000L);
+                assertEquals(450, f.project.getViews().getDmCamera().getX(), 1e-9);
+                assertEquals(0L, get(f.app, "viewportScrollNanos"));
+                assertTrue((boolean) get(f.app, "draggingPlayerViewport"));
+            }
+            set(f.app, "viewportDragSceneX", 290.0);
+            tickViewport(f, 20_000_000_000L);
+            assertEquals(450, f.project.getViews().getDmCamera().getX(), 1e-9);
+            tickViewport(f, 21_000_000_000L);
+            assertEquals(900, f.project.getViews().getDmCamera().getX(), 1e-9);
+            Tuning.apply(key -> key.equals("player.viewportEdgeScroll.enabled") ? "false" : null);
+            tickViewport(f, 22_000_000_000L);
+            assertEquals(900, f.project.getViews().getDmCamera().getX(), 1e-9);
+            assertEquals(0L, get(f.app, "viewportScrollNanos"));
+            Tuning.apply(key -> null);
+            set(f.app, "ioBusy", true);
+            tickViewport(f, 23_000_000_000L);
+            assertEquals(900, f.project.getViews().getDmCamera().getX(), 1e-9);
+            set(f.app, "ioBusy", false);
+            invoke(f.app, "cancelActiveTool");
+            assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            f.canvas.requestFocus();
+            beginViewportDrag(f);
+            f.fogSlider.requestFocus();
+            assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+            f.canvas.requestFocus();
+            beginViewportDrag(f);
+            invoke(f.app, "closePlayerWindow");
+            assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+            assertNull(get(f.app, "playerStage"));
+            assertEquals(0L, get(f.app, "viewportScrollNanos"));
+        });
+    }
+
+    @Test
+    void viewportScrollingSuspendsUnderAnOverlayWithoutInputAndClearsOnProjectSwitch() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            beginViewportDrag(f);
+            f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, 400, 300, true));
+            tickViewport(f, 1_000_000_000L);
+            tickViewport(f, 2_000_000_000L);
+            var dm = f.project.getViews().getDmCamera();
+            assertEquals(600, Math.hypot(dm.getX(), dm.getY()), 1e-9);
+            assertViewportAnchor(f, 400, 300);
+            double beforeX = dm.getX();
+            double beforeY = dm.getY();
+            StackPane mapCenter = new StackPane();
+            mapCenter.setManaged(false);
+            mapCenter.resize(400, 300);
+            Region overlay = new Region();
+            overlay.setManaged(false);
+            overlay.resizeRelocate(360, 260, 40, 40);
+            mapCenter.getChildren().add(overlay);
+            f.root.getChildren().add(mapCenter);
+            set(f.app, "mapCenter", mapCenter);
+            tickViewport(f, 10_000_000_000L);
+            assertEquals(beforeX, dm.getX());
+            assertEquals(beforeY, dm.getY());
+            assertTrue((boolean) get(f.app, "draggingPlayerViewport"));
+            assertEquals(0L, get(f.app, "viewportScrollNanos"));
+            overlay.setVisible(false);
+            tickViewport(f, 20_000_000_000L);
+            assertEquals(beforeX, dm.getX());
+            tickViewport(f, 21_000_000_000L);
+            assertEquals(beforeX * 2, dm.getX(), 1e-9);
+            assertEquals(beforeY * 2, dm.getY(), 1e-9);
+            DmProject next = DmProject.builder().build();
+            next.getViews().getDmCamera().setX(50);
+            next.getViews().getPlayerCamera().setX(60);
+            DmProject frozen = DmProject.builder().build();
+            set(f.app, "frozenPlayerProject", frozen);
+            invoke(f.app, "switchProject", new Class<?>[]{DmProject.class, Path.class}, next, null);
+            assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+            assertEquals(0L, get(f.app, "viewportScrollNanos"));
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            tickViewport(f, 30_000_000_000L);
+            assertEquals(50, next.getViews().getDmCamera().getX());
+            assertEquals(60, next.getViews().getPlayerCamera().getX());
+            assertSame(frozen, get(f.app, "frozenPlayerProject"));
+        });
+    }
+
+    @Test
+    void viewportDragContinuesOutsideTheWindowWithStationaryCursorAndStopsOnOutsideRelease() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            beginViewportDrag(f);
+            long now = 1_000_000_000L;
+            for (double[] point : new double[][]{{-200, 150}, {800, 150}, {200, -200}, {200, 600}, {800, 600}}) {
+                f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, point[0], point[1], true));
+                tickViewport(f, now);
+                double beforeX = f.project.getViews().getDmCamera().getX();
+                double beforeY = f.project.getViews().getDmCamera().getY();
+                tickViewport(f, now + 1_000_000_000L);
+                var dm = f.project.getViews().getDmCamera();
+                assertEquals(600, Math.hypot(dm.getX() - beforeX, dm.getY() - beforeY), 1e-9);
+                assertViewportAnchor(f, point[0], point[1]);
+                assertTrue((boolean) get(f.app, "draggingPlayerViewport"));
+                now += 2_000_000_000L;
+            }
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, 800, 600, false));
+            assertFalse((boolean) get(f.app, "draggingPlayerViewport"));
+            assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+            var before = copy(f.project.getViews().getDmCamera());
+            tickViewport(f, now);
+            assertEquals(before, f.project.getViews().getDmCamera());
+        });
+    }
+
+    private static void beginViewportDrag(Fixture f) throws Exception {
+        f.project.getViews().getPlayerCamera().setX(0);
+        f.project.getViews().getPlayerCamera().setY(0);
+        set(f.app, "playerStage", new Stage());
+        set(f.app, "playerCanvas", new Canvas(160, 100));
+        var camera = f.project.getViews().getDmCamera();
+        double x = 180 - camera.getX() * camera.getZoom();
+        double y = 150 - (50 + camera.getY()) * camera.getZoom() - 10;
+        f.canvas.getOnMousePressed().handle(mouse(f.canvas, MouseEvent.MOUSE_PRESSED, x, y, true));
+        assertTrue((boolean) get(f.app, "draggingPlayerViewport"));
+    }
+
+    private static MouseEvent mouse(Canvas canvas, javafx.event.EventType<MouseEvent> type, double x, double y, boolean down) {
+        return new MouseEvent(type, x, y, x, y, MouseButton.PRIMARY, 1, false, false, false, false,
+                down, false, false, false, false, true, new PickResult(canvas, x, y));
+    }
+
+    private static void tickViewport(Fixture f, long now) throws Exception {
+        invoke(f.app, "updatePlayerViewportDrag", new Class<?>[]{long.class}, now);
+    }
+
+    private static void assertViewportAnchor(Fixture f, double x, double y) throws Exception {
+        var rect = (dmmt.render.CanvasMapRenderer.WorldRect) invoke(f.app, "getPlayerViewportRect");
+        var renderer = (dmmt.render.CanvasMapRenderer) get(f.app, "renderer");
+        var camera = f.project.getViews().getDmCamera();
+        assertEquals(x, renderer.worldToScreenX(rect.x() + (double) get(f.app, "viewportDragOffsetX"), 400, camera), 1e-7);
+        assertEquals(y, renderer.worldToScreenY(rect.y() + (double) get(f.app, "viewportDragOffsetY"), 300, camera), 1e-7);
     }
 
     private void onFx(CheckedRunnable action) throws Exception {

@@ -453,6 +453,9 @@ public final class AppSettings {
             case "window":
                 return new Placement("Main window", 1);
             case "player":
+                if (key.startsWith("player.viewportEdgeScroll.")) {
+                    return new Placement("Viewport edge scrolling", 2);
+                }
                 return key.startsWith("player.zoom.") ? new Placement("Player zoom", 2) : new Placement("Calibration limits", 1);
             case "dm":
                 return new Placement("DM view zoom", 1);

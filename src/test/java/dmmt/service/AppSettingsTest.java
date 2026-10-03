@@ -179,6 +179,8 @@ class AppSettingsTest {
         assertTrue(infos.stream().anyMatch(i -> i.key().equals("texture.fire.layer1.speedX") && "Fire/Layer 1".equals(i.group())));
         assertTrue(infos.stream().anyMatch(i -> i.key().equals("cache.imageTiles") && "Map image cache".equals(i.group())));
         assertTrue(infos.stream().anyMatch(i -> i.key().equals("player.zoom.min") && "Player zoom".equals(i.group())));
+        assertTrue(infos.stream().anyMatch(i -> i.key().equals("player.viewportEdgeScroll.enabled")
+                && "Viewport edge scrolling".equals(i.group()) && !i.restart()));
     }
 
     @Test
@@ -215,6 +217,26 @@ class AppSettingsTest {
         assertEquals(3.0, Tuning.DM_ZOOM_MAX.get());
         settings.applyEdit(Tuning.DM_ZOOM_MAX.key(), null);
         assertEquals(Tuning.DM_ZOOM_MAX.defaultValue(), Tuning.DM_ZOOM_MAX.get());
+    }
+
+    @Test
+    void viewportEdgeScrollingDefaultsPersistsAndClampsTuning() {
+        Path file = dir.resolve("viewport-settings.ini");
+        AppSettings settings = new AppSettings(file);
+        assertTrue(Tuning.PLAYER_VIEWPORT_EDGE_SCROLL.get());
+        assertEquals(40.0, Tuning.PLAYER_VIEWPORT_EDGE_ZONE.get());
+        assertEquals(600.0, Tuning.PLAYER_VIEWPORT_EDGE_SPEED.get());
+        settings.applyEdit(Tuning.PLAYER_VIEWPORT_EDGE_SCROLL.key(), "false");
+        settings.applyEdit(Tuning.PLAYER_VIEWPORT_EDGE_ZONE.key(), "55");
+        settings.applyEdit(Tuning.PLAYER_VIEWPORT_EDGE_SPEED.key(), "900");
+        new AppSettings(file);
+        assertFalse(Tuning.PLAYER_VIEWPORT_EDGE_SCROLL.get());
+        assertEquals(55.0, Tuning.PLAYER_VIEWPORT_EDGE_ZONE.get());
+        assertEquals(900.0, Tuning.PLAYER_VIEWPORT_EDGE_SPEED.get());
+        settings.applyEdit(Tuning.PLAYER_VIEWPORT_EDGE_ZONE.key(), "0");
+        settings.applyEdit(Tuning.PLAYER_VIEWPORT_EDGE_SPEED.key(), "99999");
+        assertEquals(1.0, Tuning.PLAYER_VIEWPORT_EDGE_ZONE.get());
+        assertEquals(3000.0, Tuning.PLAYER_VIEWPORT_EDGE_SPEED.get());
     }
 
     @Test

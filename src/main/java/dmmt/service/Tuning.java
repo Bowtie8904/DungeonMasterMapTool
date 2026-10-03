@@ -246,6 +246,12 @@ public final class Tuning {
 
     // ---- Player screen ----
 
+    public static final Setting<Boolean> PLAYER_VIEWPORT_EDGE_SCROLL = bool(PLAYER, "player.viewportEdgeScroll.enabled", true, false,
+            "Automatically pan the DM view near map edges while dragging the player viewport title bar.");
+    public static final Setting<Double> PLAYER_VIEWPORT_EDGE_ZONE = decimal(PLAYER, "player.viewportEdgeScroll.zonePx", 40, 1, 300, false,
+            "Width of the player viewport drag edge zone in logical pixels.");
+    public static final Setting<Double> PLAYER_VIEWPORT_EDGE_SPEED = decimal(PLAYER, "player.viewportEdgeScroll.maxSpeedPxPerSecond", 600, 1, 3000, false,
+            "Maximum DM pan speed during a player viewport drag in logical pixels per second (also caps diagonal speed).");
     public static final Setting<Double> PLAYER_ZOOM_MIN_STEP = decimal(PLAYER, "player.zoom.minStep", -2, -6, 0, true,
             "Lowest value of the player zoom slider as a power of two (-2 = 25 %).");
     public static final Setting<Double> PLAYER_ZOOM_MAX_STEP = decimal(PLAYER, "player.zoom.maxStep", 2, 0, 6, true,
@@ -324,7 +330,7 @@ public final class Tuning {
 
     // ---- Editing ----
 
-    public static final Setting<Integer> HISTORY_MAX_STEPS = integer(EDITING, "history.maxSteps", 100, 1, 10000, false,
+    public static final Setting<Integer> HISTORY_MAX_STEPS = integer(EDITING, "history.maxSteps", 10, 1, 10000, false,
             "Number of undo steps kept.");
     public static final Setting<Double> BRUSH_DEFAULT = decimal(EDITING, "brush.defaultSizeTiles", 1.5, 0.1, 200, true,
             "Brush size in tiles when the application starts.");
