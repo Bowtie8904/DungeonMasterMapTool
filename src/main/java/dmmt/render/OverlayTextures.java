@@ -800,19 +800,142 @@ public final class OverlayTextures {
         return withAlpha(winner >= 0 ? 1.0 : 0.82, color);
     }
 
+    /**
+     * Tangled brambles: dark leaf-litter ground dotted with a few domed leaf clumps, overlaid by several
+     * looping vine strands. Each strand is shaded like a rounded cable (a lit side, a soft highlight along
+     * its spine and a dark contact rim where it lies over whatever is behind it) rather than a flat ribbon,
+     * and sprouts short triangular thorns at irregular intervals that are shaded the same directional way so
+     * they read as solid barbs. Strands are drawn with a per-crossing depth order so overlapping vines look
+     * like they actually weave over and under one another instead of sitting on a single flat plane.
+     */
     private static int thorns(double u, double v, int rgb) {
-        double n1 = fbm(u, v, 3, 3, 4, 201);
-        double n2 = fbm(u, v, 4, 3, 4, 203);
-        double vine = Math.max(smoothstep(0.055, 0.02, Math.abs(n1 - 0.5)), smoothstep(0.055, 0.02, Math.abs(n2 - 0.5)));
-        double[] w = worley(u, v, 8, 207);
-        int cell = (int) w[4];
-        double angle = Math.atan2(w[3], w[2]);
-        double tri = Math.abs(fract(angle / (2 * Math.PI) * 3 + hash(cell, 2, 209)) - 0.5) * 2;
-        double limit = 0.34 * Math.pow(1 - tri, 1.6);
-        double spike = hash(cell, 5, 211) > 0.35 ? smoothstep(limit + 0.03, limit - 0.01, w[0]) : 0;
-        double leaf = smoothstep(0.55, 0.8, fbm(u, v, 5, 5, 3, 213)) * 0.3;
-        int color = mix(mix(rgb, 0x000000, 0.35), mix(rgb, 0xFFFFFF, 0.4), spike);
-        return withAlpha(Math.max(leaf, Math.max(vine, spike)), color);
+        double litter = fbm(u, v, 14, 14, 3, 701);
+        double blotch = fbm(u, v, 34, 34, 2, 702);
+        int ground = mix(mix(rgb, 0x000000, 0.74), mix(rgb, 0x000000, 0.5), litter);
+        ground = mix(ground, mix(rgb, 0x000000, 0.3), smoothstep(0.62, 0.85, blotch) * 0.4);
+
+        // A handful of small domed leaf clumps sitting on the ground, always covered by the vines above.
+        double[] lw = worley(u, v, 9, 311);
+        int leafCell = (int) lw[4];
+        if (hash(leafCell, 11, 313) > 0.42) {
+            double leafRadius = 0.32 + 0.12 * hash(leafCell, 12, 313);
+            double rot = hash(leafCell, 13, 313) * Math.PI;
+            double cosR = Math.cos(rot);
+            double sinR = Math.sin(rot);
+            double ox = lw[2] * cosR - lw[3] * sinR;
+            double oy = -lw[2] * sinR + lw[3] * cosR;
+            double aspect = 0.5 + 0.22 * hash(leafCell, 14, 313);
+            double ex = ox / aspect;
+            double ey = oy * aspect;
+            double ed = Math.hypot(ex, ey);
+            if (ed < leafRadius) {
+                double nx = ex / leafRadius;
+                double ny = ey / leafRadius;
+                double dome = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+                double facing = clamp(0.3 + dome * 0.6 - ny * 0.2, 0, 1);
+                double vein = smoothstep(0.05, 0.0, Math.abs(oy)) * smoothstep(leafRadius, 0, Math.abs(ox) - leafRadius * 0.1);
+                int leafBase = shiftHue(rgb, 18);
+                int leafColor = mix(mix(leafBase, 0x000000, 0.45), mix(leafBase, 0xFFFFFF, 0.5), facing);
+                leafColor = mix(leafColor, mix(leafBase, 0xFFFFFF, 0.65), vein * 0.5);
+                leafColor = mix(leafColor, 0x000000, smoothstep(leafRadius * 0.82, leafRadius, ed) * 0.5);
+                ground = leafColor;
+            }
+        }
+
+        int bestColor = ground;
+        boolean covered = false;
+        double bestDepth = -1;
+        double contactShadow = 0;
+
+        int strandCount = 4;
+        for (int s = 0; s < strandCount; s++) {
+            int seed = 709 + s * 97;
+            double vBase = (s + 0.5) / strandCount + 0.08 * (hash(s, 1, seed) - 0.5);
+            double amp1 = 0.05 + 0.05 * hash(s, 2, seed);
+            double amp2 = 0.02 + 0.02 * hash(s, 3, seed);
+            double k1 = 1 + Math.floor(hash(s, 4, seed) * 2);
+            double k2 = 2 + Math.floor(hash(s, 5, seed) * 2);
+            double phase1 = hash(s, 6, seed) * 2 * Math.PI;
+            double phase2 = hash(s, 7, seed) * 2 * Math.PI;
+            double radius = 0.016 + 0.009 * hash(s, 8, seed);
+
+            double angle1 = 2 * Math.PI * k1 * u + phase1;
+            double angle2 = 2 * Math.PI * k2 * u + phase2;
+            double curve = vBase + amp1 * Math.sin(angle1) + amp2 * Math.sin(angle2);
+            double slope = 2 * Math.PI * k1 * amp1 * Math.cos(angle1) + 2 * Math.PI * k2 * amp2 * Math.cos(angle2);
+
+            double dv = v - curve;
+            dv -= Math.round(dv);
+            double perp = dv / Math.sqrt(1 + slope * slope);
+            double norm = perp / radius;
+            double absNorm = Math.abs(norm);
+
+            // Thorn slots run along the strand; each slot may sprout a solid triangular barb to one side,
+            // its base flush against the vine's own edge and tapering to a sharp point further out. The
+            // slot count differs per strand so neighbouring vines don't sprout thorns in metronomic sync.
+            int slotScale = 9 + (int) Math.floor(hash(s, 9, seed) * 7);
+            double slotPos = u * slotScale + s * 6.1;
+            int thornSlot = Math.floorMod((int) Math.floor(slotPos), slotScale);
+            double slotFrac = fract(slotPos);
+            double thornMask = 0;
+            double thornShade = 0;
+            if (hash(thornSlot, s, seed + 400) > 0.48) {
+                double thornSide = hash(thornSlot, s + 50, seed + 401) > 0.5 ? 1 : -1;
+                if (Math.signum(norm) == thornSide) {
+                    double thornLenR = 3.2 + 2.6 * hash(thornSlot, s + 60, seed + 402);
+                    double baseHalfWidthR = 0.55 + 0.25 * hash(thornSlot, s + 70, seed + 403);
+                    double xR = (slotFrac - 0.5) / slotScale / radius;
+                    double yR = absNorm - 1;
+                    double tipFrac = clamp(yR, 0, thornLenR) / thornLenR;
+                    // curved taper (not linear) so the barb stays needle-thin along most of its length
+                    // and only flares out right at the base where it fuses into the vine.
+                    double widthAt = baseHalfWidthR * Math.pow(1 - tipFrac, 1.6);
+                    double lenMask = smoothstep(thornLenR + 0.15, thornLenR - 0.15, yR);
+                    double widthMask = smoothstep(-0.1, 0.1, widthAt - Math.abs(xR));
+                    thornMask = Math.min(lenMask, widthMask);
+                    if (thornMask > 0) {
+                        double along = widthAt > 0.001 ? clamp(Math.abs(xR) / widthAt, 0, 1) : 1;
+                        thornShade = clamp(0.25 + (1 - along) * 0.35 + (1 - tipFrac) * 0.1 - thornSide * 0.1, 0, 1);
+                    }
+                }
+            }
+            boolean onVine = absNorm < 1.0;
+            boolean onThorn = thornMask > 0.03;
+
+            if (onVine || onThorn) {
+                double height = Math.sqrt(Math.max(0, 1 - Math.min(1, norm * norm)));
+                double facing = height * 0.85 - Math.signum(norm) * 0.3;
+                double bark = fbm(u * 5 + s * 3, dv * 18, 20, 20, 2, 733 + s) - 0.5;
+                double tone = clamp(0.28 + facing * 0.55 + bark * 0.2, 0, 1);
+                int color = mix(mix(rgb, 0x000000, 0.55), mix(rgb, 0xFFFFFF, 0.5), tone);
+                if (onThorn) {
+                    // Thorns read as hardened, slightly browned barbs rather than soft leafy growth.
+                    int thornBase = shiftHue(rgb, -22);
+                    int thornColor = mix(mix(thornBase, 0x000000, 0.45), mix(thornBase, 0xFFFFFF, 0.42), thornShade);
+                    color = onVine ? mix(color, thornColor, thornMask) : thornColor;
+                }
+                double edgeDark = onVine ? smoothstep(0.7, 1.0, absNorm) * 0.45 : 0;
+                if (onThorn) {
+                    // dark contact rim along the thorn's own silhouette, so it visually separates from the vine.
+                    edgeDark = Math.max(edgeDark, (1 - thornMask) * 0.3);
+                }
+                color = mix(color, 0x000000, edgeDark);
+
+                int crossCell = Math.floorMod((int) Math.floor(u * 5), 5);
+                double depth = s * 3 + hash(crossCell, s, seed + 900) * 2.5 + (onThorn ? 0.5 : 0);
+                if (depth > bestDepth) {
+                    bestDepth = depth;
+                    bestColor = color;
+                    covered = true;
+                }
+            }
+            contactShadow = Math.max(contactShadow, smoothstep(1.6, 1.0, absNorm) * 0.3);
+        }
+
+        if (!covered) {
+            bestColor = mix(bestColor, 0x000000, contactShadow);
+        }
+        return withAlpha(0.95, bestColor);
     }
 
     /** Hex grid (period of 3 x 5 hex units so it tiles) with softly flickering cells and bright edges. */
