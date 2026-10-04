@@ -850,21 +850,51 @@ public final class OverlayTextures {
         int strandCount = 4;
         for (int s = 0; s < strandCount; s++) {
             int seed = 709 + s * 97;
+            // Each strand runs along one of four seamlessly tileable directions (horizontal, vertical, or
+            // either diagonal) instead of always sloping left-to-right, so the tangle reads as random growth
+            // rather than a row of parallel waves. Diagonal axes move sqrt(2) times faster than a straight
+            // one for the same (u, v) step, so amplitude/radius are scaled up to keep a consistent thickness.
+            int orientation = (int) Math.floor(hash(s, 4, 991) * 4);
+            double axisU;
+            double crossV;
+            double axisScale;
+            switch (orientation) {
+                case 1 -> {
+                    axisU = v;
+                    crossV = u;
+                    axisScale = 1;
+                }
+                case 2 -> {
+                    axisU = u + v;
+                    crossV = u - v + 1;
+                    axisScale = 1.41421356;
+                }
+                case 3 -> {
+                    axisU = u - v + 1;
+                    crossV = u + v;
+                    axisScale = 1.41421356;
+                }
+                default -> {
+                    axisU = u;
+                    crossV = v;
+                    axisScale = 1;
+                }
+            }
             double vBase = (s + 0.5) / strandCount + 0.08 * (hash(s, 1, seed) - 0.5);
-            double amp1 = 0.05 + 0.05 * hash(s, 2, seed);
-            double amp2 = 0.02 + 0.02 * hash(s, 3, seed);
+            double amp1 = (0.05 + 0.05 * hash(s, 2, seed)) * axisScale;
+            double amp2 = (0.02 + 0.02 * hash(s, 3, seed)) * axisScale;
             double k1 = 1 + Math.floor(hash(s, 4, seed) * 2);
             double k2 = 2 + Math.floor(hash(s, 5, seed) * 2);
             double phase1 = hash(s, 6, seed) * 2 * Math.PI;
             double phase2 = hash(s, 7, seed) * 2 * Math.PI;
-            double radius = 0.016 + 0.009 * hash(s, 8, seed);
+            double radius = (0.016 + 0.009 * hash(s, 8, seed)) * axisScale;
 
-            double angle1 = 2 * Math.PI * k1 * u + phase1;
-            double angle2 = 2 * Math.PI * k2 * u + phase2;
+            double angle1 = 2 * Math.PI * k1 * axisU + phase1;
+            double angle2 = 2 * Math.PI * k2 * axisU + phase2;
             double curve = vBase + amp1 * Math.sin(angle1) + amp2 * Math.sin(angle2);
             double slope = 2 * Math.PI * k1 * amp1 * Math.cos(angle1) + 2 * Math.PI * k2 * amp2 * Math.cos(angle2);
 
-            double dv = v - curve;
+            double dv = crossV - curve;
             dv -= Math.round(dv);
             double perp = dv / Math.sqrt(1 + slope * slope);
             double norm = perp / radius;
@@ -874,7 +904,7 @@ public final class OverlayTextures {
             // its base flush against the vine's own edge and tapering to a sharp point further out. The
             // slot count differs per strand so neighbouring vines don't sprout thorns in metronomic sync.
             int slotScale = 9 + (int) Math.floor(hash(s, 9, seed) * 7);
-            double slotPos = u * slotScale + s * 6.1;
+            double slotPos = axisU * slotScale + s * 6.1;
             int thornSlot = Math.floorMod((int) Math.floor(slotPos), slotScale);
             double slotFrac = fract(slotPos);
             double thornMask = 0;
@@ -905,7 +935,7 @@ public final class OverlayTextures {
             if (onVine || onThorn) {
                 double height = Math.sqrt(Math.max(0, 1 - Math.min(1, norm * norm)));
                 double facing = height * 0.85 - Math.signum(norm) * 0.3;
-                double bark = fbm(u * 5 + s * 3, dv * 18, 20, 20, 2, 733 + s) - 0.5;
+                double bark = fbm(axisU * 5 + s * 3, dv * 18, 20, 20, 2, 733 + s) - 0.5;
                 double tone = clamp(0.28 + facing * 0.55 + bark * 0.2, 0, 1);
                 int color = mix(mix(rgb, 0x000000, 0.55), mix(rgb, 0xFFFFFF, 0.5), tone);
                 if (onThorn) {
@@ -921,7 +951,7 @@ public final class OverlayTextures {
                 }
                 color = mix(color, 0x000000, edgeDark);
 
-                int crossCell = Math.floorMod((int) Math.floor(u * 5), 5);
+                int crossCell = Math.floorMod((int) Math.floor(axisU * 5), 5);
                 double depth = s * 3 + hash(crossCell, s, seed + 900) * 2.5 + (onThorn ? 0.5 : 0);
                 if (depth > bestDepth) {
                     bestDepth = depth;
