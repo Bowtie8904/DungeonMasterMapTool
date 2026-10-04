@@ -681,17 +681,123 @@ public final class OverlayTextures {
         return withAlpha(0.92, color);
     }
 
+    /**
+     * Top-down pile of broken debris: two scatter scales of individually shaped stones (each a random blend
+     * between a round pebble and an irregular, pointy-cornered shard) overlap each other in random stacking
+     * order, with the higher pieces casting a thin contact shadow onto whatever sits beneath or beside them.
+     * Gaps show a dusty gravel floor sprinkled with tiny pebbles.
+     */
     private static int rubble(double u, double v, int rgb) {
-        double[] w = worley(u, v, 6, 193);
-        int cell = (int) w[4];
-        double stone = smoothstep(0.03, 0.12, w[1] - w[0]);
-        double tone = 0.35 + 0.45 * hash(cell, 1, 197);
-        double lit = clamp(-(w[2] + w[3]) * 0.5, -1, 1);
-        double grain = fbm(u, v, 24, 24, 3, 199);
-        double shade = clamp(tone + lit * 0.3 + (grain - 0.5) * 0.35, 0, 1);
-        int face = mix(mix(rgb, 0x000000, 0.55), mix(rgb, 0xFFFFFF, 0.25), shade);
-        int dust = mix(rgb, 0x000000, 0.8);
-        return withAlpha(0.75 + 0.25 * stone, mix(dust, face, stone));
+        double[] fine = worley(u, v, 20, 233);
+        boolean speck = hash((int) fine[4], 7, 239) > 0.6;
+        double speckle = speck ? smoothstep(0.14, 0.0, fine[0]) : 0;
+        double silt = fbm(u, v, 30, 30, 3, 241);
+        int ground = mix(mix(rgb, 0x000000, 0.78 - 0.1 * silt), mix(rgb, 0xFFFFFF, 0.32), speckle);
+
+        int[] scaleN = {4, 7};
+        int[] scaleSeed = {401, 457};
+        double[] scaleRadius = {0.74, 0.46};
+
+        // Each candidate stone found in the 3x3 neighbourhood of both scatter scales: {distance, radius, depth, shade}.
+        double[][] cand = new double[18][4];
+        int count = 0;
+
+        for (int s = 0; s < scaleN.length; s++) {
+            int n = scaleN[s];
+            int seed = scaleSeed[s];
+            double baseRadius = scaleRadius[s];
+            double x = u * n;
+            double y = v * n;
+            int cx = (int) Math.floor(x);
+            int cy = (int) Math.floor(y);
+            for (int j = -1; j <= 1; j++) {
+                for (int i = -1; i <= 1; i++) {
+                    int gx = cx + i;
+                    int gy = cy + j;
+                    int wx = Math.floorMod(gx, n);
+                    int wy = Math.floorMod(gy, n);
+                    double px = gx + hash(wx, wy, seed);
+                    double py = gy + hash(wx, wy, seed + 17);
+                    double dx = x - px;
+                    double dy = y - py;
+                    double d = Math.hypot(dx, dy);
+                    int cellId = (wx * 131 + wy) * 4 + s + seed;
+
+                    // Blend a round pebble silhouette with an irregular polygon shard: each shard vertex gets
+                    // its own random length and the radius is interpolated between the two vertices bracketing
+                    // the current angle, so corners stick out and edges pull back in, like a broken rock face.
+                    double angle = Math.atan2(dy, dx);
+                    double roundness = hash(cellId, 51, 601);
+                    int facetCount = 5 + (int) (hash(cellId, 52, 601) * 4);
+                    double facetAngle = 2 * Math.PI / facetCount;
+                    double rot = hash(cellId, 53, 601) * facetCount;
+                    double raw = angle / facetAngle + rot;
+                    int vertex0 = (int) Math.floor(raw);
+                    int vertex1 = vertex0 + 1;
+                    double within = raw - vertex0;
+                    double r0 = 0.68 + 0.35 * hash(cellId * 17 + vertex0, 70, 601);
+                    double r1 = 0.68 + 0.35 * hash(cellId * 17 + vertex1, 70, 601);
+                    double angularRadius = baseRadius * lerp(r0, r1, smoothstep(0, 1, within));
+                    double bump = 1 + 0.07 * Math.sin(angle * 5 + hash(cellId, 54, 601) * 10);
+                    double roundRadius = baseRadius * bump;
+                    double radius = roundRadius * roundness + angularRadius * (1 - roundness);
+                    double depth = hash(cellId, 55, 601);
+
+                    // Shading: a soft sphere-like highlight for the round part, discrete per-facet brightness
+                    // offsets so flat broken faces read as distinct planes, plus a dark contact rim all around
+                    // the stone's own silhouette so neighbouring pieces visually separate from one another.
+                    double nx = dx / radius;
+                    double ny = dy / radius;
+                    double heightSq = Math.max(0, 1 - nx * nx - ny * ny);
+                    double facing = nx * -0.5 + ny * -0.75 + Math.sqrt(heightSq) * 0.45;
+                    double tone = 0.26 + 0.46 * hash(cellId, 56, 601);
+                    // Blend the two bracketing vertices' tones the same way the radius is blended, so any
+                    // brightness change follows the same smooth corner-to-corner gradient as the silhouette
+                    // instead of a hard radial seam (which would read as a cut gem rather than a rock face).
+                    double facetTone0 = hash(cellId * 31 + vertex0, 57, 601) - 0.5;
+                    double facetTone1 = hash(cellId * 31 + vertex1, 57, 601) - 0.5;
+                    double facetTone = lerp(facetTone0, facetTone1, smoothstep(0, 1, within)) * (1 - roundness);
+                    double grain = fbm(u, v, 26, 26, 3, 211 + s * 19) - 0.5;
+                    double blotch = fbm(u, v, 10, 10, 2, 277 + s * 13) - 0.5;
+                    double rimDark = smoothstep(radius * 0.7, radius, d) * 0.4;
+                    double shade = clamp(tone + facing * 0.25 + facetTone * 0.25 + grain * 0.22 + blotch * 0.3 - rimDark, 0, 1);
+
+                    if (count < cand.length) {
+                        cand[count][0] = d;
+                        cand[count][1] = radius;
+                        cand[count][2] = depth;
+                        cand[count][3] = shade;
+                        count++;
+                    }
+                }
+            }
+        }
+
+        int winner = -1;
+        double winnerDepth = -1;
+        for (int k = 0; k < count; k++) {
+            if (cand[k][0] < cand[k][1] && cand[k][2] > winnerDepth) {
+                winnerDepth = cand[k][2];
+                winner = k;
+            }
+        }
+
+        double ao = 0;
+        for (int k = 0; k < count; k++) {
+            if (k == winner || cand[k][2] <= winnerDepth) {
+                continue;
+            }
+            double edgeDist = cand[k][0] - cand[k][1];
+            if (edgeDist >= 0) {
+                ao = Math.max(ao, smoothstep(0.12, 0.0, edgeDist));
+            }
+        }
+
+        int color = winner >= 0
+                ? mix(mix(rgb, 0x000000, 0.5), mix(rgb, 0xFFFFFF, 0.38), cand[winner][3])
+                : ground;
+        color = mix(color, 0x000000, ao * 0.4);
+        return withAlpha(winner >= 0 ? 1.0 : 0.82, color);
     }
 
     private static int thorns(double u, double v, int rgb) {
