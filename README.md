@@ -48,7 +48,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
 - **Handouts**: paste images from the clipboard and show them on the player screen.
-- Organises maps in a **folder library** with thumbnails, search, drag & drop and auto-save.
+- Organises maps in a **folder library** with thumbnails, tags, name/tag search, drag & drop and auto-save.
 - **Multilevel maps**: several floors of a building (e.g. Dungeon Alchemist level exports) shown as one map, with quick up/down level switching.
 - Full **undo/redo**.
 
@@ -137,19 +137,29 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - Each map is shown by **name only**, with a **thumbnail** (hover for a larger preview). Thumbnails show only the map images (never fog, lights or effects) at the current rotation.
 - The currently open map is highlighted, and its name is shown at the top.
 - **Toolbar:** New map, Import dd2vtt, Import folder, Import multilevel map, Save, Auto-save toggle (with interval), New folder, Refresh, Rotate left, Rotate right.
-- **Search bar:** case-insensitive live filter on map and folder names. A matching map is shown with its parent folders, a matching folder with its content. `Esc` or the clear button restores the tree.
+- **Search bar:** case-insensitive live filter on map names, tags and folder names. The search is split into words, and **every word** must match part of the map name or a tag; words may match different fields. For example, `tav haven` finds a map named `Haven` tagged `tavern`. A matching map is shown with its parent folders, a matching folder with its content. `Esc` or the clear button restores the tree.
 - **Open a map:** double-click or press `Enter`. The current map is auto-saved first.
 - **Recent maps:** the list below the tree shows the maps you opened last (most recent first, size set by `ui.recentMaps.max`). Double-click one to open it again.
 - **Move:** drag & drop maps or folders onto a folder (or onto empty space for the library root). Hovering a collapsed folder while dragging expands it. Folders dropped onto a map go to that map's folder. With several entries selected, dragging any of them moves **all selected entries** (entries inside a selected folder travel with it); entries that cannot be moved (name taken, folder into itself) are skipped and listed afterwards.
 - **Merge by drag & drop:** drop a map **onto another map** to build a multilevel map. The target turns green and shows what happens: map onto map → *Create a multilevel map*; map onto a multilevel map (or a multilevel map onto a map) → *Add to the multilevel map*; multilevel map onto a multilevel map → *Merge the levels into this map* (the map you drop onto keeps its name and shared settings, the dragged one gives up its levels and disappears). The level dialog opens first so you can set the order. Dragging **several selected maps** onto a map adds all of them in one go; if multilevel maps are involved, the target keeps its name and settings when it is a multilevel map, otherwise the first dragged multilevel map does.
 - **Select several maps** with `Ctrl+click` / `Shift+click` to duplicate, delete or drag them all at once. Ordinary and multilevel maps can be selected together. Right-clicking a selected map preserves the selection; right-clicking an unselected entry selects only that entry.
-- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map, Delete. **On a multilevel map:** Open, Manage levels, Dissolve into separate maps, Rename, Duplicate, Delete. With multiple maps selected, **Duplicate** and **Delete** apply to every selected map; **Make multilevel map** is enabled only for two or more ordinary maps and merges the entire selection. It is disabled for a single map or selections containing multilevel maps. All other menu actions are disabled during multi-selection. Mixed map/folder selections disable all menu actions. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
+- **Context menu on a map:** Open, Manage tags, Rename, Duplicate, Make multilevel map, Delete. **On a multilevel map:** Open, Manage tags, Manage levels, Dissolve into separate maps, Rename, Duplicate, Delete. With multiple maps selected, **Add tags**, **Duplicate** and **Delete** apply to every selected map; **Make multilevel map** is enabled only for two or more ordinary maps and merges the entire selection. It is disabled for a single map or selections containing multilevel maps. All other menu actions are disabled during multi-selection. Mixed map/folder selections disable all menu actions. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
 - **Keyboard:** `F2` rename and `Enter` open require a single selection. `Delete` deletes all selected maps with one confirmation listing them; deleting a single folder states how many maps it contains.
 - **Duplicate** creates `Name (Copy)`, `Name (Copy 2)`, ...
 - **Rename** renames the package folder and file on disk. Names cannot be empty, contain `<>:"/\|?*`, be reserved Windows names, or duplicate a name in the same folder.
 - Leaving an unsaved new map asks **Save / Discard / Cancel**.
 
 On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `assets`, `imports` and `thumbnail.png` (hidden in the tree). A multilevel map is a package `<folder>/<Map Name>/<Map Name>.dmlevels` with one ordinary map package per level below `levels/` (also hidden in the tree).
+
+**Map tags**
+
+Right-click a map and choose **Manage tags...**. Type a tag and click **Add** (or press `Enter`); remove a tag with its small cross button. Tag names are trimmed, stored and displayed in **UPPERCASE**, including older tags and suggestions, and cannot appear twice on the same map, regardless of capitalization. The tag input also displays uppercase as you type. Suggestions come from tags already used in the library: typing `tav` displays `TAV` and suggests `TAVERN`, without autocompleting the name. An overlay below the field shows up to **five suggestions**, all visible without scrolling: navigate with **Up/Down** and accept with **Enter**, or click a row to fill the field, then add it. **Escape** dismisses suggestions. **Apply** saves the edits; **Cancel** discards them.
+
+Select several maps and choose **Add tags...** to add the same tags to all of them without removing any existing tags. A multilevel map shows the unique tags of all its levels together; adding or removing a tag affects **every level**. Original per-level tags stay with their maps when combined, and dissolving or moving a level out retains its original tags plus later whole-map changes. Tags cannot be edited per level in Manage levels.
+
+Suggestions are ranked by how closely they fit your input: exact matches first, then tags starting with the text, then tags containing it elsewhere. Earlier matches and fewer extra characters rank higher, with alphabetical order breaking ties. Only the five best matches are shown.
+
+Imports automatically inherit known tags whose full name appears in the source filename, case-insensitively: if `tavern` is already used, importing `haven small criminal tavern.dd2vtt` adds it. This applies to single, batch and multilevel imports.
 
 ### 3. Creating and importing maps
 

@@ -18,6 +18,7 @@ import dmmt.service.DuplicateCheckService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
+import dmmt.service.MapTagService;
 import dmmt.service.MultiLevelService;
 import dmmt.service.RoomFillService;
 import dmmt.service.RecentMaps;
@@ -31,6 +32,7 @@ import dmmt.ui.Icons;
 import dmmt.ui.LevelListDialog;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
+import dmmt.ui.MapTagsDialog;
 import dmmt.ui.SettingsWindow;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
@@ -2021,6 +2023,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             @Override
+            public void manageTags(List<MapLibraryService.Entry> maps) {
+                handleManageTags(maps);
+            }
+
+            @Override
             public void dropMapOnMap(List<MapLibraryService.Entry> dragged, MapLibraryService.Entry target) {
                 handleDropMapOnMap(dragged, target);
             }
@@ -2050,6 +2057,47 @@ public class DungeonMasterMapToolApplication extends Application {
                     () -> rotationService.rotateClockwise(project));
             status("Rotated map 90° counter-clockwise.");
         }
+    }
+
+    private record TagDialogData(List<String> tags, List<String> known) {
+    }
+
+    private void handleManageTags(List<MapLibraryService.Entry> maps) {
+        MapTagService tags = new MapTagService(mapLibrary, projectService);
+        runInBackground("Loading tags...", "Could not read map tags: ", () ->
+                new TagDialogData(maps.size() == 1 ? tags.readTags(maps.getFirst().mapFile()) : List.of(),
+                        tags.knownTags()), data -> {
+            Optional<MapTagsDialog.Result> edited = MapTagsDialog.show(primaryStage, maps.getFirst().name(),
+                    maps.size(), maps.getFirst().isMultiLevel(), data.tags(), data.known());
+            if (edited.isEmpty() || (edited.get().additions().isEmpty() && edited.get().removals().isEmpty())) {
+                return;
+            }
+            MapTagsDialog.Result changes = edited.get();
+            Path openFile = projectFile;
+            DmProject openProject = project;
+            Path affected = openFile == null ? null : maps.stream()
+                    .filter(map -> openFile.toAbsolutePath().normalize().startsWith(map.path().toAbsolutePath().normalize()))
+                    .map(MapLibraryService.Entry::path).findFirst().orElse(null);
+            List<String> liveTags = new ArrayList<>();
+            runLibraryOperation("Updating tags...", affected, () -> {
+                tags.updateTags(maps.stream().map(MapLibraryService.Entry::mapFile).toList(),
+                        changes.additions(), changes.removals());
+                if (affected != null) {
+                    liveTags.addAll(tags.readTags(openFile));
+                }
+                return new MapLibraryService.Result(Map.of(), null);
+            }, result -> {
+                if (affected != null && project == openProject) {
+                    boolean clean = !hasUnsavedChanges();
+                    project.getMap().setTags(new ArrayList<>(liveTags));
+                    if (clean) {
+                        savedFingerprint = fingerprintOrNull(project);
+                    }
+                }
+                mapBrowser.refresh();
+                status("Updated tags for " + (maps.size() == 1 ? maps.getFirst().name() : maps.size() + " maps") + ".");
+            });
+        });
     }
 
     private void installDmInteractions() {
@@ -3152,6 +3200,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 Files.createDirectories(projectDir);
                 try {
                     DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
+                    new MapTagService(mapLibrary, projectService).applyKnownTags(imported, sourcePath);
                     projectService.save(targetPath, imported);
                     return new LoadedProject(imported, targetPath);
                 } catch (IOException | RuntimeException ex) {

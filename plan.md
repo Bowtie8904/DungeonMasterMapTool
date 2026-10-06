@@ -47,6 +47,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)
 - [x] Map browser thumbnails + search bar for maps and folders (3.20)
+- [x] Map tags, click-to-use suggestions, import tag inheritance and word-based name/tag search (3.34)
 - [x] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [x] Right-click cancels the active tool like Esc (3.23)
@@ -269,7 +270,7 @@ Desktop tool for tabletop dungeon masters that:
   - **Double-click** (or Enter) opens a map in the DM view (current map is auto-saved first).
   - **Drag & drop** maps and folders onto a folder (or onto a map to use its folder) to move them; the move happens on disk. Dropping a folder into itself/its children is rejected. Hovering a collapsed folder while dragging expands it.
   - Right-click a **map**: Open, Rename, Duplicate (copy), Delete. Right-click a **folder** (or empty space = library root): New map here, Import map here, New folder, Rename, Delete. Keyboard: F2 rename, Delete delete, Enter open.
-  - **Multiple selected maps:** Duplicate and Delete apply to all selected maps, including multilevel maps; the Delete key uses the same batch deletion with one confirmation listing the maps. Make multilevel map is enabled only when at least two ordinary maps are selected and uses the entire selection; it is disabled for a single map or selections containing multilevel maps. All other context-menu actions are disabled with multiple entries selected. Enter and F2 also require a single selection. Right-clicking a selected map preserves the selection; right-clicking an unselected entry selects only that entry. Batch map actions are disabled for mixed map/folder selections.
+  - **Multiple selected maps:** Add tags (3.34), Duplicate and Delete apply to all selected maps, including multilevel maps; the Delete key uses the same batch deletion with one confirmation listing the maps. Make multilevel map is enabled only when at least two ordinary maps are selected and uses the entire selection; it is disabled for a single map or selections containing multilevel maps. All other context-menu actions are disabled with multiple entries selected. Enter and F2 also require a single selection. Right-clicking a selected map preserves the selection; right-clicking an unselected entry selects only that entry. Batch map actions are disabled for mixed map/folder selections.
   - **Delete** always asks for confirmation (folders state how many maps they contain).
   - **Copy** creates a sibling named `<Name> (Copy)`, `<Name> (Copy 2)`, ... (a copy of a copy re-uses the base name).
   - **Rename** renames everything required on disk: the package folder and the `.dmmap` file (asset paths are relative, so they stay valid).
@@ -343,7 +344,7 @@ Desktop tool for tabletop dungeon masters that:
   - Stored as `thumbnail.png` inside the map package, next to the `.dmmap` (hidden from the tree like `assets`/`imports`). It is rewritten on every save (manual and auto-save) and on import. Moving/renaming/copying a package carries it along automatically.
   - Maps without a thumbnail (older saves, loose `.dmmap` files) get one generated lazily on a background thread when they first become visible in the tree; a placeholder icon is shown meanwhile. Loaded thumbnails are cached in memory.
 - **Search bar** at the top of the map browser (search icon, placeholder "Search maps and folders", clear button):
-  - Case-insensitive substring match on map names **and** folder names, filtered live while typing.
+  - Split the query into whitespace-separated words, matching case-insensitive substrings of map names or tags (3.34) and folder names. Every word must match; different words may match different fields on one map. Filter live while typing without changing the search bar.
   - A matching **map** is shown together with its parent folders (expanded).
   - A matching **folder** is shown with its full contents.
   - Non-matching entries are hidden; if nothing matches, an "No maps or folders found" hint is shown.
@@ -546,6 +547,17 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
   (single + multi-file chooser), `handleImportDd2vttFolder` (folder import) and `pickDd2vttFiles` (the level file
   picker used both for "Import multilevel map" and "Add dd2vtt files…" in the level dialog).
 
+## 3.34 Map Tags (implemented)
+
+- Store tags in each ordinary map's `map.tags` array, including individual multilevel levels. Older maps without tags start with an empty list. Trim tag names, normalize them to uppercase using `Locale.ROOT`, and keep them unique case-insensitively. Existing saved tags, suggestions, chips and the tag input are always presented in uppercase; casing conversion must not autocomplete names.
+- Right-click a single map or multilevel map to open **Manage tags...**, using the existing dark dialog theme. Show its tags with easy removal, a tag input and an Add action. Several selected maps support **Add tags...** only; removal is not available.
+- While typing, suggest existing tag names from all other library maps and levels in a dark overlay directly below the tag field, without resizing the dialog. Show at most five suggestions, with all rows fully visible and no unnecessary vertical scrolling; size the overlay including its themed padding and border. Up/Down navigates, Enter accepts the selected suggestion, and clicking accepts a row; acceptance fills the field without adding the tag. Escape dismisses the overlay before closing the dialog. Hide on focus loss, empty input or dialog closure. Never automatically complete the input.
+- On dd2vtt/uvtt import (single, batch, automatic grouping and new multilevel levels), apply known library tags whose full name is contained in the original filename, case-insensitively.
+- Rank suggestions by fit before selecting the best five: exact matches first, then prefixes, then other substring matches. Within a category prefer an earlier match position, fewer extra characters, then alphabetical order. Re-rank as the input changes, case-insensitively.
+- A multilevel map displays the case-insensitively deduplicated union of its levels' tags. Adding a tag applies it to every level; deleting one removes it from every level. Combining maps retains each level's own tags; dissolving or extracting restores those tags including later whole-map changes. No per-level tag editing in Manage levels.
+- The existing search bar checks each whitespace-separated search word against the map name or any tag, using case-insensitive partial matches and AND between words. For example, `tav haven` can match tag `tavern` and map name `Haven`. Preserve matching-folder visibility and ancestor folders.
+- Tag edits persist immediately through the library-operation workflow, preserving unsaved open-map changes and synchronizing the open level so later saves cannot overwrite tag edits. No new global settings.
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -555,6 +567,7 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
     "sourceType": "dd2vtt",
     "imagePath": "imports/catacombs/catacombs.webp",
     "originalFileName": "catacombs",
+    "tags": ["DUNGEON", "UNDERGROUND"],
     "grid": { "pixelsPerCell": 140, "cellSizeFeet": 5 },
     "rotationQuarterTurns": 0,
     "imageLayersLocked": true

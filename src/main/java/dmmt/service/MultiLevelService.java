@@ -389,6 +389,9 @@ public class MultiLevelService {
         List<Path> createdDirs = new ArrayList<>();
         Map<Path, Path> moved = new LinkedHashMap<>();
         try {
+            // Taken once before any level is written, so half-built levels never take part in the library scan.
+            List<String> knownTags = plan.stream().anyMatch(item -> item.source() instanceof Dd2vtt)
+                    ? library.tags().knownTags() : List.of();
             // Imports can fail on bad files, so they run before anything in the library is moved.
             for (PlanItem item : plan) {
                 if (item.source() instanceof Dd2vtt || item.source() instanceof Empty) {
@@ -403,6 +406,7 @@ public class MultiLevelService {
                     if (item.source() instanceof Dd2vtt(Path dd2vttFile)) {
                         level.setOriginalName(MapLibraryService.stripExtension(dd2vttFile.getFileName().toString()));
                         project = importService.importToProject(dd2vttFile, levelDir);
+                        MapTagService.applyMatchingTags(project, dd2vttFile, knownTags);
                     } else {
                         project = DmProject.builder().build();
                         project.getMap().setSourceType("custom");

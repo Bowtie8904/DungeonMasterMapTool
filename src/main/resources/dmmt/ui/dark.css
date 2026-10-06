@@ -724,6 +724,42 @@
 
 /* ---------- Dialogs ---------- */
 
+.map-tag-chips {
+    -fx-padding: 8;
+}
+
+.map-tag-chip {
+    -fx-background-color: -dm-surface-3;
+    -fx-background-radius: 6;
+    -fx-padding: 3 4 3 10;
+}
+
+.map-tag-chip .icon-button {
+    -fx-padding: 3;
+}
+
+.tag-suggestions {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 6;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 6;
+    -fx-padding: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 12, 0.1, 0, 4);
+}
+
+.tag-suggestions .list-cell {
+    -fx-padding: 7 12;
+    -fx-cursor: hand;
+}
+
+.tag-suggestions .list-cell:filled:hover {
+    -fx-background-color: -dm-surface-3;
+}
+
+.tag-suggestions .list-cell:filled:selected {
+    -fx-background-color: -fx-selection-bar;
+}
+
 .dialog-pane {
     -fx-background-color: -dm-surface;
     -fx-padding: 0;

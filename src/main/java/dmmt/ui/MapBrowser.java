@@ -47,6 +47,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -98,6 +99,9 @@ public class MapBrowser extends VBox {
 
         /** Opens the level dialog of a multilevel map. */
         void manageLevels(Path manifestFile);
+
+        /** Edits one map's tags, or adds tags to every selected map. */
+        void manageTags(java.util.List<Entry> maps);
 
         /**
          * Maps were dropped onto another map ({@code dragged} never contains {@code target}): ordinary maps only
@@ -728,9 +732,13 @@ public class MapBrowser extends VBox {
         MenuItem merge = item("Make multilevel map…", MaterialDesignL.LAYERS_PLUS,
                 () -> host.mergeIntoMultiLevelMap(selected));
         merge.setDisable(selected.size() < 2 || selected.stream().anyMatch(Entry::isMultiLevel));
+        MenuItem tags = item(selected.size() > 1 ? "Add tags…" : "Manage tags…",
+                MaterialDesignT.TAG_MULTIPLE_OUTLINE, () -> host.manageTags(selected));
+        tags.setDisable(selected.isEmpty());
         if (entry.isMultiLevel()) {
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
+                    tags,
                     item("Manage levels…", MaterialDesignL.LAYERS_TRIPLE_OUTLINE, () -> host.manageLevels(target.mapFile())),
                     item("Dissolve into separate maps…", MaterialDesignL.LAYERS_OFF_OUTLINE,
                             () -> host.dissolveMultiLevel(target.mapFile())),
@@ -742,6 +750,7 @@ public class MapBrowser extends VBox {
         } else if (entry.isMap()) {
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
+                    tags,
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                     duplicate,
@@ -766,7 +775,8 @@ public class MapBrowser extends VBox {
         }
         if (tree.getSelectionModel().getSelectedItems().size() > 1) {
             for (MenuItem action : menu.getItems()) {
-                if (action != duplicate && action != merge && !(action == delete && target.isMap())) {
+                if (action != duplicate && action != merge && action != tags
+                        && !(action == delete && target.isMap())) {
                     action.setDisable(true);
                 }
             }

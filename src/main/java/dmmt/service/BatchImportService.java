@@ -1,5 +1,7 @@
 package dmmt.service;
 
+import dmmt.model.DmProject;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,6 +67,17 @@ public class BatchImportService {
         List<Path> imported = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
         int total = sources.size();
+        List<String> knownTags;
+        try {
+            // Read before anything is imported; matching tags are applied to every new ordinary map.
+            knownTags = library.tags().knownTags();
+        } catch (IOException | RuntimeException ex) {
+            String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            for (Path source : sources) {
+                failures.add(new Failure(source, reason));
+            }
+            return new Result(imported, failures, total);
+        }
         int[] index = {0};
         boolean autoMerge = Tuning.IMPORT_AUTO_MERGE_MULTILEVEL.get();
         List<MultiLevelService.ImportGroup> groups = new ArrayList<>();
@@ -112,7 +125,7 @@ public class BatchImportService {
                 progress.report(++index[0], total, baseName);
             }
             try {
-                imported.add(importOne(source, groupFolder, baseName));
+                imported.add(importOne(source, groupFolder, baseName, knownTags));
             } catch (IOException | RuntimeException ex) {
                 String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                 failures.add(new Failure(source, reason));
@@ -149,12 +162,14 @@ public class BatchImportService {
         return library.multiLevels().create(targetFolder, name, plan, progress).manifestFile();
     }
 
-    private Path importOne(Path source, Path targetFolder, String baseName) throws IOException {
+    private Path importOne(Path source, Path targetFolder, String baseName, List<String> knownTags) throws IOException {
         Path mapFile = uniqueMapFile(targetFolder, baseName);
         Path projectDir = mapFile.getParent();
         Files.createDirectories(projectDir);
         try {
-            projectService.save(mapFile, importService.importToProject(source, projectDir));
+            DmProject project = importService.importToProject(source, projectDir);
+            MapTagService.applyMatchingTags(project, source, knownTags);
+            projectService.save(mapFile, project);
             return mapFile;
         } catch (IOException | RuntimeException ex) {
             try {

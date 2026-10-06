@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import dmmt.lighting.TimeOfDayPreset;
+import dmmt.service.MapTagService;
 import dmmt.service.Tuning;
 
 import java.util.ArrayList;
@@ -98,6 +99,21 @@ public class DmProject {
         private int rotationQuarterTurns = 0;
         /** {@code null} (older saves) falls back to {@link #defaultImageLayersLocked()}. */
         private Boolean imageLayersLocked;
+        /**
+         * Tags of this map (or multilevel level), trimmed, uppercase and unique ignoring case; empty for older saves without
+         * tags.
+         */
+        @Builder.Default
+        private List<String> tags = new ArrayList<>();
+
+        public List<String> getTags() {
+            tags = MapTagService.normalize(tags);
+            return tags;
+        }
+
+        public void setTags(List<String> tags) {
+            this.tags = MapTagService.normalize(tags);
+        }
 
         public boolean imageLayersLockedOrDefault() {
             return imageLayersLocked != null ? imageLayersLocked : defaultImageLayersLocked();
@@ -448,4 +464,3 @@ public class DmProject {
         private boolean autoSize;
     }
 }
-

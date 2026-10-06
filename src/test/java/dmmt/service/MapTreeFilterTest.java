@@ -27,6 +27,11 @@ class MapTreeFilterTest {
         return new Entry(Kind.MAP, name, dir, dir.resolve(name + ".dmmap"), List.of());
     }
 
+    private static Entry tagged(String name, String... tags) {
+        Path dir = Path.of("lib", name);
+        return new Entry(Kind.MAP, name, dir, dir.resolve(name + ".dmmap"), List.of(), List.of(tags));
+    }
+
     private static Entry folder(String name, Entry... children) {
         return new Entry(Kind.FOLDER, name, Path.of("lib", name), null, List.of(children));
     }
@@ -71,6 +76,61 @@ class MapTreeFilterTest {
         Entry result = MapTreeFilter.filter(sampleRoot(), "tav");
         assertEquals(List.of("Tavern"), result.children().stream().map(Entry::name).toList());
         assertTrue(MapTreeFilter.filter(sampleRoot(), "zzz").children().isEmpty());
+    }
+
+    private static Entry taggedRoot() {
+        return folder("Library",
+                folder("Cities", tagged("Haven", "Tavern", "Port"), tagged("Market", "town")),
+                folder("Haven Region", map("Fields")),
+                tagged("Cave", "Dungeon"),
+                map("Plain"));
+    }
+
+    private static List<String> mapNames(Entry entry) {
+        List<String> names = new java.util.ArrayList<>();
+        for (Entry child : entry.children()) {
+            if (child.isMap()) {
+                names.add(child.name());
+            } else {
+                names.addAll(mapNames(child));
+            }
+        }
+        return names;
+    }
+
+    @Test
+    void tagsMatchPartiallyIgnoringCase() {
+        assertEquals(List.of("Cave"), mapNames(MapTreeFilter.filter(taggedRoot(), "DUNG")));
+        assertEquals(List.of("Market"), mapNames(MapTreeFilter.filter(taggedRoot(), "tow")));
+    }
+
+    @Test
+    void everyWordMustMatchButWordsMayMatchDifferentFields() {
+        Entry result = MapTreeFilter.filter(taggedRoot(), "  tav   haven ");
+        assertEquals(List.of("Haven"), mapNames(result));
+        assertEquals(List.of("Haven"), mapNames(MapTreeFilter.filter(taggedRoot(), "port tavern")));
+        assertTrue(mapNames(MapTreeFilter.filter(taggedRoot(), "tav cave")).isEmpty());
+        assertTrue(mapNames(MapTreeFilter.filter(taggedRoot(), "dungeon town")).isEmpty());
+    }
+
+    @Test
+    void filteredCopiesKeepTagsAndMatchingFoldersKeepFullContents() {
+        Entry result = MapTreeFilter.filter(taggedRoot(), "tavern");
+        Entry cities = result.children().get(0);
+        assertEquals("Cities", cities.name());
+        assertEquals(List.of("TAVERN", "PORT"), cities.children().get(0).tags());
+
+        Entry region = MapTreeFilter.filter(taggedRoot(), "haven region");
+        Entry regionFolder = region.children().stream().filter(e -> e.name().equals("Haven Region"))
+                .findFirst().orElseThrow();
+        assertEquals(List.of("Fields"), mapNames(regionFolder));
+        assertEquals(List.of("Haven", "Fields"), mapNames(MapTreeFilter.filter(taggedRoot(), "haven")));
+    }
+
+    @Test
+    void wordsSplitOnAnyWhitespace() {
+        assertEquals(List.of("tav", "haven"), MapTreeFilter.words(" Tav\t HAVEN "));
+        assertTrue(MapTreeFilter.words("   ").isEmpty());
     }
 
     @Test

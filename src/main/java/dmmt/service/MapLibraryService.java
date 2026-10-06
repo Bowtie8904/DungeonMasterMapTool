@@ -41,14 +41,24 @@ public class MapLibraryService {
     private final Path root;
     private final ProjectService projectService;
     private MultiLevelService multiLevels;
+    private MapTagService tags;
 
     public enum Kind { FOLDER, MAP }
 
     /**
      * @param path    folder directory, map package directory, or loose map file
      * @param mapFile the {@code .dmmap} file for maps, {@code null} for folders
+     * @param tags    the map's tags (for multilevel maps the union of the levels' tags); empty for folders
      */
-    public record Entry(Kind kind, String name, Path path, Path mapFile, List<Entry> children) {
+    public record Entry(Kind kind, String name, Path path, Path mapFile, List<Entry> children, List<String> tags) {
+        public Entry {
+            tags = List.copyOf(MapTagService.normalize(tags));
+        }
+
+        public Entry(Kind kind, String name, Path path, Path mapFile, List<Entry> children) {
+            this(kind, name, path, mapFile, children, List.of());
+        }
+
         public boolean isFolder() {
             return kind == Kind.FOLDER;
         }
@@ -89,6 +99,13 @@ public class MapLibraryService {
             multiLevels = new MultiLevelService(this, projectService, new Dd2vttImportService());
         }
         return multiLevels;
+    }
+
+    public synchronized MapTagService tags() {
+        if (tags == null) {
+            tags = new MapTagService(this, projectService);
+        }
+        return tags;
     }
 
     public byte[] loadOrCreateThumbnail(Path mapFile) throws IOException {
@@ -132,12 +149,16 @@ public class MapLibraryService {
                     Path multiLevel = MultiLevelService.findManifest(child);
                     Path packagedMap = multiLevel != null ? multiLevel : findPackagedMap(child);
                     if (packagedMap != null) {
-                        maps.add(new Entry(Kind.MAP, fileName, child, packagedMap, List.of()));
+                        if (includeMaps) {
+                            maps.add(new Entry(Kind.MAP, fileName, child, packagedMap, List.of(),
+                                    tags().readTagsForScan(packagedMap)));
+                        }
                     } else {
                         folders.add(new Entry(Kind.FOLDER, fileName, child, null, scanChildren(child, includeMaps)));
                     }
-                } else if (isMapFile(child)) {
-                    maps.add(new Entry(Kind.MAP, stripExtension(fileName), child, child, List.of()));
+                } else if (isMapFile(child) && includeMaps) {
+                    maps.add(new Entry(Kind.MAP, stripExtension(fileName), child, child, List.of(),
+                            tags().readTagsForScan(child)));
                 }
             }
         }
