@@ -1180,12 +1180,14 @@ public class CanvasMapRenderer {
         buffer.key = key;
         buffer.valid = true;
         Arrays.fill(buffer.lit, 0f);
+        Arrays.fill(buffer.litR, 0f);
+        Arrays.fill(buffer.litG, 0f);
+        Arrays.fill(buffer.litB, 0f);
 
-        int[] lightRgb = new int[lights.size() + emitters.size()];
         List<LightRaster> rasters = new java.util.ArrayList<>();
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
-            lightRgb[li] = parseRgb(light.getColor());
+            int rgb = parseRgb(light.getColor());
             if (!light.isEnabled() || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;
             }
@@ -1211,16 +1213,16 @@ public class CanvasMapRenderer {
                 minY = Math.min(minY, ys[i]);
                 maxY = Math.max(maxY, ys[i]);
             }
-            rasters.add(new LightRaster(li, xs, ys, lx, ly, radius, brightness, minY, maxY));
+            rasters.add(new LightRaster(xs, ys, lx, ly, radius, brightness, minY, maxY,
+                    (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
         }
         rasterizeLights(buffer, rasters, bw, bh);
 
         double ppc = project.getMap().getGrid().getPixelsPerCell();
         for (int ei = 0; ei < emitters.size(); ei++) {
             DmProject.OverlayShape shape = emitters.get(ei);
-            int index = lights.size() + ei;
-            lightRgb[index] = parseRgb(shape.getColor());
-            emitShapeLight(buffer, shape, index, ppc, emitterFlickers.get(ei), bw, bh, width, height, camera);
+            int rgb = parseRgb(shape.getColor());
+            emitShapeLight(buffer, shape, rgb, ppc, emitterFlickers.get(ei), bw, bh, width, height, camera);
         }
 
         double glowStrength = lightTint * Math.sqrt(darkness);
@@ -1229,11 +1231,14 @@ public class CanvasMapRenderer {
         double ambB = preset.blue() * 255;
         int[] argb = buffer.argb;
         final float[] litArr = buffer.lit;
-        final int[] sourceArr = buffer.source;
+        final float[] litRArr = buffer.litR;
+        final float[] litGArr = buffer.litG;
+        final float[] litBArr = buffer.litB;
         final double fDarkness = darkness;
         IntStream.range(0, bh).parallel().forEach(row -> {
             for (int i = row * bw, end = i + bw; i < end; i++) {
-                double l = litArr[i];
+                double total = litArr[i];
+                double l = Math.min(1.0, total);
                 double dark = fDarkness * (1.0 - l);
                 double glow = l > 0 ? glowStrength * l : 0;
                 double a = Math.min(1.0, dark + glow);
@@ -1241,10 +1246,14 @@ public class CanvasMapRenderer {
                     argb[i] = 0;
                     continue;
                 }
-                int rgb = l > 0 ? lightRgb[sourceArr[i]] : 0;
-                double r = (ambR * dark + ((rgb >> 16) & 0xFF) * glow) / (dark + glow);
-                double g = (ambG * dark + ((rgb >> 8) & 0xFF) * glow) / (dark + glow);
-                double b = (ambB * dark + (rgb & 0xFF) * glow) / (dark + glow);
+                // Blend the colors of every overlapping light weighted by how much each contributed, so two
+                // overlapping lights brighten the area and mix toward a combined hue instead of one light winning.
+                double rgbR = total > 0 ? litRArr[i] / total : 0;
+                double rgbG = total > 0 ? litGArr[i] / total : 0;
+                double rgbB = total > 0 ? litBArr[i] / total : 0;
+                double r = (ambR * dark + rgbR * glow) / (dark + glow);
+                double g = (ambG * dark + rgbG * glow) / (dark + glow);
+                double b = (ambB * dark + rgbB * glow) / (dark + glow);
                 argb[i] = ((int) Math.round(a * 255) << 24)
                         | ((int) Math.round(r) << 16)
                         | ((int) Math.round(g) << 8)
@@ -1256,8 +1265,8 @@ public class CanvasMapRenderer {
         gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
     }
 
-    private record LightRaster(int index, double[] xs, double[] ys, double lx, double ly, double radius,
-                               double brightness, double minY, double maxY) {
+    private record LightRaster(double[] xs, double[] ys, double lx, double ly, double radius,
+                               double brightness, double minY, double maxY, int red, int green, int blue) {
     }
 
     /**
@@ -1269,7 +1278,9 @@ public class CanvasMapRenderer {
             return;
         }
         final float[] lit = buffer.lit;
-        final int[] source = buffer.source;
+        final float[] litR = buffer.litR;
+        final float[] litG = buffer.litG;
+        final float[] litB = buffer.litB;
         int bandHeight = Math.max(8, (bh + 31) / 32);
         int bands = (bh + bandHeight - 1) / bandHeight;
         IntStream.range(0, bands).parallel().forEach(band -> {
@@ -1283,7 +1294,9 @@ public class CanvasMapRenderer {
                 double lx = r.lx();
                 double ly = r.ly();
                 double brightness = r.brightness();
-                int lightIndex = r.index();
+                float cr = r.red();
+                float cg = r.green();
+                float cb = r.blue();
                 PolygonRaster.fill(r.xs(), r.ys(), bw, first, end, (row, colStart, colEnd) -> {
                     double dy = row + 0.5 - ly;
                     double dy2 = dy * dy;
@@ -1297,10 +1310,12 @@ public class CanvasMapRenderer {
                         double f = d2 <= 0.25 ? 1.0 : falloff(Math.sqrt(d2));
                         float value = (float) (f * brightness);
                         int idx = base + col;
-                        if (value > lit[idx]) {
-                            lit[idx] = value;
-                            source[idx] = lightIndex;
-                        }
+                        // Additive blend: every light contributes brightness and its own color weight, so
+                        // overlapping lights brighten the area and mix color instead of the brightest one winning.
+                        lit[idx] += value;
+                        litR[idx] += value * cr;
+                        litG[idx] += value * cg;
+                        litB[idx] += value * cb;
                     }
                 });
             }
@@ -1331,7 +1346,7 @@ public class CanvasMapRenderer {
      * Adds the glow of one emissive effect to the light map: full strength inside the shape, fading to zero over
      * the texture's light range beyond its edge. Walls do not block this light.
      */
-    private void emitShapeLight(LightBuffer buffer, DmProject.OverlayShape shape, int sourceIndex, double ppc,
+    private void emitShapeLight(LightBuffer buffer, DmProject.OverlayShape shape, int rgb, double ppc,
                                 double flicker, int bw, int bh, double width, double height, DmProject.CameraState camera) {
         String texture = OverlayTextures.normalize(shape.getTexture());
         double strength = OverlayTextures.lightStrength(texture) * (1.0 - 0.6 * flicker);
@@ -1413,6 +1428,13 @@ public class CanvasMapRenderer {
         final double fStrength = strength;
         final int fColStart = colStart;
         final int fColEnd = colEnd;
+        final float cr = (rgb >> 16) & 0xFF;
+        final float cg = (rgb >> 8) & 0xFF;
+        final float cb = rgb & 0xFF;
+        final float[] lit = buffer.lit;
+        final float[] litR = buffer.litR;
+        final float[] litG = buffer.litG;
+        final float[] litB = buffer.litB;
         IntStream.rangeClosed(rowStart, rowEnd).parallel().forEach(row -> {
             double y = row + 0.5;
             for (int col = fColStart; col <= fColEnd; col++) {
@@ -1439,10 +1461,11 @@ public class CanvasMapRenderer {
                 double t = d / fGlow;
                 float value = (float) (fStrength * (1 - t * t * (3 - 2 * t)));
                 int idx = row * bw + col;
-                if (value > buffer.lit[idx]) {
-                    buffer.lit[idx] = value;
-                    buffer.source[idx] = sourceIndex;
-                }
+                // Additive blend, same as point lights: emitters brighten and mix color with overlapping lights.
+                lit[idx] += value;
+                litR[idx] += value * cr;
+                litG[idx] += value * cg;
+                litB[idx] += value * cb;
             }
         });
     }
@@ -2037,7 +2060,9 @@ public class CanvasMapRenderer {
         private int width;
         private int height;
         private float[] lit = new float[0];
-        private int[] source = new int[0];
+        private float[] litR = new float[0];
+        private float[] litG = new float[0];
+        private float[] litB = new float[0];
         private int[] argb = new int[0];
         private WritableImage image;
         private long key;
@@ -2051,7 +2076,9 @@ public class CanvasMapRenderer {
             width = w;
             height = h;
             lit = new float[w * h];
-            source = new int[w * h];
+            litR = new float[w * h];
+            litG = new float[w * h];
+            litB = new float[w * h];
             argb = new int[w * h];
             image = new WritableImage(w, h);
         }

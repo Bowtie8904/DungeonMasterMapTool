@@ -270,6 +270,7 @@ The *Lighting* section controls lights and ambience.
   - **Blocked by walls**,
   - **Remove**.
 - Light is blocked by walls and closed doors; open doors let light through.
+- Overlapping lights (and glowing effects, see [Tactical overlays](#8-tactical-overlays)) brighten the area together and blend their colours by how much each contributes, instead of only the brightest light showing.
 - **Light tint** slider: strength of the light colour over lit areas (0–30 %, global).
 
 **Time of day**

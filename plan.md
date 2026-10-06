@@ -56,6 +56,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Copy/paste of lights, effect shapes and text boxes (Ctrl+C / Ctrl+V), also across maps (3.28)
 - [x] Subtle ambient weather per map: rain, snow, mist, dust motes, embers (3.29)
 - [x] Multilevel maps: several levels (e.g. building floors from Dungeon Alchemist) shown as one map with a level switcher (3.32)
+- [x] Additive multi-light blending: overlapping lights brighten and mix color instead of only the brightest light showing (3.6)
 
 ## 4) Core Functional Requirements
 
@@ -149,6 +150,7 @@ Desktop tool for tabletop dungeon masters that:
 - Persistent reveals only accumulate while fog is enabled.
 - Light moves, light setting changes and door toggles are undoable, including the fog they revealed.
 - Rendering: quarter-resolution light map (cached LOS polygons per light, recomputed only on move/geometry change), skipped entirely at Day.
+- **Additive multi-light blending**: overlapping lights accumulate brightness and blend their colors (weighted by each light's contribution in linear light) instead of only the brightest light winning per pixel, so e.g. two overlapping torches are brighter where they overlap and a red and a blue light mix toward purple. Total brightness per pixel is clamped to 1.0 (no over-exposure); ambient ("dark") contribution still blends in using the same weighted average as before. Rasterization stays a single parallel pass (sum brightness and weighted RGB per light instead of a max-compare), so performance is unchanged.
 - **Light tint** slider (Lighting section): strength of the light colour tint over lit areas (0-30%, default 8%). Stored globally in the settings file (3.25) (applies to all lights and projects); updates live while dragging.
 
 ## 3.7 Time-of-Day Lighting
@@ -724,7 +726,8 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 - **v3.1:** Tuning constants moved into the settings file, fog fade with separate reveal/hide times and easing, settings reference `docs/SETTINGS.md` (3.25).
 - **v3.0:** Per-map player zoom slider (3.3).
 - **v2.9:** Batch import of maps (3.26), multi-image handouts with grid layout and per-image delete (3.27), soft fog edges and fog fade animation (3.5), Phase 8.
-- **v3.7 (current):** Migrated to Java 25 (LTS): release 25, JavaFX 25.0.4, Lombok 1.18.48, RichTextFX 0.11.7 (0.11.4 fails to load on JavaFX 22+), Ikonli 12.4.0, shade plugin 3.6.2; CI uses JDK 25; shaded jar manifest sets `Enable-Native-Access: ALL-UNNAMED` to silence JavaFX native-access warnings. `MultiLevelService` / `LevelListDialog` handle the sealed `Source` with exhaustive pattern `switch`es and record patterns, `getLast()` replaces `get(size() - 1)`, and the Windows app image and the documented jar launch use `-XX:+UseCompactObjectHeaders` (lower memory use).`n- **v3.6:** Multilevel map refinements (3.32.1): drag & drop merging in the library, move levels out / dissolve, collapse single-level maps, map-wide DM zoom, level previews in the switcher, drag & drop level dialog, automatic multilevel grouping on batch import.
+- **v3.8 (current):** Additive multi-light blending (3.6): overlapping lights sum brightness and blend color (weighted in linear light) instead of the brightest light winning per pixel; ambient darkness blends in the same way.
+- **v3.7:** Migrated to Java 25 (LTS): release 25, JavaFX 25.0.4, Lombok 1.18.48, RichTextFX 0.11.7 (0.11.4 fails to load on JavaFX 22+), Ikonli 12.4.0, shade plugin 3.6.2; CI uses JDK 25; shaded jar manifest sets `Enable-Native-Access: ALL-UNNAMED` to silence JavaFX native-access warnings. `MultiLevelService` / `LevelListDialog` handle the sealed `Source` with exhaustive pattern `switch`es and record patterns, `getLast()` replaces `get(size() - 1)`, and the Windows app image and the documented jar launch use `-XX:+UseCompactObjectHeaders` (lower memory use).`n- **v3.6:** Multilevel map refinements (3.32.1): drag & drop merging in the library, move levels out / dissolve, collapse single-level maps, map-wide DM zoom, level previews in the switcher, drag & drop level dialog, automatic multilevel grouping on batch import.
 - **v3.5:** Multilevel maps (3.32): import several dd2vtt levels or merge library maps into one map with per-level fog/cameras, shared map-wide settings and a level switcher overlay.
 - **v3.4:** Pushing a `v*` tag builds Windows (app image zip), Linux and macOS (shaded jars; each jar bundles the JavaFX natives of the OS it was built on) and creates a GitHub release with those files attached. Default settings file removed from the Windows package.
 - **v3.3:** GitHub Actions workflow (`.github/workflows/build.yml`): on push/PR to master it runs `mvn verify` (all tests) on `windows-latest` with JDK 25 and uploads the `DungeonMasterMapTool-windows` artifact: a zip of a jpackage app image (`DungeonMasterMapTool.exe` with a bundled trimmed Java runtime, no Java install needed; plus the README). README shows build/tech badges.
