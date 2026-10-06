@@ -1491,13 +1491,26 @@ public class CanvasMapRenderer {
         return dx * dx + dy * dy <= radius * radius;
     }
 
-    /** Full brightness in the inner half of the radius, smooth fade to zero at the edge. */
+    /** End of the full-brightness "bright light" core, as a fraction of the light's range (matches the usual
+     * D&D bright/dim light radius split: the inner half is bright light, the outer half dims to dark). */
+    private static final double FALLOFF_INNER = 0.5;
+    /** Shapes how quickly the dim-light band decays like an inverse square before the window forces it to zero. */
+    private static final double FALLOFF_STEEPNESS = 8.0;
+
+    /**
+     * Full brightness in the inner half of the radius (bright light). Beyond that (dim light), a windowed
+     * inverse-square-style curve decays faster near the bright/dim boundary and levels out towards the edge,
+     * which reads as more physically realistic than a generic cubic ease, while still reaching exactly zero at
+     * the edge so the light map never has a hard cutoff.
+     */
     private static double falloff(double normalizedDistance) {
-        if (normalizedDistance <= 0.5) {
+        if (normalizedDistance <= FALLOFF_INNER) {
             return 1.0;
         }
-        double t = (normalizedDistance - 0.5) / 0.5;
-        return 1.0 - t * t * (3 - 2 * t);
+        double u = (normalizedDistance - FALLOFF_INNER) / (1.0 - FALLOFF_INNER);
+        double window = 1.0 - u * u * u * u;
+        window *= window;
+        return window / (1.0 + FALLOFF_STEEPNESS * u * u);
     }
 
     private static int parseRgb(String hex) {
