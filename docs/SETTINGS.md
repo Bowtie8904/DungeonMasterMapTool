@@ -630,9 +630,9 @@ ordinary map; you can still merge them later in the library.
 ## DM view navigation
 
 ### `dm.zoom.min`
-**Default:** `0.1` · **Range:** 0.001 to 1 · **Applies:** live
+**Default:** `0.03` · **Range:** 0.001 to 1 · **Applies:** live
 
-Furthest the DM view can zoom out with the mouse wheel (`0.1` = map shown at 10 %). Lower it to see huge maps
+Furthest the DM view can zoom out with the mouse wheel (`0.03` = map shown at 3 %). Lower it to see huge maps
 completely.
 
 *Keywords:* DM zoom, zoom out limit, mouse wheel, overview, huge map

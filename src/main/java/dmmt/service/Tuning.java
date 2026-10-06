@@ -277,7 +277,7 @@ public final class Tuning {
 
     // ---- DM view ----
 
-    public static final Setting<Double> DM_ZOOM_MIN = decimal(DM_VIEW, "dm.zoom.min", 0.1, 0.001, 1, false,
+    public static final Setting<Double> DM_ZOOM_MIN = decimal(DM_VIEW, "dm.zoom.min", 0.03, 0.001, 1, false,
             "Furthest the DM view can zoom out.");
     public static final Setting<Double> DM_ZOOM_MAX = decimal(DM_VIEW, "dm.zoom.max", 6, 1, 100, false,
             "Closest the DM view can zoom in.");
