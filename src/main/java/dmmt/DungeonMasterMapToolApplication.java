@@ -3113,10 +3113,18 @@ public class DungeonMasterMapToolApplication extends Application {
                     + "\" (including its sub-folders) contains no .dd2vtt or .uvtt files.");
             return;
         }
-        importBatch(maps, suggestedFolder);
+        importBatch(maps, suggestedFolder, folder.toPath());
     }
 
     private void importBatch(List<Path> sources, Path suggestedFolder) {
+        importBatch(sources, suggestedFolder, null);
+    }
+
+    /**
+     * {@code sourceRoot} is the chosen folder for a folder import (its sub-folder structure is re-created in the
+     * library, empty sub-folders are skipped), or {@code null} for a flat multi-file selection.
+     */
+    private void importBatch(List<Path> sources, Path suggestedFolder, Path sourceRoot) {
         Optional<Path> target = MapLocationDialog.showFolder(primaryStage, mapLibrary,
                 "Import " + sources.size() + " maps", MaterialDesignF.FILE_IMPORT_OUTLINE, "Import", suggestedFolder);
         if (target.isEmpty()) {
@@ -3124,7 +3132,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         BatchImportService batch = new BatchImportService(mapLibrary, projectService, dd2vttImportService);
         runInBackground("Importing " + sources.size() + " maps...", "Import failed: ", () -> batch.importAll(
-                sources, target.get(),
+                sources, target.get(), sourceRoot,
                 (index, total, name) -> Platform.runLater(() -> status("Importing " + index + "/" + total + ": " + name + "..."))),
                 result -> {
                     mapBrowser.refresh();

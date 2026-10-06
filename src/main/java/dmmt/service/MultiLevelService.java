@@ -970,6 +970,15 @@ public class MultiLevelService {
     /** Number followed by a digit-free room label: {@code tower upper levels 02 barracks}. */
     private static final java.util.regex.Pattern LABELLED_NUMBER =
             java.util.regex.Pattern.compile("^(.+?)[\\s\\-.]+(\\d+)[\\s\\-.]+(\\D*\\p{L}\\D*)$");
+    /**
+     * Name ending in a parenthesized number, the pattern left by renaming several files to the same name at once:
+     * {@code kings castle (1)}, {@code kings castle (2)}.
+     */
+    private static final java.util.regex.Pattern TRAILING_NUMBER_PAREN =
+            java.util.regex.Pattern.compile("^(.*?)[\\s\\-.]*\\((\\d+)\\)$");
+    /** Parenthesized number followed by a digit-free room label: {@code tower upper levels (2) barracks}. */
+    private static final java.util.regex.Pattern LABELLED_NUMBER_PAREN =
+            java.util.regex.Pattern.compile("^(.+?)[\\s\\-.]+\\((\\d+)\\)[\\s\\-.]+(\\D*\\p{L}\\D*)$");
 
     /** A file name split into level parts: shared {@code prefix}, level {@code number} and optional {@code label}. */
     private record LevelFileName(String prefix, String number, String label) {
@@ -984,11 +993,22 @@ public class MultiLevelService {
             String prefix = trimSeparators(trailing.group(1));
             return prefix.isEmpty() ? null : new LevelFileName(prefix, trailing.group(2), "");
         }
+        java.util.regex.Matcher trailingParen = TRAILING_NUMBER_PAREN.matcher(normalizedName);
+        if (trailingParen.matches()) {
+            String prefix = trimSeparators(trailingParen.group(1));
+            return prefix.isEmpty() ? null : new LevelFileName(prefix, trailingParen.group(2), "");
+        }
         java.util.regex.Matcher labelled = LABELLED_NUMBER.matcher(normalizedName);
         if (labelled.matches()) {
             String prefix = trimSeparators(labelled.group(1));
             return prefix.isEmpty() ? null
                     : new LevelFileName(prefix, labelled.group(2), trimSeparators(labelled.group(3)));
+        }
+        java.util.regex.Matcher labelledParen = LABELLED_NUMBER_PAREN.matcher(normalizedName);
+        if (labelledParen.matches()) {
+            String prefix = trimSeparators(labelledParen.group(1));
+            return prefix.isEmpty() ? null
+                    : new LevelFileName(prefix, labelledParen.group(2), trimSeparators(labelledParen.group(3)));
         }
         return null;
     }

@@ -352,6 +352,25 @@ class MultiLevelServiceTest {
     }
 
     @Test
+    void groupsFilesNumberedWithParenthesesFromRenamingAtOnce() {
+        Path dir = Path.of("maps");
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(
+                dir.resolve("kings castle (1).dd2vtt"),
+                dir.resolve("kings castle (2).dd2vtt"),
+                dir.resolve("kings castle (3).dd2vtt"),
+                dir.resolve("Cave.dd2vtt")));
+
+        assertEquals(2, groups.size());
+        MultiLevelService.ImportGroup castle = groups.get(0);
+        assertEquals("kings castle", castle.name());
+        assertEquals(List.of("kings castle (1).dd2vtt", "kings castle (2).dd2vtt", "kings castle (3).dd2vtt"),
+                castle.files().stream().map(file -> file.getFileName().toString()).toList());
+        assertEquals(List.of("Level 1", "Level 2", "Level 3"), castle.levelNames());
+        assertTrue(castle.multiLevel());
+        assertFalse(groups.get(1).multiLevel());
+    }
+
+    @Test
     void groupsLabelledLevelsAndTheirBaseFile() {
         Path dir = Path.of("maps");
         List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(

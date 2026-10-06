@@ -71,6 +71,22 @@ class BatchImportServiceTest {
     }
 
     @Test
+    void folderImportRecreatesSubFoldersButSkipsEmptyOnes() throws Exception {
+        write(source, "cave.dd2vtt", "{\"pixels_per_grid\":100}");
+        write(source.resolve("dungeon").resolve("level1"), "hall.dd2vtt", "{\"pixels_per_grid\":100}");
+        Files.createDirectories(source.resolve("empty"));
+        List<Path> maps = BatchImportService.findMaps(source);
+
+        BatchImportService.Result result = service.importAll(maps, libraryRoot, source, null);
+
+        assertTrue(result.failures().isEmpty());
+        assertTrue(Files.exists(libraryRoot.resolve("cave").resolve("cave.dmmap")));
+        assertTrue(Files.exists(libraryRoot.resolve("dungeon").resolve("level1").resolve("hall")
+                .resolve("hall.dmmap")));
+        assertFalse(Files.exists(libraryRoot.resolve("empty")));
+    }
+
+    @Test
     void replacesInvalidCharactersInNames() throws Exception {
         Path file = service.uniqueMapFile(libraryRoot, "a:b*c");
 

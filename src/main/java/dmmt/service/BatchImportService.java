@@ -45,11 +45,23 @@ public class BatchImportService {
     }
 
     /**
-     * Imports the files into {@code targetFolder}. Files that look like the levels of one building become one
-     * multilevel map each (see {@link MultiLevelService#groupLevelFiles}); the rest become ordinary maps.
-     * {@code imported} lists the created map / multilevel map files.
+     * Imports the files into {@code targetFolder}, flat (no sub-folders created). Files that look like the levels of
+     * one building become one multilevel map each (see {@link MultiLevelService#groupLevelFiles}); the rest become
+     * ordinary maps. {@code imported} lists the created map / multilevel map files.
      */
     public Result importAll(List<Path> sources, Path targetFolder, Progress progress) {
+        return importAll(sources, targetFolder, null, progress);
+    }
+
+    /**
+     * Imports the files into {@code targetFolder}. When {@code sourceRoot} is given (folder import), each file's
+     * sub-folder path relative to {@code sourceRoot} is re-created under {@code targetFolder} (sub-folders with no
+     * suitable maps are never created); otherwise every file is imported directly into {@code targetFolder}.
+     * Files that look like the levels of one building become one multilevel map each
+     * (see {@link MultiLevelService#groupLevelFiles}); the rest become ordinary maps. {@code imported} lists the
+     * created map / multilevel map files.
+     */
+    public Result importAll(List<Path> sources, Path targetFolder, Path sourceRoot, Progress progress) {
         List<Path> imported = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
         int total = sources.size();
@@ -65,10 +77,21 @@ public class BatchImportService {
             }
         }
         for (MultiLevelService.ImportGroup group : groups) {
+            Path groupFolder;
+            try {
+                groupFolder = resolveTargetFolder(targetFolder, sourceRoot, group.files().get(0));
+            } catch (IOException ex) {
+                String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+                for (Path file : group.files()) {
+                    failures.add(new Failure(file, reason));
+                }
+                index[0] += group.files().size();
+                continue;
+            }
             if (group.multiLevel()) {
                 int first = index[0];
                 try {
-                    imported.add(importMultiLevel(group, targetFolder, (levelIndex, levelTotal, levelName) -> {
+                    imported.add(importMultiLevel(group, groupFolder, (levelIndex, levelTotal, levelName) -> {
                         index[0] = first + levelIndex;
                         if (progress != null) {
                             progress.report(index[0], total, group.name() + " · " + levelName);
@@ -89,13 +112,30 @@ public class BatchImportService {
                 progress.report(++index[0], total, baseName);
             }
             try {
-                imported.add(importOne(source, targetFolder, baseName));
+                imported.add(importOne(source, groupFolder, baseName));
             } catch (IOException | RuntimeException ex) {
                 String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                 failures.add(new Failure(source, reason));
             }
         }
         return new Result(imported, failures, total);
+    }
+
+    /**
+     * {@code targetFolder} itself when {@code sourceRoot} is {@code null}, otherwise {@code targetFolder} plus the
+     * sub-folder path of {@code source} relative to {@code sourceRoot} (created on demand, so a sub-folder only
+     * appears once a suitable map is actually imported from it).
+     */
+    private static Path resolveTargetFolder(Path targetFolder, Path sourceRoot, Path source) throws IOException {
+        if (sourceRoot == null) {
+            return targetFolder;
+        }
+        Path sourceDir = source.toAbsolutePath().normalize().getParent();
+        Path root = sourceRoot.toAbsolutePath().normalize();
+        Path relative = root.relativize(sourceDir);
+        Path resolved = relative.toString().isEmpty() ? targetFolder : targetFolder.resolve(relative.toString());
+        Files.createDirectories(resolved);
+        return resolved;
     }
 
     private Path importMultiLevel(MultiLevelService.ImportGroup group, Path targetFolder,
