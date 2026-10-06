@@ -354,14 +354,6 @@ configured with `fog.revealSeconds`, `fog.hideSeconds`, `fog.lightFadeSeconds`, 
 
 *Keywords:* fog fade, fog animation, fade in, fade out, transition, instant fog
 
-### `lighting.tint`
-**Default:** `0.08` · **Range:** 0 to `lighting.tint.max` · **Applies:** managed by the app
-
-How strongly lit areas are tinted with the colour of their light (warm torch light, blue moonlight, ...). `0` = no
-tint. Set with the light tint slider in the Lighting section; values above `lighting.tint.max` are clamped.
-
-*Keywords:* light colour, color tint, warm light, coloured light, light hue
-
 ### `fog.cellsPerGrid.min`
 **Default:** `5` · **Range:** 1 to 100 · **Applies:** restart
 
@@ -898,15 +890,16 @@ difference is hard to see. Lower it if busy maps use a lot of CPU, raise it to `
 ### `lighting.tint.max`
 **Default:** `0.3` · **Range:** 0 to 1 · **Applies:** restart
 
-Upper limit of the light tint slider and of `lighting.tint`.
+Upper limit of the light tint slider; this strength itself is saved per map (not here), so different maps can use
+different values. Values above this are clamped.
 
 *Keywords:* light tint limit, colour strength, slider range
 
 ### `lighting.brightCore.max`
 **Default:** `0.5` · **Range:** 0 to 1 · **Applies:** restart
 
-Upper limit of the bright core slider and of the global bright core strength. Set with the bright core slider in the
-Lighting section; values above this are clamped.
+Upper limit of the bright core slider; this strength itself is saved per map (not here), so different maps can use
+different values. Values above this are clamped.
 
 *Keywords:* bright core limit, hot spot strength, glow strength, slider range
 
@@ -985,7 +978,7 @@ The submenus of a light's right-click menu have a **fixed set of entries**; you 
 remove entries. All values are **live**.
 
 - **`lightMenu.range1`**, `lightMenu.range2`, `lightMenu.range3`, `lightMenu.range4`, `lightMenu.range5`, `lightMenu.range6`, `lightMenu.range7`, `lightMenu.range8`, `lightMenu.range9`, `lightMenu.range10` – the ten choices of the **Range** submenu, in tiles (0.1 to 10000). Defaults: 1, 2, 3, 4, 6, 8, 12, 16, 24, 100.
-- **`lightMenu.color.warmTorch`**, **`lightMenu.color.candle`**, **`lightMenu.color.neutral`**, **`lightMenu.color.moonlight`**, **`lightMenu.color.arcane`**, **`lightMenu.color.fire`** – colours `#RRGGBB` of the **Color** submenu entries (defaults `#FFB35C`, `#FFD9A0`, `#FFF4E0`, `#A8C8FF`, `#C08CFF`, `#FF6A3D`).
+- **`lightMenu.color.warmTorch`**, **`lightMenu.color.candle`**, **`lightMenu.color.neutral`**, **`lightMenu.color.moonlight`**, **`lightMenu.color.arcane`**, **`lightMenu.color.fire`**, **`lightMenu.color.verdant`**, **`lightMenu.color.sunbeam`**, **`lightMenu.color.crimson`**, **`lightMenu.color.frost`**, **`lightMenu.color.rose`**, **`lightMenu.color.toxic`** – colours `#RRGGBB` of the **Color** submenu entries (defaults `#FFB35C`, `#FFD9A0`, `#FFF4E0`, `#A8C8FF`, `#C08CFF`, `#FF6A3D`, `#4DFF8C`, `#FFE34D`, `#FF3B3B`, `#6EF0FF`, `#FF6FCF`, `#C6FF4D`).
 - **`lightMenu.flicker.candle.depth`** / `lightMenu.flicker.candle.speed`, **`lightMenu.flicker.torch.depth`** / `lightMenu.flicker.torch.speed`, **`lightMenu.flicker.strongTorch.depth`** / `lightMenu.flicker.strongTorch.speed`, **`lightMenu.flicker.slowPulse.depth`** / `lightMenu.flicker.slowPulse.speed` – depth (0.01 to 1) and speed (0.05 to 20, `1` = normal) of the **Flicker** submenu entries; the *Off* entry is fixed. Defaults: 0.12/2.5, 0.22/1.4, 0.35/1.8, 0.3/0.35.
 - **`lightMenu.brightness.dim`**, **`lightMenu.brightness.normal`**, **`lightMenu.brightness.bright`** – brightness (0 to 1) of the **Brightness** submenu entries (defaults 0.4, 0.75, 1).
 

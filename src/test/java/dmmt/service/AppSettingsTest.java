@@ -148,7 +148,7 @@ class AppSettingsTest {
             default -> null;
         });
 
-        assertEquals(6, Tuning.lightMenuColors().size());
+        assertEquals(12, Tuning.lightMenuColors().size());
         assertEquals("Moonlight", Tuning.lightMenuColors().get(3).name());
         assertEquals("#99CCFF", Tuning.lightMenuColors().get(3).value());
         assertEquals("Off", Tuning.lightMenuFlicker().get(0).name());

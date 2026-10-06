@@ -75,11 +75,7 @@ public class CanvasMapRenderer {
         viewportZoomChanged = changed;
     }
     public static final double MIN_LIGHT_TINT = 0.0;
-    public static final double DEFAULT_LIGHT_TINT = 0.08;
-
-    /** Global strength of the light colour tint over lit areas; applies to every light in every project. */
-    @Getter
-    private static volatile double lightTint = DEFAULT_LIGHT_TINT;
+    public static final double DEFAULT_LIGHT_TINT = 0.05;
 
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
@@ -110,24 +106,22 @@ public class CanvasMapRenderer {
         return Tuning.LIGHT_TINT_MAX.get();
     }
 
-    public static void setLightTint(double value) {
-        lightTint = Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
+    /** Clamps a light tint value (e.g. loaded from a project file) to the valid [MIN_LIGHT_TINT, maxLightTint()] range. */
+    public static double clampLightTint(double value) {
+        return Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
     }
 
     public static final double MIN_BRIGHT_CORE = 0.0;
     public static final double DEFAULT_BRIGHT_CORE = 0.15;
-
-    /** Global strength of each light's bright-core highlight; applies to every light in every project. */
-    @Getter
-    private static volatile double brightCore = DEFAULT_BRIGHT_CORE;
 
     /** Highest bright core strength (setting lighting.brightCore.max). */
     public static double maxBrightCore() {
         return Tuning.BRIGHT_CORE_MAX.get();
     }
 
-    public static void setBrightCore(double value) {
-        brightCore = Math.max(MIN_BRIGHT_CORE, Math.min(maxBrightCore(), value));
+    /** Clamps a bright core value (e.g. loaded from a project file) to the valid [MIN_BRIGHT_CORE, maxBrightCore()] range. */
+    public static double clampBrightCore(double value) {
+        return Math.max(MIN_BRIGHT_CORE, Math.min(maxBrightCore(), value));
     }
 
     public static final double DEFAULT_FOG_SOFTNESS = 0.3;
@@ -1191,6 +1185,7 @@ public class CanvasMapRenderer {
         LightBuffer buffer = playerMode ? playerLightBuffer : dmLightBuffer;
         buffer.ensureSize(bw, bh);
 
+        double lightTint = clampLightTint(project.getLighting().getLightTint());
         List<DmProject.LightSource> lights = project.getLighting().getLights();
         int fps = animationFps;
         long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
@@ -1353,6 +1348,7 @@ public class CanvasMapRenderer {
     public void renderBrightCore(GraphicsContext gc, DmProject project, double width, double height,
                                   DmProject.CameraState camera, boolean playerMode) {
         gc.clearRect(0, 0, width, height);
+        double brightCore = clampBrightCore(project.getLighting().getBrightCore());
         if (brightCore <= 0) {
             return;
         }

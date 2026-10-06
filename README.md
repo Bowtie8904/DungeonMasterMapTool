@@ -142,9 +142,9 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - **Recent maps:** the list below the tree shows the maps you opened last (most recent first, size set by `ui.recentMaps.max`). Double-click one to open it again.
 - **Move:** drag & drop maps or folders onto a folder (or onto empty space for the library root). Hovering a collapsed folder while dragging expands it. Folders dropped onto a map go to that map's folder. With several entries selected, dragging any of them moves **all selected entries** (entries inside a selected folder travel with it); entries that cannot be moved (name taken, folder into itself) are skipped and listed afterwards.
 - **Merge by drag & drop:** drop a map **onto another map** to build a multilevel map. The target turns green and shows what happens: map onto map → *Create a multilevel map*; map onto a multilevel map (or a multilevel map onto a map) → *Add to the multilevel map*; multilevel map onto a multilevel map → *Merge the levels into this map* (the map you drop onto keeps its name and shared settings, the dragged one gives up its levels and disappears). The level dialog opens first so you can set the order. Dragging **several selected maps** onto a map adds all of them in one go; if multilevel maps are involved, the target keeps its name and settings when it is a multilevel map, otherwise the first dragged multilevel map does.
-- **Select several maps** with `Ctrl+click` / `Shift+click` (used to merge them into a multilevel map, or to drag them all at once).
-- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map (or *Merge N maps into a multilevel map* when several maps are selected), Delete. **On a multilevel map:** Open, Manage levels, Dissolve into separate maps, Rename, Duplicate, Delete. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
-- **Keyboard:** `F2` rename, `Delete` delete (always with confirmation; folders state how many maps they contain), `Enter` open.
+- **Select several maps** with `Ctrl+click` / `Shift+click` to duplicate, delete or drag them all at once. Ordinary and multilevel maps can be selected together. Right-clicking a selected map preserves the selection; right-clicking an unselected entry selects only that entry.
+- **Context menu on a map:** Open, Rename, Duplicate, Make multilevel map, Delete. **On a multilevel map:** Open, Manage levels, Dissolve into separate maps, Rename, Duplicate, Delete. With multiple maps selected, **Duplicate** and **Delete** apply to every selected map; **Make multilevel map** is enabled only for two or more ordinary maps and merges the entire selection. It is disabled for a single map or selections containing multilevel maps. All other menu actions are disabled during multi-selection. Mixed map/folder selections disable all menu actions. **On a folder** (or empty space): New map here, Import map here, Import folder here, Import multilevel map here, New folder, Rename, Delete.
+- **Keyboard:** `F2` rename and `Enter` open require a single selection. `Delete` deletes all selected maps with one confirmation listing them; deleting a single folder states how many maps it contains.
 - **Duplicate** creates `Name (Copy)`, `Name (Copy 2)`, ...
 - **Rename** renames the package folder and file on disk. Names cannot be empty, contain `<>:"/\|?*`, be reserved Windows names, or duplicate a name in the same folder.
 - Leaving an unsaved new map asks **Save / Discard / Cancel**.
@@ -195,7 +195,7 @@ Dungeon Alchemist can export every floor of a multi-story building as its own dd
 
 - **Import:** click **Import multilevel map** in the library toolbar (or right-click a folder → *Import multilevel map here*) and select all level files at once. The level dialog lists them **lowest level at the top**, sorted by file name and with suggested level names (e.g. `haus_00 … haus_03` → *Level 00 … Level 03*). Reorder, rename, remove or add levels, click **Next**, then pick the folder and name (pre-filled with the part all file names share).
 - **Batch import:** files numbered like levels are grouped automatically (see *Batch import* above).
-- **Merge existing maps:** drag a map onto another map, or select several maps in the library (`Ctrl+click`) and right-click → *Merge N maps into a multilevel map…* (or *Make multilevel map…* on a single map). The maps are **moved** into the new multilevel map and no longer appear on their own; their fog, lights, effects and cameras are kept. File names do not have to match — set the order in the dialog.
+- **Merge existing maps:** select two or more ordinary maps in the library (`Ctrl+click` / `Shift+click`) and right-click → *Make multilevel map…*. This menu action is disabled for a single selected map. Alternatively, drag a map (or several selected maps) onto another map. The maps are **moved** into the new multilevel map and no longer appear on their own; their fog, lights, effects and cameras are kept. File names do not have to match — set the order in the dialog.
 
 **Switch levels**
 
@@ -278,8 +278,8 @@ The *Lighting* section controls lights and ambience.
   - **Remove**.
 - Light is blocked by walls and closed doors; open doors let light through.
 - Overlapping lights (and glowing effects, see [Tactical overlays](#8-tactical-overlays)) brighten the area together and blend their colours by how much each contributes, instead of only the brightest light showing.
-- **Light tint** slider: strength of the light colour over lit areas (0–30 %, global).
-- **Bright core** slider: adds a small, additive hot spot right at each light's own position that brightens the map art underneath (not a flat overlay), similar to the bright centers baked into some hand-painted map lights (0–50 %, default 15 %, global).
+- **Light tint** slider: strength of the light colour over lit areas (0–30 %, saved per map).
+- **Bright core** slider: adds a small, additive hot spot right at each light's own position that brightens the map art underneath (not a flat overlay), similar to the bright centers baked into some hand-painted map lights (0–50 %, default 15 %, saved per map).
 
 **Time of day**
 

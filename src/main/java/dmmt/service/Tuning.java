@@ -448,7 +448,10 @@ public final class Tuning {
         }
         String[][] colors = {{"warmTorch", "Warm torch", "#FFB35C"}, {"candle", "Candle", "#FFD9A0"},
                 {"neutral", "Neutral", "#FFF4E0"}, {"moonlight", "Moonlight", "#A8C8FF"},
-                {"arcane", "Arcane", "#C08CFF"}, {"fire", "Fire", "#FF6A3D"}};
+                {"arcane", "Arcane", "#C08CFF"}, {"fire", "Fire", "#FF6A3D"},
+                {"verdant", "Verdant", "#4DFF8C"}, {"sunbeam", "Sunbeam", "#FFE34D"},
+                {"crimson", "Crimson", "#FF3B3B"}, {"frost", "Frost", "#6EF0FF"},
+                {"rose", "Rose", "#FF6FCF"}, {"toxic", "Toxic", "#C6FF4D"}};
         for (String[] c : colors) {
             LIGHT_MENU_COLORS.put(c[1], color(LIGHTS, "lightMenu.color." + c[0], c[2], false,
                     "Colour of the '" + c[1] + "' entry of the Color submenu of a light's right-click menu."));

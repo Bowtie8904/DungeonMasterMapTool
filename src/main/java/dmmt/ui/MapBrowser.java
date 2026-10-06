@@ -31,6 +31,7 @@ import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -217,14 +218,20 @@ public class MapBrowser extends VBox {
             if (entry == null) {
                 return;
             }
-            if (event.getCode() == KeyCode.ENTER && entry.isMap()) {
+            boolean single = tree.getSelectionModel().getSelectedItems().size() == 1;
+            if (event.getCode() == KeyCode.ENTER && single && entry.isMap()) {
                 host.openMap(entry.mapFile());
                 event.consume();
-            } else if (event.getCode() == KeyCode.F2 && !isRoot(entry)) {
+            } else if (event.getCode() == KeyCode.F2 && single && !isRoot(entry)) {
                 rename(entry);
                 event.consume();
             } else if (event.getCode() == KeyCode.DELETE && !isRoot(entry)) {
-                delete(entry);
+                java.util.List<Entry> maps = selectedMaps();
+                if (!maps.isEmpty()) {
+                    deleteMaps(maps);
+                } else if (single) {
+                    delete(entry);
+                }
                 event.consume();
             }
         });
@@ -518,15 +525,16 @@ public class MapBrowser extends VBox {
         return item == null || item.getValue() == null ? null : item.getValue().path();
     }
 
-    /** The selected ordinary (not multilevel) maps, in tree order. */
-    private java.util.List<Entry> selectedPlainMaps() {
+    /** All selected maps in tree order, or none if the selection includes a folder. */
+    private java.util.List<Entry> selectedMaps() {
         java.util.List<Entry> maps = new java.util.ArrayList<>();
         for (TreeItem<Entry> item : tree.getSelectionModel().getSelectedItems()) {
-            if (item != null && item.getValue() != null && item.getValue().isMap() && !item.getValue().isMultiLevel()) {
-                maps.add(item.getValue());
+            if (item == null || item.getValue() == null || !item.getValue().isMap()) {
+                return java.util.List.of();
             }
+            maps.add(item.getValue());
         }
-        return maps;
+        return java.util.List.copyOf(maps);
     }
 
     private boolean isRoot(Entry entry) {
@@ -581,11 +589,68 @@ public class MapBrowser extends VBox {
         });
     }
 
-    private void copy(Entry entry) {
-        host.runLibraryOperation("Copying map…", null, () -> library.copy(entry), result -> {
+    private void copyMaps(java.util.List<Entry> maps) {
+        java.util.List<Path> created = new java.util.ArrayList<>();
+        java.util.List<String> failures = new java.util.ArrayList<>();
+        host.runLibraryOperation("Copying " + maps.size() + " maps…", affectedOpenMap(maps), () -> {
+            for (Entry map : maps) {
+                try {
+                    created.add(library.copy(map).createdMap());
+                } catch (IOException exception) {
+                    failures.add(map.name() + ": " + exception.getMessage());
+                }
+            }
+            return new MapLibraryService.Result(java.util.Map.of(), null);
+        }, result -> {
             refresh();
-            select(result.createdMap());
+            tree.getSelectionModel().clearSelection();
+            for (Path path : created) {
+                TreeItem<Entry> item = findItem(tree.getRoot(), path.toAbsolutePath().normalize());
+                if (item != null) {
+                    tree.getSelectionModel().select(item);
+                }
+            }
+            showBatchFailures("duplicated", failures);
         });
+    }
+
+    private void deleteMaps(java.util.List<Entry> maps) {
+        if (maps.size() == 1) {
+            delete(maps.get(0));
+            return;
+        }
+        String names = String.join("\n", maps.stream().map(Entry::name).toList());
+        boolean confirmed = Dialogs.confirmDanger(window(), "Delete maps", "Delete " + maps.size() + " maps?",
+                "These maps and all of their images and saved state will be permanently deleted from disk:\n\n"
+                        + names + "\n\nThis cannot be undone.", "Delete");
+        if (!confirmed) {
+            return;
+        }
+        java.util.List<String> failures = new java.util.ArrayList<>();
+        host.runLibraryOperation("Deleting " + maps.size() + " maps…", affectedOpenMap(maps), () -> {
+            for (Entry map : maps) {
+                try {
+                    library.delete(map);
+                } catch (IOException exception) {
+                    failures.add(map.name() + ": " + exception.getMessage());
+                }
+            }
+            return new MapLibraryService.Result(java.util.Map.of(), null);
+        }, result -> {
+            refresh();
+            showBatchFailures("deleted", failures);
+        });
+    }
+
+    private Path affectedOpenMap(java.util.List<Entry> maps) {
+        return maps.stream().filter(this::isOpenMap).map(Entry::path).findFirst().orElse(null);
+    }
+
+    private void showBatchFailures(String action, java.util.List<String> failures) {
+        if (!failures.isEmpty()) {
+            Dialogs.error(window(), failures.size() + (failures.size() == 1 ? " map was" : " maps were")
+                    + " not " + action, String.join("\n", failures));
+        }
     }
 
     private void delete(Entry entry) {
@@ -639,12 +704,30 @@ public class MapBrowser extends VBox {
                 : folder.getFileName().toString();
     }
 
-    private ContextMenu buildMenu(Entry entry) {
+    ContextMenu buildMenu(Entry entry) {
         ContextMenu menu = new ContextMenu();
         if (entry == null) {
             entry = tree.getRoot().getValue();
         }
         Entry target = entry;
+        java.util.List<Entry> maps = selectedMaps();
+        if (maps.isEmpty() && tree.getSelectionModel().getSelectedItems().size() <= 1 && entry.isMap()) {
+            maps = java.util.List.of(entry);
+        }
+        java.util.List<Entry> selected = maps;
+        MenuItem duplicate = item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copyMaps(selected));
+        MenuItem delete = danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> {
+            if (target.isMap()) {
+                deleteMaps(selected);
+            } else {
+                delete(target);
+            }
+        }));
+        duplicate.setDisable(selected.isEmpty());
+        delete.setDisable(target.isMap() && selected.isEmpty());
+        MenuItem merge = item("Make multilevel map…", MaterialDesignL.LAYERS_PLUS,
+                () -> host.mergeIntoMultiLevelMap(selected));
+        merge.setDisable(selected.size() < 2 || selected.stream().anyMatch(Entry::isMultiLevel));
         if (entry.isMultiLevel()) {
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
@@ -653,28 +736,18 @@ public class MapBrowser extends VBox {
                             () -> host.dissolveMultiLevel(target.mapFile())),
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
-                    item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
+                    duplicate,
                     new SeparatorMenuItem(),
-                    danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+                    delete);
         } else if (entry.isMap()) {
-            java.util.List<Entry> mergeable = selectedPlainMaps();
-            if (!mergeable.contains(entry)) {
-                mergeable = java.util.List.of(entry);
-            }
-            java.util.List<Entry> toMerge = mergeable;
-            MenuItem merge = toMerge.size() > 1
-                    ? item("Merge " + toMerge.size() + " maps into a multilevel map…", MaterialDesignL.LAYERS_PLUS,
-                    () -> host.mergeIntoMultiLevelMap(toMerge))
-                    : item("Make multilevel map…", MaterialDesignL.LAYERS_PLUS,
-                    () -> host.mergeIntoMultiLevelMap(toMerge));
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
-                    item("Duplicate", MaterialDesignC.CONTENT_COPY, () -> copy(target)),
+                    duplicate,
                     merge,
                     new SeparatorMenuItem(),
-                    danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+                    delete);
         } else {
             menu.getItems().addAll(
                     item("New map here…", MaterialDesignM.MAP_PLUS, () -> host.newMapIn(target.path())),
@@ -688,7 +761,14 @@ public class MapBrowser extends VBox {
                 menu.getItems().addAll(
                         new SeparatorMenuItem(),
                         item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
-                        danger(item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> delete(target))));
+                        delete);
+            }
+        }
+        if (tree.getSelectionModel().getSelectedItems().size() > 1) {
+            for (MenuItem action : menu.getItems()) {
+                if (action != duplicate && action != merge && !(action == delete && target.isMap())) {
+                    action.setDisable(true);
+                }
             }
         }
         return menu;
@@ -892,6 +972,13 @@ public class MapBrowser extends VBox {
             thumbnailView.setFitHeight(THUMB_HEIGHT);
             thumbnailView.setPreserveRatio(true);
             thumbnailView.setSmooth(true);
+            addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+                if (event.getButton() == MouseButton.SECONDARY && getTreeItem() != null
+                        && tree.getSelectionModel().getSelectedItems().contains(getTreeItem())) {
+                    tree.requestFocus();
+                    event.consume();
+                }
+            });
             setOnMouseClicked(event -> {
                 Entry entry = getItem();
                 if (entry != null && entry.isMap() && event.getButton() == MouseButton.PRIMARY
@@ -907,6 +994,8 @@ public class MapBrowser extends VBox {
                 if (getTreeItem() != null && !tree.getSelectionModel().getSelectedItems().contains(getTreeItem())) {
                     tree.getSelectionModel().clearSelection();
                     tree.getSelectionModel().select(getTreeItem());
+                } else if (isEmpty()) {
+                    tree.getSelectionModel().clearSelection();
                 }
                 openMenu = buildMenu(isEmpty() ? null : getItem());
                 openMenu.show(this, event.getScreenX(), event.getScreenY());

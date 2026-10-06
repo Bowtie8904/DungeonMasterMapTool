@@ -148,8 +148,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
     private static final String PREF_FOG_SOFTNESS = "fog.softness";
     private static final String PREF_FOG_FADE = "fog.fadeAnimation";
-    private static final String PREF_LIGHT_TINT = "lighting.tint";
-    private static final String PREF_BRIGHT_CORE = "lighting.brightCore";
     private static final String PREF_AUTOSAVE_ENABLED = "autosave.enabled";
     private static final String PREF_AUTOSAVE_MINUTES = "autosave.minutes";
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
@@ -335,6 +333,14 @@ public class DungeonMasterMapToolApplication extends Application {
     private Slider weatherIntensitySlider;
     private Label weatherIntensityValue;
     private double weatherIntensityCommitted = WeatherEffects.defaultIntensity();
+    private Slider lightTintSlider;
+    private Label lightTintValue;
+    /** Last committed light tint of the current map; the "before" value for undo. */
+    private double lightTintCommitted = CanvasMapRenderer.DEFAULT_LIGHT_TINT;
+    private Slider brightCoreSlider;
+    private Label brightCoreValue;
+    /** Last committed bright core strength of the current map; the "before" value for undo. */
+    private double brightCoreCommitted = CanvasMapRenderer.DEFAULT_BRIGHT_CORE;
     private ToggleButton freezePlayerButton;
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
@@ -409,8 +415,6 @@ public class DungeonMasterMapToolApplication extends Application {
         FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
         CanvasMapRenderer.setFogSoftness(preferences.getDouble(PREF_FOG_SOFTNESS, CanvasMapRenderer.DEFAULT_FOG_SOFTNESS));
         CanvasMapRenderer.setFogFadeEnabled(preferences.getBoolean(PREF_FOG_FADE, true));
-        CanvasMapRenderer.setLightTint(preferences.getDouble(PREF_LIGHT_TINT, CanvasMapRenderer.DEFAULT_LIGHT_TINT));
-        CanvasMapRenderer.setBrightCore(preferences.getDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.DEFAULT_BRIGHT_CORE));
         CanvasMapRenderer.setTextQuarterTurns(Math.floorDiv(preferences.getInt(PREF_TEXT_ROTATION, 0), 90));
         targetFps = clampFps(preferences.getInt(PREF_FPS_TARGET, DEFAULT_FPS_TARGET));
         animationFps = clampFps(preferences.getInt(PREF_FPS_ANIMATION, DEFAULT_FPS_ANIMATION));
@@ -1445,8 +1449,12 @@ public class DungeonMasterMapToolApplication extends Application {
      * Global strength of the light colour tint over lit areas. Stored in the settings file so it
      * applies to every light in every project; the renderer picks it up on the next frame.
      */
+    /**
+     * Strength of the light colour tint over lit areas on this map. Saved with the map (in {@code lighting.lightTint}
+     * of the project file) so different maps can use different strengths; the renderer picks it up on the next frame.
+     */
     private HBox lightTintSlider() {
-        double initial = CanvasMapRenderer.getLightTint();
+        double initial = CanvasMapRenderer.DEFAULT_LIGHT_TINT;
         Slider slider = new Slider(CanvasMapRenderer.MIN_LIGHT_TINT, CanvasMapRenderer.maxLightTint(), initial);
         slider.setMajorTickUnit(0.01);
         slider.setMinorTickCount(0);
@@ -1454,21 +1462,31 @@ public class DungeonMasterMapToolApplication extends Application {
         slider.setBlockIncrement(0.01);
         HBox.setHgrow(slider, Priority.ALWAYS);
         slider.setPrefWidth(90);
-        Icons.tooltip(slider, "Light colour tint strength (applies to all lights and maps). "
-                + "Lower keeps the map's own colours, higher tints lit areas with the light colour.");
+        Icons.tooltip(slider, "Light colour tint strength on this map (saved with the map). "
+                + "Lower keeps the map's own colours, higher tints lit areas with the light colour. Double-click to reset.");
         Label value = new Label(Math.round(initial * 100) + "%");
         value.getStyleClass().add("value-label");
+        lightTintSlider = slider;
+        lightTintValue = value;
         slider.valueProperty().addListener((obs, oldValue, newValue) -> {
-            CanvasMapRenderer.setLightTint(newValue.doubleValue());
-            value.setText(Math.round(CanvasMapRenderer.getLightTint() * 100) + "%");
+            value.setText(Math.round(newValue.doubleValue() * 100) + "%");
+            if (syncingControls) {
+                return;
+            }
+            project.getLighting().setLightTint(CanvasMapRenderer.clampLightTint(newValue.doubleValue()));
             if (!slider.isValueChanging()) {
-                preferences.putDouble(PREF_LIGHT_TINT, CanvasMapRenderer.getLightTint());
+                commitLightTint();
             }
         });
         slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
-            if (!changing) {
-                preferences.putDouble(PREF_LIGHT_TINT, CanvasMapRenderer.getLightTint());
-                status("Light tint: " + Math.round(CanvasMapRenderer.getLightTint() * 100) + "%.");
+            if (!changing && !syncingControls) {
+                commitLightTint();
+            }
+        });
+        slider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                slider.setValue(CanvasMapRenderer.DEFAULT_LIGHT_TINT);
+                commitLightTint();
             }
         });
         FontIcon icon = Icons.icon(MaterialDesignP.PALETTE_OUTLINE);
@@ -1479,12 +1497,12 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     /**
-     * Global strength of each light's bright-core highlight: a small additive hot-spot at each light's own
-     * position that brightens the map art underneath (not a flat overlay). Stored in the settings file so it
-     * applies to every light in every map; the renderer picks it up on the next frame.
+     * Strength of each light's bright-core highlight on this map: a small additive hot-spot at each light's own
+     * position that brightens the map art underneath (not a flat overlay). Saved with the map (in
+     * {@code lighting.brightCore} of the project file); the renderer picks it up on the next frame.
      */
     private HBox brightCoreSlider() {
-        double initial = CanvasMapRenderer.getBrightCore();
+        double initial = CanvasMapRenderer.DEFAULT_BRIGHT_CORE;
         Slider slider = new Slider(CanvasMapRenderer.MIN_BRIGHT_CORE, CanvasMapRenderer.maxBrightCore(), initial);
         slider.setMajorTickUnit(0.01);
         slider.setMinorTickCount(0);
@@ -1492,21 +1510,31 @@ public class DungeonMasterMapToolApplication extends Application {
         slider.setBlockIncrement(0.01);
         HBox.setHgrow(slider, Priority.ALWAYS);
         slider.setPrefWidth(90);
-        Icons.tooltip(slider, "Bright core strength (applies to all lights and maps). "
-                + "0% is off; higher brightens the map art at each light's own center instead of covering it.");
+        Icons.tooltip(slider, "Bright core strength on this map (saved with the map). "
+                + "0% is off; higher brightens the map art at each light's own center instead of covering it. Double-click to reset.");
         Label value = new Label(Math.round(initial * 100) + "%");
         value.getStyleClass().add("value-label");
+        brightCoreSlider = slider;
+        brightCoreValue = value;
         slider.valueProperty().addListener((obs, oldValue, newValue) -> {
-            CanvasMapRenderer.setBrightCore(newValue.doubleValue());
-            value.setText(Math.round(CanvasMapRenderer.getBrightCore() * 100) + "%");
+            value.setText(Math.round(newValue.doubleValue() * 100) + "%");
+            if (syncingControls) {
+                return;
+            }
+            project.getLighting().setBrightCore(CanvasMapRenderer.clampBrightCore(newValue.doubleValue()));
             if (!slider.isValueChanging()) {
-                preferences.putDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.getBrightCore());
+                commitBrightCore();
             }
         });
         slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
-            if (!changing) {
-                preferences.putDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.getBrightCore());
-                status("Bright core: " + Math.round(CanvasMapRenderer.getBrightCore() * 100) + "%.");
+            if (!changing && !syncingControls) {
+                commitBrightCore();
+            }
+        });
+        slider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                slider.setValue(CanvasMapRenderer.DEFAULT_BRIGHT_CORE);
+                commitBrightCore();
             }
         });
         FontIcon icon = Icons.icon(MaterialDesignW.WHITE_BALANCE_SUNNY);
@@ -1686,6 +1714,46 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void setAmbientBrightness(String presetName, double brightness) {
         project.getLighting().putAmbientBrightness(presetName, brightness);
+        syncControlsFromProject();
+    }
+
+    private void commitLightTint() {
+        double before = lightTintCommitted;
+        double after = project.getLighting().getLightTint();
+        if (Math.abs(after - before) < 1e-9) {
+            return;
+        }
+        lightTintCommitted = after;
+        recordHistory(
+                "Change light tint",
+                () -> setLightTint(after),
+                () -> setLightTint(before)
+        );
+        status("Light tint on this map: " + Math.round(after * 100) + "%.");
+    }
+
+    private void setLightTint(double value) {
+        project.getLighting().setLightTint(CanvasMapRenderer.clampLightTint(value));
+        syncControlsFromProject();
+    }
+
+    private void commitBrightCore() {
+        double before = brightCoreCommitted;
+        double after = project.getLighting().getBrightCore();
+        if (Math.abs(after - before) < 1e-9) {
+            return;
+        }
+        brightCoreCommitted = after;
+        recordHistory(
+                "Change bright core",
+                () -> setBrightCore(after),
+                () -> setBrightCore(before)
+        );
+        status("Bright core on this map: " + Math.round(after * 100) + "%.");
+    }
+
+    private void setBrightCore(double value) {
+        project.getLighting().setBrightCore(CanvasMapRenderer.clampBrightCore(value));
         syncControlsFromProject();
     }
 
@@ -4474,6 +4542,18 @@ public class DungeonMasterMapToolApplication extends Application {
                 weatherIntensitySlider.setValue(weather.getIntensity());
                 weatherIntensityValue.setText(Math.round(weather.getIntensity() * 100) + "%");
                 weatherIntensitySlider.setDisable(WeatherType.from(weather.getType()) == WeatherType.NONE);
+            }
+            if (lightTintSlider != null) {
+                double tint = CanvasMapRenderer.clampLightTint(project.getLighting().getLightTint());
+                lightTintCommitted = tint;
+                lightTintSlider.setValue(tint);
+                lightTintValue.setText(Math.round(tint * 100) + "%");
+            }
+            if (brightCoreSlider != null) {
+                double core = CanvasMapRenderer.clampBrightCore(project.getLighting().getBrightCore());
+                brightCoreCommitted = core;
+                brightCoreSlider.setValue(core);
+                brightCoreValue.setText(Math.round(core * 100) + "%");
             }
             if (textLayerToggle != null) {
                 textLayerToggle.setSelected(project.isTextLayerVisible());
