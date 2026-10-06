@@ -48,12 +48,7 @@ class ContextualBrushSizeTest {
 
     @BeforeAll
     static void startJavaFx() throws Exception {
-        FutureTask<Void> ready = new FutureTask<>(() -> {
-            Platform.setImplicitExit(false);
-            return null;
-        });
-        Platform.startup(ready);
-        ready.get(10, TimeUnit.SECONDS);
+        FxTestSupport.startJavaFx();
     }
 
     @Test

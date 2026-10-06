@@ -729,7 +729,7 @@ public class MapBrowser extends VBox {
         }));
         duplicate.setDisable(selected.isEmpty());
         delete.setDisable(target.isMap() && selected.isEmpty());
-        MenuItem merge = item("Make multilevel map…", MaterialDesignL.LAYERS_PLUS,
+        MenuItem merge = item("Combine into multilevel map", MaterialDesignL.LAYERS_PLUS,
                 () -> host.mergeIntoMultiLevelMap(selected));
         merge.setDisable(selected.size() < 2 || selected.stream().anyMatch(Entry::isMultiLevel));
         MenuItem tags = item(selected.size() > 1 ? "Add tags…" : "Manage tags…",

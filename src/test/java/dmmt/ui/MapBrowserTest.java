@@ -1,6 +1,7 @@
 package dmmt.ui;
 
 import dmmt.DungeonMasterMapToolApplication;
+import dmmt.FxTestSupport;
 import dmmt.model.DmProject;
 import dmmt.model.MultiLevelManifest;
 import dmmt.service.AppSettings;
@@ -60,12 +61,7 @@ class MapBrowserTest {
 
     @BeforeAll
     static void startJavaFx() throws Exception {
-        FutureTask<Void> started = new FutureTask<>(() -> {
-            Platform.setImplicitExit(false);
-            return null;
-        });
-        Platform.startup(started);
-        started.get(10, TimeUnit.SECONDS);
+        FxTestSupport.startJavaFx();
     }
 
     private static void onFx(Runnable action) throws Exception {
@@ -99,7 +95,7 @@ class MapBrowserTest {
                 fixture.select(index);
                 ContextMenu menu = fixture.browser.buildMenu(fixture.entry(index));
                 for (MenuItem item : menu.getItems()) {
-                    assertEquals(item.getText() != null && item.getText().equals("Make multilevel map…"),
+                    assertEquals(item.getText() != null && item.getText().equals("Combine into multilevel map"),
                             item.isDisable());
                 }
             }
@@ -119,11 +115,11 @@ class MapBrowserTest {
                 ContextMenu menu = fixture.browser.buildMenu(target);
                 for (MenuItem item : menu.getItems()) {
                     if (!(item instanceof SeparatorMenuItem)) {
-                        assertEquals(!List.of("Add tags…", "Duplicate", "Delete…", "Make multilevel map…")
+                        assertEquals(!List.of("Add tags…", "Duplicate", "Delete…", "Combine into multilevel map")
                                 .contains(item.getText()), item.isDisable(), item.getText());
                     }
                 }
-                menuItem(menu, "Make multilevel map…").fire();
+                menuItem(menu, "Combine into multilevel map").fire();
                 assertEquals(List.of(fixture.entry(0), second), fixture.host.merged);
             }
         });
