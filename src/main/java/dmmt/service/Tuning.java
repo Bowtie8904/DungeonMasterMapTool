@@ -387,6 +387,10 @@ public final class Tuning {
 
     public static final Setting<Double> LIGHT_TINT_MAX = decimal(LIGHTS, "lighting.tint.max", 0.3, 0, 1, true,
             "Upper limit of the light tint slider.");
+    public static final Setting<Double> BRIGHT_CORE_MAX = decimal(LIGHTS, "lighting.brightCore.max", 0.5, 0, 1, true,
+            "Upper limit of the light bright core slider.");
+    public static final Setting<Double> BRIGHT_CORE_RADIUS = decimal(LIGHTS, "lighting.brightCore.radius", 0.3, 0.05, 1, false,
+            "Radius of each light's bright core highlight, as a fraction of the light's own range.");
     public static final Setting<Double> DM_DARKNESS_FACTOR = decimal(LIGHTS, "lighting.dmDarknessFactor", 0.65, 0, 1, false,
             "Share of the time-of-day darkness shown in the DM view (players get all of it).");
     public static final Setting<Integer> LIGHT_MAP_SCALE = integer(LIGHTS, "lighting.lightMapScale", 4, 1, 32, false,

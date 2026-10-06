@@ -272,6 +272,7 @@ The *Lighting* section controls lights and ambience.
 - Light is blocked by walls and closed doors; open doors let light through.
 - Overlapping lights (and glowing effects, see [Tactical overlays](#8-tactical-overlays)) brighten the area together and blend their colours by how much each contributes, instead of only the brightest light showing.
 - **Light tint** slider: strength of the light colour over lit areas (0–30 %, global).
+- **Bright core** slider: adds a small, additive hot spot right at each light's own position that brightens the map art underneath (not a flat overlay), similar to the bright centers baked into some hand-painted map lights (0–50 %, default 15 %, global).
 
 **Time of day**
 

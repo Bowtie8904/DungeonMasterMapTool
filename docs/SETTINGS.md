@@ -887,6 +887,23 @@ Upper limit of the light tint slider and of `lighting.tint`.
 
 *Keywords:* light tint limit, colour strength, slider range
 
+### `lighting.brightCore.max`
+**Default:** `0.5` · **Range:** 0 to 1 · **Applies:** restart
+
+Upper limit of the bright core slider and of the global bright core strength. Set with the bright core slider in the
+Lighting section; values above this are clamped.
+
+*Keywords:* bright core limit, hot spot strength, glow strength, slider range
+
+### `lighting.brightCore.radius`
+**Default:** `0.3` · **Range:** 0.05 to 1 · **Applies:** live
+
+Radius of each light's bright core highlight, as a fraction of the light's own range. The bright core is a small
+additive hot spot drawn right at each light's own position that brightens the map art underneath (rather than
+covering it with a flat tint), mimicking the bright glow often baked into the centre of hand-painted map lights.
+
+*Keywords:* bright core, hot spot, light glow, additive light, bright center, light highlight
+
 ### `lighting.dmDarknessFactor`
 **Default:** `0.65` · **Range:** 0 to 1 · **Applies:** live
 

@@ -18,8 +18,11 @@ import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.ImagePattern;
 import javafx.scene.paint.Paint;
+import javafx.scene.paint.RadialGradient;
+import javafx.scene.paint.Stop;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
@@ -109,6 +112,22 @@ public class CanvasMapRenderer {
 
     public static void setLightTint(double value) {
         lightTint = Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
+    }
+
+    public static final double MIN_BRIGHT_CORE = 0.0;
+    public static final double DEFAULT_BRIGHT_CORE = 0.15;
+
+    /** Global strength of each light's bright-core highlight; applies to every light in every project. */
+    @Getter
+    private static volatile double brightCore = DEFAULT_BRIGHT_CORE;
+
+    /** Highest bright core strength (setting lighting.brightCore.max). */
+    public static double maxBrightCore() {
+        return Tuning.BRIGHT_CORE_MAX.get();
+    }
+
+    public static void setBrightCore(double value) {
+        brightCore = Math.max(MIN_BRIGHT_CORE, Math.min(maxBrightCore(), value));
     }
 
     public static final double DEFAULT_FOG_SOFTNESS = 0.3;
@@ -1263,6 +1282,59 @@ public class CanvasMapRenderer {
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         gc.setImageSmoothing(true);
         gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
+    }
+
+    /**
+     * Draws each enabled light's bright-core highlight: a small additive radial glow at the light's own
+     * position that brightens the map art underneath instead of covering it, matching the look of baked-in
+     * bright highlights some map art already has at lamp/torch positions. The caller must draw this on a
+     * canvas layer whose (node-level) blend mode is {@code ADD}, stacked directly above the base map canvas
+     * and below the walls/overlays/tokens/fog layer, so only the base map is brightened. A no-op (and free)
+     * when the bright core slider is at 0% or at Day (no darkness, lights are not shown at all).
+     */
+    public void renderBrightCore(GraphicsContext gc, DmProject project, double width, double height,
+                                  DmProject.CameraState camera, boolean playerMode) {
+        gc.clearRect(0, 0, width, height);
+        if (brightCore <= 0) {
+            return;
+        }
+        TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
+        double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
+        double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
+        if (darkness < 0.01) {
+            return;
+        }
+        double radiusFraction = Tuning.BRIGHT_CORE_RADIUS.get();
+        int fps = animationFps;
+        long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
+        double zoom = camera.getZoom();
+        for (DmProject.LightSource light : project.getLighting().getLights()) {
+            if (!light.isEnabled() || !lightRangeTouchesScreen(light, width, height, camera)) {
+                continue;
+            }
+            double flicker = flickerOn(project) ? LightFlicker.amount(light, now) : 0;
+            double brightness = (0.35 + 0.65 * Math.min(1.0, Math.max(0, light.getIntensity()))) * (1.0 - 0.6 * flicker);
+            double peak = Math.min(1.0, brightCore * brightness);
+            if (peak <= 0.002) {
+                continue;
+            }
+            double radius = light.getRange() * zoom * radiusFraction * (1.0 - 0.25 * flicker);
+            if (radius < 0.5) {
+                continue;
+            }
+            double cx = worldToScreenX(light.getX(), width, camera);
+            double cy = worldToScreenY(light.getY(), height, camera);
+            if (cx + radius < 0 || cy + radius < 0 || cx - radius > width || cy - radius > height) {
+                continue;
+            }
+            int rgb = parseRgb(light.getColor());
+            Color color = Color.rgb((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+            RadialGradient gradient = new RadialGradient(0, 0, cx, cy, radius, false, CycleMethod.NO_CYCLE,
+                    new Stop(0, Color.color(color.getRed(), color.getGreen(), color.getBlue(), peak)),
+                    new Stop(1, Color.color(color.getRed(), color.getGreen(), color.getBlue(), 0)));
+            gc.setFill(gradient);
+            gc.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
+        }
     }
 
     private record LightRaster(double[] xs, double[] ys, double lx, double ly, double radius,

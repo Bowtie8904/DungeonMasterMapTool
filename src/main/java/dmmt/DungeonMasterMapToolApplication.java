@@ -45,6 +45,7 @@ import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.effect.BlendMode;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ColorPicker;
@@ -144,6 +145,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_FOG_SOFTNESS = "fog.softness";
     private static final String PREF_FOG_FADE = "fog.fadeAnimation";
     private static final String PREF_LIGHT_TINT = "lighting.tint";
+    private static final String PREF_BRIGHT_CORE = "lighting.brightCore";
     private static final String PREF_AUTOSAVE_ENABLED = "autosave.enabled";
     private static final String PREF_AUTOSAVE_MINUTES = "autosave.minutes";
     private static final String APP_ICON_RESOURCE = "/dmmt/icon.png";
@@ -175,6 +177,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private final CanvasMapRenderer.BaseLayerState dmBaseState = new CanvasMapRenderer.BaseLayerState();
     private Canvas playerBaseCanvas;
     private CanvasMapRenderer.BaseLayerState playerBaseState = new CanvasMapRenderer.BaseLayerState();
+    private Canvas dmBrightCoreCanvas;
+    private Canvas playerBrightCoreCanvas;
     private Canvas dmCanvas;
     private Canvas dmFogCanvas;
     private Canvas playerCanvas;
@@ -398,6 +402,7 @@ public class DungeonMasterMapToolApplication extends Application {
         CanvasMapRenderer.setFogSoftness(preferences.getDouble(PREF_FOG_SOFTNESS, CanvasMapRenderer.DEFAULT_FOG_SOFTNESS));
         CanvasMapRenderer.setFogFadeEnabled(preferences.getBoolean(PREF_FOG_FADE, true));
         CanvasMapRenderer.setLightTint(preferences.getDouble(PREF_LIGHT_TINT, CanvasMapRenderer.DEFAULT_LIGHT_TINT));
+        CanvasMapRenderer.setBrightCore(preferences.getDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.DEFAULT_BRIGHT_CORE));
         CanvasMapRenderer.setTextQuarterTurns(Math.floorDiv(preferences.getInt(PREF_TEXT_ROTATION, 0), 90));
         targetFps = clampFps(preferences.getInt(PREF_FPS_TARGET, DEFAULT_FPS_TARGET));
         animationFps = clampFps(preferences.getInt(PREF_FPS_ANIMATION, DEFAULT_FPS_ANIMATION));
@@ -418,12 +423,15 @@ public class DungeonMasterMapToolApplication extends Application {
 
         dmBaseCanvas = new Canvas(1280, 800);
         dmBaseCanvas.setMouseTransparent(true);
+        dmBrightCoreCanvas = new Canvas(1280, 800);
+        dmBrightCoreCanvas.setMouseTransparent(true);
+        dmBrightCoreCanvas.setBlendMode(BlendMode.ADD);
         dmCanvas = new Canvas(1280, 800);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmBaseCanvas, dmCanvas, dmFogCanvas, textEditor.node());
+        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmCanvas, dmFogCanvas, textEditor.node());
         center.setMinSize(0, 0);
         mapCenter = center;
         Region controls = createControlsPanel(stage);
@@ -443,6 +451,8 @@ public class DungeonMasterMapToolApplication extends Application {
         center.getChildren().add(createBrushSizeLabel());
         dmBaseCanvas.widthProperty().bind(center.widthProperty());
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
+        dmBrightCoreCanvas.widthProperty().bind(center.widthProperty());
+        dmBrightCoreCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
         dmCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
@@ -819,6 +829,7 @@ public class DungeonMasterMapToolApplication extends Application {
         lightHint.setPrefWidth(220);
         lightHint.setMinHeight(Region.USE_PREF_SIZE);
         HBox lightTintRow = lightTintSlider();
+        HBox brightCoreRow = brightCoreSlider();
         HBox ambientBrightnessRow = ambientBrightnessSlider();
 
         // Effects
@@ -1214,7 +1225,7 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, lightHint),
+                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
                 new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather", weatherRow),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
@@ -1447,6 +1458,44 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         FontIcon icon = Icons.icon(MaterialDesignP.PALETTE_OUTLINE);
+        icon.getStyleClass().add("muted-icon");
+        HBox box = row(icon, slider, value);
+        HBox.setHgrow(box, Priority.ALWAYS);
+        return box;
+    }
+
+    /**
+     * Global strength of each light's bright-core highlight: a small additive hot-spot at each light's own
+     * position that brightens the map art underneath (not a flat overlay). Stored in the settings file so it
+     * applies to every light in every map; the renderer picks it up on the next frame.
+     */
+    private HBox brightCoreSlider() {
+        double initial = CanvasMapRenderer.getBrightCore();
+        Slider slider = new Slider(CanvasMapRenderer.MIN_BRIGHT_CORE, CanvasMapRenderer.maxBrightCore(), initial);
+        slider.setMajorTickUnit(0.01);
+        slider.setMinorTickCount(0);
+        slider.setSnapToTicks(true);
+        slider.setBlockIncrement(0.01);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        slider.setPrefWidth(90);
+        Icons.tooltip(slider, "Bright core strength (applies to all lights and maps). "
+                + "0% is off; higher brightens the map art at each light's own center instead of covering it.");
+        Label value = new Label(Math.round(initial * 100) + "%");
+        value.getStyleClass().add("value-label");
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            CanvasMapRenderer.setBrightCore(newValue.doubleValue());
+            value.setText(Math.round(CanvasMapRenderer.getBrightCore() * 100) + "%");
+            if (!slider.isValueChanging()) {
+                preferences.putDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.getBrightCore());
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing) {
+                preferences.putDouble(PREF_BRIGHT_CORE, CanvasMapRenderer.getBrightCore());
+                status("Bright core: " + Math.round(CanvasMapRenderer.getBrightCore() * 100) + "%.");
+            }
+        });
+        FontIcon icon = Icons.icon(MaterialDesignW.WHITE_BALANCE_SUNNY);
         icon.getStyleClass().add("muted-icon");
         HBox box = row(icon, slider, value);
         HBox.setHgrow(box, Priority.ALWAYS);
@@ -2662,12 +2711,17 @@ public class DungeonMasterMapToolApplication extends Application {
         playerBaseCanvas = new Canvas(1280, 720);
         playerBaseCanvas.setMouseTransparent(true);
         playerBaseState = new CanvasMapRenderer.BaseLayerState();
+        playerBrightCoreCanvas = new Canvas(1280, 720);
+        playerBrightCoreCanvas.setMouseTransparent(true);
+        playerBrightCoreCanvas.setBlendMode(BlendMode.ADD);
         playerCanvas = new Canvas(1280, 720);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerBaseCanvas, playerCanvas, playerFogCanvas);
+        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerCanvas, playerFogCanvas);
         playerBaseCanvas.widthProperty().bind(root.widthProperty());
         playerBaseCanvas.heightProperty().bind(root.heightProperty());
+        playerBrightCoreCanvas.widthProperty().bind(root.widthProperty());
+        playerBrightCoreCanvas.heightProperty().bind(root.heightProperty());
         playerCanvas.widthProperty().bind(root.widthProperty());
         playerCanvas.heightProperty().bind(root.heightProperty());
         playerFogCanvas.widthProperty().bind(root.widthProperty());
@@ -2685,6 +2739,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage = null;
             playerCanvas = null;
             playerBaseCanvas = null;
+            playerBrightCoreCanvas = null;
             playerFogCanvas = null;
             syncPlayerWindowToggle();
         });
@@ -2724,6 +2779,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage = null;
             playerCanvas = null;
             playerBaseCanvas = null;
+            playerBrightCoreCanvas = null;
             playerFogCanvas = null;
         }
         syncPlayerWindowToggle();
@@ -2761,6 +2817,8 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
+        renderer.renderBrightCore(dmBrightCoreCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
+                dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
         renderer.render(
                 gc,
@@ -2807,6 +2865,7 @@ public class DungeonMasterMapToolApplication extends Application {
         GraphicsContext gc = playerCanvas.getGraphicsContext2D();
         if (handoutWindow != null && handoutWindow.isShownToPlayers()) {
             playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
+            playerBrightCoreCanvas.getGraphicsContext2D().clearRect(0, 0, playerBrightCoreCanvas.getWidth(), playerBrightCoreCanvas.getHeight());
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
             HandoutWindow.drawBoard(gc, handoutWindow.getImages(), handoutWindow.getRotation(),
@@ -2820,6 +2879,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
                         ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
+        playerView.renderBrightCore(playerBrightCoreCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
+                playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
         playerView.render(
                 gc,
                 shown,
