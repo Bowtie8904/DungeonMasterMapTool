@@ -179,6 +179,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private CanvasMapRenderer.BaseLayerState playerBaseState = new CanvasMapRenderer.BaseLayerState();
     private Canvas dmBrightCoreCanvas;
     private Canvas playerBrightCoreCanvas;
+    private Canvas dmAmbientCanvas;
+    private Canvas playerAmbientCanvas;
     private Canvas dmCanvas;
     private Canvas dmFogCanvas;
     private Canvas playerCanvas;
@@ -426,12 +428,15 @@ public class DungeonMasterMapToolApplication extends Application {
         dmBrightCoreCanvas = new Canvas(1280, 800);
         dmBrightCoreCanvas.setMouseTransparent(true);
         dmBrightCoreCanvas.setBlendMode(BlendMode.ADD);
+        dmAmbientCanvas = new Canvas(1280, 800);
+        dmAmbientCanvas.setMouseTransparent(true);
+        dmAmbientCanvas.setBlendMode(BlendMode.MULTIPLY);
         dmCanvas = new Canvas(1280, 800);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmCanvas, dmFogCanvas, textEditor.node());
+        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas, dmFogCanvas, textEditor.node());
         center.setMinSize(0, 0);
         mapCenter = center;
         Region controls = createControlsPanel(stage);
@@ -453,6 +458,8 @@ public class DungeonMasterMapToolApplication extends Application {
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmBrightCoreCanvas.widthProperty().bind(center.widthProperty());
         dmBrightCoreCanvas.heightProperty().bind(center.heightProperty());
+        dmAmbientCanvas.widthProperty().bind(center.widthProperty());
+        dmAmbientCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().bind(center.widthProperty());
         dmCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
@@ -2714,14 +2721,19 @@ public class DungeonMasterMapToolApplication extends Application {
         playerBrightCoreCanvas = new Canvas(1280, 720);
         playerBrightCoreCanvas.setMouseTransparent(true);
         playerBrightCoreCanvas.setBlendMode(BlendMode.ADD);
+        playerAmbientCanvas = new Canvas(1280, 720);
+        playerAmbientCanvas.setMouseTransparent(true);
+        playerAmbientCanvas.setBlendMode(BlendMode.MULTIPLY);
         playerCanvas = new Canvas(1280, 720);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerCanvas, playerFogCanvas);
+        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerAmbientCanvas, playerCanvas, playerFogCanvas);
         playerBaseCanvas.widthProperty().bind(root.widthProperty());
         playerBaseCanvas.heightProperty().bind(root.heightProperty());
         playerBrightCoreCanvas.widthProperty().bind(root.widthProperty());
         playerBrightCoreCanvas.heightProperty().bind(root.heightProperty());
+        playerAmbientCanvas.widthProperty().bind(root.widthProperty());
+        playerAmbientCanvas.heightProperty().bind(root.heightProperty());
         playerCanvas.widthProperty().bind(root.widthProperty());
         playerCanvas.heightProperty().bind(root.heightProperty());
         playerFogCanvas.widthProperty().bind(root.widthProperty());
@@ -2740,6 +2752,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerCanvas = null;
             playerBaseCanvas = null;
             playerBrightCoreCanvas = null;
+            playerAmbientCanvas = null;
             playerFogCanvas = null;
             syncPlayerWindowToggle();
         });
@@ -2780,6 +2793,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerCanvas = null;
             playerBaseCanvas = null;
             playerBrightCoreCanvas = null;
+            playerAmbientCanvas = null;
             playerFogCanvas = null;
         }
         syncPlayerWindowToggle();
@@ -2818,6 +2832,8 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
         renderer.renderBrightCore(dmBrightCoreCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
+                dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        renderer.renderAmbientLight(dmAmbientCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
                 dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
         renderer.render(
@@ -2866,6 +2882,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (handoutWindow != null && handoutWindow.isShownToPlayers()) {
             playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
             playerBrightCoreCanvas.getGraphicsContext2D().clearRect(0, 0, playerBrightCoreCanvas.getWidth(), playerBrightCoreCanvas.getHeight());
+            playerAmbientCanvas.getGraphicsContext2D().clearRect(0, 0, playerAmbientCanvas.getWidth(), playerAmbientCanvas.getHeight());
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
             HandoutWindow.drawBoard(gc, handoutWindow.getImages(), handoutWindow.getRotation(),
@@ -2880,6 +2897,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 getEffectivePlayerCamera(), showPlayerGrid
                         ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
         playerView.renderBrightCore(playerBrightCoreCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
+                playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
+        playerView.renderAmbientLight(playerAmbientCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
                 playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
         playerView.render(
                 gc,

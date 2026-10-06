@@ -1141,6 +1141,50 @@ public class CanvasMapRenderer {
         if (darkness < 0.01) {
             return;
         }
+        LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
+        LightBuffer buffer = composite.buffer();
+        gc.setImageSmoothing(true);
+        gc.drawImage(buffer.image, 0, 0, composite.bw(), composite.bh(), 0, 0,
+                composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
+    }
+
+    /**
+     * Draws the time-of-day ambient darkness/tint as an opaque image on its own canvas layer. The caller must
+     * draw this on a canvas layer whose (node-level) blend mode is {@code MULTIPLY}, stacked directly above
+     * the bright-core layer and below the base map's own walls/overlays/light-glow canvas. Multiplying the
+     * map underneath by a per-pixel {@code lerp(white, presetColor, darknessHere)} colour darkens/tints it in
+     * proportion to the map's own brightness and detail instead of overwriting it with a flat colour, so
+     * texture and contrast stay visible even in heavily darkened areas (most noticeable at Dawn/Dusk, which
+     * previously washed the whole map toward one flat colour). A no-op (and free) at Day (no darkness).
+     */
+    public void renderAmbientLight(GraphicsContext gc, DmProject project, double width, double height,
+                                    DmProject.CameraState camera, boolean playerMode) {
+        gc.clearRect(0, 0, width, height);
+        TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
+        double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
+        double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
+        if (darkness < 0.01) {
+            return;
+        }
+        LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
+        LightBuffer buffer = composite.buffer();
+        gc.setImageSmoothing(true);
+        gc.drawImage(buffer.ambientImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
+                composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
+    }
+
+    private record LightComposite(LightBuffer buffer, int bw, int bh) {
+    }
+
+    /**
+     * Rasterises lights (if the inputs changed since the last call) and builds both final images shared by
+     * {@link #drawLighting} and {@link #renderAmbientLight}: the light-glow overlay (colour highlight over lit
+     * areas, normal alpha blend) and the ambient darkness/tint image (opaque, meant for a multiply-blended
+     * layer). Both outputs are derived from the same per-pixel "how lit is this point" raster, computed once
+     * per frame and cached, so computing both costs no more than the glow alone used to.
+     */
+    private LightComposite ensureLightComposite(DmProject project, double width, double height, DmProject.CameraState camera,
+                                                 boolean playerMode, TimeOfDayPreset preset, double ambientBrightness, double darkness) {
         activeLightMapScale = lightMapScaleFor(width, height);
         int bw = Math.max(1, (int) Math.ceil(width / lightMapScale()));
         int bh = Math.max(1, (int) Math.ceil(height / lightMapScale()));
@@ -1192,9 +1236,7 @@ public class CanvasMapRenderer {
             }
         }
         if (buffer.valid && buffer.key == key) {
-            gc.setImageSmoothing(true);
-            gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
-            return;
+            return new LightComposite(buffer, bw, bh);
         }
         buffer.key = key;
         buffer.valid = true;
@@ -1245,10 +1287,11 @@ public class CanvasMapRenderer {
         }
 
         double glowStrength = lightTint * Math.sqrt(darkness);
-        double ambR = preset.red() * 255;
-        double ambG = preset.green() * 255;
-        double ambB = preset.blue() * 255;
+        double ambRNorm = preset.red();
+        double ambGNorm = preset.green();
+        double ambBNorm = preset.blue();
         int[] argb = buffer.argb;
+        int[] ambientArgb = buffer.ambientArgb;
         final float[] litArr = buffer.lit;
         final float[] litRArr = buffer.litR;
         final float[] litGArr = buffer.litG;
@@ -1259,29 +1302,44 @@ public class CanvasMapRenderer {
                 double total = litArr[i];
                 double l = Math.min(1.0, total);
                 double dark = fDarkness * (1.0 - l);
+
+                // Ambient tint: an always-opaque colour that lerps from "no change" (white) toward the
+                // preset's ambient colour as this pixel gets darker. Meant to be drawn on a multiply-blended
+                // layer, so it darkens/tints the map proportionally to the map's own colour instead of
+                // overwriting it with a flat tone.
+                double tr = 1.0 - dark + dark * ambRNorm;
+                double tg = 1.0 - dark + dark * ambGNorm;
+                double tb = 1.0 - dark + dark * ambBNorm;
+                ambientArgb[i] = 0xFF000000
+                        | (clampByte(tr * 255) << 16)
+                        | (clampByte(tg * 255) << 8)
+                        | clampByte(tb * 255);
+
+                // Light glow: tints lit areas toward the blended colour of every overlapping light, weighted
+                // by how much each contributed. Independent of the ambient darkening above (now handled
+                // entirely by the multiply layer), so this is zero wherever nothing is lit.
                 double glow = l > 0 ? glowStrength * l : 0;
-                double a = Math.min(1.0, dark + glow);
-                if (a <= 0.002) {
+                double a = Math.min(1.0, glow);
+                if (a <= 0.002 || total <= 0) {
                     argb[i] = 0;
                     continue;
                 }
-                // Blend the colors of every overlapping light weighted by how much each contributed, so two
-                // overlapping lights brighten the area and mix toward a combined hue instead of one light winning.
-                double rgbR = total > 0 ? litRArr[i] / total : 0;
-                double rgbG = total > 0 ? litGArr[i] / total : 0;
-                double rgbB = total > 0 ? litBArr[i] / total : 0;
-                double r = (ambR * dark + rgbR * glow) / (dark + glow);
-                double g = (ambG * dark + rgbG * glow) / (dark + glow);
-                double b = (ambB * dark + rgbB * glow) / (dark + glow);
+                double rgbR = litRArr[i] / total;
+                double rgbG = litGArr[i] / total;
+                double rgbB = litBArr[i] / total;
                 argb[i] = ((int) Math.round(a * 255) << 24)
-                        | ((int) Math.round(r) << 16)
-                        | ((int) Math.round(g) << 8)
-                        | (int) Math.round(b);
+                        | ((int) Math.round(rgbR) << 16)
+                        | ((int) Math.round(rgbG) << 8)
+                        | (int) Math.round(rgbB);
             }
         });
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
-        gc.setImageSmoothing(true);
-        gc.drawImage(buffer.image, 0, 0, bw, bh, 0, 0, bw * (double) lightMapScale(), bh * (double) lightMapScale());
+        buffer.ambientImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), ambientArgb, 0, bw);
+        return new LightComposite(buffer, bw, bh);
+    }
+
+    private static int clampByte(double value) {
+        return Math.max(0, Math.min(255, (int) Math.round(value)));
     }
 
     /**
@@ -2150,6 +2208,11 @@ public class CanvasMapRenderer {
         private float[] litB = new float[0];
         private int[] argb = new int[0];
         private WritableImage image;
+        // Ambient (time-of-day) darkness/tint, rendered separately as an opaque image on its own
+        // multiply-blended canvas layer so it darkens/tints the map beneath it while preserving its own
+        // detail, instead of a flat overlay painted over everything (see renderAmbientLight).
+        private int[] ambientArgb = new int[0];
+        private WritableImage ambientImage;
         private long key;
         private boolean valid;
 
@@ -2166,6 +2229,8 @@ public class CanvasMapRenderer {
             litB = new float[w * h];
             argb = new int[w * h];
             image = new WritableImage(w, h);
+            ambientArgb = new int[w * h];
+            ambientImage = new WritableImage(w, h);
         }
     }
 }

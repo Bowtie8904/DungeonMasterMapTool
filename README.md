@@ -278,6 +278,7 @@ The *Lighting* section controls lights and ambience.
 
 - Four buttons: **Day, Dawn, Dusk, Night**. Day means no darkness (dd2vtt maps have baked lighting). The DM view shows darkness at reduced strength so the map stays readable.
 - **Ambient brightness** slider (−50 % to +100 %): adjusts the darkness of the current preset for this map only. Double-click resets; disabled at Day.
+- The Dawn/Dusk/Night darkening and colour tint blend with the map using a multiply blend instead of a flat colour painted over everything, so the map's own texture and contrast stay visible underneath instead of washing toward one flat colour.
 
 ### 8. Doors and windows
 
