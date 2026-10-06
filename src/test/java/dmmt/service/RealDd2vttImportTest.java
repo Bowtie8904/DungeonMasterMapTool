@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RealDd2vttImportTest {
@@ -27,7 +26,6 @@ class RealDd2vttImportTest {
         DmProject project = service.importToProject(source, projectDir);
 
         assertNotNull(project.getMap().getImagePath(), "Image path should be set after import.");
-        assertNull(project.getMap().getSourcePath(), "The dd2vtt file must not be stored in the project.");
         assertFalse(project.getWalls().isEmpty(), "Expected line-of-sight walls from DD2VTT.");
         assertFalse(project.getInteractables().isEmpty(), "Expected portals/interactables from DD2VTT.");
         assertFalse(project.getLighting().getLights().isEmpty(), "Expected lights from DD2VTT.");

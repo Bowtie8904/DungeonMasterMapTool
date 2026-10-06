@@ -172,6 +172,13 @@ On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `asse
   - Series with a repeated number (`Market 1 day`, `Market 1 night`) and merely similar names (`Goblin Cave`, `Goblin Camp`) stay separate maps — merge them afterwards if needed.
 - Import runs in the background with progress in the status bar (`Importing 3/12: name...`). The open map is not switched. Failed maps are removed again, the batch continues, and a final dialog lists failures.
 
+**Duplicate detection**
+
+- Whenever you pick dd2vtt/uvtt files to import (single file, multi-file/folder batch import, or the files chosen for a multilevel map's levels), the app checks each file's name against the **original file name** stored in every map already in the library - never the map's current library name, since maps can be renamed after import. For multilevel maps, every level is checked individually.
+- If any files match, by default (`import.duplicateBehavior = ask`) a dialog lists only those duplicates, each with its own checkbox (all ticked by default). Use **Select all** / **Select none** to toggle every row at once, then choose **Cancel** (abort the whole import), **Don't import duplicates** (skip every listed duplicate), or **Import selected** (import only the ticked ones). Files that are not duplicates are always imported and never shown in the dialog.
+- Set `import.duplicateBehavior` to `always` or `never` (see [docs/SETTINGS.md](docs/SETTINGS.md#importduplicatebehavior)) to always import duplicates, or always skip them, without being asked.
+- Maps saved before this check existed have no stored original file name and are never flagged as duplicates.
+
 **Create a custom map**
 
 1. Click **New map**.

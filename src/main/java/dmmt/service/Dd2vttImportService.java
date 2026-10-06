@@ -26,6 +26,7 @@ public class Dd2vttImportService {
         DmProject project = DmProject.builder().build();
         project.getMap().setSourceType("dd2vtt");
         project.getMap().setImageLayersLocked(true);
+        project.getMap().setOriginalFileName(baseName);
         double pixelsPerGrid = resolvePixelsPerGrid(root);
         project.getMap().setGrid(DmProject.GridSpec.builder()
                 .pixelsPerCell(pixelsPerGrid)

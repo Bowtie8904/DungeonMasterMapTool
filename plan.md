@@ -518,6 +518,33 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
   - **Order and names:** base file first, then by level number. The multilevel map is named after the base file, otherwise after the shared part. Level names: `Level <number>` plus ` – <label>` when present; the base file gets the number below the lowest (`Level 01` before `Level 02`), or `Base` if the lowest is 0.
 - **Re-targeting the open map after a level change:** every change returns the relocations of all moved map files (library map → level, level → other multilevel map, level → separate map, last level → collapsed map). If the open map/level was moved, the app reopens it at its new place (as a level or a single map); if the open level was deleted, the nearest remaining level is opened; if nothing is left, an empty new map is shown; otherwise only the level list is refreshed.
 
+## 3.33 Duplicate Import Detection (implemented)
+
+- When one or more `.dd2vtt`/`.uvtt` files are picked for import (single map, multi-file/folder batch import, or the
+  files chosen to build/extend a multilevel map), the app compares each file's name against the **original file
+  name** stored in every map already in the library. Duplicate detection is always by original file name
+  (extension stripped, case-insensitive) - **never** by the map's current name in the library, since maps can be
+  renamed after import. For multilevel maps every level's own original file name is checked individually.
+- Each imported (ordinary) `.dmmap` stores `map.originalFileName` (the source file name, extension stripped) the
+  first time it is imported from a dd2vtt/uvtt file; custom maps (no source file) leave it `null`. Multilevel levels
+  already store the same information per level (`Level.originalName`, 3.32.1). **Maps/levels saved before this field
+  existed have no original file name and are skipped entirely during duplicate detection** - they are never matched
+  as a duplicate and never cause a false positive, regardless of their current map name.
+- If any picked file matches, the app follows the `import.duplicateBehavior` setting (default `ask`):
+  - `ask`: a dialog (`DuplicateMapsDialog`, same dark theme as the rest of the app) lists only the matching files,
+    each with its own checkbox (all ticked by default), plus **Select all** / **Select none** buttons for quickly
+    toggling every row at once. Three actions are offered: **Cancel** (aborts the whole import, nothing is
+    imported), **Don't import duplicates** (skips every listed duplicate regardless of the checkboxes), and
+    **Import selected** (imports the ticked duplicates, skips the unticked ones).
+  - `always`: every duplicate is imported without asking.
+  - `never`: every duplicate is skipped without asking.
+  - Files that are not duplicates are never shown in the dialog and are always imported, regardless of the setting.
+- Implementation: `dmmt.service.DuplicateCheckService` (scans the library - including multilevel manifests - for
+  existing original file names; unit-tested), `dmmt.ui.DuplicateMapsDialog`, `Tuning.IMPORT_DUPLICATE_BEHAVIOR`
+  (`import.duplicateBehavior`, settings window + `docs/SETTINGS.md`). Wired into `handleImportDd2vtt`
+  (single + multi-file chooser), `handleImportDd2vttFolder` (folder import) and `pickDd2vttFiles` (the level file
+  picker used both for "Import multilevel map" and "Add dd2vtt files…" in the level dialog).
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -526,6 +553,7 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
   "map": {
     "sourceType": "dd2vtt",
     "imagePath": "imports/catacombs/catacombs.webp",
+    "originalFileName": "catacombs",
     "grid": { "pixelsPerCell": 140, "cellSizeFeet": 5 },
     "rotationQuarterTurns": 0,
     "imageLayersLocked": true
@@ -720,7 +748,13 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 
 ## 9) Change Log
 
-- **v3.10 (current):** Batch import improvements (3.26): folder import now re-creates the imported folder's sub-folder structure in the library (a sub-folder only appears if it actually contains a suitable map; empty sub-folders are never created). Automatic multilevel grouping (3.32.1) also recognises the `Name (1)`, `Name (2)`, ... numbering left by renaming several files to the same name at once, with or without a trailing room label.
+- **v3.11 (current):** Duplicate import detection (3.33): importing dd2vtt/uvtt files (single, batch/folder, or the
+  files used to build a multilevel map) now checks each file's original file name against the library (including
+  per-level for multilevel maps) and, on a match, asks via `DuplicateMapsDialog` whether to still import it (per-file
+  checkboxes, Select all/none, Cancel / Don't import duplicates / Import selected). Added `map.originalFileName` to
+  the `.dmmap` format; older maps without it are never treated as duplicates. Added `import.duplicateBehavior`
+  setting (`ask` default / `always` / `never`) to skip the dialog and apply a fixed behavior instead.
+- **v3.10:** Batch import improvements (3.26): folder import now re-creates the imported folder's sub-folder structure in the library (a sub-folder only appears if it actually contains a suitable map; empty sub-folders are never created). Automatic multilevel grouping (3.32.1) also recognises the `Name (1)`, `Name (2)`, ... numbering left by renaming several files to the same name at once, with or without a trailing room label.
 - **v0.1:** Initial requirement mapping + selected stack locked.
 - **v0.2:** Added custom map builder requirements (drag/drop images, resizing, shared `.dmmap` model parity, manual walls).
 - **v0.3:** Added whole-map 90-degree rotation via menu with save/restore in `.dmmap`.

@@ -85,8 +85,13 @@ public class DmProject {
     public static class MapInfo {
         @Builder.Default
         private String sourceType = "custom";
-        private String sourcePath;
         private String imagePath;
+        /**
+         * Name (without extension) of the dd2vtt/uvtt file this map was imported from, used only to detect
+         * duplicate imports by original file name; {@code null} for custom maps and for older saves made before
+         * this field existed (such maps are never treated as duplicates).
+         */
+        private String originalFileName;
         @Builder.Default
         private GridSpec grid = GridSpec.builder().build();
         @Builder.Default
@@ -100,7 +105,7 @@ public class DmProject {
 
         /** Imported dd2vtt maps start locked; custom maps start unlocked. */
         public boolean defaultImageLayersLocked() {
-            return "dd2vtt".equalsIgnoreCase(sourceType) || (sourcePath != null && !sourcePath.isBlank());
+            return "dd2vtt".equalsIgnoreCase(sourceType);
         }
     }
 

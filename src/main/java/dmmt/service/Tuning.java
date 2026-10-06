@@ -610,6 +610,10 @@ public final class Tuning {
             "Flicker speed given to lights imported from dd2vtt/uvtt files.");
     public static final Setting<Boolean> IMPORT_AUTO_MERGE_MULTILEVEL = bool(IMPORT, "import.autoMergeMultiLevel", true, false,
             "Batch imports merge files that look like the levels of one building into a multilevel map (false = every file becomes its own map).");
+    public static final Setting<String> IMPORT_DUPLICATE_BEHAVIOR = choice(IMPORT, "import.duplicateBehavior", "ask", false,
+            "What to do when an imported file's original file name already exists in the library: ask every time, "
+                    + "always import duplicates without asking, or never import duplicates without asking.",
+            "ask", "always", "never");
 
     // ---- Storage and caches ----
 

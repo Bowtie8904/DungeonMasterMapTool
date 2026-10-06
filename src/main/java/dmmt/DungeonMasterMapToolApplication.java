@@ -14,6 +14,7 @@ import dmmt.render.WeatherEffects;
 import dmmt.render.WeatherType;
 import dmmt.service.BatchImportService;
 import dmmt.service.Dd2vttImportService;
+import dmmt.service.DuplicateCheckService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
 import dmmt.service.MapLibraryService;
@@ -24,6 +25,7 @@ import dmmt.service.ProjectService;
 import dmmt.service.Tuning;
 import dmmt.ui.CollapsibleSection;
 import dmmt.ui.Dialogs;
+import dmmt.ui.DuplicateMapsDialog;
 import dmmt.ui.HandoutWindow;
 import dmmt.ui.Icons;
 import dmmt.ui.LevelListDialog;
@@ -115,10 +117,12 @@ import java.util.BitSet;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -155,6 +159,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private final AppSettings preferences = AppSettings.load();
     private final ProjectService projectService = new ProjectService();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
+    /** Created once {@link #mapLibrary} exists, see {@link #start}. */
+    private DuplicateCheckService duplicateCheckService;
     private final MapRotationService rotationService = new MapRotationService();
     private final LightingEngine lightingEngine = new LightingEngine();
     private final CanvasMapRenderer renderer = new CanvasMapRenderer(lightingEngine);
@@ -419,6 +425,7 @@ public class DungeonMasterMapToolApplication extends Application {
             libraryRoot = Path.of(System.getProperty("user.home"), "dmmap-projects");
         }
         mapLibrary = new MapLibraryService(libraryRoot, projectService);
+        duplicateCheckService = new DuplicateCheckService(mapLibrary, projectService);
 
         BorderPane root = new BorderPane();
         root.getStyleClass().add("app-root");
@@ -3043,20 +3050,27 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         rememberImportDirectory(selected.get(0).toPath().getParent());
-        if (selected.size() > 1) {
-            importBatch(selected.stream().map(File::toPath).toList(), suggestedFolder);
+        List<Path> sources = filterOutDuplicates(primaryStage, selected.stream().map(File::toPath).toList());
+        if (sources == null) {
             return;
         }
-        File source = selected.get(0);
+        if (sources.isEmpty()) {
+            status("Nothing to import: every selected file is already in the library.");
+            return;
+        }
+        if (sources.size() > 1) {
+            importBatch(sources, suggestedFolder);
+            return;
+        }
+        Path sourcePath = sources.get(0);
+        String sourceName = sourcePath.getFileName().toString();
 
         Optional<MapLocationDialog.Selection> selection = MapLocationDialog.show(primaryStage, mapLibrary,
                 "Import map", MaterialDesignF.FILE_IMPORT_OUTLINE, "Import",
-                MapLibraryService.stripExtension(source.getName()), suggestedFolder);
+                MapLibraryService.stripExtension(sourceName), suggestedFolder);
         if (selection.isEmpty()) {
             return;
         }
-        Path sourcePath = source.toPath();
-        String sourceName = source.getName();
         MapLocationDialog.Selection target = selection.get();
         leaveCurrentMap(() -> {
             if (ioBusy) {
@@ -3092,6 +3106,48 @@ public class DungeonMasterMapToolApplication extends Application {
         });
     }
 
+    /**
+     * Compares {@code sources} against the library's original file names (see {@link DuplicateCheckService}) and,
+     * if any match, applies {@code import.duplicateBehavior}: {@code always}/{@code never} silently keep/drop every
+     * duplicate, {@code ask} (default) shows {@link DuplicateMapsDialog} to decide which of them to still import.
+     * Returns the filtered list (non-duplicates are always kept), or {@code null} if the user cancelled the whole
+     * import.
+     */
+    private List<Path> filterOutDuplicates(javafx.stage.Window owner, List<Path> sources) {
+        if (duplicateCheckService == null || sources.isEmpty()) {
+            return sources;
+        }
+        List<Path> duplicates;
+        try {
+            duplicates = duplicateCheckService.findDuplicates(sources);
+        } catch (IOException ex) {
+            return sources;
+        }
+        if (duplicates.isEmpty()) {
+            return sources;
+        }
+        String behavior = Tuning.IMPORT_DUPLICATE_BEHAVIOR.get();
+        if ("always".equalsIgnoreCase(behavior)) {
+            return sources;
+        }
+        if ("never".equalsIgnoreCase(behavior)) {
+            Set<Path> duplicateSet = new HashSet<>(duplicates);
+            return sources.stream().filter(source -> !duplicateSet.contains(source)).toList();
+        }
+        Optional<DuplicateMapsDialog.Result> decision = DuplicateMapsDialog.show(owner, duplicates);
+        if (decision.isEmpty()) {
+            return null;
+        }
+        Set<Path> accepted = decision.get().accepted();
+        List<Path> filtered = new ArrayList<>();
+        for (Path source : sources) {
+            if (!duplicates.contains(source) || accepted.contains(source)) {
+                filtered.add(source);
+            }
+        }
+        return filtered;
+    }
+
     private void handleImportDd2vttFolder(Path suggestedFolder) {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Select a folder with DD2VTT maps");
@@ -3113,7 +3169,15 @@ public class DungeonMasterMapToolApplication extends Application {
                     + "\" (including its sub-folders) contains no .dd2vtt or .uvtt files.");
             return;
         }
-        importBatch(maps, suggestedFolder, folder.toPath());
+        List<Path> filtered = filterOutDuplicates(primaryStage, maps);
+        if (filtered == null) {
+            return;
+        }
+        if (filtered.isEmpty()) {
+            status("Nothing to import: every map found is already in the library.");
+            return;
+        }
+        importBatch(filtered, suggestedFolder, folder.toPath());
     }
 
     private void importBatch(List<Path> sources, Path suggestedFolder) {
@@ -4817,7 +4881,8 @@ public class DungeonMasterMapToolApplication extends Application {
             return List.of();
         }
         rememberImportDirectory(selected.get(0).toPath().getParent());
-        return selected.stream().map(File::toPath).toList();
+        List<Path> filtered = filterOutDuplicates(owner, selected.stream().map(File::toPath).toList());
+        return filtered == null ? List.of() : filtered;
     }
 
     private void handleImportMultiLevel(Path suggestedFolder) {

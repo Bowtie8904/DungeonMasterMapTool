@@ -625,6 +625,21 @@ ordinary map; you can still merge them later in the library.
 
 *Keywords:* multilevel, merge, auto merge, batch import, levels, floors, import folder
 
+### `import.duplicateBehavior`
+**Default:** `ask` · **Options:** `ask`, `always`, `never` · **Applies:** live (next import)
+
+What happens when an imported dd2vtt/uvtt file's original file name already matches a map (or multilevel level)
+already in the library:
+- `ask` (default): show the duplicate-maps dialog listing the matches, with per-file checkboxes (all ticked by
+  default) plus Select all/Select none, and the choice to cancel the import, skip every duplicate, or import the
+  ticked ones.
+- `always`: import duplicates without asking.
+- `never`: silently skip duplicates without asking.
+
+Non-duplicate files in the same import are never affected and are always imported.
+
+*Keywords:* duplicate, duplicate import, re-import, already imported, ask, always import, never import
+
 ---
 
 ## DM view navigation

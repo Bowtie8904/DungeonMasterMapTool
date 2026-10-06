@@ -1,6 +1,7 @@
 package dmmt.service;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import dmmt.model.DmProject;
@@ -11,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ProjectService {
     private final ObjectMapper objectMapper = JsonMappers.create()
@@ -18,6 +20,20 @@ public class ProjectService {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final FogService fogService = new FogService();
     private final ThumbnailService thumbnailService = new ThumbnailService();
+
+    /**
+     * Lightweight read of just {@code map.originalFileName}, without parsing the rest of the project (fog mask,
+     * lights, etc.); used for duplicate-import detection. Empty if the field is missing/blank (older saves) or the
+     * file cannot be read.
+     */
+    public Optional<String> readOriginalFileName(Path projectFile) {
+        try {
+            JsonNode node = objectMapper.readTree(projectFile.toFile()).path("map").path("originalFileName");
+            return node.isTextual() && !node.asText().isBlank() ? Optional.of(node.asText()) : Optional.empty();
+        } catch (IOException | RuntimeException ex) {
+            return Optional.empty();
+        }
+    }
 
     public DmProject load(Path projectFile) throws IOException {
         DmProject project = objectMapper.readValue(projectFile.toFile(), DmProject.class);
