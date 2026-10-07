@@ -34,6 +34,7 @@ import dmmt.ui.LevelListDialog;
 import dmmt.ui.MapBrowser;
 import dmmt.ui.MapLocationDialog;
 import dmmt.ui.MapTagsDialog;
+import dmmt.ui.PlayerViewTransition;
 import dmmt.ui.SettingsWindow;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
@@ -193,6 +194,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private Canvas playerCanvas;
     private Canvas playerFogCanvas;
     private Stage playerStage;
+    private PlayerViewTransition playerTransition;
     private Label statusLabel;
     private ComboBox<String> playerScreenSelector;
     private DmProject.CameraState frozenPlayerCamera;
@@ -2906,6 +2908,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerCanvas.heightProperty().bind(root.heightProperty());
         playerFogCanvas.widthProperty().bind(root.widthProperty());
         playerFogCanvas.heightProperty().bind(root.heightProperty());
+        playerTransition = new PlayerViewTransition(root);
         Scene scene = new Scene(root, 1280, 720, Color.BLACK);
 
         playerStage = new Stage(StageStyle.UNDECORATED);
@@ -2916,6 +2919,8 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setScene(scene);
         playerStage.setOnHidden(event -> {
             finishPlayerViewportDrag();
+            playerTransition.cancel();
+            playerTransition = null;
             playerStage = null;
             playerCanvas = null;
             playerBaseCanvas = null;
@@ -3048,6 +3053,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         GraphicsContext gc = playerCanvas.getGraphicsContext2D();
         if (handoutWindow != null && handoutWindow.isShownToPlayers()) {
+            playerTransition.cancel();
             playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
             playerBrightCoreCanvas.getGraphicsContext2D().clearRect(0, 0, playerBrightCoreCanvas.getWidth(), playerBrightCoreCanvas.getHeight());
             playerAmbientCanvas.getGraphicsContext2D().clearRect(0, 0, playerAmbientCanvas.getWidth(), playerAmbientCanvas.getHeight());
@@ -3095,6 +3101,14 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (showScaleTestSquare) {
             drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
+        }
+        playerTransition.frameRendered();
+    }
+
+    private void capturePlayerTransition() {
+        if (playerTransition != null && (handoutWindow == null || !handoutWindow.isShownToPlayers())) {
+            playerTransition.capture();
+            lastInputNanos = System.nanoTime();
         }
     }
 
@@ -4567,6 +4581,9 @@ public class DungeonMasterMapToolApplication extends Application {
         finishNudge();
         finishPlayerViewportDrag();
         commitTextEdit();
+        if (frozenPlayerProject == null) {
+            capturePlayerTransition();
+        }
         project = next;
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
@@ -7536,6 +7553,11 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private void setPlayerFrozen(boolean frozen) {
         if (!frozen) {
+            if (frozenPlayerProject != null && PlayerViewTransition.contentChanged(
+                    frozenPlayerProject, frozenPlayerProjectFile, frozenPlayerCamera,
+                    project, projectFile, project.getViews().getPlayerCamera())) {
+                capturePlayerTransition();
+            }
             frozenPlayerProject = null;
             frozenPlayerProjectFile = null;
             frozenPlayerCamera = null;
