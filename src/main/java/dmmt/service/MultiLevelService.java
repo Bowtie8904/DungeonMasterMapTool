@@ -1021,8 +1021,8 @@ public class MultiLevelService {
      * Groups import files that look like the levels of one building (same folder, case-insensitive): files sharing the
      * part before a level number, optionally followed by a room label ({@code haus_00 … haus_03},
      * {@code turm_upper_02_barracks … turm_upper_10}), at least two of them and all numbers distinct. A file without a
-     * number whose whole name starts that shared part ({@code turm}) joins as the lowest level, if it fits exactly one
-     * group. Every other file is a group of its own. Groups keep the order in which their first file appears.
+     * number whose whole normalized name equals that shared part ({@code turm_upper}) joins as the lowest level.
+     * Every other file is a group of its own. Groups keep the order in which their first file appears.
      */
     public static List<ImportGroup> groupLevelFiles(List<Path> files) {
         Map<String, List<Path>> numbered = new LinkedHashMap<>();
@@ -1050,15 +1050,8 @@ public class MultiLevelService {
             if (name.isEmpty()) {
                 continue;
             }
-            String folder = folderKey(file);
-            List<String> matches = valid.keySet().stream()
-                    .filter(key -> key.startsWith(folder))
-                    .filter(key -> {
-                        String prefix = key.substring(folder.length());
-                        return prefix.equals(name) || prefix.startsWith(name + " ");
-                    }).toList();
-            if (matches.size() == 1) {
-                String key = matches.get(0);
+            String key = folderKey(file) + name;
+            if (valid.containsKey(key)) {
                 Path current = bases.get(key);
                 if (current == null || current.getFileName().toString().length() < file.getFileName().toString().length()) {
                     bases.put(key, file);

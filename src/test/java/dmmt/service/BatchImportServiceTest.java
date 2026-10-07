@@ -115,6 +115,25 @@ class BatchImportServiceTest {
     }
 
     @Test
+    void shorterMapNameIsNotImportedIntoMultilevelMap() throws Exception {
+        Path single = write(source, "schilftritt.dd2vtt", "{\"pixels_per_grid\":100}");
+        Path ground = write(source, "schilftritt_tor_00.dd2vtt", "{\"pixels_per_grid\":100}");
+        Path upper = write(source, "schilftritt_tor_01.dd2vtt", "{\"pixels_per_grid\":100}");
+
+        BatchImportService.Result result = service.importAll(List.of(single, upper, ground), libraryRoot, null);
+
+        Path singleMap = libraryRoot.resolve("schilftritt").resolve("schilftritt.dmmap");
+        Path manifest = libraryRoot.resolve("schilftritt tor").resolve("schilftritt tor.dmlevels");
+        assertTrue(result.failures().isEmpty());
+        assertEquals(List.of(singleMap, manifest), result.imported());
+        assertTrue(Files.isRegularFile(singleMap));
+        ProjectService projectService = new ProjectService();
+        MultiLevelService levels = new MapLibraryService(libraryRoot, projectService).multiLevels();
+        assertEquals(List.of("schilftritt_tor_00", "schilftritt_tor_01"), levels.loadManifest(manifest).getLevels().stream()
+                .map(dmmt.model.MultiLevelManifest.Level::getOriginalName).toList());
+    }
+
+    @Test
     void autoMergeCanBeDisabled() throws Exception {
         Path ground = write(source, "inn_00.dd2vtt", "{\"pixels_per_grid\":100}");
         Path upper = write(source, "inn_01.dd2vtt", "{\"pixels_per_grid\":100}");

@@ -371,10 +371,58 @@ class MultiLevelServiceTest {
     }
 
     @Test
+    void shorterBaseNameStaysSeparateFromLongerNumberedPrefix() {
+        Path dir = Path.of("maps");
+        Path single = dir.resolve("schilftritt.dd2vtt");
+        Path upper = dir.resolve("schilftritt_tor_01.dd2vtt");
+        Path ground = dir.resolve("schilftritt_tor_00.dd2vtt");
+
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(single, upper, ground));
+
+        assertEquals(2, groups.size());
+        assertEquals(List.of(single), groups.get(0).files());
+        assertFalse(groups.get(0).multiLevel());
+        assertEquals(List.of(ground, upper), groups.get(1).files());
+        assertEquals("schilftritt tor", groups.get(1).name());
+        assertTrue(groups.get(1).multiLevel());
+    }
+
+    @Test
+    void entireBaseNameJoinsMatchingNumberedPrefix() {
+        Path dir = Path.of("maps");
+        Path single = dir.resolve("schilftritt.dd2vtt");
+        Path base = dir.resolve("schilftritt_tor.dd2vtt");
+        Path ground = dir.resolve("schilftritt_tor_00.dd2vtt");
+        Path upper = dir.resolve("schilftritt_tor_01.dd2vtt");
+
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(upper, single, base, ground));
+
+        assertEquals(2, groups.size());
+        assertEquals(List.of(base, ground, upper), groups.get(0).files());
+        assertEquals(List.of("Base", "Level 00", "Level 01"), groups.get(0).levelNames());
+        assertEquals(List.of(single), groups.get(1).files());
+        assertFalse(groups.get(1).multiLevel());
+    }
+
+    @Test
+    void singleMapJoinsLevelsWithItsEntireNameAsPrefix() {
+        Path dir = Path.of("maps");
+        Path base = dir.resolve("schilftritt.dd2vtt");
+        Path ground = dir.resolve("schilftritt_00.dd2vtt");
+        Path upper = dir.resolve("schilftritt_01.dd2vtt");
+
+        List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(upper, base, ground));
+
+        assertEquals(1, groups.size());
+        assertEquals("schilftritt", groups.get(0).name());
+        assertEquals(List.of(base, ground, upper), groups.get(0).files());
+    }
+
+    @Test
     void groupsLabelledLevelsAndTheirBaseFile() {
         Path dir = Path.of("maps");
         List<MultiLevelService.ImportGroup> groups = MultiLevelService.groupLevelFiles(List.of(
-                dir.resolve("gottloser turm.dd2vtt"),
+                dir.resolve("Gottloser Turm Upper Levels.dd2vtt"),
                 dir.resolve("gottloser_turm_upper_levels_10.dd2vtt"),
                 dir.resolve("gottloser_turm_upper_levels_02_barracks.dd2vtt"),
                 dir.resolve("gottloser_turm_upper_levels_03_office.dd2vtt"),
@@ -382,12 +430,12 @@ class MultiLevelServiceTest {
                 dir.resolve("Goblin Camp.dd2vtt"),
                 dir.resolve("Market 1 day.dd2vtt"),
                 dir.resolve("Market 1 night.dd2vtt"),
-                dir.resolve("other").resolve("gottloser turm.dd2vtt")));
+                dir.resolve("other").resolve("Gottloser Turm Upper Levels.dd2vtt")));
 
         assertEquals(6, groups.size());
         MultiLevelService.ImportGroup tower = groups.get(0);
-        assertEquals("gottloser turm", tower.name());
-        assertEquals(List.of("gottloser turm.dd2vtt", "gottloser_turm_upper_levels_02_barracks.dd2vtt",
+        assertEquals("Gottloser Turm Upper Levels", tower.name());
+        assertEquals(List.of("Gottloser Turm Upper Levels.dd2vtt", "gottloser_turm_upper_levels_02_barracks.dd2vtt",
                         "gottloser_turm_upper_levels_03_office.dd2vtt", "gottloser_turm_upper_levels_10.dd2vtt"),
                 tower.files().stream().map(file -> file.getFileName().toString()).toList());
         assertEquals(List.of("Level 01", "Level 02 – barracks", "Level 03 – office", "Level 10"), tower.levelNames());
