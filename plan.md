@@ -304,6 +304,7 @@ Desktop tool for tabletop dungeon masters that:
 - Boundary segments are rasterised into the fog grid as blocking cells (conservative line rasterisation, 4-connected fill) so tiny gaps between wall segments do not let the fill leak.
 - The fill is limited to the map content bounds (same area the fog mask covers), so an area that isn't enclosed never reveals more than the map.
 - **Hover preview:** while the tool is armed, the region under the cursor is outlined/tinted in the DM view before clicking, so the DM sees at once if the region is not enclosed. The preview is cached per start cell and recomputed only when the cursor enters a different region or wall/door geometry changes.
+- The hover tint is green for reveal (amber for an unenclosed region) and red while Shift is held to hide. Pressing or releasing Shift updates the preview without moving the cursor; losing window focus clears the modifier state. This is DM-only feedback and does not change fog until clicking.
 - Stays armed after a click (several rooms can be revealed in a row); `Esc` returns to Select.
 - Each click is one undo step (uses the existing fog history). No named/saved reveal regions.
 - Works identically on rotated maps (fill runs on the rotated fog grid with rotated wall geometry).

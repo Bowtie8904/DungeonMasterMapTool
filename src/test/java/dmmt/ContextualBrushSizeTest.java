@@ -470,6 +470,78 @@ class ContextualBrushSizeTest {
     }
 
     @Test
+    void roomPreviewChangesColorOnShiftWithoutPointerMovementOrFogEdits() throws Exception {
+        onFx(() -> {
+            for (boolean enclosed : new boolean[]{true, false}) {
+                Fixture f = fixture();
+                f.tool("REVEAL_ROOM");
+                FogMask mask = new FogMask(-200, -150, 10, 40, 30);
+                f.project.getFog().setEnabled(true);
+                f.project.getFog().setMask(mask);
+                if (enclosed) {
+                    for (double[] edge : new double[][]{
+                            {-100, -100, 100, -100}, {100, -100, 100, 100},
+                            {100, 100, -100, 100}, {-100, 100, -100, -100}}) {
+                        f.project.getWalls().add(DmProject.WallSegment.builder()
+                                .x1(edge[0]).y1(edge[1]).x2(edge[2]).y2(edge[3]).build());
+                    }
+                }
+                set(f.app, "hoverInsideCanvas", true);
+                set(f.app, "hoverWorldX", 0.0);
+                set(f.app, "hoverWorldY", 0.0);
+                FogMask.Snapshot before = mask.snapshot();
+                Color revealColor = Color.web(enclosed ? "#7CFFB2" : "#FFB020");
+                assertRoomPreviewColor(f, revealColor);
+                Object cachedRoom = get(f.app, "roomPreview");
+                // Scene filtering must still work when a sidebar control owns keyboard focus.
+                f.fogSlider.requestFocus();
+                for (int repeat = 0; repeat < 2; repeat++) {
+                    javafx.event.Event.fireEvent(f.fogSlider, new KeyEvent(KeyEvent.KEY_PRESSED,
+                            "", "", KeyCode.SHIFT, true, false, false, false));
+                    assertRoomPreviewColor(f, Color.web("#FF8A7A"));
+                }
+                javafx.event.Event.fireEvent(f.fogSlider, new KeyEvent(KeyEvent.KEY_RELEASED,
+                        "", "", KeyCode.SHIFT, false, false, false, false));
+                assertRoomPreviewColor(f, revealColor);
+                assertSame(cachedRoom, get(f.app, "roomPreview"));
+                assertTrue(before.sameBits(mask.snapshot()));
+                assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+                assertTrue(((Deque<?>) get(f.app, "redoStack")).isEmpty());
+            }
+        });
+    }
+
+    @Test
+    void roomPreviewRecognizesShiftAlreadyHeldWhenPointerEntersCanvas() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.tool("REVEAL_ROOM");
+            f.project.getFog().setEnabled(true);
+            f.project.getFog().setMask(new FogMask(-200, -150, 10, 40, 30));
+            javafx.event.Event.fireEvent(f.canvas, new MouseEvent(MouseEvent.MOUSE_MOVED,
+                    200, 150, 200, 150, MouseButton.NONE, 0, true, false, false, false,
+                    false, false, false, false, false, true, new PickResult(f.canvas, 200, 150)));
+            assertRoomPreviewColor(f, Color.web("#FF8A7A"));
+            javafx.event.Event.fireEvent(f.canvas, mouse(f.canvas, MouseEvent.MOUSE_MOVED, 200, 150, false));
+            assertRoomPreviewColor(f, Color.web("#FFB020"));
+        });
+    }
+
+    private static void assertRoomPreviewColor(Fixture f, Color expected) throws Exception {
+        Canvas canvas = (Canvas) get(f.app, "dmFogCanvas");
+        canvas.getGraphicsContext2D().clearRect(0, 0, 400, 300);
+        invoke(f.app, "drawToolPreview", new Class<?>[]{javafx.scene.canvas.GraphicsContext.class},
+                canvas.getGraphicsContext2D());
+        SnapshotParameters parameters = new SnapshotParameters();
+        parameters.setFill(Color.TRANSPARENT);
+        Color actual = canvas.snapshot(parameters, null).getPixelReader().getColor(205, 155);
+        assertEquals(expected.getRed(), actual.getRed(), 0.02);
+        assertEquals(expected.getGreen(), actual.getGreen(), 0.02);
+        assertEquals(expected.getBlue(), actual.getBlue(), 0.02);
+        assertTrue(actual.getOpacity() >= 0.29);
+    }
+
+    @Test
     void arrowsNudgeEveryMovableKindWithExactStepsIgnoringSnapAndRotation() throws Exception {
         onFx(() -> {
             Fixture f = fixture();

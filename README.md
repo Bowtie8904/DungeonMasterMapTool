@@ -261,7 +261,7 @@ The *Fog of war* section:
 - **Fog on/off** toggle: hides or shows fog without losing what is revealed. Fog tools only work while fog is on.
 - **Reveal brush / Hide brush:** paint fog away or back. The shared brush size slider defaults to 0.2–8 tiles and a circular preview follows the cursor. **Alt + mouse wheel** over the map changes size by 0.1 tiles per notch.
 - **Reveal area / Hide area:** drag a rectangle (dashed preview).
-- **Reveal room:** one click floods the room under the cursor, bounded by walls and doors/windows (regardless of whether they are open). **Shift+click** hides the room instead. A hover preview outlines the region before you click, so you see immediately if it is not enclosed. The tool stays armed for several rooms in a row.
+- **Reveal room:** one click floods the room under the cursor, bounded by walls and doors/windows (regardless of whether they are open). **Shift+click** hides the room instead. A hover preview outlines the region before you click, so you see immediately if it is not enclosed. The highlight is green for reveal (amber if unenclosed) and turns red while Shift is held to hide, even without moving the cursor; releasing Shift restores the reveal color. The tool stays armed for several rooms in a row.
 - **Reveal all / Hide all.**
 - **Fog sharpness** slider: fog cells per tile (5–30, default 10). Applies to all projects; existing masks are resampled.
 

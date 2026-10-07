@@ -262,6 +262,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private BitSet roomBarrier;
     private long roomBarrierSignature;
     private RoomFillService.Result roomPreview;
+    private boolean roomHidePreview;
     private boolean hoverInsideCanvas;
     private String lastDoorToggleId;
     private long lastDoorToggleNanos;
@@ -613,6 +614,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         stage.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
+                roomHidePreview = false;
                 finishNudge();
                 finishPlayerViewportDrag();
                 autoSaveIfDirty();
@@ -2122,11 +2124,15 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.sceneProperty().addListener((obs, oldScene, scene) -> {
             if (scene != null) {
                 installNudgeFocusListener(scene);
+                installRoomPreviewKeyFilter(scene);
             }
         });
         if (dmCanvas.getScene() != null) {
             installNudgeFocusListener(dmCanvas.getScene());
+            installRoomPreviewKeyFilter(dmCanvas.getScene());
         }
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.ANY, event ->
+                roomHidePreview = event.isShiftDown());
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
             finishNudge();
             canvasMouseDown = true;
@@ -3492,6 +3498,17 @@ public class DungeonMasterMapToolApplication extends Application {
         });
     }
 
+    private void installRoomPreviewKeyFilter(Scene scene) {
+        scene.addEventFilter(javafx.scene.input.KeyEvent.ANY, event -> {
+            if (event.getEventType() == javafx.scene.input.KeyEvent.KEY_PRESSED
+                    || event.getEventType() == javafx.scene.input.KeyEvent.KEY_RELEASED) {
+                roomHidePreview = event.getCode() == KeyCode.SHIFT
+                        ? event.getEventType() == javafx.scene.input.KeyEvent.KEY_PRESSED
+                        : event.isShiftDown();
+            }
+        });
+    }
+
     private boolean hasUnsavedChanges() {
         if (projectFile == null || project == null) {
             return false;
@@ -4379,7 +4396,8 @@ public class DungeonMasterMapToolApplication extends Application {
         int maxCol = Math.min(cols - 1, (int) Math.floor((Math.max(topLeft.x(), bottomRight.x()) - mask.getOriginX()) / cell));
         int minRow = Math.max(0, (int) Math.floor((Math.min(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
         int maxRow = Math.min(mask.getRows() - 1, (int) Math.floor((Math.max(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
-        gc.setFill(room.leaked() ? Color.web("#FFB020", 0.35) : Color.web("#7CFFB2", 0.3));
+        gc.setFill(roomHidePreview ? Color.web("#FF8A7A", 0.3)
+                : room.leaked() ? Color.web("#FFB020", 0.35) : Color.web("#7CFFB2", 0.3));
         BitSet cells = room.cells();
         double cellScreen = cell * camera.getZoom();
         for (int row = minRow; row <= maxRow; row++) {
