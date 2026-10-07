@@ -620,8 +620,8 @@ public final class Tuning {
 
     // ---- Storage and caches ----
 
-    public static final Setting<String> LIBRARY_FOLDER = text(STORAGE, "library.folder", "", true,
-            "Folder of the map library. Empty = 'dmmap-projects' next to the application; relative paths start there too.");
+    public static final Setting<String> LIBRARY_FOLDER = text(STORAGE, "library.folder", "dmmap-projects", true,
+            "Folder of the map library. Relative paths start next to the application.");
     public static final Setting<Integer> CACHE_IMAGE_TILES = integer(STORAGE, "cache.imageTiles", 96, 8, 4096, false,
             "Map image tiles kept in memory (each up to cache.imageTileSize squared pixels).");
     public static final Setting<Integer> CACHE_TILE_QUEUE = integer(STORAGE, "cache.imageTileLoadQueue", 48, 4, 4096, false,
