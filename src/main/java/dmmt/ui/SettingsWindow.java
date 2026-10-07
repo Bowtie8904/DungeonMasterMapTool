@@ -59,6 +59,7 @@ public final class SettingsWindow {
     private final Runnable onSectionsChanged;
     private final List<Row> rows = new ArrayList<>();
     private final Map<String, CheckBox> tabBoxes = new LinkedHashMap<>();
+    private final Map<String, CheckBox> controlBoxes = new LinkedHashMap<>();
     private final ListView<String> categories = new ListView<>();
     private final TextField search = new TextField();
     private final StackPane holder = new StackPane();
@@ -161,6 +162,7 @@ public final class SettingsWindow {
 
     private void buildRows() {
         Set<String> hidden = settings.hiddenSections();
+        Set<String> hiddenControls = settings.hiddenControls();
         for (SidebarSection section : AppSettings.SIDEBAR_SECTIONS) {
             CheckBox box = new CheckBox("Show \"" + section.title() + "\"");
             box.setSelected(!hidden.contains(section.id()));
@@ -178,6 +180,27 @@ public final class SettingsWindow {
                     + AppSettings.HIDDEN_SECTIONS_KEY + " (" + section.id() + ")");
             rows.add(new Row(TABS_CATEGORY, null, (TABS_CATEGORY + " tab show hide sidebar overlay " + section.title() + " "
                     + section.description() + " " + AppSettings.HIDDEN_SECTIONS_KEY).toLowerCase(Locale.ROOT), node));
+            for (AppSettings.SidebarControl control : AppSettings.SIDEBAR_CONTROLS) {
+                if (!control.sectionId().equals(section.id())) {
+                    continue;
+                }
+                CheckBox controlBox = new CheckBox("Show " + control.label());
+                controlBox.setSelected(!hiddenControls.contains(control.id()));
+                controlBox.setOnAction(e -> {
+                    settings.setHiddenControls(controlBoxes.entrySet().stream().filter(c -> !c.getValue().isSelected())
+                            .map(Map.Entry::getKey).collect(Collectors.toSet()));
+                    onSectionsChanged.run();
+                });
+                controlBoxes.put(control.id(), controlBox);
+                Icons.tooltip(controlBox, "Show or hide this control without changing its value or keyboard shortcuts.\nSetting: "
+                        + AppSettings.HIDDEN_CONTROLS_KEY + " (" + control.id() + ")");
+                VBox controlNode = new VBox(controlBox);
+                controlNode.getStyleClass().add("settings-row");
+                rows.add(new Row(TABS_CATEGORY, section.title() + " controls",
+                        (TABS_CATEGORY + " show hide individual control sidebar overlay " + section.title() + " "
+                                + control.label() + " " + control.id() + " " + AppSettings.HIDDEN_CONTROLS_KEY)
+                                .toLowerCase(Locale.ROOT), controlNode));
+            }
         }
         for (SettingInfo info : AppSettings.editableSettings()) {
             rows.add(new Row(info.category(), info.group(), (info.category() + " " + info.group() + " " + info.key() + " "

@@ -186,12 +186,12 @@ public class MapBrowser extends VBox {
                 Icons.button(MaterialDesignM.MAP_PLUS, "New empty map (drop images onto it to build a custom map)",
                         host::newMap),
                 Icons.button(MaterialDesignF.FILE_IMPORT_OUTLINE,
-                        "Import one or more .dd2vtt maps (e.g. from Dungeon Alchemist)",
+                        "Import one or more .dd2vtt or .uvtt maps",
                         () -> host.importMap(selectedFolder())),
                 Icons.button(MaterialDesignF.FOLDER_DOWNLOAD_OUTLINE, "Import all maps from a folder",
                         () -> host.importMapFolder(selectedFolder())),
                 Icons.button(MaterialDesignL.LAYERS_PLUS,
-                        "Import a multilevel map: several .dd2vtt levels (e.g. building floors) as one map",
+                        "Import a multilevel map: several .dd2vtt or .uvtt levels (e.g. building floors) as one map",
                         () -> host.importMultiLevelMap(selectedFolder())),
                 Icons.button(MaterialDesignC.CONTENT_SAVE_OUTLINE, "Save the open map (Ctrl+S)", host::saveMap));
         actions.getStyleClass().add("toolbar-row");

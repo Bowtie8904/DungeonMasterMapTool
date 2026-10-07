@@ -32,6 +32,7 @@ public final class AppSettings {
     }
 
     public static final String HIDDEN_SECTIONS_KEY = "ui.sections.hidden";
+    public static final String HIDDEN_CONTROLS_KEY = "ui.controls.hidden";
 
     /** One tab of the DM controls panel; its id is used in {@value #HIDDEN_SECTIONS_KEY} and ui.section.<id>.expanded. */
     public record SidebarSection(String id, String title, String description) {
@@ -47,6 +48,49 @@ public final class AppSettings {
             new SidebarSection("building", "Map building", "Walls, doors and windows."),
             new SidebarSection("player", "Player view", "Player screen, calibration and player zoom."),
             new SidebarSection("performance", "Performance", "Frame rate settings."));
+
+    public record SidebarControl(String id, String sectionId, String label) {
+    }
+
+    public static final List<SidebarControl> SIDEBAR_CONTROLS = sidebarControls();
+
+    private static List<SidebarControl> sidebarControls() {
+        List<SidebarControl> controls = new ArrayList<>();
+        addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");
+        addControls(controls, "fog", "enabled|Fog on/off", "revealBrush|Reveal brush", "hideBrush|Hide brush",
+                "revealRect|Reveal rectangle", "hideRect|Hide rectangle", "revealAll|Reveal all", "hideAll|Hide all",
+                "revealRoom|Reveal room", "brushSize|Brush size slider", "sharpness|Fog sharpness",
+                "fade|Fade animation", "softness|Fog softness");
+        addControls(controls, "lighting", "torch|Default torch light", "candle|Default candle light",
+                "campfire|Default campfire light", "magic|Default magic light", "remove|Remove selected lights",
+                "flicker|Light flicker", "revealPersistent|Keep fog revealed", "revealWhileLit|Reveal only while lit",
+                "revealNone|Don't reveal fog", "day|Day", "dawn|Dawn", "dusk|Dusk", "night|Night",
+                "on|Turn selected lights on", "off|Turn selected lights off", "ambient|Ambient brightness",
+                "tint|Light colour tint", "brightCore|Bright core strength", "hint|Right-click light hint");
+        addControls(controls, "weather", "type|Weather type", "intensity|Weather intensity");
+        addControls(controls, "effects", "circle|Circle", "rectangle|Box", "brush|Draw", "pen|Pen", "line|Line",
+                "delete|Delete selected effect", "clear|Remove all effects", "color|Effect colour", "opacity|Effect opacity",
+                "players|Players see effect", "texture|Effect texture", "border|Effect border",
+                "light|Effect emits light", "animations|Animate effects and weather", "brushSize|Brush size slider");
+        addControls(controls, "text", "add|Text tool", "layer|Show/hide text layer", "autoSize|Auto-size text box",
+                "players|Players see text", "delete|Delete selected text", "size|Font size", "color|Text colour",
+                "rotateLeft|Rotate text left", "rotateRight|Rotate text right", "background|Background colour",
+                "noBackground|No background", "border|Border colour", "noBorder|No border");
+        addControls(controls, "building", "drawWall|Draw wall", "eraseWall|Erase wall", "wallLayer|Show/hide wall layer",
+                "lock|Lock image layer", "snap|Snap image layers", "addImage|Add image layer");
+        addControls(controls, "player", "window|Player window", "freeze|Freeze player view", "scaleTest|1-inch test square",
+                "handout|Handout", "grid|Show player grid", "gridOpacity|Grid opacity", "screen|Player screen",
+                "diagonal|Screen diagonal (diameter)", "tileSize|Tile size", "zoom|Player zoom");
+        addControls(controls, "performance", "target|Target FPS", "animation|Animation FPS", "idle|Idle FPS");
+        return List.copyOf(controls);
+    }
+
+    private static void addControls(List<SidebarControl> controls, String section, String... entries) {
+        for (String entry : entries) {
+            String[] parts = entry.split("\\|", 2);
+            controls.add(new SidebarControl(section + "." + parts[0], section, parts[1]));
+        }
+    }
 
     /**
      * Kind of editor and limits of one setting, used by the settings window. {@code group} is the collapsible block
@@ -167,6 +211,21 @@ public final class AppSettings {
     public void setHiddenSections(Set<String> ids) {
         List<String> ordered = SIDEBAR_SECTIONS.stream().map(SidebarSection::id).filter(ids::contains).toList();
         put(HIDDEN_SECTIONS_KEY, String.join(",", ordered));
+    }
+
+    public synchronized Set<String> hiddenControls() {
+        Set<String> hidden = new java.util.LinkedHashSet<>();
+        for (String id : get(HIDDEN_CONTROLS_KEY, "").split(",")) {
+            String trimmed = id.trim();
+            SIDEBAR_CONTROLS.stream().filter(c -> c.id().equalsIgnoreCase(trimmed))
+                    .findFirst().ifPresent(c -> hidden.add(c.id()));
+        }
+        return hidden;
+    }
+
+    public void setHiddenControls(Set<String> ids) {
+        put(HIDDEN_CONTROLS_KEY, String.join(",", SIDEBAR_CONTROLS.stream()
+                .map(SidebarControl::id).filter(ids::contains).toList()));
     }
 
     /** Stores a value edited in the settings window (null restores the default) and applies it right away. */
@@ -325,6 +384,8 @@ public final class AppSettings {
                 new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."),
                 new Entry(HIDDEN_SECTIONS_KEY, "", "DM controls tabs that are hidden from the overlay, comma separated ids: "
                         + String.join(", ", SIDEBAR_SECTIONS.stream().map(SidebarSection::id).toList()) + ". Empty = all tabs shown."),
+                new Entry(HIDDEN_CONTROLS_KEY, "", "Individual DM controls hidden from the overlay, comma separated section.control ids. "
+                        + "Empty = all controls shown. Configure in Settings > DM controls tabs; values and shortcuts are unchanged."),
                 new Entry("ui.recentMaps.max", "5", "Number of maps kept in the recent maps list below the map library (1 to 30)."),
                 new Entry("ui.recentMaps", null, "Recently opened maps, most recent first, separated by '|' (managed by the app)."))));
 

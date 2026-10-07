@@ -211,6 +211,41 @@ class AppSettingsTest {
     }
 
     @Test
+    void hiddenControlsPersistIndependentlyOfTabsAndNormalizeHandEdits() throws Exception {
+        Path file = dir.resolve("control-settings.ini");
+        AppSettings settings = new AppSettings(file);
+        assertTrue(settings.hiddenControls().isEmpty());
+        java.util.Set<String> hidden = java.util.Set.of("lighting.candle", "player.diagonal", "fog.brushSize", "effects.brushSize");
+        settings.setHiddenControls(java.util.Set.of("lighting.candle", "player.diagonal", "fog.brushSize", "effects.brushSize", "bogus"));
+        settings.setHiddenSections(java.util.Set.of("lighting"));
+        AppSettings restored = new AppSettings(file);
+        assertEquals(hidden, restored.hiddenControls());
+        restored.setHiddenSections(java.util.Set.of());
+        assertEquals(hidden, restored.hiddenControls());
+        assertEquals("fog.brushSize,lighting.candle,effects.brushSize,player.diagonal",
+                restored.get(AppSettings.HIDDEN_CONTROLS_KEY, ""));
+        String text = Files.readString(file);
+        Files.writeString(file, text.replace("ui.controls.hidden = fog.brushSize,lighting.candle,effects.brushSize,player.diagonal",
+                "ui.controls.hidden = LIGHTING.CANDLE, fog.BRUSHSIZE, unknown, lighting.candle"));
+        Files.setLastModifiedTime(file, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 2000));
+        assertTrue(restored.pollExternalChange());
+        assertEquals(java.util.Set.of("lighting.candle", "fog.brushSize"), restored.hiddenControls());
+        restored.setHiddenControls(java.util.Set.of());
+        assertTrue(new AppSettings(file).hiddenControls().isEmpty());
+    }
+
+    @Test
+    void sidebarControlsHaveUniqueIdsAndKnownSections() {
+        var controls = AppSettings.SIDEBAR_CONTROLS;
+        assertEquals(controls.size(), controls.stream().map(AppSettings.SidebarControl::id).distinct().count());
+        for (var control : controls) {
+            assertTrue(AppSettings.SIDEBAR_SECTIONS.stream().anyMatch(s -> s.id().equals(control.sectionId())));
+            assertTrue(control.id().startsWith(control.sectionId() + "."));
+            assertFalse(control.label().isBlank());
+        }
+    }
+
+    @Test
     void editedSettingsApplyImmediatelyAndResetToDefault() {
         AppSettings settings = new AppSettings(dir.resolve("settings.ini"));
         settings.applyEdit(Tuning.DM_ZOOM_MAX.key(), "3");

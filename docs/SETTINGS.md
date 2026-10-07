@@ -116,6 +116,29 @@ Tabs of the DM controls overlay that are **completely hidden**. A DM who never u
 
 *Keywords:* hide tab, hide section, remove section, sidebar tabs, overlay, declutter, DM controls, show hide
 
+### `ui.controls.hidden`
+**Default:** empty · **Values:** comma separated `section.control` ids from the table below · **Applies:** live (also changed from the settings window)
+
+Individual controls hidden from the DM controls overlay. In **Settings > DM controls tabs**, expand a tab's **controls** group and uncheck the controls you do not need. Labels, icons and value readouts belonging to a field/slider are hidden together; empty rows and unused separators take no layout space. Values, active tools, map data and keyboard shortcuts are unchanged. Both brush-size sliders have independent visibility choices but still share the same brush size, adjustable with Alt + mouse wheel. Whole-tab visibility (`ui.sections.hidden`) is independent, so restoring a tab preserves its individual choices. Empty means everything is shown; unknown ids are ignored. Hand edits are applied while the app is running.
+
+For example: `ui.controls.hidden = lighting.candle,player.diagonal,fog.brushSize,effects.brushSize`
+
+Each entry below combines the section prefix with a control suffix (for example, `lighting.candle`):
+
+| Section prefix | Control suffixes |
+|---|---|
+| `tools` | `select`, `ping`, `laser`, `undo`, `redo` |
+| `fog` | `enabled`, `revealBrush`, `hideBrush`, `revealRect`, `hideRect`, `revealAll`, `hideAll`, `revealRoom`, `brushSize`, `sharpness`, `fade`, `softness` |
+| `lighting` | `torch`, `candle`, `campfire`, `magic`, `remove`, `flicker`, `revealPersistent`, `revealWhileLit`, `revealNone`, `day`, `dawn`, `dusk`, `night`, `on`, `off`, `ambient`, `tint`, `brightCore`, `hint` |
+| `weather` | `type`, `intensity` |
+| `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `animations`, `brushSize` |
+| `text` | `add`, `layer`, `autoSize`, `players`, `delete`, `size`, `color`, `rotateLeft`, `rotateRight`, `background`, `noBackground`, `border`, `noBorder` |
+| `building` | `drawWall`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
+| `player` | `window`, `freeze`, `scaleTest`, `handout`, `grid`, `gridOpacity`, `screen`, `diagonal`, `tileSize`, `zoom` |
+| `performance` | `target`, `animation`, `idle` |
+
+*Keywords:* hide control, show control, individual controls, candle, screen diagonal, diameter, brush size slider, declutter, sidebar
+
 ### `ui.recentMaps`
 **Default:** empty · **Values:** full map file paths separated by `|` · **Applies:** managed by the app
 

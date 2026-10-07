@@ -25,6 +25,7 @@ import dmmt.service.RecentMaps;
 import dmmt.service.ProjectService;
 import dmmt.service.Tuning;
 import dmmt.ui.CollapsibleSection;
+import dmmt.ui.ControlVisibility;
 import dmmt.ui.Dialogs;
 import dmmt.ui.DuplicateMapsDialog;
 import dmmt.ui.HandoutWindow;
@@ -232,6 +233,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private StackPane mapCenter;
     private Region dmControls;
     private final java.util.Map<String, CollapsibleSection> dmSections = new java.util.LinkedHashMap<>();
+    private final ControlVisibility dmControlVisibility = new ControlVisibility();
     private StackPane loadingOverlay;
     private String savedFingerprint;
     private long historyVersion;
@@ -1211,11 +1213,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 preferences.putDouble(PREF_TILE_INCHES, newValue);
             }
         });
-        GridPane scaleGrid = new GridPane();
-        scaleGrid.setHgap(8);
-        scaleGrid.setVgap(4);
-        scaleGrid.addRow(0, mutedLabel("Screen diagonal (in)"), screenInchesSpinner);
-        scaleGrid.addRow(1, mutedLabel("Tile size (in)"), tileInchesSpinner);
+        HBox diagonalRow = calibrationRow("Screen diagonal (in)", screenInchesSpinner);
+        HBox tileSizeRow = calibrationRow("Tile size (in)", tileInchesSpinner);
+        VBox scaleGrid = new VBox(4, diagonalRow, tileSizeRow);
+        dmControlVisibility.registerRow("player", diagonalRow, "diagonal", "diagonal");
+        dmControlVisibility.registerRow("player", tileSizeRow, "tileSize", "tileSize");
+        dmControlVisibility.registerContainer(scaleGrid);
 
         playerZoomSlider = new Slider(Tuning.PLAYER_ZOOM_MIN_STEP.get(), Tuning.PLAYER_ZOOM_MAX_STEP.get(), 0);
         playerZoomSlider.setMajorTickUnit(0.05);
@@ -1243,6 +1246,33 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox.setHgrow(playerZoomRow, Priority.ALWAYS);
 
         HBox weatherRow = weatherRow();
+
+        dmControlVisibility.registerRow("tools", toolsRow, "select", "ping", "laser", null, "undo", "redo");
+        dmControlVisibility.registerRow("fog", fogToolsRow, "enabled", null, "revealBrush", "hideBrush", "revealRect", "hideRect");
+        dmControlVisibility.registerRow("fog", fogFillRow, "revealAll", "hideAll", "revealRoom", null, "brushSize");
+        dmControlVisibility.register("fog.sharpness", fogSharpnessRow);
+        dmControlVisibility.registerRow("fog", fogEffectsRow, "fade", "softness", "softness", "softness");
+        dmControlVisibility.registerRow("lighting", lightRow, "torch", "candle", "campfire", "magic", null, "remove", null, "flicker");
+        dmControlVisibility.registerRow("lighting", revealRow, null, "revealPersistent", "revealWhileLit", "revealNone");
+        dmControlVisibility.registerRow("lighting", timeSegment, "day", "dawn", "dusk", "night");
+        dmControlVisibility.registerRow("lighting", timeRow, "", null, "on", "off");
+        dmControlVisibility.register("lighting.ambient", ambientBrightnessRow);
+        dmControlVisibility.register("lighting.tint", lightTintRow);
+        dmControlVisibility.register("lighting.brightCore", brightCoreRow);
+        dmControlVisibility.register("lighting.hint", lightHint);
+        dmControlVisibility.registerRow("weather", weatherRow, "type", "intensity", "intensity");
+        dmControlVisibility.registerRow("effects", effectToolsRow, "circle", "rectangle", "brush", "pen", "line", null, "delete", "clear");
+        dmControlVisibility.registerRow("effects", effectStyleRow, "color", "opacity", "players");
+        dmControlVisibility.registerRow("effects", effectTextureRow, "texture", "border", "light", "animations");
+        dmControlVisibility.register("effects.brushSize", effectBrushRow);
+        dmControlVisibility.registerRow("text", textToolsRow, "add", "layer", "autoSize", "players", null, "delete");
+        dmControlVisibility.registerRow("text", textSizeRow, "size", "size", "color", "color", "rotateLeft", "rotateRight");
+        dmControlVisibility.registerRow("text", textBoxColorRow, "background", "background", "noBackground", "border", "border", "noBorder");
+        dmControlVisibility.registerRow("building", buildRow, "drawWall", "eraseWall", "wallLayer", null, "lock", "snap", "addImage");
+        dmControlVisibility.registerRow("player", playerRow, "window", "freeze", "scaleTest", "handout");
+        dmControlVisibility.registerRow("player", playerGridRow, "grid", "gridOpacity", "gridOpacity");
+        dmControlVisibility.register("player.screen", screenRow);
+        dmControlVisibility.register("player.zoom", playerZoomRow);
 
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
@@ -1294,7 +1324,7 @@ public class DungeonMasterMapToolApplication extends Application {
             collapse.fire();
         }
         Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings: all options that are not part of the DM controls, "
-                + "and which tabs of these controls are shown", this::openSettings);
+                + "and which tabs and individual controls are shown", this::openSettings);
         HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, settingsButton, collapse);
         titleRow.getStyleClass().add("panel-header");
 
@@ -1334,6 +1364,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */
     private void applySectionVisibility() {
+        dmControlVisibility.apply(preferences.hiddenControls());
         java.util.Set<String> hidden = preferences.hiddenSections();
         dmSections.forEach((id, section) -> {
             boolean show = !hidden.contains(id);
@@ -1346,6 +1377,14 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox row = new HBox(nodes);
         row.getStyleClass().add("control-row");
         return row;
+    }
+
+    private HBox calibrationRow(String title, javafx.scene.Node control) {
+        Label label = mutedLabel(title);
+        label.setMinWidth(136);
+        HBox box = new HBox(8, label, control);
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
     }
 
     private Label mutedLabel(String text) {
@@ -4777,22 +4816,24 @@ public class DungeonMasterMapToolApplication extends Application {
         return Math.max(textMinFont(), Math.min(textMaxFont(), size));
     }
 
-    private GridPane frameRateGrid() {
-        GridPane grid = new GridPane();
-        grid.setHgap(8);
-        grid.setVgap(4);
-        grid.addRow(0, mutedLabel("Target FPS"), fpsSpinner(PREF_FPS_TARGET, targetFps, Math.min(10, Tuning.MAX_FPS.get()), Tuning.MAX_FPS.get(),
+    private VBox frameRateGrid() {
+        HBox targetRow = calibrationRow("Target FPS", fpsSpinner(PREF_FPS_TARGET, targetFps, Math.min(10, Tuning.MAX_FPS.get()), Tuning.MAX_FPS.get(),
                 "Frame rate while you interact with the map (mouse, keyboard, laser). Applies to DM and player view.",
                 value -> targetFps = value));
-        grid.addRow(1, mutedLabel("Animation FPS"), fpsSpinner(PREF_FPS_ANIMATION, animationFps, 1, Tuning.MAX_FPS.get(),
+        HBox animationRow = calibrationRow("Animation FPS", fpsSpinner(PREF_FPS_ANIMATION, animationFps, 1, Tuning.MAX_FPS.get(),
                 "Frame rate of effect textures and light flicker. Flicker never updates faster than this, even while you interact (never above the target FPS).",
                 value -> {
                     animationFps = value;
                     CanvasMapRenderer.setAnimationFps(value);
                 }));
-        grid.addRow(2, mutedLabel("Idle FPS"), fpsSpinner(PREF_FPS_IDLE, idleFps, 1, Math.min(60, Tuning.MAX_FPS.get()),
+        HBox idleRow = calibrationRow("Idle FPS", fpsSpinner(PREF_FPS_IDLE, idleFps, 1, Math.min(60, Tuning.MAX_FPS.get()),
                 "Frame rate when nothing moves and there was no input for a moment. Lower saves CPU.",
                 value -> idleFps = value));
+        VBox grid = new VBox(4, targetRow, animationRow, idleRow);
+        dmControlVisibility.registerRow("performance", targetRow, "target", "target");
+        dmControlVisibility.registerRow("performance", animationRow, "animation", "animation");
+        dmControlVisibility.registerRow("performance", idleRow, "idle", "idle");
+        dmControlVisibility.registerContainer(grid);
         return grid;
     }
 
