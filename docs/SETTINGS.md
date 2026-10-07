@@ -11,13 +11,13 @@ common synonyms to make searching easier.
 
 **Default:** `false`. **Applies:** Live.
 
-Enables the HTTP API for controlling the DM UI from Stream Deck or other local programs without keyboard focus.
+Enables the HTTP API for controlling the DM UI from external control devices or local programs without keyboard focus.
 Only `127.0.0.1` is bound. Browser-origin requests are rejected; there is no network access or CORS support.
 Switching this setting in Settings starts or stops the listener immediately, without a restart.
 Right-click URL copying is available even when the server is disabled, for preparing buttons before enabling it.
 Commands and examples are documented in [API.md](API.md).
 
-**Keywords:** Stream Deck, remote control, HTTP, localhost, automation.
+**Keywords:** external controls, remote control, HTTP, localhost, automation.
 
 ### `api.port`
 
@@ -29,7 +29,7 @@ working normally without the API. Port changes switch the listener immediately w
 cannot be bound, the old listener stays running and the status bar reports its address. Copy command URLs again
 after successfully changing the port. Hand edits apply when the DM window regains focus.
 
-**Keywords:** Stream Deck, HTTP, TCP, localhost, port.
+**Keywords:** external controls, HTTP, TCP, localhost, port.
 
 ## Contents
 

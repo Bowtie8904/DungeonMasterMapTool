@@ -6,9 +6,9 @@ Alternatively, edit `api.enabled = true` in `dmmt-settings.ini`; hand edits appl
 The server binds only to `127.0.0.1`; do not proxy or forward it to a network. Other local programs can control it.
 Browser-origin requests are rejected and CORS is not enabled.
 
-## Stream Deck setup
+## External control setup
 
-Use a Stream Deck HTTP-request action/plugin, or a local script that sends an HTTP request.
+Use an HTTP-request action/plugin on your control device, or a local script that sends an HTTP request.
 Right-click the desired DM control and copy its API URL into that action. Set the method to **GET**.
 An HTTP request is preferable to an "open website" action, which opens a browser and may be rejected.
 
@@ -29,6 +29,20 @@ just as selecting the colour manually would. Undo, project/global persistence an
 Tool buttons arm tools as usual; they do not place an object without a canvas interaction.
 Buttons that normally open a dialog still open that dialog and may need DM input. Further action commands are
 rejected while a modal DM dialog or another API action is in progress.
+
+## Control key images
+
+Right-click any actionable DM control and choose **Open key image** to open its artwork in the default browser.
+Numeric controls additionally offer **Open increment key image** and **Open decrement key image**, with green
+plus and red minus badges. Each is a 144x144 PNG on a dark background, using the control's tool icon where
+available. Dropdowns use their tab's icon (weather, effects, player view or levels) instead of a generic list
+or dropdown arrow. Other value controls use fitting icons such as opacity, palette, font size, ruler and zoom;
+remaining controls fall back to their section's icon.
+
+The browser opens a local HTML page containing the PNG, rather than opening an image viewer through the OS file
+association. Right-click the image in the browser to copy or save it for your control device's key. No API listener,
+network connection or window focus is required. Generated PNGs and pages are cached in
+`.dmmt/control-key-images` under your home directory and never written into maps.
 
 ## Discovery and parameters
 

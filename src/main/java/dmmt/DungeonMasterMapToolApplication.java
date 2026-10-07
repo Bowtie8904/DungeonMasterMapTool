@@ -39,6 +39,7 @@ import dmmt.ui.MapLocationDialog;
 import dmmt.ui.MapTagsDialog;
 import dmmt.ui.PlayerViewTransition;
 import dmmt.ui.SettingsWindow;
+import dmmt.ui.ControlKeyImages;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
@@ -528,6 +529,9 @@ public class DungeonMasterMapToolApplication extends Application {
         controlApi = new DmControlApi(dmControlVisibility);
         extraApiControls.forEach(controlApi::add);
         controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
+        controlApi.attachKeyImageMenus(
+                new ControlKeyImages(Path.of(System.getProperty("user.home"), ".dmmt", "control-key-images")),
+                url -> getHostServices().showDocument(url), this::status);
         mapBrowser.setApiUrlProvider(this::mapApiUrl);
         HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel);
         statusBar.getStyleClass().add("status-bar");

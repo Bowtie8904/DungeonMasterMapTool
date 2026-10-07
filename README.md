@@ -417,14 +417,14 @@ Highlights:
 | `texture.<kind>.*` | Per-texture colour, opacity, soft edges, light emission and animation layers |
 
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
-### Stream Deck and local control API
+### External controls and local control API
 
 The optional **localhost HTTP API** controls the DM UI without giving the application keyboard focus. Enable
 `api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,
 without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.
 The default address is `http://127.0.0.1:7071`.
 
-Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in a Stream Deck
+Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in an external control device's
 HTTP-request action. Toggles invert their current state; colour, dropdown and numeric controls include their current
 value in the copied example. Dropdowns also offer **Copy API index URL** with `?index=0` for the first option,
 avoiding long encoded names. Sliders also have increment/decrement examples. Commands use the same UI handlers as
@@ -432,6 +432,12 @@ manual interaction, including changes to selected objects and frozen-player beha
 
 See [Local API reference](docs/API.md) for commands, discovery, slider units, map UUIDs and zero-based level selection.
 The server is disabled by default, only accepts local requests, and is not intended to be exposed to a network.
+
+**Control key artwork:** right-click a control and choose **Open key image**. A browser page shows a
+144x144 PNG based on its tool icon (dropdowns use their tab's icon, and value controls use fitting symbols);
+right-click the image in the browser to copy or save it. Numeric controls
+also offer **Open increment key image** and **Open decrement key image**, with distinct plus/minus badges.
+This works even when the API is disabled. Images are stored under `.dmmt/control-key-images` in your home directory.
 
 ### 17. Keyboard and mouse reference
 

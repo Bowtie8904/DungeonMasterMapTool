@@ -246,6 +246,48 @@ class DmControlApiTest {
         });
     }
 
+    @Test
+    void keyImagesOpenLocalBrowserPagesWithoutApiAndNumericVariantsDiffer() throws Exception {
+        onFx(() -> {
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            Button button = new Button();
+            var original = new org.kordamp.ikonli.javafx.FontIcon(
+                    org.kordamp.ikonli.materialdesign2.MaterialDesignS.SNOWFLAKE);
+            button.setGraphic(original);
+            javafx.scene.Parent originalParent = original.getParent();
+            Slider slider = new Slider(0, 1, .5);
+            api.add("player.freeze", button);
+            api.add("effects.opacity", slider);
+            List<String> opened = new ArrayList<>();
+            List<String> statuses = new ArrayList<>();
+            api.attachUrlMenus(() -> null, statuses::add);
+            api.attachKeyImageMenus(new dmmt.ui.ControlKeyImages(dir), opened::add, statuses::add);
+            for (Control control : List.of(button, slider)) {
+                for (MenuItem item : control.getContextMenu().getItems()) {
+                    if (item.getText() != null && item.getText().startsWith("Open ")) {
+                        item.fire();
+                    }
+                }
+            }
+            assertEquals(4, opened.size());
+            assertTrue(statuses.isEmpty(), statuses.toString());
+            for (String url : opened) {
+                Path page = Path.of(java.net.URI.create(url));
+                assertTrue(java.nio.file.Files.readString(page).contains("<img width=\"144\" height=\"144\""));
+                Path png = page.resolveSibling(page.getFileName().toString().replace(".html", ".png"));
+                var image = javax.imageio.ImageIO.read(png.toFile());
+                assertEquals(144, image.getWidth());
+                assertEquals(144, image.getHeight());
+            }
+            var increase = javax.imageio.ImageIO.read(dir.resolve("effects.opacity-increment.png").toFile());
+            var decrease = javax.imageio.ImageIO.read(dir.resolve("effects.opacity-decrement.png").toFile());
+            assertNotEquals(increase.getRGB(115, 100), decrease.getRGB(115, 100));
+            assertSame(original, button.getGraphic());
+            assertSame(originalParent, original.getParent());
+            assertEquals(.5, slider.getValue());
+        });
+    }
+
     private static void assertError(int status, Runnable action) {
         assertEquals(status, assertThrows(LocalApiServer.ApiException.class, action::run).status());
     }

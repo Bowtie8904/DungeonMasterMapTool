@@ -2,6 +2,7 @@ package dmmt.api;
 
 import dmmt.service.AppSettings;
 import dmmt.ui.ControlVisibility;
+import dmmt.ui.ControlKeyImages;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.scene.Node;
@@ -23,6 +24,8 @@ import java.util.function.Supplier;
 public final class DmControlApi {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private final Set<Node> menuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<Node, ContextMenu> menus = new IdentityHashMap<>();
+    private final Set<Node> imageMenuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
 
     public DmControlApi(ControlVisibility registry) {
         registry.registeredNodes().forEach(this::register);
@@ -307,6 +310,7 @@ public final class DmControlApi {
                 if (menu == null) {
                     menu = new ContextMenu();
                 }
+                menus.put(target, menu);
                 if (existing && !menu.getItems().isEmpty()) {
                     menu.getItems().add(new SeparatorMenuItem());
                 }
@@ -329,6 +333,47 @@ public final class DmControlApi {
                 }
             }
         }
+    }
+
+    public void attachKeyImageMenus(ControlKeyImages images, Consumer<String> openBrowser,
+                                    Consumer<String> status) {
+        for (Entry entry : entries.values()) {
+            Set<Node> targets = Collections.newSetFromMap(new IdentityHashMap<>());
+            targets.add(entry.control());
+            entry.targets().forEach(node -> collectTargets(node, targets));
+            for (Node target : targets) {
+                if (!imageMenuTargets.add(target)) {
+                    continue;
+                }
+                ContextMenu menu = menus.get(target);
+                if (menu == null) {
+                    throw new IllegalStateException("Attach control URL menus before key image menus.");
+                }
+                menu.getItems().add(new SeparatorMenuItem());
+                menu.getItems().add(imageItem("Open key image", entry, null, images, openBrowser, status));
+                if (entry.control() instanceof Slider || entry.control() instanceof Spinner<?>) {
+                    menu.getItems().addAll(
+                            imageItem("Open increment key image", entry, "increment", images, openBrowser, status),
+                            imageItem("Open decrement key image", entry, "decrement", images, openBrowser, status));
+                }
+            }
+        }
+    }
+
+    private MenuItem imageItem(String label, Entry entry, String operation, ControlKeyImages images,
+                               Consumer<String> openBrowser, Consumer<String> status) {
+        MenuItem item = new MenuItem(label);
+        item.setOnAction(event -> {
+            List<Node> sources = new ArrayList<>();
+            sources.add(entry.control());
+            sources.addAll(entry.targets());
+            try {
+                openBrowser.accept(images.create(entry.id(), sources, operation).toUri().toString());
+            } catch (java.io.IOException | RuntimeException ex) {
+                status.accept("Could not open key image: " + ex.getMessage());
+            }
+        });
+        return item;
     }
 
     private static void collectTargets(Node node, Set<Node> targets) {
