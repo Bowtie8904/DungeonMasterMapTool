@@ -5,6 +5,32 @@ exact key (for example `fog.revealSeconds`) or with a word describing what you w
 *zoom*, *tooltip*, *torch*, *cache*, *click*, *frame rate*). Every entry ends with a **Keywords** line that lists
 common synonyms to make searching easier.
 
+## Local control API
+
+### `api.enabled`
+
+**Default:** `false`. **Applies:** Live.
+
+Enables the HTTP API for controlling the DM UI from Stream Deck or other local programs without keyboard focus.
+Only `127.0.0.1` is bound. Browser-origin requests are rejected; there is no network access or CORS support.
+Switching this setting in Settings starts or stops the listener immediately, without a restart.
+Right-click URL copying is available even when the server is disabled, for preparing buttons before enabling it.
+Commands and examples are documented in [API.md](API.md).
+
+**Keywords:** Stream Deck, remote control, HTTP, localhost, automation.
+
+### `api.port`
+
+**Default:** `7071`. **Range:** `1024` to `65535`. **Applies:** Live.
+
+TCP port for the local API. With the default, URLs begin with `http://127.0.0.1:7071`.
+Choose an unused port if another application occupies it. Startup errors appear in the DM status bar; the app keeps
+working normally without the API. Port changes switch the listener immediately while enabled; if the new port
+cannot be bound, the old listener stays running and the status bar reports its address. Copy command URLs again
+after successfully changing the port. Hand edits apply when the DM window regains focus.
+
+**Keywords:** Stream Deck, HTTP, TCP, localhost, port.
+
 ## Contents
 
 1. [How the settings file works](#how-the-settings-file-works)

@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -44,6 +47,57 @@ public class MapLibraryService {
     private MapTagService tags;
 
     public enum Kind { FOLDER, MAP }
+
+    /** API identity; path is the current project file or multilevel manifest, never a caller-supplied path. */
+    public record ApiMap(String id, Path path, String name, boolean multilevel) {
+    }
+
+    /** Lists only library maps, assigning and persisting legacy identities on first indexing. */
+    public synchronized List<ApiMap> listApiMaps() throws IOException {
+        List<ApiMap> result = new ArrayList<>();
+        indexApiMaps(scan(), result);
+        Set<String> identities = new HashSet<>();
+        for (ApiMap map : result) {
+            if (!identities.add(map.id().toLowerCase(Locale.ROOT))) {
+                throw new IOException("Duplicate map UUID in the library: " + map.id());
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private void indexApiMaps(Entry entry, List<ApiMap> result) throws IOException {
+        if (entry.isMap()) {
+            Path file = entry.mapFile().toAbsolutePath().normalize();
+            if (file.toRealPath().startsWith(root.toRealPath())) {
+                result.add(new ApiMap(projectService.ensureId(file), file, entry.name(), entry.isMultiLevel()));
+            }
+        } else {
+            for (Entry child : entry.children()) {
+                indexApiMaps(child, result);
+            }
+        }
+    }
+
+    /** Resolves a canonical UUID against a fresh library scan; duplicate identities fail indexing explicitly. */
+    public Optional<ApiMap> resolveApiMap(String id) throws IOException {
+        if (!ProjectService.isValidId(id)) {
+            return Optional.empty();
+        }
+        List<ApiMap> matches = listApiMaps().stream().filter(map -> map.id().equalsIgnoreCase(id)).toList();
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
+    /** Finds a library file for URL copying; arbitrary files and individual multilevel levels are rejected. */
+    public Optional<ApiMap> findApiMap(Path mapFile) throws IOException {
+        if (mapFile == null) {
+            return Optional.empty();
+        }
+        Path file = mapFile.toAbsolutePath().normalize();
+        if (!file.startsWith(root)) {
+            return Optional.empty();
+        }
+        return listApiMaps().stream().filter(map -> map.path().equals(file)).findFirst();
+    }
 
     /**
      * @param path    folder directory, map package directory, or loose map file
@@ -129,6 +183,14 @@ public class MapLibraryService {
     }
 
     private List<Entry> scanChildren(Path dir, boolean includeMaps) throws IOException {
+        return scanChildren(dir, includeMaps, new HashSet<>());
+    }
+
+    private List<Entry> scanChildren(Path dir, boolean includeMaps, Set<Path> visited) throws IOException {
+        Path real = dir.toRealPath();
+        if (!real.startsWith(root.toRealPath()) || !visited.add(real)) {
+            return List.of();
+        }
         List<Entry> folders = new ArrayList<>();
         List<Entry> maps = new ArrayList<>();
         boolean hasLooseMaps;
@@ -137,6 +199,9 @@ public class MapLibraryService {
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path child : stream) {
+                if (Files.isSymbolicLink(child) || !child.toRealPath().startsWith(root.toRealPath())) {
+                    continue;
+                }
                 String fileName = child.getFileName().toString();
                 if (fileName.startsWith(".")) {
                     continue;
@@ -154,7 +219,7 @@ public class MapLibraryService {
                                     tags().readTagsForScan(packagedMap)));
                         }
                     } else {
-                        folders.add(new Entry(Kind.FOLDER, fileName, child, null, scanChildren(child, includeMaps)));
+                        folders.add(new Entry(Kind.FOLDER, fileName, child, null, scanChildren(child, includeMaps, visited)));
                     }
                 } else if (isMapFile(child) && includeMaps) {
                     maps.add(new Entry(Kind.MAP, stripExtension(fileName), child, child, List.of(),
@@ -381,11 +446,47 @@ public class MapLibraryService {
             return new Result(Map.of(), result.movedMaps().get(entry.mapFile()));
         }
         Path destination = folder.resolve(copyName);
-        copyRecursive(entry.path(), destination);
-        Path copiedFile = destination.resolve(entry.mapFile().getFileName());
-        Path renamedFile = destination.resolve(copyName + extensionOf(entry.mapFile()));
-        Files.move(copiedFile, renamedFile);
-        return new Result(Map.of(), renamedFile);
+        try {
+            copyRecursive(entry.path(), destination);
+            Path copiedFile = destination.resolve(entry.mapFile().getFileName());
+            Path renamedFile = destination.resolve(copyName + extensionOf(entry.mapFile()));
+            Files.move(copiedFile, renamedFile);
+            regenerateCopyIds(renamedFile);
+            return new Result(Map.of(), renamedFile);
+        } catch (IOException | RuntimeException ex) {
+            try {
+                if (Files.exists(destination)) {
+                    deleteRecursive(destination);
+                }
+            } catch (IOException cleanup) {
+                ex.addSuppressed(cleanup);
+            }
+            throw ex;
+        }
+    }
+
+    private void regenerateCopyIds(Path mapFile) throws IOException {
+        if (MultiLevelService.isMultiLevelFile(mapFile)) {
+            var manifest = multiLevels().loadManifest(mapFile);
+            manifest.setId(UUID.randomUUID().toString());
+            for (var level : manifest.getLevels()) {
+                String oldId = level.getId();
+                level.setId(UUID.randomUUID().toString());
+                if (java.util.Objects.equals(oldId, manifest.getCurrentLevelId())) {
+                    manifest.setCurrentLevelId(level.getId());
+                }
+                Path levelFile = MultiLevelService.levelFile(mapFile, level);
+                if (!levelFile.toRealPath().startsWith(mapFile.getParent().toRealPath())) {
+                    throw new IOException("A copied level points outside its map package.");
+                }
+                regenerateCopyIds(levelFile);
+            }
+            multiLevels().saveManifest(mapFile, manifest);
+        } else {
+            DmProject project = projectService.load(mapFile);
+            project.setId(UUID.randomUUID().toString());
+            projectService.save(mapFile, project);
+        }
     }
 
     public void delete(Entry entry) throws IOException {
@@ -413,6 +514,9 @@ public class MapLibraryService {
         }
         Path newFile = packageDir.resolve(clean + EXTENSION);
         DmProject project = projectService.load(entry.mapFile());
+        if (!deleteOriginal) {
+            project.setId(UUID.randomUUID().toString());
+        }
         Path base = entry.mapFile().getParent();
         if (project.getMap() != null) {
             project.getMap().setImagePath(absolutize(base, project.getMap().getImagePath()));

@@ -24,6 +24,9 @@ import java.util.TreeMap;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DmProject {
     @Builder.Default
+    private String id = java.util.UUID.randomUUID().toString();
+
+    @Builder.Default
     private int schemaVersion = 1;
 
     @Builder.Default

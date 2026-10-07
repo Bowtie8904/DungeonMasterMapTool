@@ -35,7 +35,7 @@ jobs:
             --main-jar DungeonMasterMapTool.jar `
             --main-class dmmt.DungeonMasterMapToolLauncher `
             --icon packaging/icon.ico `
-            --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported `
+            --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver `
             --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED" `
             --dest dist
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }

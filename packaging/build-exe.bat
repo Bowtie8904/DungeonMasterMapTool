@@ -27,7 +27,7 @@ mkdir jpackage-input
 for %%F in (target\DungeonMasterMapTool-*-all.jar) do copy /y "%%F" jpackage-input\DungeonMasterMapTool.jar >nul
 
 echo [3/3] Creating the app image with jpackage...
-jpackage --type app-image --name DungeonMasterMapTool --input jpackage-input --main-jar DungeonMasterMapTool.jar --main-class dmmt.DungeonMasterMapToolLauncher --icon packaging\icon.ico --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported --dest dist %JP_EXTRA%
+jpackage --type app-image --name DungeonMasterMapTool --input jpackage-input --main-jar DungeonMasterMapTool.jar --main-class dmmt.DungeonMasterMapToolLauncher --icon packaging\icon.ico --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver --dest dist %JP_EXTRA%
 if errorlevel 1 goto :failed
 rmdir /s /q jpackage-input
 

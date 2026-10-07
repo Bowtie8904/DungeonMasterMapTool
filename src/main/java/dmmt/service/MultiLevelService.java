@@ -148,7 +148,9 @@ public class MultiLevelService {
     }
 
     public MultiLevelManifest loadManifest(Path manifestFile) throws IOException {
-        MultiLevelManifest manifest = mapper.readValue(manifestFile.toFile(), MultiLevelManifest.class);
+        var json = mapper.readTree(manifestFile.toFile());
+        MultiLevelManifest manifest = mapper.treeToValue(json, MultiLevelManifest.class);
+        manifest.setId(json.path("id").isTextual() ? json.path("id").asText() : null);
         if (manifest.getLevels() == null) {
             manifest.setLevels(new ArrayList<>());
         }
@@ -156,10 +158,16 @@ public class MultiLevelService {
     }
 
     public void saveManifest(Path manifestFile, MultiLevelManifest manifest) throws IOException {
-        Files.createDirectories(manifestFile.toAbsolutePath().getParent());
-        Path temp = manifestFile.resolveSibling(manifestFile.getFileName() + ".tmp");
-        mapper.writeValue(temp.toFile(), manifest);
-        Files.move(temp, manifestFile, StandardCopyOption.REPLACE_EXISTING);
+        synchronized (projectService) {
+            if (!ProjectService.isValidId(manifest.getId())) {
+                manifest.setId(Files.isRegularFile(manifestFile) ? projectService.ensureId(manifestFile)
+                        : UUID.randomUUID().toString());
+            }
+            Files.createDirectories(manifestFile.toAbsolutePath().getParent());
+            Path temp = manifestFile.resolveSibling(manifestFile.getFileName() + ".tmp");
+            mapper.writeValue(temp.toFile(), manifest);
+            Files.move(temp, manifestFile, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     // ---- Loading and saving levels ----

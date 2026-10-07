@@ -6,6 +6,10 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.Pane;
 
 import java.util.IdentityHashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -53,6 +57,23 @@ public final class ControlVisibility {
 
     public Set<String> registeredIds() {
         return new LinkedHashSet<>(controls.values());
+    }
+
+    /** Immutable snapshot including registered rows and their labels/readouts. Nodes remain live. */
+    public Map<String, List<Node>> registeredNodes() {
+        Map<String, List<Node>> result = new LinkedHashMap<>();
+        for (AppSettings.SidebarControl control : AppSettings.SIDEBAR_CONTROLS) {
+            List<Node> nodes = new ArrayList<>();
+            controls.forEach((node, id) -> {
+                if (id.equals(control.id())) {
+                    nodes.add(node);
+                }
+            });
+            if (!nodes.isEmpty()) {
+                result.put(control.id(), List.copyOf(nodes));
+            }
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     public void apply(Set<String> hidden) {

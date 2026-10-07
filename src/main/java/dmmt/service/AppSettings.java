@@ -492,7 +492,7 @@ public final class AppSettings {
     private static final List<String> CATEGORY_ORDER = List.of(Tuning.WINDOW, Tuning.UI, Tuning.DM_VIEW, Tuning.INPUT,
             Tuning.PLAYER, Tuning.EDITING, TEXTURES_CATEGORY, Tuning.TEXT, Tuning.FOG, Tuning.LIGHTS, Tuning.TIME_OF_DAY,
             Tuning.WEATHER, Tuning.PING, Tuning.FRAME_RATES, Tuning.PERFORMANCE_MODE, Tuning.AUTOSAVE, Tuning.IMPORT,
-            Tuning.STORAGE);
+            Tuning.STORAGE, Tuning.LOCAL_API);
 
     private static int categoryRank(String category) {
         int index = CATEGORY_ORDER.indexOf(category);
@@ -510,6 +510,8 @@ public final class AppSettings {
         String[] parts = key.split("\\.");
         String kind = parts.length > 1 ? parts[1] : "";
         switch (parts[0]) {
+            case "api":
+                return new Placement(null, 1);
             case "window":
                 return new Placement("Main window", 1);
             case "player":

@@ -19,6 +19,67 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapLibraryServiceTest {
+    @Test
+    void apiIndexPersistsLegacyIdentityWithoutChangingUnknownContent() throws IOException {
+        Path file = root.resolve("Legacy.dmmap");
+        Files.writeString(file, "{\"schemaVersion\":1,\"unknown\":{\"keep\":42},\"map\":{\"tags\":[\"forest\"]}}");
+        library.scan();
+        assertFalse(Files.readString(file).contains("\"id\""));
+        MapLibraryService.ApiMap indexed = library.listApiMaps().getFirst();
+        assertEquals(file, indexed.path());
+        assertEquals("Legacy", indexed.name());
+        assertFalse(indexed.multilevel());
+        assertTrue(ProjectService.isValidId(indexed.id()));
+        assertEquals(42, JsonMappers.create().readTree(file.toFile()).path("unknown").path("keep").asInt());
+        assertEquals(indexed, library.resolveApiMap(indexed.id()).orElseThrow());
+        assertEquals(indexed.id(), new MapLibraryService(root, new ProjectService()).listApiMaps().getFirst().id());
+    }
+
+    @Test
+    void apiIdentityTracksMovesAndRenameButCopiesAreDistinct() throws IOException {
+        Path original = createMap(root, "Original");
+        String id = projectService.load(original).getId();
+        assertTrue(ProjectService.isValidId(id));
+        Path renamed = library.rename(find(library.scan(), "Original"), "Renamed").movedMaps().get(original);
+        Path folder = library.createFolder(root, "Folder");
+        Path moved = library.move(find(library.scan(), "Renamed"), folder).movedMaps().get(renamed);
+        assertEquals(moved, library.resolveApiMap(id).orElseThrow().path());
+        Path copied = library.copy(find(library.scan(), "Renamed")).createdMap();
+        String copyId = projectService.load(copied).getId();
+        assertFalse(id.equals(copyId));
+        assertEquals(copied, library.resolveApiMap(copyId).orElseThrow().path());
+        library.delete(find(library.scan(), "Renamed"));
+        assertTrue(library.resolveApiMap(id).isEmpty());
+    }
+
+    @Test
+    void apiLookupRejectsArbitraryPathsInvalidIdsAndAmbiguousIds() throws IOException {
+        Path first = createMap(root, "First");
+        String id = projectService.load(first).getId();
+        assertTrue(library.findApiMap(tempDir.resolve("outside.dmmap")).isEmpty());
+        assertTrue(library.resolveApiMap(first.toString()).isEmpty());
+        assertTrue(library.resolveApiMap("1-1-1-1-1").isEmpty());
+        assertTrue(library.resolveApiMap(null).isEmpty());
+        assertTrue(library.resolveApiMap(java.util.UUID.randomUUID().toString()).isEmpty());
+        Path second = createMap(root, "Second");
+        DmProject clone = projectService.load(second);
+        clone.setId(id);
+        projectService.save(second, clone);
+        assertTrue(assertThrows(IOException.class, library::listApiMaps).getMessage().contains("Duplicate map UUID"));
+        assertThrows(IOException.class, () -> library.resolveApiMap(id));
+        assertThrows(IOException.class, () -> library.findApiMap(first));
+    }
+
+    @Test
+    void copyingLegacyLooseMapsGeneratesIndependentIds() throws IOException {
+        Path file = root.resolve("Legacy.dmmap");
+        Files.writeString(file, "{\"map\":{}}");
+        String id = library.listApiMaps().getFirst().id();
+        Path copy = library.copy(find(library.scan(), "Legacy")).createdMap();
+        assertFalse(id.equals(projectService.load(copy).getId()));
+        assertEquals(id, projectService.load(file).getId());
+    }
+
     @TempDir
     Path tempDir;
 

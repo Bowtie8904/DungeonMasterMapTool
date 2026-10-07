@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -13,6 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public class ProjectService {
     private final ObjectMapper objectMapper = JsonMappers.create()
@@ -36,7 +38,9 @@ public class ProjectService {
     }
 
     public DmProject load(Path projectFile) throws IOException {
-        DmProject project = objectMapper.readValue(projectFile.toFile(), DmProject.class);
+        JsonNode json = objectMapper.readTree(projectFile.toFile());
+        DmProject project = objectMapper.treeToValue(json, DmProject.class);
+        project.setId(json.path("id").isTextual() ? json.path("id").asText() : null);
         fogService.ensureMask(project);
         return project;
     }
@@ -59,16 +63,52 @@ public class ProjectService {
         }
     }
 
-    public void save(Path projectFile, DmProject project) throws IOException {
+    public synchronized void save(Path projectFile, DmProject project) throws IOException {
+        if (!isValidId(project.getId())) {
+            project.setId(Files.isRegularFile(projectFile) ? ensureId(projectFile) : UUID.randomUUID().toString());
+        }
         if (projectFile.getParent() != null) {
             Files.createDirectories(projectFile.getParent());
         }
+
         normalizeAssetPaths(projectFile, project);
         objectMapper.writeValue(projectFile.toFile(), project);
         try {
             thumbnailService.write(projectFile, project);
         } catch (IOException | RuntimeException ignored) {
             // A missing thumbnail must never fail a save; it is regenerated lazily.
+        }
+    }
+
+    /** Indexes legacy files without migrating their content or copying assets. */
+    public synchronized String ensureId(Path mapFile) throws IOException {
+        JsonNode json = objectMapper.readTree(mapFile.toFile());
+        if (!(json instanceof ObjectNode object)) {
+            throw new IOException("The map must contain a JSON object.");
+        }
+        String id = object.path("id").asText(null);
+        if (!isValidId(id)) {
+            id = UUID.randomUUID().toString();
+            object.put("id", id);
+            Path staging = mapFile.resolveSibling(mapFile.getFileName() + ".identity");
+            try {
+                objectMapper.writeValue(staging.toFile(), object);
+                Files.move(staging, mapFile, StandardCopyOption.REPLACE_EXISTING);
+            } finally {
+                Files.deleteIfExists(staging);
+            }
+        }
+        return id;
+    }
+
+    static boolean isValidId(String id) {
+        if (id == null) {
+            return false;
+        }
+        try {
+            return UUID.fromString(id).toString().equalsIgnoreCase(id);
+        } catch (IllegalArgumentException ex) {
+            return false;
         }
     }
 

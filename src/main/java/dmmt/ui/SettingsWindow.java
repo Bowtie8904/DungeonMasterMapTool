@@ -240,6 +240,9 @@ public final class SettingsWindow {
             boolean isDefault = sameValue(info, value, info.defaultValue());
             settings.applyEdit(info.key(), isDefault ? null : value);
             reset.setDisable(isDefault);
+            if (info.key().startsWith("api.")) {
+                onSectionsChanged.run();
+            }
         };
         reset.setOnAction(e -> {
             editor.set(info.defaultValue());
@@ -247,6 +250,9 @@ public final class SettingsWindow {
             error.setVisible(false);
             error.setManaged(false);
             reset.setDisable(true);
+            if (info.key().startsWith("api.")) {
+                onSectionsChanged.run();
+            }
         });
 
         String tip = info.description() + "\nDefault: " + (info.defaultValue().isEmpty() ? "(empty)" : info.defaultValue())

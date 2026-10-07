@@ -28,6 +28,7 @@ import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Clipboard;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
@@ -61,11 +62,34 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Left sidebar: map actions plus a file-browser style tree of the map library (folders mirror folders on disk).
  */
 public class MapBrowser extends VBox {
+    private Function<Path, String> apiUrlProvider;
+
+    /** Supplies the map-switch URL; failures are displayed rather than silently copying an invalid URL. */
+    public void setApiUrlProvider(Function<Path, String> apiUrlProvider) {
+        this.apiUrlProvider = apiUrlProvider;
+    }
+
+    private void copyApiUrl(Path mapFile) {
+        try {
+            String url = apiUrlProvider.apply(mapFile);
+            if (url == null || url.isBlank()) {
+                throw new IllegalStateException("The local API URL is not available.");
+            }
+            ClipboardContent content = new ClipboardContent();
+            content.putString(url);
+            if (!Clipboard.getSystemClipboard().setContent(content)) {
+                throw new IllegalStateException("Could not write to the clipboard.");
+            }
+        } catch (RuntimeException ex) {
+            Dialogs.error(window(), "Could not copy API URL", ex.getMessage());
+        }
+    }
 
     /** Callbacks into the application. */
     public interface Host {
@@ -772,6 +796,10 @@ public class MapBrowser extends VBox {
                         item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                         delete);
             }
+        }
+        if (entry.isMap() && apiUrlProvider != null) {
+            menu.getItems().add(item("Copy API URL", MaterialDesignC.CONTENT_COPY,
+                    () -> copyApiUrl(target.mapFile())));
         }
         if (tree.getSelectionModel().getSelectedItems().size() > 1) {
             for (MenuItem action : menu.getItems()) {

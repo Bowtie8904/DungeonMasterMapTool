@@ -40,6 +40,7 @@ public final class Tuning {
     static final String IMPORT = "Import";
     static final String STORAGE = "Storage and caches";
     static final String UI = "User interface";
+    static final String LOCAL_API = "Local control API";
 
     private static final Pattern HEX_COLOR = Pattern.compile("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?");
     private static final List<Setting<?>> ALL = new ArrayList<>();
@@ -238,6 +239,11 @@ public final class Tuning {
     }
 
     // ---- Window ----
+
+    public static final Setting<Boolean> API_ENABLED = bool(LOCAL_API, "api.enabled", false, false,
+            "Enable the localhost-only HTTP API for Stream Deck and other local controls.");
+    public static final Setting<Integer> API_PORT = integer(LOCAL_API, "api.port", 7071, 1024, 65535, false,
+            "TCP port of the local control API, bound only to 127.0.0.1.");
 
     public static final Setting<Integer> DM_WINDOW_WIDTH = integer(WINDOW, "window.dmWidth", 1500, 400, 10000, true,
             "Initial width of the main (DM) window in pixels.");

@@ -24,6 +24,44 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MultiLevelServiceTest {
+    @Test
+    void apiIndexesMultilevelPackageOnlyAndCopyRenewsPackageAndLevelIdentities() throws IOException {
+        Path file = createTower().manifestFile();
+        MultiLevelManifest before = service.loadManifest(file);
+        service.loadLevel(file, before.getLevels().get(1).getId());
+        before = service.loadManifest(file);
+        assertTrue(ProjectService.isValidId(before.getId()));
+        List<MapLibraryService.ApiMap> maps = library.listApiMaps();
+        assertEquals(1, maps.size());
+        assertTrue(maps.getFirst().multilevel());
+        assertEquals(before.getId(), maps.getFirst().id());
+        Path sourceLevel = MultiLevelService.levelFile(file, before.getLevels().getFirst());
+        assertTrue(library.findApiMap(sourceLevel).isEmpty());
+        Path copyFile = library.copy(library.scan().children().getFirst()).createdMap();
+        MultiLevelManifest copy = service.loadManifest(copyFile);
+        assertFalse(before.getId().equals(copy.getId()));
+        assertEquals(1, copy.indexOf(copy.getCurrentLevelId()));
+        for (int i = 0; i < before.getLevels().size(); i++) {
+            assertFalse(before.getLevels().get(i).getId().equals(copy.getLevels().get(i).getId()));
+            String sourceId = projectService.load(MultiLevelService.levelFile(file, before.getLevels().get(i))).getId();
+            String copyId = projectService.load(MultiLevelService.levelFile(copyFile, copy.getLevels().get(i))).getId();
+            assertTrue(ProjectService.isValidId(sourceId));
+            assertFalse(sourceId.equals(copyId));
+        }
+        assertEquals(file, library.resolveApiMap(before.getId()).orElseThrow().path());
+    }
+
+    @Test
+    void apiIndexPersistsLegacyManifestIdWithoutRewritingLevels() throws IOException {
+        Path file = createTower().manifestFile();
+        var json = JsonMappers.create().readTree(file.toFile());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) json).remove("id");
+        JsonMappers.create().writeValue(file.toFile(), json);
+        String id = library.listApiMaps().getFirst().id();
+        assertEquals(id, service.loadManifest(file).getId());
+        assertEquals(id, library.resolveApiMap(id).orElseThrow().id());
+    }
+
     @TempDir
     Path tempDir;
 

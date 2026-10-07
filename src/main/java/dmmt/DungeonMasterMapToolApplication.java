@@ -1,5 +1,8 @@
 package dmmt;
 
+import dmmt.api.DmControlApi;
+import dmmt.api.FxApiDispatcher;
+import dmmt.api.LocalApiServer;
 import dmmt.lighting.LightingEngine;
 import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
@@ -160,6 +163,10 @@ public class DungeonMasterMapToolApplication extends Application {
     /** Loaded first: it applies the tuning values that the field initializers below already read. */
     private final AppSettings preferences = AppSettings.load();
     private final ProjectService projectService = new ProjectService();
+    private LocalApiServer localApiServer;
+    private DmControlApi controlApi;
+    private boolean apiActionRunning;
+    private final Map<String, javafx.scene.Node> extraApiControls = new java.util.LinkedHashMap<>();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
     /** Created once {@link #mapLibrary} exists, see {@link #start}. */
     private DuplicateCheckService duplicateCheckService;
@@ -515,6 +522,13 @@ public class DungeonMasterMapToolApplication extends Application {
         metricsTooltip = Icons.tooltip("Waiting for the first frames...");
         javafx.scene.control.Tooltip.install(metricsLabel, metricsTooltip);
         Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings", this::openSettings);
+        extraApiControls.put("ui.library", sidebarToggle);
+        extraApiControls.put("ui.performance", performanceToggle);
+        extraApiControls.put("ui.settings", settingsButton);
+        controlApi = new DmControlApi(dmControlVisibility);
+        extraApiControls.forEach(controlApi::add);
+        controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
+        mapBrowser.setApiUrlProvider(this::mapApiUrl);
         HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel);
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
@@ -615,6 +629,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         updateWindowTitle();
         stage.show();
+        applyLocalApiSettings();
 
         stage.focusedProperty().addListener((obs, was, focused) -> {
             if (!focused) {
@@ -628,6 +643,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 applyPlayerGridSetting();
                 status("Settings reloaded from " + preferences.getFile().getFileName()
                         + " (entries marked 'Restart required' apply after a restart)");
+                applyLocalApiSettings();
             }
         });
         javafx.animation.Timeline autoSaveTicker = new javafx.animation.Timeline(
@@ -1327,6 +1343,8 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings: all options that are not part of the DM controls, "
                 + "and which tabs and individual controls are shown", this::openSettings);
+        extraApiControls.put("ui.controls", collapse);
+        extraApiControls.put("ui.panelSettings", settingsButton);
         HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, settingsButton, collapse);
         titleRow.getStyleClass().add("panel-header");
 
@@ -1341,10 +1359,180 @@ public class DungeonMasterMapToolApplication extends Application {
         return panel;
     }
 
+    private String localApiBaseUrl() {
+        return localApiServer == null ? "http://127.0.0.1:" + Tuning.API_PORT.get() : localApiServer.baseUrl();
+    }
+
+    private String mapApiUrl(Path file) {
+        try {
+            var map = mapLibrary.findApiMap(file).orElseThrow(
+                    () -> new LocalApiServer.ApiException(404, "Map is not in the library."));
+            return localApiBaseUrl() + "/api/maps/" + map.id() + "/switch";
+        } catch (IOException ex) {
+            throw new LocalApiServer.ApiException(500, "Could not read map ID: " + ex.getMessage());
+        }
+    }
+
+    private void applyLocalApiSettings() {
+        if (!Tuning.API_ENABLED.get()) {
+            if (localApiServer != null) {
+                LocalApiServer previous = localApiServer;
+                localApiServer = null;
+                previous.close();
+                status("Local control API disabled.");
+            }
+            return;
+        }
+        int port = Tuning.API_PORT.get();
+        if (localApiServer != null && localApiServer.baseUrl().equals("http://127.0.0.1:" + port)) {
+            return;
+        }
+        LocalApiServer server = new LocalApiServer(port, this::handleLocalApi);
+        try {
+            server.start();
+            LocalApiServer previous = localApiServer;
+            localApiServer = server;
+            if (previous != null) {
+                previous.close();
+            }
+            status("Local control API listening at " + server.baseUrl());
+        } catch (IOException ex) {
+            server.close();
+            status("Could not start local control API: " + ex.getMessage()
+                    + (localApiServer == null ? "" : ". Still listening at " + localApiServer.baseUrl()));
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (localApiServer != null) {
+            localApiServer.close();
+            localApiServer = null;
+        }
+    }
+
+    private Object handleLocalApi(String path, Map<String, String> query) {
+        try {
+            if (path.equals("/api/controls")) {
+                requireApiParameters(query, Set.of());
+                return FxApiDispatcher.call(controlApi::describe);
+            }
+            if (path.startsWith("/api/controls/")) {
+                String id = path.substring("/api/controls/".length()).replace('/', '.');
+                return FxApiDispatcher.call(() -> {
+                    ensureApiCanAct();
+                    finishNudge();
+                    lastInputNanos = System.nanoTime();
+                    apiActionRunning = true;
+                    try {
+                        return controlApi.execute(id, query);
+                    } finally {
+                        apiActionRunning = false;
+                    }
+                });
+            }
+            if (path.equals("/api/maps")) {
+                requireApiParameters(query, Set.of());
+                FxApiDispatcher.call(() -> {
+                    if (ioBusy) {
+                        throw new LocalApiServer.ApiException(409, "A map file operation is in progress.");
+                    }
+                    return null;
+                });
+                return mapLibrary.listApiMaps().stream().map(map -> Map.of(
+                        "id", map.id(), "name", map.name(), "multilevel", map.multilevel(),
+                        "url", localApiBaseUrl() + "/api/maps/" + map.id() + "/switch")).toList();
+            }
+            if (path.startsWith("/api/maps/") && path.endsWith("/switch")) {
+                requireApiParameters(query, Set.of("level"));
+                FxApiDispatcher.call(() -> {
+                    if (ioBusy) {
+                        throw new LocalApiServer.ApiException(409, "A map file operation is in progress.");
+                    }
+                    return null;
+                });
+                String id = path.substring("/api/maps/".length(), path.length() - "/switch".length());
+                try {
+                    if (!UUID.fromString(id).toString().equalsIgnoreCase(id)) {
+                        throw new IllegalArgumentException("UUID must use its canonical form.");
+                    }
+                } catch (IllegalArgumentException ex) {
+                    throw new LocalApiServer.ApiException(400, "Invalid map UUID.");
+                }
+                var map = mapLibrary.resolveApiMap(id).orElseThrow(
+                        () -> new LocalApiServer.ApiException(404, "Map ID is not in the library."));
+                String levelId = null;
+                if (query.containsKey("level")) {
+                    if (!map.multilevel()) {
+                        throw new LocalApiServer.ApiException(400, "Only multilevel maps accept a level index.");
+                    }
+                    int index;
+                    try {
+                        index = Integer.parseInt(query.get("level"));
+                    } catch (NumberFormatException ex) {
+                        throw new LocalApiServer.ApiException(400, "Level index must be an integer.");
+                    }
+                    MultiLevelManifest manifest = mapLibrary.multiLevels().loadManifest(map.path());
+                    if (index < 0 || index >= manifest.getLevels().size()) {
+                        throw new LocalApiServer.ApiException(400, "Level index is outside this map's range.");
+                    }
+                    levelId = manifest.getLevels().get(index).getId();
+                }
+                String desiredLevel = levelId;
+                return FxApiDispatcher.call(() -> {
+                    ensureApiCanAct();
+                    commitTextEdit();
+                    if (projectFile == null && hasContent(project)) {
+                        throw new LocalApiServer.ApiException(409, "Save the new map before switching via the API.");
+                    }
+                    finishNudge();
+                    switchToMap(map.path(), desiredLevel);
+                    boolean alreadyOpen = openMapFile() != null
+                            && map.path().toAbsolutePath().normalize().equals(openMapFile().toAbsolutePath().normalize())
+                            && (desiredLevel == null || desiredLevel.equals(currentLevelId));
+                    if (!ioBusy && !alreadyOpen) {
+                        throw new LocalApiServer.ApiException(500, "Map switch could not be started; see the DM status bar.");
+                    }
+                    return Map.of("accepted", true, "id", id, "message",
+                            "Map switch requested; loading and any errors are shown in the DM window.");
+                });
+            }
+            if (path.equals("/api/state")) {
+                requireApiParameters(query, Set.of());
+                return FxApiDispatcher.call(() -> Map.of("busy", ioBusy,
+                        "map", openMapFile() == null ? "" : MapBrowser.displayName(openMapFile()),
+                        "level", multiLevelManifest == null ? -1 : multiLevelManifest.indexOf(currentLevelId),
+                        "frozen", frozenPlayerProject != null));
+            }
+            throw new LocalApiServer.ApiException(404, "Unknown API endpoint.");
+        } catch (IOException ex) {
+            throw new LocalApiServer.ApiException(500, "Map library operation failed: " + ex.getMessage());
+        }
+    }
+
+    private static void requireApiParameters(Map<String, String> query, Set<String> allowed) {
+        if (!allowed.containsAll(query.keySet())) {
+            throw new LocalApiServer.ApiException(400, "Unsupported query parameter.");
+        }
+    }
+
+    private void ensureApiCanAct() {
+        if (ioBusy || apiActionRunning || canvasMouseDown || fogDragging) {
+            throw new LocalApiServer.ApiException(409, "A DM operation is in progress.");
+        }
+        boolean modalDialog = javafx.stage.Window.getWindows().stream()
+                .anyMatch(window -> window instanceof Stage stage && stage.isShowing()
+                        && stage.getModality() != javafx.stage.Modality.NONE);
+        if (modalDialog) {
+            throw new LocalApiServer.ApiException(409, "Close the modal DM dialog before sending commands.");
+        }
+    }
+
     private void openSettings() {
         SettingsWindow.show(primaryStage, preferences, () -> {
             applySectionVisibility();
             applyPlayerGridSetting();
+            applyLocalApiSettings();
         });
     }
 
@@ -4981,6 +5169,18 @@ public class DungeonMasterMapToolApplication extends Application {
         levelDownButton = Icons.button(MaterialDesignA.ARROW_DOWN_BOLD, "One level down (Page Down)", () -> stepLevel(-1));
         levelUpButton = Icons.button(MaterialDesignA.ARROW_UP_BOLD, "One level up (Page Up)", () -> stepLevel(1));
         levelSelector = new ComboBox<>();
+        levelSelector.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(MultiLevelManifest.Level level) {
+                return level == null ? "" : level.getName();
+            }
+
+            @Override
+            public MultiLevelManifest.Level fromString(String name) {
+                return levelSelector.getItems().stream().filter(level -> level.getName().equals(name))
+                        .findFirst().orElse(null);
+            }
+        });
         levelSelector.getStyleClass().add("level-selector");
         levelSelector.setPrefWidth(190);
         levelSelector.setVisibleRowCount(12);
@@ -5026,6 +5226,10 @@ public class DungeonMasterMapToolApplication extends Application {
                         handleManageLevels(multiLevelFile);
                     }
                 });
+        extraApiControls.put("levels.down", levelDownButton);
+        extraApiControls.put("levels.up", levelUpButton);
+        extraApiControls.put("levels.manage", manage);
+        extraApiControls.put("levels.select", levelSelector);
         HBox box = new HBox(6, icon, levelSelector, levelDownButton, levelUpButton, levelPositionLabel, manage);
         box.setAlignment(Pos.CENTER_LEFT);
         box.getStyleClass().add("level-switcher");

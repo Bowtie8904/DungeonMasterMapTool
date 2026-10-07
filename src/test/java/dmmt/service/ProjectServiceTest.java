@@ -14,6 +14,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectServiceTest {
+    @Test
+    void savingLegacyProjectLoadedBeforeIndexingRetainsTheIndexedIdentity() throws IOException {
+        Path file = tempDir.resolve("legacy.dmmap");
+        Files.writeString(file, "{\"map\":{}}");
+        ProjectService service = new ProjectService();
+        DmProject project = service.load(file);
+        String indexedId = service.ensureId(file);
+        service.save(file, project);
+        assertEquals(indexedId, project.getId());
+        assertEquals(indexedId, service.load(file).getId());
+    }
+
     @TempDir
     Path tempDir;
 
@@ -57,6 +69,7 @@ class ProjectServiceTest {
         ProjectService service = new ProjectService();
         DmProject copy = service.copy(project);
 
+        assertEquals(project.getId(), copy.getId(), "A frozen snapshot is still the same map");
         assertEquals(project.getFog().getMask().copyBits(), copy.getFog().getMask().copyBits());
         assertEquals(4, copy.getOverlays().get(0).getPoints().size());
         assertEquals(false, copy.getOverlays().get(0).isPlayerVisible());

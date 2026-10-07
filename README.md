@@ -417,6 +417,22 @@ Highlights:
 | `texture.<kind>.*` | Per-texture colour, opacity, soft edges, light emission and animation layers |
 
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
+### Stream Deck and local control API
+
+The optional **localhost HTTP API** controls the DM UI without giving the application keyboard focus. Enable
+`api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,
+without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.
+The default address is `http://127.0.0.1:7071`.
+
+Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in a Stream Deck
+HTTP-request action. Toggles invert their current state; colour, dropdown and numeric controls include their current
+value in the copied example. Dropdowns also offer **Copy API index URL** with `?index=0` for the first option,
+avoiding long encoded names. Sliders also have increment/decrement examples. Commands use the same UI handlers as
+manual interaction, including changes to selected objects and frozen-player behavior.
+
+See [Local API reference](docs/API.md) for commands, discovery, slider units, map UUIDs and zero-based level selection.
+The server is disabled by default, only accepts local requests, and is not intended to be exposed to a network.
+
 ### 17. Keyboard and mouse reference
 
 | Input | Action |
