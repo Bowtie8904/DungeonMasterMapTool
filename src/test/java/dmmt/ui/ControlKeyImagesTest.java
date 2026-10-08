@@ -16,6 +16,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ControlKeyImagesTest {
@@ -46,6 +47,14 @@ class ControlKeyImagesTest {
             freeze.setGraphic(new FontIcon(MaterialDesignS.SNOWFLAKE));
             assertEquals(MaterialDesignS.SNOWFLAKE,
                     ControlKeyImages.selectIcon("player.freeze", List.of(freeze)));
+
+            // The volume sliders carry no icon of their own and must not fall back to the generic glyph.
+            assertEquals(MaterialDesignM.MUSIC_NOTE,
+                    ControlKeyImages.selectIcon("audio.musicVolume", List.of(new Slider())));
+            assertEquals(MaterialDesignV.VOLUME_HIGH,
+                    ControlKeyImages.selectIcon("audio.masterVolume", List.of(new Slider())));
+            assertEquals(MaterialDesignW.WAVES,
+                    ControlKeyImages.selectIcon("audio.effectsVolume", List.of(new Slider())));
             return null;
         });
         Platform.runLater(task);
@@ -71,6 +80,34 @@ class ControlKeyImagesTest {
             Color lightened = ControlKeyImages.selectColor(List.of(dark));
             assertTrue(lightened.getBrightness() >= 0.45,
                     "a nearly black colour must be lightened to stay readable: " + lightened);
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void theFingerprintChangesWithTheIconAndTheColourButNotOtherwise() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            String id = "audio.category.1234";
+            Button combat = new Button();
+            combat.setGraphic(AudioIcons.tinted("mdi2s-sword-cross", "#FF8800", 22));
+            String original = ControlKeyImages.fingerprint(id, List.of(combat));
+
+            Button same = new Button();
+            same.setGraphic(AudioIcons.tinted("mdi2s-sword-cross", "#FF8800", 22));
+            assertEquals(original, ControlKeyImages.fingerprint(id, List.of(same)),
+                    "identical artwork must keep the cached key image");
+
+            Button recoloured = new Button();
+            recoloured.setGraphic(AudioIcons.tinted("mdi2s-sword-cross", "#2288FF", 22));
+            assertNotEquals(original, ControlKeyImages.fingerprint(id, List.of(recoloured)),
+                    "a new colour must invalidate the cached key image");
+
+            Button reIconed = new Button();
+            reIconed.setGraphic(AudioIcons.tinted("mdi2b-bird", "#FF8800", 22));
+            assertNotEquals(original, ControlKeyImages.fingerprint(id, List.of(reIconed)),
+                    "a new icon must invalidate the cached key image");
             return null;
         });
         Platform.runLater(task);

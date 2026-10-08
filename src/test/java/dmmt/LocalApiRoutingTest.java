@@ -296,6 +296,116 @@ class LocalApiRoutingTest {
                     connection.disconnect();
                 }
             }
+    @Test
+    void batchedDiscoveryReturnsOnlyTheRequestedControlsAndSkipsUnknownIds() throws Exception {
+        var app = fixture();
+        installControls(app);
+        var all = (List<?>) request(app, "/api/controls", Map.of());
+        assertEquals(2, all.size());
+        var filtered = (List<?>) request(app, "/api/controls", Map.of("ids", "effects.opacity,missing.control"));
+        assertEquals(1, filtered.size());
+        assertEquals("effects.opacity", ((Map<?, ?>) filtered.getFirst()).get("id"));
+        var ordered = (List<?>) request(app, "/api/controls", Map.of("ids", "effects.opacity,fog.enabled"));
+        assertEquals(List.of("effects.opacity", "fog.enabled"),
+                ordered.stream().map(entry -> ((Map<?, ?>) entry).get("id")).toList());
+        assertThrows(LocalApiServer.ApiException.class, () -> request(app, "/api/controls", Map.of("ids", "")));
+        assertThrows(LocalApiServer.ApiException.class, () -> request(app, "/api/controls", Map.of("ids", "a,,b")));
+        String many = java.util.stream.IntStream.range(0, 129).mapToObj(index -> "id" + index)
+                .collect(java.util.stream.Collectors.joining(","));
+        assertThrows(LocalApiServer.ApiException.class, () -> request(app, "/api/controls", Map.of("ids", many)));
+    }
+
+    @Test
+    void keyImagesAreServedAsPngAndRejectImpossibleOperations() throws Exception {
+        var app = fixture();
+        installControls(app);
+        var image = (LocalApiServer.Binary) request(app, "/api/controls/fog/enabled/image", Map.of());
+        assertEquals("image/png", image.contentType());
+        assertArrayEquals(new byte[] {(byte) 0x89, 'P', 'N', 'G'}, java.util.Arrays.copyOf(image.body(), 4));
+        var increment = (LocalApiServer.Binary) request(app, "/api/controls/effects/opacity/image",
+                Map.of("operation", "increment"));
+        assertFalse(java.util.Arrays.equals(image.body(), increment.body()));
+        assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/fog/enabled/image", Map.of("operation", "increment")));
+        assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/effects/opacity/image", Map.of("operation", "sideways")));
+        assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/not/known/image", Map.of()));
+    }
+
+    @Test
+    void keyImagesAndFilteredDiscoveryAnswerOverHttp() throws Exception {
+        var app = fixture();
+        installControls(app);
+        try (var server = new LocalApiServer(0, (path, query) -> {
+            try {
+                return request(app, path, query);
+            } catch (RuntimeException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new IllegalStateException(ex);
+            }
+        })) {
+            server.start();
+            HttpURLConnection connection = (HttpURLConnection) URI
+                    .create(server.baseUrl() + "/api/controls/fog/enabled/image").toURL().openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            try {
+                assertEquals(200, connection.getResponseCode());
+                assertEquals("image/png", connection.getHeaderField("Content-Type"));
+                assertEquals("private, max-age=60", connection.getHeaderField("Cache-Control"));
+                byte[] body = connection.getInputStream().readAllBytes();
+                assertEquals(Integer.parseInt(connection.getHeaderField("Content-Length")), body.length);
+                assertArrayEquals(new byte[] {(byte) 0x89, 'P', 'N', 'G'}, java.util.Arrays.copyOf(body, 4));
+            } finally {
+                connection.disconnect();
+            }
+            connection = (HttpURLConnection) URI.create(server.baseUrl() + "/api/controls?ids=fog.enabled")
+                    .toURL().openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            try {
+                assertEquals(200, connection.getResponseCode());
+                assertEquals("application/json; charset=utf-8", connection.getHeaderField("Content-Type"));
+                var controls = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(connection.getInputStream());
+                assertEquals(1, controls.size());
+                assertEquals("fog.enabled", controls.get(0).path("id").asText());
+            } finally {
+                connection.disconnect();
+            }
+        }
+    }
+
+    @Test
+    void stateReportsTheOpenMapUuidForMapKeys() throws Exception {
+        var app = fixture();
+        var state = (Map<?, ?>) request(app, "/api/state", Map.of());
+        assertEquals("", state.get("id"));
+        Path map = temp.resolve("maps").resolve("Test.dmmap");
+        FxApiDispatcher.call(() -> {
+            set(app, "projectFile", map);
+            return null;
+        });
+        var maps = (List<?>) request(app, "/api/maps", Map.of());
+        String expected = (String) ((Map<?, ?>) maps.getFirst()).get("id");
+        assertEquals(expected, ((Map<?, ?>) request(app, "/api/state", Map.of())).get("id"));
+        // Cached per open map file: repeated polls must keep answering the same id without rescanning.
+        assertEquals(expected, ((Map<?, ?>) request(app, "/api/state", Map.of())).get("id"));
+    }
+
+    /** Gives the fixture a small control registry so the control routes can be exercised. */
+    private static void installControls(DungeonMasterMapToolApplication app) {
+        FxApiDispatcher.call(() -> {
+            var api = new dmmt.api.DmControlApi(new dmmt.ui.ControlVisibility());
+            api.add("effects.opacity", new javafx.scene.control.Slider(0.1, 1, 0.5));
+            api.add("fog.enabled", new javafx.scene.control.ToggleButton());
+            set(app, "controlApi", api);
+            return null;
+        });
+    }
+
     private static Object get(Object instance, String name) throws Exception {
         Field field = instance.getClass().getDeclaredField(name);
         field.setAccessible(true);

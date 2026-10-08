@@ -248,6 +248,8 @@ public final class Tuning {
     public static final Setting<String> API_COPY_ADDRESS = choice(LOCAL_API, "api.copyAddress", "network", false,
             "Address used in copied API URLs: network uses the LAN IP; local uses 127.0.0.1. Does not restrict network access.",
             "network", "local");
+    public static final Setting<Boolean> API_SHOW_URL_OPTIONS = bool(LOCAL_API, "api.showUrlOptions", false, false,
+            "Show API and key-image URL copy options in right-click menus.");
 
     public static final Setting<Integer> DM_WINDOW_WIDTH = integer(WINDOW, "window.dmWidth", 1500, 400, 10000, true,
             "Initial width of the main (DM) window in pixels.");

@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>Dungeon Master Map Tool</title>
+		<link rel="stylesheet" href="inspector.css" />
+	</head>
+	<body>
+		<div class="sdpi-wrapper">
+			<details open id="targetBlock">
+				<summary>Target</summary>
+
+				<div class="sdpi-item" id="pasteItem">
+					<div class="sdpi-item-label">Copied URL</div>
+					<input class="sdpi-item-value" id="paste" type="text"
+						placeholder="Paste a URL copied from the application" />
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label"></div>
+					<div class="sdpi-item-value hint" id="pasteHint">
+						Right-click the control, music category, sound effect or library map in the application and
+						choose <b>Copy API URL</b> or <b>Copy key image URL</b>, then paste it here.
+					</div>
+				</div>
+
+				<div class="sdpi-item" id="sectionItem">
+					<div class="sdpi-item-label">Section</div>
+					<select class="sdpi-item-value select" id="section"></select>
+				</div>
+				<div class="sdpi-item" id="controlItem">
+					<div class="sdpi-item-label">Control</div>
+					<select class="sdpi-item-value select" id="control"></select>
+				</div>
+				<div class="sdpi-item" id="controlIdItem">
+					<div class="sdpi-item-label">Control id</div>
+					<input class="sdpi-item-value" id="controlId" type="text" placeholder="e.g. lighting.night" />
+				</div>
+
+				<div class="sdpi-item" id="mapItem">
+					<div class="sdpi-item-label">Map</div>
+					<select class="sdpi-item-value select" id="map"></select>
+				</div>
+				<div class="sdpi-item" id="mapIdItem">
+					<div class="sdpi-item-label">Map id</div>
+					<input class="sdpi-item-value" id="mapId" type="text" placeholder="map UUID" />
+				</div>
+				<div class="sdpi-item" id="levelItem">
+					<div class="sdpi-item-label">Level</div>
+					<input class="sdpi-item-value" id="level" type="number" min="0" step="1"
+						placeholder="empty = last used level" />
+				</div>
+
+				<div class="sdpi-item" id="modeItem">
+					<div class="sdpi-item-label">Action</div>
+					<select class="sdpi-item-value select" id="mode">
+						<option value="set">Set to</option>
+						<option value="increment">Increase by</option>
+						<option value="decrement">Decrease by</option>
+					</select>
+				</div>
+				<div class="sdpi-item" id="amountItem">
+					<div class="sdpi-item-label">Amount</div>
+					<input class="sdpi-item-value" id="amount" type="number" step="any"
+						placeholder="empty = the control's own step" />
+				</div>
+				<div class="sdpi-item" id="indexItem">
+					<div class="sdpi-item-label">Option</div>
+					<select class="sdpi-item-value select" id="index"></select>
+				</div>
+				<div class="sdpi-item" id="titleItem">
+					<div class="sdpi-item-label">Title</div>
+					<select class="sdpi-item-value select" id="title">
+						<option value="none">No title</option>
+						<option value="name">Name</option>
+						<option value="value">Current value</option>
+					</select>
+				</div>
+
+				<div class="sdpi-item">
+					<div class="sdpi-item-label">Key image</div>
+					<input class="sdpi-item-value" id="imageUrl" type="text"
+						placeholder="empty = the control's own artwork" />
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label"></div>
+					<div class="sdpi-item-value hint" id="status"></div>
+				</div>
+			</details>
+
+			<details id="connectionBlock">
+				<summary>Application</summary>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label">Address</div>
+					<input class="sdpi-item-value" id="host" type="text" placeholder="127.0.0.1" />
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label">Port</div>
+					<input class="sdpi-item-value" id="port" type="number" min="1" max="65535" placeholder="7071" />
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label">Refresh</div>
+					<input class="sdpi-item-value" id="pollMs" type="number" min="250" max="10000" step="50" />
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label"></div>
+					<div class="sdpi-item-value hint">
+						How often, in milliseconds, all visible keys are refreshed with one request. 1000 is a good
+						default; raise it if you run many keys on a slow network. These settings are shared by every
+						key of this plugin.
+					</div>
+				</div>
+				<div class="sdpi-item">
+					<div class="sdpi-item-label">On press</div>
+					<div class="sdpi-item-value">
+						<div class="sdpi-item-child">
+							<input id="confirmPress" type="checkbox" />
+							<label for="confirmPress" class="sdpi-item-label"><span></span>Flash a checkmark</label>
+						</div>
+					</div>
+				</div>
+				<div class="sdpi-item">
+					<button class="sdpi-item-value" id="reload">Reload from the application</button>
+				</div>
+			</details>
+		</div>
+		<script src="inspector.js"></script>
+	</body>
+</html>

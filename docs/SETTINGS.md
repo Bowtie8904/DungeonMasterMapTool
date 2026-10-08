@@ -46,6 +46,16 @@ It does **not** make the API local-only: the listener still accepts LAN connecti
 
 **Keywords:** copy URL, clipboard, localhost, loopback, network, LAN, IP address.
 
+### `api.showUrlOptions`
+
+**Default:** `false`. **Applies:** Live.
+
+Shows or hides the URL-copy actions in right-click menus: API command and key-image URLs on DM controls, and map
+switch URLs on library maps. This is only a menu-visibility preference: it does not enable, disable or change any
+API endpoint.
+
+**Keywords:** right click, context menu, copy API URL, key image URL, hide API options, URL menu.
+
 ## Contents
 
 1. [How the settings file works](#how-the-settings-file-works)

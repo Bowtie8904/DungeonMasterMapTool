@@ -25,12 +25,11 @@ public final class DmControlApi {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private final Set<Node> menuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Node, ContextMenu> menus = new IdentityHashMap<>();
-    private final Set<Node> imageMenuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<Node, Entry> urlMenuEntries = new IdentityHashMap<>();
+    private final Map<Node, List<MenuItem>> urlMenuItems = new IdentityHashMap<>();
     private Supplier<String> menuBaseUrl;
     private Consumer<String> menuCopiedStatus;
-    private ControlKeyImages keyImages;
-    private Consumer<String> keyImageBrowser;
-    private Consumer<String> keyImageStatus;
+    private boolean urlOptionsVisible;
 
     public DmControlApi(ControlVisibility registry) {
         registry.registeredNodes().forEach(this::register);
@@ -40,6 +39,10 @@ public final class DmControlApi {
     public void add(String id, Node node) {
         if (id == null || !id.matches("[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*")) {
             throw new IllegalArgumentException("Invalid control id: " + id);
+        }
+        if (id.endsWith(".image")) {
+            // "/api/controls/<id>/image" serves the key image, so that segment cannot also address a control.
+            throw new IllegalArgumentException("Control ids must not end in '.image': " + id);
         }
         if (entries.containsKey(id)) {
             throw new IllegalArgumentException("Control already registered: " + id);
@@ -71,9 +74,6 @@ public final class DmControlApi {
         if (menuBaseUrl != null) {
             attachUrlMenus(menuBaseUrl, menuCopiedStatus);
         }
-        if (keyImages != null) {
-            attachKeyImageMenus(keyImages, keyImageBrowser, keyImageStatus);
-        }
     }
 
     private void forget(Node node) {
@@ -81,8 +81,9 @@ public final class DmControlApi {
             return;
         }
         menuTargets.remove(node);
+        removeUrlMenuItems(node);
         menus.remove(node);
-        imageMenuTargets.remove(node);
+        urlMenuEntries.remove(node);
     }
 
     private void register(String id, List<Node> targets) {        Set<Node> found = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -114,6 +115,47 @@ public final class DmControlApi {
 
     public List<Map<String, Object>> describe() {
         return entries.values().stream().map(this::describe).toList();
+    }
+
+    /**
+     * Describes only the requested ids, in the requested order (3.36.1). Unknown ids are skipped instead of
+     * failing, so a deleted music category degrades a single Stream Deck key rather than a whole poll.
+     */
+    public List<Map<String, Object>> describe(List<String> ids) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (String id : ids) {
+            Entry entry = entries.get(id);
+            if (entry != null) {
+                result.add(describe(entry));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * PNG bytes of a control's key image (3.36.1), rendered from the live control so audio entries carry their
+     * current colour and icon. {@code operation} is {@code null}, {@code "increment"} or {@code "decrement"}.
+     */
+    public byte[] keyImage(String id, String operation) {
+        Entry entry = entries.get(id);
+        if (entry == null) {
+            throw error(404, "Unknown command control: " + id);
+        }
+        if (operation != null && !(entry.control() instanceof Slider || entry.control() instanceof Spinner<?>)) {
+            throw error(400, "Only sliders and spinners have increment and decrement key images.");
+        }
+        try {
+            return ControlKeyImages.png(id, imageSources(entry), operation);
+        } catch (java.io.IOException ex) {
+            throw error(500, "Could not render the key image: " + ex.getMessage());
+        }
+    }
+
+    private static List<Node> imageSources(Entry entry) {
+        List<Node> sources = new ArrayList<>();
+        sources.add(entry.control());
+        sources.addAll(entry.targets());
+        return sources;
     }
 
     public Map<String, Object> execute(String id, Map<String, String> params) {
@@ -282,8 +324,8 @@ public final class DmControlApi {
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("id", entry.id());
         state.put("path", path(entry.id()));
-        state.put("label", AppSettings.SIDEBAR_CONTROLS.stream().filter(c -> c.id().equals(entry.id()))
-                .map(AppSettings.SidebarControl::label).findFirst().orElse(entry.id()));
+        state.put("label", label(entry));
+        state.put("image", ControlKeyImages.fingerprint(entry.id(), imageSources(entry)));
         state.put("disabled", node.isDisabled());
         if (node instanceof ToggleButton toggle) {
             state.put("type", "toggle");
@@ -352,72 +394,69 @@ public final class DmControlApi {
                     menu = new ContextMenu();
                 }
                 menus.put(target, menu);
-                if (existing && !menu.getItems().isEmpty()) {
-                    menu.getItems().add(new SeparatorMenuItem());
-                }
-                menu.getItems().add(copyItem("Copy API URL", entry, null, baseUrl, copiedStatus));
-                if (entry.control() instanceof ComboBox<?>) {
-                    menu.getItems().add(copyItem("Copy API index URL", entry, "index", baseUrl, copiedStatus));
-                }
-                if (entry.control() instanceof Slider || entry.control() instanceof Spinner<?>) {
-                    menu.getItems().addAll(copyItem("Copy API increment URL", entry, "increment", baseUrl, copiedStatus),
-                            copyItem("Copy API decrement URL", entry, "decrement", baseUrl, copiedStatus));
-                }
-                if (target instanceof Control control) {
-                    control.setContextMenu(menu);
-                } else {
+                urlMenuEntries.put(target, entry);
+                if (!(target instanceof Control)) {
                     ContextMenu popup = menu;
                     target.addEventHandler(ContextMenuEvent.CONTEXT_MENU_REQUESTED, event -> {
-                        popup.show(target, event.getScreenX(), event.getScreenY());
-                        event.consume();
+                        if (!popup.getItems().isEmpty()) {
+                            popup.show(target, event.getScreenX(), event.getScreenY());
+                            event.consume();
+                        }
                     });
                 }
+                updateUrlMenu(target, entry, existing, baseUrl, copiedStatus);
             }
         }
     }
 
-    public void attachKeyImageMenus(ControlKeyImages images, Consumer<String> openBrowser,
-                                    Consumer<String> status) {
-        this.keyImages = images;
-        this.keyImageBrowser = openBrowser;
-        this.keyImageStatus = status;
-        for (Entry entry : entries.values()) {
-            Set<Node> targets = Collections.newSetFromMap(new IdentityHashMap<>());
-            targets.add(entry.control());
-            entry.targets().forEach(node -> collectTargets(node, targets));
-            for (Node target : targets) {
-                if (!imageMenuTargets.add(target)) {
-                    continue;
-                }
-                ContextMenu menu = menus.get(target);
-                if (menu == null) {
-                    throw new IllegalStateException("Attach control URL menus before key image menus.");
-                }
-                menu.getItems().add(new SeparatorMenuItem());
-                menu.getItems().add(imageItem("Open key image", entry, null, images, openBrowser, status));
-                if (entry.control() instanceof Slider || entry.control() instanceof Spinner<?>) {
-                    menu.getItems().addAll(
-                            imageItem("Open increment key image", entry, "increment", images, openBrowser, status),
-                            imageItem("Open decrement key image", entry, "decrement", images, openBrowser, status));
-                }
+    /** Shows or hides only URL-copy actions; API endpoints and unrelated context-menu actions are unchanged. */
+    public void setUrlOptionsVisible(boolean visible) {
+        urlOptionsVisible = visible;
+        if (menuBaseUrl == null || menuCopiedStatus == null) {
+            return;
+        }
+        urlMenuEntries.forEach((target, entry) ->
+                updateUrlMenu(target, entry, false, menuBaseUrl, menuCopiedStatus));
+    }
+
+    private void updateUrlMenu(Node target, Entry entry, boolean hadExistingMenu,
+                               Supplier<String> baseUrl, Consumer<String> copiedStatus) {
+        ContextMenu menu = menus.get(target);
+        removeUrlMenuItems(target);
+        if (urlOptionsVisible) {
+            List<MenuItem> added = new ArrayList<>();
+            if (hadExistingMenu || !menu.getItems().isEmpty()) {
+                added.add(new SeparatorMenuItem());
             }
+            added.add(copyItem("Copy API URL", entry, null, baseUrl, copiedStatus));
+            if (entry.control() instanceof ComboBox<?>) {
+                added.add(copyItem("Copy API index URL", entry, "index", baseUrl, copiedStatus));
+            }
+            if (entry.control() instanceof Slider || entry.control() instanceof Spinner<?>) {
+                added.addAll(List.of(copyItem("Copy API increment URL", entry, "increment", baseUrl, copiedStatus),
+                        copyItem("Copy API decrement URL", entry, "decrement", baseUrl, copiedStatus)));
+            }
+            added.add(new SeparatorMenuItem());
+            added.add(copyImageItem("Copy key image URL", entry, null, baseUrl, copiedStatus));
+            if (entry.control() instanceof Slider || entry.control() instanceof Spinner<?>) {
+                added.addAll(List.of(
+                        copyImageItem("Copy increment key image URL", entry, "increment", baseUrl, copiedStatus),
+                        copyImageItem("Copy decrement key image URL", entry, "decrement", baseUrl, copiedStatus)));
+            }
+            menu.getItems().addAll(added);
+            urlMenuItems.put(target, added);
+        }
+        if (target instanceof Control control) {
+            control.setContextMenu(menu.getItems().isEmpty() ? null : menu);
         }
     }
 
-    private MenuItem imageItem(String label, Entry entry, String operation, ControlKeyImages images,
-                               Consumer<String> openBrowser, Consumer<String> status) {
-        MenuItem item = new MenuItem(label);
-        item.setOnAction(event -> {
-            List<Node> sources = new ArrayList<>();
-            sources.add(entry.control());
-            sources.addAll(entry.targets());
-            try {
-                openBrowser.accept(images.create(entry.id(), sources, operation).toUri().toString());
-            } catch (java.io.IOException | RuntimeException ex) {
-                status.accept("Could not open key image: " + ex.getMessage());
-            }
-        });
-        return item;
+    private void removeUrlMenuItems(Node target) {
+        ContextMenu menu = menus.get(target);
+        List<MenuItem> added = urlMenuItems.remove(target);
+        if (menu != null && added != null) {
+            menu.getItems().removeAll(added);
+        }
     }
 
     private static void collectTargets(Node node, Set<Node> targets) {
@@ -451,19 +490,66 @@ public final class DmControlApi {
                 query = Map.of("value", Objects.toString(state.get("value"), ""));
             }
             String url = LocalApiServer.url(base, path(entry.id()), query);
-            ClipboardContent content = new ClipboardContent();
-            content.putString(url);
-            if (Clipboard.getSystemClipboard().setContent(content)) {
-                copiedStatus.accept("Copied API URL: " + url);
-            } else {
-                copiedStatus.accept("Could not copy API URL.");
-            }
+            copyUrl(url, copiedStatus);
         });
         return item;
     }
 
+    /** Copies the HTTP key image URL a Stream Deck action uses for its artwork (3.36.1). */
+    private MenuItem copyImageItem(String label, Entry entry, String operation, Supplier<String> baseUrl,
+                                   Consumer<String> copiedStatus) {
+        MenuItem item = new MenuItem(label);
+        item.setOnAction(event -> {
+            String base = baseUrl.get();
+            if (base == null || base.isBlank()) {
+                copiedStatus.accept("Local DM API is not running.");
+                return;
+            }
+            copyUrl(LocalApiServer.url(base, imagePath(entry.id()),
+                    operation == null ? Map.of() : Map.of("operation", operation)), copiedStatus);
+        });
+        return item;
+    }
+
+    private static void copyUrl(String url, Consumer<String> copiedStatus) {
+        ClipboardContent content = new ClipboardContent();
+        content.putString(url);
+        if (Clipboard.getSystemClipboard().setContent(content)) {
+            copiedStatus.accept("Copied API URL: " + url);
+        } else {
+            copiedStatus.accept("Could not copy API URL.");
+        }
+    }
+
+    /**
+     * The human readable name of a control. Sidebar controls have a fixed label; everything else - music
+     * categories and sound effects above all - is named after the control itself, so a Stream Deck or any other
+     * client can offer a pick list instead of raw ids. Overlay ring buttons carry their name only as accessible
+     * text because they show an icon alone.
+     */
+    private static String label(Entry entry) {
+        return AppSettings.SIDEBAR_CONTROLS.stream().filter(control -> control.id().equals(entry.id()))
+                .map(AppSettings.SidebarControl::label).findFirst()
+                .orElseGet(() -> firstNonBlank(entry.control() instanceof Labeled labeled ? labeled.getText() : null,
+                        entry.control().getAccessibleText(), entry.id()));
+    }
+
+    private static String firstNonBlank(String... candidates) {
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate.strip();
+            }
+        }
+        return "";
+    }
+
     private static String path(String id) {
         return "/api/controls/" + id.replace('.', '/');
+    }
+
+    /** {@code image} is reserved as the final path segment, so no control id may end in {@code .image}. */
+    static String imagePath(String id) {
+        return path(id) + "/image";
     }
 
     private static LocalApiServer.ApiException error(int status, String message) {

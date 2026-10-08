@@ -65,6 +65,18 @@ class AppSettingsTest {
     }
 
     @Test
+    void apiUrlMenuOptionsDefaultOffAndApplyImmediately() {
+        AppSettings settings = new AppSettings(dir.resolve("settings.ini"));
+        assertFalse(Tuning.API_SHOW_URL_OPTIONS.get());
+        assertTrue(Files.exists(dir.resolve("settings.ini")));
+
+        settings.applyEdit("api.showUrlOptions", "true");
+        assertTrue(Tuning.API_SHOW_URL_OPTIONS.get());
+        settings.applyEdit("api.showUrlOptions", null);
+        assertFalse(Tuning.API_SHOW_URL_OPTIONS.get());
+    }
+
+    @Test
     void gridOpacityEditsApplyImmediatelyAndPersist() {
         Path file = dir.resolve("settings.ini");
         AppSettings settings = new AppSettings(file);

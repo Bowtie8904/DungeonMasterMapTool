@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -178,7 +179,6 @@ class AudioControlsTest {
             audio.setApiControlsChangedHandler(() -> controlApi.replaceGroup("audio", audio.apiControls()));
             controlApi.replaceGroup("audio", audio.apiControls());
             controlApi.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
-            controlApi.attachKeyImageMenus(new ControlKeyImages(dir.resolve("keys")), ignored -> {}, ignored -> {});
 
             // Opening the overlay must not swap the buttons out from under the API.
             audio.overlay().show();
@@ -192,8 +192,11 @@ class AudioControlsTest {
             assertTrue(onScreen.getContextMenu().getItems().stream()
                     .anyMatch(item -> "Copy API URL".equals(item.getText())));
             assertTrue(onScreen.getContextMenu().getItems().stream()
-                    .anyMatch(item -> "Open key image".equals(item.getText())));
+                    .anyMatch(item -> "Copy key image URL".equals(item.getText())));
 
+            // Discovery must name the category, not repeat its UUID, so a control device can offer a pick list.
+            var described = controlApi.describe(List.of("audio.category." + combatId));
+            assertEquals("Combat", described.getFirst().get("label"));
             ToggleButton effect = audio.overlay().effectButtons().get(library.effects().get(0).getId());
             assertNotNull(effect.getContextMenu());
             assertEquals(onScreen.getContextMenu().getItems().size(), effect.getContextMenu().getItems().size());
@@ -205,7 +208,7 @@ class AudioControlsTest {
             assertSame(rebuilt, audio.apiControls().get("audio.category." + combatId));
             assertNotNull(rebuilt.getContextMenu());
             assertTrue(rebuilt.getContextMenu().getItems().stream()
-                    .anyMatch(item -> "Open key image".equals(item.getText())));
+                    .anyMatch(item -> "Copy key image URL".equals(item.getText())));
             audio.closeOverlay();
             audio.shutdown();
         });

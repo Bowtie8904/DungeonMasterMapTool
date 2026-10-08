@@ -44,23 +44,41 @@ rejected while a modal DM dialog or another API action is in progress.
 
 ## Control key images
 
-Right-click any actionable DM control and choose **Open key image** to open its artwork in the default browser.
-Numeric controls additionally offer **Open increment key image** and **Open decrement key image**, with green
-plus and red minus badges. Each is a 144x144 PNG on a dark background, using the control's tool icon where
+`GET /api/controls/<path>/image` returns a control's key artwork as a raw `image/png` body. Right-click any
+actionable DM control and choose **Copy key image URL** to copy that address; numeric controls additionally
+offer **Copy increment key image URL** and **Copy decrement key image URL**, whose artwork carries a green plus
+or a red minus badge. For example:
+
+```text
+http://192.168.1.100:7071/api/controls/audio/category/<uuid>/image
+http://192.168.1.100:7071/api/controls/effects/opacity/image?operation=increment
+```
+
+Each image is a 144x144 PNG on a dark background, using the control's tool icon where
 available. Dropdowns use their tab's icon (weather, effects, player view or levels) instead of a generic list
 or dropdown arrow. Other value controls use fitting icons such as opacity, palette, font size, ruler and zoom;
-remaining controls fall back to their section's icon. The glyph is white, except for a music category or a sound
+the three audio volume sliders use volume, music-note and waves icons; remaining controls fall back to their
+section's icon. The glyph is white, except for a music category or a sound
 effect: those are drawn in the colour configured for that entry, so the artwork matches the audio overlay (a very
 dark colour is lightened until the glyph is readable on the dark background).
 
-The browser opens a local HTML page containing the PNG, rather than opening an image viewer through the OS file
-association. Right-click the image in the browser to copy or save it for your control device's key. No API listener,
-network connection or window focus is required. Generated PNGs and pages are cached in
-`.dmmt/control-key-images` under your home directory and never written into maps.
+`?operation=increment` and `?operation=decrement` are accepted only by sliders and numeric spinners; any other
+control rejects `operation` with `400`. Unknown controls return `404`. Responses carry
+`Cache-Control: private, max-age=60`. Nothing is written to disk.
+
+Because `image` is the marker for this endpoint, it is reserved as the final segment of a control id; the
+application refuses to register a control whose id ends in `.image`.
+
+The artwork is rendered from the live control on every request, so it always reflects the current icon and
+colour. Discovery reports a short `image` fingerprint per control that changes exactly when the rendered
+artwork would, which lets a client cache key images and refetch only after an edit.
 
 ## Discovery and parameters
 
 `GET /api/controls` lists actionable controls, their current values, numeric bounds and dropdown choices.
+Pass `?ids=a.b,c.d` to describe only the listed controls, in the order given. This keeps polling cheap for a
+control device that watches a handful of keys. Unknown ids are skipped instead of failing, so a deleted music
+category only breaks its own key; empty ids and more than 128 ids are rejected with `400`.
 Dropdown descriptors include the current `index` (`-1` if nothing is selected); `choices` is ordered by index.
 Control paths use their stable section/name identifiers, for example `/api/controls/weather/type`.
 Hidden sidebar controls remain callable. Disabled controls return an error rather than silently doing nothing.
@@ -106,7 +124,10 @@ indexed for API use. Reordering multilevel levels changes their indices, so upda
 
 Switch commands save the current map and use the normal asynchronous map loader. The response confirms that the
 switch was **requested**, not that loading has completed. The DM window shows loading errors; `GET /api/state`
-reports `busy`, the current map name, current zero-based level (`-1` for ordinary maps), and player freeze state.
+reports `busy`, the current map name, the open map's persistent UUID as `id` (empty when the map is not in the
+library or has never been saved), current zero-based level (`-1` for ordinary maps), and player freeze state.
+Match `id` against `/api/maps` rather than `map`: the displayed name is not unique and differs from the library
+name for multilevel maps.
 Save an unsaved new map before switching through the API; it returns `409` instead of discarding it or opening a
 save prompt. File operations in progress also return `409`. Frozen players keep their snapshot until unfrozen.
 
@@ -151,3 +172,12 @@ library changes, so `GET /api/controls` always lists the current set.
 
 A stream deck page for a scene typically uses one `audio/category/<id>` button plus a few `audio/effect/<id>`
 buttons, or a single `audio/assign` per map so that opening the map restores the whole ambience.
+
+## Stream Deck plugin
+
+A ready-made Elgato Stream Deck plugin ships in [`streamdeck-plugin/`](../streamdeck-plugin/README.md). It talks
+to this API from its own Node process, polls `GET /api/controls?ids=...` so that an active music category stays
+highlighted, and draws each key from `GET /api/controls/<path>/image`. See that README for installation and setup.
+
+Note for anything you build yourself in a browser: the API rejects requests that carry an `Origin` or `Referer`
+header, so a web page cannot call it directly. Use a non-browser process.

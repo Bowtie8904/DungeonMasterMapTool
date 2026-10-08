@@ -68,6 +68,9 @@ class MapBrowserApiTest {
                 assertTrue(file.equals(entry(".dmmap").mapFile()) || file.equals(entry(".dmlevels").mapFile()));
                 return "http://127.0.0.1:8123/api/maps/" + file.getFileName();
             });
+            assertTrue(browser.buildMenu(entry(".dmmap")).getItems().stream()
+                    .noneMatch(item -> "Copy API URL".equals(item.getText())));
+            browser.setApiUrlOptionsVisible(true);
             for (String extension : List.of(".dmmap", ".dmlevels")) {
                 Entry map = entry(extension);
                 MenuItem copy = copyItem(browser, map);
@@ -76,6 +79,9 @@ class MapBrowserApiTest {
                 assertEquals("http://127.0.0.1:8123/api/maps/" + map.mapFile().getFileName(),
                         Clipboard.getSystemClipboard().getString());
             }
+            browser.setApiUrlOptionsVisible(false);
+            assertTrue(browser.buildMenu(entry(".dmmap")).getItems().stream()
+                    .noneMatch(item -> "Copy API URL".equals(item.getText())));
         });
     }
 
@@ -89,6 +95,7 @@ class MapBrowserApiTest {
             browser.setApiUrlProvider(file -> {
                 throw new IllegalStateException("Local API is disabled.");
             });
+            browser.setApiUrlOptionsVisible(true);
             FutureTask<Void> answer = new FutureTask<>(() -> {
                 Window window = Window.getWindows().stream().filter(Window::isShowing)
                         .filter(candidate -> candidate.getScene().getRoot() instanceof DialogPane)

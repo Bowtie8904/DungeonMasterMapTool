@@ -80,6 +80,9 @@ public final class Icons {
 
     public static void tooltip(Control control, String text) {
         Tooltip tooltip = tooltip(text);
+        // The tooltip is shown by hand below, so it never reaches the node's tooltip property. Mirroring it into
+        // the accessible text keeps the label readable for screen readers and for API discovery.
+        control.setAccessibleText(text);
         PauseTransition delay = new PauseTransition(Duration.millis(Tuning.TOOLTIP_DELAY_MS.get()));
         PauseTransition duration = new PauseTransition(Duration.seconds(Tuning.TOOLTIP_DURATION_SECONDS.get()));
         duration.setOnFinished(event -> tooltip.hide());

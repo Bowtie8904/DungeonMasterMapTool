@@ -69,10 +69,15 @@ import java.util.function.Function;
  */
 public class MapBrowser extends VBox {
     private Function<Path, String> apiUrlProvider;
+    private boolean apiUrlOptionsVisible;
 
     /** Supplies the map-switch URL; failures are displayed rather than silently copying an invalid URL. */
     public void setApiUrlProvider(Function<Path, String> apiUrlProvider) {
         this.apiUrlProvider = apiUrlProvider;
+    }
+
+    public void setApiUrlOptionsVisible(boolean visible) {
+        apiUrlOptionsVisible = visible;
     }
 
     private void copyApiUrl(Path mapFile) {
@@ -797,7 +802,7 @@ public class MapBrowser extends VBox {
                         delete);
             }
         }
-        if (entry.isMap() && apiUrlProvider != null) {
+        if (entry.isMap() && apiUrlProvider != null && apiUrlOptionsVisible) {
             menu.getItems().add(item("Copy API URL", MaterialDesignC.CONTENT_COPY,
                     () -> copyApiUrl(target.mapFile())));
         }

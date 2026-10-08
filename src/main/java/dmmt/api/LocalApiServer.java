@@ -42,6 +42,8 @@ public final class LocalApiServer implements AutoCloseable {
     static final int MAX_URI_LENGTH = 4096;
     static final int MAX_PARAMETERS = 32;
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String JSON_TYPE = "application/json; charset=utf-8";
+    private static final String NO_STORE = "no-store";
 
     /** Handles a validated request; runs on an HTTP worker thread. Throw {@link ApiException} for client errors. */
     @FunctionalInterface
@@ -49,9 +51,22 @@ public final class LocalApiServer implements AutoCloseable {
         Object handle(String path, Map<String, String> query);
     }
 
+    /**
+     * A non-JSON response body, such as a control key image. Returned by a {@link Handler} instead of a value
+     * that would be serialized as JSON. {@code cacheSeconds} of 0 keeps the default {@code no-store}.
+     */
+    public record Binary(String contentType, byte[] body, int cacheSeconds) {
+        public Binary {
+            Objects.requireNonNull(contentType, "contentType");
+            Objects.requireNonNull(body, "body");
+            if (cacheSeconds < 0) {
+                throw new IllegalArgumentException("cacheSeconds must not be negative: " + cacheSeconds);
+            }
+        }
+    }
+
     /** An explicit HTTP error returned to the client as {@code {"status":..,"error":..}}. */
-    public static final class ApiException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
+    public static final class ApiException extends RuntimeException {        private static final long serialVersionUID = 1L;
         private final int status;
 
         public ApiException(int status, String message) {
@@ -188,21 +203,34 @@ public final class LocalApiServer implements AutoCloseable {
         try (exchange) {
             int status;
             byte[] body;
+            String contentType = JSON_TYPE;
+            String cacheControl = NO_STORE;
             try {
                 Request request = validate(exchange);
                 Object result = handler.handle(request.path(), request.query());
-                body = JSON.writeValueAsBytes(result == null ? Map.of("ok", true) : result);
+                if (result instanceof Binary binary) {
+                    body = binary.body();
+                    contentType = binary.contentType();
+                    cacheControl = binary.cacheSeconds() == 0
+                            ? NO_STORE : "private, max-age=" + binary.cacheSeconds();
+                } else {
+                    body = JSON.writeValueAsBytes(result == null ? Map.of("ok", true) : result);
+                }
                 status = 200;
             } catch (ApiException ex) {
                 status = ex.status();
+                contentType = JSON_TYPE;
+                cacheControl = NO_STORE;
                 body = errorBody(status, ex.getMessage());
             } catch (Exception ex) {
                 LOG.log(System.Logger.Level.ERROR, "Local API request failed: " + describe(exchange), ex);
                 status = 500;
+                contentType = JSON_TYPE;
+                cacheControl = NO_STORE;
                 body = errorBody(status, "Internal error: " + ex.getClass().getSimpleName()
                         + (ex.getMessage() == null ? "" : " - " + ex.getMessage()));
             }
-            respond(exchange, status, body);
+            respond(exchange, status, body, contentType, cacheControl);
         } catch (IOException ex) {
             LOG.log(System.Logger.Level.DEBUG, "Local API response could not be sent.", ex);
         } catch (RuntimeException ex) {
@@ -373,10 +401,11 @@ public final class LocalApiServer implements AutoCloseable {
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, byte[] body) throws IOException {
+    private static void respond(HttpExchange exchange, int status, byte[] body, String contentType,
+                                String cacheControl) throws IOException {
         Headers headers = exchange.getResponseHeaders();
-        headers.set("Content-Type", "application/json; charset=utf-8");
-        headers.set("Cache-Control", "no-store");
+        headers.set("Content-Type", contentType);
+        headers.set("Cache-Control", cacheControl);
         headers.set("X-Content-Type-Options", "nosniff");
         if (exchange.getRequestMethod().equals("HEAD")) {
             exchange.sendResponseHeaders(status, -1);

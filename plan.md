@@ -62,6 +62,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Inverse-square-style falloff in the dim-light band for more physically realistic light falloff (3.6)
 - [x] Bright core highlight per light: additive hot-spot that brightens the map texture at the light's center instead of covering it (3.6)
 - [x] Ambient darkness/tint rendered via multiply blend on its own canvas layer instead of a flat colour-over overlay, so Dawn/Dusk/Night darkening preserves the map's own detail/contrast (3.7)
+- [x] Stream Deck plugin driving the DM view through the local control API, with key artwork and live highlighting (3.36)
 
 ## 4) Core Functional Requirements
 
@@ -411,6 +412,7 @@ Desktop tool for tabletop dungeon masters that:
 - `AppSettings` loads `Tuning` whenever it (re)reads the file, so the defaults are active from startup and hand edits apply when the window regains focus (values marked *restart* shape controls or windows and need a restart). On startup any missing known key is written to the file with its default.
 - Every entry is documented in `docs/SETTINGS.md` (searchable keywords per entry); `SettingsDocumentationTest` fails when a settings key is not documented.
 - **Settings window (v3.8):** a cog button in the DM controls header and in the status bar opens a non-modal `Settings` window (`dmmt.ui.SettingsWindow`) with every setting that has no control in the DM controls (all `Tuning` values, the effect texture defaults, `ui.recentMaps.max`). Settings are grouped by category (list on the left), explained by a description and tooltip (default, key, range), edited with a type-specific control (checkbox, colour picker, choice list, validated text/number field with clamping), individually resettable, and **text-searchable** (all words must match category, key, name or description; results are grouped by category). Changes are written to the settings file and applied at once through `AppSettings.applyEdit` (entries marked *restart required* only apply after a restart). `AppSettings.editableSettings()` describes the entries; `Tuning.Setting` carries kind, min, max and options.
+- **API URL context-menu visibility:** `api.showUrlOptions` defaults to `false` and controls whether API/key-image URL actions on DM controls and map-switch URL actions in the map library are shown. This is a live display-only toggle: hiding the options does not disable or change any API endpoint.
 - **Grouping (v3.9):** categories are ordered so related ones are adjacent (editing/effects next to effect textures, fog, lights, time of day, weather together). `AppSettings.SettingInfo` carries an optional `group` path (nested with `/`, e.g. `Fire/Layer 1`, `Right-click menu/Colour choices`): a collapsible block, collapsed by default, for every subtopic with two or more settings (player zoom, calibration limits, pick distances, map image cache, tooltips, per time of day / weather type / light preset / effect texture, ...); there are no tabs. Numbers use spinners with the setting's range. Search also matches hard-coded keywords from `src/main/resources/dmmt/settings-keywords.properties` (copied from the *Keywords* lines of docs/SETTINGS.md, generic keys use `*`); keep it in sync when adding settings (`AppSettingsTest` requires keywords for every editable setting). The light right-click menu lists became fixed individual settings (`lightMenu.range1-10`, `lightMenu.color.<id>`, `lightMenu.flicker.<id>.depth/speed`, `lightMenu.brightness.<id>`) so no entries can be added that the code does not know; the old list keys are dropped at startup (`Tuning.lightMenu*()`).
 - **Hidden DM controls tabs (v3.8):** the first settings category *DM controls tabs* lets the DM show or hide each tab (Tools, Fog of war, Lighting, Weather, Effects, Text, Map building, Player view, Performance) of the DM controls overlay. Stored as `ui.sections.hidden` (comma separated ids, empty = all shown), applied live and when the settings file is edited by hand; hidden tabs keep their data and settings.
 
@@ -730,9 +732,9 @@ full-screen overlay that is opened from there.
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
   `audio.effect.<id>` switches that effect on or off. The id is the library id of the entry (a UUID), so an
   endpoint keeps working when the entry is **renamed** and never collides with another entry; the readable name is
-  in the `name` field of `GET /api/controls`. Hidden entries keep their endpoints. Because the audio
+  in the `label` field of `GET /api/controls`. Hidden entries keep their endpoints. Because the audio
   endpoints are (re-)registered after the library changed, they get the **same right-click menu as every other
-  control**: "Copy API URL" *and* "Open key image"; re-registering never duplicates those menu entries. A key
+  control**: "Copy API URL" *and* "Copy key image URL"; re-registering never duplicates those menu entries. A key
   image exported for a category or a sound effect is drawn in **that entry's colour** instead of plain white (very
   dark colours are lightened so the glyph stays readable on the dark key background), so a stream deck full of
   audio buttons looks like the overlay.
@@ -760,6 +762,104 @@ full-screen overlay that is opened from there.
   four times per second, and only while the section is visible.
 - New dependencies: `org.openjfx:javafx-media` (playback) and `com.googlecode.soundlibs:jlayer` (pure-Java MP3
   decoding for waveforms; MP3 frame parsing for cutting is implemented in-house).
+
+## 3.36 Stream Deck Plugin (implemented)
+
+A companion Elgato Stream Deck plugin drives the DM view through the local control API (see "Local DM Control
+API"), so a DM can run lighting, fog, the player view and especially the audio ambience from hardware keys. The
+plugin lives in `streamdeck-plugin/` inside this repository and is distributed as a `.streamDeckPlugin` file; the
+application itself never depends on it and never talks to the Stream Deck.
+
+### 3.36.1 Application-side additions
+
+- **Key images over HTTP.** Every actionable control answers
+  `GET /api/controls/<section>/<name>/image`, returning a 144x144 PNG as a binary response
+  (`image/png`). Numeric controls additionally accept `?operation=increment|decrement` for the badged variants.
+  `image` is a reserved final path segment: no control id may end in `.image`. The image is rendered on demand on
+  the JavaFX thread from the live control, so a music category or sound effect always exports its current colour
+  and icon. Nothing is written to disk. The endpoint needs no window focus but does require the API to be enabled.
+- Right-click on an actionable control offers **"Copy key image URL"** below the "Copy API URL" items, and the
+  numeric controls offer increment/decrement variants. This is the URL the user pastes into a Stream Deck action.
+  This replaces the earlier "Open key image" browser-page export, which is gone: the URL covers the same need
+  without a disk cache or an OS file association.
+- **Binary API responses.** `LocalApiServer` gains a `LocalApiServer.Binary(String contentType, byte[] body)`
+  result type; handlers returning it bypass JSON serialization. Caching, security, Host and origin checks are
+  unchanged, and image responses are cacheable (`Cache-Control: private, max-age=60`) unlike JSON commands.
+- **Batched discovery.** `GET /api/controls?ids=a.b,c.d` returns only the listed controls, in the requested
+  order, so a poller can watch exactly the ids it needs instead of describing every control each second. Unknown
+  ids are skipped rather than failing, so deleting a music category degrades one key instead of the whole page;
+  the caller detects the gap from the missing entry. At most 128 ids per request.
+- **Nameable and cacheable discovery.** A control's `label` falls back to its own text and then to its accessible
+  text before the raw id, so music categories and sound effects are discovered by name and a client can offer a
+  pick list instead of UUIDs. Each descriptor also carries a short `image` fingerprint derived from exactly what
+  determines the artwork (glyph plus colour), so a client can cache key images and refetch one only after the
+  user re-icons or re-colours the entry.
+- **Map identity in state.** `GET /api/state` additionally reports the open map's library UUID as `id` (empty
+  when no library map is open), so a map key can highlight exactly its map instead of comparing display names.
+  The UUID is resolved off the JavaFX thread and cached per open map file, so polling never rescans the library.
+
+### 3.36.2 Actions
+
+Actions are generic and predefined rather than one action per control: the user picks the control in the property
+inspector or pastes a copied URL. Music categories and sound effects are addressed by their library id, which the
+user supplies (usually by pasting a copied URL), because they are user data and change over time.
+
+- **Control toggle** - any button/toggle control, chosen from a list of the known controls or pasted.
+- **Control value** - slider/spinner control with a mode of set / increase / decrease and an amount.
+- **Dropdown** - selects a dropdown option by zero-based index; highlighted while that option is selected.
+- **Music category** - toggles one music category by id; highlighted while that category is playing.
+- **Sound effect** - toggles one sound effect loop by id; highlighted while the loop runs.
+- **Switch map** - switches to a map UUID with an optional zero-based level index; highlighted while that map
+  (and level) is open. Library maps have no control in the application and therefore no key image endpoint, so
+  a map key falls back to a **generic map artwork shipped with the plugin**, drawn in the same style as the
+  control images (dark background, accent glyph) and composited with the same highlight states. A pasted key
+  image URL still overrides it.
+
+Every action shares the same connection fields (host, port) and an optional key image URL. Pasting any copied
+URL - command URL, index URL, key image URL or map switch URL - fills in host, port and target automatically.
+
+**Picking a control** is two-step: a **section** dropdown (audio, fog, lighting, player, ...) narrows the
+control list, because the application exposes over a hundred controls and a single flat list is unusable. The
+section list is derived from the control ids, so it needs no extra endpoint and stays correct as controls are
+added. Music category and sound effect actions skip the section step; their list is already scoped.
+
+**Key titles.** Every action can show a caption under its artwork, chosen per key: **nothing** (default, the
+artwork alone), the **name** of the target, or - where one exists - its **value**. The name comes from the
+`label` reported by discovery (so a music category shows "Combat" and a renamed category updates by itself),
+from the map list for a map action, and the value is the dropdown choice or the current slider value. A key
+whose target has gone missing shows a short problem caption regardless of this setting.
+
+**Value amounts** default to the control's own `step` from discovery rather than to a hard-coded number, so an
+increase/decrease key moves a volume slider by the same amount as the application's own UI without the user
+having to know the control's units. An explicit amount overrides it.
+
+### 3.36.3 Visual feedback and polling
+
+- A key shows the control's artwork fetched from the key image endpoint, composited into a PNG at display time:
+  **active** keys get a bright accent border, **inactive** keys are dimmed, **disabled** controls are dimmed
+  further and greyed, and a control that is **unknown or unreachable** gets a red border and a short title. This
+  makes "which music category is playing" readable at a glance: starting another category clears the previous
+  key because the application reports only one category as active.
+- The API's own responses are sufficient for this: category and sound effect endpoints are toggles and report
+  `value` in discovery and in each command response. No extra state endpoint is required; only the batched
+  discovery filter, the image endpoint and the map UUID in `/api/state` are added.
+- **One shared poller per application address** in the plugin process, never one timer per key. It requests the
+  union of the ids of all currently visible keys in a single `GET /api/controls?ids=...` call, plus at most one
+  `GET /api/state` call when a map action is visible.
+- Polling runs only while at least one key of that address is visible; the last key disappearing stops the timer
+  entirely, so an idle Stream Deck page costs nothing.
+- The interval is a user setting (default 1000 ms, minimum 250 ms). A request is never started while the previous
+  one is still in flight, and a poll is skipped when nothing changed in the id set and the previous poll failed
+  recently.
+- On errors the poller backs off (1s, 2s, 5s, 10s, 20s cap) and returns to the normal interval on the first
+  success, so a closed application or a disabled API does not produce a request storm.
+- Pressing a key applies the state from the command response immediately and schedules one short follow-up poll
+  (about 250 ms later) to pick up side effects such as another category stopping. Keys are only redrawn when
+  their rendered appearance actually changes.
+- Key images are fetched once per key configuration and cached in memory by URL, so polling transfers only JSON.
+- A failed command flashes the Stream Deck's alert icon. The **success** checkmark is off by default and can be
+  switched on globally: the key's own highlight is already the confirmation, and a checkmark covering the
+  artwork on every press is noise. Stateless buttons are the only case that benefits, so it stays available.
 
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
@@ -964,6 +1064,12 @@ full-screen overlay that is opened from there.
 3. `AudioEngine` with playlist, crossfade, channels and volumes behind an `AudioOutput` interface, unit-tested without sound hardware (3.35.4).
 4. Sidebar mini player, audio library window and cut-clips window; settings, local API ids and per-map ambience (3.35.5, 3.35.6).
 
+## Phase 11 - Stream Deck Plugin
+
+1. Serve control key images over the API (`/api/controls/.../image`) with binary responses and a "Copy key image URL" menu item (3.36.1).
+2. Batched control discovery (`GET /api/controls?ids=...`) for cheap polling (3.36.1).
+3. Stream Deck plugin in `streamdeck-plugin/`: generic actions, shared poller with backoff, PNG highlight composition and cached key images (3.36.2, 3.36.3).
+
 ## Local DM Control API
 
 - Provide an opt-in HTTP API for every DM control, reachable from other devices on the local network and usable without window focus. Bind all IPv4 interfaces; copied control/map URLs and discovery URLs advertise an active LAN IPv4 address rather than localhost (loopback fallback only when no LAN address exists). No authentication or automatic firewall changes. Use only on trusted networks; do not expose the API to the internet. Commands run on the JavaFX thread through the same controls/actions as manual interaction, including selected-object updates, undo, persistence and player freeze semantics.
@@ -971,7 +1077,8 @@ full-screen overlay that is opened from there.
 - Live global setting `api.copyAddress` (`network` default, `local` alternative) selects LAN IP or `127.0.0.1` for copied control/map URLs and discovery URLs. This only changes generated URLs, not listener binding or LAN accessibility; use the running listener's port even after a failed port change.
 - Each control has a stable endpoint. Buttons invoke their action; toggles invert current state with no parameter; value controls accept a URL-encoded `value`; sliders also accept `increment` or `decrement` amounts, bounded by their normal UI range. Dropdown values identify their displayed choices. Invalid commands return explicit HTTP errors.
 - Dropdowns additionally accept `index` (zero-based UI option order), mutually exclusive with `value`. Discovery includes the current index; right-click offers copying an index URL using the current selection. Invalid/out-of-range indices fail without changing the selection.
-- Every actionable DM control offers a right-click "Open key image" action for a square PNG using its tool icon. Numeric controls additionally offer distinct increment/decrement images. Open a local browser image page so users can copy/save the PNG; images work independently of the API listener. Generated images are cached locally, not saved in projects; failures are surfaced in the DM status bar. Use device-independent names in code, UI, storage and documentation.
+- Every actionable DM control offers a right-click "Copy key image URL" action; the URL serves a square PNG using its tool icon over the API. Numeric controls additionally offer distinct increment/decrement images. Images are rendered on request from the live control, never cached on disk or saved in projects; failures are surfaced in the DM status bar. Use device-independent names in code, UI, storage and documentation.
+- Right-click URL-copy actions for controls, key images and library maps are hidden by default and can be shown with the live `api.showUrlOptions` setting; API routes remain available either way.
 - Key artwork uses meaningful control-specific icons; dropdowns without their own icon use their tab icon (weather, effects, player, levels), never a generic list or skin arrow. Remaining controls retain their own icon or use a fitting control/section fallback.
 - Right-click each DM control to copy its command URL; value controls include their current value as an example. Sliders additionally provide increment/decrement URL examples.
 - Maps have persisted UUIDs from import/creation; legacy maps receive a persisted ID when first indexed. Rename/move preserve IDs; copying creates new IDs. Multilevel packages have a map UUID and support switching by zero-based level index.
@@ -986,7 +1093,17 @@ full-screen overlay that is opened from there.
 
 ## 9) Change Log
 
-- **v3.12.1 (current):** Audio polish (3.35.2/3.35.6): the icon picker now offers the whole Material Design icon
+- **v3.13 (current):** Stream Deck plugin (3.36): control key images are served over the API
+  (`GET /api/controls/<section>/<name>/image`, with `?operation=increment|decrement`), `LocalApiServer` supports
+  binary responses, `GET /api/controls?ids=...` returns just the listed controls for cheap polling,
+  `GET /api/state` also reports the open map's library UUID, discovery labels fall back to the control's own
+  text or accessible text so music categories and sound effects are listed by name instead of by UUID,
+  discovery reports an artwork fingerprint so cached key images are refetched after an icon or colour change,
+  and right-click offers "Copy key image URL" in place of the removed "Open key image" browser export. The
+  companion plugin in `streamdeck-plugin/` adds generic actions for toggles, values, dropdowns, music
+  categories, sound effects and map switching, highlights active keys and uses a single shared poller per
+  application address with error backoff.
+- **v3.12.1:** Audio polish (3.35.2/3.35.6): the icon picker now offers the whole Material Design icon
   set with a search field, "Uncategorised" is hidden from the overlay by default (library `schemaVersion` 2) and
   empty categories are left out of the rings, the library window separates "Music categories" from "Sound effects",
   drag & drop converts tracks between music and sound effects, every audio window and dialog inherits the

@@ -40,7 +40,6 @@ import dmmt.ui.MapLocationDialog;
 import dmmt.ui.MapTagsDialog;
 import dmmt.ui.PlayerViewTransition;
 import dmmt.ui.SettingsWindow;
-import dmmt.ui.ControlKeyImages;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
@@ -127,12 +126,14 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import dmmt.service.AppSettings;
@@ -168,6 +169,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private LocalApiServer localApiServer;
     private DmControlApi controlApi;
     private boolean apiActionRunning;
+    private volatile Path apiStateMapFile;
+    private volatile String apiStateMapId = "";
     private final Map<String, javafx.scene.Node> extraApiControls = new java.util.LinkedHashMap<>();
     private final Dd2vttImportService dd2vttImportService = new Dd2vttImportService();
     /** Created once {@link #mapLibrary} exists, see {@link #start}. */
@@ -534,10 +537,8 @@ public class DungeonMasterMapToolApplication extends Application {
         controlApi = new DmControlApi(dmControlVisibility);
         extraApiControls.forEach(controlApi::add);
         controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
-        controlApi.attachKeyImageMenus(
-                new ControlKeyImages(Path.of(System.getProperty("user.home"), ".dmmt", "control-key-images")),
-                url -> getHostServices().showDocument(url), this::status);
         mapBrowser.setApiUrlProvider(this::mapApiUrl);
+        applyApiUrlOptionVisibility();
         Region statusSpacer = new Region();
         HBox.setHgrow(statusSpacer, Priority.ALWAYS);
         HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel,
@@ -672,6 +673,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 // The reload already applied tuning values and texture settings edited by hand.
                 applySectionVisibility();
                 applyPlayerGridSetting();
+                applyApiUrlOptionVisibility();
                 if (audioControls != null) {
                     audioControls.applySettings();
                 }
@@ -1457,8 +1459,24 @@ public class DungeonMasterMapToolApplication extends Application {
     private Object handleLocalApi(String path, Map<String, String> query) {
         try {
             if (path.equals("/api/controls")) {
-                requireApiParameters(query, Set.of());
+                requireApiParameters(query, Set.of("ids"));
+                if (query.containsKey("ids")) {
+                    List<String> ids = apiControlIds(query.get("ids"));
+                    return FxApiDispatcher.call(() -> controlApi.describe(ids));
+                }
                 return FxApiDispatcher.call(controlApi::describe);
+            }
+            if (path.startsWith("/api/controls/") && path.endsWith("/image")) {
+                requireApiParameters(query, Set.of("operation"));
+                String id = path.substring("/api/controls/".length(), path.length() - "/image".length())
+                        .replace('/', '.');
+                String operation = query.get("operation");
+                if (operation != null && !operation.equals("increment") && !operation.equals("decrement")) {
+                    throw new LocalApiServer.ApiException(400,
+                            "Key image operation must be 'increment' or 'decrement'.");
+                }
+                return new LocalApiServer.Binary("image/png",
+                        FxApiDispatcher.call(() -> controlApi.keyImage(id, operation)), 60);
             }
             if (path.startsWith("/api/controls/")) {
                 String id = path.substring("/api/controls/".length()).replace('/', '.');
@@ -1542,10 +1560,19 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             if (path.equals("/api/state")) {
                 requireApiParameters(query, Set.of());
-                return FxApiDispatcher.call(() -> Map.of("busy", ioBusy,
-                        "map", openMapFile() == null ? "" : MapBrowser.displayName(openMapFile()),
-                        "level", multiLevelManifest == null ? -1 : multiLevelManifest.indexOf(currentLevelId),
-                        "frozen", frozenPlayerProject != null));
+                AtomicReference<Path> openFile = new AtomicReference<>();
+                Map<String, Object> state = FxApiDispatcher.call(() -> {
+                    openFile.set(openMapFile());
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("busy", ioBusy);
+                    values.put("map", openMapFile() == null ? "" : MapBrowser.displayName(openMapFile()));
+                    values.put("level", multiLevelManifest == null ? -1 : multiLevelManifest.indexOf(currentLevelId));
+                    values.put("frozen", frozenPlayerProject != null);
+                    return values;
+                });
+                // Resolved off the JavaFX thread and cached, so polling never scans the library per request.
+                state.put("id", apiMapId(openFile.get()));
+                return Map.copyOf(state);
             }
             throw new LocalApiServer.ApiException(404, "Unknown API endpoint.");
         } catch (IOException ex) {
@@ -1557,6 +1584,50 @@ public class DungeonMasterMapToolApplication extends Application {
         if (!allowed.containsAll(query.keySet())) {
             throw new LocalApiServer.ApiException(400, "Unsupported query parameter.");
         }
+    }
+
+    /**
+     * The library UUID of the open map for {@code /api/state} (3.36.1), cached per map file so that polling a
+     * map key does not rescan the library. Called on an API worker thread, never on the JavaFX thread.
+     */
+    private String apiMapId(Path file) {
+        if (file == null) {
+            apiStateMapFile = null;
+            apiStateMapId = "";
+            return "";
+        }
+        if (file.equals(apiStateMapFile)) {
+            return apiStateMapId;
+        }
+        String id;
+        try {
+            id = mapLibrary.findApiMap(file).map(MapLibraryService.ApiMap::id).orElse("");
+        } catch (IOException ex) {
+            return "";
+        }
+        apiStateMapFile = file;
+        apiStateMapId = id;
+        return id;
+    }
+
+    /** Parses the comma-separated {@code ids} filter of batched control discovery (3.36.1). */    private static List<String> apiControlIds(String value) {
+        List<String> ids = new ArrayList<>();
+        for (String part : value.split(",", -1)) {
+            String id = part.trim();
+            if (id.isEmpty()) {
+                throw new LocalApiServer.ApiException(400, "The ids parameter contains an empty control id.");
+            }
+            if (!ids.contains(id)) {
+                ids.add(id);
+            }
+        }
+        if (ids.isEmpty()) {
+            throw new LocalApiServer.ApiException(400, "The ids parameter must list at least one control id.");
+        }
+        if (ids.size() > 128) {
+            throw new LocalApiServer.ApiException(400, "At most 128 control ids can be requested at once.");
+        }
+        return List.copyOf(ids);
     }
 
     private void ensureApiCanAct() {
@@ -1575,11 +1646,22 @@ public class DungeonMasterMapToolApplication extends Application {
         SettingsWindow.show(primaryStage, preferences, () -> {
             applySectionVisibility();
             applyPlayerGridSetting();
+            applyApiUrlOptionVisibility();
             applyLocalApiSettings();
             if (audioControls != null) {
                 audioControls.applySettings();
             }
         });
+    }
+
+    private void applyApiUrlOptionVisibility() {
+        boolean visible = Tuning.API_SHOW_URL_OPTIONS.get();
+        if (controlApi != null) {
+            controlApi.setUrlOptionsVisible(visible);
+        }
+        if (mapBrowser != null) {
+            mapBrowser.setApiUrlOptionsVisible(visible);
+        }
     }
 
     private void applyPlayerGridSetting() {

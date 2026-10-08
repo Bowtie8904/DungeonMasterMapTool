@@ -429,7 +429,11 @@ The default port is `7071`. Copied URLs use the computer's active LAN IPv4 addre
 In **Settings > Local control API > Copy address**, choose `network` (default) for LAN URLs or `local` for
 `127.0.0.1` URLs. This applies immediately to future copies and does not change network accessibility.
 
-Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in an external control device's
+Right-click URL-copy actions are hidden by default. Turn on **Show URL options** (`api.showUrlOptions`) in
+**Settings > Local control API** to show API URL actions on library maps and API/key-image URL actions on DM
+controls. This only changes menu visibility; all API endpoints continue to work normally.
+
+When shown, right-click a DM control or a library map and choose **Copy API URL**, then use that URL in an external control device's
 HTTP-request action. Toggles invert their current state; colour, dropdown and numeric controls include their current
 value in the copied example. Dropdowns also offer **Copy API index URL** with `?index=0` for the first option,
 avoiding long encoded names. Sliders also have increment/decrement examples. Commands use the same UI handlers as
@@ -440,13 +444,22 @@ The server is disabled by default and has no authentication. It listens on all I
 on trusted networks and do not forward its port to the internet. The app does not change firewall settings;
 an existing OS firewall or Wi-Fi client-isolation policy can still prevent access.
 
-**Control key artwork:** right-click a control and choose **Open key image**. A browser page shows a
-144x144 PNG based on its tool icon (dropdowns use their tab's icon, and value controls use fitting symbols);
-right-click the image in the browser to copy or save it. Music categories and sound effects export in **their own
-colour** instead of white, so a deck full of audio buttons matches the overlay (very dark colours are lightened so
-the glyph stays readable). Numeric controls
-also offer **Open increment key image** and **Open decrement key image**, with distinct plus/minus badges.
-This works even when the API is disabled. Images are stored under `.dmmt/control-key-images` in your home directory.
+**Control key artwork:** right-click a control and choose **Copy key image URL**. The copied address serves a
+144x144 PNG based on the control's tool icon (dropdowns use their tab's icon, and value controls use fitting
+symbols), ready for a Stream Deck or any other device that fetches its own key images. Music categories and sound
+effects use **their own colour** instead of white, so a deck full of audio buttons matches the overlay (very dark
+colours are lightened so the glyph stays readable). Numeric controls also offer **Copy increment key image URL**
+and **Copy decrement key image URL**, with distinct plus/minus badges. The image is rendered on request, so it
+always matches the control's current icon and colour; the API must be running.
+
+### Stream Deck plugin
+
+A ready-made Elgato Stream Deck plugin lives in [`streamdeck-plugin/`](streamdeck-plugin/README.md). Six generic
+actions cover music categories, sound effects, DM controls, sliders, dropdowns and map switching, so there is
+nothing to maintain per category. Keys stay **highlighted while the thing they control is active** - start a
+different music category and the previous key dims by itself - and each key draws the application's own artwork
+for the control it triggers. It polls the API in one batched request per interval and goes completely silent when
+no key is visible. See its README for installation and setup.
 
 ### 17. Keyboard and mouse reference
 

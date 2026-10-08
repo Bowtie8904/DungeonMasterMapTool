@@ -165,10 +165,12 @@ class DmControlApiTest {
             MenuItem old = new MenuItem("Existing");
             slider.setContextMenu(new ContextMenu(old));
             List<String> status = new ArrayList<>();
+            api.setUrlOptionsVisible(true);
             api.attachUrlMenus(() -> "http://127.0.0.1:8080", status::add);
             assertSame(old, slider.getContextMenu().getItems().getFirst());
             assertNull(row.getOnContextMenuRequested());
-            assertEquals(3, label.getContextMenu().getItems().size());
+            // Three API URL items, a separator, then three key image URL items.
+            assertEquals(7, label.getContextMenu().getItems().size());
             slider.setValue(.75);
             slider.getContextMenu().getItems().get(2).fire();
             assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity?value=0.75",
@@ -177,7 +179,8 @@ class DmControlApiTest {
             assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity?increment=0.1",
                     Clipboard.getSystemClipboard().getString());
             api.attachUrlMenus(() -> "http://127.0.0.1:8080", status::add);
-            assertEquals(5, slider.getContextMenu().getItems().size());
+            assertEquals(9, slider.getContextMenu().getItems().size(),
+                    "re-attaching must not add a second set of items to a control that already has them");
             ColorPicker color = new ColorPicker(Color.web("#01020380"));
             api.add("color", color);
             api.attachUrlMenus(() -> "http://127.0.0.1:8080", status::add);
@@ -207,6 +210,7 @@ class DmControlApiTest {
                         .filter(id -> !id.equals("lighting.hint")).collect(Collectors.toSet());
                 assertEquals(expected, api.describe().stream().map(d -> (String) d.get("id")).collect(Collectors.toSet()));
                 assertError(404, () -> api.execute("lighting.hint", Map.of()));
+                api.setUrlOptionsVisible(true);
                 api.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
                 new ObjectMapper().writeValueAsString(api.describe());
             } finally {
@@ -237,6 +241,7 @@ class DmControlApiTest {
             assertError(400, () -> api.execute("dropdown", Map.of("index", "1", "value", "Second long name")));
             assertEquals("Third long name", combo.getValue());
             assertEquals(2, actions[0]);
+            api.setUrlOptionsVisible(true);
             api.attachUrlMenus(() -> "http://127.0.0.1:7071", ignored -> {});
             combo.getContextMenu().getItems().stream().filter(item -> item.getText().equals("Copy API index URL"))
                     .findFirst().orElseThrow().fire();
@@ -247,7 +252,7 @@ class DmControlApiTest {
     }
 
     @Test
-    void keyImagesOpenLocalBrowserPagesWithoutApiAndNumericVariantsDiffer() throws Exception {
+    void keyImagesRenderWithoutTheApiAndWithoutStealingTheLiveGraphic() throws Exception {
         onFx(() -> {
             DmControlApi api = new DmControlApi(new ControlVisibility());
             Button button = new Button();
@@ -258,30 +263,20 @@ class DmControlApiTest {
             Slider slider = new Slider(0, 1, .5);
             api.add("player.freeze", button);
             api.add("effects.opacity", slider);
-            List<String> opened = new ArrayList<>();
-            List<String> statuses = new ArrayList<>();
-            api.attachUrlMenus(() -> null, statuses::add);
-            api.attachKeyImageMenus(new dmmt.ui.ControlKeyImages(dir), opened::add, statuses::add);
-            for (Control control : List.of(button, slider)) {
-                for (MenuItem item : control.getContextMenu().getItems()) {
-                    if (item.getText() != null && item.getText().startsWith("Open ")) {
-                        item.fire();
-                    }
-                }
-            }
-            assertEquals(4, opened.size());
-            assertTrue(statuses.isEmpty(), statuses.toString());
-            for (String url : opened) {
-                Path page = Path.of(java.net.URI.create(url));
-                assertTrue(java.nio.file.Files.readString(page).contains("<img width=\"144\" height=\"144\""));
-                Path png = page.resolveSibling(page.getFileName().toString().replace(".html", ".png"));
-                var image = javax.imageio.ImageIO.read(png.toFile());
+
+            for (String id : List.of("player.freeze", "effects.opacity")) {
+                var image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(api.keyImage(id, null)));
                 assertEquals(144, image.getWidth());
                 assertEquals(144, image.getHeight());
             }
-            var increase = javax.imageio.ImageIO.read(dir.resolve("effects.opacity-increment.png").toFile());
-            var decrease = javax.imageio.ImageIO.read(dir.resolve("effects.opacity-decrement.png").toFile());
-            assertNotEquals(increase.getRGB(115, 100), decrease.getRGB(115, 100));
+            var increase = javax.imageio.ImageIO
+                    .read(new java.io.ByteArrayInputStream(api.keyImage("effects.opacity", "increment")));
+            var decrease = javax.imageio.ImageIO
+                    .read(new java.io.ByteArrayInputStream(api.keyImage("effects.opacity", "decrement")));
+            assertNotEquals(increase.getRGB(115, 100), decrease.getRGB(115, 100),
+                    "the increment and decrement badges must be distinguishable");
+
+            // Rendering must snapshot a copy; the live control keeps its own graphic and value.
             assertSame(original, button.getGraphic());
             assertSame(originalParent, original.getParent());
             assertEquals(.5, slider.getValue());
@@ -295,8 +290,8 @@ class DmControlApiTest {
             Slider volume = new Slider(0, 1, .5);
             Button first = new Button();
             api.replaceGroup("audio", Map.of("audio.musicVolume", volume, "audio.category.combat", first));
+            api.setUrlOptionsVisible(true);
             api.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
-            api.attachKeyImageMenus(new dmmt.ui.ControlKeyImages(dir), ignored -> {}, ignored -> {});
             int volumeItems = volume.getContextMenu().getItems().size();
             assertTrue(volumeItems > 0);
 
@@ -310,9 +305,63 @@ class DmControlApiTest {
                             .anyMatch(item -> "Copy API URL".equals(item.getText())),
                     "a new control gets the API URL menu");
             assertTrue(second.getContextMenu().getItems().stream()
-                            .anyMatch(item -> "Open key image".equals(item.getText())),
-                    "a new control gets the key image menu like every other control");
+                            .anyMatch(item -> "Copy key image URL".equals(item.getText())),
+                    "a new control gets the key image URL item like every other control");
         });
+    }
+
+    @Test
+    void keyImageUrlsCanBeCopiedForEveryVariantOfAControl() throws Exception {
+        onFx(() -> {
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            Button button = new Button();
+            Slider slider = new Slider(0, 1, .5);
+            api.add("player.freeze", button);
+            api.add("effects.opacity", slider);
+            List<String> statuses = new ArrayList<>();
+            api.setUrlOptionsVisible(true);
+            api.attachUrlMenus(() -> "http://127.0.0.1:8080", statuses::add);
+
+            fire(button, "Copy key image URL");
+            assertEquals("http://127.0.0.1:8080/api/controls/player/freeze/image",
+                    Clipboard.getSystemClipboard().getString());
+            fire(slider, "Copy increment key image URL");
+            assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=increment",
+                    Clipboard.getSystemClipboard().getString());
+            fire(slider, "Copy decrement key image URL");
+            assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=decrement",
+                    Clipboard.getSystemClipboard().getString());
+            assertTrue(statuses.stream().allMatch(status -> status.startsWith("Copied API URL: ")), statuses.toString());
+            assertTrue(button.getContextMenu().getItems().stream()
+                    .noneMatch(item -> "Copy increment key image URL".equals(item.getText())));
+            assertThrows(IllegalArgumentException.class, () -> api.add("player.freeze.image", new Button()));
+        });
+    }
+
+    @Test
+    void urlMenuOptionsAreHiddenByDefaultAndCanBeToggledWithoutRemovingOtherItems() throws Exception {
+        onFx(() -> {
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            Button button = new Button();
+            javafx.scene.control.ContextMenu existing = new javafx.scene.control.ContextMenu(
+                    new javafx.scene.control.MenuItem("Existing action"));
+            button.setContextMenu(existing);
+            api.add("player.freeze", button);
+            api.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
+
+            assertEquals(List.of("Existing action"), existing.getItems().stream()
+                    .map(javafx.scene.control.MenuItem::getText).toList());
+            api.setUrlOptionsVisible(true);
+            assertTrue(existing.getItems().stream().anyMatch(item -> "Copy API URL".equals(item.getText())));
+            api.setUrlOptionsVisible(false);
+            assertEquals(List.of("Existing action"), existing.getItems().stream()
+                    .map(javafx.scene.control.MenuItem::getText).toList());
+        });
+    }
+
+    private static void fire(Control control, String label) {
+        control.getContextMenu().getItems().stream().filter(item -> label.equals(item.getText())).findFirst()
+                .orElseThrow(() -> new AssertionError(label + " is missing")).fire();
     }
 
     private static void assertError(int status, Runnable action) {

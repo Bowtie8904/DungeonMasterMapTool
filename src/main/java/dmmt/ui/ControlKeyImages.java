@@ -21,25 +21,27 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignV;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
-/** Exports a PNG and a browser page, avoiding the OS image-file association (often a photo viewer). */
+/** Renders the 144x144 key artwork that control devices use for their keys; served over the API (3.36.1). */
 public final class ControlKeyImages {
     public static final int SIZE = 144;
-    private final Path directory;
 
-    public ControlKeyImages(Path directory) {
-        this.directory = directory;
+    private ControlKeyImages() {
     }
 
-    public Path create(String id, List<Node> sources, String operation) throws IOException {
+    /**
+     * Renders the key image and returns the PNG bytes (3.36.1). Must run on the JavaFX application thread
+     * because it snapshots live controls.
+     */
+    public static byte[] png(String id, List<Node> sources, String operation) throws IOException {
         if (!id.matches("[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*")
                 || operation != null && !List.of("increment", "decrement").contains(operation)) {
             throw new IllegalArgumentException("Invalid key image identifier or operation.");
@@ -78,18 +80,11 @@ public final class ControlKeyImages {
         image.getPixelReader().getPixels(0, 0, SIZE, SIZE,
                 javafx.scene.image.PixelFormat.getIntArgbInstance(), pixels, 0, SIZE);
         png.setRGB(0, 0, SIZE, SIZE, pixels, 0, SIZE);
-        Files.createDirectories(directory);
-        String name = id + (operation == null ? "" : "-" + operation);
-        Path file = directory.resolve(name + ".png");
-        if (!ImageIO.write(png, "png", file.toFile())) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        if (!ImageIO.write(png, "png", bytes)) {
             throw new IOException("No PNG encoder is available.");
         }
-        Path page = directory.resolve(name + ".html");
-        Files.writeString(page, "<!doctype html><html><head><meta charset=\"utf-8\"><title>"
-                + name + " - Control key image</title></head><body style=\"margin:0;min-height:100vh;"
-                + "display:grid;place-items:center;background:#10151d\"><img width=\"144\" height=\"144\" src=\""
-                + name + ".png\" alt=\"" + name + "\"></body></html>", StandardCharsets.UTF_8);
-        return page;
+        return bytes.toByteArray();
     }
 
     static Ikon selectIcon(String id, List<Node> sources) {
@@ -105,6 +100,11 @@ public final class ControlKeyImages {
             case "player.diagonal", "player.tileSize" -> MaterialDesignR.RULER_SQUARE;
             case "player.zoom" -> MaterialDesignM.MAGNIFY;
             case "performance.target", "performance.animation", "performance.idle" -> MaterialDesignS.SPEEDOMETER;
+            // The volume sliders are registered on their own, so the icon beside them in the overlay is not
+            // among this entry's nodes; mirror it here to avoid the generic fallback glyph.
+            case "audio.masterVolume" -> MaterialDesignV.VOLUME_HIGH;
+            case "audio.musicVolume" -> MaterialDesignM.MUSIC_NOTE;
+            case "audio.effectsVolume" -> MaterialDesignW.WAVES;
             default -> null;
         };
         if (specific != null) {
@@ -133,6 +133,16 @@ public final class ControlKeyImages {
             case "levels" -> MaterialDesignL.LAYERS_TRIPLE_OUTLINE;
             default -> MaterialDesignT.TUNE_VARIANT;
         };
+    }
+
+    /**
+     * Short tag identifying the artwork {@link #png} would produce for this control, derived from exactly the two
+     * things that determine it: the glyph and its colour. Clients cache key images, so they need a cheap way to
+     * notice that a music category was given a new icon or colour (3.36.1). Must run on the JavaFX thread.
+     */
+    public static String fingerprint(String id, List<Node> sources) {
+        Ikon icon = selectIcon(id, sources);
+        return Integer.toHexString(Objects.hash(icon.getDescription(), selectColor(sources)));
     }
 
     private static Ikon findIcon(Node node) {

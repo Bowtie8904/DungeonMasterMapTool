@@ -1,0 +1,128 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Dungeon Master Map Tool",
+	"UUID": "com.dmmt.dungeonmaster",
+	"Version": "1.0.0.0",
+	"Author": "Dungeon Master Map Tool",
+	"Description": "Control the Dungeon Master Map Tool from your Stream Deck: music categories, sound effects, fog, lighting, the player view and map switching. Keys show the application's own artwork and stay highlighted while their control is active. Requires Settings > Local control API to be enabled in the application.",
+	"Category": "Dungeon Master Map Tool",
+	"CategoryIcon": "imgs/plugin/category",
+	"Icon": "imgs/plugin/icon",
+	"CodePath": "plugin.js",
+	"PropertyInspectorPath": "pi/index.html",
+	"SDKVersion": 2,
+	"Nodejs": {
+		"Version": "20"
+	},
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		},
+		{
+			"Platform": "mac",
+			"MinimumVersion": "13"
+		}
+	],
+	"Actions": [
+		{
+			"UUID": "com.dmmt.dungeonmaster.music",
+			"Name": "Music category",
+			"Tooltip": "Plays a music category, or stops it when it is already playing. Stays highlighted while the category is the one that plays.",
+			"Icon": "imgs/actions/music/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/music/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "com.dmmt.dungeonmaster.effect",
+			"Name": "Sound effect",
+			"Tooltip": "Starts or stops one sound effect loop. Stays highlighted while the loop runs.",
+			"Icon": "imgs/actions/effect/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/effect/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "com.dmmt.dungeonmaster.control",
+			"Name": "DM control",
+			"Tooltip": "Presses any DM control button or toggle, such as Night, Fog on/off or Freeze player view. Toggles stay highlighted while they are on.",
+			"Icon": "imgs/actions/control/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/control/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "com.dmmt.dungeonmaster.value",
+			"Name": "DM value",
+			"Tooltip": "Sets, increases or decreases a slider or spinner such as a volume, the brush size or the ambient brightness.",
+			"Icon": "imgs/actions/value/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/value/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "com.dmmt.dungeonmaster.dropdown",
+			"Name": "DM dropdown option",
+			"Tooltip": "Selects one option of a dropdown such as the weather type or the effect texture. Stays highlighted while that option is selected.",
+			"Icon": "imgs/actions/dropdown/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/dropdown/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		},
+		{
+			"UUID": "com.dmmt.dungeonmaster.map",
+			"Name": "Switch map",
+			"Tooltip": "Opens a library map, optionally at a given level. Stays highlighted while that map is open.",
+			"Icon": "imgs/actions/map/icon",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/map/key",
+					"TitleAlignment": "bottom",
+					"FontSize": "12"
+				}
+			]
+		}
+	]
+}

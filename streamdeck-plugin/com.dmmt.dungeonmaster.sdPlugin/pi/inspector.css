@@ -1,0 +1,126 @@
+:root {
+	color-scheme: dark;
+	--background: #2d2d2d;
+	--text: #d8d8d8;
+	--muted: #969696;
+	--field: #3d3d3d;
+	--accent: #4fc3f7;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--background);
+	color: var(--text);
+	font-family: "Segoe UI", -apple-system, "Helvetica Neue", sans-serif;
+	font-size: 9pt;
+}
+
+.sdpi-wrapper {
+	padding: 8px 12px 16px;
+}
+
+details {
+	margin-bottom: 10px;
+	border-top: 1px solid #4a4a4a;
+	padding-top: 6px;
+}
+
+summary {
+	cursor: pointer;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	font-size: 8pt;
+	margin-bottom: 6px;
+	user-select: none;
+}
+
+.sdpi-item {
+	display: flex;
+	align-items: center;
+	margin-bottom: 6px;
+	min-height: 24px;
+}
+
+.sdpi-item.hidden {
+	display: none;
+}
+
+.sdpi-item-label {
+	flex: 0 0 94px;
+	text-align: right;
+	padding-right: 8px;
+	color: var(--muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sdpi-item-value {
+	flex: 1 1 auto;
+	min-width: 0;
+	background: var(--field);
+	color: var(--text);
+	border: none;
+	border-radius: 3px;
+	padding: 4px 6px;
+	font-size: 9pt;
+	font-family: inherit;
+}
+
+.sdpi-item-value:focus {
+	outline: 1px solid var(--accent);
+}
+
+.sdpi-item-value.hint {
+	background: transparent;
+	color: var(--muted);
+	line-height: 1.35;
+	padding: 2px 0;
+}
+
+.sdpi-item-value.hint b {
+	color: var(--text);
+	font-weight: 600;
+}
+
+.sdpi-item-value.problem {
+	color: #ef8d8d;
+}
+
+.sdpi-item-value.good {
+	color: #8fd69a;
+}
+
+select.select {
+	appearance: none;
+	background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+		linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+	background-position: right 12px center, right 7px center;
+	background-size: 5px 5px, 5px 5px;
+	background-repeat: no-repeat;
+	padding-right: 22px;
+}
+
+.sdpi-item-child {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.sdpi-item-child .sdpi-item-label {
+	flex: 1 1 auto;
+	text-align: left;
+	padding-right: 0;
+}
+
+button.sdpi-item-value {
+	cursor: pointer;
+	text-align: center;
+	padding: 5px 6px;
+}
+
+button.sdpi-item-value:hover {
+	background: #4a4a4a;
+}
