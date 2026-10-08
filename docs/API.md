@@ -3,8 +3,17 @@
 Enable the API in Settings > Local control API; enabling/disabling and port changes apply immediately without restart.
 Alternatively, edit `api.enabled = true` in `dmmt-settings.ini`; hand edits apply when the DM window regains focus.
 `api.port` defaults to `7071`. The app must be running, but its window need not have focus.
-The server binds only to `127.0.0.1`; do not proxy or forward it to a network. Other local programs can control it.
-Browser-origin requests are rejected and CORS is not enabled.
+The server listens on all IPv4 interfaces, so a phone or other device on the same local network can call it.
+Copied URLs (including map discovery URLs) use an active LAN IPv4 address instead of localhost. Private,
+nonvirtual interfaces are preferred. If there is no LAN IPv4 address, URLs fall back to `127.0.0.1`.
+On machines with multiple networks, use the IP on the network shared with the calling device; the server accepts
+requests to any active local IPv4 interface. Copy URLs again if DHCP or changing networks changes the computer's IP.
+
+There is **no authentication** and the app does not modify firewall rules. Enable the API only on trusted networks;
+any device that can reach it can control the app. Do not forward the port to the internet. Existing firewall
+restrictions or Wi-Fi client isolation may still block connections.
+Cross-origin browser requests remain rejected and CORS is not enabled. Direct navigation to a copied URL in a
+phone browser works; requests made by a separate web page remain subject to the browser-origin restrictions.
 
 ## External control setup
 
@@ -12,17 +21,17 @@ Use an HTTP-request action/plugin on your control device, or a local script that
 Right-click the desired DM control and copy its API URL into that action. Set the method to **GET**.
 An HTTP request is preferable to an "open website" action, which opens a browser and may be rejected.
 
-Examples (default port):
+Examples (default port, illustrative LAN IP; use the actual IP from **Copy API URL**):
 
 | Action | URL |
 |--------|-----|
-| Night | `http://127.0.0.1:7071/api/controls/lighting/night` |
-| Toggle fog | `http://127.0.0.1:7071/api/controls/fog/enabled` |
-| Toggle player freeze | `http://127.0.0.1:7071/api/controls/player/freeze` |
-| Set effect colour to red | `http://127.0.0.1:7071/api/controls/effects/color?value=%23FF0000` |
-| Set effect opacity to 0.5 | `http://127.0.0.1:7071/api/controls/effects/opacity?value=0.5` |
-| Increase effect opacity by 0.1 | `http://127.0.0.1:7071/api/controls/effects/opacity?increment=0.1` |
-| Decrease effect opacity by 0.1 | `http://127.0.0.1:7071/api/controls/effects/opacity?decrement=0.1` |
+| Night | `http://192.168.1.100:7071/api/controls/lighting/night` |
+| Toggle fog | `http://192.168.1.100:7071/api/controls/fog/enabled` |
+| Toggle player freeze | `http://192.168.1.100:7071/api/controls/player/freeze` |
+| Set effect colour to red | `http://192.168.1.100:7071/api/controls/effects/color?value=%23FF0000` |
+| Set effect opacity to 0.5 | `http://192.168.1.100:7071/api/controls/effects/opacity?value=0.5` |
+| Increase effect opacity by 0.1 | `http://192.168.1.100:7071/api/controls/effects/opacity?increment=0.1` |
+| Decrease effect opacity by 0.1 | `http://192.168.1.100:7071/api/controls/effects/opacity?decrement=0.1` |
 
 Requests run through the existing JavaFX controls. Setting effect colour updates both the picker and a selected effect,
 just as selecting the colour manually would. Undo, project/global persistence and player freeze rules are unchanged.
@@ -81,8 +90,8 @@ timeout; do not blindly retry a toggle when the outcome is uncertain.
 Right-click a library map to copy the same switch URL:
 
 ```text
-http://127.0.0.1:7071/api/maps/<uuid>/switch
-http://127.0.0.1:7071/api/maps/<uuid>/switch?level=0
+http://192.168.1.100:7071/api/maps/<uuid>/switch
+http://192.168.1.100:7071/api/maps/<uuid>/switch?level=0
 ```
 
 `level` is a **zero-based index**, ordered lowest level first. Omit it to open the level used last (or the lowest

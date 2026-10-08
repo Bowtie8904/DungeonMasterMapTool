@@ -759,7 +759,7 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 
 ## Local DM Control API
 
-- Provide an opt-in localhost-only HTTP API for every DM control, usable without window focus. Commands run on the JavaFX thread through the same controls/actions as manual interaction, including selected-object updates, undo, persistence and player freeze semantics.
+- Provide an opt-in HTTP API for every DM control, reachable from other devices on the local network and usable without window focus. Bind all IPv4 interfaces; copied control/map URLs and discovery URLs advertise an active LAN IPv4 address rather than localhost (loopback fallback only when no LAN address exists). No authentication or automatic firewall changes. Use only on trusted networks; do not expose the API to the internet. Commands run on the JavaFX thread through the same controls/actions as manual interaction, including selected-object updates, undo, persistence and player freeze semantics.
 - API enabling/disabling and port changes apply live from Settings, and after external settings reload, without restart. Repeated settings callbacks leave an unchanged server running. A failed port change reports the error and preserves the existing listener.
 - Each control has a stable endpoint. Buttons invoke their action; toggles invert current state with no parameter; value controls accept a URL-encoded `value`; sliders also accept `increment` or `decrement` amounts, bounded by their normal UI range. Dropdown values identify their displayed choices. Invalid commands return explicit HTTP errors.
 - Dropdowns additionally accept `index` (zero-based UI option order), mutually exclusive with `value`. Discovery includes the current index; right-click offers copying an index URL using the current selection. Invalid/out-of-range indices fail without changing the selection.
@@ -768,7 +768,7 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 - Right-click each DM control to copy its command URL; value controls include their current value as an example. Sliders additionally provide increment/decrement URL examples.
 - Maps have persisted UUIDs from import/creation; legacy maps receive a persisted ID when first indexed. Rename/move preserve IDs; copying creates new IDs. Multilevel packages have a map UUID and support switching by zero-based level index.
 - Right-click library maps to copy the map-switch URL. Map switching uses the existing save/load and frozen-player workflow.
-- Document configuration, endpoint discovery, URL encoding, slider operations, map/level commands and external control setup in README and settings documentation. Restrict requests to loopback, reject browser-origin requests, and surface startup/command failures.
+- Document configuration, endpoint discovery, URL encoding, slider operations, map/level commands and external control setup in README and settings documentation. Accept local-interface IP Host headers, preserve browser-origin protections, and surface startup/command failures.
 
 ## 8) Open Decisions (Track Here)
 

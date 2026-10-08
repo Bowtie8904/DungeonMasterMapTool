@@ -241,9 +241,9 @@ public final class Tuning {
     // ---- Window ----
 
     public static final Setting<Boolean> API_ENABLED = bool(LOCAL_API, "api.enabled", false, false,
-            "Enable the localhost-only HTTP API for external control devices and local automation.");
+            "Enable the LAN-accessible HTTP API for external control devices and local automation.");
     public static final Setting<Integer> API_PORT = integer(LOCAL_API, "api.port", 7071, 1024, 65535, false,
-            "TCP port of the local control API, bound only to 127.0.0.1.");
+            "TCP port of the local control API, bound to all IPv4 interfaces.");
 
     public static final Setting<Integer> DM_WINDOW_WIDTH = integer(WINDOW, "window.dmWidth", 1500, 400, 10000, true,
             "Initial width of the main (DM) window in pixels.");

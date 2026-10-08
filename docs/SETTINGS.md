@@ -12,24 +12,27 @@ common synonyms to make searching easier.
 **Default:** `false`. **Applies:** Live.
 
 Enables the HTTP API for controlling the DM UI from external control devices or local programs without keyboard focus.
-Only `127.0.0.1` is bound. Browser-origin requests are rejected; there is no network access or CORS support.
+The server binds all IPv4 interfaces, allowing phones and other devices on the same local network to send commands.
+There is no authentication; only enable it on trusted networks and do not expose it to the internet. The app does
+not change firewall settings. Browser-origin requests are rejected; CORS is not enabled.
 Switching this setting in Settings starts or stops the listener immediately, without a restart.
 Right-click URL copying is available even when the server is disabled, for preparing buttons before enabling it.
 Commands and examples are documented in [API.md](API.md).
 
-**Keywords:** external controls, remote control, HTTP, localhost, automation.
+**Keywords:** external controls, remote control, HTTP, LAN, network, phone, automation.
 
 ### `api.port`
 
 **Default:** `7071`. **Range:** `1024` to `65535`. **Applies:** Live.
 
-TCP port for the local API. With the default, URLs begin with `http://127.0.0.1:7071`.
+TCP port for the local API. Copied URLs use an active LAN IP, for example `http://192.168.1.100:7071`.
+If no LAN IPv4 address exists, URLs fall back to `127.0.0.1` for use on this computer.
 Choose an unused port if another application occupies it. Startup errors appear in the DM status bar; the app keeps
 working normally without the API. Port changes switch the listener immediately while enabled; if the new port
 cannot be bound, the old listener stays running and the status bar reports its address. Copy command URLs again
 after successfully changing the port. Hand edits apply when the DM window regains focus.
 
-**Keywords:** external controls, HTTP, TCP, localhost, port.
+**Keywords:** external controls, HTTP, TCP, LAN, IP address, port.
 
 ## Contents
 

@@ -419,10 +419,11 @@ Highlights:
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
 ### External controls and local control API
 
-The optional **localhost HTTP API** controls the DM UI without giving the application keyboard focus. Enable
+The optional **local-network HTTP API** controls the DM UI without giving the application keyboard focus. Enable
 `api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,
 without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.
-The default address is `http://127.0.0.1:7071`.
+The default port is `7071`. Copied URLs use the computer's active LAN IPv4 address, for example
+`http://192.168.1.100:7071`, so phones and other devices on the same network can call them.
 
 Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in an external control device's
 HTTP-request action. Toggles invert their current state; colour, dropdown and numeric controls include their current
@@ -431,7 +432,9 @@ avoiding long encoded names. Sliders also have increment/decrement examples. Com
 manual interaction, including changes to selected objects and frozen-player behavior.
 
 See [Local API reference](docs/API.md) for commands, discovery, slider units, map UUIDs and zero-based level selection.
-The server is disabled by default, only accepts local requests, and is not intended to be exposed to a network.
+The server is disabled by default and has no authentication. It listens on all IPv4 interfaces; enable it only
+on trusted networks and do not forward its port to the internet. The app does not change firewall settings;
+an existing OS firewall or Wi-Fi client-isolation policy can still prevent access.
 
 **Control key artwork:** right-click a control and choose **Open key image**. A browser page shows a
 144x144 PNG based on its tool icon (dropdowns use their tab's icon, and value controls use fitting symbols);

@@ -29,14 +29,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Loopback-only HTTP transport for the local DM control API (JDK {@code jdk.httpserver} module).
+ * LAN-accessible HTTP transport for the local DM control API (JDK {@code jdk.httpserver} module).
  * <p>
  * Validates and decodes requests, then calls the {@link Handler} synchronously on a bounded worker pool and
  * serializes its result as JSON. Routing and JavaFX dispatch are left to the handler.
  */
 public final class LocalApiServer implements AutoCloseable {
     private static final System.Logger LOG = System.getLogger(LocalApiServer.class.getName());
-    private static final byte[] LOOPBACK = {127, 0, 0, 1};
+    private static final byte[] ANY_IPV4 = {0, 0, 0, 0};
     private static final int DEFAULT_THREADS = 4;
     private static final int DEFAULT_QUEUE = 16;
     static final int MAX_URI_LENGTH = 4096;
@@ -91,14 +91,14 @@ public final class LocalApiServer implements AutoCloseable {
         this.boundPort = port;
     }
 
-    /** Binds to 127.0.0.1 only. Port 0 picks a free port (see {@link #baseUrl()}). Can be started once. */
+    /** Binds all IPv4 interfaces. Port 0 picks a free port (see {@link #baseUrl()}). Can be started once. */
     public synchronized void start() throws IOException {
         if (started) {
             throw new IllegalStateException("Local API server can only be started once.");
         }
         started = true;
         HttpServer created = HttpServer.create(
-                new InetSocketAddress(InetAddress.getByAddress(LOOPBACK), port), 16);
+                new InetSocketAddress(InetAddress.getByAddress(ANY_IPV4), port), 16);
         ThreadPoolExecutor pool = new ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(queueCapacity), new WorkerThreads(),
                 new ThreadPoolExecutor.AbortPolicy());
@@ -132,9 +132,19 @@ public final class LocalApiServer implements AutoCloseable {
         }
     }
 
-    /** {@code http://127.0.0.1:<port>}, using the actually bound port once started. */
+    /** LAN URL using the actually bound port and current interface addresses. */
     public String baseUrl() {
-        return "http://127.0.0.1:" + boundPort;
+        return baseUrl(boundPort);
+    }
+
+    public int port() {
+        return boundPort;
+    }
+
+    /** Prefer an active private, nonvirtual interface; keep local use working when disconnected. */
+    public static String baseUrl(int port) {
+        List<String> hosts = ApiNetworkAddresses.hosts();
+        return "http://" + (hosts.isEmpty() ? "127.0.0.1" : hosts.getFirst()) + ":" + port;
     }
 
     /**
@@ -201,10 +211,6 @@ public final class LocalApiServer implements AutoCloseable {
     }
 
     private Request validate(HttpExchange exchange) {
-        InetSocketAddress remote = exchange.getRemoteAddress();
-        if (remote == null || remote.getAddress() == null || !remote.getAddress().isLoopbackAddress()) {
-            throw new ApiException(403, "Only loopback clients are allowed.");
-        }
         Headers headers = exchange.getRequestHeaders();
         validateHost(headers.get("Host"));
         if (headers.containsKey("Origin") || headers.containsKey("Referer")) {
@@ -242,7 +248,11 @@ public final class LocalApiServer implements AutoCloseable {
         boolean valid = host.equals("127.0.0.1" + suffix) || host.equals("localhost" + suffix)
                 || (boundPort == 80 && (host.equals("127.0.0.1") || host.equals("localhost")));
         if (!valid) {
-            throw new ApiException(403, "Host must be 127.0.0.1 or localhost with port " + boundPort + ".");
+            valid = ApiNetworkAddresses.hosts().stream()
+                    .anyMatch(address -> host.equals(address + suffix) || boundPort == 80 && host.equals(address));
+        }
+        if (!valid) {
+            throw new ApiException(403, "Host must be a local interface IP or localhost with port " + boundPort + ".");
         }
     }
 

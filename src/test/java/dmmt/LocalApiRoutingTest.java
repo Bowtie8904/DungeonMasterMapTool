@@ -38,9 +38,28 @@ class LocalApiRoutingTest {
         var map = (Map<?, ?>) maps.getFirst();
         assertEquals("Test", map.get("name"));
         assertEquals(false, map.get("multilevel"));
-        assertEquals("http://127.0.0.1:7071/api/maps/" + map.get("id") + "/switch", map.get("url"));
+        assertEquals(LocalApiServer.baseUrl(7071) + "/api/maps/" + map.get("id") + "/switch", map.get("url"));
         assertEquals(map.get("id"), new ProjectService().load(temp.resolve("maps").resolve("Test.dmmap"))
                 .getId());
+    }
+
+    @Test
+    void copiedControlUrlsUseTheSameLanAddressAsMapDiscovery() throws Exception {
+        var app = fixture();
+        FxApiDispatcher.call(() -> {
+            var control = new javafx.scene.control.Button();
+            var api = new dmmt.api.DmControlApi(new dmmt.ui.ControlVisibility());
+            api.add("player.freeze", control);
+            Method method = app.getClass().getDeclaredMethod("localApiBaseUrl");
+            method.setAccessible(true);
+            String base = (String) method.invoke(app);
+            assertEquals(LocalApiServer.baseUrl(7071), base);
+            api.attachUrlMenus(() -> base, ignored -> {});
+            control.getContextMenu().getItems().getFirst().fire();
+            assertEquals(base + "/api/controls/player/freeze",
+                    javafx.scene.input.Clipboard.getSystemClipboard().getString());
+            return null;
+        });
     }
 
     @Test

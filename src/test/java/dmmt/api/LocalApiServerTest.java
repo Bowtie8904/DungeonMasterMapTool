@@ -223,7 +223,7 @@ class LocalApiServerTest {
     }
 
     @Test
-    void hostHeaderMustNameLoopbackAndBoundPort() throws Exception {
+    void hostHeaderMustNameLocalInterfaceAndBoundPort() throws Exception {
         startRecording("x");
         int port = port();
         for (String host : List.of("evil.example:" + port, "127.0.0.1:" + (port == 1 ? 2 : port - 1), "127.0.0.1",
@@ -293,7 +293,7 @@ class LocalApiServerTest {
         startRecording("x");
         int port = port();
         assertTrue(port > 0);
-        assertEquals("http://127.0.0.1:" + port, server.baseUrl());
+        assertEquals(LocalApiServer.baseUrl(port), server.baseUrl());
         assertEquals(200, get(server.baseUrl() + "/a").statusCode());
 
         LocalApiServer conflicting = new LocalApiServer(port, (path, query) -> null);
@@ -309,11 +309,11 @@ class LocalApiServerTest {
         server.start();
         assertEquals("\"again\"", get(server.baseUrl() + "/a").body());
         assertThrows(IllegalArgumentException.class, () -> new LocalApiServer(70000, (path, query) -> null));
-        assertEquals("http://127.0.0.1:7071", new LocalApiServer(7071, (path, query) -> null).baseUrl());
+        assertEquals(LocalApiServer.baseUrl(7071), new LocalApiServer(7071, (path, query) -> null).baseUrl());
     }
 
     @Test
-    void bindsOnlyToIpv4Loopback() throws Exception {
+    void lanInterfacesAcceptRequestsAndCopiedBaseUrlUsesLanAddress() throws Exception {
         startRecording("x");
         List<InetAddress> external = new ArrayList<>();
         for (NetworkInterface nic : Collections.list(NetworkInterface.getNetworkInterfaces())) {
@@ -324,11 +324,12 @@ class LocalApiServerTest {
             }
         }
         assumeTrue(!external.isEmpty(), "No non-loopback IPv4 address available");
+        assertNotEquals("127.0.0.1", URI.create(server.baseUrl()).getHost());
+        assertTrue(external.stream().anyMatch(address -> address.getHostAddress()
+                .equals(URI.create(server.baseUrl()).getHost())));
         for (InetAddress address : external) {
-            try (Socket socket = new Socket()) {
-                assertThrows(IOException.class, () -> socket.connect(new InetSocketAddress(address, port()), 2000),
-                        address.toString());
-            }
+            String url = "http://" + address.getHostAddress() + ":" + port() + "/api/state";
+            assertEquals(200, get(url).statusCode(), url);
         }
     }
 
