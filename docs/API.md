@@ -109,6 +109,16 @@ timeout; do not blindly retry a toggle when the outcome is uncertain.
 
 ## Maps and levels
 
+`GET /api/controls/maps/previous` invokes the **Previous map** button beside Recent maps, with no parameters.
+It opens the most recently opened existing map other than the current one; repeated presses switch between the
+last two maps. Control discovery (`GET /api/controls`, including `?ids=maps.previous`) lists `maps.previous`
+as a button with its live disabled state. It is disabled when no previous map is available (`409` on invocation).
+`GET /api/controls/maps/previous/image` supplies its arrow key artwork; right-click the button to copy either
+URL when URL options are enabled. Use **DM Control > Maps > Previous map** in the Stream Deck plugin.
+The previous map is retained during the session even with a one-entry recent list; after restarting, only the
+persisted recent history is available. This uses the normal asynchronous map switch described below, including
+auto-save, unsaved-new-map rejection and player freeze.
+
 `GET /api/maps` lists library maps with their persistent UUID, name, multilevel flag and switch URL.
 Right-click a library map to copy the same switch URL:
 

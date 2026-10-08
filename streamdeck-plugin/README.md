@@ -60,6 +60,9 @@ DistributionTool -b -i com.dmmt.dungeonmaster.sdPlugin -o .
 
 ### Shared options
 
+- To switch back to the previous map, add a **DM Control** key and choose **Maps > Previous map**
+  (`maps.previous`). Repeated presses alternate between the last two maps. The key uses the application's
+  arrow artwork and is disabled when there is no previous map; auto-save and player freeze work normally.
 - **Title** decides what the plugin writes on the key: *No title* (the default) leaves the title you typed in
   Stream Deck alone, *Name* shows the target's own name - the music category, the sound effect, the control,
   the slider or the map - and *Value* shows the live value where that is meaningful (the selected dropdown

@@ -43,6 +43,7 @@ import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
@@ -189,6 +190,8 @@ public class MapBrowser extends VBox {
     private HBox actions;
     private final RecentMaps recentMaps;
     private final ListView<Path> recentList = new ListView<>();
+    private final Button previousMapButton;
+    private Path previousMap;
     private Entry scannedRoot;
     private java.util.List<Entry> draggedEntries;
     private ContextMenu openMenu;
@@ -197,6 +200,10 @@ public class MapBrowser extends VBox {
         this.library = library;
         this.host = host;
         this.recentMaps = recentMaps;
+        previousMapButton = Icons.button(MaterialDesignA.ARROW_LEFT, "Previous map",
+                () -> host.openMap(previousMap));
+        previousMapButton.setId("previous-map");
+        previousMapButton.setDisable(true);
         getStyleClass().add("sidebar");
         setPrefWidth(270);
         setMinWidth(200);
@@ -296,7 +303,12 @@ public class MapBrowser extends VBox {
                 event.consume();
             }
         });
-        VBox box = new VBox(4, caption, recentList);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox heading = new HBox(4, caption, spacer, previousMapButton);
+        heading.getStyleClass().add("toolbar-row");
+        heading.setStyle("-fx-alignment: center-left;");
+        VBox box = new VBox(4, heading, recentList);
         box.getStyleClass().add("recent-maps-box");
         return box;
     }
@@ -309,6 +321,12 @@ public class MapBrowser extends VBox {
         recentList.setPrefHeight(height);
         recentList.setMinHeight(height);
         recentList.setMaxHeight(height);
+        previousMap = recentMaps.previous(host.currentMapFile()).orElse(null);
+        previousMapButton.setDisable(previousMap == null);
+    }
+
+    public Button previousMapButton() {
+        return previousMapButton;
     }
 
     /** Adds a control to the row of map actions (new / import / save). */

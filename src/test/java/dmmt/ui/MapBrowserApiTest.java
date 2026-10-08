@@ -1,6 +1,8 @@
 package dmmt.ui;
 
 import dmmt.FxTestSupport;
+import dmmt.api.DmControlApi;
+import dmmt.api.LocalApiServer;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import dmmt.service.ProjectService;
@@ -20,7 +22,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
@@ -118,6 +123,65 @@ class MapBrowserApiTest {
                 throw new AssertionError(ex);
             }
             assertEquals("keep this", Clipboard.getSystemClipboard().getString());
+        });
+    }
+
+    @Test
+    void previousMapIsDiscoverableWithArtworkAndSwitchesThroughTheHost() throws Exception {
+        Path a = Files.writeString(dir.resolve("First.dmmap"), "{}");
+        Path b = Files.writeString(dir.resolve("Second.dmlevels"), "{}");
+        onFx(() -> {
+            AtomicReference<Path> current = new AtomicReference<>();
+            AtomicReference<Path> requested = new AtomicReference<>();
+            MapBrowser.Host host = (MapBrowser.Host) Proxy.newProxyInstance(getClass().getClassLoader(),
+                    new Class<?>[]{MapBrowser.Host.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("currentMapFile")) {
+                            return current.get();
+                        }
+                        if (method.getName().equals("openMap")) {
+                            requested.set((Path) args[0]);
+                        }
+                        return null;
+                    });
+            MapBrowser browser = new MapBrowser(new MapLibraryService(dir, new ProjectService()), host,
+                    new RecentMaps(new AppSettings(dir.resolve("previous.ini"))));
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            api.add("maps.previous", browser.previousMapButton());
+            Map<String, Object> description = api.describe(List.of("maps.previous")).getFirst();
+            assertEquals("Previous map", description.get("label"));
+            assertEquals("button", description.get("type"));
+            assertEquals("/api/controls/maps/previous", description.get("path"));
+            assertEquals(true, description.get("disabled"));
+            assertEquals(409, assertThrows(LocalApiServer.ApiException.class,
+                    () -> api.execute("maps.previous", Map.of())).status());
+            try {
+                byte[] artwork = api.keyImage("maps.previous", null);
+                assertTrue(artwork.length > 100);
+                assertEquals(0x89, artwork[0] & 0xff);
+            } catch (Exception ex) {
+                throw new AssertionError(ex);
+            }
+            api.attachUrlMenus(() -> "http://127.0.0.1:7071", ignored -> {});
+            api.setUrlOptionsVisible(true);
+            browser.previousMapButton().getContextMenu().getItems().stream()
+                    .filter(item -> "Copy API URL".equals(item.getText())).findFirst().orElseThrow().fire();
+            assertEquals("http://127.0.0.1:7071/api/controls/maps/previous",
+                    Clipboard.getSystemClipboard().getString());
+            current.set(a);
+            browser.updateCurrentMap();
+            assertTrue(browser.previousMapButton().isDisabled());
+            current.set(b);
+            browser.updateCurrentMap();
+            assertFalse(browser.previousMapButton().isDisabled());
+            api.execute("maps.previous", Map.of());
+            assertEquals(a, requested.get());
+            // Only a completed open records history; requests alone must not change the target.
+            api.execute("maps.previous", Map.of());
+            assertEquals(a, requested.get());
+            current.set(a);
+            browser.updateCurrentMap();
+            browser.previousMapButton().fire();
+            assertEquals(b, requested.get());
         });
     }
 }

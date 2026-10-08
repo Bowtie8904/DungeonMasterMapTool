@@ -475,6 +475,8 @@ Desktop tool for tabletop dungeon masters that:
 
 - Small **Recent maps** list at the bottom of the map browser sidebar, below the library tree: a history of the maps that were opened, most recent first, up to `ui.recentMaps.max` entries (default 5, 1 to 30). Shows at most 5 rows, then scrolls.
 - **Double-click** (or Enter) opens a map from the list, same flow as the tree (current map is auto-saved first). The open map is highlighted; the tooltip shows the full path.
+- A **Previous map** button beside the Recent maps heading opens the most recently opened existing map other than the current map. Repeated presses switch back and forth between the last two maps, using the normal save/load and player-freeze behavior. It is disabled when no previous map is available. Keep the previous map available during the session even when `ui.recentMaps.max` is 1; after restarting, use the persisted recent history.
+- Register the button as `maps.previous` in control discovery, including disabled state, key artwork and right-click command/image URL copying. The Stream Deck plugin discovers it under **DM Control > Maps**. Remote switching rejects unsaved new-map content with HTTP `409` instead of opening a save dialog, and retains the existing busy/modal guards.
 - A map is recorded whenever it becomes the open map (`MapBrowser.updateCurrentMap`). Persisted in the settings file as `ui.recentMaps` (paths separated by `|`); maps that no longer exist on disk are dropped. Logic lives in `RecentMaps` (unit tested).
 
 ## 3.32 Multilevel Maps (implemented)

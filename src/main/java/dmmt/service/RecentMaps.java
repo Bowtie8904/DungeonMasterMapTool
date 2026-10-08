@@ -5,6 +5,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * History of recently opened maps, most recent first, persisted in the settings file.
@@ -18,6 +19,7 @@ public final class RecentMaps {
 
     private final AppSettings settings;
     private final List<Path> entries = new ArrayList<>();
+    private Path previousMap;
 
     public RecentMaps(AppSettings settings) {
         this.settings = settings;
@@ -30,6 +32,9 @@ public final class RecentMaps {
             return;
         }
         Path normalized = normalize(mapFile);
+        if (!entries.isEmpty() && !entries.getFirst().equals(normalized)) {
+            previousMap = entries.getFirst();
+        }
         entries.remove(normalized);
         entries.add(0, normalized);
         trim();
@@ -43,6 +48,17 @@ public final class RecentMaps {
             save();
         }
         return List.copyOf(entries);
+    }
+
+    /** The last other map; keeps a session fallback when the configured history holds only one map. */
+    public Optional<Path> previous(Path currentMap) {
+        Path current = currentMap == null ? null : normalize(currentMap);
+        Optional<Path> recent = existing().stream().filter(path -> !path.equals(current)).findFirst();
+        if (recent.isPresent()) {
+            return recent;
+        }
+        return previousMap != null && !previousMap.equals(current) && Files.isRegularFile(previousMap)
+                ? Optional.of(previousMap) : Optional.empty();
     }
 
     public int max() {

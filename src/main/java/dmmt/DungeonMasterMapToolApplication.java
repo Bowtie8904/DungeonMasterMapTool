@@ -534,6 +534,7 @@ public class DungeonMasterMapToolApplication extends Application {
         extraApiControls.put("ui.library", sidebarToggle);
         extraApiControls.put("ui.performance", performanceToggle);
         extraApiControls.put("ui.settings", settingsButton);
+        extraApiControls.put("maps.previous", mapBrowser.previousMapButton());
         controlApi = new DmControlApi(dmControlVisibility);
         extraApiControls.forEach(controlApi::add);
         controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
@@ -3728,6 +3729,12 @@ public class DungeonMasterMapToolApplication extends Application {
             status("That map is already open.");
             return;
         }
+        if (apiActionRunning) {
+            commitTextEdit();
+            if (projectFile == null && hasContent(project)) {
+                throw new LocalApiServer.ApiException(409, "Save the new map before switching via the API.");
+            }
+        }
         if (projectFile == null && hasContent(project)) {
             switch (Dialogs.askSaveChanges(primaryStage, "Save the new map first?",
                     "This map has not been saved yet. Save it to your map library before opening another one?")) {
@@ -3739,6 +3746,9 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         switchToMap(file);
+        if (apiActionRunning && !ioBusy) {
+            throw new LocalApiServer.ApiException(500, "Map switch could not be started; see the DM status bar.");
+        }
     }
 
     private void handleSave() {

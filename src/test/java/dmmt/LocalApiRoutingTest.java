@@ -88,6 +88,43 @@ class LocalApiRoutingTest {
     }
 
     @Test
+    void previousMapControlRejectsUnsavedContentAndBusyOperationsWithoutOpeningDialogs() throws Exception {
+        var app = fixture();
+        FxApiDispatcher.call(() -> {
+            Method createHost = app.getClass().getDeclaredMethod("createBrowserHost");
+            createHost.setAccessible(true);
+            var host = (dmmt.ui.MapBrowser.Host) createHost.invoke(app);
+            var settings = (AppSettings) get(app, "preferences");
+            var recent = new dmmt.service.RecentMaps(settings);
+            recent.record(temp.resolve("maps").resolve("Test.dmmap"));
+            var browser = new dmmt.ui.MapBrowser((MapLibraryService) get(app, "mapLibrary"), host, recent);
+            var api = new dmmt.api.DmControlApi(new dmmt.ui.ControlVisibility());
+            api.add("maps.previous", browser.previousMapButton());
+            set(app, "mapBrowser", browser);
+            set(app, "controlApi", api);
+            ((DmProject) get(app, "project")).getOverlays()
+                    .add(DmProject.OverlayShape.builder().id("unsaved").build());
+            return null;
+        });
+        var discovery = (List<?>) request(app, "/api/controls", Map.of("ids", "maps.previous"));
+        assertEquals(false, ((Map<?, ?>) discovery.getFirst()).get("disabled"));
+        assertEquals(400, assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/maps/previous", Map.of("value", "1"))).status());
+        var unsaved = assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/maps/previous", Map.of()));
+        assertEquals(409, unsaved.status());
+        assertTrue(unsaved.getMessage().contains("Save the new map"));
+        assertNull(get(app, "projectFile"));
+        assertEquals(false, get(app, "apiActionRunning"));
+        FxApiDispatcher.call(() -> {
+            set(app, "ioBusy", true);
+            return null;
+        });
+        assertEquals(409, assertThrows(LocalApiServer.ApiException.class,
+                () -> request(app, "/api/controls/maps/previous", Map.of())).status());
+    }
+
+    @Test
     void copyAddressSettingChangesControlAndMapUrlsLiveWithoutRebinding() throws Exception {
         var app = fixture();
         try {
