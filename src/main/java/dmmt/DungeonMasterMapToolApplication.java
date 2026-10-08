@@ -1364,7 +1364,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private String localApiBaseUrl() {
-        return localApiServer == null ? LocalApiServer.baseUrl(Tuning.API_PORT.get()) : localApiServer.baseUrl();
+        int port = localApiServer == null ? Tuning.API_PORT.get() : localApiServer.port();
+        return Tuning.API_COPY_ADDRESS.get().equals("local")
+                ? "http://127.0.0.1:" + port : LocalApiServer.baseUrl(port);
     }
 
     private String mapApiUrl(Path file) {

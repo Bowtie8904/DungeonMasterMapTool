@@ -424,6 +424,8 @@ The optional **local-network HTTP API** controls the DM UI without giving the ap
 without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.
 The default port is `7071`. Copied URLs use the computer's active LAN IPv4 address, for example
 `http://192.168.1.100:7071`, so phones and other devices on the same network can call them.
+In **Settings > Local control API > Copy address**, choose `network` (default) for LAN URLs or `local` for
+`127.0.0.1` URLs. This applies immediately to future copies and does not change network accessibility.
 
 Right-click a DM control or a library map and choose **Copy API URL**, then use that URL in an external control device's
 HTTP-request action. Toggles invert their current state; colour, dropdown and numeric controls include their current

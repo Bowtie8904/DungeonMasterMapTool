@@ -87,6 +87,43 @@ class LocalApiRoutingTest {
         assertThrows(LocalApiServer.ApiException.class, () -> request(app, "/api/maps", Map.of()));
     }
 
+    @Test
+    void copyAddressSettingChangesControlAndMapUrlsLiveWithoutRebinding() throws Exception {
+        var app = fixture();
+        try {
+            FxApiDispatcher.call(() -> {
+                AppSettings settings = (AppSettings) get(app, "preferences");
+                Method base = app.getClass().getDeclaredMethod("localApiBaseUrl");
+                base.setAccessible(true);
+                var button = new javafx.scene.control.Button();
+                var api = new dmmt.api.DmControlApi(new dmmt.ui.ControlVisibility());
+                api.add("player.freeze", button);
+                api.attachUrlMenus(() -> {
+                    try {
+                        return (String) base.invoke(app);
+                    } catch (ReflectiveOperationException ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                }, ignored -> {});
+                for (String choice : List.of("local", "network", "local")) {
+                    settings.applyEdit("api.copyAddress", choice);
+                    String expected = choice.equals("local") ? "http://127.0.0.1:7071"
+                            : LocalApiServer.baseUrl(7071);
+                    button.getContextMenu().getItems().getFirst().fire();
+                    assertEquals(expected + "/api/controls/player/freeze",
+                            javafx.scene.input.Clipboard.getSystemClipboard().getString());
+                    var maps = (List<?>) request(app, "/api/maps", Map.of());
+                    var map = (Map<?, ?>) maps.getFirst();
+                    assertEquals(expected + "/api/maps/" + map.get("id") + "/switch", map.get("url"));
+                    assertNull(get(app, "localApiServer"));
+                }
+                return null;
+            });
+        } finally {
+            dmmt.service.Tuning.apply(key -> null);
+        }
+    }
+
     private DungeonMasterMapToolApplication fixture() {
         return FxApiDispatcher.call(() -> {
             String previous = System.getProperty(AppSettings.SYSTEM_PROPERTY);

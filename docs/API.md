@@ -8,6 +8,9 @@ Copied URLs (including map discovery URLs) use an active LAN IPv4 address instea
 nonvirtual interfaces are preferred. If there is no LAN IPv4 address, URLs fall back to `127.0.0.1`.
 On machines with multiple networks, use the IP on the network shared with the calling device; the server accepts
 requests to any active local IPv4 interface. Copy URLs again if DHCP or changing networks changes the computer's IP.
+Set **Copy address** (`api.copyAddress`) to `local` to copy `127.0.0.1` URLs for use on the same computer, or
+`network` (default) for LAN URLs. The setting applies immediately to all URL-copy actions and map discovery URLs;
+it changes only the URL address, not the listener's network accessibility.
 
 There is **no authentication** and the app does not modify firewall rules. Enable the API only on trusted networks;
 any device that can reach it can control the app. Do not forward the port to the internet. Existing firewall

@@ -34,6 +34,18 @@ after successfully changing the port. Hand edits apply when the DM window regain
 
 **Keywords:** external controls, HTTP, TCP, LAN, IP address, port.
 
+### `api.copyAddress`
+
+**Default:** `network`. **Options:** `network`, `local`. **Applies:** Live.
+
+Selects the address in copied API URLs for controls and maps, including increment/decrement and dropdown index URLs.
+`network` uses the computer's LAN IPv4 address (falling back to loopback when disconnected); `local` always uses
+`127.0.0.1`, suitable for controls on the same computer. Map discovery URLs use the same choice.
+Changing this setting affects the next URL copied without restarting the server. Previously copied URLs are unchanged.
+It does **not** make the API local-only: the listener still accepts LAN connections while enabled.
+
+**Keywords:** copy URL, clipboard, localhost, loopback, network, LAN, IP address.
+
 ## Contents
 
 1. [How the settings file works](#how-the-settings-file-works)
