@@ -1,6 +1,5 @@
 package dmmt.api;
 
-import dmmt.service.AppSettings;
 import dmmt.ui.ControlVisibility;
 import dmmt.ui.ControlKeyImages;
 import javafx.event.ActionEvent;
@@ -521,26 +520,9 @@ public final class DmControlApi {
         }
     }
 
-    /**
-     * The human readable name of a control. Sidebar controls have a fixed label; everything else - music
-     * categories and sound effects above all - is named after the control itself, so a Stream Deck or any other
-     * client can offer a pick list instead of raw ids. Overlay ring buttons carry their name only as accessible
-     * text because they show an icon alone.
-     */
     private static String label(Entry entry) {
-        return AppSettings.SIDEBAR_CONTROLS.stream().filter(control -> control.id().equals(entry.id()))
-                .map(AppSettings.SidebarControl::label).findFirst()
-                .orElseGet(() -> firstNonBlank(entry.control() instanceof Labeled labeled ? labeled.getText() : null,
-                        entry.control().getAccessibleText(), entry.id()));
-    }
-
-    private static String firstNonBlank(String... candidates) {
-        for (String candidate : candidates) {
-            if (candidate != null && !candidate.isBlank()) {
-                return candidate.strip();
-            }
-        }
-        return "";
+        return ControlNames.name(entry.id(), entry.control() instanceof Labeled labeled ? labeled.getText() : null,
+                entry.control().getAccessibleText());
     }
 
     private static String path(String id) {

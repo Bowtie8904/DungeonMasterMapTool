@@ -36,6 +36,30 @@ class DmControlApiTest {
     }
 
     @Test
+    void apiNamesAreIndependentOfTooltipsAndDynamicNamesStayLive() throws Exception {
+        onFx(() -> {
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            Button torch = new Button("A long UI label");
+            torch.setAccessibleText("A long tooltip describing the default torch");
+            Button play = new Button();
+            play.setAccessibleText("Pause or resume all music and sound effects");
+            Button category = new Button("Combat");
+            api.add("lighting.torch", torch);
+            api.add("audio.play", play);
+            api.add("audio.category.test", category);
+            assertEquals(List.of("Torch", "Play / pause", "Combat"),
+                    api.describe().stream().map(control -> control.get("label")).toList());
+            assertEquals("Torch", api.execute("lighting.torch", Map.of()).get("label"));
+            assertEquals("A long UI label", torch.getText());
+            assertEquals("A long tooltip describing the default torch", torch.getAccessibleText());
+            play.setAccessibleText("A different tooltip");
+            assertEquals("Play / pause", api.describe(List.of("audio.play")).getFirst().get("label"));
+            category.setText("Exploration");
+            assertEquals("Exploration", api.describe(List.of("audio.category.test")).getFirst().get("label"));
+        });
+    }
+
+    @Test
     void invokesActionsTogglesColorAndConverterDropdownWithoutUnsafeCasts() throws Exception {
         onFx(() -> {
             DmControlApi api = new DmControlApi(new ControlVisibility());

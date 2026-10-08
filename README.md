@@ -421,6 +421,12 @@ Highlights:
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
 ### External controls and local control API
 
+**API / Stream Deck control names:** edit
+[`src/main/resources/dmmt/api/control-names.properties`](src/main/resources/dmmt/api/control-names.properties)
+to set short names by control ID (for example, `lighting.torch=Torch`). Rebuild and restart to apply them.
+These names are independent of tooltips and settings labels; endpoints stay unchanged. Music categories and
+sound effects keep their live library names unless you add an exact ID override.
+
 The optional **local-network HTTP API** controls the DM UI without giving the application keyboard focus. Enable
 `api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,
 without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.

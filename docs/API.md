@@ -76,6 +76,15 @@ artwork would, which lets a client cache key images and refetch only after an ed
 ## Discovery and parameters
 
 `GET /api/controls` lists actionable controls, their current values, numeric bounds and dropdown choices.
+The `label` field is the short display name used by Stream Deck's control picker and **Title > Name**.
+All fixed control names are defined in one ID-to-name file:
+[`src/main/resources/dmmt/api/control-names.properties`](../src/main/resources/dmmt/api/control-names.properties).
+For example, change `lighting.torch=Torch` to rename that control in the API without changing its tooltip,
+sidebar settings label or endpoint. Rebuild and restart the application after editing this bundled resource.
+Dynamic music categories and sound effects keep their live library names unless their exact
+`audio.category.<id>` or `audio.effect.<id>` is added to the file. Unmapped controls fall back to their UI text,
+then accessible text, then their id. These are application-source labels, not settings-file entries.
+
 Pass `?ids=a.b,c.d` to describe only the listed controls, in the order given. This keeps polling cheap for a
 control device that watches a handful of keys. Unknown ids are skipped instead of failing, so a deleted music
 category only breaks its own key; empty ids and more than 128 ids are rejected with `400`.

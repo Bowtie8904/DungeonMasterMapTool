@@ -774,6 +774,8 @@ application itself never depends on it and never talks to the Stream Deck.
 
 ### 3.36.1 Application-side additions
 
+- All fixed API control names are mapped by stable control id in `src/main/resources/dmmt/api/control-names.properties`, loaded by `dmmt.api.ControlNames`. API discovery and command responses use these short names independently of UI tooltips, accessibility descriptions and sidebar settings labels. Edit this single file and rebuild/restart to change names without changing endpoints. Dynamic audio category/effect ids retain their live library names unless explicitly mapped; unknown ids fall back to control text, accessible text, then id. No new application settings.
+
 - **Key images over HTTP.** Every actionable control answers
   `GET /api/controls/<section>/<name>/image`, returning a 144x144 PNG as a binary response
   (`image/png`). Numeric controls additionally accept `?operation=increment|decrement` for the badged variants.

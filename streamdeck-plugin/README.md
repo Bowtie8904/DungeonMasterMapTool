@@ -60,6 +60,10 @@ DistributionTool -b -i com.dmmt.dungeonmaster.sdPlugin -o .
 
 ### Shared options
 
+Control names come from the API's `label` field. To shorten fixed control names independently of tooltips,
+edit [`control-names.properties`](../src/main/resources/dmmt/api/control-names.properties) in the application
+source, then rebuild and restart the application. The control picker and **Title > Name** use the same mapping.
+
 - To switch back to the previous map, add a **DM Control** key and choose **Maps > Previous map**
   (`maps.previous`). Repeated presses alternate between the last two maps. The key uses the application's
   arrow artwork and is disabled when there is no previous map; auto-save and player freeze work normally.
