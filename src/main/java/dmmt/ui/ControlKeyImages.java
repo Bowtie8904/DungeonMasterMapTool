@@ -47,7 +47,7 @@ public final class ControlKeyImages {
         Ikon icon = selectIcon(id, sources);
         FontIcon glyph = new FontIcon(icon);
         glyph.setIconSize(82);
-        glyph.setIconColor(Color.WHITE);
+        glyph.setIconColor(selectColor(sources));
         StackPane pane = new StackPane(glyph);
         pane.setStyle("-fx-background-color: transparent;");
         new Scene(pane, Color.TRANSPARENT);
@@ -136,15 +136,44 @@ public final class ControlKeyImages {
     }
 
     private static Ikon findIcon(Node node) {
+        FontIcon icon = findFontIcon(node, false);
+        return icon == null ? null : icon.getIconCode();
+    }
+
+    /**
+     * Colour of the exported glyph. Music categories and sound effects carry their own colour (3.35.6); every
+     * other control keeps the plain white glyph of the standard key image.
+     */
+    static Color selectColor(List<Node> sources) {
+        for (Node source : sources) {
+            FontIcon icon = findFontIcon(source, true);
+            if (icon != null && icon.getIconColor() instanceof Color color) {
+                return readable(color);
+            }
+        }
+        return Color.WHITE;
+    }
+
+    /** Lightens very dark colours until the glyph is legible on the dark key background. */
+    private static Color readable(Color color) {
+        Color result = color;
+        for (int i = 0; i < 8 && result.getBrightness() < 0.45; i++) {
+            result = result.brighter();
+        }
+        return result;
+    }
+
+    /** The first icon of the node tree, optionally only one that carries a user-chosen audio colour. */
+    private static FontIcon findFontIcon(Node node, boolean tintedOnly) {
         if (node instanceof FontIcon icon) {
-            return icon.getIconCode();
+            return !tintedOnly || icon.getStyleClass().contains(AudioIcons.TINTED_CLASS) ? icon : null;
         }
         if (node instanceof Labeled labeled && labeled.getGraphic() != null) {
-            return findIcon(labeled.getGraphic());
+            return findFontIcon(labeled.getGraphic(), tintedOnly);
         }
         if (node instanceof Parent parent) {
             for (Node child : parent.getChildrenUnmodifiable()) {
-                Ikon icon = findIcon(child);
+                FontIcon icon = findFontIcon(child, tintedOnly);
                 if (icon != null) {
                     return icon;
                 }

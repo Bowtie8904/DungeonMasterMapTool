@@ -26,6 +26,11 @@ public final class DmControlApi {
     private final Set<Node> menuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Node, ContextMenu> menus = new IdentityHashMap<>();
     private final Set<Node> imageMenuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
+    private Supplier<String> menuBaseUrl;
+    private Consumer<String> menuCopiedStatus;
+    private ControlKeyImages keyImages;
+    private Consumer<String> keyImageBrowser;
+    private Consumer<String> keyImageStatus;
 
     public DmControlApi(ControlVisibility registry) {
         registry.registeredNodes().forEach(this::register);
@@ -45,8 +50,42 @@ public final class DmControlApi {
         }
     }
 
-    private void register(String id, List<Node> targets) {
-        Set<Node> found = Collections.newSetFromMap(new IdentityHashMap<>());
+    /**
+     * Replaces every control whose id is {@code prefix} or starts with {@code prefix + "."}. The audio endpoints
+     * use this: their per-category and per-effect toggles change whenever the library changes (3.35.6).
+     */
+    public void replaceGroup(String prefix, Map<String, Node> controls) {
+        Objects.requireNonNull(prefix, "prefix");
+        List<Node> dropped = new ArrayList<>();
+        for (Entry entry : List.copyOf(entries.values())) {
+            if (entry.id().equals(prefix) || entry.id().startsWith(prefix + ".")) {
+                entries.remove(entry.id());
+                dropped.add(entry.control());
+                dropped.addAll(entry.targets());
+            }
+        }
+        controls.forEach(this::add);
+        // Only nodes that are gone for good lose their menus; a node that was registered again keeps its menu
+        // instead of collecting a second copy of every "Copy API URL" item.
+        dropped.forEach(this::forget);
+        if (menuBaseUrl != null) {
+            attachUrlMenus(menuBaseUrl, menuCopiedStatus);
+        }
+        if (keyImages != null) {
+            attachKeyImageMenus(keyImages, keyImageBrowser, keyImageStatus);
+        }
+    }
+
+    private void forget(Node node) {
+        if (entries.values().stream().anyMatch(other -> other.control() == node || other.targets().contains(node))) {
+            return;
+        }
+        menuTargets.remove(node);
+        menus.remove(node);
+        imageMenuTargets.remove(node);
+    }
+
+    private void register(String id, List<Node> targets) {        Set<Node> found = Collections.newSetFromMap(new IdentityHashMap<>());
         targets.forEach(node -> collect(node, found));
         if (found.isEmpty()) {
             return;
@@ -297,6 +336,8 @@ public final class DmControlApi {
     public void attachUrlMenus(Supplier<String> baseUrl, Consumer<String> copiedStatus) {
         Objects.requireNonNull(baseUrl);
         Objects.requireNonNull(copiedStatus);
+        this.menuBaseUrl = baseUrl;
+        this.menuCopiedStatus = copiedStatus;
         for (Entry entry : entries.values()) {
             Set<Node> targets = Collections.newSetFromMap(new IdentityHashMap<>());
             targets.add(entry.control());
@@ -337,6 +378,9 @@ public final class DmControlApi {
 
     public void attachKeyImageMenus(ControlKeyImages images, Consumer<String> openBrowser,
                                     Consumer<String> status) {
+        this.keyImages = images;
+        this.keyImageBrowser = openBrowser;
+        this.keyImageStatus = status;
         for (Entry entry : entries.values()) {
             Set<Node> targets = Collections.newSetFromMap(new IdentityHashMap<>());
             targets.add(entry.control());

@@ -858,3 +858,86 @@
 .settings-group-title {
     -fx-font-weight: bold;
 }
+
+/* ---- Audio overlay (3.35.6) ---- */
+
+.audio-overlay-scrim {
+    -fx-background-color: rgba(10, 11, 14, 0.62);
+}
+
+.audio-overlay-panel {
+    -fx-background-color: rgba(28, 31, 37, 0.94);
+    -fx-background-radius: 14;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 24, 0.2, 0, 8);
+}
+
+.audio-overlay-title {
+    -fx-text-fill: -dm-accent;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.audio-overlay-now {
+    -fx-font-weight: bold;
+    -fx-text-alignment: center;
+}
+
+.audio-overlay-footer {
+    -fx-padding: 8 0 0 0;
+    -fx-border-color: -dm-border transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.audio-ring-button {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 50%;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 50%;
+    -fx-border-width: 2;
+    -fx-padding: 0;
+    -fx-opacity: 0.75;
+    -fx-cursor: hand;
+}
+
+.audio-ring-button:hover {
+    -fx-background-color: -dm-surface-3;
+    -fx-border-color: -dm-accent;
+    -fx-opacity: 1;
+}
+
+.audio-ring-button:selected {
+    -fx-background-color: -dm-surface-3;
+    -fx-border-color: -dm-accent;
+    -fx-border-width: 3;
+    -fx-opacity: 1;
+    -fx-effect: dropshadow(gaussian, -dm-accent, 14, 0.35, 0, 0);
+}
+
+.audio-hidden {
+    -fx-opacity: 0.45;
+}
+
+/* Drop highlight of the category / sound effect rows while tracks are dragged over them (3.35.2). */
+.list-cell.audio-drop-target {
+    -fx-background-color: derive(-dm-accent, -55%);
+    -fx-border-color: -dm-accent;
+    -fx-border-width: 1;
+}
+
+/* The single "Sound effects" row below the category list must not look like a scrollable list (3.35.6). */
+.audio-effects-list {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.audio-effects-list .scroll-bar {
+    -fx-opacity: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+}
+
+.audio-status-group {
+    -fx-padding: 0 4 0 4;
+}

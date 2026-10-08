@@ -34,6 +34,7 @@ public final class Tuning {
     static final String LIGHTS = "Lights";
     static final String TIME_OF_DAY = "Time of day";
     static final String WEATHER = "Weather";
+    static final String AUDIO = "Audio";
     static final String FRAME_RATES = "Frame rates";
     static final String PERFORMANCE_MODE = "Performance mode";
     static final String AUTOSAVE = "Auto-save";
@@ -626,6 +627,37 @@ public final class Tuning {
             "What to do when an imported file's original file name already exists in the library: ask every time, "
                     + "always import duplicates without asking, or never import duplicates without asking.",
             "ask", "always", "never");
+
+    // ---- Audio ----
+
+    public static final Setting<Boolean> AUDIO_ENABLED = bool(AUDIO, "audio.enabled", true, true,
+            "Enable the audio feature (ambient music and sound effects). When off, the status bar transport group, the audio overlay, their API endpoints and the whole audio engine stay unloaded.");
+    public static final Setting<String> AUDIO_FOLDER = text(AUDIO, "audio.folder", "dmmap-audio", true,
+            "Folder of the audio library (imported music and sound effects). Relative paths start next to the application.");
+    public static final Setting<Boolean> AUDIO_SHUFFLE = bool(AUDIO, "audio.shuffle", true, false,
+            "Play the tracks of a music category in random order (false = alphabetical order).");
+    public static final Setting<Double> AUDIO_CROSSFADE_SECONDS = decimal(AUDIO, "audio.crossfadeSeconds", 4, 0, 30, false,
+            "Seconds two music tracks overlap when one follows the other (0 = hard cut).");
+    public static final Setting<Double> AUDIO_EFFECT_FADE_SECONDS = decimal(AUDIO, "audio.effectFadeSeconds", 1.5, 0, 30, false,
+            "Seconds a sound effect fades in when it is started and out when it is stopped.");
+    public static final Setting<Double> AUDIO_PANIC_FADE_SECONDS = decimal(AUDIO, "audio.panicFadeSeconds", 1, 0, 10, false,
+            "Seconds the mute button in the audio overlay needs to fade all audio to silence and back.");
+    public static final Setting<Integer> AUDIO_MAX_EFFECTS = integer(AUDIO, "audio.maxEffects", 32, 1, 64, false,
+            "Sound effects that may loop at the same time; starting one more stops the oldest. Lower this on slow machines.");
+    public static final Setting<Boolean> AUDIO_AUTO_SWITCH = bool(AUDIO, "audio.autoSwitchOnMapChange", true, false,
+            "Switch to a map's stored ambience when it is opened (false = playback always continues unchanged).");
+    public static final Setting<Integer> AUDIO_UPDATE_FPS = integer(AUDIO, "audio.updateFps", 4, 1, 60, false,
+            "How often per second fades and the now-playing readout are updated. Higher values make fades smoother and cost a little more CPU.");
+    public static final Setting<Double> AUDIO_OVERLAY_FADE_SECONDS = decimal(AUDIO, "audio.overlayFadeSeconds", 0.15, 0, 2, false,
+            "How long the audio overlay takes to fade in and out when it is opened from the status bar (0 = show it instantly).");
+    public static final Setting<Integer> AUDIO_WAVEFORM_BUCKETS = integer(AUDIO, "audio.waveformBuckets", 4000, 200, 40000, false,
+            "Resolution of the waveform in the cut window: peak values computed for the whole file. Higher values show finer detail and use more memory.");
+    public static final Setting<Double> AUDIO_SILENCE_DB = decimal(AUDIO, "audio.cut.silenceDb", -45, -90, 0, false,
+            "Level below which the cut window treats audio as silence when it detects the songs of a long recording.");
+    public static final Setting<Double> AUDIO_MIN_SILENCE_SECONDS = decimal(AUDIO, "audio.cut.minSilenceSeconds", 1.5, 0.1, 60, false,
+            "Seconds of silence that must pass before the cut window treats it as a gap between two songs.");
+    public static final Setting<Double> AUDIO_MIN_TRACK_SECONDS = decimal(AUDIO, "audio.cut.minTrackSeconds", 20, 1, 3600, false,
+            "Shortest detected song the cut window proposes as a clip; shorter sections between two gaps are ignored.");
 
     // ---- Storage and caches ----
 

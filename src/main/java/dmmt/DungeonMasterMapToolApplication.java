@@ -27,6 +27,7 @@ import dmmt.service.RoomFillService;
 import dmmt.service.RecentMaps;
 import dmmt.service.ProjectService;
 import dmmt.service.Tuning;
+import dmmt.ui.AudioControls;
 import dmmt.ui.CollapsibleSection;
 import dmmt.ui.ControlVisibility;
 import dmmt.ui.Dialogs;
@@ -242,6 +243,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private volatile boolean ioBusy;
     private StackPane mapCenter;
     private Region dmControls;
+    private AudioControls audioControls;
     private final java.util.Map<String, CollapsibleSection> dmSections = new java.util.LinkedHashMap<>();
     private final ControlVisibility dmControlVisibility = new ControlVisibility();
     private StackPane loadingOverlay;
@@ -480,6 +482,9 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setMargin(levelSwitcher, new Insets(10));
         center.getChildren().addAll(chip, imageUnlockBanner, levelSwitcher, controls);
         center.getChildren().add(createBrushSizeLabel());
+        if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
+            center.getChildren().add(audioControls.overlayLayer());
+        }
         dmBaseCanvas.widthProperty().bind(center.widthProperty());
         dmBaseCanvas.heightProperty().bind(center.heightProperty());
         dmBrightCoreCanvas.widthProperty().bind(center.widthProperty());
@@ -533,7 +538,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 new ControlKeyImages(Path.of(System.getProperty("user.home"), ".dmmt", "control-key-images")),
                 url -> getHostServices().showDocument(url), this::status);
         mapBrowser.setApiUrlProvider(this::mapApiUrl);
-        HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel);
+        Region statusSpacer = new Region();
+        HBox.setHgrow(statusSpacer, Priority.ALWAYS);
+        HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel,
+                statusSpacer);
+        if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
+            statusBar.getChildren().add(audioControls.statusBarGroup());
+            registerAudioApiControls();
+        }
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
 
@@ -596,12 +608,24 @@ public class DungeonMasterMapToolApplication extends Application {
                 setPingArmed(true);
                 return;
             }
+            if (event.getCode() == KeyCode.M && !event.isControlDown() && !event.isAltDown()
+                    && !event.isShiftDown() && !event.isMetaDown()) {
+                if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
+                    audioControls.toggleOverlay();
+                    event.consume();
+                }
+                return;
+            }
             if (event.getCode() == KeyCode.L && !event.isControlDown() && !event.isAltDown() && !event.isMetaDown()) {
                 setLaserToolActive(!laserToolActive);
                 event.consume();
                 return;
             }
             if (event.getCode() == KeyCode.ESCAPE) {
+                if (audioControls != null && audioControls.closeOverlay()) {
+                    event.consume();
+                    return;
+                }
                 cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
@@ -628,6 +652,9 @@ public class DungeonMasterMapToolApplication extends Application {
             if (handoutWindow != null) {
                 handoutWindow.close();
             }
+            if (audioControls != null) {
+                audioControls.shutdown();
+            }
             closePlayerWindow();
             Platform.exit();
         });
@@ -645,6 +672,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 // The reload already applied tuning values and texture settings edited by hand.
                 applySectionVisibility();
                 applyPlayerGridSetting();
+                if (audioControls != null) {
+                    audioControls.applySettings();
+                }
                 status("Settings reloaded from " + preferences.getFile().getFileName()
                         + " (entries marked 'Restart required' apply after a restart)");
                 applyLocalApiSettings();
@@ -1296,6 +1326,13 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("player.screen", screenRow);
         dmControlVisibility.register("player.zoom", playerZoomRow);
 
+        if (Tuning.AUDIO_ENABLED.get()) {
+            audioControls = new AudioControls(preferences, () -> primaryStage);
+            audioControls.setStatusSink(this::status);
+            audioControls.setProjectAccess(() -> project, null);
+            audioControls.setApiControlsChangedHandler(this::registerAudioApiControls);
+        }
+
         VBox sections = new VBox(
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
@@ -1539,6 +1576,9 @@ public class DungeonMasterMapToolApplication extends Application {
             applySectionVisibility();
             applyPlayerGridSetting();
             applyLocalApiSettings();
+            if (audioControls != null) {
+                audioControls.applySettings();
+            }
         });
     }
 
@@ -1558,8 +1598,18 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */
-    private void applySectionVisibility() {
+    /**
+     * Registers the audio endpoints of the status bar group and the overlay, including one toggle per music
+     * category and per sound effect; called again whenever the library changed (3.35.6).
+     */
+    private void registerAudioApiControls() {
+        if (controlApi == null || audioControls == null || !Tuning.AUDIO_ENABLED.get()) {
+            return;
+        }
+        controlApi.replaceGroup("audio", audioControls.apiControls());
+    }
+
+    /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */    private void applySectionVisibility() {
         dmControlVisibility.apply(preferences.hiddenControls());
         java.util.Set<String> hidden = preferences.hiddenSections();
         dmSections.forEach((id, section) -> {
@@ -4812,6 +4862,9 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (mapBrowser != null) {
             mapBrowser.updateCurrentMap();
+        }
+        if (audioControls != null) {
+            audioControls.applyProjectAmbience(project);
         }
         updateWindowTitle();
     }

@@ -20,6 +20,7 @@
         <jts.version>1.20.0</jts.version>
         <ikonli.version>12.4.0</ikonli.version>
         <richtextfx.version>0.11.7</richtextfx.version>
+        <jlayer.version>1.0.1.4</jlayer.version>
     </properties>
 
     <dependencies>
@@ -32,6 +33,16 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-media</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.soundlibs</groupId>
+            <artifactId>jlayer</artifactId>
+            <version>${jlayer.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

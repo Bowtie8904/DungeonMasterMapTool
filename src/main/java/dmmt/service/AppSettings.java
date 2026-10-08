@@ -425,6 +425,13 @@ public final class AppSettings {
         sections.add(new Section(Tuning.IMPORT, List.of(
                 new Entry("import.lastDirectory", "", "Folder last used when importing a map image."))));
 
+        sections.add(new Section(Tuning.AUDIO, List.of(
+                new Entry("audio.masterVolume", "0.8", "Master volume of all audio (0 to 1); changed with the slider in the audio overlay."),
+                new Entry("audio.musicVolume", "0.7", "Volume of the category music (0 to 1); changed with the slider in the audio overlay."),
+                new Entry("audio.effectsVolume", "0.6", "Volume of the sound effects (0 to 1); changed with the slider in the audio overlay."),
+                new Entry("audio.lastCategory", null, "Id of the music category last played in the audio overlay (managed by the app)."),
+                new Entry("audio.lastDirectory", "", "Folder last used when importing audio files."))));
+
         mergeTuning(sections);
 
         List<Entry> textures = new ArrayList<>();
@@ -492,7 +499,7 @@ public final class AppSettings {
     private static final List<String> CATEGORY_ORDER = List.of(Tuning.WINDOW, Tuning.UI, Tuning.DM_VIEW, Tuning.INPUT,
             Tuning.PLAYER, Tuning.EDITING, TEXTURES_CATEGORY, Tuning.TEXT, Tuning.FOG, Tuning.LIGHTS, Tuning.TIME_OF_DAY,
             Tuning.WEATHER, Tuning.PING, Tuning.FRAME_RATES, Tuning.PERFORMANCE_MODE, Tuning.AUTOSAVE, Tuning.IMPORT,
-            Tuning.STORAGE, Tuning.LOCAL_API);
+            Tuning.AUDIO, Tuning.STORAGE, Tuning.LOCAL_API);
 
     private static int categoryRank(String category) {
         int index = CATEGORY_ORDER.indexOf(category);
@@ -571,6 +578,8 @@ public final class AppSettings {
                 return new Placement("Auto-save timing", 1);
             case "import":
                 return key.startsWith("import.dd2vtt.") ? new Placement("dd2vtt lights", 2) : new Placement(null, 0);
+            case "audio":
+                return key.startsWith("audio.cut.") ? new Placement("Cut clips", 2) : new Placement(null, 1);
             case "cache":
                 return key.equals("cache.textureTiles") ? new Placement(null, 0) : new Placement("Map image cache", 1);
             case "ui":

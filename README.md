@@ -37,6 +37,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
   15. [Performance](#15-performance)
   16. [Settings file](#16-settings-file)
   17. [Keyboard and mouse reference](#17-keyboard-and-mouse-reference)
+  18. [Ambient audio](#18-ambient-audio)
 
 ---
 
@@ -48,6 +49,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
 - **Handouts**: paste images from the clipboard and show them on the player screen.
+- **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips, crossfading playback and per-map ambience.
 - Organises maps in a **folder library** with thumbnails, tags, name/tag search, drag & drop and auto-save.
 - **Multilevel maps**: several floors of a building (e.g. Dungeon Alchemist level exports) shown as one map, with quick up/down level switching.
 - Full **undo/redo**.
@@ -440,7 +442,9 @@ an existing OS firewall or Wi-Fi client-isolation policy can still prevent acces
 
 **Control key artwork:** right-click a control and choose **Open key image**. A browser page shows a
 144x144 PNG based on its tool icon (dropdowns use their tab's icon, and value controls use fitting symbols);
-right-click the image in the browser to copy or save it. Numeric controls
+right-click the image in the browser to copy or save it. Music categories and sound effects export in **their own
+colour** instead of white, so a deck full of audio buttons matches the overlay (very dark colours are lightened so
+the glyph stays readable). Numeric controls
 also offer **Open increment key image** and **Open decrement key image**, with distinct plus/minus badges.
 This works even when the API is disabled. Images are stored under `.dmmt/control-key-images` in your home directory.
 
@@ -459,6 +463,7 @@ This works even when the API is disabled. Images are stored under `.dmmt/control
 | `Ctrl+S` | Save |
 | `Page Up` / `Page Down` | One level up / down (multilevel maps) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `M` | Open / close the audio overlay |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste text box (in the handout window: paste image) |
 | `Delete` / `Backspace` | Delete selected layer, light, text box or effect |
 | `Ctrl+click` | Add or remove an item from the selection |
@@ -469,3 +474,89 @@ This works even when the API is disabled. Images are stored under `.dmmt/control
 | `Enter` / `F2` / `Delete` (map browser) | Open / rename / delete |
 
 Arrow-key nudges move lights, effects, text boxes and unlocked image layers together without changing selection or the active tool. Holding arrows repeats; a continuous gesture is one undo step (including persistent fog reveals), ending when all arrows are released, focus leaves the canvas or selection changes. Locked images, walls and doors/windows do not move. Nudging is disabled during mouse drags, drawing and geometry editing; arrows in text editors, controls, the map library and dialogs retain their normal behaviour. Both views update immediately, except that a frozen player view remains frozen.
+
+---
+
+### 18. Ambient audio
+
+The tool plays background music and layered sound effects at the table, without leaving the map. Audio is
+deliberately **not** part of the DM controls sidebar: a small transport group sits at the **bottom right of the
+status bar** (previous, play/pause, next and an **Audio** button), and that button - or the `M` key - opens the
+audio overlay on top of the map. It is optional: switch `audio.enabled` off in the settings and the status bar
+group, the overlay and everything audio-related stay unloaded.
+
+**The library.** The library button in the overlay opens the audio library window. Import `.mp3` and
+`.wav` files, either file by file or a whole folder; every import is copied into the library folder
+(`audio.folder`, `dmmap-audio` next to the settings file by default), so moving or deleting the original does not
+break anything. Tracks can be renamed, deleted and moved freely. Imports run in the background with a progress bar
+and a status line at the bottom of the window ("Importing 12 of 80 - rain.mp3"), so importing a large folder never
+freezes the window; files that could not be imported are listed afterwards.
+
+**Folders become categories.** A folder import also walks all subfolders, and every music file found in a subfolder
+lands in a category named after its direct parent folder - so a tree like `Music/Combat`, `Music/Tavern`,
+`Music/Travel` imports into three ready-made categories in one go. Nested deeper (`Music/Fantasy/Boss/track.mp3`)
+only the direct parent (`Boss`) counts. Existing categories are matched without regard to case ("combat" finds
+"Combat"), new ones are created with the folder's exact spelling. Files lying directly in the picked folder keep
+the category that is selected in the window, and when you import into the sound effects view the folder names are
+ignored.
+
+**Checked by content.** Files are checked by content, not by
+extension: a file that is named `.mp3` but does not actually contain MP3 audio - a damaged download, or a file taken
+out of the internal (encrypted) library folder of another audio tool - is rejected with an explanation instead of
+being imported as an unplayable two-second track. Always import the original audio files, not another
+application's library folder.
+
+**Music categories and sound effects.** Audio is either **music**, sorted into categories such as *Adventure*,
+*Combat* or *Tavern*, or a **sound effect** such as wind, rain, birds or waves. The library window keeps the two
+apart: the **Music categories** list fills the left side, the single **Sound effects** entry sits below it under its
+own heading. Create, rename and delete categories, give each one a colour and an icon, and **drag tracks between
+categories - and onto or off the Sound effects entry**, which turns them into sound effects or back into music of
+the category you drop them on. Sound effects get their own colour and icon too. Colour and icon are both in the
+right-click menu (**Choose colour...**, **Choose icon...**); the icon picker searches the **complete Material Design
+icon set**, so typing `tree` lists every tree icon. Deleting a category keeps its files and moves them to
+*Uncategorised*. Changing a music track into a sound effect (and back) is a right click away.
+
+**Hiding entries from the overlay.** Right-click a category or a sound effect and choose **Hide in overlay** to keep
+it out of the audio overlay without deleting anything - useful for a *Christmas* category you only need once a year.
+Hidden entries are **greyed out** in the library window, still play, and keep their API endpoint; **Show in overlay**
+brings them back. *Uncategorised* is hidden this way by default, and a category that contains no music at all is
+left out of the overlay until it has a track.
+
+**Cutting long recordings.** Select a long file and choose **Cut clips** to open the waveform window. It shows the
+whole recording, so the gaps between the songs are easy to spot; click anywhere to listen from there, `Space` plays
+and pauses, the mouse wheel pans and `Ctrl` + wheel zooms. Playback repeats what you see: with **Loop** switched on
+(the default) the selected range repeats endlessly, and when nothing is selected the visible part of the waveform
+does - so zooming into a song is all it takes to listen to it again and again. Drag across the waveform to select a
+song, fine-tune the
+start and end in the time fields, and **Create clip** writes exactly that range into the library as a standalone
+audio file. **Detect** finds the songs automatically by looking for the silent gaps (tunable with the
+`audio.cut.*` settings) and **Create all** turns every detected song into its own clip. Cutting is lossless: MP3
+clips are copied frame by frame, WAV clips sample by sample, so nothing is re-encoded. Writing clips also happens in
+the background: the progress bar and status line at the top of the window report "Creating clip 3 of 17" and finish
+with the number of clips added to the library.
+
+**Playing.** Press `M` or the **Audio** button in the status bar (close it the same way, with `Escape`, or with a
+click on the dimmed background). The overlay shows two rings: music categories on the left, sound effects on the
+right. Each entry is a small round button showing only its icon **in its own colour** - the name is in the tooltip -
+and every active button lights up with the same accent ring and glow, so what is running is obvious at a glance.
+Categories that are hidden or hold no music are left out of the rings.
+Click a category to play it - its tracks run one after another, shuffled by default (`audio.shuffle`), crossfading
+into each other (`audio.crossfadeSeconds`) - and click it again to stop. The centre of the left ring holds previous,
+play/pause, next and stop plus the **name of the running category**, the current track and its time. On the right,
+switch on any number of sound effects (up to `audio.maxEffects`, 32 by default); they loop seamlessly and fade in
+and out (`audio.effectFadeSeconds`), and the matching pause and stop buttons in the centre of that ring control all
+of them at once while listing what is running. Below the rings sit the master, music and effect volumes and the
+speaker button, which fades everything out and back in. Crowded libraries simply grow onto further circles, and the
+overlay only updates while it is open.
+
+The play/pause button in the **status bar** is the quick version of all of this: it pauses and resumes the music
+*and* every running sound effect together, next to previous/next, without opening anything.
+
+**Ambience per map.** The map button in the overlay stores the running category and sound effects with the open
+map. Opening that map later starts the same ambience automatically, unless `audio.autoSwitchOnMapChange` is off.
+
+Everything is also reachable from the [local control API](docs/API.md#audio-controls) - including **one endpoint per
+category and per sound effect**, addressed by the entry's library id
+(`/api/controls/audio/category/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
+button and a stream deck can switch the whole ambience with one press. `GET /api/controls` lists every endpoint
+with its current name.

@@ -48,6 +48,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Laser pointer on middle mouse button hold (3.19)
 - [x] Map browser thumbnails + search bar for maps and folders (3.20)
 - [x] Map tags, click-to-use suggestions, import tag inheritance and word-based name/tag search (3.34)
+- [ ] Audio: ambient music categories, sound effect loops, clip cutting from long files and a mini player (3.35)
 - [x] Auto-save for maps that already exist on disk (3.21)
 - [x] Light presets (candle, torch, lantern, ...) placeable with one click (3.22)
 - [x] Right-click cancels the active tool like Esc (3.23)
@@ -561,6 +562,205 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 - The existing search bar checks each whitespace-separated search word against the map name or any tag, using case-insensitive partial matches and AND between words. For example, `tav haven` can match tag `tavern` and map name `Haven`. Preserve matching-folder visibility and ancestor folders.
 - Tag edits persist immediately through the library-operation workflow, preserving unsaved open-map changes and synchronizing the open level so later saves cannot overwrite tag edits. No new global settings.
 
+## 3.35 Audio: Ambient Music and Sound Effects (implemented)
+
+Optional, fully self-contained audio subsystem so the DM can run ambient music and layered sound effects from the
+same application. It must never be in the way of DMs who do not use it, and must not noticeably cost frame rate.
+
+### 3.35.1 Library and storage
+
+- A single, global audio library (not per map, not stored in `.dmmap`), kept in an app-managed folder next to the
+  map library: `audio.folder` (default `dmmap-audio`, relative paths start next to the application, restart
+  required). Layout: `<folder>/library.json` (index), `<folder>/files/` (the audio files),
+  `<folder>/peaks/` (cached waveform peaks, derived data that may be deleted at any time).
+- Supported formats: **MP3 and WAV**. Other files are rejected with a clear message. The extension alone is not
+  trusted: an MP3 is only accepted when its MPEG frames really cover at least half of the file, so files that merely
+  carry an `.mp3` name (damaged downloads, or the encrypted library formats some other audio tools use for their
+  internal storage) are refused at import instead of ending up as unplayable tracks of a few seconds. WAV must be
+  uncompressed PCM.
+- Importing **copies** the picked files into `files/` under a sanitized, unique file name, so the library keeps
+  working when the original (USB stick, download folder) is gone. The display name is independent of the file name
+  and defaults to the original file name without extension.
+- Every track stores: `id` (UUID), `name`, `file` (name inside `files/`), `kind` (`music` or `effect`),
+  `categoryId` (music only), `durationMs`, `originalFileName`, `sourceTrackId` + `sourceStartMs`/`sourceEndMs`
+  (only for clips cut out of a long file, purely informational) and `addedAt`.
+- Library operations: import (multi-file and whole folder), rename, delete (removes the file from `files/`), move a
+  music track to another category, change a track's kind. The index is written atomically (temp file + move) exactly
+  like the settings file, and a corrupt/missing index starts an empty library instead of failing the app.
+- Importing copies files on a background thread and always reports what it is doing: a progress bar plus a status
+  line ("Importing x of y - <file name>") in the library window, the toolbar disabled while the import runs, a
+  closing summary ("12 files imported") and an error dialog listing the files that failed. Importing a folder of a
+  hundred files therefore never freezes the window.
+- **Folder import walks subfolders** and uses the folder structure as categories (music only):
+  - a file lying directly in the picked folder goes into the category that is currently selected, exactly like a
+    file picked by hand;
+  - a file lying in a subfolder goes into a category named after its **direct parent folder**, no matter how deep
+    it is nested (`Fantasy/Combat/Boss/track.mp3` picked at `Fantasy` lands in "Boss");
+  - the category is matched **case-insensitively** against the existing ones ("combat" finds "Combat") and, when
+    nothing matches, created with the folder's **exact** spelling and the default colour/icon;
+  - when importing into the sound effects view there are no categories, so the folder names are ignored and every
+    file found becomes a sound effect.
+  - Hidden folders and files are skipped, symlinks are not followed, and unsupported files are ignored silently
+    instead of being reported as failures.
+
+### 3.35.2 Kinds and categories
+
+- Two kinds of audio: **music** (plays one track at a time inside a category) and **sound effects** (seamless loops
+  layered on top of the music, e.g. wind, rain, birds, waves).
+- Music is organised in **categories** (Adventure, Combat, Tavern, ...). Create, rename and delete categories; a
+  deleted category's tracks move to "Uncategorised" instead of being lost (confirmation dialog states this).
+  "Uncategorised" is **hidden from the overlay by default** (it is a leftovers bin, not an ambience); existing
+  libraries are migrated once (`schemaVersion` 1 -> 2) and it can be shown again like any other category.
+- A category has a **colour** (`#RRGGBB`) and an **icon**. The icon is always tinted with the category colour, in
+  the picker, the library window and the audio overlay.
+- **Sound effects have a colour and an icon too.** They are a flat list (no categories) and searchable by name.
+- The **icon picker** offers the **complete Material Design icon set** (all ~7400 icons of the bundled pack), not a
+  short curated list, because a DM names categories anything from "Dragon" to "Submarine". It opens on a small
+  set of **suggested** icons (adventure themes for categories, weather/nature for sound effects) and has a
+  **search field** that filters the whole set by icon name, so typing `tree` finds every tree icon. Results are
+  capped (the grid shows the first 300 matches plus a "refine your search" hint) so the dialog stays instant.
+- Categories and sound effects can be **hidden from the audio overlay** ("Hide in overlay" in the right-click menu
+  of the library window, with "Show in overlay" to bring them back). Hiding is purely cosmetic: a hidden entry
+  still exists, still plays, still appears in the library window and keeps its local API endpoint - it just does
+  not take up a slot in the overlay. Typical use: a "Christmas" category that should not clutter the ring in
+  July. The library window shows hidden entries **greyed out** (dimmed name and icon) instead of adding a text
+  marker, so they stay readable but are obviously inactive.
+- A category that contains **no music at all** is left out of the overlay as well, even when it is not hidden: an
+  empty ring button cannot be played and would only take up a slot. It reappears as soon as it has a track.
+- Tracks move between categories **and between music and sound effects** by drag & drop in the library window and
+  via a context menu ("Move to >", "Use as sound effect", "Use as music"), with multi-selection support. Dropping
+  tracks on the "Sound effects" entry turns them into sound effects, dropping sound effects on a category turns
+  them back into music of that category.
+
+### 3.35.3 Cutting clips out of long files
+
+- A long recording (one or two hours, e.g. a YouTube ambience mix) can be imported and split into standalone songs
+  in a dedicated **Cut clips** window.
+- The window shows a **waveform** of the whole file (min/max peaks per pixel column) so silent gaps between songs
+  are immediately visible, plus a zoomable detail view, a time ruler and a movable playhead. Clicking the waveform
+  seeks, space toggles play/pause, so any point of the file can be auditioned at any time.
+- Peaks are computed once in a background thread (WAV via `javax.sound.sampled`, MP3 via a pure-Java decoder) with
+  a progress indicator, and cached in `peaks/<trackId>.peaks` so reopening is instant.
+- A selection (drag on the waveform, or exact start/end time fields with millisecond precision) defines a clip.
+  **Auto-detect tracks** proposes one selection per detected song by scanning for silence longer than
+  `audio.cut.minSilenceSeconds` below `audio.cut.silenceDb`; proposals can be edited or deleted before saving.
+- Playback **loops what is shown** (toggle "Loop", on by default): the selection when there is one, otherwise the
+  visible part of the waveform, so zooming into a song is enough to audition it over and over. Reaching the end of
+  the looped range jumps back to its start without stopping; playing from before the range is allowed and simply
+  runs into the loop. With the toggle off, playback stops at the end of the selection as before.
+- **Create clip** writes a **real, standalone file** into the library (the user's explicit choice; a clip keeps
+  working if the source file is later deleted):
+  - **MP3:** frame-exact copy of the MP3 frames inside the range (no re-encode, no quality loss, very fast);
+    the range snaps to frame boundaries (max ~26 ms) and an ID3v2 tag of the source is not copied. The LAME/Xing
+    (`Xing`/`Info`/`VBRI`) header frame of the source is metadata, not audio: it is excluded from the frame index
+    and therefore never copied into a clip, because it describes the length and seek table of the *source* file and
+    would otherwise make players treat a two-minute clip as a three-hour one and seek to the wrong positions.
+  - **WAV:** PCM sample range copied into a new WAV file with the same format.
+  - The new track is added to the chosen kind/category with an editable name and stays independent of the source.
+- The source file itself is never modified. It may be deleted afterwards ("Delete source file" offered once all
+  clips are saved).
+- Cutting runs on a background thread with visible feedback: the header progress bar and status line report
+  "Creating clip x of y - <name>" and end with the number of clips added (or a failure list). The clip buttons and
+  the detected-tracks list are disabled while clips are being written so the same clip cannot be created twice, and
+  closing the window cancels the pending work.
+
+### 3.35.4 Playback
+
+- **Music channel:** exactly one category plays at a time. Its tracks play in shuffled order
+  (`audio.shuffle`, default on; off = library order) and are faded into each other over `audio.crossfadeSeconds`
+  (default 4 s, 0 = hard cut). The channel loops the category endlessly, never replaying the same track twice in a
+  row unless the category has a single track. Controls: play/pause, previous, next, stop (fades out).
+- **Effects channel:** any number of sound effects (capped by `audio.maxEffects`, default 32) play as **seamless
+  loops** at the same time. Starting and stopping an effect fades it in/out over
+  `audio.effectFadeSeconds` so it never clicks.
+- **Volumes:** master, music and effects volumes are independent, persisted in the settings file and applied as
+  `master x channel` (a logarithmic/perceptual curve, `volume^2.2`, so sliders feel linear). Pausing is per channel:
+  pausing effects pauses **all** currently playing effects at once and resumes them together. The play/pause button
+  in the status bar is the "everything" button instead: it pauses music **and** all running effects together, and
+  resumes both.
+- **Mute:** the mute button in the overlay fades everything to silence over `audio.panicFadeSeconds` and keeps the
+  current playlist position; pressing it again fades back in. There is no global mute hotkey.
+- Audio is DM-side only: it is never sent to the player view and is independent of freeze, maps and projects.
+  Switching, saving or closing a map never interrupts playback.
+
+### 3.35.5 Per-map ambience
+
+- A map can remember a default music category and a set of sound effects (`.dmmap` `audio` object:
+  `categoryId`, `effectIds`, both optional). "Use current ambience for this map" stores it, "Clear" removes it.
+- When `audio.autoSwitchOnMapChange` (default on) is enabled and the opened map has a stored ambience, the music
+  category is crossfaded over and the stored effects replace the running ones. With the setting off, or when the map
+  has no stored ambience, playback simply continues unchanged.
+- Stored ids that no longer exist in the library are ignored silently (the library is global and may change).
+
+### 3.35.6 UI
+
+Audio is deliberately **not** part of the DM controls sidebar: it is not a map tool, and a DM who never plays music
+should not scroll past it. It lives in two places instead - a small transport group in the status bar, and a
+full-screen overlay that is opened from there.
+
+- **Status bar group** (bottom right of the DM window, right-aligned, only present when `audio.enabled`):
+  previous, play/pause, next, and the **Audio** button that opens the overlay. Play/pause here is the "everything"
+  button: it pauses and resumes music and all running sound effects together (3.35.4). The button shows the colour
+  and icon of the running category, so the status bar doubles as an "what is playing" indicator; a tooltip names
+  the current track. The transport buttons are disabled while no category is playing.
+- **Audio overlay** (3.35.6): a translucent panel drawn **inside** the main window on top of the map, not a second
+  window. It fades in over `audio.overlayFadeSeconds`, toggles with the `M` key, closes with `Escape`, with the
+  Audio button, or with a click on the dimmed background, and never blocks the map while it is closed.
+  - Layout follows the two-ring idea: a **left ring of round category buttons** and a **right ring of round sound
+    effect buttons**, each ring laid out on a circle and growing outwards into further rings when there are more
+    entries than fit on one circle. The buttons are **small and icon-only** so many entries fit on a ring: the
+    entry's icon in **its own colour**, the name only as a tooltip. The **ring around the button is not coloured**
+    per entry - it uses the application's accent colour for every button, so "which ones are on" reads at a glance
+    (filled accent ring plus glow when the category plays / the effect runs) while the colours stay a property of
+    the icons.
+  - The centre of the left ring holds the music transport (previous, play/pause, next, stop), the **name of the
+    active category**, the current track and elapsed/total time; the centre of the right ring holds the same-looking
+    pause/resume button for all effects and the names of the running effects. Both centres use identical button
+    styling so the two halves of the overlay look like one control.
+  - Below the rings: master, music and effects volume sliders with percentage readouts, the mute button, the
+    "Use current ambience for this map" button and the button that opens the audio library window.
+  - Only entries that are **not hidden** (3.35.2) appear in the rings; an empty library shows a hint that links to
+    the library window.
+  - Everything is keyboard reachable, and the overlay repaints only while it is open, so a closed overlay costs
+    nothing.
+- **Local control API:** the status bar group registers `audio.previous`, `audio.play`, `audio.next` and
+  `audio.overlay`; the overlay registers `audio.stop`, `audio.mute`, `audio.library`, `audio.assign`,
+  `audio.effectsPause`, `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`. In addition **every
+  category and every sound effect gets its own toggle endpoint**, registered dynamically whenever the library
+  changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
+  `audio.effect.<id>` switches that effect on or off. The id is the library id of the entry (a UUID), so an
+  endpoint keeps working when the entry is **renamed** and never collides with another entry; the readable name is
+  in the `name` field of `GET /api/controls`. Hidden entries keep their endpoints. Because the audio
+  endpoints are (re-)registered after the library changed, they get the **same right-click menu as every other
+  control**: "Copy API URL" *and* "Open key image"; re-registering never duplicates those menu entries. A key
+  image exported for a category or a sound effect is drawn in **that entry's colour** instead of plain white (very
+  dark colours are lightened so the glyph stays readable on the dark key background), so a stream deck full of
+  audio buttons looks like the overlay.
+- **Audio library window** (own dark-themed window, like the handout/settings windows; it and every audio dialog
+  carry the application icon in their title bar): the left side is split into two clearly separated sections - a
+  **"Music categories"** list (add/rename/delete, colour and icon editing, drag & drop target) and, below a
+  separator, a single **"Sound effects"** entry under its own heading, so the two kinds never look alike. The
+  right side shows the track table of the selected category or of the sound effects (name, duration, source), with
+  import, rename, delete, change kind, move, search and the **Cut clips** action. The right-click menu of a
+  category and of a sound effect offers **"Choose colour..."**, **"Choose icon..."** and **Hide in overlay** /
+  **Show in overlay**.
+- The whole feature can be switched off with `audio.enabled = false`: no audio is loaded, the status bar group and
+  the overlay disappear together with their API endpoints, and nothing audio-related runs.
+
+### 3.35.7 Architecture and performance
+
+- Package `dmmt.audio`: `AudioKind`, `AudioCategory`, `AudioTrack`, `AudioLibrary` (model), `AudioLibraryService`
+  (storage/index), `AudioFormats` (format detection + duration), `Mp3FrameIndex` (MP3 frame parsing),
+  `AudioClipCutter` (MP3/WAV cutting), `WaveformPeaks` (peak extraction + silence detection + cache),
+  `AudioEngine` (playlists, crossfade, channels, volumes) and `AudioOutput`/`JavaFxAudioOutput` (the thin JavaFX
+  Media layer behind an interface, so the engine logic is unit-testable without sound hardware).
+- Decoding, peak extraction and all file IO happen on background threads; the JavaFX thread only updates labels.
+  Playback itself uses the platform's native media pipeline (javafx-media), so mixing several streams costs
+  essentially no frame time; the render loop is never woken up by audio. The now-playing readout updates at most
+  four times per second, and only while the section is visible.
+- New dependencies: `org.openjfx:javafx-media` (playback) and `com.googlecode.soundlibs:jlayer` (pure-Java MP3
+  decoding for waveforms; MP3 frame parsing for cutting is implemented in-house).
+
 ## 4) Proposed `.dmmap` Structure (v1 Draft)
 
 ```json
@@ -757,6 +957,13 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 2. Library integration: package detection, rename/copy/move, multi-selection merge, import multilevel map.
 3. Level dialog (reorder, rename, insert anywhere, remove, delete-last confirmation) and level switcher overlay.
 
+## Phase 10 - Audio: Ambient Music and Sound Effects
+
+1. Audio library model + `AudioLibraryService` (storage, import copy, categories, tracks) with unit tests (3.35.1, 3.35.2).
+2. Waveform peaks, silence detection and frame-exact MP3 / PCM WAV cutting with unit tests (3.35.3).
+3. `AudioEngine` with playlist, crossfade, channels and volumes behind an `AudioOutput` interface, unit-tested without sound hardware (3.35.4).
+4. Sidebar mini player, audio library window and cut-clips window; settings, local API ids and per-map ambience (3.35.5, 3.35.6).
+
 ## Local DM Control API
 
 - Provide an opt-in HTTP API for every DM control, reachable from other devices on the local network and usable without window focus. Bind all IPv4 interfaces; copied control/map URLs and discovery URLs advertise an active LAN IPv4 address rather than localhost (loopback fallback only when no LAN address exists). No authentication or automatic firewall changes. Use only on trusted networks; do not expose the API to the internet. Commands run on the JavaFX thread through the same controls/actions as manual interaction, including selected-object updates, undo, persistence and player freeze semantics.
@@ -779,7 +986,19 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 
 ## 9) Change Log
 
-- **v3.11 (current):** Duplicate import detection (3.33): importing dd2vtt/uvtt files (single, batch/folder, or the
+- **v3.12.1 (current):** Audio polish (3.35.2/3.35.6): the icon picker now offers the whole Material Design icon
+  set with a search field, "Uncategorised" is hidden from the overlay by default (library `schemaVersion` 2) and
+  empty categories are left out of the rings, the library window separates "Music categories" from "Sound effects",
+  drag & drop converts tracks between music and sound effects, every audio window and dialog inherits the
+  application icon, and categories and sound effects both have "Choose colour..." in their right-click menu.
+  Key images exported for a category or sound effect are drawn in that entry's colour.
+- **v3.12:** Audio subsystem (3.35): global audio library in an app-managed folder (MP3/WAV, imported by
+  copy), music categories with colour and icon, sound effects as seamless loops, cutting standalone clips out of
+  long recordings with a waveform view and silence auto-detection, a status bar transport group with a two-ring
+  audio overlay (`M`) offering separate master/music/effects volumes, per-channel pause and a mute fade,
+  shuffle + crossfade playback, optional per-map ambience stored in `.dmmap`, and `audio.*` settings plus local
+  control API ids for every audio control, category and sound effect. Added `javafx-media` and `jlayer` dependencies.
+- **v3.11:** Duplicate import detection (3.33): importing dd2vtt/uvtt files (single, batch/folder, or the
   files used to build a multilevel map) now checks each file's original file name against the library (including
   per-level for multilevel maps) and, on a match, asks via `DuplicateMapsDialog` whether to still import it (per-file
   checkboxes, Select all/none, Cancel / Don't import duplicates / Import selected). Added `map.originalFileName` to

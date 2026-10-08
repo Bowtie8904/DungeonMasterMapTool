@@ -288,6 +288,33 @@ class DmControlApiTest {
         });
     }
 
+    @Test
+    void replacingAGroupKeepsOneMenuPerReusedControlAndGivesNewOnesKeyImages() throws Exception {
+        onFx(() -> {
+            DmControlApi api = new DmControlApi(new ControlVisibility());
+            Slider volume = new Slider(0, 1, .5);
+            Button first = new Button();
+            api.replaceGroup("audio", Map.of("audio.musicVolume", volume, "audio.category.combat", first));
+            api.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
+            api.attachKeyImageMenus(new dmmt.ui.ControlKeyImages(dir), ignored -> {}, ignored -> {});
+            int volumeItems = volume.getContextMenu().getItems().size();
+            assertTrue(volumeItems > 0);
+
+            Button second = new Button();
+            // The slider stays registered, only the category toggle is swapped out.
+            api.replaceGroup("audio", Map.of("audio.musicVolume", volume, "audio.category.combat", second));
+
+            assertEquals(volumeItems, volume.getContextMenu().getItems().size(),
+                    "re-registering must not duplicate the menu items of a reused control");
+            assertTrue(second.getContextMenu().getItems().stream()
+                            .anyMatch(item -> "Copy API URL".equals(item.getText())),
+                    "a new control gets the API URL menu");
+            assertTrue(second.getContextMenu().getItems().stream()
+                            .anyMatch(item -> "Open key image".equals(item.getText())),
+                    "a new control gets the key image menu like every other control");
+        });
+    }
+
     private static void assertError(int status, Runnable action) {
         assertEquals(status, assertThrows(LocalApiServer.ApiException.class, action::run).status());
     }

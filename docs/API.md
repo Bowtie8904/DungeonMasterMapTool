@@ -49,7 +49,9 @@ Numeric controls additionally offer **Open increment key image** and **Open decr
 plus and red minus badges. Each is a 144x144 PNG on a dark background, using the control's tool icon where
 available. Dropdowns use their tab's icon (weather, effects, player view or levels) instead of a generic list
 or dropdown arrow. Other value controls use fitting icons such as opacity, palette, font size, ruler and zoom;
-remaining controls fall back to their section's icon.
+remaining controls fall back to their section's icon. The glyph is white, except for a music category or a sound
+effect: those are drawn in the colour configured for that entry, so the artwork matches the audio overlay (a very
+dark colour is lightened until the glyph is readable on the dark background).
 
 The browser opens a local HTML page containing the PNG, rather than opening an image viewer through the OS file
 association. Right-click the image in the browser to copy or save it for your control device's key. No API listener,
@@ -107,3 +109,45 @@ switch was **requested**, not that loading has completed. The DM window shows lo
 reports `busy`, the current map name, current zero-based level (`-1` for ordinary maps), and player freeze state.
 Save an unsaved new map before switching through the API; it returns `409` instead of discarding it or opening a
 save prompt. File operations in progress also return `409`. Frozen players keep their snapshot until unfrozen.
+
+## Audio controls
+
+Audio is not part of the DM controls sidebar: it lives in the transport group at the bottom right of the status bar
+and in the audio overlay that opens from there. Both are exposed under `/api/controls/audio/...` and are only
+available when `audio.enabled` is on. Endpoints work whether the overlay is open or closed.
+
+| Endpoint | Type | What it does |
+|----------|------|--------------|
+| `/api/controls/audio/play` | button | Pauses or resumes the music **and** all running sound effects. |
+| `/api/controls/audio/previous` | button | Previous track of the category. |
+| `/api/controls/audio/next` | button | Next track of the category. |
+| `/api/controls/audio/overlay` | button | Opens or closes the audio overlay on the DM screen. |
+| `/api/controls/audio/stop` | button | Stops the music (sound effects keep playing). |
+| `/api/controls/audio/musicVolume` | slider | Music volume, `0` to `1`. |
+| `/api/controls/audio/effectsPause` | button | Pauses or resumes all running sound effects at once. |
+| `/api/controls/audio/effectsStop` | button | Stops all running sound effects (fades out). |
+| `/api/controls/audio/effectsVolume` | slider | Sound effect volume, `0` to `1`. |
+| `/api/controls/audio/masterVolume` | slider | Master volume, `0` to `1`. |
+| `/api/controls/audio/mute` | button | Mute: fades everything out, and back in on the next call. |
+| `/api/controls/audio/assign` | button | Stores the running ambience with the open map. |
+| `/api/controls/audio/library` | button | Opens the audio library window on the DM screen. |
+
+### One endpoint per category and per sound effect
+
+In addition, **every music category and every sound effect has its own toggle**:
+
+| Endpoint | Type | What it does |
+|----------|------|--------------|
+| `/api/controls/audio/category/<id>` | button | Plays that category, or stops it when it is already playing. |
+| `/api/controls/audio/effect/<id>` | button | Starts or stops that sound effect loop. |
+
+`<id>` is the library id of the category or sound effect - the UUID that also appears in the library's
+`library.json`, for example
+`/api/controls/audio/category/8f1c6d94-2b77-4f0e-9a3b-6c5a1d2e7f10`. Ids never change, so an endpoint survives
+**renaming** the entry and can never collide with another one; `GET /api/controls` lists every endpoint together
+with the entry's current name, which is the easiest way to look an id up. Hiding an entry from the overlay does
+**not** affect its endpoint - hidden entries keep working over the API. The endpoints are rebuilt whenever the
+library changes, so `GET /api/controls` always lists the current set.
+
+A stream deck page for a scene typically uses one `audio/category/<id>` button plus a few `audio/effect/<id>`
+buttons, or a single `audio/assign` per map so that opening the map restores the whole ambience.

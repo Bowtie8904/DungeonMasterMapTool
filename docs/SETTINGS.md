@@ -64,11 +64,12 @@ It does **not** make the API local-only: the listener still accepts LAN connecti
 14. [Lights](#lights)
 15. [Time of day](#time-of-day)
 16. [Weather](#weather)
-17. [Performance mode](#performance-mode)
-18. [Storage and caches](#storage-and-caches)
-19. [User interface](#user-interface)
-20. [Effect textures](#effect-textures)
-21. [Other (unknown) keys](#other-unknown-keys)
+17. [Audio](#audio)
+18. [Performance mode](#performance-mode)
+19. [Storage and caches](#storage-and-caches)
+20. [User interface](#user-interface)
+21. [Effect textures](#effect-textures)
+22. [Other (unknown) keys](#other-unknown-keys)
 
 ---
 
@@ -220,6 +221,7 @@ to toggle it. A missing or invalid value shows the section expanded. One entry e
 | `ui.section.text.expanded` | Text (text boxes, font size and colours) |
 | `ui.section.building.expanded` | Building (walls, doors and windows) |
 | `ui.section.player.expanded` | Player (player screen, calibration, player zoom) |
+| `ui.section.audio.expanded` | Audio (music categories, sound effects, volumes) |
 | `ui.section.performance.expanded` | Performance (frame rates) |
 
 *Keywords:* collapse, expand, fold, accordion, sidebar section, panel state
@@ -1130,6 +1132,159 @@ Weather intensity of maps without saved weather and the value the intensity slid
 | `weather.embers.particles` | `295` | `weather.embers.color` | `#FF963C` | `weather.embers.opacity` | `0.75` |
 
 *Keywords:* rain, snow, mist, fog bank, dust, embers, sparks, ash, particles, weather effect, storm, blizzard
+
+---
+
+## Audio
+
+The ambient audio feature: a library of music and sound effects, one playing music category plus any number of
+looping sound effects, and the waveform window that cuts long recordings into clips. See
+[the audio chapter of the README](../README.md#18-ambient-audio) for how it is used.
+
+### `audio.enabled`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** restart required
+
+Turns the whole audio feature on or off. With `false` the transport group in the status bar and the audio overlay
+are gone, nothing is loaded and no audio thread runs, so the feature costs nothing on low-end machines.
+
+*Keywords:* music, ambient audio, sound, soundscape, audio off, disable music
+
+### `audio.folder`
+**Default:** `dmmap-audio` · **Values:** folder path · **Applies:** restart required
+
+Where the audio library lives: the index `library.json`, the imported audio files in `files/` and the cached
+waveforms in `peaks/`. A relative path starts next to the settings file; absolute paths are used as they are. Put it
+on a fast drive if the library is large.
+
+*Keywords:* audio folder, music folder, library path, sound storage, audio location
+
+### `audio.shuffle`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** live
+
+Plays the tracks of a music category in a random order (`false` plays them in the order of the library). The shuffle
+never repeats a track until the category has been played through.
+
+*Keywords:* shuffle, random, playlist order, repeat, music order
+
+### `audio.crossfadeSeconds`
+**Default:** `4` · **Range:** 0 to 30 seconds · **Applies:** live
+
+How long the previous track fades out while the next one fades in, so a category never falls silent between tracks.
+`0` switches hard.
+
+*Keywords:* crossfade, fade, blend tracks, gapless, transition
+
+### `audio.effectFadeSeconds`
+**Default:** `1.5` · **Range:** 0 to 30 seconds · **Applies:** live
+
+Fade in and fade out time of a sound effect when it is switched on or off, so rain or wind never starts abruptly.
+
+*Keywords:* effect fade, ambience fade, fade in, fade out, sound effect
+
+### `audio.panicFadeSeconds`
+**Default:** `1` · **Range:** 0 to 10 seconds · **Applies:** live
+
+How fast everything fades out when the mute button in the audio overlay is pressed, and back in when it is pressed
+again.
+
+*Keywords:* panic, mute, silence, fade out all, emergency mute
+
+### `audio.maxEffects`
+**Default:** `32` · **Range:** 1 to 64 · **Applies:** live
+
+How many sound effects may loop at the same time. Each effect is one decoding stream, so lower values protect weak
+hardware; switching on one more effect than allowed stops the one that has been running longest.
+
+*Keywords:* sound effects, simultaneous, layers, mixing limit, performance
+
+### `audio.autoSwitchOnMapChange`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** live
+
+Starts the music category and sound effects that are stored with a map when that map is opened. With `false` the
+audio keeps playing whatever it played before.
+
+*Keywords:* per map music, auto switch, map ambience, remember music
+
+### `audio.updateFps`
+**Default:** `4` · **Range:** 1 to 60 · **Applies:** restart required
+
+How often per second the audio engine updates fades, crossfades and the now-playing readout. The default is enough
+for smooth fades and costs almost no frame time.
+
+*Keywords:* audio update rate, fade smoothness, audio performance, tick rate
+
+### `audio.overlayFadeSeconds`
+**Default:** `0.15` · **Range:** 0 to 2 s · **Applies:** live
+
+How long the audio overlay takes to fade in and out when it is opened with the Audio button in the status bar.
+`0` shows and hides it instantly.
+
+*Keywords:* audio overlay, fade in, open animation, music overlay, status bar
+
+### `audio.waveformBuckets`
+**Default:** `4000` · **Range:** 200 to 40000 · **Applies:** live
+
+How many samples the waveform of the cut window is reduced to. Higher values show more detail when zoomed in but make
+the first analysis of a long recording slower and the cache file bigger.
+
+*Keywords:* waveform, resolution, detail, cut window, peaks, zoom
+
+### `audio.cut.silenceDb`
+**Default:** `-45` · **Range:** -90 to 0 dB · **Applies:** live
+
+Everything quieter than this counts as silence when the cut window detects the songs inside a long recording. Raise
+it (towards `0`) for recordings with a noisy background.
+
+*Keywords:* silence threshold, detect songs, split, gap detection, loudness
+
+### `audio.cut.minSilenceSeconds`
+**Default:** `1.5` · **Range:** 0.1 to 60 seconds · **Applies:** live
+
+How long a quiet passage has to be before the detection treats it as the gap between two songs.
+
+*Keywords:* gap length, silence length, split songs, detection
+
+### `audio.cut.minTrackSeconds`
+**Default:** `20` · **Range:** 1 to 3600 seconds · **Applies:** live
+
+Detected pieces shorter than this are ignored, so applause or a single chord does not become its own clip.
+
+*Keywords:* minimum song length, ignore short, detection, clip length
+
+### `audio.masterVolume`
+**Default:** `0.8` · **Range:** 0 to 1 · **Applies:** managed by the app
+
+The master volume slider of the Audio sidebar section. It scales music and sound effects together.
+
+*Keywords:* master volume, loudness, overall volume
+
+### `audio.musicVolume`
+**Default:** `0.7` · **Range:** 0 to 1 · **Applies:** managed by the app
+
+The volume slider of the music channel.
+
+*Keywords:* music volume, background music loudness
+
+### `audio.effectsVolume`
+**Default:** `0.6` · **Range:** 0 to 1 · **Applies:** managed by the app
+
+The volume slider of the sound effect channel.
+
+*Keywords:* effect volume, ambience loudness, sound effects
+
+### `audio.lastCategory`
+**Default:** empty · **Values:** category id · **Applies:** managed by the app
+
+The music category that was selected when the application was closed; it is preselected on the next start.
+
+*Keywords:* last category, remember, startup music
+
+### `audio.lastDirectory`
+**Default:** empty · **Values:** folder path · **Applies:** managed by the app
+
+The folder the last audio import came from, used as the starting folder of the import dialog.
+
+*Keywords:* import folder, last folder, file dialog
 
 ---
 

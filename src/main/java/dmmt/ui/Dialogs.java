@@ -2,6 +2,7 @@ package dmmt.ui;
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -9,6 +10,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -41,6 +43,29 @@ public final class Dialogs {
         }
         dialog.setGraphic(icon);
         dialog.getDialogPane().getStylesheets().add(Icons.STYLESHEET);
+        inheritIcons(dialog, owner);
+    }
+
+    /** Gives the dialog's own window the application icon of its owner, so the title bar is never blank. */
+    private static void inheritIcons(Dialog<?> dialog, Window owner) {
+        if (!(owner instanceof Stage ownerStage) || ownerStage.getIcons().isEmpty()) {
+            return;
+        }
+        Runnable apply = () -> {
+            Scene scene = dialog.getDialogPane().getScene();
+            if (scene != null && scene.getWindow() instanceof Stage dialogStage) {
+                dialogStage.getIcons().setAll(ownerStage.getIcons());
+            }
+        };
+        apply.run();
+        dialog.setOnShowing(event -> apply.run());
+    }
+
+    /** Copies the application icon of a window onto another window; does nothing when there is none. */
+    public static void inheritIcons(Stage stage, Window owner) {
+        if (stage != null && owner instanceof Stage ownerStage && !ownerStage.getIcons().isEmpty()) {
+            stage.getIcons().setAll(ownerStage.getIcons());
+        }
     }
 
     /**
