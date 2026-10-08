@@ -54,6 +54,7 @@ class LocalApiRoutingTest {
             method.setAccessible(true);
             String base = (String) method.invoke(app);
             assertEquals(LocalApiServer.baseUrl(7071), base);
+            api.setUrlOptionsVisible(true);
             api.attachUrlMenus(() -> base, ignored -> {});
             control.getContextMenu().getItems().getFirst().fire();
             assertEquals(base + "/api/controls/player/freeze",
@@ -135,6 +136,7 @@ class LocalApiRoutingTest {
                 var button = new javafx.scene.control.Button();
                 var api = new dmmt.api.DmControlApi(new dmmt.ui.ControlVisibility());
                 api.add("player.freeze", button);
+                api.setUrlOptionsVisible(true);
                 api.attachUrlMenus(() -> {
                     try {
                         return (String) base.invoke(app);

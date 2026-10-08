@@ -75,6 +75,7 @@ class AudioControlsTest {
             assertTrue(api.containsKey("audio.play"));
             assertTrue(api.containsKey("audio.next"));
             assertTrue(api.containsKey("audio.overlay"));
+            assertTrue(api.containsKey("audio.musicPlay"));
             assertTrue(api.containsKey("audio.masterVolume"));
             assertTrue(api.containsKey("audio.category." + categoryId(library, "Combat")), api.keySet().toString());
             assertTrue(api.containsKey("audio.category." + categoryId(library, "Christmas Eve")),
@@ -178,6 +179,7 @@ class AudioControlsTest {
             DmControlApi controlApi = new DmControlApi(new ControlVisibility());
             audio.setApiControlsChangedHandler(() -> controlApi.replaceGroup("audio", audio.apiControls()));
             controlApi.replaceGroup("audio", audio.apiControls());
+            controlApi.setUrlOptionsVisible(true);
             controlApi.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});
 
             // Opening the overlay must not swap the buttons out from under the API.

@@ -14,7 +14,7 @@ class ControlNamesTest {
                 .forEach(control -> assertNotEquals(control.id(), ControlNames.name(control.id()), control.id()));
         for (String id : List.of("ui.library", "ui.performance", "ui.settings", "ui.controls", "ui.panelSettings",
                 "maps.previous", "levels.down", "levels.up", "levels.manage", "levels.select",
-                "audio.previous", "audio.play", "audio.next", "audio.overlay", "audio.stop", "audio.mute",
+                "audio.previous", "audio.play", "audio.next", "audio.overlay", "audio.musicPlay", "audio.stop", "audio.mute",
                 "audio.library", "audio.assign", "audio.effectsPause", "audio.effectsStop",
                 "audio.masterVolume", "audio.musicVolume", "audio.effectsVolume")) {
             assertNotEquals(id, ControlNames.name(id), id);

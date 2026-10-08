@@ -162,6 +162,7 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 | `/api/controls/audio/previous` | button | Previous track of the category. |
 | `/api/controls/audio/next` | button | Next track of the category. |
 | `/api/controls/audio/overlay` | button | Opens or closes the audio overlay on the DM screen. |
+| `/api/controls/audio/musicPlay` | button | The play/pause button in the middle of the music ring: pauses or resumes only the music (sound effects are untouched). |
 | `/api/controls/audio/stop` | button | Stops the music (sound effects keep playing). |
 | `/api/controls/audio/musicVolume` | slider | Music volume, `0` to `1`. |
 | `/api/controls/audio/effectsPause` | button | Pauses or resumes all running sound effects at once. |

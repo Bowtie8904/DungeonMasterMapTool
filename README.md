@@ -427,6 +427,9 @@ to set short names by control ID (for example, `lighting.torch=Torch`). Rebuild 
 These names are independent of tooltips and settings labels; endpoints stay unchanged. Music categories and
 sound effects keep their live library names unless you add an exact ID override.
 
+Tests load their own names from `src/test/resources/dmmt/api/control-names.properties`, so changing
+production display names does not require updating test expectations.
+
 The optional **local-network HTTP API** controls the DM UI without giving the application keyboard focus. Enable
 `api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,
 without restarting. Hand edits in `dmmt-settings.ini` apply when the DM window regains focus.

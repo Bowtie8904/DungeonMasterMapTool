@@ -462,6 +462,7 @@ public final class AudioOverlay {
     /** The overlay controls that the local control API exposes, keyed by their api id (3.35.6). */
     public Map<String, Node> apiControls() {
         Map<String, Node> controls = new LinkedHashMap<>();
+        controls.put("audio.musicPlay", playButton);
         controls.put("audio.stop", stopButton);
         controls.put("audio.mute", muteButton);
         controls.put("audio.library", libraryButton);

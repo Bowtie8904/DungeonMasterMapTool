@@ -728,7 +728,7 @@ full-screen overlay that is opened from there.
   - Everything is keyboard reachable, and the overlay repaints only while it is open, so a closed overlay costs
     nothing.
 - **Local control API:** the status bar group registers `audio.previous`, `audio.play`, `audio.next` and
-  `audio.overlay`; the overlay registers `audio.stop`, `audio.mute`, `audio.library`, `audio.assign`,
+  `audio.overlay`; the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`, `audio.assign`,
   `audio.effectsPause`, `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`. In addition **every
   category and every sound effect gets its own toggle endpoint**, registered dynamically whenever the library
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
@@ -775,6 +775,7 @@ application itself never depends on it and never talks to the Stream Deck.
 ### 3.36.1 Application-side additions
 
 - All fixed API control names are mapped by stable control id in `src/main/resources/dmmt/api/control-names.properties`, loaded by `dmmt.api.ControlNames`. API discovery and command responses use these short names independently of UI tooltips, accessibility descriptions and sidebar settings labels. Edit this single file and rebuild/restart to change names without changing endpoints. Dynamic audio category/effect ids retain their live library names unless explicitly mapped; unknown ids fall back to control text, accessible text, then id. No new application settings.
+- Tests use an independent `src/test/resources/dmmt/api/control-names.properties` fixture rather than asserting editable production names. URL-copy menu tests explicitly enable URL options; the application default remains hidden.
 
 - **Key images over HTTP.** Every actionable control answers
   `GET /api/controls/<section>/<name>/image`, returning a 144x144 PNG as a binary response
