@@ -378,7 +378,7 @@ Show images such as NPC portraits or letters to your players.
 
 Enable **Mirror for opposite side** using the opposing vertical arrows icon toggle beside the rotation buttons to show two copies facing opposite sides of the table, with one rotated 180 degrees (text is not reflected). The layout is recalculated to fit each half, rather than shrinking the full-screen arrangement. At 0/180 degrees the copies occupy the top and bottom halves; rotate to 90/270 degrees for left and right halves. Both copies show the same images, including when showing only a selection. The DM preview stays unrotated and selectable. Mirroring is off by default and is not saved.
 
-Closing the handout window stops showing it and discards the images. Handouts are session-only and never saved.
+Closing the handout window stops showing it but keeps the images for reopening during the same application session. Reopening leaves **Show to players** off and clears the selection; use **Delete** or **Remove all images** to remove retained images. Handouts are session-only and are not kept after exiting the application.
 
 ### 14. Saving, auto-save and undo/redo
 

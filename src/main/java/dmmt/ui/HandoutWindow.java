@@ -43,7 +43,7 @@ import java.util.function.BooleanSupplier;
 
 /**
  * Non-modal DM window for pasting images from the clipboard and showing them together to the players.
- * The images and the "shown" state are session-only; closing the window discards them.
+ * Images are retained when the window closes, for reuse during the same application session.
  */
 public final class HandoutWindow {
 
@@ -161,10 +161,10 @@ public final class HandoutWindow {
         stage.setScene(scene);
         stage.initOwner(owner);
         stage.setOnHidden(event -> {
-            images.clear();
             selection.clear();
             showOnly = null;
             shown = false;
+            refreshState();
             onClosed.run();
         });
         refreshState();

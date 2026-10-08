@@ -3270,7 +3270,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void openHandoutWindow(Stage owner) {
         if (handoutWindow == null) {
             handoutWindow = new HandoutWindow(owner, appIcons(), () -> playerStage != null,
-                    () -> lastInputNanos = System.nanoTime(), () -> handoutWindow = null);
+                    () -> lastInputNanos = System.nanoTime(), () -> lastInputNanos = System.nanoTime());
         }
         handoutWindow.show();
     }
