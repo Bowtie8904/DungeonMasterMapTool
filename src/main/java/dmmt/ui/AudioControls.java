@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.api.ControlTooltips;
 import dmmt.audio.AudioCategory;
 import dmmt.audio.AudioEngine;
 import dmmt.audio.AudioKind;
@@ -147,6 +148,10 @@ public final class AudioControls {
     private void buildGroup() {
         playButton.setOnAction(event -> engine.toggleAll());
         Icons.tooltip(playButton, "Pause or resume the music and all running sound effects");
+        ControlTooltips.apply("audio.play", playButton);
+        ControlTooltips.apply("audio.previous", previousButton);
+        ControlTooltips.apply("audio.next", nextButton);
+        ControlTooltips.apply("audio.overlay", overlayButton);
         previousButton.setOnAction(event -> engine.previous());
         nextButton.setOnAction(event -> engine.next());
         overlayButton.setOnAction(event -> {

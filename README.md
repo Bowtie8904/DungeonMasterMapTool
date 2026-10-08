@@ -427,8 +427,17 @@ to set short names by control ID (for example, `lighting.torch=Torch`). Rebuild 
 These names are independent of tooltips and settings labels; endpoints stay unchanged. Music categories and
 sound effects keep their live library names unless you add an exact ID override.
 
-Tests load their own names from `src/test/resources/dmmt/api/control-names.properties`, so changing
-production display names does not require updating test expectations.
+**Control tooltips:** edit
+[`src/main/resources/dmmt/api/control-tooltips.properties`](src/main/resources/dmmt/api/control-tooltips.properties)
+to set descriptive hover help by the same control IDs. These descriptions are shown in the app and exported
+as the API's `tooltip` field. Stream Deck's control dropdowns use the descriptions to distinguish, for example,
+music playback, sound-effect playback and combined playback; **Title > Name** still uses the short name.
+Dropdowns never use the short title; if a tooltip is unavailable, they show the stable control ID instead.
+Unmapped controls keep their live help text or display name. Rebuild and restart after editing either file;
+these are bundled resources, not settings-file entries.
+
+Tests load independent names and tooltips from `src/test/resources/dmmt/api/`, so changing
+production wording does not require updating test expectations.
 
 The optional **local-network HTTP API** controls the DM UI without giving the application keyboard focus. Enable
 `api.enabled` in Settings under **Local control API**. Enabling/disabling and port changes apply immediately,

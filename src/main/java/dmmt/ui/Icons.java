@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.api.ControlTooltips;
 import dmmt.service.Tuning;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -42,6 +43,7 @@ public final class Icons {
     private static final Map<String, Cursor> CURSOR_CACHE = new HashMap<>();
     private static final Map<String, Image> IMAGE_CACHE = new HashMap<>();
     private static final double TOOLTIP_CURSOR_GAP = 4;
+    private static final Object CONTROL_TOOLTIP = new Object();
 
     private Icons() {
     }
@@ -79,10 +81,15 @@ public final class Icons {
     }
 
     public static void tooltip(Control control, String text) {
-        Tooltip tooltip = tooltip(text);
+        control.setAccessibleText(ControlTooltips.text(control, text));
+        if (control.getProperties().containsKey(CONTROL_TOOLTIP)) {
+            return;
+        }
+        Tooltip tooltip = tooltip(control.getAccessibleText());
+        tooltip.textProperty().bind(control.accessibleTextProperty());
+        control.getProperties().put(CONTROL_TOOLTIP, tooltip);
         // The tooltip is shown by hand below, so it never reaches the node's tooltip property. Mirroring it into
         // the accessible text keeps the label readable for screen readers and for API discovery.
-        control.setAccessibleText(text);
         PauseTransition delay = new PauseTransition(Duration.millis(Tuning.TOOLTIP_DELAY_MS.get()));
         PauseTransition duration = new PauseTransition(Duration.seconds(Tuning.TOOLTIP_DURATION_SECONDS.get()));
         duration.setOnFinished(event -> tooltip.hide());

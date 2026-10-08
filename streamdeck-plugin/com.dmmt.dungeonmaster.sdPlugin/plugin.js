@@ -492,6 +492,7 @@ class Plugin {
 					controls: controls.map((control) => ({
 						id: control.id,
 						label: control.label,
+						tooltip: control.tooltip,
 						type: control.type,
 						choices: control.choices || null,
 					})),

@@ -141,7 +141,7 @@ function fillControls() {
 	for (const control of matching) {
 		// The section hint only helps when the list spans sections; a filtered list repeats itself.
 		const hint = scope.prefix || section ? "" : ` (${sectionOf(control)})`;
-		select.appendChild(new Option(control.label + hint, control.id));
+		select.appendChild(new Option((control.tooltip || control.id) + hint, control.id));
 	}
 	const current = String(settings.controlId || "");
 	if (current && !matching.some((control) => control.id === current)) {

@@ -76,7 +76,7 @@ artwork would, which lets a client cache key images and refetch only after an ed
 ## Discovery and parameters
 
 `GET /api/controls` lists actionable controls, their current values, numeric bounds and dropdown choices.
-The `label` field is the short display name used by Stream Deck's control picker and **Title > Name**.
+The `label` field is the short display name used by Stream Deck's **Title > Name**.
 All fixed control names are defined in one ID-to-name file:
 [`src/main/resources/dmmt/api/control-names.properties`](../src/main/resources/dmmt/api/control-names.properties).
 For example, change `lighting.torch=Torch` to rename that control in the API without changing its tooltip,
@@ -84,6 +84,16 @@ sidebar settings label or endpoint. Rebuild and restart the application after ed
 Dynamic music categories and sound effects keep their live library names unless their exact
 `audio.category.<id>` or `audio.effect.<id>` is added to the file. Unmapped controls fall back to their UI text,
 then accessible text, then their id. These are application-source labels, not settings-file entries.
+
+The separate `tooltip` field is the descriptive name used in Stream Deck's control picker.
+[`src/main/resources/dmmt/api/control-tooltips.properties`](../src/main/resources/dmmt/api/control-tooltips.properties)
+maps the same stable IDs to app hover help and API descriptions. For example, `audio.play`, `audio.musicPlay`
+and `audio.effectsPause` can all have a short `label` of `Play/pause`, but distinct `tooltip` descriptions
+for combined, music-only and effects-only playback. Rebuild and restart after editing.
+Unmapped controls use their live tooltip, accessible text, then their short label. The field is included
+in full discovery, batched discovery and command responses. The plugin relays this field to its property
+inspector without dropping it. If it is unavailable, dropdowns show the stable control ID rather than the
+short `label`; short names are reserved for key titles. Older clients can continue using `label`.
 
 Pass `?ids=a.b,c.d` to describe only the listed controls, in the order given. This keeps polling cheap for a
 control device that watches a handful of keys. Unknown ids are skipped instead of failing, so a deleted music

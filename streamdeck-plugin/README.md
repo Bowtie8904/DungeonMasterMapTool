@@ -62,7 +62,12 @@ DistributionTool -b -i com.dmmt.dungeonmaster.sdPlugin -o .
 
 Control names come from the API's `label` field. To shorten fixed control names independently of tooltips,
 edit [`control-names.properties`](../src/main/resources/dmmt/api/control-names.properties) in the application
-source, then rebuild and restart the application. The control picker and **Title > Name** use the same mapping.
+source, then rebuild and restart the application. **Title > Name** uses this short-name mapping.
+The control picker instead uses the API's `tooltip` description, configured in
+[`control-tooltips.properties`](../src/main/resources/dmmt/api/control-tooltips.properties), which also controls
+the application's hover help. This distinguishes music-only, effects-only and combined playback even when
+their short key titles are identical. If a description is unavailable (for example, with an older application),
+the picker shows the stable control ID, never the short title.
 
 - To switch back to the previous map, add a **DM Control** key and choose **Maps > Previous map**
   (`maps.previous`). Repeated presses alternate between the last two maps. The key uses the application's

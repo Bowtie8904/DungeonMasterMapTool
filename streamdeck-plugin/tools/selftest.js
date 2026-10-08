@@ -11,6 +11,7 @@ const assert = require("node:assert");
 const http = require("node:http");
 const path = require("node:path");
 const fsSync = require("node:fs");
+const vm = require("node:vm");
 
 const base = path.join(__dirname, "..", "com.dmmt.dungeonmaster.sdPlugin");
 const png = require(path.join(base, "lib/png"));
@@ -43,6 +44,85 @@ function sample(width, height) {
 
 async function main() {
 	process.stdout.write("Dungeon Master Map Tool Stream Deck plugin self-test\n");
+
+	await test("control picker uses descriptions or ids, never short titles", () => {
+		function select() {
+			return {
+				options: [],
+				value: "",
+				set innerHTML(value) { this.options = []; },
+				appendChild(option) { this.options.push(option); },
+			};
+		}
+		const elements = { section: select(), control: select() };
+		const context = vm.createContext({
+			document: { getElementById: (id) => elements[id] },
+			Option: function(text, value) { this.text = text; this.value = value; },
+		});
+		vm.runInContext(fsSync.readFileSync(path.join(base, "pi/inspector.js"), "utf8"), context);
+		vm.runInContext(`
+			action = ACTION.CONTROL;
+			settings = { section: "audio", controlId: "audio.musicPlay" };
+			controls = [
+				{ id: "audio.play", type: "button", label: "Play/pause", tooltip: "Pause or resume music and sound effects" },
+				{ id: "audio.musicPlay", type: "button", label: "Play/pause", tooltip: "Play or pause music only" },
+				{ id: "audio.effectsPause", type: "toggle", label: "Play/pause", tooltip: "Pause or resume sound effects only" },
+				{ id: "audio.legacy", type: "button", label: "Older API name" },
+				{ id: "audio.noDescription", type: "button", label: "Empty description", tooltip: "" },
+			];
+			fillControls();
+		`, context);
+		assert.deepStrictEqual(elements.control.options.slice(1).map((option) => option.text), [
+			"Pause or resume music and sound effects",
+			"Play or pause music only",
+			"Pause or resume sound effects only",
+			"audio.legacy",
+			"audio.noDescription",
+		]);
+		assert.strictEqual(elements.control.value, "audio.musicPlay");
+		assert.strictEqual(elements.control.options[2].value, "audio.musicPlay");
+	});
+
+	await test("plugin forwards API tooltip descriptions to the property inspector", async () => {
+		const sent = [];
+		let socket;
+		class FakeSocket extends require("node:events").EventEmitter {
+			constructor() {
+				super();
+				socket = this;
+			}
+			send(text) { sent.push(JSON.parse(text)); }
+		}
+		const descriptors = [
+			{ id: "audio.play", type: "button", label: "Play/pause", tooltip: "Pause or resume music and sound effects" },
+			{ id: "audio.musicPlay", type: "button", label: "Play/pause", tooltip: "Play or pause music only" },
+			{ id: "audio.effectsPause", type: "toggle", label: "Play/pause", tooltip: "Pause or resume sound effects only" },
+		];
+		const context = vm.createContext({
+			require: (name) => {
+				if (name === "./lib/ws") return { WebSocketClient: FakeSocket };
+				if (name === "./lib/api") return { describe: async () => descriptors };
+				if (name.startsWith("./")) return require(path.join(base, name));
+				return require(name);
+			},
+			module: { exports: {} },
+			__dirname: base,
+			process,
+		});
+		vm.runInContext(fsSync.readFileSync(path.join(base, "plugin.js"), "utf8") +
+			"\nnew Plugin(1234, 'test-plugin', 'registerPlugin');", context);
+		socket.emit("message", JSON.stringify({ event: "propertyInspectorDidAppear", context: "inspector" }));
+		socket.emit("message", JSON.stringify({ event: "sendToPlugin", payload: { kind: "listControls" } }));
+		await new Promise((resolve) => setImmediate(resolve));
+		const response = sent.find((message) => message.payload && message.payload.kind === "controls");
+		assert.ok(response, "the plugin must reply with the control list");
+		assert.strictEqual(response.context, "inspector");
+		for (const [index, descriptor] of descriptors.entries()) {
+			assert.strictEqual(response.payload.controls[index].tooltip, descriptor.tooltip);
+			assert.strictEqual(response.payload.controls[index].label, descriptor.label);
+			assert.strictEqual(response.payload.controls[index].id, descriptor.id);
+		}
+	});
 
 	await test("PNG encodes and decodes losslessly", () => {
 		const image = sample(144, 144);
@@ -205,8 +285,10 @@ async function main() {
 		const controls = new Map([
 			["audio.category.combat", { id: "audio.category.combat", type: "toggle", value: true, label: "Combat" }],
 			["audio.musicVolume", { id: "audio.musicVolume", type: "slider", value: 0.7, max: 1, label: "Music" }],
+			["audio.play", { id: "audio.play", type: "button", label: "Play/pause", tooltip: "Pause or resume music and sound effects" }],
 		]);
 		const named = (action, settings) => plugin.evaluate(action, settings, { ok: true, controls, state: null }).title;
+		assert.strictEqual(named(plugin.ACTION.CONTROL, { controlId: "audio.play", title: "name" }), "Play/pause");
 		assert.strictEqual(named(plugin.ACTION.MUSIC, { controlId: "audio.category.combat", title: "name" }), "Combat");
 		assert.strictEqual(named(plugin.ACTION.VALUE, { controlId: "audio.musicVolume", title: "name" }), "Music");
 		assert.strictEqual(named(plugin.ACTION.VALUE, { controlId: "audio.musicVolume", title: "value" }), "70%");

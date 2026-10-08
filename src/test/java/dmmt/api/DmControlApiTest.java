@@ -51,11 +51,62 @@ class DmControlApiTest {
                     api.describe().stream().map(control -> control.get("label")).toList());
             assertEquals("Torch", api.execute("lighting.torch", Map.of()).get("label"));
             assertEquals("A long UI label", torch.getText());
-            assertEquals("A long tooltip describing the default torch", torch.getAccessibleText());
+            assertEquals("Place a torch on the map", torch.getAccessibleText());
             play.setAccessibleText("A different tooltip");
             assertEquals("Play / pause", api.describe(List.of("audio.play")).getFirst().get("label"));
             category.setText("Exploration");
             assertEquals("Exploration", api.describe(List.of("audio.category.test")).getFirst().get("label"));
+        });
+    }
+
+    @Test
+    void tooltipMappingIsSharedByUiDiscoveryCommandsAndLaterRefreshes() throws Exception {
+        onFx(() -> {
+            ControlVisibility registry = new ControlVisibility();
+            Slider slider = new Slider(0, 1, .5);
+            Label label = new Label("Opacity");
+            HBox row = new HBox(label, slider);
+            dmmt.ui.Icons.tooltip(slider, "Original help");
+            registry.register("effects.opacity", row);
+            assertEquals("Opacity of effects on the map", slider.getAccessibleText());
+            assertEquals(slider.getAccessibleText(), label.getAccessibleText());
+            DmControlApi api = new DmControlApi(registry);
+            Button all = new Button();
+            Button music = new Button();
+            Button effects = new Button();
+            api.add("audio.play", all);
+            api.add("audio.musicPlay", music);
+            api.add("audio.effectsPause", effects);
+            dmmt.ui.Icons.tooltip(all, "Later refresh");
+            assertEquals("Pause or resume music and sound effects", all.getAccessibleText());
+            var hoverTooltips = all.getProperties().values().stream()
+                    .filter(Tooltip.class::isInstance).map(Tooltip.class::cast).toList();
+            assertEquals(1, hoverTooltips.size(), "Refreshing help must reuse the hover tooltip");
+            assertEquals(all.getAccessibleText(), hoverTooltips.getFirst().getText());
+            var audio = api.describe(List.of("audio.play", "audio.musicPlay", "audio.effectsPause"));
+            assertEquals(3, audio.stream().map(control -> control.get("tooltip")).distinct().count());
+            assertEquals(all.getAccessibleText(), audio.getFirst().get("tooltip"));
+            assertEquals(all.getAccessibleText(), api.execute("audio.play", Map.of()).get("tooltip"));
+            assertEquals(slider.getAccessibleText(), api.describe(List.of("effects.opacity")).getFirst().get("tooltip"));
+            Button category = new Button("Combat");
+            dmmt.ui.Icons.tooltip(category, "Combat: playing");
+            api.replaceGroup("audio.category", Map.of("audio.category.test", category));
+            assertEquals("Combat: playing", api.describe(List.of("audio.category.test")).getFirst().get("tooltip"));
+            dmmt.ui.Icons.tooltip(category, "Exploration: paused");
+            category.setText("Exploration");
+            assertEquals("Exploration: paused", api.describe(List.of("audio.category.test")).getFirst().get("tooltip"));
+            Button torch = new Button();
+            Tooltip originalTooltip = new Tooltip("Original help");
+            torch.setTooltip(originalTooltip);
+            api.add("lighting.torch", torch);
+            assertSame(originalTooltip, torch.getTooltip());
+            assertEquals("Place a torch on the map", originalTooltip.getText());
+            Button plain = new Button("Custom name");
+            plain.setTooltip(new Tooltip("Custom help"));
+            api.add("custom.control", plain);
+            assertEquals("Custom help", api.describe(List.of("custom.control")).getFirst().get("tooltip"));
+            plain.setTooltip(null);
+            assertEquals("Custom name", api.describe(List.of("custom.control")).getFirst().get("tooltip"));
         });
     }
 

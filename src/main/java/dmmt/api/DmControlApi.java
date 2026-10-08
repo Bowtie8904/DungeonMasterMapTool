@@ -94,6 +94,7 @@ public final class DmControlApi {
             throw new IllegalArgumentException("Ambiguous command control: " + id);
         }
         Node control = found.iterator().next();
+        targets.forEach(node -> ControlTooltips.apply(id, node));
         entries.put(id, new Entry(id, control, targets));
     }
 
@@ -324,6 +325,9 @@ public final class DmControlApi {
         state.put("id", entry.id());
         state.put("path", path(entry.id()));
         state.put("label", label(entry));
+        state.put("tooltip", ControlTooltips.tooltip(entry.id(),
+                node instanceof Control c && c.getTooltip() != null ? c.getTooltip().getText() : null,
+                node.getAccessibleText(), label(entry)));
         state.put("image", ControlKeyImages.fingerprint(entry.id(), imageSources(entry)));
         state.put("disabled", node.isDisabled());
         if (node instanceof ToggleButton toggle) {

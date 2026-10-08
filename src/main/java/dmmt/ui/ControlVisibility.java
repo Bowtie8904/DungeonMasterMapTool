@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.api.ControlTooltips;
 import dmmt.service.AppSettings;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
@@ -28,6 +29,7 @@ public final class ControlVisibility {
             if (controls.putIfAbsent(node, id) != null) {
                 throw new IllegalArgumentException("DM control node already registered: " + id);
             }
+            ControlTooltips.apply(id, node);
         }
     }
 

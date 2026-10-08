@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.api.ControlTooltips;
 import dmmt.audio.AudioCategory;
 import dmmt.audio.AudioEngine;
 import dmmt.audio.AudioLibraryService;
@@ -101,6 +102,9 @@ public final class AudioOverlay {
         this.engine = engine;
         this.settings = settings;
         build();
+        apiControls().forEach(ControlTooltips::apply);
+        ControlTooltips.apply("audio.previous", previousButton);
+        ControlTooltips.apply("audio.next", nextButton);
     }
 
     /** The layer to drop into the main window's root stack; invisible and non-blocking while closed. */
