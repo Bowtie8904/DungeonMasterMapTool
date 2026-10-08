@@ -1364,9 +1364,9 @@ mode fog). Off by default because every fading frame redraws the fog image.
 **Default:** `dmmap-projects` · **Applies:** restart
 
 Folder of the map library (the map browser on the left). The default relative path `dmmap-projects` is next to the
-application. A relative path is resolved against the application folder; an absolute path (for example a cloud-synced
-folder like `D:\Dropbox\DnD maps`) is used as is. The folder is created if it does not exist. If the application
-folder itself cannot be determined, `dmmap-projects` in your user folder is used.
+audio library folder (`dmmap-audio` by default). Relative paths are resolved against the folder containing
+`dmmt-settings.ini`; an absolute path (for example a cloud-synced folder like `D:\Dropbox\DnD maps`) is used as is.
+The folder is created if it does not exist.
 
 *Keywords:* map library, projects folder, save location, storage, Dropbox, OneDrive, network drive, campaign folder
 

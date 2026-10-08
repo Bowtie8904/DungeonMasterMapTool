@@ -151,6 +151,18 @@ public final class AppSettings {
         return Path.of(System.getProperty("user.dir")).resolve(FILE_NAME).toAbsolutePath();
     }
 
+    /** Resolves a configured storage folder relative to the settings file, keeping app libraries together. */
+    public static Path resolveConfiguredFolder(Path settingsFile, String configured, String defaultFolder) {
+        String value = configured == null || configured.isBlank() ? defaultFolder : configured.trim();
+        Path folder = Path.of(value);
+        if (folder.isAbsolute()) {
+            return folder.normalize();
+        }
+        Path base = settingsFile.toAbsolutePath().normalize().getParent();
+        return (base == null ? Path.of(".").toAbsolutePath().normalize() : base)
+                .resolve(folder).toAbsolutePath().normalize();
+    }
+
     // ---- typed access (mirrors java.util.prefs.Preferences) ----
 
     public synchronized String get(String key, String defaultValue) {

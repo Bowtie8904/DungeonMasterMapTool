@@ -116,7 +116,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -442,12 +441,7 @@ public class DungeonMasterMapToolApplication extends Application {
         idleFps = clampFps(preferences.getInt(PREF_FPS_IDLE, DEFAULT_FPS_IDLE));
         this.project = DmProject.builder().build();
         this.project.getMap().setSourceType("custom");
-        Path libraryRoot;
-        try {
-            libraryRoot = resolveProjectsRoot();
-        } catch (IOException ex) {
-            libraryRoot = Path.of(System.getProperty("user.home"), "dmmap-projects");
-        }
+        Path libraryRoot = resolveProjectsRoot();
         mapLibrary = new MapLibraryService(libraryRoot, projectService);
         duplicateCheckService = new DuplicateCheckService(mapLibrary, projectService);
 
@@ -7797,14 +7791,10 @@ public class DungeonMasterMapToolApplication extends Application {
         return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 
-    /** Map library folder: setting library.folder, default 'dmmap-projects' next to the application. */
-    private Path resolveProjectsRoot() throws IOException {
-        Path home = resolveApplicationHome();
-        String configured = Tuning.LIBRARY_FOLDER.get();
-        if (configured == null || configured.isBlank()) {
-            return home.resolve("dmmap-projects");
-        }
-        return home.resolve(configured.trim()).toAbsolutePath().normalize();
+    /** Map library folder: setting library.folder, default 'dmmap-projects' beside the audio library. */
+    private Path resolveProjectsRoot() {
+        return AppSettings.resolveConfiguredFolder(AppSettings.resolveFile(), Tuning.LIBRARY_FOLDER.get(),
+                "dmmap-projects");
     }
 
     private void applyInitialImportDirectory(FileChooser chooser) {
@@ -7829,21 +7819,6 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         preferences.put(PREF_LAST_IMPORT_DIRECTORY, directory.toAbsolutePath().normalize().toString());
-    }
-
-    private Path resolveApplicationHome() throws IOException {
-        try {
-            Path codeSource = Path.of(DungeonMasterMapToolLauncher.class
-                    .getProtectionDomain()
-                    .getCodeSource()
-                    .getLocation()
-                    .toURI())
-                    .toAbsolutePath()
-                    .normalize();
-            return Files.isRegularFile(codeSource) ? codeSource.getParent() : codeSource;
-        } catch (URISyntaxException | NullPointerException ex) {
-            throw new IOException("Could not resolve application directory.", ex);
-        }
     }
 
     private void refreshPlayerScreenSelector() {

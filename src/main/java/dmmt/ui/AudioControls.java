@@ -91,15 +91,9 @@ public final class AudioControls {
         ticker.play();
     }
 
-    /** The audio library folder from the settings; relative paths start next to the application. */
+    /** The audio library folder from the settings; relative paths start next to the settings file. */
     public static Path resolveFolder() {
-        String configured = Tuning.AUDIO_FOLDER.get();
-        Path folder = Path.of(configured == null || configured.isBlank() ? "dmmap-audio" : configured);
-        if (folder.isAbsolute()) {
-            return folder.normalize();
-        }
-        Path base = AppSettings.resolveFile().getParent();
-        return (base == null ? Path.of(".") : base).resolve(folder).toAbsolutePath().normalize();
+        return AppSettings.resolveConfiguredFolder(AppSettings.resolveFile(), Tuning.AUDIO_FOLDER.get(), "dmmap-audio");
     }
 
     public AudioLibraryService library() {

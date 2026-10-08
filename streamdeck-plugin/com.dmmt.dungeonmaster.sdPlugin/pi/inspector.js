@@ -179,7 +179,7 @@ function fillMaps() {
 	select.disabled = false;
 	select.appendChild(new Option(maps.length ? "Choose..." : "The library is empty", ""));
 	for (const map of maps) {
-		select.appendChild(new Option(map.name + (map.multilevel ? " (multilevel)" : ""), map.id));
+		select.appendChild(new Option(map.name, map.id));
 	}
 	const current = String(settings.mapId || "");
 	if (current && !maps.some((map) => map.id === current)) {

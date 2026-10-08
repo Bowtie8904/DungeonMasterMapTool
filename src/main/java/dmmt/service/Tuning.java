@@ -635,7 +635,7 @@ public final class Tuning {
     public static final Setting<Boolean> AUDIO_ENABLED = bool(AUDIO, "audio.enabled", true, true,
             "Enable the audio feature (ambient music and sound effects). When off, the status bar transport group, the audio overlay, their API endpoints and the whole audio engine stay unloaded.");
     public static final Setting<String> AUDIO_FOLDER = text(AUDIO, "audio.folder", "dmmap-audio", true,
-            "Folder of the audio library (imported music and sound effects). Relative paths start next to the application.");
+            "Folder of the audio library (imported music and sound effects). Relative paths start next to the settings file.");
     public static final Setting<Boolean> AUDIO_SHUFFLE = bool(AUDIO, "audio.shuffle", true, false,
             "Play the tracks of a music category in random order (false = alphabetical order).");
     public static final Setting<Double> AUDIO_CROSSFADE_SECONDS = decimal(AUDIO, "audio.crossfadeSeconds", 4, 0, 30, false,
@@ -664,7 +664,7 @@ public final class Tuning {
     // ---- Storage and caches ----
 
     public static final Setting<String> LIBRARY_FOLDER = text(STORAGE, "library.folder", "dmmap-projects", true,
-            "Folder of the map library. Relative paths start next to the application.");
+            "Folder of the map library. Relative paths start next to the settings file.");
     public static final Setting<Integer> CACHE_IMAGE_TILES = integer(STORAGE, "cache.imageTiles", 96, 8, 4096, false,
             "Map image tiles kept in memory (each up to cache.imageTileSize squared pixels).");
     public static final Setting<Integer> CACHE_TILE_QUEUE = integer(STORAGE, "cache.imageTileLoadQueue", 48, 4, 4096, false,

@@ -48,7 +48,8 @@ DistributionTool -b -i com.dmmt.dungeonmaster.sdPlugin -o .
 2. In the Property Inspector set **Host** and **Port** once; every action on every key shares them.
    They default to `127.0.0.1` and the port shown in the application's settings.
 3. Pick the target. Music categories, sound effects, controls, dropdowns and maps are listed live, read from
-   the running application - no ids to type.
+   the running application - no ids to type. Maps are listed by name only, whether or not they have multiple
+   levels; the optional level field remains available for level-specific map keys.
 4. Alternatively paste a URL copied in the application (right-click a control or a library map, then
    **Copy API URL**). The plugin fills in the rest of the fields from it.
 5. The key artwork comes from the application automatically: once a control is selected, the plugin fetches

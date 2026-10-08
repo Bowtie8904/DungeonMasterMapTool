@@ -96,7 +96,7 @@ Main class: `dmmt.DungeonMasterMapToolLauncher`.
 
 Data locations:
 
-- **Map library:** `dmmap-projects` next to the application by default (created on first use, git-ignored; configurable with `library.folder`).
+- **Map library:** `dmmap-projects` beside `dmmap-audio` by default (created on first use, git-ignored; configurable with `library.folder`).
 - **Settings:** `dmmt-settings.ini` next to the jar (see [Settings file](#16-settings-file)); override with `-Ddmmt.settings=<path>`.
 - **Image tile cache:** `%LOCALAPPDATA%\DungeonMasterMapTool\image-cache` (fallback `~/.dmmt/image-cache`); entries unused for 60 days are pruned.
 

@@ -508,7 +508,7 @@ class Plugin {
 				const maps = await api.maps(addr);
 				this.#toInspector({
 					kind: "maps",
-					maps: maps.map((map) => ({ id: map.id, name: map.name, multilevel: map.multilevel })),
+					maps: maps.map((map) => ({ id: map.id, name: map.name })),
 				});
 			} catch (error) {
 				this.#toInspector({ kind: "maps", maps: null, error: error.message });

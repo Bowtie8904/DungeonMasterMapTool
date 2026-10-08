@@ -34,6 +34,21 @@ class AppSettingsTest {
     }
 
     @Test
+    void resolvesRelativeStorageFoldersBesideSettingsAndLeavesAbsoluteFoldersAlone() {
+        Path settingsFile = dir.resolve("config").resolve("dmmt-settings.ini");
+        Path projectsFolder = AppSettings.resolveConfiguredFolder(settingsFile, "dmmap-projects", "dmmap-projects");
+        Path audioFolder = AppSettings.resolveConfiguredFolder(settingsFile, "dmmap-audio", "dmmap-audio");
+        assertEquals(dir.resolve("config/dmmap-projects").toAbsolutePath().normalize(), projectsFolder);
+        assertEquals(dir.resolve("config").toAbsolutePath().normalize(), projectsFolder.getParent());
+        assertEquals(projectsFolder.getParent(), audioFolder.getParent());
+        assertEquals(dir.resolve("custom-audio").toAbsolutePath().normalize(),
+                AppSettings.resolveConfiguredFolder(settingsFile, "  " + dir.resolve("custom-audio") + "  ",
+                        "dmmap-audio"));
+        assertEquals(dir.resolve("config/dmmap-projects").toAbsolutePath().normalize(),
+                AppSettings.resolveConfiguredFolder(settingsFile, "", "dmmap-projects"));
+    }
+
+    @Test
     void valuesPersistAndInvalidOnesFallBack() throws IOException {
         Path file = dir.resolve("settings.ini");
         AppSettings settings = new AppSettings(file);

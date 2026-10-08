@@ -40,7 +40,7 @@
 				{
 					"Image": "imgs/actions/music/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		},
@@ -56,7 +56,7 @@
 				{
 					"Image": "imgs/actions/effect/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		},
@@ -72,7 +72,7 @@
 				{
 					"Image": "imgs/actions/control/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		},
@@ -88,7 +88,7 @@
 				{
 					"Image": "imgs/actions/value/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		},
@@ -104,7 +104,7 @@
 				{
 					"Image": "imgs/actions/dropdown/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		},
@@ -120,7 +120,7 @@
 				{
 					"Image": "imgs/actions/map/key",
 					"TitleAlignment": "bottom",
-					"FontSize": "12"
+					"FontSize": "9"
 				}
 			]
 		}
