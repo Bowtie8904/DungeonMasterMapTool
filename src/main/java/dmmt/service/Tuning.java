@@ -642,6 +642,10 @@ public final class Tuning {
             "Seconds two music tracks overlap when one follows the other (0 = hard cut).");
     public static final Setting<Double> AUDIO_EFFECT_FADE_SECONDS = decimal(AUDIO, "audio.effectFadeSeconds", 1.5, 0, 30, false,
             "Seconds a sound effect fades in when it is started and out when it is stopped.");
+    public static final Setting<Double> AUDIO_EFFECT_LOOP_CROSSFADE_SECONDS = decimal(AUDIO, "audio.effectLoopCrossfadeSeconds", 0.5, 0, 5, false,
+            "Seconds consecutive repetitions of a sound effect overlap to mask restart gaps (0 = no overlap). Limited to half the clip length.");
+    public static final Setting<Integer> AUDIO_EFFECT_LOOP_UPDATE_FPS = integer(AUDIO, "audio.effectLoopUpdateFps", 30, 1, 60, true,
+            "How often per second active sound effects update their short loop crossfades, independently of the audio readout. Higher values make loop blends smoother.");
     public static final Setting<Double> AUDIO_PANIC_FADE_SECONDS = decimal(AUDIO, "audio.panicFadeSeconds", 1, 0, 10, false,
             "Seconds the mute button in the audio overlay needs to fade all audio to silence and back.");
     public static final Setting<Integer> AUDIO_MAX_EFFECTS = integer(AUDIO, "audio.maxEffects", 32, 1, 64, false,

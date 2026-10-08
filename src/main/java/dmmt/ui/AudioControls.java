@@ -56,6 +56,7 @@ public final class AudioControls {
     };
     private boolean syncing;
     private long lastTickNanos;
+    private long lastReadoutNanos;
 
     public AudioControls(AppSettings settings, Supplier<Window> owner) {
         this(settings, owner, new AudioLibraryService(resolveFolder()), new JavaFxAudioOutput());
@@ -76,7 +77,8 @@ public final class AudioControls {
         overlay.refreshLibrary();
         refreshPlaybackState();
         engine.addListener(this::refreshPlaybackState);
-        ticker = new Timeline(new KeyFrame(Duration.seconds(1.0 / Math.max(1, Tuning.AUDIO_UPDATE_FPS.get())),
+        ticker = new Timeline(new KeyFrame(Duration.seconds(1.0 / Math.max(Tuning.AUDIO_UPDATE_FPS.get(),
+                Tuning.AUDIO_EFFECT_LOOP_UPDATE_FPS.get())),
                 event -> tick()));
         ticker.setCycleCount(Animation.INDEFINITE);
         ticker.play();
@@ -236,6 +238,7 @@ public final class AudioControls {
         engine.setShuffle(Tuning.AUDIO_SHUFFLE.get());
         engine.setCrossfadeSeconds(Tuning.AUDIO_CROSSFADE_SECONDS.get());
         engine.setEffectFadeSeconds(Tuning.AUDIO_EFFECT_FADE_SECONDS.get());
+        engine.setEffectLoopCrossfadeSeconds(Tuning.AUDIO_EFFECT_LOOP_CROSSFADE_SECONDS.get());
         engine.setPanicFadeSeconds(Tuning.AUDIO_PANIC_FADE_SECONDS.get());
         engine.setMaxEffects(Tuning.AUDIO_MAX_EFFECTS.get());
     }
@@ -275,13 +278,20 @@ public final class AudioControls {
         overlay.refreshState();
     }
 
-    /** Advances the engine's fades and refreshes the readout; driven by the ticker a few times per second. */
+    /** Advances active loop blends smoothly, keeping readouts and inactive playback on their slower cadence. */
     private void tick() {
         long now = System.nanoTime();
         double delta = lastTickNanos == 0 ? 0 : (now - lastTickNanos) / 1_000_000_000.0;
-        lastTickNanos = now;
-        engine.tick(delta);
-        overlay.refreshTime();
+        double readoutInterval = 1.0 / Tuning.AUDIO_UPDATE_FPS.get();
+        if (lastTickNanos == 0 || (!engine.activeEffects().isEmpty() && !engine.areEffectsPaused())
+                || delta >= readoutInterval) {
+            lastTickNanos = now;
+            engine.tick(delta);
+        }
+        if (lastReadoutNanos == 0 || (now - lastReadoutNanos) / 1_000_000_000.0 >= readoutInterval) {
+            lastReadoutNanos = now;
+            overlay.refreshTime();
+        }
     }
 
     // ---- Actions ----

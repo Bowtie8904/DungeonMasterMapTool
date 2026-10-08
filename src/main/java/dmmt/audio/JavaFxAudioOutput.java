@@ -106,8 +106,17 @@ public final class JavaFxAudioOutput implements AudioOutput {
             if (disposed) {
                 return 0;
             }
-            Duration total = player.getTotalDuration();
+            Duration total = player.getMedia().getDuration();
             return total == null || total.isUnknown() ? 0 : total.toMillis();
+        }
+
+        @Override
+        public boolean isReady() {
+            return !disposed && player.getError() == null
+                    && switch (player.getStatus()) {
+                case READY, PLAYING, PAUSED, STOPPED -> true;
+                default -> false;
+            };
         }
 
         @Override

@@ -12,7 +12,7 @@ public interface AudioOutput {
      * Prepares a file for playback. Implementations load asynchronously; calling {@link Voice#play()} right away is
      * allowed and starts playback as soon as the file is ready.
      *
-     * @param loop seamless endless repeat (sound effects)
+     * @param loop native endless repeat (not guaranteed gapless; effects overlap non-looping voices instead)
      * @return the voice, or {@code null} when the file cannot be opened
      */
     Voice open(Path file, boolean loop);
@@ -34,6 +34,11 @@ public interface AudioOutput {
 
         /** Length in milliseconds, 0 while still loading. */
         double durationMs();
+
+        /** Whether this voice has loaded and can start without waiting for decoding setup. */
+        default boolean isReady() {
+            return true;
+        }
 
         /** Called once when a non-looping voice reaches its end. */
         void setOnEnd(Runnable action);

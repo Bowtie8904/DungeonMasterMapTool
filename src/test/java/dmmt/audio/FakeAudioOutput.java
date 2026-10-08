@@ -33,6 +33,7 @@ public final class FakeAudioOutput implements AudioOutput {
         final boolean loop;
         boolean playing;
         boolean disposed;
+        boolean ready = true;
         double volume;
         double position;
         double duration = 60_000;
@@ -88,6 +89,11 @@ public final class FakeAudioOutput implements AudioOutput {
         @Override
         public double durationMs() {
             return duration;
+        }
+
+        @Override
+        public boolean isReady() {
+            return ready && !disposed;
         }
 
         @Override

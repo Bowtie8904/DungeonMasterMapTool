@@ -208,7 +208,208 @@ class AudioEngineTest {
 
         assertEquals(3, output.playing().size());
         assertEquals(List.of(rain.getId(), wind.getId()), engine.activeEffects());
-        assertTrue(output.live().stream().filter(voice -> voice.loop).count() == 2, "effects must loop");
+        assertTrue(output.live().stream().noneMatch(voice -> voice.loop), "effects overlap instead of native repeat");
+        assertEquals(5, output.live().size(), "each effect preloads its next repetition");
+    }
+
+    private FakeAudioOutput.FakeVoice startRain() throws IOException {
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectActive(effect("rain").getId(), true);
+        engine.tick(0.25);
+        return output.opened.get(0);
+    }
+
+    @Test
+    void effectRepetitionsOverlapWithEqualPowerAndDisposeTheOldVoice() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.opened.get(1);
+        assertFalse(next.playing);
+        assertEquals(0, next.volume);
+
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.05);
+        assertTrue(next.playing);
+        assertFalse(first.disposed);
+        assertEquals(1, first.volume, 0.0001);
+        assertEquals(0, next.volume);
+
+        next.advanceTo(250);
+        engine.tick(0.05);
+        assertEquals(Math.sqrt(0.5), first.volume, 0.0001);
+        assertEquals(Math.sqrt(0.5), next.volume, 0.0001);
+        assertEquals(1, first.volume * first.volume + next.volume * next.volume, 0.0001);
+        assertEquals(2, output.opened.size(), "no second transition during an overlap");
+
+        next.advanceTo(500);
+        engine.tick(0.05);
+        assertTrue(first.disposed);
+        assertEquals(1, next.volume, 0.0001);
+        assertEquals(2, output.live().size(), "one playing voice and one preloaded voice");
+        assertFalse(output.last().playing);
+
+        next.advanceTo(next.duration - 500);
+        engine.tick(0.05);
+        assertTrue(output.last().playing, "later repetitions overlap too");
+    }
+
+    @Test
+    void overlapWaitsForTheNextVoiceToAdvanceAndForItToBeReady() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        next.ready = false;
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.25);
+        assertFalse(next.playing);
+        next.ready = true;
+        engine.tick(0.25);
+        engine.tick(0.25);
+        assertEquals(1, first.volume, 0.0001, "startup delay must not fade the outgoing voice");
+        assertEquals(0, next.volume);
+    }
+
+    @Test
+    void overlapInterpolatesBetweenCoarseNativePositionUpdates() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.01);
+        next.advanceTo(100);
+        engine.tick(0.01);
+        double before = next.volume;
+        engine.tick(0.02);
+        assertTrue(next.volume > before, "a blend advances even between native position notifications");
+        assertEquals(Math.sin(0.12 / 0.5 * Math.PI / 2), next.volume, 0.0001);
+    }
+
+    @Test
+    void effectStartedWhilePausedKeepsItsPreparedVoiceSilentOnResume() throws IOException {
+        engine.setEffectsPaused(true);
+        engine.setEffectActive(effect("rain").getId(), true);
+        engine.tick(1);
+        assertTrue(output.playing().isEmpty());
+        engine.setEffectsPaused(false);
+        assertEquals(1, output.playing().size());
+        assertFalse(output.last().playing);
+    }
+
+    @Test
+    void pausingAnOverlapFreezesBothVoicesAndDoesNotPlayThePreloadedVoice() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.05);
+        next.advanceTo(250);
+        engine.tick(0.05);
+        double before = first.volume;
+
+        engine.setEffectsPaused(true);
+        engine.tick(1);
+        assertTrue(output.playing().isEmpty());
+        assertEquals(before, first.volume, 0.0001);
+        assertEquals(before, next.volume, 0.0001);
+
+        engine.setEffectsPaused(false);
+        assertEquals(2, output.playing().size());
+        engine.tick(0.2);
+        assertEquals(before, first.volume, 0.0001, "the first resumed tick must not count paused time");
+        assertEquals(before, next.volume, 0.0001);
+        next.advanceTo(500);
+        engine.tick(0.05);
+        engine.setEffectsPaused(true);
+        engine.setEffectsPaused(false);
+        assertEquals(1, output.playing().size(), "the prepared repetition must stay silent and paused");
+    }
+
+    @Test
+    void stoppingAndMutingAnOverlapAffectBothSides() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.05);
+        next.advanceTo(250);
+        engine.tick(0.05);
+        engine.setPanicFadeSeconds(0);
+        engine.setPanic(true);
+        engine.tick(0.05);
+        assertEquals(0, first.volume);
+        assertEquals(0, next.volume);
+        engine.setPanic(false);
+        engine.tick(0.05);
+        assertTrue(first.volume > 0);
+        assertTrue(next.volume > 0);
+
+        engine.stopAllEffects();
+        assertTrue(output.live().isEmpty());
+        first.reachEnd();
+        next.reachEnd();
+        assertTrue(engine.activeEffects().isEmpty());
+        assertEquals(2, output.opened.size(), "stale end callbacks must not restart a stopped effect");
+    }
+
+    @Test
+    void stoppingAnOverlapFadesBothSidesOut() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.05);
+        next.advanceTo(250);
+        engine.tick(0.05);
+        engine.setEffectFadeSeconds(1);
+        engine.stopAllEffects();
+        engine.tick(0.25);
+        assertTrue(first.volume > 0 && first.volume < Math.sqrt(0.5));
+        assertTrue(next.volume > 0 && next.volume < Math.sqrt(0.5));
+        settle();
+        assertTrue(output.live().isEmpty());
+    }
+
+    @Test
+    void effectCapAndShutdownReleaseOverlappingAndPreparedVoices() throws IOException {
+        engine.setMaxEffects(1);
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 500);
+        engine.tick(0.05);
+        engine.setEffectActive(effect("wind").getId(), true);
+        assertTrue(first.disposed);
+        assertTrue(next.disposed);
+        assertEquals(2, output.live().size());
+        engine.shutdown();
+        assertTrue(output.live().isEmpty());
+    }
+
+    @Test
+    void shortEffectsLimitTheOverlapToHalfTheirLength() throws IOException {
+        FakeAudioOutput.FakeVoice first = startRain();
+        first.duration = 200;
+        first.advanceTo(50);
+        engine.tick(0.05);
+        assertFalse(output.last().playing);
+        first.advanceTo(100);
+        engine.tick(0.05);
+        assertTrue(output.last().playing);
+        output.last().advanceTo(100);
+        engine.tick(0.05);
+        assertTrue(first.disposed);
+    }
+
+    @Test
+    void endEventsRepeatEffectsWhenOverlapIsDisabledOrTimingIsUnknown() throws IOException {
+        engine.setEffectLoopCrossfadeSeconds(0);
+        FakeAudioOutput.FakeVoice first = startRain();
+        FakeAudioOutput.FakeVoice next = output.last();
+        first.advanceTo(first.duration - 250);
+        engine.tick(0.05);
+        assertFalse(next.playing);
+        first.reachEnd();
+        assertTrue(first.disposed);
+        assertTrue(next.playing);
+        assertEquals(1, next.volume);
+        assertFalse(output.last().playing);
+        next.duration = 0;
+        next.reachEnd();
+        assertTrue(next.disposed);
+        assertEquals(1, output.playing().size());
     }
 
     @Test

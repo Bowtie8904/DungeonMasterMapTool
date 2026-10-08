@@ -557,7 +557,12 @@ left out of the overlay until it has a track.
 whole recording, so the gaps between the songs are easy to spot; click anywhere to listen from there, `Space` plays
 and pauses, the mouse wheel pans and `Ctrl` + wheel zooms. Playback repeats what you see: with **Loop** switched on
 (the default) the selected range repeats endlessly, and when nothing is selected the visible part of the waveform
-does - so zooming into a song is all it takes to listen to it again and again. Drag across the waveform to select a
+does - so zooming into a song is all it takes to listen to it again and again. Loops also restart at the end of the
+file, including selections that reach that boundary; switching Loop off stops playback at the selection or file end.
+Editor loops use the same preloaded, equal-power crossfade as sound effects
+(`audio.effectLoopCrossfadeSeconds`, default 0.5 seconds, limited to half the loop range).
+This lets you audition a smooth rain/ambience seam without changing the samples written by **Create clip**.
+Drag across the waveform to select a
 song, fine-tune the
 start and end in the time fields, and **Create clip** writes exactly that range into the library as a standalone
 audio file. **Detect** finds the songs automatically by looking for the silent gaps (tunable with the
@@ -575,7 +580,12 @@ Click a category to play it - its tracks run one after another, shuffled by defa
 into each other (`audio.crossfadeSeconds`) - and click it again to stop. The centre of the left ring holds previous,
 play/pause, next and stop plus the **name of the running category**, the current track and its time. On the right,
 switch on any number of sound effects (up to `audio.maxEffects`, 32 by default); they loop seamlessly and fade in
-and out (`audio.effectFadeSeconds`), and the matching pause and stop buttons in the centre of that ring control all
+and out (`audio.effectFadeSeconds`). Repetitions preload the next play and overlap with an equal-power crossfade
+(`audio.effectLoopCrossfadeSeconds`, default 0.5 seconds), masking small restart gaps in rain, wind and other
+ambience. The overlap is limited to half the clip length; set it to 0 for no overlap.
+Active effects update their blends at 30 Hz (`audio.effectLoopUpdateFps`) without increasing map rendering or
+now-playing readout updates.
+The matching pause and stop buttons in the centre of that ring control all
 of them at once while listing what is running. Below the rings sit the master, music and effect volumes and the
 speaker button, which fades everything out and back in. Crowded libraries simply grow onto further circles, and the
 overlay only updates while it is open.

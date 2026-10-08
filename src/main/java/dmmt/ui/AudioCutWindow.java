@@ -8,6 +8,7 @@ import dmmt.audio.AudioLibraryService;
 import dmmt.audio.AudioOutput;
 import dmmt.audio.AudioTrack;
 import dmmt.audio.JavaFxAudioOutput;
+import dmmt.audio.LoopCrossfade;
 import dmmt.audio.WaveformPeaks;
 import dmmt.service.Tuning;
 import javafx.animation.AnimationTimer;
@@ -51,6 +52,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.DoubleSupplier;
 
 /**
  * The waveform window (3.35.3): it shows a long recording, lets the DM listen to any point of it, select a range
@@ -93,8 +95,15 @@ public final class AudioCutWindow {
     private long dragAnchorMs;
     private boolean dragging;
 
-    private final AudioOutput output = new JavaFxAudioOutput();
+    private final AudioOutput output;
     private AudioOutput.Voice voice;
+    private AudioOutput.Voice preparedVoice;
+    private AudioOutput.Voice outgoingVoice;
+    private LoopCrossfade blend;
+    private long preparedStartMs = -1;
+    private long preparedEndMs = -1;
+    private long lastPlaybackNanos;
+    private final DoubleSupplier loopCrossfadeSeconds;
     private boolean playing;
     private AnimationTimer timer;
     private Task<WaveformPeaks> analysis;
@@ -104,6 +113,18 @@ public final class AudioCutWindow {
     private int clipCounter = 1;
 
     private AudioCutWindow(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged) {
+        this(owner, library, track, onChanged, new JavaFxAudioOutput());
+    }
+
+    AudioCutWindow(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged,
+                   AudioOutput output) {
+        this(owner, library, track, onChanged, output, () -> Tuning.AUDIO_EFFECT_LOOP_CROSSFADE_SECONDS.get());
+    }
+
+    AudioCutWindow(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged,
+                   AudioOutput output, DoubleSupplier loopCrossfadeSeconds) {
+        this.output = output;
+        this.loopCrossfadeSeconds = loopCrossfadeSeconds;
         this.library = library;
         this.track = track;
         this.onChanged = onChanged == null ? () -> {
@@ -200,6 +221,7 @@ public final class AudioCutWindow {
         Button toStart = Icons.button(MaterialDesignS.SKIP_PREVIOUS, "Jump to the start of the selection",
                 () -> seek(hasSelection() ? selectionStartMs : 0));
         loop.setSelected(true);
+        loop.selectedProperty().addListener((observable, oldValue, selected) -> cancelLoopBlend());
         Icons.tooltip(loop, "Repeat what is shown: the selection, or the visible part of the waveform when "
                 + "nothing is selected.");
         Button zoomIn = Icons.button(MaterialDesignM.MAGNIFY_PLUS_OUTLINE, "Zoom in",
@@ -211,6 +233,7 @@ public final class AudioCutWindow {
             if (hasSelection()) {
                 viewSpanMs = Math.max((long) MIN_SPAN_MS, (long) ((selectionEndMs - selectionStartMs) * 1.2));
                 viewStartMs = clampStart(selectionStartMs - (viewSpanMs - (selectionEndMs - selectionStartMs)) / 2);
+                cancelLoopBlend();
                 draw();
             }
         });
@@ -497,17 +520,20 @@ public final class AudioCutWindow {
         double anchorFraction = viewSpanMs == 0 ? 0.5 : (anchorMs - viewStartMs) / (double) viewSpanMs;
         viewSpanMs = span;
         viewStartMs = clampStart(anchorMs - (long) (anchorFraction * span));
+        cancelLoopBlend();
         draw();
     }
 
     private void zoomToFit() {
         viewStartMs = 0;
         viewSpanMs = totalMs;
+        cancelLoopBlend();
         draw();
     }
 
     private void pan(long deltaMs) {
         viewStartMs = clampStart(viewStartMs + deltaMs);
+        cancelLoopBlend();
         draw();
     }
 
@@ -532,6 +558,7 @@ public final class AudioCutWindow {
     }
 
     private void setSelection(long startMs, long endMs) {
+        cancelLoopBlend();
         selectionStartMs = Math.max(0, Math.min(startMs, totalMs));
         selectionEndMs = Math.max(selectionStartMs, Math.min(endMs, totalMs));
         startField.setText(AudioTrack.formatDuration(selectionStartMs));
@@ -540,6 +567,7 @@ public final class AudioCutWindow {
     }
 
     private void clearSelection() {
+        cancelLoopBlend();
         selectionStartMs = -1;
         selectionEndMs = -1;
         detectedList.getSelectionModel().clearSelection();
@@ -580,6 +608,9 @@ public final class AudioCutWindow {
             if (voice != null) {
                 voice.pause();
             }
+            if (outgoingVoice != null) {
+                outgoingVoice.pause();
+            }
             playing = false;
             return;
         }
@@ -590,13 +621,22 @@ public final class AudioCutWindow {
                 return;
             }
             voice.setVolume(0.8);
+            setPreviewEndHandler(voice);
             voice.seek(playheadMs);
         }
         if (loop.isSelected() && playheadMs >= loopEndMs()) {
             seek(loopStartMs());
         }
         voice.play();
+        if (outgoingVoice != null) {
+            if (outgoingVoice.positionMs() < loopEndMs()) {
+                outgoingVoice.play();
+            }
+            blend.resume();
+        }
+        lastPlaybackNanos = 0;
         playing = true;
+        prepareLoopVoice();
     }
 
     /**
@@ -608,11 +648,135 @@ public final class AudioCutWindow {
     }
 
     private long loopEndMs() {
-        long end = hasSelection() ? selectionEndMs : viewStartMs + viewSpanMs;
-        return Math.min(totalMs, Math.max(end, loopStartMs() + (long) MIN_SPAN_MS));
+        return Math.min(totalMs, hasSelection() ? selectionEndMs : viewStartMs + viewSpanMs);
+    }
+
+    private void restartLoop() {
+        seek(loopStartMs());
+        voice.play();
+    }
+
+    private void setPreviewEndHandler(AudioOutput.Voice handle) {
+        handle.setOnEnd(() -> {
+            if (voice == handle) {
+                onPreviewEnd();
+            }
+        });
+    }
+
+    private void cancelLoopBlend() {
+        if (preparedVoice != null) {
+            preparedVoice.dispose();
+            preparedVoice = null;
+        }
+        if (outgoingVoice != null) {
+            outgoingVoice.dispose();
+            outgoingVoice = null;
+        }
+        blend = null;
+        preparedStartMs = -1;
+        preparedEndMs = -1;
+        if (voice != null) {
+            voice.setVolume(0.8);
+        }
+    }
+
+    private void prepareLoopVoice() {
+        if (!loop.isSelected() || loopCrossfadeSeconds.getAsDouble() <= 0 || outgoingVoice != null) {
+            return;
+        }
+        if (preparedVoice == null) {
+            preparedVoice = output.open(library.fileOf(track), false);
+            if (preparedVoice == null) {
+                status.setText("Could not preload the loop; preview will repeat without a crossfade.");
+                return;
+            }
+            preparedVoice.setVolume(0);
+        }
+        if (preparedVoice.isReady() && preparedStartMs < 0) {
+            preparedStartMs = loopStartMs();
+            preparedEndMs = loopEndMs();
+            preparedVoice.seek(preparedStartMs);
+        }
+    }
+
+    private void startLoopBlend(double remainingMs) {
+        outgoingVoice = voice;
+        voice = preparedVoice;
+        preparedVoice = null;
+        blend = new LoopCrossfade(preparedStartMs, remainingMs / 1000);
+        setPreviewEndHandler(voice);
+        voice.play();
+        playheadMs = preparedStartMs;
+    }
+
+    private void onPreviewEnd() {
+        if (!playing || voice == null) {
+            return;
+        }
+        if (loop.isSelected()) {
+            restartLoop();
+        } else {
+            playing = false;
+            seek(hasSelection() ? selectionStartMs : totalMs);
+        }
+    }
+
+    private void updatePlayback() {
+        if (playing && voice != null) {
+            long now = System.nanoTime();
+            double delta = lastPlaybackNanos == 0 ? 0 : Math.min(1, (now - lastPlaybackNanos) / 1_000_000_000.0);
+            lastPlaybackNanos = now;
+            if (loopCrossfadeSeconds.getAsDouble() <= 0 && (preparedVoice != null || outgoingVoice != null)) {
+                cancelLoopBlend();
+            }
+            if ((preparedVoice != null || outgoingVoice != null) && preparedStartMs >= 0
+                    && (preparedStartMs != loopStartMs() || preparedEndMs != loopEndMs())) {
+                cancelLoopBlend();
+            }
+            double positionMs = voice.positionMs();
+            playheadMs = (long) positionMs;
+            if (loop.isSelected()) {
+                if (outgoingVoice != null) {
+                    blend.advance(positionMs, delta);
+                    voice.setVolume(0.8 * blend.incomingGain());
+                    outgoingVoice.setVolume(0.8 * blend.outgoingGain());
+                    if (blend.finished()) {
+                        outgoingVoice.dispose();
+                        outgoingVoice = null;
+                        blend = null;
+                        preparedStartMs = -1;
+                        preparedEndMs = -1;
+                    }
+                } else {
+                    prepareLoopVoice();
+                    double remainingMs = loopEndMs() - positionMs;
+                    double overlapMs = Math.min(loopCrossfadeSeconds.getAsDouble() * 1000,
+                            (loopEndMs() - loopStartMs()) / 2.0);
+                    if (remainingMs > 0 && remainingMs <= overlapMs && preparedVoice != null
+                            && preparedStartMs >= 0 && preparedVoice.isReady()
+                            && Math.abs(preparedVoice.positionMs() - preparedStartMs)
+                            <= Math.min(50, (loopEndMs() - loopStartMs()) / 4.0)) {
+                        startLoopBlend(remainingMs);
+                    }
+                }
+                if (outgoingVoice != null && outgoingVoice.positionMs() >= loopEndMs()) {
+                    outgoingVoice.pause();
+                }
+                if (voice.positionMs() >= loopEndMs() || voice.positionMs() >= totalMs) {
+                    restartLoop();
+                }
+            } else if (hasSelection() && positionMs >= selectionEndMs) {
+                voice.pause();
+                playing = false;
+                seek(selectionStartMs);
+            }
+            draw();
+        }
     }
 
     private void seek(long millis) {
+        cancelLoopBlend();
         playheadMs = Math.max(0, Math.min(millis, totalMs));
         if (voice != null) {
             voice.seek(playheadMs);
@@ -630,21 +794,7 @@ public final class AudioCutWindow {
                     return;
                 }
                 lastDraw = now;
-                if (playing && voice != null) {
-                    playheadMs = (long) voice.positionMs();
-                    if (loop.isSelected()) {
-                        if (playheadMs >= loopEndMs() || playheadMs >= totalMs) {
-                            seek(loopStartMs());
-                            // After the end of the media the player has stopped, so it has to be started again.
-                            voice.play();
-                        }
-                    } else if (hasSelection() && playheadMs > selectionEndMs) {
-                        voice.pause();
-                        playing = false;
-                        seek(selectionStartMs);
-                    }
-                    draw();
-                }
+                updatePlayback();
             }
         };
         timer.start();
@@ -792,6 +942,7 @@ public final class AudioCutWindow {
     }
 
     private void dispose() {
+        playing = false;
         if (timer != null) {
             timer.stop();
         }
@@ -805,6 +956,7 @@ public final class AudioCutWindow {
             voice.dispose();
             voice = null;
         }
+        cancelLoopBlend();
         output.close();
         open = null;
     }

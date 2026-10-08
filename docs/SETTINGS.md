@@ -1191,6 +1191,26 @@ Fade in and fade out time of a sound effect when it is switched on or off, so ra
 
 *Keywords:* effect fade, ambience fade, fade in, fade out, sound effect
 
+### `audio.effectLoopCrossfadeSeconds`
+**Default:** `0.5` · **Range:** 0 to 5 seconds · **Applies:** live
+
+Overlap between consecutive repetitions of a sound effect. The next repetition is preloaded and blended with
+an equal-power crossfade to mask small playback restart gaps, especially for rain and wind ambience. Limited
+to half the clip length. `0` disables the overlap. Pause freezes both repetitions and their blend; stop and mute
+affect both. The clip editor uses the same blend for its selected or visible loop range, limited to half that
+range; exported clips still contain the original samples. This is separate from the effect's start/stop fade.
+
+*Keywords:* loop, rain, wind, seamless, gapless, overlap, effect crossfade
+
+### `audio.effectLoopUpdateFps`
+**Default:** `30` · **Range:** 1 to 60 · **Applies:** restart required
+
+Audio-only update rate while effects are running, so their short loop crossfades blend smoothly. This does not
+wake the map renderer or increase the now-playing readout rate (`audio.updateFps`). Higher values cost a little
+more CPU. The timer runs at the higher of the two configured rates.
+
+*Keywords:* loop, crossfade, smooth, sound effects, audio fps, performance
+
 ### `audio.panicFadeSeconds`
 **Default:** `1` · **Range:** 0 to 10 seconds · **Applies:** live
 
@@ -1202,7 +1222,8 @@ again.
 ### `audio.maxEffects`
 **Default:** `32` · **Range:** 1 to 64 · **Applies:** live
 
-How many sound effects may loop at the same time. Each effect is one decoding stream, so lower values protect weak
+How many sound effects may loop at the same time. Each effect uses a playing stream and a preloaded next stream
+(both play during an overlap), so lower values protect weak
 hardware; switching on one more effect than allowed stops the one that has been running longest.
 
 *Keywords:* sound effects, simultaneous, layers, mixing limit, performance
@@ -1211,7 +1232,8 @@ hardware; switching on one more effect than allowed stops the one that has been 
 **Default:** `4` · **Range:** 1 to 60 · **Applies:** restart required
 
 How often per second the audio engine updates fades, crossfades and the now-playing readout. The default is enough
-for smooth fades and costs almost no frame time.
+for long fades and costs almost no frame time. While effects are playing, `audio.effectLoopUpdateFps` provides
+faster audio updates for their shorter loop blends; readouts remain at this rate.
 
 *Keywords:* audio update rate, fade smoothness, audio performance, tick rate
 

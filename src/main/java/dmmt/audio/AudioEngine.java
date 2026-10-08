@@ -31,6 +31,7 @@ public class AudioEngine {
     private double effectsVolume = 0.6;
     private double crossfadeSeconds = 4;
     private double effectFadeSeconds = 1.5;
+    private double effectLoopCrossfadeSeconds = 0.5;
     private double panicFadeSeconds = 1;
     private boolean shuffle = true;
     private int maxEffects = 8;
@@ -46,7 +47,7 @@ public class AudioEngine {
     /** Guards against starting the crossfade twice for the same track. */
     private boolean crossfadeStarted;
 
-    private final Map<String, Voice> effects = new LinkedHashMap<>();
+    private final Map<String, EffectLoop> effects = new LinkedHashMap<>();
     /** Voices that are fading out and get disposed once they are silent. */
     private final List<Voice> stopping = new ArrayList<>();
     /** Global fade factor of the panic mute, 1 = normal, 0 = silent. */
@@ -71,6 +72,7 @@ public class AudioEngine {
         private double targetGain = 1;
         private double fadeSeconds = 1;
         private boolean disposeWhenSilent;
+        private double loopGain = 1;
 
         Voice(AudioOutput.Voice handle, String trackId, boolean musicChannel, double gain) {
             this.handle = handle;
@@ -82,6 +84,29 @@ public class AudioEngine {
         void fadeTo(double target, double seconds) {
             targetGain = target;
             fadeSeconds = Math.max(MIN_FADE_SECONDS, seconds);
+        }
+    }
+
+    private static final class EffectLoop {
+        private Voice current;
+        private Voice prepared;
+        private Voice outgoing;
+        private LoopCrossfade blend;
+
+        EffectLoop(Voice current) {
+            this.current = current;
+        }
+
+        List<Voice> voices() {
+            List<Voice> voices = new ArrayList<>();
+            voices.add(current);
+            if (prepared != null) {
+                voices.add(prepared);
+            }
+            if (outgoing != null) {
+                voices.add(outgoing);
+            }
+            return voices;
         }
     }
 
@@ -131,6 +156,10 @@ public class AudioEngine {
 
     public void setEffectFadeSeconds(double seconds) {
         this.effectFadeSeconds = Math.max(0, seconds);
+    }
+
+    public void setEffectLoopCrossfadeSeconds(double seconds) {
+        this.effectLoopCrossfadeSeconds = Math.max(0, seconds);
     }
 
     public void setPanicFadeSeconds(double seconds) {
@@ -350,8 +379,7 @@ public class AudioEngine {
             return;
         }
         if (!active) {
-            Voice voice = effects.remove(trackId);
-            stopVoice(voice, effectFadeSeconds);
+            stopEffect(effects.remove(trackId), effectFadeSeconds);
             fireChanged();
             return;
         }
@@ -361,24 +389,122 @@ public class AudioEngine {
         if (effects.size() >= maxEffects) {
             // Oldest effect makes room, so the cap can never be exceeded on low-end hardware.
             String oldest = effects.keySet().iterator().next();
-            stopVoice(effects.remove(oldest), effectFadeSeconds);
+            stopEffect(effects.remove(oldest), effectFadeSeconds);
         }
         Optional<AudioTrack> track = library.track(trackId);
         if (track.isEmpty()) {
             return;
         }
-        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), true);
+        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), false);
         if (handle == null) {
             return;
         }
         Voice voice = new Voice(handle, trackId, false, 0);
         voice.fadeTo(1, effectFadeSeconds);
         handle.setVolume(voiceVolume(voice));
-        effects.put(trackId, voice);
+        EffectLoop effect = new EffectLoop(voice);
+        effects.put(trackId, effect);
+        prepareEffect(effect);
+        handle.setOnEnd(() -> effectEnded(effect, voice));
         if (!effectsPaused) {
             handle.play();
         }
         fireChanged();
+    }
+
+    private void prepareEffect(EffectLoop effect) {
+        Optional<AudioTrack> track = library.track(effect.current.trackId);
+        if (track.isEmpty()) {
+            return;
+        }
+        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), false);
+        if (handle != null) {
+            handle.setVolume(0);
+            effect.prepared = new Voice(handle, effect.current.trackId, false, 1);
+            effect.prepared.loopGain = 0;
+        }
+    }
+
+    private void effectEnded(EffectLoop effect, Voice ended) {
+        if (effects.get(ended.trackId) != effect || effect.current != ended || effectsPaused) {
+            return;
+        }
+        // End events are a fallback for unknown durations or a delayed UI tick.
+        if (effect.outgoing != null) {
+            effect.outgoing.handle.dispose();
+            effect.outgoing = null;
+        }
+        if (effect.prepared == null) {
+            prepareEffect(effect);
+        }
+        if (effect.prepared == null) {
+            System.err.println("Could not repeat sound effect " + ended.trackId);
+            effects.remove(ended.trackId);
+            stopEffect(effect, 0);
+            fireChanged();
+            return;
+        }
+        repeatEffect(effect, 0);
+    }
+
+    private void repeatEffect(EffectLoop effect, double overlapSeconds) {
+        Voice previous = effect.current;
+        effect.current = effect.prepared;
+        effect.prepared = null;
+        effect.blend = overlapSeconds > 0 ? new LoopCrossfade(0, overlapSeconds) : null;
+        if (overlapSeconds > 0) {
+            effect.outgoing = previous;
+            effect.current.gain = previous.gain;
+            effect.current.fadeTo(1, effectFadeSeconds);
+        } else {
+            previous.handle.dispose();
+            effect.current.loopGain = 1;
+        }
+        Voice current = effect.current;
+        current.handle.setOnEnd(() -> effectEnded(effect, current));
+        current.handle.setVolume(voiceVolume(current));
+        current.handle.play();
+        if (overlapSeconds <= 0) {
+            prepareEffect(effect);
+        }
+    }
+
+    private void stepEffect(EffectLoop effect, double delta) {
+        step(effect.current, delta);
+        if (effect.outgoing != null) {
+            effect.blend.advance(effect.current.handle.positionMs(), delta);
+            effect.current.loopGain = effect.blend.incomingGain();
+            effect.outgoing.loopGain = effect.blend.outgoingGain();
+            effect.current.handle.setVolume(voiceVolume(effect.current));
+            step(effect.outgoing, delta);
+            if (effect.blend.finished()) {
+                effect.outgoing.handle.dispose();
+                effect.outgoing = null;
+                prepareEffect(effect);
+            }
+            return;
+        }
+        double duration = effect.current.handle.durationMs();
+        if (!Double.isFinite(duration) || duration <= 0) {
+            duration = library.track(effect.current.trackId).map(AudioTrack::getDurationMs).orElse(0L);
+        }
+        double remaining = duration - effect.current.handle.positionMs();
+        double overlap = Math.min(effectLoopCrossfadeSeconds, duration / 2000);
+        if (overlap > 0 && remaining > 0 && remaining <= overlap * 1000
+                && effect.prepared != null && effect.prepared.handle.isReady()) {
+            repeatEffect(effect, remaining / 1000);
+        }
+    }
+
+    private void stopEffect(EffectLoop effect, double fadeSeconds) {
+        if (effect == null) {
+            return;
+        }
+        if (effect.prepared != null) {
+            effect.prepared.handle.dispose();
+        }
+        stopVoice(effect.current, effectsPaused ? 0 : fadeSeconds);
+        stopVoice(effect.outgoing, effectsPaused ? 0 : fadeSeconds);
     }
 
     public void toggleEffect(String trackId) {
@@ -415,7 +541,17 @@ public class AudioEngine {
             return;
         }
         effectsPaused = paused;
-        effects.values().forEach(voice -> {
+        if (!paused) {
+            effects.values().forEach(effect -> {
+                if (effect.blend != null) {
+                    effect.blend.resume();
+                }
+            });
+        }
+        effects.values().stream().flatMap(effect -> effect.outgoing == null
+                        ? java.util.stream.Stream.of(effect.current)
+                        : java.util.stream.Stream.of(effect.current, effect.outgoing))
+                .forEach(voice -> {
             if (paused) {
                 voice.handle.pause();
             } else {
@@ -426,7 +562,7 @@ public class AudioEngine {
     }
 
     public void stopAllEffects() {
-        effects.values().forEach(voice -> stopVoice(voice, effectFadeSeconds));
+        effects.values().forEach(effect -> stopEffect(effect, effectFadeSeconds));
         effects.clear();
         fireChanged();
     }
@@ -471,8 +607,10 @@ public class AudioEngine {
                 fadingOut = null;
             }
         }
-        for (Voice voice : List.copyOf(effects.values())) {
-            step(voice, delta);
+        if (!effectsPaused) {
+            for (EffectLoop effect : List.copyOf(effects.values())) {
+                stepEffect(effect, delta);
+            }
         }
         for (Voice voice : List.copyOf(stopping)) {
             step(voice, delta);
@@ -542,14 +680,15 @@ public class AudioEngine {
         if (fadingOut != null) {
             fadingOut.handle.setVolume(voiceVolume(fadingOut));
         }
-        effects.values().forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
+        effects.values().stream().flatMap(effect -> effect.voices().stream())
+                .forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
         stopping.forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
     }
 
     /** Output volume of a voice: its fade gain times the channel, master and panic factors on a perceptual curve. */
     private double voiceVolume(Voice voice) {
         double channel = voice.musicChannel ? musicVolume : effectsVolume;
-        return clamp01(voice.gain * curve(channel) * curve(masterVolume) * panicGain);
+        return clamp01(voice.gain * voice.loopGain * curve(channel) * curve(masterVolume) * panicGain);
     }
 
     /** Volume of a channel as the output hears it, for tests and readouts. */
@@ -571,7 +710,7 @@ public class AudioEngine {
         stopVoice(fadingOut, 0);
         music = null;
         fadingOut = null;
-        effects.values().forEach(voice -> voice.handle.dispose());
+        effects.values().forEach(effect -> stopEffect(effect, 0));
         effects.clear();
         stopping.forEach(voice -> voice.handle.dispose());
         stopping.clear();

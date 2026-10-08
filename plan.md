@@ -651,7 +651,12 @@ same application. It must never be in the way of DMs who do not use it, and must
 - Playback **loops what is shown** (toggle "Loop", on by default): the selection when there is one, otherwise the
   visible part of the waveform, so zooming into a song is enough to audition it over and over. Reaching the end of
   the looped range jumps back to its start without stopping; playing from before the range is allowed and simply
-  runs into the loop. With the toggle off, playback stops at the end of the selection as before.
+  runs into the loop. The media-end event also restarts the loop, even if the final reported position is
+  slightly below the file duration. Short selections repeat at their exact end, without a minimum playback span.
+  With the toggle off, playback stops at the end of the selection or file.
+  Editor loops use the same preloaded equal-power overlap as effects (`audio.effectLoopCrossfadeSeconds`,
+  capped at half the selected/visible range). This previews the blend without modifying exported clip samples.
+  Pause freezes both voices; seeking, changing the loop range or disabling Loop cancels the previous blend.
 - **Create clip** writes a **real, standalone file** into the library (the user's explicit choice; a clip keeps
   working if the source file is later deleted):
   - **MP3:** frame-exact copy of the MP3 frames inside the range (no re-encode, no quality loss, very fast);
@@ -677,6 +682,12 @@ same application. It must never be in the way of DMs who do not use it, and must
 - **Effects channel:** any number of sound effects (capped by `audio.maxEffects`, default 32) play as **seamless
   loops** at the same time. Starting and stopping an effect fades it in/out over
   `audio.effectFadeSeconds` so it never clicks.
+  Repetitions use a preloaded second voice and an equal-power overlap (`audio.effectLoopCrossfadeSeconds`,
+  default 0.5 s, capped at half the clip length) instead of native media repeat, masking restart gaps in ambience
+  such as rain. Setting this to 0 disables the overlap. Pause/resume, mute, stop and the effect cap apply to both
+  sides of an overlap; pausing freezes its progress.
+  Active effects advance at `audio.effectLoopUpdateFps` (default 30) for smooth short blends, independently of the
+  slower `audio.updateFps` readout updates; neither timer wakes the map renderer.
 - **Volumes:** master, music and effects volumes are independent, persisted in the settings file and applied as
   `master x channel` (a logarithmic/perceptual curve, `volume^2.2`, so sliders feel linear). Pausing is per channel:
   pausing effects pauses **all** currently playing effects at once and resumes them together. The play/pause button
