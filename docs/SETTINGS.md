@@ -1151,6 +1151,13 @@ The ambient audio feature: a library of music and sound effects, one playing mus
 looping sound effects, and the waveform window that cuts long recordings into clips. See
 [the audio chapter of the README](../README.md#18-ambient-audio) for how it is used.
 
+Loudness matching and manual per-file gain overrides are stored in the audio library's `library.json`, not in
+this settings file. New imports and clips are automatically matched toward -23 LUFS, with peak-safe boosting;
+use **Loudness...** in the audio library to override a file or restore its automatic level. Manual overrides allow
+-60 to +24 dB; gains above the file's peak-safe headroom use a lookahead peak limiter (-1 dBFS sample ceiling).
+Playback copies are prepared in the background; active playback keeps its position when copies change.
+Master and channel volume settings below continue to scale these adjusted levels. There are no global limiter settings.
+
 ### `audio.enabled`
 **Default:** `true` · **Values:** `true`/`false` · **Applies:** restart required
 
@@ -1163,8 +1170,9 @@ are gone, nothing is loaded and no audio thread runs, so the feature costs nothi
 **Default:** `dmmap-audio` · **Values:** folder path · **Applies:** restart required
 
 Where the audio library lives: the index `library.json`, the imported audio files in `files/` and the cached
-waveforms in `peaks/`. A relative path starts next to the settings file; absolute paths are used as they are. Put it
-on a fast drive if the library is large.
+waveforms in `peaks/`, plus prepared PCM WAV playback copies where loudness boosting needs extra headroom.
+These copies preserve the originals but consume extra disk space. A relative path starts next to the settings
+file; absolute paths are used as they are. Put it on a fast drive if the library is large.
 
 *Keywords:* audio folder, music folder, library path, sound storage, audio location
 

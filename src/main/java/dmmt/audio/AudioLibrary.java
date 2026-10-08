@@ -22,4 +22,7 @@ public class AudioLibrary {
     private List<AudioCategory> categories = new ArrayList<>();
     @Builder.Default
     private List<AudioTrack> tracks = new ArrayList<>();
+    /** Replaced prepared playback copies that could not be deleted yet (e.g. still open in a playing voice). */
+    @Builder.Default
+    private List<String> stalePlaybackFiles = new ArrayList<>();
 }

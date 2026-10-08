@@ -44,8 +44,158 @@ class AudioEngineTest {
 
     private AudioTrack importTrack(String name, AudioKind kind, String categoryId) throws IOException {
         Path source = dir.resolve(name + ".wav");
-        TestAudioFiles.writeWav(source, 200, 8000);
+        TestAudioFiles.writeWav(source, 200, 8000, 0);
         return library.importFile(source, kind, categoryId);
+    }
+
+    private AudioTrack transientTrack(String name, AudioKind kind, String categoryId) throws IOException {
+        int rate = 8000;
+        java.nio.ByteBuffer pcm = java.nio.ByteBuffer.allocate(rate * 2 * 2)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < rate * 2; i++) {
+            pcm.putShort((short) (i == rate ? 32000 : Math.sin(2 * Math.PI * 220 * i / rate) * 1000));
+        }
+        Path file = dir.resolve(name + ".wav");
+        TestAudioFiles.writeWav(file, pcm.array(), rate);
+        return library.importFile(file, kind, categoryId);
+    }
+
+    @Test
+    void limiterSourceSwitchPreservesPausedMusicPositionAndPreparedEffectState() throws IOException {
+        AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
+        engine.setCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        FakeAudioOutput.FakeVoice old = output.last();
+        old.advanceTo(720);
+        engine.toggleMusic();
+        library.setGainOverride(track.getId(), 12.0);
+        engine.refreshTrackVolumes();
+        FakeAudioOutput.FakeVoice replaced = output.last();
+        assertTrue(old.disposed);
+        assertEquals(720, replaced.position);
+        assertFalse(replaced.playing);
+        assertEquals(library.playbackFileOf(track), replaced.file);
+        engine.toggleMusic();
+        assertTrue(replaced.playing);
+
+        AudioTrack effect = transientTrack("effect", AudioKind.EFFECT, null);
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectActive(effect.getId(), true);
+        engine.tick(0.1);
+        FakeAudioOutput.FakeVoice current = output.opened.get(output.opened.size() - 2);
+        current.advanceTo(400);
+        engine.setEffectsPaused(true);
+        library.setGainOverride(effect.getId(), 12.0);
+        engine.refreshTrackVolumes();
+        List<FakeAudioOutput.FakeVoice> effectCopies = output.live().stream()
+                .filter(voice -> voice.file.equals(library.playbackFileOf(effect))).toList();
+        assertEquals(2, effectCopies.size());
+        assertTrue(effectCopies.stream().noneMatch(voice -> voice.playing));
+        assertEquals(400, effectCopies.get(0).position);
+        engine.setEffectsPaused(false);
+        assertTrue(effectCopies.get(0).playing);
+        assertFalse(effectCopies.get(1).playing, "preloaded repetition must remain silent and unstarted");
+        engine.shutdown();
+    }
+
+    @Test
+    void changingLimiterDuringMusicCrossfadePreservesOutgoingFadeAndOtherTrack() throws IOException {
+        engine.setShuffle(false);
+        engine.setCrossfadeSeconds(1);
+        AudioTrack first = transientTrack("a-transient", AudioKind.MUSIC, combat.getId());
+        transientTrack("b-transient", AudioKind.MUSIC, combat.getId());
+        engine.playCategory(combat.getId());
+        engine.tick(1);
+        FakeAudioOutput.FakeVoice outgoing = output.last();
+        outgoing.advanceTo(500);
+        engine.next();
+        engine.tick(0.25);
+        FakeAudioOutput.FakeVoice incoming = output.last();
+        double incomingVolume = incoming.volume;
+        library.setGainOverride(first.getId(), 12.0);
+        engine.refreshTrackVolumes();
+        FakeAudioOutput.FakeVoice replacement = output.last();
+        assertTrue(outgoing.disposed);
+        assertEquals(500, replacement.position);
+        assertEquals(0.75, replacement.volume, 0.0001);
+        assertEquals(incomingVolume, incoming.volume);
+        outgoing.reachEnd();
+        assertEquals("b-transient", engine.currentTrack().orElseThrow().getName());
+        engine.tick(0.25);
+        assertEquals(0.5, replacement.volume, 0.0001);
+        engine.shutdown();
+    }
+
+    @Test
+    void sourceSwitchDuringEffectOverlapKeepsBothSidesAndLoopProgress() throws IOException {
+        AudioTrack track = transientTrack("effect", AudioKind.EFFECT, null);
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectLoopCrossfadeSeconds(0.5);
+        engine.setEffectActive(track.getId(), true);
+        engine.tick(0.1);
+        FakeAudioOutput.FakeVoice old = output.opened.get(0);
+        old.advanceTo(old.duration - 400);
+        engine.tick(0);
+        FakeAudioOutput.FakeVoice incoming = output.opened.get(1);
+        incoming.advanceTo(200);
+        engine.tick(0);
+        library.setGainOverride(track.getId(), 12.0);
+        engine.refreshTrackVolumes();
+        List<FakeAudioOutput.FakeVoice> live = output.playing();
+        assertEquals(2, live.size());
+        assertTrue(old.disposed);
+        assertTrue(incoming.disposed);
+        FakeAudioOutput.FakeVoice replacedIncoming = live.stream()
+                .filter(voice -> voice.position == 200).findFirst().orElseThrow();
+        assertEquals(Math.sqrt(0.5), replacedIncoming.volume, 0.0001);
+        assertEquals(Math.sqrt(0.5), live.stream().filter(voice -> voice != replacedIncoming)
+                .findFirst().orElseThrow().volume, 0.0001);
+        incoming.reachEnd();
+        assertEquals(2, output.playing().size(), "late events from old handles must not restart loops");
+        replacedIncoming.advanceTo(400);
+        engine.tick(0);
+        assertEquals(1, output.playing().size());
+        engine.shutdown();
+    }
+
+    @Test
+    void sourceSwitchWaitsUntilReadyAndSeeksToTheThenCurrentPosition() throws IOException {
+        AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
+        engine.setCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        FakeAudioOutput.FakeVoice old = output.last();
+        old.advanceTo(300);
+        library.setGainOverride(track.getId(), 12.0);
+        output.readyOnOpen = false;
+        engine.refreshTrackVolumes();
+        FakeAudioOutput.FakeVoice pending = output.last();
+        assertFalse(old.disposed);
+        assertFalse(pending.playing);
+        old.advanceTo(550);
+        pending.ready = true;
+        engine.tick(0);
+        assertTrue(old.disposed);
+        assertTrue(pending.playing);
+        assertEquals(550, pending.position);
+        engine.shutdown();
+        assertTrue(output.opened.stream().allMatch(voice -> voice.disposed));
+    }
+
+    @Test
+    void aLimiterReplacementMustNotResumePausedMusicThatWasStopped() throws IOException {
+        AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
+        engine.setCrossfadeSeconds(1);
+        engine.playCategory(combat.getId());
+        engine.tick(1);
+        engine.toggleMusic();
+        engine.stopMusic();
+        library.setGainOverride(track.getId(), 12.0);
+        engine.refreshTrackVolumes();
+        assertFalse(output.last().playing);
+        assertFalse(engine.isMusicPlaying());
+        engine.tick(1);
+        assertTrue(output.live().isEmpty());
+        engine.shutdown();
     }
 
     /** Runs enough ticks for every fade to reach its target (one tick advances a fade by at most one second). */

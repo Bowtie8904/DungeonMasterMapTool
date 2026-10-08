@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -27,12 +29,14 @@ import java.util.Set;
  * &lt;root&gt;/peaks/         cached waveform peaks (derived, may be deleted)
  * </pre>
  *
- * Imports copy the picked file into {@code files/}, so the library keeps working when the original is gone. All
- * methods are synchronized; file IO is the caller's responsibility to keep off the JavaFX thread.
+ * Imports copy the picked file into {@code files/}, so the library keeps working when the original is gone.
+ * Index changes are synchronized; decoding and loudness analysis run outside the library lock.
  */
 public class AudioLibraryService {
-    /** Version of {@code library.json}; 2 hides "Uncategorised" from the overlay (3.35.2). */
-    public static final int SCHEMA_VERSION = 2;
+    /** Version of {@code library.json}; 4 distinguishes peak-safe sources from limiter renders (3.35.5). */
+    public static final int SCHEMA_VERSION = 4;
+    /** Highest manual absolute gain, independent of the file's measured peak-safe headroom. */
+    public static final double MANUAL_MAXIMUM_GAIN_DB = 24;
     public static final String INDEX_FILE = "library.json";
     public static final String FILES_FOLDER = "files";
     public static final String PEAKS_FOLDER = "peaks";
@@ -42,10 +46,16 @@ public class AudioLibraryService {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final Path root;
     private AudioLibrary library;
+    private final Set<Path> clipsBeingIndexed = new HashSet<>();
 
     public AudioLibraryService(Path root) {
         this.root = root.toAbsolutePath().normalize();
         this.library = load();
+        try {
+            deleteStalePlaybackFiles();
+        } catch (IOException e) {
+            System.err.println("Could not clean up replaced audio playback copies: " + e.getMessage());
+        }
     }
 
     public Path root() {
@@ -63,6 +73,19 @@ public class AudioLibraryService {
     /** Full path of a track's audio file. */
     public Path fileOf(AudioTrack track) {
         return filesFolder().resolve(track.getFile());
+    }
+
+    /** File to play; prepared PCM copies are separate from originals and remain inside {@code files/}. */
+    public synchronized Path playbackFileOf(AudioTrack track) {
+        return track.getPlaybackFile() == null ? fileOf(track) : filesFolder().resolve(track.getPlaybackFile());
+    }
+
+    /** The playback file and the gain baked into it, read atomically so a voice never mixes two analyses. */
+    public record PlaybackSource(Path file, double bakedGainDb) {
+    }
+
+    public synchronized PlaybackSource playbackSourceOf(AudioTrack track) {
+        return new PlaybackSource(playbackFileOf(track), track.getPlaybackGainDb());
     }
 
     /** Cache file of a track's waveform peaks. */
@@ -92,13 +115,25 @@ public class AudioLibraryService {
         if (loaded.getTracks() == null) {
             loaded.setTracks(new ArrayList<>());
         }
+        if (loaded.getStalePlaybackFiles() == null) {
+            loaded.setStalePlaybackFiles(new ArrayList<>());
+        }
+        for (AudioTrack track : loaded.getTracks()) {
+            if (track.getPeakSafePlaybackFile() == null && track.getPlaybackFile() != null
+                    && !track.getPlaybackFile().endsWith(".limited.wav")) {
+                track.setPeakSafePlaybackFile(track.getPlaybackFile());
+                track.setPeakSafePlaybackGainDb(track.getPlaybackGainDb());
+            }
+        }
         if (loaded.getCategories().stream().noneMatch(AudioCategory::isUncategorised)) {
             loaded.getCategories().add(AudioCategory.uncategorised());
         }
         if (loaded.getSchemaVersion() < SCHEMA_VERSION) {
             // Schema 2 hides "Uncategorised" from the overlay; older libraries are migrated once (3.35.2).
-            loaded.getCategories().stream().filter(AudioCategory::isUncategorised)
-                    .forEach(category -> category.setHidden(true));
+            if (loaded.getSchemaVersion() < 2) {
+                loaded.getCategories().stream().filter(AudioCategory::isUncategorised)
+                        .forEach(category -> category.setHidden(true));
+            }
             loaded.setSchemaVersion(SCHEMA_VERSION);
         }
         return loaded;
@@ -295,11 +330,46 @@ public class AudioLibraryService {
      *
      * @param categoryId category of a music track; ignored for sound effects
      */
-    public synchronized AudioTrack importFile(Path source, AudioKind kind, String categoryId) throws IOException {
+    public AudioTrack importFile(Path source, AudioKind kind, String categoryId) throws IOException {
         AudioFormats.validate(source);
-        Path target = copyIntoLibrary(source, source.getFileName().toString());
+        Path target;
+        synchronized (this) {
+            target = reserveImportFile(source, source.getFileName().toString());
+        }
         String original = AudioFormats.stripExtension(source.getFileName().toString());
-        return index(target, original, original, kind, categoryId, null, 0, 0);
+        String id = java.util.UUID.randomUUID().toString();
+        Path prepared = null;
+        try {
+            Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+            LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(target);
+            String playbackFile = null;
+            double playbackGainDb = 0;
+            if (measurement.maximumGainDb() > 0) {
+                playbackFile = id + ".playback.wav";
+                prepared = filesFolder().resolve(playbackFile);
+                LoudnessAnalyzer.writePrepared(target, prepared, measurement.maximumGainDb(),
+                        measurement.channels(), measurement.sampleRate());
+                playbackGainDb = measurement.maximumGainDb();
+            }
+            checkImportInterrupted();
+            AudioTrack track = createTrack(id, target, original, original, kind, categoryId, null, 0, 0,
+                    measurement, playbackFile, playbackGainDb);
+            synchronized (this) {
+                checkImportInterrupted();
+                track.setCategoryId(resolveCategory(kind, categoryId));
+                library.getTracks().add(track);
+                try {
+                    save();
+                } catch (IOException | RuntimeException e) {
+                    library.getTracks().remove(track);
+                    throw e;
+                }
+            }
+            return track;
+        } catch (IOException | RuntimeException e) {
+            cleanupOnFailure(e, target, prepared);
+            throw e;
+        }
     }
 
     /**
@@ -348,19 +418,69 @@ public class AudioLibraryService {
      * Adds a file that has already been written into the library's {@code files/} folder (a cut clip, 3.35.3).
      * {@code sourceTrack} is only recorded for information; the new track is fully standalone.
      */
-    public synchronized AudioTrack addClip(Path fileInLibrary, String name, AudioKind kind, String categoryId,
-                                           AudioTrack sourceTrack, long startMs, long endMs) throws IOException {
-        if (!fileInLibrary.toAbsolutePath().normalize().startsWith(filesFolder())) {
+    public AudioTrack addClip(Path fileInLibrary, String name, AudioKind kind, String categoryId,
+                              AudioTrack sourceTrack, long startMs, long endMs) throws IOException {
+        Path clip = fileInLibrary.toAbsolutePath().normalize();
+        if (!clip.startsWith(filesFolder())) {
             throw new IOException("A clip must be written into the library's files folder.");
         }
+        synchronized (this) {
+            if (library.getTracks().stream().anyMatch(track -> fileOf(track).equals(clip))) {
+                throw new IOException("This audio file is already in the library.");
+            }
+            if (!clipsBeingIndexed.add(clip)) {
+                throw new IOException("This clip is already being added to the library.");
+            }
+        }
         String original = sourceTrack == null ? name : sourceTrack.getName();
-        return index(fileInLibrary, name, original, kind, categoryId,
-                sourceTrack == null ? null : sourceTrack.getId(), startMs, endMs);
+        String id = java.util.UUID.randomUUID().toString();
+        Path prepared = null;
+        try {
+            LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(clip);
+            String playbackFile = null;
+            double playbackGainDb = 0;
+            if (measurement.maximumGainDb() > 0) {
+                playbackFile = id + ".playback.wav";
+                prepared = filesFolder().resolve(playbackFile);
+                LoudnessAnalyzer.writePrepared(clip, prepared, measurement.maximumGainDb(),
+                        measurement.channels(), measurement.sampleRate());
+                playbackGainDb = measurement.maximumGainDb();
+            }
+            checkImportInterrupted();
+            AudioTrack track = createTrack(id, clip, name, original, kind, categoryId,
+                    sourceTrack == null ? null : sourceTrack.getId(), startMs, endMs,
+                    measurement, playbackFile, playbackGainDb);
+            synchronized (this) {
+                checkImportInterrupted();
+                if (library.getTracks().stream().anyMatch(existing -> fileOf(existing).equals(clip))) {
+                    throw new IOException("This clip is already in the library.");
+                }
+                track.setCategoryId(resolveCategory(kind, categoryId));
+                library.getTracks().add(track);
+                try {
+                    save();
+                } catch (IOException | RuntimeException e) {
+                    library.getTracks().remove(track);
+                    throw e;
+                }
+            }
+            return track;
+        } catch (IOException | RuntimeException e) {
+            cleanupOnFailure(e, clip, prepared);
+            throw e;
+        } finally {
+            synchronized (this) {
+                clipsBeingIndexed.remove(clip);
+            }
+        }
     }
 
-    private AudioTrack index(Path file, String name, String originalFileName, AudioKind kind, String categoryId,
-                             String sourceTrackId, long startMs, long endMs) throws IOException {
-        AudioTrack track = AudioTrack.builder()
+    private AudioTrack createTrack(String id, Path file, String name, String originalFileName,
+                                   AudioKind kind, String categoryId, String sourceTrackId,
+                                   long startMs, long endMs, LoudnessAnalyzer.Measurement measurement,
+                                   String playbackFile, double playbackGainDb) {
+        return AudioTrack.builder()
+                .id(id)
                 .name(cleanName(name, "Audio"))
                 .file(file.getFileName().toString())
                 .kind(kind == null ? AudioKind.MUSIC : kind)
@@ -370,10 +490,305 @@ public class AudioLibraryService {
                 .sourceTrackId(sourceTrackId)
                 .sourceStartMs(startMs)
                 .sourceEndMs(endMs)
+                .loudnessLufs(measurement.loudnessLufs())
+                .samplePeakDbfs(measurement.samplePeakDbfs())
+                .peakCeilingDbfs(LoudnessAnalyzer.PEAK_CEILING_DBFS)
+                .peakHeadroomDb(measurement.peakHeadroomDb())
+                .autoGainDb(measurement.autoGainDb())
+                .maxGainDb(measurement.maximumGainDb())
+                .audioChannels(measurement.channels())
+                .audioSampleRate(measurement.sampleRate())
+                .playbackFile(playbackFile)
+                .playbackGainDb(playbackGainDb)
+                .peakSafePlaybackFile(playbackFile)
+                .peakSafePlaybackGainDb(playbackGainDb)
                 .build();
-        library.getTracks().add(track);
-        save();
-        return track;
+    }
+
+    /** Re-measures a legacy entry or refreshes the analysis of an existing one. */
+    public void analyzeLoudness(String id) throws IOException {
+        TrackAnalysis snapshot;
+        Path original;
+        synchronized (this) {
+            AudioTrack current = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
+            snapshot = TrackAnalysis.of(current);
+            original = fileOf(current);
+        }
+        LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(original);
+        PreparedSources sources = prepareSources(id, original, measurement, snapshot.gainOverrideDb);
+        boolean committed = false;
+        try {
+            checkImportInterrupted();
+            synchronized (this) {
+                checkImportInterrupted();
+                AudioTrack current = track(id).orElseThrow(() -> new IOException("The audio track was deleted."));
+                if (!snapshot.matches(current)) {
+                    throw new IOException("The audio track changed while it was being analyzed; try again.");
+                }
+                List<String> staleBefore = new ArrayList<>(library.getStalePlaybackFiles());
+                current.setLoudnessLufs(measurement.loudnessLufs());
+                current.setSamplePeakDbfs(measurement.samplePeakDbfs());
+                current.setPeakCeilingDbfs(LoudnessAnalyzer.PEAK_CEILING_DBFS);
+                current.setPeakHeadroomDb(measurement.peakHeadroomDb());
+                current.setAutoGainDb(measurement.autoGainDb());
+                current.setMaxGainDb(measurement.maximumGainDb());
+                current.setAudioChannels(measurement.channels());
+                current.setAudioSampleRate(measurement.sampleRate());
+                current.setPeakSafePlaybackFile(sources.peakSafeFile);
+                current.setPeakSafePlaybackGainDb(sources.peakSafeGainDb);
+                current.setPlaybackFile(sources.playbackFile);
+                current.setPlaybackGainDb(sources.playbackGainDb);
+                addObsoletePlaybackFiles(current, snapshot);
+                try {
+                    save();
+                } catch (IOException | RuntimeException e) {
+                    snapshot.restore(current);
+                    library.setStalePlaybackFiles(staleBefore);
+                    throw e;
+                }
+                committed = true;
+            }
+        } catch (IOException | RuntimeException e) {
+            if (!committed) {
+                cleanupOnFailure(e, sources.createdFiles.toArray(Path[]::new));
+            }
+            throw e;
+        }
+    }
+
+    private record PreparedSources(String peakSafeFile, double peakSafeGainDb,
+                                   String playbackFile, double playbackGainDb, List<Path> createdFiles) {
+    }
+
+    private PreparedSources prepareSources(String id, Path original, LoudnessAnalyzer.Measurement measurement,
+                                           Double overrideDb) throws IOException {
+        List<Path> createdFiles = new ArrayList<>();
+        try {
+            String safeFile = null;
+            double safeGainDb = 0;
+            String playbackFile;
+            double playbackGainDb;
+            if (measurement.maximumGainDb() > 0) {
+                safeFile = id + "." + java.util.UUID.randomUUID() + ".peak-safe.wav";
+                Path safePath = filesFolder().resolve(safeFile);
+                createdFiles.add(safePath);
+                LoudnessAnalyzer.writePrepared(original, safePath, measurement.maximumGainDb(),
+                        measurement.channels(), measurement.sampleRate());
+                safeGainDb = measurement.maximumGainDb();
+            }
+            double selectedGain = overrideDb == null ? measurement.autoGainDb() : overrideDb;
+            if (overrideDb != null && overrideDb > measurement.maximumGainDb()) {
+                playbackFile = id + "." + java.util.UUID.randomUUID() + ".limited.wav";
+                Path limitedPath = filesFolder().resolve(playbackFile);
+                createdFiles.add(limitedPath);
+                LoudnessAnalyzer.writeLimitedPrepared(original, limitedPath, overrideDb,
+                        measurement.channels(), measurement.sampleRate());
+                playbackGainDb = overrideDb;
+            } else {
+                playbackFile = safeFile;
+                playbackGainDb = safeGainDb;
+                if (selectedGain > measurement.maximumGainDb()) {
+                    throw new IOException("The requested gain exceeds the analyzed peak-safe limit.");
+                }
+            }
+            return new PreparedSources(safeFile, safeGainDb, playbackFile, playbackGainDb, createdFiles);
+        } catch (IOException | RuntimeException e) {
+            cleanupOnFailure(e, createdFiles.toArray(Path[]::new));
+            throw e;
+        }
+    }
+
+    private void addObsoletePlaybackFiles(AudioTrack current, TrackAnalysis previous) {
+        Set<String> activeFiles = new HashSet<>();
+        if (current.getPlaybackFile() != null) {
+            activeFiles.add(current.getPlaybackFile());
+        }
+        if (current.getPeakSafePlaybackFile() != null) {
+            activeFiles.add(current.getPeakSafePlaybackFile());
+        }
+        addStaleFile(previous.playbackFile, activeFiles);
+        addStaleFile(previous.peakSafePlaybackFile, activeFiles);
+    }
+
+    private void addStaleFile(String name, Set<String> activeFiles) {
+        if (name != null && !activeFiles.contains(name) && !library.getStalePlaybackFiles().contains(name)) {
+            library.getStalePlaybackFiles().add(name);
+        }
+    }
+
+    /**
+     * Deletes playback copies recorded as stale. A copy that is still open (Windows locks playing files) stays
+     * listed in the index and is retried later; the number of copies that remain is returned.
+     */
+    public synchronized int deleteStalePlaybackFiles() throws IOException {
+        List<String> remaining = new ArrayList<>();
+        for (String name : library.getStalePlaybackFiles()) {
+            Path file = filesFolder().resolve(name).normalize();
+            if (!file.startsWith(filesFolder())) {
+                continue;
+            }
+            try {
+                Files.deleteIfExists(file);
+            } catch (java.nio.file.FileSystemException e) {
+                remaining.add(name);
+            }
+        }
+        if (remaining.size() != library.getStalePlaybackFiles().size()) {
+            library.setStalePlaybackFiles(remaining);
+            save();
+        }
+        return remaining.size();
+    }
+
+    private record TrackAnalysis(String file, Double loudnessLufs, Double samplePeakDbfs,
+                                 Double peakCeilingDbfs, Double peakHeadroomDb, double autoGainDb,
+                                 double maxGainDb, int audioChannels, int audioSampleRate,
+                                 Double gainOverrideDb, String playbackFile,
+                                 double playbackGainDb, String peakSafePlaybackFile,
+                                 double peakSafePlaybackGainDb) {
+        static TrackAnalysis of(AudioTrack track) {
+            return new TrackAnalysis(track.getFile(), track.getLoudnessLufs(), track.getSamplePeakDbfs(),
+                    track.getPeakCeilingDbfs(), track.getPeakHeadroomDb(), track.getAutoGainDb(),
+                    track.getMaxGainDb(), track.getAudioChannels(), track.getAudioSampleRate(),
+                    track.getGainOverrideDb(), track.getPlaybackFile(),
+                    track.getPlaybackGainDb(), track.getPeakSafePlaybackFile(),
+                    track.getPeakSafePlaybackGainDb());
+        }
+
+        boolean matches(AudioTrack track) {
+            return Objects.equals(file, track.getFile())
+                    && Objects.equals(loudnessLufs, track.getLoudnessLufs())
+                    && Objects.equals(samplePeakDbfs, track.getSamplePeakDbfs())
+                    && Objects.equals(peakCeilingDbfs, track.getPeakCeilingDbfs())
+                    && Objects.equals(peakHeadroomDb, track.getPeakHeadroomDb())
+                    && Double.compare(autoGainDb, track.getAutoGainDb()) == 0
+                    && Double.compare(maxGainDb, track.getMaxGainDb()) == 0
+                    && audioChannels == track.getAudioChannels()
+                    && audioSampleRate == track.getAudioSampleRate()
+                    && Objects.equals(gainOverrideDb, track.getGainOverrideDb())
+                    && Objects.equals(playbackFile, track.getPlaybackFile())
+                    && Double.compare(playbackGainDb, track.getPlaybackGainDb()) == 0
+                    && Objects.equals(peakSafePlaybackFile, track.getPeakSafePlaybackFile())
+                    && Double.compare(peakSafePlaybackGainDb, track.getPeakSafePlaybackGainDb()) == 0;
+        }
+
+        void restore(AudioTrack track) {
+            track.setLoudnessLufs(loudnessLufs);
+            track.setSamplePeakDbfs(samplePeakDbfs);
+            track.setPeakCeilingDbfs(peakCeilingDbfs);
+            track.setPeakHeadroomDb(peakHeadroomDb);
+            track.setAutoGainDb(autoGainDb);
+            track.setMaxGainDb(maxGainDb);
+            track.setAudioChannels(audioChannels);
+            track.setAudioSampleRate(audioSampleRate);
+            track.setGainOverrideDb(gainOverrideDb);
+            track.setPlaybackFile(playbackFile);
+            track.setPlaybackGainDb(playbackGainDb);
+            track.setPeakSafePlaybackFile(peakSafePlaybackFile);
+            track.setPeakSafePlaybackGainDb(peakSafePlaybackGainDb);
+        }
+    }
+
+    /** Sets an absolute gain override; {@code null} restores the automatic recommendation. */
+    public void setGainOverride(String id, Double gainDb) throws IOException {
+        checkImportInterrupted();
+        if (gainDb != null && (!Double.isFinite(gainDb) || gainDb < LoudnessAnalyzer.MIN_GAIN_DB
+                || gainDb > MANUAL_MAXIMUM_GAIN_DB)) {
+            throw new IOException("Gain must be between " + LoudnessAnalyzer.MIN_GAIN_DB + " dB and "
+                    + MANUAL_MAXIMUM_GAIN_DB + " dB.");
+        }
+        TrackAnalysis snapshot;
+        Path original;
+        synchronized (this) {
+            AudioTrack current = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
+            snapshot = TrackAnalysis.of(current);
+            original = fileOf(current);
+            if (Objects.equals(snapshot.gainOverrideDb, gainDb) && current.isLoudnessAnalyzed()) {
+                return;
+            }
+        }
+        LoudnessAnalyzer.Measurement measurement = null;
+        if (gainDb != null && (snapshot.peakCeilingDbfs == null
+                || (gainDb > snapshot.maxGainDb
+                && (snapshot.audioChannels <= 0 || snapshot.audioSampleRate <= 0)))) {
+            measurement = LoudnessAnalyzer.analyze(original);
+        }
+        PreparedSources sources = null;
+        List<Path> createdFiles = new ArrayList<>();
+        try {
+            String safeFile = snapshot.peakSafePlaybackFile;
+            double safeGainDb = snapshot.peakSafePlaybackGainDb;
+            String playbackFile;
+            double playbackGainDb;
+            double maximumGainDb = snapshot.maxGainDb;
+            double automaticGainDb = snapshot.autoGainDb;
+            int audioChannels = snapshot.audioChannels;
+            int audioSampleRate = snapshot.audioSampleRate;
+            if (measurement != null) {
+                sources = prepareSources(id, original, measurement, gainDb);
+                createdFiles.addAll(sources.createdFiles);
+                safeFile = sources.peakSafeFile;
+                safeGainDb = sources.peakSafeGainDb;
+                playbackFile = sources.playbackFile;
+                playbackGainDb = sources.playbackGainDb;
+                maximumGainDb = measurement.maximumGainDb();
+                automaticGainDb = measurement.autoGainDb();
+                audioChannels = measurement.channels();
+                audioSampleRate = measurement.sampleRate();
+            } else {
+                double selectedGainDb = gainDb == null ? snapshot.autoGainDb : gainDb;
+                if (gainDb != null && gainDb > snapshot.maxGainDb
+                        && audioChannels > 0 && audioSampleRate > 0) {
+                    playbackFile = id + "." + java.util.UUID.randomUUID() + ".limited.wav";
+                    Path limitedPath = filesFolder().resolve(playbackFile);
+                    createdFiles.add(limitedPath);
+                    LoudnessAnalyzer.writeLimitedPrepared(original, limitedPath, gainDb,
+                            snapshot.audioChannels, snapshot.audioSampleRate);
+                    playbackGainDb = gainDb;
+                } else {
+                    playbackFile = safeFile;
+                    playbackGainDb = safeGainDb;
+                    if (selectedGainDb > snapshot.maxGainDb) {
+                        throw new IOException("The requested gain exceeds the analyzed peak-safe limit.");
+                    }
+                }
+            }
+            checkImportInterrupted();
+            synchronized (this) {
+                checkImportInterrupted();
+                AudioTrack current = track(id).orElseThrow(() -> new IOException("The audio track was deleted."));
+                if (!snapshot.matches(current)) {
+                    throw new IOException("The audio track changed while gain was being prepared; try again.");
+                }
+                List<String> staleBefore = new ArrayList<>(library.getStalePlaybackFiles());
+                if (measurement != null) {
+                    current.setLoudnessLufs(measurement.loudnessLufs());
+                    current.setSamplePeakDbfs(measurement.samplePeakDbfs());
+                    current.setPeakCeilingDbfs(LoudnessAnalyzer.PEAK_CEILING_DBFS);
+                    current.setPeakHeadroomDb(measurement.peakHeadroomDb());
+                    current.setAutoGainDb(automaticGainDb);
+                    current.setMaxGainDb(maximumGainDb);
+                    current.setAudioChannels(audioChannels);
+                    current.setAudioSampleRate(audioSampleRate);
+                    current.setPeakSafePlaybackFile(safeFile);
+                    current.setPeakSafePlaybackGainDb(safeGainDb);
+                }
+                current.setGainOverrideDb(gainDb);
+                current.setPlaybackFile(playbackFile);
+                current.setPlaybackGainDb(playbackGainDb);
+                addObsoletePlaybackFiles(current, snapshot);
+                try {
+                    save();
+                } catch (IOException | RuntimeException e) {
+                    snapshot.restore(current);
+                    library.setStalePlaybackFiles(staleBefore);
+                    throw e;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            cleanupOnFailure(e, createdFiles.toArray(Path[]::new));
+            throw e;
+        }
     }
 
     /** A free file name inside {@code files/} for the given name, keeping the extension. */
@@ -382,11 +797,11 @@ public class AudioLibraryService {
         return uniqueFile(sanitizeFileName(name) + "." + extension.toLowerCase(Locale.ROOT));
     }
 
-    private Path copyIntoLibrary(Path source, String fileName) throws IOException {
+    private Path reserveImportFile(Path source, String fileName) throws IOException {
         Files.createDirectories(filesFolder());
         Path target = uniqueFile(sanitizeFileName(AudioFormats.stripExtension(fileName))
                 + "." + AudioFormats.extensionOf(source));
-        Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES);
+        Files.createFile(target);
         return target;
     }
 
@@ -428,13 +843,48 @@ public class AudioLibraryService {
         save();
     }
 
-    /** Removes a track from the index and deletes its audio file and cached peaks. */
+    /** Removes a track from the index and deletes its audio file, prepared playback and cached peaks. */
     public synchronized void deleteTrack(String id) throws IOException {
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
+        List<String> staleBefore = new ArrayList<>(library.getStalePlaybackFiles());
+        List<String> preparedFiles = new ArrayList<>();
+        if (track.getPlaybackFile() != null) {
+            preparedFiles.add(track.getPlaybackFile());
+        }
+        if (track.getPeakSafePlaybackFile() != null
+                && !preparedFiles.contains(track.getPeakSafePlaybackFile())) {
+            preparedFiles.add(track.getPeakSafePlaybackFile());
+        }
+        preparedFiles.addAll(staleBefore.stream().filter(name -> name.startsWith(id + "."))
+                .filter(name -> !preparedFiles.contains(name)).toList());
+        for (String name : preparedFiles) {
+            if (!library.getStalePlaybackFiles().contains(name)) {
+                library.getStalePlaybackFiles().add(name);
+            }
+        }
         library.getTracks().remove(track);
-        save();
+        try {
+            save();
+        } catch (IOException | RuntimeException e) {
+            library.getTracks().add(track);
+            library.setStalePlaybackFiles(staleBefore);
+            throw e;
+        }
         Files.deleteIfExists(fileOf(track));
+        List<String> staleAfterDelete = new ArrayList<>(library.getStalePlaybackFiles());
+        for (String preparedFile : preparedFiles) {
+            try {
+                Files.deleteIfExists(filesFolder().resolve(preparedFile));
+                staleAfterDelete.remove(preparedFile);
+            } catch (java.nio.file.FileSystemException lockedFile) {
+                // Keep locked prepared files indexed for cleanup on startup or a later explicit cleanup.
+            }
+        }
         Files.deleteIfExists(peaksFileOf(track));
+        if (!staleAfterDelete.equals(library.getStalePlaybackFiles())) {
+            library.setStalePlaybackFiles(staleAfterDelete);
+            save();
+        }
     }
 
     /** Tracks whose index entry has no file on disk any more (e.g. deleted outside the app). */
@@ -447,6 +897,26 @@ public class AudioLibraryService {
             return null;
         }
         return categoryId != null && category(categoryId).isPresent() ? categoryId : AudioCategory.UNCATEGORISED_ID;
+    }
+
+    private static void cleanupOnFailure(Throwable failure, Path... paths) {
+        for (Path path : paths) {
+            if (path == null) {
+                continue;
+            }
+            try {
+                Files.deleteIfExists(path);
+                Files.deleteIfExists(path.resolveSibling(path.getFileName() + ".tmp"));
+            } catch (IOException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        }
+    }
+
+    private static void checkImportInterrupted() throws InterruptedIOException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new InterruptedIOException("Audio processing was interrupted.");
+        }
     }
 
     static String cleanName(String raw, String fallback) {

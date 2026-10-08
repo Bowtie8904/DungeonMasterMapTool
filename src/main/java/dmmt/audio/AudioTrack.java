@@ -53,9 +53,71 @@ public class AudioTrack {
     /** Hidden sound effects keep working but are left out of the audio overlay (3.35.2). */
     @Builder.Default
     private boolean hidden = false;
+    /** Measured integrated loudness; {@code null} for legacy entries and digital silence. */
+    private Double loudnessLufs;
+    /** Measured sample peak in dBFS; {@code null} when the file is silent or has not been analyzed. */
+    private Double samplePeakDbfs;
+    /** Configured sample-peak ceiling in dBFS. */
+    private Double peakCeilingDbfs;
+    /** Remaining sample-peak headroom at the original level, in decibels. */
+    private Double peakHeadroomDb;
+    /** Automatic absolute gain relative to the original audio. */
+    @Builder.Default
+    private double autoGainDb = 0;
+    /** Greatest peak-safe absolute gain relative to the original audio. */
+    @Builder.Default
+    private double maxGainDb = 0;
+    /** Decoded PCM format used to prepare peak-safe and limited playback sources. */
+    @Builder.Default
+    private int audioChannels = 0;
+    @Builder.Default
+    private int audioSampleRate = 0;
+    /** Optional absolute gain override; {@code null} selects {@link #autoGainDb}. */
+    private Double gainOverrideDb;
+    /** App-managed PCM playback copy, relative to {@code files/}; originals remain in {@code file}. */
+    private String playbackFile;
+    /** Gain already baked into {@code playbackFile}, relative to the original. */
+    @Builder.Default
+    private double playbackGainDb = 0;
+    /** Uncompressed, peak-safe playback copy used when automatic gain or a peak-safe override is selected. */
+    private String peakSafePlaybackFile;
+    /** Gain already baked into {@code peakSafePlaybackFile}, relative to the original. */
+    @Builder.Default
+    private double peakSafePlaybackGainDb = 0;
 
     public boolean isMusic() {
         return kind == AudioKind.MUSIC;
+    }
+
+    public double effectiveGainDb() {
+        return gainOverrideDb == null ? autoGainDb : gainOverrideDb;
+    }
+
+    public double maximumGainDb() {
+        return maxGainDb;
+    }
+
+    /** Manual override range is independent of measured peak-safe headroom. */
+    public double manualMaximumGainDb() {
+        return AudioLibraryService.MANUAL_MAXIMUM_GAIN_DB;
+    }
+
+    public boolean isLoudnessAnalyzed() {
+        return peakCeilingDbfs != null;
+    }
+
+    /**
+     * JavaFX volume multiplier for {@link #getPlaybackFile()}: {@code 10^((effectiveGainDb - playbackGainDb) / 20)}
+     * clamped to 0..1, because the prepared copy already contains {@code playbackGainDb}.
+     */
+    public double playbackVolumeFactor() {
+        return playbackVolumeFactor(playbackGainDb);
+    }
+
+    /** Volume multiplier when a caller still holds a voice prepared with an earlier baked gain. */
+    public double playbackVolumeFactor(double bakedGainDb) {
+        double factor = Math.pow(10, (effectiveGainDb() - bakedGainDb) / 20);
+        return Double.isFinite(factor) ? Math.max(0, Math.min(1, factor)) : 0;
     }
 
     /** {@code 3:07}, or {@code -} when the length is unknown. */

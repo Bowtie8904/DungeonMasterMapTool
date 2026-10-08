@@ -698,6 +698,33 @@ same application. It must never be in the way of DMs who do not use it, and must
 - Audio is DM-side only: it is never sent to the player view and is independent of freeze, maps and projects.
   Switching, saving or closing a map never interrupts playback.
 
+### 3.35.5 Per-file loudness matching
+
+- Analyze new MP3/WAV imports (including folder imports and newly cut clips) on the existing background workers.
+  Measure gated, K-weighted integrated loudness, targeting -23 LUFS, with a -1 dBFS sample-peak ceiling and a
+  maximum boost of 24 dB. Silence remains unchanged. Short effects are measured over their available samples.
+- Save the automatic gain and an optional absolute gain override in decibels per library track. Older entries
+  retain their original level until explicitly analyzed. Never modify imported originals or source files.
+- JavaFX media volume cannot amplify above unity. Where amplification needs headroom, create an app-managed
+  PCM WAV playback copy with that headroom baked in; keep originals for clip cutting. Gain adjustments remain
+  fixed during automatic playback and preserve dynamics.
+- Manual overrides allow -60 to +24 dB relative to the original, independently of automatic peak headroom.
+  Overrides above peak-safe headroom prepare a gain-specific PCM playback copy using a stereo-linked lookahead
+  peak limiter with smooth gain release and a -1 dBFS sample ceiling, not hard sample clipping. Only such
+  overrides reduce dynamics; restoring automatic returns to the uncompressed, peak-safe playback source.
+  Prepare copies in background workers, persist only after success, keep originals unchanged, and report failures.
+  Reopen active instances at their current positions when their playback source changes, retaining pause, fade,
+  crossfade and loop state. Waveform previews use the same gain/limiter and source-switch semantics.
+- The audio library exposes a per-file Loudness action and gain column: show the automatic recommendation,
+  edit the saved override, reset to automatic, and analyze an older file. Changes apply to currently playing
+  music/effects and waveform previews at their current positions. Ordinary volume-only edits do not reopen
+  voices; limiter source changes do. Master/channel volumes, fades, loops and mute
+  continue to multiply the per-file gain. Prepared playback copies are removed when their track is deleted.
+- An older file analyzed while already playing switches automatically to its prepared copy at the current
+  position when the media source is ready; applying a manual override analyzes an older file if required.
+- Analysis/preparation errors are reported through the existing import/dialog error flow, not silently ignored.
+  Analysis is bounded-memory, interruptible, and does not block the JavaFX thread. No new global settings.
+
 ### 3.35.6 UI
 
 Audio is deliberately **not** part of the DM controls sidebar: it is not a map tool, and a DM who never plays music

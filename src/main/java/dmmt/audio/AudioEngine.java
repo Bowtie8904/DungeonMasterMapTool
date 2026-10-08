@@ -65,25 +65,65 @@ public class AudioEngine {
 
     /** A playing sound with its own fade state; the gain is relative (0 to 1) inside its channel. */
     private static final class Voice {
-        private final AudioOutput.Voice handle;
+        private AudioOutput.Voice handle;
         private final String trackId;
         private final boolean musicChannel;
+        private java.nio.file.Path playbackFile;
+        private double playbackGainDb;
+        private Runnable onEnd;
+        private AudioOutput.Voice replacement;
+        private AudioLibraryService.PlaybackSource replacementSource;
         private double gain;
         private double targetGain = 1;
         private double fadeSeconds = 1;
         private boolean disposeWhenSilent;
         private double loopGain = 1;
+        private boolean playing;
 
-        Voice(AudioOutput.Voice handle, String trackId, boolean musicChannel, double gain) {
+        Voice(AudioOutput.Voice handle, String trackId, AudioLibraryService.PlaybackSource source,
+              boolean musicChannel, double gain) {
             this.handle = handle;
             this.trackId = trackId;
             this.musicChannel = musicChannel;
+            this.playbackFile = source.file();
+            this.playbackGainDb = source.bakedGainDb();
             this.gain = gain;
         }
 
         void fadeTo(double target, double seconds) {
             targetGain = target;
             fadeSeconds = Math.max(MIN_FADE_SECONDS, seconds);
+        }
+
+        void setOnEnd(Runnable action) {
+            onEnd = action;
+            AudioOutput.Voice opened = handle;
+            opened.setOnEnd(() -> {
+                if (handle == opened && onEnd != null) {
+                    playing = false;
+                    onEnd.run();
+                }
+            });
+        }
+
+        void dispose() {
+            playing = false;
+            onEnd = null;
+            handle.dispose();
+            if (replacement != null) {
+                replacement.dispose();
+                replacement = null;
+            }
+        }
+
+        void play() {
+            playing = true;
+            handle.play();
+        }
+
+        void pause() {
+            playing = false;
+            handle.pause();
         }
     }
 
@@ -132,6 +172,100 @@ public class AudioEngine {
     public void setEffectsVolume(double value) {
         effectsVolume = clamp01(value);
         applyVolumes();
+    }
+
+    /**
+     * Reapplies per-track gain after a library override or loudness analysis changes. Overrides take effect
+     * immediately because each voice is scaled relative to the gain baked into the copy it opened.
+     */
+    public void refreshTrackVolumes() {
+        for (Voice voice : allVoices()) {
+            requestReplacement(voice);
+        }
+        applyVolumes();
+    }
+
+    /**
+     * Whether a live voice of this track still plays an older playback copy (after {@code analyzeLoudness}).
+     * Such voices stay correct but cannot exceed their old copy's baked gain until the track is reopened.
+     */
+    public boolean needsReopen(String trackId) {
+        Optional<AudioTrack> track = library.track(trackId);
+        if (track.isEmpty()) {
+            return false;
+        }
+        java.nio.file.Path current = library.playbackSourceOf(track.get()).file();
+        return allVoices().stream().anyMatch(voice -> voice.trackId.equals(trackId)
+                && !voice.playbackFile.equals(current));
+    }
+
+    /**
+     * Restarts the running music/effect voices of a track from the current playback copy at their positions,
+     * so a fresh analysis can apply its newly prepared boost headroom. Other tracks are not touched.
+     */
+    public void reopenTrack(String trackId) {
+        if (!needsReopen(trackId)) {
+            return;
+        }
+        allVoices().stream().filter(voice -> voice.trackId.equals(trackId)).forEach(this::requestReplacement);
+        fireChanged();
+    }
+
+    private void requestReplacement(Voice voice) {
+        Optional<AudioTrack> track = library.track(voice.trackId);
+        if (track.isEmpty()) {
+            return;
+        }
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
+        if (voice.replacement != null && !source.equals(voice.replacementSource)) {
+            voice.replacement.dispose();
+            voice.replacement = null;
+        }
+        if (voice.playbackFile.equals(source.file())) {
+            return;
+        }
+        if (voice.replacement == null) {
+            voice.replacement = output.open(source.file(), false);
+            voice.replacementSource = source;
+            if (voice.replacement == null) {
+                System.err.println("Could not apply the new playback source for " + voice.trackId);
+                return;
+            }
+            voice.replacement.setVolume(0);
+        }
+        finishReplacement(voice);
+    }
+
+    private void finishReplacement(Voice voice) {
+        if (voice.replacement == null || !voice.replacement.isReady()) {
+            return;
+        }
+        AudioOutput.Voice old = voice.handle;
+        double position = old.positionMs();
+        voice.handle = voice.replacement;
+        voice.playbackFile = voice.replacementSource.file();
+        voice.playbackGainDb = voice.replacementSource.bakedGainDb();
+        voice.replacement = null;
+        voice.handle.seek(position);
+        voice.handle.setVolume(voiceVolume(voice));
+        voice.setOnEnd(voice.onEnd);
+        old.dispose();
+        if (voice.playing) {
+            voice.handle.play();
+        }
+    }
+
+    private List<Voice> allVoices() {
+        List<Voice> voices = new ArrayList<>();
+        if (music != null) {
+            voices.add(music);
+        }
+        if (fadingOut != null) {
+            voices.add(fadingOut);
+        }
+        effects.values().forEach(effect -> voices.addAll(effect.voices()));
+        voices.addAll(stopping);
+        return voices;
     }
 
     public double masterVolume() {
@@ -251,14 +385,14 @@ public class AudioEngine {
         }
         musicPaused = !musicPaused;
         if (musicPaused) {
-            music.handle.pause();
+            music.pause();
             if (fadingOut != null) {
-                fadingOut.handle.pause();
+                fadingOut.pause();
             }
         } else {
-            music.handle.play();
+            music.play();
             if (fadingOut != null) {
-                fadingOut.handle.play();
+                fadingOut.play();
             }
         }
         fireChanged();
@@ -325,24 +459,25 @@ public class AudioEngine {
             fadingOut.fadeTo(0, fadeSeconds);
             fadingOut.disposeWhenSilent = true;
         }
-        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), false);
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
+        AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
             music = null;
             fireChanged();
             return;
         }
-        Voice voice = new Voice(handle, trackId, true, fadeSeconds > 0 ? 0 : 1);
+        Voice voice = new Voice(handle, trackId, source, true, fadeSeconds > 0 ? 0 : 1);
         voice.fadeTo(1, fadeSeconds);
         music = voice;
         crossfadeStarted = false;
         handle.setVolume(voiceVolume(voice));
-        handle.setOnEnd(() -> {
+        voice.setOnEnd(() -> {
             if (music == voice) {
                 advance(1, 0);
             }
         });
         if (!musicPaused) {
-            handle.play();
+            voice.play();
         }
         fireChanged();
     }
@@ -395,19 +530,20 @@ public class AudioEngine {
         if (track.isEmpty()) {
             return;
         }
-        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), false);
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
+        AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
             return;
         }
-        Voice voice = new Voice(handle, trackId, false, 0);
+        Voice voice = new Voice(handle, trackId, source, false, 0);
         voice.fadeTo(1, effectFadeSeconds);
         handle.setVolume(voiceVolume(voice));
         EffectLoop effect = new EffectLoop(voice);
         effects.put(trackId, effect);
         prepareEffect(effect);
-        handle.setOnEnd(() -> effectEnded(effect, voice));
+        voice.setOnEnd(() -> effectEnded(effect, voice));
         if (!effectsPaused) {
-            handle.play();
+            voice.play();
         }
         fireChanged();
     }
@@ -417,10 +553,11 @@ public class AudioEngine {
         if (track.isEmpty()) {
             return;
         }
-        AudioOutput.Voice handle = output.open(library.fileOf(track.get()), false);
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
+        AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle != null) {
             handle.setVolume(0);
-            effect.prepared = new Voice(handle, effect.current.trackId, false, 1);
+            effect.prepared = new Voice(handle, effect.current.trackId, source, false, 1);
             effect.prepared.loopGain = 0;
         }
     }
@@ -431,7 +568,7 @@ public class AudioEngine {
         }
         // End events are a fallback for unknown durations or a delayed UI tick.
         if (effect.outgoing != null) {
-            effect.outgoing.handle.dispose();
+            effect.outgoing.dispose();
             effect.outgoing = null;
         }
         if (effect.prepared == null) {
@@ -457,13 +594,13 @@ public class AudioEngine {
             effect.current.gain = previous.gain;
             effect.current.fadeTo(1, effectFadeSeconds);
         } else {
-            previous.handle.dispose();
+            previous.dispose();
             effect.current.loopGain = 1;
         }
         Voice current = effect.current;
-        current.handle.setOnEnd(() -> effectEnded(effect, current));
+        current.setOnEnd(() -> effectEnded(effect, current));
         current.handle.setVolume(voiceVolume(current));
-        current.handle.play();
+        current.play();
         if (overlapSeconds <= 0) {
             prepareEffect(effect);
         }
@@ -478,7 +615,7 @@ public class AudioEngine {
             effect.current.handle.setVolume(voiceVolume(effect.current));
             step(effect.outgoing, delta);
             if (effect.blend.finished()) {
-                effect.outgoing.handle.dispose();
+                effect.outgoing.dispose();
                 effect.outgoing = null;
                 prepareEffect(effect);
             }
@@ -501,7 +638,7 @@ public class AudioEngine {
             return;
         }
         if (effect.prepared != null) {
-            effect.prepared.handle.dispose();
+            effect.prepared.dispose();
         }
         stopVoice(effect.current, effectsPaused ? 0 : fadeSeconds);
         stopVoice(effect.outgoing, effectsPaused ? 0 : fadeSeconds);
@@ -553,9 +690,9 @@ public class AudioEngine {
                         : java.util.stream.Stream.of(effect.current, effect.outgoing))
                 .forEach(voice -> {
             if (paused) {
-                voice.handle.pause();
+                voice.pause();
             } else {
-                voice.handle.play();
+                voice.play();
             }
         });
         fireChanged();
@@ -594,6 +731,7 @@ public class AudioEngine {
      * {@code deltaSeconds} is the time since the previous call.
      */
     public void tick(double deltaSeconds) {
+        allVoices().forEach(this::requestReplacement);
         double delta = Math.max(0, Math.min(1, deltaSeconds));
         stepPanic(delta);
         if (music != null) {
@@ -603,7 +741,7 @@ public class AudioEngine {
         if (fadingOut != null) {
             step(fadingOut, delta);
             if (fadingOut.disposeWhenSilent && fadingOut.gain <= 0.001) {
-                fadingOut.handle.dispose();
+                fadingOut.dispose();
                 fadingOut = null;
             }
         }
@@ -615,7 +753,7 @@ public class AudioEngine {
         for (Voice voice : List.copyOf(stopping)) {
             step(voice, delta);
             if (voice.gain <= 0.001) {
-                voice.handle.dispose();
+                voice.dispose();
                 stopping.remove(voice);
             }
         }
@@ -665,7 +803,7 @@ public class AudioEngine {
             return;
         }
         if (fadeSeconds <= 0) {
-            voice.handle.dispose();
+            voice.dispose();
             return;
         }
         voice.fadeTo(0, fadeSeconds);
@@ -688,7 +826,9 @@ public class AudioEngine {
     /** Output volume of a voice: its fade gain times the channel, master and panic factors on a perceptual curve. */
     private double voiceVolume(Voice voice) {
         double channel = voice.musicChannel ? musicVolume : effectsVolume;
-        return clamp01(voice.gain * voice.loopGain * curve(channel) * curve(masterVolume) * panicGain);
+        double trackGain = library.track(voice.trackId)
+                .map(track -> track.playbackVolumeFactor(voice.playbackGainDb)).orElse(1.0);
+        return clamp01(voice.gain * voice.loopGain * trackGain * curve(channel) * curve(masterVolume) * panicGain);
     }
 
     /** Volume of a channel as the output hears it, for tests and readouts. */
@@ -712,7 +852,7 @@ public class AudioEngine {
         fadingOut = null;
         effects.values().forEach(effect -> stopEffect(effect, 0));
         effects.clear();
-        stopping.forEach(voice -> voice.handle.dispose());
+        stopping.forEach(Voice::dispose);
         stopping.clear();
         output.close();
     }

@@ -60,6 +60,38 @@ public final class TestAudioFiles {
         }
     }
 
+    /** Writes interleaved 16-bit stereo PCM for loudness/channel-isolation tests. */
+    public static void writeStereoWav(Path file, short[] left, short[] right, int sampleRate) throws IOException {
+        if (left.length != right.length) {
+            throw new IllegalArgumentException("Both stereo channels must have the same number of samples.");
+        }
+        Files.createDirectories(file.toAbsolutePath().getParent());
+        ByteBuffer pcm = ByteBuffer.allocate(left.length * 4).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < left.length; i++) {
+            pcm.putShort(left[i]);
+            pcm.putShort(right[i]);
+        }
+        byte[] samples = pcm.array();
+        ByteBuffer header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
+        header.put(new byte[]{'R', 'I', 'F', 'F'});
+        header.putInt(36 + samples.length);
+        header.put(new byte[]{'W', 'A', 'V', 'E'});
+        header.put(new byte[]{'f', 'm', 't', ' '});
+        header.putInt(16);
+        header.putShort((short) 1);
+        header.putShort((short) 2);
+        header.putInt(sampleRate);
+        header.putInt(sampleRate * 4);
+        header.putShort((short) 4);
+        header.putShort((short) 16);
+        header.put(new byte[]{'d', 'a', 't', 'a'});
+        header.putInt(samples.length);
+        try (OutputStream out = Files.newOutputStream(file)) {
+            out.write(header.array());
+            out.write(samples);
+        }
+    }
+
     /** An MP3 of whole 128 kbit/s frames; the audio data itself is filler, only the frame headers matter. */
     public static void writeMp3(Path file, int frames) throws IOException {
         writeMp3(file, frames, false);

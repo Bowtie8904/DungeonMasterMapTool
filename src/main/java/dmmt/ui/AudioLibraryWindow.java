@@ -46,6 +46,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignV;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 
 import java.io.File;
@@ -232,7 +233,7 @@ public final class AudioLibraryWindow {
     private Region buildTracks() {
         TableColumn<AudioTrack, String> name = new TableColumn<>("Name");
         name.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().getName()));
-        name.setPrefWidth(340);
+        name.setPrefWidth(260);
         name.setCellFactory(column -> new javafx.scene.control.TableCell<>() {
             @Override
             protected void updateItem(String text, boolean empty) {
@@ -250,8 +251,14 @@ public final class AudioLibraryWindow {
         TableColumn<AudioTrack, String> source = new TableColumn<>("Imported from");
         source.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(
                 data.getValue().getOriginalFileName() == null ? "" : data.getValue().getOriginalFileName()));
-        source.setPrefWidth(220);
-        trackTable.getColumns().setAll(List.of(name, duration, source));
+        source.setPrefWidth(160);
+        TableColumn<AudioTrack, String> gain = new TableColumn<>("Gain");
+        gain.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(
+                AudioLoudnessDialog.decibels(data.getValue().effectiveGainDb())
+                        + (data.getValue().getGainOverrideDb() != null ? " (manual)"
+                        : data.getValue().isLoudnessAnalyzed() ? " (auto)" : " (original)")));
+        gain.setPrefWidth(145);
+        trackTable.getColumns().setAll(List.of(name, duration, gain, source));
         trackTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         trackTable.setPlaceholder(new Label("No audio here yet - use \"Import files\"."));
         trackTable.setContextMenu(trackMenu());
@@ -307,8 +314,13 @@ public final class AudioLibraryWindow {
                 preview(track);
             }
         });
+        Button loudness = Icons.button(MaterialDesignV.VOLUME_HIGH,
+                "Adjust the selected file's loudness or restore its automatic level", this::adjustLoudness);
+        loudness.setId("audioLibraryLoudness");
+        loudness.disableProperty().bind(javafx.beans.binding.Bindings.size(
+                trackTable.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
 
-        HBox tools = new HBox(6, importFiles, importFolder, Icons.separator(), play, rename, delete,
+        HBox tools = new HBox(6, importFiles, importFolder, Icons.separator(), play, loudness, rename, delete,
                 Icons.separator(), cut, Icons.separator(), search);
         tools.setAlignment(Pos.CENTER_LEFT);
         this.tools = tools;
@@ -419,6 +431,8 @@ public final class AudioLibraryWindow {
         makeMusic.setOnAction(event -> changeKind(AudioKind.MUSIC));
         MenuItem cut = new MenuItem("Cut clips...");
         cut.setOnAction(event -> cutClips());
+        MenuItem loudness = new MenuItem("Loudness...");
+        loudness.setOnAction(event -> adjustLoudness());
         MenuItem effectIcon = new MenuItem("Choose icon...");
         effectIcon.setOnAction(event -> chooseEffectIcon());
         MenuItem effectColor = new MenuItem("Choose colour...");
@@ -428,7 +442,7 @@ public final class AudioLibraryWindow {
         MenuItem delete = new MenuItem("Delete");
         delete.getStyleClass().add("danger");
         delete.setOnAction(event -> deleteTracks());
-        menu.getItems().setAll(rename, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
+        menu.getItems().setAll(rename, loudness, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
                 new javafx.scene.control.SeparatorMenuItem(), delete);
         menu.setOnShowing(event -> {
             moveTo.getItems().clear();
@@ -440,6 +454,7 @@ public final class AudioLibraryWindow {
             }
             boolean effects = isEffectsView();
             AudioTrack selected = trackTable.getSelectionModel().getSelectedItem();
+            loudness.setDisable(selectedTracks().size() != 1 || importTask != null);
             moveTo.setDisable(effects || moveTo.getItems().isEmpty());
             makeEffect.setDisable(effects);
             makeMusic.setDisable(!effects);
@@ -849,6 +864,19 @@ public final class AudioLibraryWindow {
     /** Opens the waveform view, where the track can be listened to and split into clips. */
     private void preview(AudioTrack track) {
         AudioCutWindow.show(stage, library, track, this::refreshCategories);
+    }
+
+    private void adjustLoudness() {
+        List<AudioTrack> selected = selectedTracks();
+        if (selected.size() != 1) {
+            return;
+        }
+        AudioTrack track = selected.get(0);
+        new AudioLoudnessDialog(stage, library, track, () -> {
+            engine.refreshTrackVolumes();
+            trackTable.refresh();
+            onChanged.run();
+        }, () -> preview(track)).show();
     }
 
     /** @return the window of this library, for dialogs opened by callers. */

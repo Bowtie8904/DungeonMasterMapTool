@@ -134,19 +134,19 @@ class AudioCutWindowTest {
             invoke(window, "updatePlayback");
             assertEquals(1, next.plays);
             assertEquals(200, field("playheadMs").getLong(window));
-            assertEquals(0.8, first.volume);
+            assertEquals(previewVolume(window), first.volume);
             assertEquals(0, next.volume);
 
             next.position = 325;
             invoke(window, "updatePlayback");
-            assertEquals(0.8 * Math.sqrt(0.5), first.volume, 0.0001);
-            assertEquals(0.8 * Math.sqrt(0.5), next.volume, 0.0001);
+            assertEquals(previewVolume(window) * Math.sqrt(0.5), first.volume, 0.0001);
+            assertEquals(previewVolume(window) * Math.sqrt(0.5), next.volume, 0.0001);
             first.endAt(999);
             assertEquals(1, next.plays, "the outgoing media-end event must not restart the new voice");
             next.position = 450;
             invoke(window, "updatePlayback");
             assertTrue(first.disposed);
-            assertEquals(0.8, next.volume, 0.0001);
+            assertEquals(previewVolume(window), next.volume, 0.0001);
             invoke(window, "updatePlayback");
             assertEquals(3, output.voices.size());
             assertEquals(200, output.voices.get(2).position);
@@ -215,7 +215,7 @@ class AudioCutWindowTest {
             seek.invoke(window, 500L);
             assertTrue(first.disposed);
             assertEquals(500, next.position);
-            assertEquals(0.8, next.volume);
+            assertEquals(previewVolume(window), next.volume);
             assertEquals(null, field("outgoingVoice").get(window));
         });
     }
@@ -234,7 +234,7 @@ class AudioCutWindowTest {
             invoke(window, "updatePlayback");
             ((CheckBox) field("loop").get(window)).setSelected(false);
             assertTrue(first.disposed);
-            assertEquals(0.8, next.volume);
+            assertEquals(previewVolume(window), next.volume);
             next.position = 1000;
             invoke(window, "updatePlayback");
             assertFalse(field("playing").getBoolean(window));
@@ -257,7 +257,7 @@ class AudioCutWindowTest {
             first.position = 750;
             invoke(window, "updatePlayback");
             assertEquals(0, next.plays);
-            assertEquals(0.8, first.volume);
+            assertEquals(previewVolume(window), first.volume);
             first.endAt(999);
             assertEquals(0, first.position);
             assertEquals(2, first.plays);
@@ -302,16 +302,139 @@ class AudioCutWindowTest {
         task.get(10, TimeUnit.SECONDS);
     }
 
+    @Test
+    void overridesUpdateBothPreviewVoicesWithoutRestartingAndResetToAutomatic() throws Exception {
+        withCrossfade((window, output) -> {
+            dmmt.audio.AudioTrack track = (dmmt.audio.AudioTrack) field("track").get(window);
+            AudioLibraryService library = (AudioLibraryService) field("library").get(window);
+            invoke(window, "togglePlay");
+            PreviewVoice first = output.voices.get(0);
+            PreviewVoice next = output.voices.get(1);
+            first.position = 750;
+            invoke(window, "updatePlayback");
+            next.position = 125;
+            invoke(window, "updatePlayback");
+            ((dmmt.audio.LoopCrossfade) field("blend").get(window)).resume();
+            double original = next.volume;
+            library.setGainOverride(track.getId(), track.effectiveGainDb() - 6);
+            invoke(window, "updatePlayback");
+            assertEquals(original * Math.pow(10, -6.0 / 20), next.volume, 0.0001);
+            assertEquals(next.volume, first.volume, 0.0001);
+            assertEquals(1, first.plays);
+            assertEquals(1, next.plays);
+            ((dmmt.audio.LoopCrossfade) field("blend").get(window)).resume();
+            library.setGainOverride(track.getId(), null);
+            invoke(window, "updatePlayback");
+            assertEquals(original, next.volume, 0.0001);
+        });
+    }
+
+    @Test
+    void boostedPreviewOpensPreparedAudioInsteadOfTheQuietOriginal() throws Exception {
+        Path file = dir.resolve("quiet.wav");
+        TestAudioFiles.writeWav(file, 1000, 8000, 0.01);
+        AudioLibraryService library = new AudioLibraryService(dir.resolve("audio"));
+        dmmt.audio.AudioTrack track = library.importFile(file, AudioKind.EFFECT, null);
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            List<Path> opened = new ArrayList<>();
+            AudioOutput output = (path, loop) -> {
+                opened.add(path);
+                return new PreviewVoice();
+            };
+            AudioCutWindow window = new AudioCutWindow(null, library, track, null, output, () -> 0);
+            try {
+                invoke(window, "togglePlay");
+                assertEquals(List.of(library.playbackFileOf(track)), opened);
+                assertFalse(opened.get(0).equals(library.fileOf(track)));
+            } finally {
+                invoke(window, "dispose");
+            }
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(10, TimeUnit.SECONDS);
+    }
+
+    private static double previewVolume(AudioCutWindow window) throws Exception {
+        dmmt.audio.AudioTrack track = (dmmt.audio.AudioTrack) field("track").get(window);
+        return 0.8 * track.playbackVolumeFactor();
+    }
+
+    @Test
+    void limiterCopySwitchPreservesPreviewOverlapPositionAndIgnoresOldEndEvents() throws Exception {
+        withCrossfade((window, output) -> {
+            dmmt.audio.AudioTrack track = (dmmt.audio.AudioTrack) field("track").get(window);
+            AudioLibraryService library = (AudioLibraryService) field("library").get(window);
+            invoke(window, "togglePlay");
+            PreviewVoice first = output.voices.get(0);
+            PreviewVoice next = output.voices.get(1);
+            first.position = 750;
+            invoke(window, "updatePlayback");
+            next.position = 125;
+            invoke(window, "updatePlayback");
+            ((dmmt.audio.LoopCrossfade) field("blend").get(window)).resume();
+            library.setGainOverride(track.getId(), 6.0);
+            invoke(window, "updatePlayback");
+            assertTrue(first.disposed);
+            assertTrue(next.disposed);
+            PreviewVoice newIncoming = (PreviewVoice) field("voice").get(window);
+            PreviewVoice newOutgoing = (PreviewVoice) field("outgoingVoice").get(window);
+            assertEquals(125, newIncoming.position);
+            assertEquals(750, newOutgoing.position);
+            assertEquals(0.8 * Math.sqrt(0.5), newIncoming.volume, 0.0001);
+            assertEquals(0.8 * Math.sqrt(0.5), newOutgoing.volume, 0.0001);
+            next.endAt(1000);
+            assertEquals(newIncoming, field("voice").get(window));
+            assertEquals(125, newIncoming.position);
+            invoke(window, "togglePlay");
+            library.setGainOverride(track.getId(), null);
+            invoke(window, "updatePlayback");
+            PreviewVoice reset = (PreviewVoice) field("voice").get(window);
+            assertEquals(125, reset.position);
+            assertEquals(0, reset.plays, "a source replacement must not resume paused preview playback");
+            assertTrue(newIncoming.disposed);
+        });
+    }
+
+    @Test
+    void previewKeepsOldSourceUntilReplacementLoadsAndReleasesPendingCopiesOnClose() throws Exception {
+        withCrossfade((window, output) -> {
+            dmmt.audio.AudioTrack track = (dmmt.audio.AudioTrack) field("track").get(window);
+            AudioLibraryService library = (AudioLibraryService) field("library").get(window);
+            invoke(window, "togglePlay");
+            PreviewVoice old = output.voices.get(0);
+            old.position = 300;
+            library.setGainOverride(track.getId(), 6.0);
+            output.readyOnOpen = false;
+            invoke(window, "updatePlayback");
+            assertFalse(old.disposed);
+            PreviewVoice replacement = output.voices.get(2);
+            replacement.ready = true;
+            output.voices.get(3).ready = true;
+            old.position = 500;
+            invoke(window, "updatePlayback");
+            assertTrue(old.disposed);
+            assertEquals(500, replacement.position);
+            assertEquals(1, replacement.plays);
+            library.setGainOverride(track.getId(), 12.0);
+            invoke(window, "updatePlayback");
+            invoke(window, "dispose");
+            assertTrue(output.voices.stream().allMatch(voice -> voice.disposed));
+        });
+    }
+
     private interface CrossfadeScenario {
         void run(AudioCutWindow window, PreviewOutput output) throws Exception;
     }
 
     private static final class PreviewOutput implements AudioOutput {
         private final List<PreviewVoice> voices = new ArrayList<>();
+        private boolean readyOnOpen = true;
 
         @Override
         public Voice open(Path file, boolean loop) {
             PreviewVoice voice = new PreviewVoice();
+            voice.ready = readyOnOpen;
             voices.add(voice);
             return voice;
         }

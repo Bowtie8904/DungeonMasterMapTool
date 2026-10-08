@@ -76,14 +76,18 @@ class AudioLibraryServiceTest {
     }
 
     @Test
-    void realMp3FilesPassTheFrameCoverageCheck() throws IOException {
+    void frameCompleteMp3PassesContainerValidationButMustAlsoDecodeForImport() throws IOException {
         Path mp3 = dir.resolve("battle.mp3");
         TestAudioFiles.writeMp3(mp3, 200, true);
 
-        AudioTrack track = library.importFile(mp3, AudioKind.MUSIC, AudioCategory.UNCATEGORISED_ID);
+        AudioFormats.validate(mp3);
+        IOException failure = assertThrows(IOException.class,
+                () -> library.importFile(mp3, AudioKind.MUSIC, AudioCategory.UNCATEGORISED_ID));
 
-        assertEquals("battle", track.getName());
-        assertTrue(track.getDurationMs() > 5000, "duration " + track.getDurationMs());
+        assertTrue(failure.getMessage().contains("decode"), failure.getMessage());
+        assertTrue(library.tracks().isEmpty());
+        assertTrue(Files.list(library.filesFolder()).findAny().isEmpty(),
+                "an MP3 that cannot be decoded must not leave an imported copy");
     }
 
     @Test

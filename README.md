@@ -523,6 +523,33 @@ break anything. Tracks can be renamed, deleted and moved freely. Imports run in 
 and a status line at the bottom of the window ("Importing 12 of 80 - rain.mp3"), so importing a large folder never
 freezes the window; files that could not be imported are listed afterwards.
 
+**Consistent loudness.** Every new import and newly cut clip is analyzed in the background and automatically
+matched toward **-23 LUFS** (perceived loudness), rather than matching only its loudest peak. The adjustment is
+fixed throughout playback: dynamics stay intact, without volume pumping. Boost is limited to **+24 dB** and a
+**-1 dBFS sample-peak ceiling**, so a very dynamic recording may remain quieter than the target; silence is not
+amplified. This is per-file matching, not a limiter for the combined mix of many simultaneous effects.
+
+Select a single file in the audio library and use the **Loudness** toolbar button or right-click **Loudness...**.
+The dialog shows its measured loudness, automatic recommendation and saved gain. Choose a gain in decibels and
+press **Apply override** to save your own baseline (negative = quieter, positive = louder), or **Use automatic**
+to restore the recommendation. Overrides replace the automatic gain, rather than adding to it. Manual gains
+allow **-60 to +24 dB**, even when a file has occasional loud peaks that block automatic boosting.
+Above the peak-safe headroom, a linked-channel, lookahead **peak limiter** keeps sample peaks below -1 dBFS
+instead of clipping them. This raises the quieter parts while controlling loud peaks; strong boosts can reduce
+dynamics. Resetting to automatic restores the uncompressed, peak-safe version.
+Preparing a boosted playback copy runs in the background with a progress indicator. Once ready, running music,
+effects and waveform previews switch copies at their current positions, preserving pause/fade/loop state.
+The master/music/effects sliders still control the overall mix.
+The **Gain** column distinguishes automatic and manual levels, and **Preview** opens the waveform player.
+Existing library files keep their previous levels until you choose **Analyze file** or apply a manual override.
+Playing instances automatically switch to the prepared copy when it is ready.
+
+Original imported files stay unchanged and are still used for lossless cutting. When boosting requires it, the
+library also stores a prepared PCM WAV playback copy, which uses extra disk space (including for MP3 imports).
+Limiter copies are rendered from the original for the requested gain, not by repeatedly processing earlier boosts.
+Both the original library copy and prepared playback copy are removed when the entry is deleted. Per-file gains
+are saved in `library.json`, not in global settings or map projects.
+
 **Folders become categories.** A folder import also walks all subfolders, and every music file found in a subfolder
 lands in a category named after its direct parent folder - so a tree like `Music/Combat`, `Music/Tavern`,
 `Music/Travel` imports into three ready-made categories in one go. Nested deeper (`Music/Fantasy/Boss/track.mp3`)
@@ -595,7 +622,7 @@ The play/pause button in the **status bar** is the quick version of all of this:
 
 Audio playback is independent of maps: switching maps never changes the running music or sound effects.
 
-Everything is also reachable from the [local control API](docs/API.md#audio-controls) - including **one endpoint per
+Playback controls are also reachable from the [local control API](docs/API.md#audio-controls) - including **one endpoint per
 category and per sound effect**, addressed by the entry's library id
 (`/api/controls/audio/category/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
 button and a stream deck can switch the whole ambience with one press. `GET /api/controls` lists every endpoint

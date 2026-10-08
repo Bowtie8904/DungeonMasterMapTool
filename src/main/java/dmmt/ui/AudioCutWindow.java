@@ -50,8 +50,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.DoubleSupplier;
 
 /**
@@ -99,6 +101,11 @@ public final class AudioCutWindow {
     private AudioOutput.Voice voice;
     private AudioOutput.Voice preparedVoice;
     private AudioOutput.Voice outgoingVoice;
+    private final Map<AudioOutput.Voice, AudioLibraryService.PlaybackSource> playbackSources =
+            new IdentityHashMap<>();
+    private final Map<AudioOutput.Voice, PreviewReplacement> replacements = new IdentityHashMap<>();
+    private record PreviewReplacement(AudioOutput.Voice handle, AudioLibraryService.PlaybackSource source) {
+    }
     private LoopCrossfade blend;
     private long preparedStartMs = -1;
     private long preparedEndMs = -1;
@@ -615,12 +622,14 @@ public final class AudioCutWindow {
             return;
         }
         if (voice == null) {
-            voice = output.open(library.fileOf(track), false);
+            AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+            voice = output.open(source.file(), false);
             if (voice == null) {
                 status.setText("This file cannot be played here.");
                 return;
             }
-            voice.setVolume(0.8);
+            playbackSources.put(voice, source);
+            refreshPreviewVolumes();
             setPreviewEndHandler(voice);
             voice.seek(playheadMs);
         }
@@ -666,18 +675,18 @@ public final class AudioCutWindow {
 
     private void cancelLoopBlend() {
         if (preparedVoice != null) {
-            preparedVoice.dispose();
+            disposePreviewVoice(preparedVoice);
             preparedVoice = null;
         }
         if (outgoingVoice != null) {
-            outgoingVoice.dispose();
+            disposePreviewVoice(outgoingVoice);
             outgoingVoice = null;
         }
         blend = null;
         preparedStartMs = -1;
         preparedEndMs = -1;
         if (voice != null) {
-            voice.setVolume(0.8);
+            refreshPreviewVolumes();
         }
     }
 
@@ -686,11 +695,13 @@ public final class AudioCutWindow {
             return;
         }
         if (preparedVoice == null) {
-            preparedVoice = output.open(library.fileOf(track), false);
+            AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+            preparedVoice = output.open(source.file(), false);
             if (preparedVoice == null) {
                 status.setText("Could not preload the loop; preview will repeat without a crossfade.");
                 return;
             }
+            playbackSources.put(preparedVoice, source);
             preparedVoice.setVolume(0);
         }
         if (preparedVoice.isReady() && preparedStartMs < 0) {
@@ -723,6 +734,8 @@ public final class AudioCutWindow {
     }
 
     private void updatePlayback() {
+        refreshPreviewSources();
+        refreshPreviewVolumes();
         if (playing && voice != null) {
             long now = System.nanoTime();
             double delta = lastPlaybackNanos == 0 ? 0 : Math.min(1, (now - lastPlaybackNanos) / 1_000_000_000.0);
@@ -739,10 +752,9 @@ public final class AudioCutWindow {
             if (loop.isSelected()) {
                 if (outgoingVoice != null) {
                     blend.advance(positionMs, delta);
-                    voice.setVolume(0.8 * blend.incomingGain());
-                    outgoingVoice.setVolume(0.8 * blend.outgoingGain());
+                    refreshPreviewVolumes();
                     if (blend.finished()) {
-                        outgoingVoice.dispose();
+                        disposePreviewVoice(outgoingVoice);
                         outgoingVoice = null;
                         blend = null;
                         preparedStartMs = -1;
@@ -773,6 +785,76 @@ public final class AudioCutWindow {
             }
             draw();
         }
+    }
+
+    private void refreshPreviewVolumes() {
+        if (voice != null) {
+            voice.setVolume(0.8 * track.playbackVolumeFactor(playbackSources.get(voice).bakedGainDb())
+                    * (blend == null ? 1 : blend.incomingGain()));
+        }
+        if (outgoingVoice != null) {
+            outgoingVoice.setVolume(0.8 * track.playbackVolumeFactor(playbackSources.get(outgoingVoice).bakedGainDb())
+                    * blend.outgoingGain());
+        }
+    }
+
+    private void refreshPreviewSources() {
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+        AudioOutput.Voice previous = voice;
+        voice = replacePreviewVoice(voice, source, playing);
+        preparedVoice = replacePreviewVoice(preparedVoice, source, false);
+        outgoingVoice = replacePreviewVoice(outgoingVoice, source,
+                playing && outgoingVoice != null && outgoingVoice.positionMs() < loopEndMs());
+        if (voice != null && voice != previous) {
+            setPreviewEndHandler(voice);
+        }
+    }
+
+    private AudioOutput.Voice replacePreviewVoice(AudioOutput.Voice old,
+                                                  AudioLibraryService.PlaybackSource source, boolean resume) {
+        if (old == null) {
+            return null;
+        }
+        PreviewReplacement pending = replacements.get(old);
+        if (pending != null && !pending.source().equals(source)) {
+            pending.handle().dispose();
+            replacements.remove(old);
+            pending = null;
+        }
+        if (playbackSources.get(old).equals(source)) {
+            return old;
+        }
+        if (pending == null) {
+            AudioOutput.Voice handle = output.open(source.file(), false);
+            if (handle == null) {
+                status.setText("Could not apply the new loudness playback copy.");
+                return old;
+            }
+            handle.setVolume(0);
+            pending = new PreviewReplacement(handle, source);
+            replacements.put(old, pending);
+        }
+        if (!pending.handle().isReady()) {
+            return old;
+        }
+        AudioOutput.Voice replacement = pending.handle();
+        replacement.seek(old.positionMs());
+        replacements.remove(old);
+        playbackSources.put(replacement, source);
+        disposePreviewVoice(old);
+        if (resume) {
+            replacement.play();
+        }
+        return replacement;
+    }
+
+    private void disposePreviewVoice(AudioOutput.Voice handle) {
+        PreviewReplacement pending = replacements.remove(handle);
+        if (pending != null) {
+            pending.handle().dispose();
+        }
+        playbackSources.remove(handle);
+        handle.dispose();
     }
 
     private void seek(long millis) {
@@ -953,7 +1035,7 @@ public final class AudioCutWindow {
             cutting.cancel();
         }
         if (voice != null) {
-            voice.dispose();
+            disposePreviewVoice(voice);
             voice = null;
         }
         cancelLoopBlend();

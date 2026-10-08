@@ -7,10 +7,12 @@ import java.util.List;
 /** An {@link AudioOutput} that records what the engine does, so playback logic can be tested without sound. */
 public final class FakeAudioOutput implements AudioOutput {
     final List<FakeVoice> opened = new ArrayList<>();
+    boolean readyOnOpen = true;
 
     @Override
     public Voice open(Path file, boolean loop) {
         FakeVoice voice = new FakeVoice(file, loop);
+        voice.ready = readyOnOpen;
         opened.add(voice);
         return voice;
     }
@@ -99,6 +101,11 @@ public final class FakeAudioOutput implements AudioOutput {
         @Override
         public void setOnEnd(Runnable action) {
             this.onEnd = action;
+        }
+
+        @Override
+        public void seek(double millis) {
+            position = millis;
         }
     }
 }
