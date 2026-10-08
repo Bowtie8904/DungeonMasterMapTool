@@ -571,8 +571,11 @@ own heading. Create, rename and delete categories, give each one a colour and an
 categories - and onto or off the Sound effects entry**, which turns them into sound effects or back into music of
 the category you drop them on. Sound effects get their own colour and icon too. Colour and icon are both in the
 right-click menu (**Choose colour...**, **Choose icon...**); the icon picker searches the **complete Material Design
-icon set**, so typing `tree` lists every tree icon. Deleting a category keeps its files and moves them to
-*Uncategorised*. Changing a music track into a sound effect (and back) is a right click away.
+icon set** plus custom illustrated mountain and cave icons, so typing `mountain` or `cave` finds those landmarks
+and `tree` lists every tree icon. The suggested icons favour wilderness and nature - forests, terrain, volcanoes,
+trees, leaves, mushrooms, waterfalls, wildlife, water and weather - rather than mostly urban/modern themes.
+Deleting a category keeps its files and moves them to *Uncategorised*. Changing a music track into a sound effect
+(and back) is a right click away.
 
 **Hiding entries from the overlay.** Right-click a category or a sound effect and choose **Hide in overlay** to keep
 it out of the audio overlay without deleting anything - useful for a *Christmas* category you only need once a year.

@@ -619,10 +619,12 @@ same application. It must never be in the way of DMs who do not use it, and must
   the picker, the library window and the audio overlay.
 - **Sound effects have a colour and an icon too.** They are a flat list (no categories) and searchable by name.
 - The **icon picker** offers the **complete Material Design icon set** (all ~7400 icons of the bundled pack), not a
-  short curated list, because a DM names categories anything from "Dragon" to "Submarine". It opens on a small
-  set of **suggested** icons (adventure themes for categories, weather/nature for sound effects) and has a
-  **search field** that filters the whole set by icon name, so typing `tree` finds every tree icon. Results are
-  capped (the grid shows the first 300 matches plus a "refine your search" hint) so the dialog stays instant.
+  short curated list, because a DM names categories anything from "Dragon" to "Submarine". It also includes custom
+  illustrated mountain and cave icons, searchable alongside the bundled set. Its **suggested** icons favour
+  wilderness and natural ambience (forest, mountain/terrain, volcano, trees, leaves, mushrooms, grass, waterfalls,
+  campfires, animals, water and weather) over modern/urban themes; sound effects emphasize natural sounds. A
+  **search field** filters the whole catalogue by icon name. Results are capped (the grid shows the first 300
+  matches plus a "refine your search" hint) so the dialog stays instant.
 - Categories and sound effects can be **hidden from the audio overlay** ("Hide in overlay" in the right-click menu
   of the library window, with "Show in overlay" to bring them back). Hiding is purely cosmetic: a hidden entry
   still exists, still plays, still appears in the library window and keeps its local API endpoint - it just does

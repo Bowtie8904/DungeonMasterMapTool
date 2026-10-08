@@ -2,6 +2,7 @@ package dmmt.ui;
 
 import dmmt.FxTestSupport;
 import javafx.application.Platform;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
@@ -13,6 +14,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,8 +30,10 @@ class AudioIconsTest {
     @Test
     void tintedIconsKeepTheirGlyphAndColourAfterTheStylesheetIsApplied() throws Exception {
         onFx(() -> {
-            FontIcon category = AudioIcons.tinted("mdi2s-sword-cross", "#FF8800", 22);
-            FontIcon effect = AudioIcons.tintedEffect("mdi2b-bird", "#33CCFF", 16);
+            FontIcon category = assertInstanceOf(FontIcon.class,
+                    AudioIcons.tinted("mdi2s-sword-cross", "#FF8800", 22));
+            FontIcon effect = assertInstanceOf(FontIcon.class,
+                    AudioIcons.tintedEffect("mdi2b-bird", "#33CCFF", 16));
             StackPane root = new StackPane(category, effect);
             Scene scene = new Scene(root);
             scene.getStylesheets().add(Icons.STYLESHEET);
@@ -69,6 +73,35 @@ class AudioIconsTest {
                 .allMatch(icon -> AudioIcons.searchName(icon).contains("pine")), "every word must match");
         assertTrue(AudioIcons.search("nosuchiconname", suggested, 300).isEmpty());
         assertEquals(5, AudioIcons.search("a", suggested, 5).size(), "the result list is capped");
+        assertTrue(AudioIcons.search("mountain", suggested, 300).stream()
+                .anyMatch(icon -> icon == AudioCustomIkon.MOUNTAIN));
+        assertTrue(AudioIcons.search("cave", suggested, 300).stream()
+                .anyMatch(icon -> icon == AudioCustomIkon.CAVE));
+        assertTrue(suggested.contains(org.kordamp.ikonli.materialdesign2.MaterialDesignF.FOREST));
+        assertTrue(suggested.contains(org.kordamp.ikonli.materialdesign2.MaterialDesignT.TERRAIN));
+        assertTrue(AudioIcons.effectChoices().contains(AudioCustomIkon.CAVE));
+    }
+
+    @Test
+    void customWildernessIconsRenderTintedAsVectorArtwork() throws Exception {
+        onFx(() -> {
+            Node caveNode = AudioIcons.tinted(AudioCustomIkon.CAVE.getDescription(), "#33CCFF", 24);
+            AudioCustomIconView cave = assertInstanceOf(AudioCustomIconView.class, caveNode);
+            Node mountainNode = AudioIcons.tintedEffect(AudioCustomIkon.MOUNTAIN.getDescription(), "#FF8800", 20);
+            AudioCustomIconView mountain = assertInstanceOf(AudioCustomIconView.class, mountainNode);
+            StackPane root = new StackPane(caveNode, mountainNode);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            root.applyCss();
+
+            assertEquals(AudioCustomIkon.CAVE.getDescription(), cave.iconDescription());
+            assertEquals(Color.web("#33CCFF"), cave.iconColor());
+            assertEquals(24, cave.getPrefWidth());
+            assertEquals(AudioCustomIkon.MOUNTAIN.getDescription(), mountain.iconDescription());
+            assertEquals(Color.web("#FF8800"), mountain.iconColor());
+            assertTrue(AudioIcons.allChoices().contains(AudioCustomIkon.MOUNTAIN));
+            assertTrue(AudioIcons.allChoices().contains(AudioCustomIkon.CAVE));
+        });
     }
 
     private static void onFx(Runnable action) throws Exception {

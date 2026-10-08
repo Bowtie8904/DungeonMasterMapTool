@@ -52,8 +52,8 @@ final class AudioIconPicker {
         hint.getStyleClass().add("muted");
 
         TextField search = new TextField();
-        search.setPromptText("Search icons, e.g. tree");
-        Icons.tooltip(search, "Type part of an icon name to search the whole Material Design icon set.");
+        search.setPromptText("Search icons, e.g. mountain, cave, tree");
+        Icons.tooltip(search, "Type part of an icon name to search the complete icon catalogue.");
 
         Runnable refresh = () -> {
             java.util.List<Ikon> icons = AudioIcons.search(search.getText(), suggested, MAX_RESULTS);

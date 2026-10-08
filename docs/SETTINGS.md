@@ -1262,7 +1262,7 @@ the first analysis of a long recording slower and the cache file bigger.
 *Keywords:* waveform, resolution, detail, cut window, peaks, zoom
 
 ### `audio.cut.silenceDb`
-**Default:** `-45` · **Range:** -90 to 0 dB · **Applies:** live
+**Default:** `-30` · **Range:** -90 to 0 dB · **Applies:** live
 
 Everything quieter than this counts as silence when the cut window detects the songs inside a long recording. Raise
 it (towards `0`) for recordings with a noisy background.

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import javafx.scene.Node;
 import javafx.scene.paint.Color;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -53,26 +54,25 @@ public final class AudioIcons {
 
     /** Icons offered before anything is typed into the category icon search: adventure themes. */
     private static final List<Ikon> CHOICES = List.of(
-            MaterialDesignM.MUSIC_NOTE, MaterialDesignM.MUSIC_BOX_MULTIPLE_OUTLINE, MaterialDesignS.SWORD_CROSS,
-            MaterialDesignS.SHIELD_OUTLINE, MaterialDesignC.CASTLE, MaterialDesignG.GLASS_MUG_VARIANT,
-            MaterialDesignC.CAMPFIRE, MaterialDesignT.TREE_OUTLINE, MaterialDesignW.WEATHER_NIGHT,
-            MaterialDesignW.WAVES, MaterialDesignS.SKULL_OUTLINE, MaterialDesignD.DOOR,
-            MaterialDesignH.HORSE_VARIANT, MaterialDesignS.SHIP_WHEEL, MaterialDesignM.MAGIC_STAFF,
-            MaterialDesignB.BOOK_OPEN_PAGE_VARIANT_OUTLINE, MaterialDesignC.CITY_VARIANT_OUTLINE,
-            MaterialDesignP.PINE_TREE, MaterialDesignS.SNOWFLAKE, MaterialDesignF.FIRE,
-            MaterialDesignA.ACCOUNT_GROUP_OUTLINE, MaterialDesignD.DICE_D20_OUTLINE,
-            MaterialDesignH.HEART_PULSE, MaterialDesignW.WIZARD_HAT);
+            AudioCustomIkon.MOUNTAIN, AudioCustomIkon.CAVE, MaterialDesignF.FOREST, MaterialDesignT.TERRAIN,
+            MaterialDesignV.VOLCANO, MaterialDesignP.PINE_TREE, MaterialDesignP.PALM_TREE,
+            MaterialDesignT.TREE_OUTLINE, MaterialDesignL.LEAF, MaterialDesignL.LEAF_MAPLE,
+            MaterialDesignM.MUSHROOM, MaterialDesignG.GRASS, MaterialDesignW.WATERFALL,
+            MaterialDesignC.CAMPFIRE, MaterialDesignB.BIRD, MaterialDesignH.HORSE_VARIANT,
+            MaterialDesignW.WEATHER_NIGHT, MaterialDesignW.WAVES, MaterialDesignS.SNOWFLAKE,
+            MaterialDesignS.SWORD_CROSS, MaterialDesignS.SHIELD_OUTLINE, MaterialDesignC.CASTLE,
+            MaterialDesignM.MAGIC_STAFF, MaterialDesignS.SHIP_WHEEL);
 
-    /** Icons offered before anything is typed into the sound effect icon search: weather, nature, room tone. */
+    /** Icons offered before anything is typed into the sound effect icon search: wilderness and natural ambience. */
     private static final List<Ikon> EFFECT_CHOICES = List.of(
-            MaterialDesignW.WAVEFORM, MaterialDesignW.WEATHER_WINDY, MaterialDesignW.WEATHER_POURING,
+            AudioCustomIkon.CAVE, AudioCustomIkon.MOUNTAIN, MaterialDesignF.FOREST, MaterialDesignW.WAVEFORM,
+            MaterialDesignW.WEATHER_WINDY, MaterialDesignW.WEATHER_POURING,
             MaterialDesignW.WEATHER_LIGHTNING_RAINY, MaterialDesignW.WEATHER_FOG, MaterialDesignW.WEATHER_SNOWY,
-            MaterialDesignB.BIRD, MaterialDesignW.WAVES, MaterialDesignF.FIRE, MaterialDesignC.CAMPFIRE,
-            MaterialDesignT.TREE_OUTLINE, MaterialDesignB.BUG_OUTLINE, MaterialDesignP.PAW,
-            MaterialDesignS.SHOE_PRINT, MaterialDesignD.DOOR, MaterialDesignB.BELL_OUTLINE,
-            MaterialDesignA.ANVIL, MaterialDesignG.GLASS_MUG_VARIANT, MaterialDesignA.ACCOUNT_GROUP_OUTLINE,
-            MaterialDesignH.HORSE_VARIANT, MaterialDesignW.WATER_OUTLINE, MaterialDesignP.PINE_TREE,
-            MaterialDesignS.SKULL_OUTLINE, MaterialDesignH.HEART_PULSE);
+            MaterialDesignB.BIRD, MaterialDesignB.BUG_OUTLINE, MaterialDesignP.PAW, MaterialDesignH.HORSE_VARIANT,
+            MaterialDesignW.WAVES, MaterialDesignW.WATERFALL, MaterialDesignW.WATER_OUTLINE,
+            MaterialDesignF.FIRE, MaterialDesignC.CAMPFIRE, MaterialDesignT.TREE_OUTLINE,
+            MaterialDesignP.PINE_TREE, MaterialDesignP.PALM_TREE, MaterialDesignL.LEAF,
+            MaterialDesignM.MUSHROOM, MaterialDesignG.GRASS);
 
     private static final List<Ikon> ALL = all();
     private static final Map<String, Ikon> BY_DESCRIPTION = index();
@@ -85,6 +85,7 @@ public final class AudioIcons {
         for (Class<? extends Ikon> pack : PACKS) {
             icons.addAll(Arrays.asList(pack.getEnumConstants()));
         }
+        icons.addAll(Arrays.asList(AudioCustomIkon.values()));
         icons.sort(Comparator.comparing(AudioIcons::searchName));
         return List.copyOf(icons);
     }
@@ -171,8 +172,8 @@ public final class AudioIcons {
     }
 
     /** A sound effect icon tinted with the effect colour; falls back to the default effect colour. */
-    public static FontIcon tintedEffect(String description, String color, int size) {
-        return tint(new FontIcon(effectByDescription(description)), effectColor(color), size);
+    public static Node tintedEffect(String description, String color, int size) {
+        return tint(effectByDescription(description), effectColor(color), size);
     }
 
     /** Parses a {@code #RRGGBB} sound effect colour; invalid values give the default effect colour. */
@@ -185,8 +186,8 @@ public final class AudioIcons {
     }
 
     /** A category icon tinted with the category colour; falls back to the default colour for invalid values. */
-    public static FontIcon tinted(String description, String color, int size) {
-        return tint(new FontIcon(byDescription(description)), color(color), size);
+    public static Node tinted(String description, String color, int size) {
+        return tint(byDescription(description), color(color), size);
     }
 
     /**
@@ -202,7 +203,11 @@ public final class AudioIcons {
      * option either - any inline style on a {@code FontIcon} makes the CSS pass re-derive its font from the
      * inherited family, which replaced every glyph with an empty box (3.35.2).
      */
-    private static FontIcon tint(FontIcon icon, Color color, int size) {
+    private static Node tint(Ikon ikon, Color color, int size) {
+        if (ikon instanceof AudioCustomIkon custom) {
+            return new AudioCustomIconView(custom, color, size);
+        }
+        FontIcon icon = new FontIcon(ikon);
         icon.getStyleClass().remove("ikonli-font-icon");
         icon.getStyleClass().add(TINTED_CLASS);
         icon.setIconSize(size);

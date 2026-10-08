@@ -47,9 +47,14 @@ public final class ControlKeyImages {
             throw new IllegalArgumentException("Invalid key image identifier or operation.");
         }
         Ikon icon = selectIcon(id, sources);
-        FontIcon glyph = new FontIcon(icon);
-        glyph.setIconSize(82);
-        glyph.setIconColor(selectColor(sources));
+        Color color = selectColor(sources);
+        Node glyph = icon instanceof AudioCustomIkon
+                ? AudioIcons.tinted(icon.getDescription(), AudioColorPicker.toHex(color), 82)
+                : new FontIcon(icon);
+        if (glyph instanceof FontIcon fontIcon) {
+            fontIcon.setIconSize(82);
+            fontIcon.setIconColor(color);
+        }
         StackPane pane = new StackPane(glyph);
         pane.setStyle("-fx-background-color: transparent;");
         new Scene(pane, Color.TRANSPARENT);
@@ -146,6 +151,10 @@ public final class ControlKeyImages {
     }
 
     private static Ikon findIcon(Node node) {
+        AudioCustomIconView customIcon = findCustomIcon(node);
+        if (customIcon != null) {
+            return AudioIcons.byDescription(customIcon.iconDescription());
+        }
         FontIcon icon = findFontIcon(node, false);
         return icon == null ? null : icon.getIconCode();
     }
@@ -156,12 +165,37 @@ public final class ControlKeyImages {
      */
     static Color selectColor(List<Node> sources) {
         for (Node source : sources) {
+            AudioCustomIconView customIcon = findCustomIcon(source);
+            if (customIcon != null) {
+                return readable(customIcon.iconColor());
+            }
             FontIcon icon = findFontIcon(source, true);
             if (icon != null && icon.getIconColor() instanceof Color color) {
                 return readable(color);
             }
         }
         return Color.WHITE;
+    }
+
+    private static AudioCustomIconView findCustomIcon(Node node) {
+        if (node instanceof AudioCustomIconView icon) {
+            return icon;
+        }
+        if (node instanceof Labeled labeled && labeled.getGraphic() != null) {
+            AudioCustomIconView icon = findCustomIcon(labeled.getGraphic());
+            if (icon != null) {
+                return icon;
+            }
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                AudioCustomIconView icon = findCustomIcon(child);
+                if (icon != null) {
+                    return icon;
+                }
+            }
+        }
+        return null;
     }
 
     /** Lightens very dark colours until the glyph is legible on the dark key background. */

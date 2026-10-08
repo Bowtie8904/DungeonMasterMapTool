@@ -75,6 +75,17 @@ class ControlKeyImagesTest {
             assertEquals(MaterialDesignS.SWORD_CROSS,
                     ControlKeyImages.selectIcon("audio.category.1234", List.of(category)));
 
+            Button cave = new Button();
+            cave.setGraphic(AudioIcons.tinted(AudioCustomIkon.CAVE.getDescription(), "#2288FF", 22));
+            assertEquals(AudioCustomIkon.CAVE,
+                    ControlKeyImages.selectIcon("audio.category.5678", List.of(cave)));
+            assertEquals(Color.web("#2288FF"), ControlKeyImages.selectColor(List.of(cave)));
+            byte[] caveKey = ControlKeyImages.png("audio.category.5678", List.of(cave), null);
+            assertEquals(0x89, Byte.toUnsignedInt(caveKey[0]));
+            assertEquals('P', caveKey[1]);
+            assertEquals('N', caveKey[2]);
+            assertEquals('G', caveKey[3]);
+
             Button dark = new Button();
             dark.setGraphic(AudioIcons.tintedEffect("mdi2b-bird", "#101014", 22));
             Color lightened = ControlKeyImages.selectColor(List.of(dark));
