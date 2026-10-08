@@ -77,8 +77,6 @@ public final class AudioOverlay {
             "Fade all audio to silence and back");
     private final Button libraryButton = Icons.button(MaterialDesignM.MUSIC_BOX_MULTIPLE_OUTLINE,
             "Open the audio library: import files, manage categories and cut clips", null);
-    private final Button assignButton = Icons.button(MaterialDesignM.MAP_MARKER_STAR_OUTLINE,
-            "Use the running music and sound effects as this map's ambience", null);
     private final Slider masterVolume = new Slider(0, 1, 0.8);
     private final Slider musicVolume = new Slider(0, 1, 0.7);
     private final Slider effectsVolume = new Slider(0, 1, 0.6);
@@ -87,8 +85,6 @@ public final class AudioOverlay {
     private final Map<String, ToggleButton> effectButtons = new LinkedHashMap<>();
 
     private Runnable openLibrary = () -> {
-    };
-    private Runnable assignAmbience = () -> {
     };
     private Runnable closedHandler = () -> {
     };
@@ -115,12 +111,6 @@ public final class AudioOverlay {
     /** What the "Open audio library" button does. */
     public void setLibraryAction(Runnable action) {
         this.openLibrary = action == null ? () -> {
-        } : action;
-    }
-
-    /** What the "Use current ambience for this map" button does. */
-    public void setAssignAction(Runnable action) {
-        this.assignAmbience = action == null ? () -> {
         } : action;
     }
 
@@ -236,7 +226,6 @@ public final class AudioOverlay {
             }
         });
         libraryButton.setOnAction(event -> openLibrary.run());
-        assignButton.setOnAction(event -> assignAmbience.run());
 
         HBox volumes = new HBox(16,
                 volumeBox(MaterialDesignV.VOLUME_HIGH, "Master", masterVolume, "audio.masterVolume", 0.8,
@@ -248,7 +237,7 @@ public final class AudioOverlay {
         volumes.setAlignment(Pos.CENTER_LEFT);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox footer = new HBox(12, volumes, spacer, muteButton, assignButton, libraryButton);
+        HBox footer = new HBox(12, volumes, spacer, muteButton, libraryButton);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.getStyleClass().add("audio-overlay-footer");
         return footer;
@@ -470,7 +459,6 @@ public final class AudioOverlay {
         controls.put("audio.stop", stopButton);
         controls.put("audio.mute", muteButton);
         controls.put("audio.library", libraryButton);
-        controls.put("audio.assign", assignButton);
         controls.put("audio.effectsPause", effectsPause);
         controls.put("audio.effectsStop", effectsStop);
         controls.put("audio.masterVolume", masterVolume);

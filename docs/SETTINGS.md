@@ -1207,14 +1207,6 @@ hardware; switching on one more effect than allowed stops the one that has been 
 
 *Keywords:* sound effects, simultaneous, layers, mixing limit, performance
 
-### `audio.autoSwitchOnMapChange`
-**Default:** `true` · **Values:** `true`/`false` · **Applies:** live
-
-Starts the music category and sound effects that are stored with a map when that map is opened. With `false` the
-audio keeps playing whatever it played before.
-
-*Keywords:* per map music, auto switch, map ambience, remember music
-
 ### `audio.updateFps`
 **Default:** `4` · **Range:** 1 to 60 · **Applies:** restart required
 

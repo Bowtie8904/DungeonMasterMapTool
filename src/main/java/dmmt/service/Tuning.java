@@ -646,8 +646,6 @@ public final class Tuning {
             "Seconds the mute button in the audio overlay needs to fade all audio to silence and back.");
     public static final Setting<Integer> AUDIO_MAX_EFFECTS = integer(AUDIO, "audio.maxEffects", 32, 1, 64, false,
             "Sound effects that may loop at the same time; starting one more stops the oldest. Lower this on slow machines.");
-    public static final Setting<Boolean> AUDIO_AUTO_SWITCH = bool(AUDIO, "audio.autoSwitchOnMapChange", true, false,
-            "Switch to a map's stored ambience when it is opened (false = playback always continues unchanged).");
     public static final Setting<Integer> AUDIO_UPDATE_FPS = integer(AUDIO, "audio.updateFps", 4, 1, 60, false,
             "How often per second fades and the now-playing readout are updated. Higher values make fades smoother and cost a little more CPU.");
     public static final Setting<Double> AUDIO_OVERLAY_FADE_SECONDS = decimal(AUDIO, "audio.overlayFadeSeconds", 0.15, 0, 2, false,

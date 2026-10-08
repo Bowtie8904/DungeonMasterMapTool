@@ -77,24 +77,6 @@ public class DmProject {
         private double intensity = Tuning.WEATHER_DEFAULT_INTENSITY.get();
     }
 
-    /** Ambience stored for this map (3.35.5); {@code null} when the map has no stored audio. */
-    private AudioState audio;
-
-    /**
-     * Music category and sound effects this map should switch to when it is opened. Ids refer to the global audio
-     * library, which may change independently of maps; unknown ids are ignored when the ambience is applied.
-     */
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class AudioState {
-        /** Id of the music category to play, or {@code null} for "do not change the music". */
-        private String categoryId;
-        @Builder.Default
-        private List<String> effectIds = new ArrayList<>();
-    }
-
     /** Text settings last used on this map; {@code null} until text has been used here. */
     private TextSettings lastTextSettings;    @Builder.Default
     private List<PingEvent> activePings = new ArrayList<>();

@@ -687,15 +687,6 @@ same application. It must never be in the way of DMs who do not use it, and must
 - Audio is DM-side only: it is never sent to the player view and is independent of freeze, maps and projects.
   Switching, saving or closing a map never interrupts playback.
 
-### 3.35.5 Per-map ambience
-
-- A map can remember a default music category and a set of sound effects (`.dmmap` `audio` object:
-  `categoryId`, `effectIds`, both optional). "Use current ambience for this map" stores it, "Clear" removes it.
-- When `audio.autoSwitchOnMapChange` (default on) is enabled and the opened map has a stored ambience, the music
-  category is crossfaded over and the stored effects replace the running ones. With the setting off, or when the map
-  has no stored ambience, playback simply continues unchanged.
-- Stored ids that no longer exist in the library are ignored silently (the library is global and may change).
-
 ### 3.35.6 UI
 
 Audio is deliberately **not** part of the DM controls sidebar: it is not a map tool, and a DM who never plays music
@@ -721,14 +712,14 @@ full-screen overlay that is opened from there.
     active category**, the current track and elapsed/total time; the centre of the right ring holds the same-looking
     pause/resume button for all effects and the names of the running effects. Both centres use identical button
     styling so the two halves of the overlay look like one control.
-  - Below the rings: master, music and effects volume sliders with percentage readouts, the mute button, the
-    "Use current ambience for this map" button and the button that opens the audio library window.
+  - Below the rings: master, music and effects volume sliders with percentage readouts, the mute button and the
+    button that opens the audio library window.
   - Only entries that are **not hidden** (3.35.2) appear in the rings; an empty library shows a hint that links to
     the library window.
   - Everything is keyboard reachable, and the overlay repaints only while it is open, so a closed overlay costs
     nothing.
 - **Local control API:** the status bar group registers `audio.previous`, `audio.play`, `audio.next` and
-  `audio.overlay`; the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`, `audio.assign`,
+  `audio.overlay`; the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`,
   `audio.effectsPause`, `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`. In addition **every
   category and every sound effect gets its own toggle endpoint**, registered dynamically whenever the library
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
@@ -1069,7 +1060,7 @@ having to know the control's units. An explicit amount overrides it.
 1. Audio library model + `AudioLibraryService` (storage, import copy, categories, tracks) with unit tests (3.35.1, 3.35.2).
 2. Waveform peaks, silence detection and frame-exact MP3 / PCM WAV cutting with unit tests (3.35.3).
 3. `AudioEngine` with playlist, crossfade, channels and volumes behind an `AudioOutput` interface, unit-tested without sound hardware (3.35.4).
-4. Sidebar mini player, audio library window and cut-clips window; settings, local API ids and per-map ambience (3.35.5, 3.35.6).
+4. Sidebar mini player, audio library window and cut-clips window; settings and local API ids (3.35.6).
 
 ## Phase 11 - Stream Deck Plugin
 
@@ -1120,7 +1111,7 @@ having to know the control's units. An explicit amount overrides it.
   copy), music categories with colour and icon, sound effects as seamless loops, cutting standalone clips out of
   long recordings with a waveform view and silence auto-detection, a status bar transport group with a two-ring
   audio overlay (`M`) offering separate master/music/effects volumes, per-channel pause and a mute fade,
-  shuffle + crossfade playback, optional per-map ambience stored in `.dmmap`, and `audio.*` settings plus local
+  shuffle + crossfade playback, and `audio.*` settings plus local
   control API ids for every audio control, category and sound effect. Added `javafx-media` and `jlayer` dependencies.
 - **v3.11:** Duplicate import detection (3.33): importing dd2vtt/uvtt files (single, batch/folder, or the
   files used to build a multilevel map) now checks each file's original file name against the library (including

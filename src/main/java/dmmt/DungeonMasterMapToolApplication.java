@@ -1325,8 +1325,6 @@ public class DungeonMasterMapToolApplication extends Application {
 
         if (Tuning.AUDIO_ENABLED.get()) {
             audioControls = new AudioControls(preferences, () -> primaryStage);
-            audioControls.setStatusSink(this::status);
-            audioControls.setProjectAccess(() -> project, null);
             audioControls.setApiControlsChangedHandler(this::registerAudioApiControls);
         }
 
@@ -4948,9 +4946,6 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (mapBrowser != null) {
             mapBrowser.updateCurrentMap();
-        }
-        if (audioControls != null) {
-            audioControls.applyProjectAmbience(project);
         }
         updateWindowTitle();
     }

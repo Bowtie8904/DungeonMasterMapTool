@@ -451,27 +451,6 @@ public class AudioEngine {
         setPanic(!panic);
     }
 
-    // ---- Per-map ambience ----
-
-    /** Applies a map's stored ambience (3.35.5); unknown ids are ignored. */
-    public void applyAmbience(String categoryId, List<String> effectIds) {
-        if (categoryId != null && library.category(categoryId).isPresent()
-                && !categoryId.equals(this.categoryId)) {
-            playCategory(categoryId);
-        }
-        List<String> wanted = effectIds == null ? List.of() : effectIds;
-        for (String running : activeEffects()) {
-            if (!wanted.contains(running)) {
-                setEffectActive(running, false);
-            }
-        }
-        for (String id : wanted) {
-            if (library.track(id).filter(t -> t.getKind() == AudioKind.EFFECT).isPresent()) {
-                setEffectActive(id, true);
-            }
-        }
-    }
-
     // ---- Ticking ----
 
     /**

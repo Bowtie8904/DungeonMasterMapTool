@@ -49,7 +49,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
 - **Handouts**: paste images from the clipboard and show them on the player screen.
-- **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips, crossfading playback and per-map ambience.
+- **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips and crossfading playback.
 - Organises maps in a **folder library** with thumbnails, tags, name/tag search, drag & drop and auto-save.
 - **Multilevel maps**: several floors of a building (e.g. Dungeon Alchemist level exports) shown as one map, with quick up/down level switching.
 - Full **undo/redo**.
@@ -583,8 +583,7 @@ overlay only updates while it is open.
 The play/pause button in the **status bar** is the quick version of all of this: it pauses and resumes the music
 *and* every running sound effect together, next to previous/next, without opening anything.
 
-**Ambience per map.** The map button in the overlay stores the running category and sound effects with the open
-map. Opening that map later starts the same ambience automatically, unless `audio.autoSwitchOnMapChange` is off.
+Audio playback is independent of maps: switching maps never changes the running music or sound effects.
 
 Everything is also reachable from the [local control API](docs/API.md#audio-controls) - including **one endpoint per
 category and per sound effect**, addressed by the entry's library id

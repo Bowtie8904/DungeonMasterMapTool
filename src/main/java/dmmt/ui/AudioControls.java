@@ -7,7 +7,6 @@ import dmmt.audio.AudioKind;
 import dmmt.audio.AudioLibraryService;
 import dmmt.audio.AudioTrack;
 import dmmt.audio.JavaFxAudioOutput;
-import dmmt.model.DmProject;
 import dmmt.service.AppSettings;
 import dmmt.service.Tuning;
 import javafx.animation.Animation;
@@ -26,11 +25,9 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -55,11 +52,6 @@ public final class AudioControls {
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
     private final Map<String, ToggleButton> hiddenToggles = new LinkedHashMap<>();
 
-    private Supplier<DmProject> project = () -> null;
-    private Runnable projectChanged = () -> {
-    };
-    private Consumer<String> status = message -> {
-    };
     private Runnable apiControlsChanged = () -> {
     };
     private boolean syncing;
@@ -77,7 +69,6 @@ public final class AudioControls {
         this.engine = new AudioEngine(library, output);
         this.overlay = new AudioOverlay(library, engine, settings);
         overlay.setLibraryAction(this::openLibrary);
-        overlay.setAssignAction(this::storeAmbience);
         overlay.setClosedHandler(this::refreshPlaybackState);
         overlay.setButtonsRebuiltHandler(() -> apiControlsChanged.run());
         applySettings();
@@ -116,19 +107,6 @@ public final class AudioControls {
     /** The overlay layer to put on top of the main window's content. */
     public Region overlayLayer() {
         return overlay.node();
-    }
-
-    /** Where the current map comes from and what to call when its stored ambience changed. */
-    public void setProjectAccess(Supplier<DmProject> project, Runnable projectChanged) {
-        this.project = project == null ? () -> null : project;
-        this.projectChanged = projectChanged == null ? () -> {
-        } : projectChanged;
-    }
-
-    /** Where short messages for the user are shown (the DM status bar). */
-    public void setStatusSink(Consumer<String> status) {
-        this.status = status == null ? message -> {
-        } : status;
     }
 
     /** Called whenever the set of API controls changed, so the application can register them again. */
@@ -310,38 +288,6 @@ public final class AudioControls {
 
     private void openLibrary() {
         AudioLibraryWindow.show(owner.get(), library, engine, settings, this::refreshLibraryChoices);
-    }
-
-    /** Stores the running ambience in the current map (3.35.5). */
-    private void storeAmbience() {
-        DmProject current = project.get();
-        if (current == null) {
-            return;
-        }
-        String categoryId = engine.categoryId();
-        List<String> effects = engine.activeEffects();
-        if (categoryId == null && effects.isEmpty()) {
-            current.setAudio(null);
-            projectChanged.run();
-            status.accept("Removed this map's ambience.");
-            return;
-        }
-        current.setAudio(DmProject.AudioState.builder()
-                .categoryId(categoryId)
-                .effectIds(new ArrayList<>(effects))
-                .build());
-        projectChanged.run();
-        status.accept("Saved this map's ambience.");
-    }
-
-    /** Applies the ambience stored in a map when it is opened, if the setting allows it (3.35.5). */
-    public void applyProjectAmbience(DmProject opened) {
-        if (opened == null || opened.getAudio() == null || !Tuning.AUDIO_AUTO_SWITCH.get()) {
-            return;
-        }
-        DmProject.AudioState state = opened.getAudio();
-        engine.applyAmbience(state.getCategoryId(), state.getEffectIds());
-        refreshPlaybackState();
     }
 
     /** Imports audio files directly, used by the library window and by drag & drop. */

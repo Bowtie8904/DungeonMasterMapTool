@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectServiceTest {
@@ -24,6 +25,20 @@ class ProjectServiceTest {
         service.save(file, project);
         assertEquals(indexedId, project.getId());
         assertEquals(indexedId, service.load(file).getId());
+    }
+
+    @Test
+    void legacyStoredAmbienceIsIgnoredAndRemovedWhenMapIsSaved() throws IOException {
+        Path file = tempDir.resolve("legacy-audio.dmmap");
+        Files.writeString(file, """
+                {"map": {}, "audio": {"categoryId": "combat", "effectIds": ["rain"]}}
+                """);
+
+        ProjectService service = new ProjectService();
+        DmProject project = service.load(file);
+        service.save(file, project);
+
+        assertFalse(Files.readString(file).contains("\"audio\""));
     }
 
     @TempDir

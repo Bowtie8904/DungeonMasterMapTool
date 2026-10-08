@@ -302,35 +302,6 @@ class AudioEngineTest {
     }
 
     @Test
-    void ambienceStartsTheStoredCategoryAndExactlyTheStoredEffects() throws IOException {
-        music("a");
-        AudioTrack rain = effect("rain");
-        AudioTrack wind = effect("wind");
-        engine.setEffectActive(wind.getId(), true);
-
-        engine.applyAmbience(combat.getId(), List.of(rain.getId()));
-
-        assertEquals(combat.getId(), engine.categoryId());
-        assertTrue(engine.isMusicPlaying());
-        assertEquals(List.of(rain.getId()), engine.activeEffects());
-    }
-
-    @Test
-    void ambienceIgnoresUnknownIdsAndDoesNotRestartTheRunningCategory() throws IOException {
-        music("a");
-        engine.playCategory(combat.getId());
-        FakeAudioOutput.FakeVoice running = output.last();
-
-        engine.applyAmbience(combat.getId(), List.of("no-such-effect"));
-
-        assertEquals(running, output.last(), "the same category must not be restarted");
-        assertTrue(engine.activeEffects().isEmpty());
-
-        engine.applyAmbience("no-such-category", List.of());
-        assertEquals(combat.getId(), engine.categoryId());
-    }
-
-    @Test
     void shuffleUsesADifferentOrderThanTheLibrary() throws IOException {
         for (int i = 0; i < 8; i++) {
             music("track" + i);

@@ -180,7 +180,6 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 | `/api/controls/audio/effectsVolume` | slider | Sound effect volume, `0` to `1`. |
 | `/api/controls/audio/masterVolume` | slider | Master volume, `0` to `1`. |
 | `/api/controls/audio/mute` | button | Mute: fades everything out, and back in on the next call. |
-| `/api/controls/audio/assign` | button | Stores the running ambience with the open map. |
 | `/api/controls/audio/library` | button | Opens the audio library window on the DM screen. |
 
 ### One endpoint per category and per sound effect
@@ -201,7 +200,7 @@ with the entry's current name, which is the easiest way to look an id up. Hiding
 library changes, so `GET /api/controls` always lists the current set.
 
 A stream deck page for a scene typically uses one `audio/category/<id>` button plus a few `audio/effect/<id>`
-buttons, or a single `audio/assign` per map so that opening the map restores the whole ambience.
+buttons to control its ambience.
 
 ## Stream Deck plugin
 

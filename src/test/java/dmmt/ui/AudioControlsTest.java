@@ -77,6 +77,7 @@ class AudioControlsTest {
             assertTrue(api.containsKey("audio.overlay"));
             assertTrue(api.containsKey("audio.musicPlay"));
             assertTrue(api.containsKey("audio.masterVolume"));
+            assertFalse(api.containsKey("audio.assign"));
             assertTrue(api.containsKey("audio.category." + categoryId(library, "Combat")), api.keySet().toString());
             assertTrue(api.containsKey("audio.category." + categoryId(library, "Christmas Eve")),
                     api.keySet().toString());
