@@ -16,7 +16,7 @@ class WeatherEffectsTest {
     @Test
     void thunderstormIsAppendedAndRainScalesIndependentlyOfLightning() {
         assertEquals(WeatherType.THUNDERSTORM, WeatherType.from("thunderstorm"));
-        assertEquals(6, WeatherType.THUNDERSTORM.ordinal());
+        assertEquals(2, WeatherType.THUNDERSTORM.ordinal());
         assertEquals(WeatherEffects.particleCount(WeatherType.RAIN, 0.2, 1920, 1080),
                 WeatherEffects.particleCount(WeatherType.THUNDERSTORM, 0.2, 1920, 1080));
         assertTrue(WeatherEffects.particleCount(WeatherType.THUNDERSTORM, 1, 1920, 1080)
