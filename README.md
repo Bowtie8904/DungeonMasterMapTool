@@ -558,6 +558,10 @@ Playing instances automatically switch to the prepared copy when it is ready.
 
 Original imported files stay unchanged and are still used for lossless cutting. When boosting requires it, the
 library also stores a prepared PCM WAV playback copy, which uses extra disk space (including for MP3 imports).
+Prepared `*.playback.wav` and `*.peak-safe.wav` copies live in `dmmap-audio/files/playback/`, while
+`*.limited.wav` copies live in `dmmap-audio/files/limited/` (under your configured audio folder).
+For an existing library, move these copies into their respective subfolders yourself, keeping their file names;
+no edits to `library.json` are needed. Original imported and cut files stay directly in `files/`.
 Limiter copies are rendered from the original for the requested gain, not by repeatedly processing earlier boosts.
 Both the original library copy and prepared playback copy are removed when the entry is deleted. Per-file gains
 are saved in `library.json`, not in global settings or map projects.

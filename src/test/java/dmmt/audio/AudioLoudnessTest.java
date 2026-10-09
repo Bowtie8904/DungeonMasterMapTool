@@ -23,6 +23,71 @@ class AudioLoudnessTest {
     Path dir;
 
     @Test
+    void existingBareFileNamesResolveInSubfoldersWithoutRewritingTheLibrary() throws IOException {
+        Path root = dir.resolve("audio");
+        Path files = root.resolve(AudioLibraryService.FILES_FOLDER);
+        Path playback = files.resolve(AudioLibraryService.PLAYBACK_FOLDER);
+        Path limited = files.resolve(AudioLibraryService.LIMITED_FOLDER);
+        TestAudioFiles.writeWav(files.resolve("original.wav"), 100, 8000);
+        TestAudioFiles.writeWav(playback.resolve("safe.playback.wav"), 100, 8000);
+        TestAudioFiles.writeWav(playback.resolve("boost.peak-safe.wav"), 100, 8000);
+        TestAudioFiles.writeWav(limited.resolve("boost.limited.wav"), 100, 8000);
+        Path index = root.resolve(AudioLibraryService.INDEX_FILE);
+        String json = """
+                {"schemaVersion": 4, "tracks": [
+                  {"id": "safe", "file": "original.wav", "playbackFile": "safe.playback.wav",
+                   "peakSafePlaybackFile": "safe.playback.wav"},
+                  {"id": "boost", "file": "original.wav", "playbackFile": "boost.limited.wav",
+                   "peakSafePlaybackFile": "boost.peak-safe.wav"}
+                ]}
+                """;
+        Files.writeString(index, json);
+
+        AudioLibraryService library = new AudioLibraryService(root);
+        AudioTrack safe = library.track("safe").orElseThrow();
+        AudioTrack boost = library.track("boost").orElseThrow();
+        assertEquals(playback.resolve("safe.playback.wav"), library.playbackFileOf(safe));
+        assertEquals(limited.resolve("boost.limited.wav"), library.playbackSourceOf(boost).file());
+        assertTrue(Files.exists(library.playbackFileOf(safe)));
+        assertTrue(Files.exists(library.playbackFileOf(boost)));
+        assertEquals(files.resolve("original.wav"), library.fileOf(safe));
+        assertEquals("safe.playback.wav", safe.getPlaybackFile());
+        assertEquals("boost.limited.wav", boost.getPlaybackFile());
+        assertEquals(json, Files.readString(index));
+
+        library.setGainOverride("boost", null);
+        assertEquals(playback.resolve("boost.peak-safe.wav"), library.playbackFileOf(boost));
+        assertTrue(Files.exists(library.playbackFileOf(boost)));
+        library.deleteTrack("boost");
+        assertFalse(Files.exists(playback.resolve("boost.peak-safe.wav")));
+        assertFalse(Files.exists(limited.resolve("boost.limited.wav")));
+    }
+
+    @Test
+    void startupCleanupResolvesExistingStaleNamesInBothSubfolders() throws IOException {
+        Path root = dir.resolve("audio");
+        Path files = root.resolve(AudioLibraryService.FILES_FOLDER);
+        Path playback = files.resolve(AudioLibraryService.PLAYBACK_FOLDER);
+        Path limited = files.resolve(AudioLibraryService.LIMITED_FOLDER);
+        TestAudioFiles.writeWav(playback.resolve("old.playback.wav"), 100, 8000);
+        TestAudioFiles.writeWav(playback.resolve("old.peak-safe.wav"), 100, 8000);
+        TestAudioFiles.writeWav(limited.resolve("old.limited.wav"), 100, 8000);
+        TestAudioFiles.writeWav(files.resolve("original.wav"), 100, 8000);
+        Files.writeString(root.resolve(AudioLibraryService.INDEX_FILE), """
+                {"schemaVersion": 4,
+                 "stalePlaybackFiles": ["old.playback.wav", "old.peak-safe.wav", "old.limited.wav"]}
+                """);
+
+        AudioLibraryService library = new AudioLibraryService(root);
+
+        assertFalse(Files.exists(playback.resolve("old.playback.wav")));
+        assertFalse(Files.exists(playback.resolve("old.peak-safe.wav")));
+        assertFalse(Files.exists(limited.resolve("old.limited.wav")));
+        assertTrue(Files.exists(files.resolve("original.wav")));
+        assertEquals(0, library.deleteStalePlaybackFiles());
+    }
+
+    @Test
     void importsMeasureAndMatchQuietAndLoudFilesWithoutChangingOriginals() throws IOException {
         AudioLibraryService library = new AudioLibraryService(dir.resolve("audio"));
         Path loudSource = dir.resolve("loud.wav");
@@ -42,6 +107,9 @@ class AudioLoudnessTest {
         assertEquals(-23, loud.getLoudnessLufs() + loud.getAutoGainDb(), 0.05);
         assertTrue(quiet.getAutoGainDb() > 0);
         assertTrue(Files.exists(library.playbackFileOf(quiet)));
+        assertEquals(library.filesFolder().resolve(AudioLibraryService.PLAYBACK_FOLDER),
+                library.playbackFileOf(quiet).getParent());
+        assertEquals(quiet.getId() + ".playback.wav", quiet.getPlaybackFile());
         assertNotEquals(library.fileOf(quiet), library.playbackFileOf(quiet));
         assertTrue(LoudnessAnalyzer.analyze(library.playbackFileOf(quiet)).samplePeakDbfs() <= -1);
         assertTrue(java.util.Arrays.equals(quietOriginal, Files.readAllBytes(quietSource)));
@@ -129,6 +197,8 @@ class AudioLoudnessTest {
         assertEquals(24, track.getPlaybackGainDb(), 0.001);
         assertEquals(1, track.playbackVolumeFactor(), 1e-9);
         Path limited = library.playbackFileOf(track);
+        assertEquals(library.filesFolder().resolve(AudioLibraryService.LIMITED_FOLDER), limited.getParent());
+        assertEquals(limited.getFileName().toString(), track.getPlaybackFile());
         assertTrue(LoudnessAnalyzer.analyze(limited).samplePeakDbfs() <= -1);
         AudioTrack restored = new AudioLibraryService(library.root()).track(track.getId()).orElseThrow();
         assertEquals(track.getPeakSafePlaybackFile(), restored.getPeakSafePlaybackFile());
@@ -145,7 +215,8 @@ class AudioLoudnessTest {
         assertFalse(Files.exists(limited));
         library.deleteTrack(track.getId());
         assertFalse(Files.exists(prepared));
-        assertFalse(Files.exists(library.filesFolder().resolve(preparedName)));
+        assertFalse(Files.exists(library.filesFolder().resolve(AudioLibraryService.PLAYBACK_FOLDER)
+                .resolve(preparedName)));
     }
 
     @Test
@@ -174,6 +245,7 @@ class AudioLoudnessTest {
         assertEquals(track.getPeakSafePlaybackFile(), reloaded.getPeakSafePlaybackFile());
         assertEquals(track.getPlaybackFile(), reloaded.getPlaybackFile());
         assertTrue(Files.exists(root.resolve(AudioLibraryService.FILES_FOLDER)
+                .resolve(AudioLibraryService.LIMITED_FOLDER)
                 .resolve(reloaded.getPlaybackFile())));
     }
 
@@ -233,7 +305,7 @@ class AudioLoudnessTest {
         }
         assertNull(track.getGainOverrideDb());
         assertEquals(originalPlayback, library.playbackFileOf(track));
-        try (java.util.stream.Stream<Path> files = Files.list(library.filesFolder())) {
+        try (java.util.stream.Stream<Path> files = Files.walk(library.filesFolder())) {
             assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".limited.wav")
                     || path.getFileName().toString().endsWith(".limited.wav.tmp")));
         }
@@ -270,6 +342,9 @@ class AudioLoudnessTest {
         assertTrue(track.getAutoGainDb() > 0);
         assertNotEquals(original, library.playbackFileOf(track));
         assertTrue(Files.exists(library.playbackFileOf(track)));
+        assertEquals(library.filesFolder().resolve(AudioLibraryService.PLAYBACK_FOLDER),
+                library.playbackFileOf(track).getParent());
+        assertTrue(track.getPlaybackFile().endsWith(".peak-safe.wav"));
         assertTrue(Files.exists(original));
         assertTrue(new AudioLibraryService(root).track(track.getId()).orElseThrow().isLoudnessAnalyzed());
     }
@@ -284,6 +359,8 @@ class AudioLoudnessTest {
         AudioTrack track = library.addClip(clip, "Quiet clip", AudioKind.EFFECT, null, null, 50, 350);
         assertNotNull(track.getLoudnessLufs());
         assertTrue(track.getAutoGainDb() > 0);
+        assertEquals(library.filesFolder().resolve(AudioLibraryService.PLAYBACK_FOLDER),
+                library.playbackFileOf(track).getParent());
 
         Path badClip = library.reserveClipFile("broken", "wav");
         Files.writeString(badClip, "not a WAV");

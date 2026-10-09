@@ -93,6 +93,9 @@ public final class ControlKeyImages {
     }
 
     static Ikon selectIcon(String id, List<Node> sources) {
+        if (id.equals("player.screen")) {
+            return MaterialDesignM.MONITOR;
+        }
         // Dropdown skins contain arrow glyphs, not artwork for the action.
         if (sources.stream().anyMatch(node -> node instanceof javafx.scene.control.ComboBox<?>)) {
             return sectionIcon(id);

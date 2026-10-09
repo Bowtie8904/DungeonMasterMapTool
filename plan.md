@@ -578,6 +578,10 @@ same application. It must never be in the way of DMs who do not use it, and must
   map library: `audio.folder` (default `dmmap-audio`, relative paths start next to the settings file, restart
   required). Layout: `<folder>/library.json` (index), `<folder>/files/` (the audio files),
   `<folder>/peaks/` (cached waveform peaks, derived data that may be deleted at any time).
+- Prepared PCM copies live in `files/playback/` (`*.playback.wav` and `*.peak-safe.wav`) and
+  `files/limited/` (`*.limited.wav`). Library values remain bare file names; lookup, preparation and deletion
+  resolve the appropriate subfolder in code without a schema change. Existing copies are moved manually,
+  not migrated by the application; originals remain directly in `files/`.
 - Supported formats: **MP3 and WAV**. Other files are rejected with a clear message. The extension alone is not
   trusted: an MP3 is only accepted when its MPEG frames really cover at least half of the file, so files that merely
   carry an `.mp3` name (damaged downloads, or the encrypted library formats some other audio tools use for their

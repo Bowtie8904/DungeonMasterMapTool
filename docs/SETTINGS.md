@@ -1193,7 +1193,9 @@ are gone, nothing is loaded and no audio thread runs, so the feature costs nothi
 **Default:** `dmmap-audio` · **Values:** folder path · **Applies:** restart required
 
 Where the audio library lives: the index `library.json`, the imported audio files in `files/` and the cached
-waveforms in `peaks/`, plus prepared PCM WAV playback copies where loudness boosting needs extra headroom.
+waveforms in `peaks/`, plus prepared PCM WAV copies in `files/playback/` (peak-safe playback) and
+`files/limited/` (manual gain limiter renders). Existing prepared copies must be moved into these subfolders
+manually, keeping their file names; the values in `library.json` do not need to change.
 These copies preserve the originals but consume extra disk space. A relative path starts next to the settings
 file; absolute paths are used as they are. Put it on a fast drive if the library is large.
 

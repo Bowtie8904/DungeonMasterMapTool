@@ -26,6 +26,8 @@ import java.util.Set;
  * <pre>
  * &lt;root&gt;/library.json   index (atomically rewritten after every change)
  * &lt;root&gt;/files/         the imported and cut audio files
+ * &lt;root&gt;/files/playback/ peak-safe PCM playback copies
+ * &lt;root&gt;/files/limited/  gain-specific limiter copies
  * &lt;root&gt;/peaks/         cached waveform peaks (derived, may be deleted)
  * </pre>
  *
@@ -39,6 +41,8 @@ public class AudioLibraryService {
     public static final double MANUAL_MAXIMUM_GAIN_DB = 24;
     public static final String INDEX_FILE = "library.json";
     public static final String FILES_FOLDER = "files";
+    public static final String PLAYBACK_FOLDER = "playback";
+    public static final String LIMITED_FOLDER = "limited";
     public static final String PEAKS_FOLDER = "peaks";
 
     private final ObjectMapper mapper = new ObjectMapper()
@@ -77,7 +81,12 @@ public class AudioLibraryService {
 
     /** File to play; prepared PCM copies are separate from originals and remain inside {@code files/}. */
     public synchronized Path playbackFileOf(AudioTrack track) {
-        return track.getPlaybackFile() == null ? fileOf(track) : filesFolder().resolve(track.getPlaybackFile());
+        return track.getPlaybackFile() == null ? fileOf(track) : preparedFileOf(track.getPlaybackFile());
+    }
+
+    private Path preparedFileOf(String name) {
+        return filesFolder().resolve(name.endsWith(".limited.wav") ? LIMITED_FOLDER : PLAYBACK_FOLDER)
+                .resolve(name);
     }
 
     /** The playback file and the gain baked into it, read atomically so a voice never mixes two analyses. */
@@ -346,7 +355,7 @@ public class AudioLibraryService {
             double playbackGainDb = 0;
             if (measurement.maximumGainDb() > 0) {
                 playbackFile = id + ".playback.wav";
-                prepared = filesFolder().resolve(playbackFile);
+                prepared = preparedFileOf(playbackFile);
                 LoudnessAnalyzer.writePrepared(target, prepared, measurement.maximumGainDb(),
                         measurement.channels(), measurement.sampleRate());
                 playbackGainDb = measurement.maximumGainDb();
@@ -441,7 +450,7 @@ public class AudioLibraryService {
             double playbackGainDb = 0;
             if (measurement.maximumGainDb() > 0) {
                 playbackFile = id + ".playback.wav";
-                prepared = filesFolder().resolve(playbackFile);
+                prepared = preparedFileOf(playbackFile);
                 LoudnessAnalyzer.writePrepared(clip, prepared, measurement.maximumGainDb(),
                         measurement.channels(), measurement.sampleRate());
                 playbackGainDb = measurement.maximumGainDb();
@@ -570,7 +579,7 @@ public class AudioLibraryService {
             double playbackGainDb;
             if (measurement.maximumGainDb() > 0) {
                 safeFile = id + "." + java.util.UUID.randomUUID() + ".peak-safe.wav";
-                Path safePath = filesFolder().resolve(safeFile);
+                Path safePath = preparedFileOf(safeFile);
                 createdFiles.add(safePath);
                 LoudnessAnalyzer.writePrepared(original, safePath, measurement.maximumGainDb(),
                         measurement.channels(), measurement.sampleRate());
@@ -579,7 +588,7 @@ public class AudioLibraryService {
             double selectedGain = overrideDb == null ? measurement.autoGainDb() : overrideDb;
             if (overrideDb != null && overrideDb > measurement.maximumGainDb()) {
                 playbackFile = id + "." + java.util.UUID.randomUUID() + ".limited.wav";
-                Path limitedPath = filesFolder().resolve(playbackFile);
+                Path limitedPath = preparedFileOf(playbackFile);
                 createdFiles.add(limitedPath);
                 LoudnessAnalyzer.writeLimitedPrepared(original, limitedPath, overrideDb,
                         measurement.channels(), measurement.sampleRate());
@@ -623,7 +632,7 @@ public class AudioLibraryService {
     public synchronized int deleteStalePlaybackFiles() throws IOException {
         List<String> remaining = new ArrayList<>();
         for (String name : library.getStalePlaybackFiles()) {
-            Path file = filesFolder().resolve(name).normalize();
+            Path file = preparedFileOf(name).normalize();
             if (!file.startsWith(filesFolder())) {
                 continue;
             }
@@ -740,7 +749,7 @@ public class AudioLibraryService {
                 if (gainDb != null && gainDb > snapshot.maxGainDb
                         && audioChannels > 0 && audioSampleRate > 0) {
                     playbackFile = id + "." + java.util.UUID.randomUUID() + ".limited.wav";
-                    Path limitedPath = filesFolder().resolve(playbackFile);
+                    Path limitedPath = preparedFileOf(playbackFile);
                     createdFiles.add(limitedPath);
                     LoudnessAnalyzer.writeLimitedPrepared(original, limitedPath, gainDb,
                             snapshot.audioChannels, snapshot.audioSampleRate);
@@ -874,7 +883,7 @@ public class AudioLibraryService {
         List<String> staleAfterDelete = new ArrayList<>(library.getStalePlaybackFiles());
         for (String preparedFile : preparedFiles) {
             try {
-                Files.deleteIfExists(filesFolder().resolve(preparedFile));
+                Files.deleteIfExists(preparedFileOf(preparedFile));
                 staleAfterDelete.remove(preparedFile);
             } catch (java.nio.file.FileSystemException lockedFile) {
                 // Keep locked prepared files indexed for cleanup on startup or a later explicit cleanup.

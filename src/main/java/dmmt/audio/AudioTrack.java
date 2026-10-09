@@ -74,12 +74,12 @@ public class AudioTrack {
     private int audioSampleRate = 0;
     /** Optional absolute gain override; {@code null} selects {@link #autoGainDb}. */
     private Double gainOverrideDb;
-    /** App-managed PCM playback copy, relative to {@code files/}; originals remain in {@code file}. */
+    /** Bare PCM copy name, resolved in {@code files/playback/} or {@code files/limited/} by the service. */
     private String playbackFile;
     /** Gain already baked into {@code playbackFile}, relative to the original. */
     @Builder.Default
     private double playbackGainDb = 0;
-    /** Uncompressed, peak-safe playback copy used when automatic gain or a peak-safe override is selected. */
+    /** Bare copy name in {@code files/playback/}, used for automatic gain or a peak-safe override. */
     private String peakSafePlaybackFile;
     /** Gain already baked into {@code peakSafePlaybackFile}, relative to the original. */
     @Builder.Default
