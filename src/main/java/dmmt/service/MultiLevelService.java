@@ -217,6 +217,7 @@ public class MultiLevelService {
         DmProject.WeatherState weather = project.getWeather() == null ? null : DmProject.WeatherState.builder()
                 .type(project.getWeather().getType())
                 .intensity(project.getWeather().getIntensity())
+                .lightningIntervalSeconds(project.getWeather().getLightningIntervalSeconds())
                 .build();
         DmProject.TextSettings text = project.getLastTextSettings();
         return MultiLevelManifest.SharedSettings.builder()
@@ -254,6 +255,7 @@ public class MultiLevelService {
             project.setWeather(DmProject.WeatherState.builder()
                     .type(shared.getWeather().getType())
                     .intensity(shared.getWeather().getIntensity())
+                    .lightningIntervalSeconds(shared.getWeather().getLightningIntervalSeconds())
                     .build());
         }
         if (shared.getImageLayersLocked() != null) {

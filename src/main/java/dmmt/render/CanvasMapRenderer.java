@@ -83,6 +83,11 @@ public class CanvasMapRenderer {
     /** Global switch for moving effect textures and weather (ui.effectAnimations). */
     @Setter
     private static volatile boolean effectAnimationsEnabled = true;
+    private Double frozenWeatherSeconds;
+
+    public void setWeatherFrozen(boolean frozen) {
+        frozenWeatherSeconds = frozen ? weatherSeconds() : null;
+    }
 
     public static boolean effectAnimationsOn() {
         return effectAnimationsEnabled;
@@ -363,11 +368,30 @@ public class CanvasMapRenderer {
         if (type == WeatherType.NONE) {
             return;
         }
+        double seconds = weatherSeconds();
+        if (type == WeatherType.THUNDERSTORM) {
+            WeatherEffects.drawLightning(gc, width, height,
+                    WeatherEffects.lightningFlash(seconds, weather.getLightningIntervalSeconds()));
+        }
+        WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
+    }
+
+    double weatherSeconds() {
+        if (frozenWeatherSeconds != null) {
+            return frozenWeatherSeconds;
+        }
         double seconds = effectAnimationsEnabled ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
             seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
         }
-        WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
+        return seconds;
+    }
+
+    private double lightningBrightness(DmProject project) {
+        DmProject.WeatherState weather = project.getWeather();
+        return weather != null && WeatherType.from(weather.getType()) == WeatherType.THUNDERSTORM
+                ? WeatherEffects.lightningFlash(weatherSeconds(), weather.getLightningIntervalSeconds())
+                    * Tuning.WEATHER_FLASH_BRIGHTNESS.get() : 0;
     }
 
     private void drawGrid(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera) {
@@ -1163,8 +1187,12 @@ public class CanvasMapRenderer {
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
         LightBuffer buffer = composite.buffer();
         gc.setImageSmoothing(true);
+        // Fade only ambient darkness, not light visibility or fog, during a lightning strike.
+        gc.save();
+        gc.setGlobalAlpha(1 - lightningBrightness(project));
         gc.drawImage(buffer.ambientImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
                 composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
+        gc.restore();
     }
 
     private record LightComposite(LightBuffer buffer, int bw, int bh) {
@@ -2230,7 +2258,4 @@ public class CanvasMapRenderer {
         }
     }
 }
-
-
-
 

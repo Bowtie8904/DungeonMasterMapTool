@@ -555,6 +555,16 @@ public final class Tuning {
 
     public static final Setting<Double> WEATHER_DEFAULT_INTENSITY = decimal(WEATHER, "weather.defaultIntensity", 0.4, 0.1, 1, false,
             "Weather intensity of new maps and of a double-click reset of the intensity slider.");
+    public static final Setting<Double> WEATHER_LIGHTNING_INTERVAL = decimal(WEATHER, "weather.thunderstorm.defaultIntervalSeconds", 7, 2, 120, false,
+            "Default lightning interval in seconds for new maps and slider reset; independent of rain intensity.");
+    public static final Setting<Double> WEATHER_FLASH_DURATION = decimal(WEATHER, "weather.thunderstorm.flashDurationSeconds", 0.7, 0.2, 1.5, false,
+            "Duration of each lightning burst in seconds, including closely clustered flashes and their lingering fade-out.");
+    public static final Setting<Double> WEATHER_FLASH_BRIGHTNESS = decimal(WEATHER, "weather.thunderstorm.flashBrightness", 1, 0, 1, false,
+            "Lightning strength lifting ambient darkness; 1 fully lights the map at the flash peak, never revealing fog.");
+    public static final Setting<Double> WEATHER_FLASH_OPACITY = decimal(WEATHER, "weather.thunderstorm.flashOpacity", 0.25, 0, 1, false,
+            "Peak opacity of the lightning highlight above the map and below fog and text.");
+    public static final Setting<String> WEATHER_FLASH_COLOR = color(WEATHER, "weather.thunderstorm.flashColor", "#E8EEFF", false,
+            "Colour of the screen-wide lightning highlight.");
 
     /** Look of one weather type. */
     public record WeatherSettings(Setting<Integer> particles, Setting<String> color, Setting<Double> opacity) {
@@ -577,9 +587,10 @@ public final class Tuning {
         weather("mist", "Mist (particles = fog banks)", 70, 500, "#DBE3ED", 0.12);
         weather("dust", "Dust motes", 500, 10000, "#FFF0CD", 0.48);
         weather("embers", "Embers", 295, 10000, "#FF963C", 0.75);
+        weather("thunderstorm", "Thunderstorm rain", 600, 10000, "#C8D7EB", 0.42);
     }
 
-    /** Weather ids: rain, snow, mist, dust, embers. */
+    /** Weather ids: rain, snow, mist, dust, embers, thunderstorm. */
     public static WeatherSettings weather(String id) {
         WeatherSettings settings = WEATHER_TYPES.get(id.toLowerCase(Locale.ROOT));
         if (settings == null) {

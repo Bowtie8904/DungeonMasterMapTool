@@ -182,7 +182,7 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `tools` | `select`, `ping`, `laser`, `undo`, `redo` |
 | `fog` | `enabled`, `revealBrush`, `hideBrush`, `revealRect`, `hideRect`, `revealAll`, `hideAll`, `revealRoom`, `brushSize`, `sharpness`, `fade`, `softness` |
 | `lighting` | `torch`, `candle`, `campfire`, `magic`, `remove`, `flicker`, `revealPersistent`, `revealWhileLit`, `revealNone`, `day`, `dawn`, `dusk`, `night`, `on`, `off`, `ambient`, `tint`, `brightCore`, `hint` |
-| `weather` | `type`, `intensity` |
+| `weather` | `type`, `intensity`, `lightningInterval` |
 | `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `animations`, `brushSize` |
 | `text` | `add`, `layer`, `autoSize`, `players`, `delete`, `size`, `color`, `rotateLeft`, `rotateRight`, `background`, `noBackground`, `border`, `noBorder` |
 | `building` | `drawWall`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
@@ -1123,12 +1123,12 @@ Weather intensity of maps without saved weather and the value the intensity slid
 
 ### Weather types: `weather.<type>.*`
 
-`<type>` is `rain`, `snow`, `mist`, `dust` (dust motes) or `embers`. All values are **live**.
+`<type>` is `rain`, `snow`, `mist`, `dust` (dust motes), `embers` or `thunderstorm`. All values are **live**.
 
 - **`particles`** – number of particles at full intensity on a 1920×1080 screen (0 to 10000; mist 0 to 500). The
   actual number scales with the intensity slider and the screen size; performance mode halves it. For **mist** the
   value is the number of large drifting fog banks and does not depend on intensity (intensity changes their opacity).
-  `0` disables the weather type.
+  `0` disables the particles (thunderstorm lightning remains active).
 - **`color`** – particle colour `#RRGGBB`.
 - **`opacity`** – highest particle opacity (0 to 1). Dust motes twinkle and embers flicker between a fraction of this
   and the full value; mist uses one third of it at the lowest intensity and the full value at intensity 1.
@@ -1140,8 +1140,31 @@ Weather intensity of maps without saved weather and the value the intensity slid
 | `weather.mist.particles` | `70` | `weather.mist.color` | `#DBE3ED` | `weather.mist.opacity` | `0.12` |
 | `weather.dust.particles` | `500` | `weather.dust.color` | `#FFF0CD` | `weather.dust.opacity` | `0.48` |
 | `weather.embers.particles` | `295` | `weather.embers.color` | `#FF963C` | `weather.embers.opacity` | `0.75` |
+| `weather.thunderstorm.particles` | `600` | `weather.thunderstorm.color` | `#C8D7EB` | `weather.thunderstorm.opacity` | `0.42` |
 
-*Keywords:* rain, snow, mist, fog bank, dust, embers, sparks, ash, particles, weather effect, storm, blizzard
+*Keywords:* rain, snow, mist, fog bank, dust, embers, sparks, ash, particles, weather effect, storm, blizzard, thunderstorm, lightning, flash, frequency, interval
+
+### Thunderstorm lightning
+
+Thunderstorms combine rain with screen-wide lightning bursts that lift ambient map darkness but never reveal fog of war.
+Each strike contains 3-5 closely clustered flashes with irregular spacing, varied brightness and overlapping fade-outs.
+The flashes arrive within the first 40% of the burst, leaving a lingering glow that fades smoothly through the rest.
+The Weather intensity slider controls only rain. **Lightning interval** in the Weather tab controls the average
+time between strikes (2-120 seconds, lower = more frequent), with deterministic natural variation. It is saved per
+map as `weather.lightningIntervalSeconds`, shared across levels and undoable. Double-click restores the default.
+Animations off disables lightning; Performance mode retains the same strike schedule at its weather animation
+rate. Freezing the player view keeps its captured frame.
+
+| Setting | Default | Range | Purpose |
+|---------|---------|-------|---------|
+| `weather.thunderstorm.defaultIntervalSeconds` | `7` | 2-120 | Initial per-map interval and slider reset value; does not override a saved map's interval. |
+| `weather.thunderstorm.flashDurationSeconds` | `0.7` | 0.2-1.5 | Total burst duration in seconds, including closely clustered flashes and their lingering fade-out. |
+| `weather.thunderstorm.flashBrightness` | `1` | 0-1 | Strength lifting ambient darkness; 1 fully restores map brightness at the peak. |
+| `weather.thunderstorm.flashOpacity` | `0.25` | 0-1 | Peak opacity of the pale highlight below fog and text. |
+| `weather.thunderstorm.flashColor` | `#E8EEFF` | Colour | Highlight colour. |
+
+All settings apply live. Lightning is visual only: it creates no light source, changes no visibility polygons and
+never edits the fog mask. To disable flashes entirely, set both flash brightness and flash opacity to zero.
 
 ---
 

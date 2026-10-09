@@ -72,6 +72,7 @@ class PlayerViewTransitionTest {
         assertChange(p -> p.getTextBoxes().add(DmProject.TextBox.builder().build()));
         assertChange(p -> p.setTextLayerVisible(false));
         assertChange(p -> p.getWeather().setType("rain"));
+        assertChange(p -> p.getWeather().setLightningIntervalSeconds(30));
         DmProject before = project();
         assertTrue(PlayerViewTransition.contentChanged(before, Path.of("old.dmmap"),
                 before.getViews().getPlayerCamera(), before, Path.of("new.dmmap"),

@@ -105,6 +105,38 @@ class LocalControlApiTest {
     }
 
     @Test
+    void thunderstormIntervalApiIsIndependentPersistedAndUndoable() throws Exception {
+        onFx(() -> {
+            Fixture fixture = fixture();
+            assertThrows(dmmt.api.LocalApiServer.ApiException.class, () ->
+                    fixture.api().execute("weather.lightningInterval", Map.of("value", "5")));
+            fixture.api().execute("weather.type", Map.of("value", "Thunderstorm"));
+            assertEquals("thunderstorm", fixture.project().getWeather().getType());
+            double before = fixture.project().getWeather().getLightningIntervalSeconds();
+            Map<String, Object> interval = fixture.api().describe().stream()
+                    .filter(state -> state.get("id").equals("weather.lightningInterval")).findFirst().orElseThrow();
+            assertEquals(2.0, ((Number) interval.get("min")).doubleValue());
+            assertEquals(120.0, ((Number) interval.get("max")).doubleValue());
+            fixture.api().execute("weather.lightningInterval", Map.of("value", "5"));
+            assertEquals(5, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("tools.undo", Map.of());
+            assertEquals(before, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("tools.redo", Map.of());
+            assertEquals(5, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("weather.intensity", Map.of("value", "0.9"));
+            assertEquals(0.9, fixture.project().getWeather().getIntensity(), 1e-9);
+            assertEquals(5, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("weather.lightningInterval", Map.of("increment", "2"));
+            assertEquals(7, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("weather.lightningInterval", Map.of("decrement", "1"));
+            assertEquals(6, fixture.project().getWeather().getLightningIntervalSeconds());
+            fixture.api().execute("weather.type", Map.of("value", "Rain"));
+            fixture.api().execute("weather.type", Map.of("value", "Thunderstorm"));
+            assertEquals(6, fixture.project().getWeather().getLightningIntervalSeconds());
+        });
+    }
+
+    @Test
     void weatherEnumChoicesUseDisplayStringsAndTextureUsesConverter() throws Exception {
         onFx(() -> {
             Fixture fixture = fixture();

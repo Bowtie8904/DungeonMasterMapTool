@@ -16,6 +16,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectServiceTest {
     @Test
+    void thunderstormIntervalSurvivesSaveAndCopyAndLegacyWeatherGetsDefault() throws IOException {
+        ProjectService service = new ProjectService();
+        DmProject project = DmProject.builder().build();
+        project.getWeather().setType("thunderstorm");
+        project.getWeather().setIntensity(0.8);
+        project.getWeather().setLightningIntervalSeconds(9);
+        Path file = tempDir.resolve("storm.dmmap");
+        service.save(file, project);
+        assertEquals(project.getWeather(), service.load(file).getWeather());
+        DmProject copy = service.copy(project);
+        project.getWeather().setLightningIntervalSeconds(30);
+        assertEquals(9, copy.getWeather().getLightningIntervalSeconds());
+        Files.writeString(file, "{\"map\":{},\"weather\":{\"type\":\"rain\",\"intensity\":0.4}}");
+        assertEquals(Tuning.WEATHER_LIGHTNING_INTERVAL.get(), service.load(file).getWeather().getLightningIntervalSeconds());
+    }
+
+    @Test
     void savingLegacyProjectLoadedBeforeIndexingRetainsTheIndexedIdentity() throws IOException {
         Path file = tempDir.resolve("legacy.dmmap");
         Files.writeString(file, "{\"map\":{}}");

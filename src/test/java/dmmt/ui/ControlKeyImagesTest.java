@@ -31,6 +31,8 @@ class ControlKeyImagesTest {
             ComboBox<String> dropdown = new ComboBox<>();
             assertEquals(MaterialDesignW.WEATHER_PARTLY_RAINY,
                     ControlKeyImages.selectIcon("weather.type", List.of(dropdown)));
+            assertEquals(MaterialDesignW.WEATHER_LIGHTNING,
+                    ControlKeyImages.selectIcon("weather.lightningInterval", List.of(new Slider())));
             assertEquals(MaterialDesignF.FORMAT_PAINT,
                     ControlKeyImages.selectIcon("effects.texture", List.of(dropdown)));
             assertEquals(MaterialDesignP.PROJECTOR,

@@ -126,6 +126,28 @@ return `409`, and unavailable/timed-out UI dispatch returns `503`. No API calls 
 UI dispatch times out after 30 seconds. If a command has already opened a dialog, it may still finish after that
 timeout; do not blindly retry a toggle when the outcome is uncertain.
 
+## Weather
+
+`GET /api/controls/weather/type?value=Thunderstorm` selects the new weather option. Thunderstorm is appended
+at index `6`; existing indices (None, Rain, Snow, Mist, Dust motes, Embers) remain unchanged.
+Discovery includes it in `weather.type` choices.
+
+`GET /api/controls/weather/intensity?value=0.7` adjusts rain amount for a thunderstorm, never lightning frequency.
+The independent `weather.lightningInterval` slider is discoverable (including its current value, bounds, disabled
+state and key image) and supports the normal set/increment/decrement commands:
+
+```text
+/api/controls/weather/lightningInterval?value=7
+/api/controls/weather/lightningInterval?increment=2
+/api/controls/weather/lightningInterval?decrement=2
+```
+
+Values are seconds between strikes on average (2-120, default 7, with natural variation), not strikes per second; lower
+means more frequent. It is enabled only when Thunderstorm is selected (otherwise `409`).
+Changes use normal UI undo/redo, persist as `weather.lightningIntervalSeconds` and are shared across levels.
+Global flash appearance and the initial interval are settings, not separate control endpoints.
+Lightning pierces ambient darkness but not fog; it never reveals hidden map content.
+
 ## Maps and levels
 
 `GET /api/controls/maps/previous` invokes the **Previous map** button beside Recent maps, with no parameters.

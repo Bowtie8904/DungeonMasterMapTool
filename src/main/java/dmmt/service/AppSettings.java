@@ -42,7 +42,7 @@ public final class AppSettings {
             new SidebarSection("tools", "Tools", "Select tool, fog brushes, rectangles and room fill."),
             new SidebarSection("fog", "Fog of war", "Fog sharpness, softness and fade animation."),
             new SidebarSection("lighting", "Lighting", "Light tools, time of day, ambient brightness and light tint."),
-            new SidebarSection("weather", "Weather", "Rain, snow, mist, dust and embers."),
+            new SidebarSection("weather", "Weather", "Rain, snow, mist, dust, embers and thunderstorms."),
             new SidebarSection("effects", "Effects", "Area effect shapes, pen, line, textures and colours."),
             new SidebarSection("text", "Text", "Text boxes, font size and colours."),
             new SidebarSection("building", "Map building", "Walls, doors and windows."),
@@ -67,7 +67,8 @@ public final class AppSettings {
                 "revealNone|Don't reveal fog", "day|Day", "dawn|Dawn", "dusk|Dusk", "night|Night",
                 "on|Turn selected lights on", "off|Turn selected lights off", "ambient|Ambient brightness",
                 "tint|Light colour tint", "brightCore|Bright core strength", "hint|Right-click light hint");
-        addControls(controls, "weather", "type|Weather type", "intensity|Weather intensity");
+        addControls(controls, "weather", "type|Weather type", "intensity|Weather intensity",
+                "lightningInterval|Lightning interval");
         addControls(controls, "effects", "circle|Circle", "rectangle|Box", "brush|Draw", "pen|Pen", "line|Line",
                 "delete|Delete selected effect", "clear|Remove all effects", "color|Effect colour", "opacity|Effect opacity",
                 "players|Players see effect", "texture|Effect texture", "border|Effect border",

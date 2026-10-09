@@ -352,6 +352,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private Slider weatherIntensitySlider;
     private Label weatherIntensityValue;
     private double weatherIntensityCommitted = WeatherEffects.defaultIntensity();
+    private Slider lightningIntervalSlider;
+    private Label lightningIntervalValue;
+    private double lightningIntervalCommitted = Tuning.WEATHER_LIGHTNING_INTERVAL.get();
     private Slider lightTintSlider;
     private Label lightTintValue;
     /** Last committed light tint of the current map; the "before" value for undo. */
@@ -1295,6 +1298,7 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox.setHgrow(playerZoomRow, Priority.ALWAYS);
 
         HBox weatherRow = weatherRow();
+        HBox lightningIntervalRow = lightningIntervalRow();
 
         dmControlVisibility.registerRow("tools", toolsRow, "select", "ping", "laser", null, "undo", "redo");
         dmControlVisibility.registerRow("fog", fogToolsRow, "enabled", null, "revealBrush", "hideBrush", "revealRect", "hideRect");
@@ -1310,6 +1314,8 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("lighting.brightCore", brightCoreRow);
         dmControlVisibility.register("lighting.hint", lightHint);
         dmControlVisibility.registerRow("weather", weatherRow, "type", "intensity", "intensity");
+        dmControlVisibility.registerRow("weather", lightningIntervalRow,
+                "lightningInterval", "lightningInterval", "lightningInterval");
         dmControlVisibility.registerRow("effects", effectToolsRow, "circle", "rectangle", "brush", "pen", "line", null, "delete", "clear");
         dmControlVisibility.registerRow("effects", effectStyleRow, "color", "opacity", "players");
         dmControlVisibility.registerRow("effects", effectTextureRow, "texture", "border", "light", "animations");
@@ -1332,7 +1338,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
-                new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather", weatherRow),
+                new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather",
+                        weatherRow, lightningIntervalRow),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
                 new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
@@ -1975,7 +1982,7 @@ public class DungeonMasterMapToolApplication extends Application {
         slider.setBlockIncrement(0.05);
         slider.setPrefWidth(70);
         HBox.setHgrow(slider, Priority.ALWAYS);
-        Icons.tooltip(slider, "Weather intensity. Keep it low for a subtle effect. Double-click to reset.");
+        Icons.tooltip(slider, "Weather intensity (rain amount for thunderstorms, not lightning frequency). Double-click to reset.");
         Label value = new Label(Math.round(slider.getValue() * 100) + "%");
         value.getStyleClass().add("value-label");
         weatherIntensitySlider = slider;
@@ -2011,6 +2018,60 @@ public class DungeonMasterMapToolApplication extends Application {
             project.setWeather(DmProject.WeatherState.builder().build());
         }
         return project.getWeather();
+    }
+
+    private HBox lightningIntervalRow() {
+        Label label = new Label("Lightning interval");
+        Slider slider = new Slider(WeatherEffects.MIN_LIGHTNING_INTERVAL, WeatherEffects.MAX_LIGHTNING_INTERVAL,
+                Tuning.WEATHER_LIGHTNING_INTERVAL.get());
+        slider.setBlockIncrement(1);
+        slider.setPrefWidth(70);
+        HBox.setHgrow(slider, Priority.ALWAYS);
+        Icons.tooltip(slider, "Seconds between lightning strikes, with natural variation. Lower = more frequent; independent of rain intensity. Double-click to reset.");
+        Label value = new Label();
+        value.getStyleClass().add("value-label");
+        lightningIntervalSlider = slider;
+        lightningIntervalValue = value;
+        slider.valueProperty().addListener((obs, oldValue, newValue) -> {
+            value.setText(String.format(java.util.Locale.ROOT, "%.1f s", newValue.doubleValue()));
+            if (syncingControls) {
+                return;
+            }
+            currentWeather().setLightningIntervalSeconds(newValue.doubleValue());
+            if (!slider.isValueChanging()) {
+                commitLightningInterval();
+            }
+        });
+        slider.valueChangingProperty().addListener((obs, wasChanging, changing) -> {
+            if (!changing && !syncingControls) {
+                commitLightningInterval();
+            }
+        });
+        slider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                slider.setValue(Tuning.WEATHER_LIGHTNING_INTERVAL.get());
+                commitLightningInterval();
+            }
+        });
+        slider.setDisable(true);
+        value.setText(String.format(java.util.Locale.ROOT, "%.1f s", slider.getValue()));
+        return row(label, slider, value);
+    }
+
+    private void commitLightningInterval() {
+        double before = lightningIntervalCommitted;
+        double after = currentWeather().getLightningIntervalSeconds();
+        if (Math.abs(after - before) < 1e-9) {
+            return;
+        }
+        lightningIntervalCommitted = after;
+        recordHistory("Change lightning interval",
+                () -> setLightningInterval(after), () -> setLightningInterval(before));
+    }
+
+    private void setLightningInterval(double seconds) {
+        currentWeather().setLightningIntervalSeconds(WeatherEffects.clampLightningInterval(seconds));
+        syncControlsFromProject();
     }
 
     private void changeWeather(String typeKey, double intensity) {
@@ -4993,6 +5054,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 weatherIntensitySlider.setValue(weather.getIntensity());
                 weatherIntensityValue.setText(Math.round(weather.getIntensity() * 100) + "%");
                 weatherIntensitySlider.setDisable(WeatherType.from(weather.getType()) == WeatherType.NONE);
+                lightningIntervalCommitted = weather.getLightningIntervalSeconds();
+                lightningIntervalSlider.setValue(weather.getLightningIntervalSeconds());
+                lightningIntervalValue.setText(String.format(java.util.Locale.ROOT, "%.1f s", weather.getLightningIntervalSeconds()));
+                lightningIntervalSlider.setDisable(WeatherType.from(weather.getType()) != WeatherType.THUNDERSTORM);
             }
             if (lightTintSlider != null) {
                 double tint = CanvasMapRenderer.clampLightTint(project.getLighting().getLightTint());
@@ -7886,6 +7951,7 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerProject = null;
             frozenPlayerProjectFile = null;
             frozenPlayerCamera = null;
+            playerRenderer.setWeatherFrozen(false);
             playerLightingEngine.reset();
             return;
         }
@@ -7893,6 +7959,7 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerProject = projectService.copy(project);
             frozenPlayerProjectFile = projectFile;
             frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
+            playerRenderer.setWeatherFrozen(true);
             playerLightingEngine.reset();
         } catch (IOException ex) {
             frozenPlayerProject = null;

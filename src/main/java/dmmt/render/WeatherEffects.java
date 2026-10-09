@@ -15,6 +15,8 @@ import javafx.scene.paint.Stop;
 public final class WeatherEffects {
     public static final double MIN_INTENSITY = 0.1;
     public static final double MAX_INTENSITY = 1.0;
+    public static final double MIN_LIGHTNING_INTERVAL = 2;
+    public static final double MAX_LIGHTNING_INTERVAL = 120;
 
     private static final double REFERENCE_AREA = 1920.0 * 1080.0;
     private static final double EDGE_MARGIN = 40;
@@ -29,6 +31,62 @@ public final class WeatherEffects {
 
     public static double clampIntensity(double intensity) {
         return Math.max(MIN_INTENSITY, Math.min(MAX_INTENSITY, intensity));
+    }
+
+    public static double clampLightningInterval(double seconds) {
+        return Math.max(MIN_LIGHTNING_INTERVAL, Math.min(MAX_LIGHTNING_INTERVAL, seconds));
+    }
+
+    /** One irregular strike per interval, shared by both views and independent of rain intensity. */
+    public static double lightningFlash(double seconds, double intervalSeconds) {
+        if (!Double.isFinite(seconds) || seconds <= 0 || !Double.isFinite(intervalSeconds)) {
+            return 0;
+        }
+        double interval = clampLightningInterval(intervalSeconds);
+        long cycle = (long) Math.floor(seconds / interval);
+        return Math.max(flashInCycle(seconds, interval, cycle), flashInCycle(seconds, interval, cycle - 1));
+    }
+
+    private static double flashInCycle(double seconds, double interval, long cycle) {
+        if (cycle < 0) {
+            return 0;
+        }
+        double strike = (0.25 + 0.5 * unit((int) cycle, 83)) * interval;
+        double age = seconds - cycle * interval - strike;
+        double duration = Tuning.WEATHER_FLASH_DURATION.get();
+        if (age < 0 || age >= duration) {
+            return 0;
+        }
+        int seed = (int) cycle;
+        int pulses = 3 + (int) (unit(seed, 84) * 3);
+        double totalWeight = 0;
+        for (int pulse = 0; pulse < pulses; pulse++) {
+            totalWeight += 0.7 + unit(seed, 90 + pulse);
+        }
+        double start = 0;
+        double flash = 0;
+        for (int pulse = 0; pulse < pulses; pulse++) {
+            double segment = duration * 0.4 * (0.7 + unit(seed, 90 + pulse)) / totalWeight;
+            if (age >= start) {
+                double strength = pulse == 0 ? 1 : 0.35 + 0.5 * unit(seed, 110 + pulse);
+                double progress = (age - start) / (duration - start);
+                double pulseBrightness = strength * (1 - progress) * (1 - progress);
+                flash += (1 - flash) * pulseBrightness;
+            }
+            start += segment;
+        }
+        return flash;
+    }
+
+    public static void drawLightning(GraphicsContext gc, double width, double height, double flash) {
+        if (flash <= 0) {
+            return;
+        }
+        gc.save();
+        gc.setGlobalAlpha(flash * Tuning.WEATHER_FLASH_OPACITY.get());
+        gc.setFill(Color.web(Tuning.WEATHER_FLASH_COLOR.get()));
+        gc.fillRect(0, 0, width, height);
+        gc.restore();
     }
 
     /** Number of particles for the screen size; scales with intensity and area, at least one when active. */
@@ -74,7 +132,7 @@ public final class WeatherEffects {
         double scale = Math.max(0.6, Math.min(2.0, Math.min(width, height) / 900.0));
         double previousAlpha = gc.getGlobalAlpha();
         switch (type) {
-            case RAIN -> drawRain(gc, count, width, height, seconds, scale);
+            case RAIN, THUNDERSTORM -> drawRain(gc, type, count, width, height, seconds, scale);
             case SNOW -> drawSnow(gc, count, width, height, seconds, scale);
             case DUST -> drawDust(gc, count, width, height, seconds, scale);
             case EMBERS -> drawEmbers(gc, count, width, height, seconds, scale);
@@ -85,10 +143,10 @@ public final class WeatherEffects {
         gc.setGlobalAlpha(previousAlpha);
     }
 
-    private static void drawRain(GraphicsContext gc, int count, double w, double h, double t, double scale) {
-        gc.setStroke(WeatherType.RAIN.color());
+    private static void drawRain(GraphicsContext gc, WeatherType type, int count, double w, double h, double t, double scale) {
+        gc.setStroke(type.color());
         gc.setLineWidth(Math.max(1.0, scale));
-        gc.setGlobalAlpha(WeatherType.RAIN.opacity());
+        gc.setGlobalAlpha(type.opacity());
         double spanX = w + 2 * EDGE_MARGIN;
         double spanY = h + 2 * EDGE_MARGIN;
         for (int i = 0; i < count; i++) {

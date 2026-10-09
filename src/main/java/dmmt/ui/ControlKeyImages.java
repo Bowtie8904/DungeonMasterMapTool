@@ -100,6 +100,7 @@ public final class ControlKeyImages {
         Ikon specific = switch (id) {
             case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
+            case "weather.lightningInterval" -> MaterialDesignW.WEATHER_LIGHTNING;
             case "fog.brushSize", "effects.brushSize" -> MaterialDesignF.FORMAT_PAINT;
             case "text.size" -> MaterialDesignF.FORMAT_SIZE;
             case "player.diagonal", "player.tileSize" -> MaterialDesignR.RULER_SQUARE;

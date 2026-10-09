@@ -12,6 +12,7 @@ import java.util.Locale;
 public enum WeatherType {
     NONE("None"),
     RAIN("Rain"),
+    THUNDERSTORM("Thunderstorm"),
     SNOW("Snow"),
     MIST("Mist"),
     DUST("Dust motes"),

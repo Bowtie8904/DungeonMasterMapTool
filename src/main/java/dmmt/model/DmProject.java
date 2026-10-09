@@ -75,6 +75,8 @@ public class DmProject {
         private String type = "none";
         @Builder.Default
         private double intensity = Tuning.WEATHER_DEFAULT_INTENSITY.get();
+        @Builder.Default
+        private double lightningIntervalSeconds = Tuning.WEATHER_LIGHTNING_INTERVAL.get();
     }
 
     /** Text settings last used on this map; {@code null} until text has been used here. */

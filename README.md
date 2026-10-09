@@ -414,9 +414,21 @@ Highlights:
 | `lighting.*`, `lightPreset.*`, `lightMenu.*`, `timeOfDay.*` | Lighting, light tool presets, light menu choices, time-of-day darkness |
 | `render.*`, `performance.*` | Frame rates and performance mode |
 | `input.*`, `dm.zoom.*` | Click tolerances and DM zoom |
-| `weather.*`, `ping.*`, `laser.*` | Weather particles, ping and laser pointer look |
+| `weather.*`, `ping.*`, `laser.*` | Weather particles and thunderstorm lightning, ping and laser pointer look |
 | `cache.*`, `library.folder` | Memory/disk caches and map library location |
 | `texture.<kind>.*` | Per-texture colour, opacity, soft edges, light emission and animation layers |
+
+**Thunderstorms:** select **Thunderstorm** in the Weather tab for rain and occasional lightning flashes in both
+views. Each strike crackles through 3-5 closely clustered, irregular flashes with varying brightness and overlapping, lingering fade-outs.
+Lightning temporarily lights the map through ambient darkness, but remains below fog of war and text and
+never reveals hidden areas. **Intensity** adjusts rain only; **Lightning interval** independently sets the average
+seconds between strikes (2-120, default 7, with natural variation; lower means more frequent). Both controls are
+undoable and saved with the map; the interval is shared across multilevel maps. Double-click resets a slider.
+The global Animations toggle disables flashes; a frozen player view retains its captured frame.
+Rain appearance, default interval, flash duration, brightness, opacity and colour are configurable in
+**Settings > Weather > Thunderstorm** (see [Weather settings](docs/SETTINGS.md#weather)).
+The control API exposes the appended Thunderstorm choice and `weather.lightningInterval`
+(see [API](docs/API.md#weather)).
 
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
 ### External controls and local control API

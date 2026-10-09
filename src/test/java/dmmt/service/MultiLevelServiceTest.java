@@ -25,6 +25,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MultiLevelServiceTest {
     @Test
+    void lightningIntervalIsSharedAcrossLevelsWithoutAliasing() {
+        DmProject first = DmProject.builder().build();
+        first.getWeather().setType("thunderstorm");
+        first.getWeather().setLightningIntervalSeconds(23);
+        MultiLevelManifest.SharedSettings shared = MultiLevelService.captureShared(first);
+        first.getWeather().setLightningIntervalSeconds(60);
+        DmProject second = DmProject.builder().build();
+        service.applyShared(shared, second);
+        assertEquals("thunderstorm", second.getWeather().getType());
+        assertEquals(23, second.getWeather().getLightningIntervalSeconds());
+        second.getWeather().setLightningIntervalSeconds(5);
+        assertEquals(23, shared.getWeather().getLightningIntervalSeconds());
+    }
+
+    @Test
     void apiIndexesMultilevelPackageOnlyAndCopyRenewsPackageAndLevelIdentities() throws IOException {
         Path file = createTower().manifestFile();
         MultiLevelManifest before = service.loadManifest(file);
