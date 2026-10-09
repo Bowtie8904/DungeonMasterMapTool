@@ -5,8 +5,16 @@ import dmmt.audio.AudioKind;
 import dmmt.audio.AudioLibraryService;
 import dmmt.audio.AudioOutput;
 import dmmt.audio.TestAudioFiles;
+import dmmt.audio.WaveformPeaks;
 import javafx.application.Platform;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -98,6 +106,243 @@ class AudioCutWindowTest {
             assertEquals(3, voice.plays);
             assertFalse(field("playing").getBoolean(window));
         });
+    }
+
+    @Test
+    void mergingNonAdjacentProposalsKeepsOthersAndSelectsTheFullSpan() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            assertEquals(SelectionMode.MULTIPLE, list.getSelectionModel().getSelectionMode());
+            WaveformPeaks.Range middle = new WaveformPeaks.Range(300, 400);
+            list.getItems().setAll(new WaveformPeaks.Range(100, 200), middle,
+                    new WaveformPeaks.Range(500, 800), new WaveformPeaks.Range(900, 1000));
+            list.getSelectionModel().selectIndices(2, 0);
+            button(window, "audioCutMerge").fire();
+
+            WaveformPeaks.Range merged = new WaveformPeaks.Range(100, 800);
+            assertEquals(List.of(merged, middle, new WaveformPeaks.Range(900, 1000)), list.getItems());
+            assertEquals(List.of(merged), list.getSelectionModel().getSelectedItems());
+            assertEquals(100, field("selectionStartMs").getLong(window));
+            assertEquals(800, field("selectionEndMs").getLong(window));
+            assertTrue(button(window, "audioCutMerge").isDisabled());
+            assertFalse(button(window, "audioCutCreateSelected").isDisabled());
+            assertRequests(window, true, new long[][]{{100, 800}}, new int[]{1});
+            assertRequests(window, false, new long[][]{{100, 800}, {300, 400}, {900, 1000}}, new int[]{1, 2, 3});
+        });
+    }
+
+    @Test
+    void selectedExportUsesOnlySelectedProposalsAndDeletionRemovesThemFromAllExports() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            WaveformPeaks.Range remaining = new WaveformPeaks.Range(300, 400);
+            list.getItems().setAll(new WaveformPeaks.Range(100, 200), remaining,
+                    new WaveformPeaks.Range(500, 800));
+            list.getSelectionModel().selectIndices(0, 2);
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{1, 3});
+            button(window, "audioCutDelete").fire();
+            assertEquals(List.of(remaining), list.getItems());
+            assertTrue(list.getSelectionModel().isEmpty());
+            assertEquals(-1, field("selectionStartMs").getLong(window));
+            assertEquals(-1, field("selectionEndMs").getLong(window));
+            assertRequests(window, false, new long[][]{{300, 400}}, new int[]{1});
+            assertRequests(window, true, new long[][]{}, new int[]{});
+
+            list.getSelectionModel().select(0);
+            list.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.DELETE,
+                    false, false, false, false));
+            assertTrue(list.getItems().isEmpty());
+            assertTrue(button(window, "audioCutCreateAll").isDisabled());
+            invoke(window, "createAllClips");
+            assertTrue(list.getItems().isEmpty());
+            assertRequests(window, false, new long[][]{}, new int[]{});
+        });
+    }
+
+    @Test
+    void proposalActionsAreDisabledWhileCuttingAndRestoreSelectionDependentAvailability() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            assertTrue(button(window, "audioCutDelete").isDisabled());
+            assertTrue(button(window, "audioCutCreateSelected").isDisabled());
+            list.getItems().setAll(new WaveformPeaks.Range(0, 300), new WaveformPeaks.Range(500, 1000));
+            list.getSelectionModel().selectAll();
+            Method busy = AudioCutWindow.class.getDeclaredMethod("setCuttingBusy", boolean.class);
+            busy.setAccessible(true);
+            busy.invoke(window, true);
+            for (String id : List.of("audioCutDetect", "audioCutMerge", "audioCutDelete",
+                    "audioCutCreateSelected", "audioCutCreateAll")) {
+                assertTrue(button(window, id).isDisabled(), id);
+            }
+            assertTrue(list.isDisabled());
+            assertTrue(button(window, "audioCutUpdateBounds").isDisabled());
+            invoke(window, "mergeSelectedTracks");
+            invoke(window, "deleteSelectedTracks");
+            assertEquals(2, list.getItems().size());
+            busy.invoke(window, false);
+            for (String id : List.of("audioCutDetect", "audioCutMerge", "audioCutDelete",
+                    "audioCutCreateSelected", "audioCutCreateAll")) {
+                assertFalse(button(window, id).isDisabled(), id);
+            }
+            assertTrue(button(window, "audioCutUpdateBounds").isDisabled());
+            list.getSelectionModel().clearAndSelect(0);
+            assertFalse(button(window, "audioCutUpdateBounds").isDisabled());
+            busy.invoke(window, true);
+            select(window, 50, 250);
+            invoke(window, "updateSelectedTrackBounds");
+            assertEquals(new WaveformPeaks.Range(0, 300), list.getItems().getFirst());
+            busy.invoke(window, false);
+            list.getSelectionModel().selectAll();
+            list.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.BACK_SPACE,
+                    false, false, false, false));
+            assertTrue(list.getItems().isEmpty());
+        });
+    }
+
+    @Test
+    void batchNamesUseEnteredBaseAndSelectionAndExportCompletionKeepIt() throws Exception {
+        withWindow((window, voice) -> {
+            TextField name = (TextField) field("nameField").get(window);
+            name.setText("  Forest  ");
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            list.getItems().setAll(new WaveformPeaks.Range(100, 200), new WaveformPeaks.Range(300, 400),
+                    new WaveformPeaks.Range(500, 800));
+            list.getSelectionModel().selectIndices(0, 2);
+            assertEquals("  Forest  ", name.getText());
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{1, 3});
+            assertRequests(window, false, new long[][]{{100, 200}, {300, 400}, {500, 800}}, new int[]{1, 2, 3});
+            Method finish = AudioCutWindow.class.getDeclaredMethod("finishCutting", String.class);
+            finish.setAccessible(true);
+            finish.invoke(window, "Clips added");
+            assertEquals("  Forest  ", name.getText());
+            name.setText(" ");
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{1, 3});
+        });
+    }
+
+    @Test
+    void batchNumberingContinuesAfterHighestExactBaseAcrossLibraryAndRefreshesEachBatch() throws Exception {
+        withWindow((window, voice) -> {
+            TextField name = (TextField) field("nameField").get(window);
+            name.setText("Combat");
+            AudioLibraryService library = (AudioLibraryService) field("library").get(window);
+            dmmt.audio.AudioTrack source = (dmmt.audio.AudioTrack) field("track").get(window);
+            library.renameTrack(source.getId(), "combat 02");
+            Path file = library.fileOf(source);
+            dmmt.audio.AudioTrack highest = library.importFile(file, AudioKind.MUSIC, null);
+            library.renameTrack(highest.getId(), "COMBAT 12");
+            for (String unrelated : List.of("Combat extended 99", "Combat 80 extra", "Combat",
+                    "Combat 1.5", "PreCombat 90")) {
+                dmmt.audio.AudioTrack imported = library.importFile(file, AudioKind.EFFECT, null);
+                library.renameTrack(imported.getId(), unrelated);
+            }
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            list.getItems().setAll(new WaveformPeaks.Range(100, 200), new WaveformPeaks.Range(300, 400),
+                    new WaveformPeaks.Range(500, 800));
+            list.getSelectionModel().selectIndices(0, 2);
+            assertRequests(window, false, new long[][]{{100, 200}, {300, 400}, {500, 800}}, new int[]{13, 14, 15});
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{13, 15});
+            library.renameTrack(highest.getId(), "Combat 99");
+            assertRequests(window, false, new long[][]{{100, 200}, {300, 400}, {500, 800}},
+                    new int[]{100, 101, 102});
+            name.setText("Combat (night)+");
+            library.renameTrack(highest.getId(), "combat (night)+ 005");
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{6, 8});
+            name.setText("Forest");
+            assertRequests(window, true, new long[][]{{100, 200}, {500, 800}}, new int[]{1, 3});
+        });
+    }
+
+    @Test
+    void updateBoundsAppliesTimeFieldsAndWaveformRangeToOnlyOneProposalAndExports() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            WaveformPeaks.Range other = new WaveformPeaks.Range(800, 1000);
+            list.getItems().setAll(new WaveformPeaks.Range(300, 700), other);
+            assertTrue(button(window, "audioCutUpdateBounds").isDisabled());
+            list.getSelectionModel().select(0);
+            TextField start = (TextField) field("startField").get(window);
+            TextField end = (TextField) field("endField").get(window);
+            start.setText("0:00.125");
+            end.setText("0:00.750");
+            button(window, "audioCutUpdateBounds").fire();
+            assertEquals(List.of(new WaveformPeaks.Range(125, 750), other), list.getItems());
+            assertEquals(125, field("selectionStartMs").getLong(window));
+            assertEquals(750, field("selectionEndMs").getLong(window));
+            assertRequests(window, true, new long[][]{{125, 750}}, new int[]{1});
+            assertRequests(window, false, new long[][]{{125, 750}, {800, 1000}}, new int[]{1, 2});
+
+            select(window, 0, 799);
+            assertEquals("0:00.000", start.getText());
+            assertEquals("0:00.799", end.getText());
+            button(window, "audioCutUpdateBounds").fire();
+            assertEquals(List.of(new WaveformPeaks.Range(0, 799), other), list.getItems());
+            list.getSelectionModel().clearAndSelect(1);
+            list.getSelectionModel().clearAndSelect(0);
+            assertEquals("0:00.799", end.getText());
+            assertRequests(window, true, new long[][]{{0, 799}}, new int[]{1});
+        });
+    }
+
+    @Test
+    void invalidOrAmbiguousBoundsLeaveProposalsUnchanged() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            List<WaveformPeaks.Range> original = List.of(new WaveformPeaks.Range(100, 400),
+                    new WaveformPeaks.Range(500, 1000));
+            list.getItems().setAll(original);
+            list.getSelectionModel().select(0);
+            TextField start = (TextField) field("startField").get(window);
+            TextField end = (TextField) field("endField").get(window);
+            for (String[] times : List.of(new String[]{"bad", "0:00.400"},
+                    new String[]{"-0.100", "0:00.400"}, new String[]{"NaN", "0:00.400"},
+                    new String[]{"0:00.400", "0:00.400"}, new String[]{"0:00.500", "0:00.400"},
+                    new String[]{"0:00.100", "0:01.001"})) {
+                start.setText(times[0]);
+                end.setText(times[1]);
+                button(window, "audioCutUpdateBounds").fire();
+                assertEquals(original, list.getItems());
+                assertTrue(((javafx.scene.control.Label) field("status").get(window)).getText()
+                        .startsWith("Invalid bounds"));
+            }
+            list.getSelectionModel().selectAll();
+            select(window, 0, 700);
+            invoke(window, "updateSelectedTrackBounds");
+            assertEquals(original, list.getItems());
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ListView<WaveformPeaks.Range> detectedList(AudioCutWindow window) throws Exception {
+        return (ListView<WaveformPeaks.Range>) field("detectedList").get(window);
+    }
+
+    private static Button button(AudioCutWindow window, String id) throws Exception {
+        return (Button) ((Stage) field("stage").get(window)).getScene().lookup("#" + id);
+    }
+
+    private static void assertRequests(AudioCutWindow window, boolean selectedOnly, long[][] ranges,
+                                       int[] numbers) throws Exception {
+        Method method = AudioCutWindow.class.getDeclaredMethod("detectedClipRequests", boolean.class);
+        method.setAccessible(true);
+        List<?> requests = (List<?>) method.invoke(window, selectedOnly);
+        assertEquals(ranges.length, requests.size());
+        dmmt.audio.AudioTrack track = (dmmt.audio.AudioTrack) field("track").get(window);
+        String baseName = ((TextField) field("nameField").get(window)).getText();
+        baseName = baseName == null || baseName.isBlank() ? track.getName() : baseName.trim();
+        for (int index = 0; index < ranges.length; index++) {
+            Object request = requests.get(index);
+            for (String property : List.of("startMs", "endMs", "name")) {
+                Method accessor = request.getClass().getDeclaredMethod(property);
+                accessor.setAccessible(true);
+                Object expected = switch (property) {
+                    case "startMs" -> ranges[index][0];
+                    case "endMs" -> ranges[index][1];
+                    default -> baseName + " " + String.format(java.util.Locale.ROOT, "%02d", numbers[index]);
+                };
+                assertEquals(expected, accessor.invoke(request));
+            }
+        }
     }
 
     private void withWindow(Scenario scenario) throws Exception {

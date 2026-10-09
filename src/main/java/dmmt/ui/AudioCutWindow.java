@@ -12,6 +12,9 @@ import dmmt.audio.LoopCrossfade;
 import dmmt.audio.WaveformPeaks;
 import dmmt.service.Tuning;
 import javafx.animation.AnimationTimer;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -47,6 +50,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -55,6 +59,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.DoubleSupplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The waveform window (3.35.3): it shows a long recording, lets the DM listen to any point of it, select a range
@@ -116,7 +122,7 @@ public final class AudioCutWindow {
     private Task<WaveformPeaks> analysis;
     private Task<List<String>> cutting;
     private Button createButton;
-    private Button createAllButton;
+    private final BooleanProperty cuttingBusy = new SimpleBooleanProperty();
     private int clipCounter = 1;
 
     private AudioCutWindow(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged) {
@@ -265,8 +271,10 @@ public final class AudioCutWindow {
     private Region buildDetected() {
         Label title = new Label("Detected tracks");
         title.getStyleClass().add("panel-title");
-        detectedList.setPrefWidth(230);
-        detectedList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        detectedList.setId("audioCutDetected");
+        detectedList.setPrefWidth(280);
+        detectedList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        Icons.tooltip(detectedList, "Ctrl-click to select several tracks; Shift-click to select a range.");
         detectedList.setCellFactory(list -> new javafx.scene.control.ListCell<>() {
             @Override
             protected void updateItem(WaveformPeaks.Range range, boolean empty) {
@@ -280,31 +288,63 @@ public final class AudioCutWindow {
         detectedList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, range) -> {
             if (range != null) {
                 setSelection(range.startMs(), range.endMs());
-                nameField.setText(track.getName() + " "
-                        + String.format(Locale.ROOT, "%02d", detectedList.getSelectionModel().getSelectedIndex() + 1));
             }
         });
         detectedList.setPlaceholder(new Label("Use \"Detect\" to find\nthe songs in this file."));
+        detectedList.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                deleteSelectedTracks();
+                event.consume();
+            }
+        });
         VBox.setVgrow(detectedList, Priority.ALWAYS);
 
         Button detect = new Button("Detect");
+        detect.setId("audioCutDetect");
+        detect.disableProperty().bind(cuttingBusy);
         detect.setGraphic(Icons.icon(MaterialDesignS.SCISSORS_CUTTING));
         Icons.tooltip(detect, "Find songs by looking for the silent gaps between them.");
         detect.setOnAction(event -> detectTracks());
+        Button update = new Button("Update bounds");
+        update.setId("audioCutUpdateBounds");
+        update.disableProperty().bind(cuttingBusy.or(
+                Bindings.size(detectedList.getSelectionModel().getSelectedItems()).isNotEqualTo(1)));
+        Icons.tooltip(update, "Select one track, adjust From/to or drag a waveform range, then apply its bounds.");
+        update.setOnAction(event -> updateSelectedTrackBounds());
         Button all = new Button("Create all");
+        all.setId("audioCutCreateAll");
+        all.disableProperty().bind(cuttingBusy.or(Bindings.isEmpty(detected)));
         Icons.tooltip(all, "Write every detected track into the library as a standalone clip.");
         all.setOnAction(event -> createAllClips());
-        createAllButton = all;
-        HBox buttons = new HBox(6, detect, all);
+        Button selected = new Button("Create selected");
+        selected.setId("audioCutCreateSelected");
+        selected.disableProperty().bind(cuttingBusy.or(
+                Bindings.isEmpty(detectedList.getSelectionModel().getSelectedItems())));
+        Icons.tooltip(selected, "Write only the selected detected tracks into the library as standalone clips.");
+        selected.setOnAction(event -> createSelectedClips());
+        Button merge = new Button("Merge selected");
+        merge.setId("audioCutMerge");
+        merge.disableProperty().bind(cuttingBusy.or(
+                Bindings.size(detectedList.getSelectionModel().getSelectedItems()).lessThan(2)));
+        Icons.tooltip(merge, "Replace the selected tracks with one range from the earliest start to the latest end.");
+        merge.setOnAction(event -> mergeSelectedTracks());
+        Button delete = new Button("Delete selected");
+        delete.setId("audioCutDelete");
+        delete.disableProperty().bind(selected.disableProperty());
+        Icons.tooltip(delete, "Remove the selected proposals, not the source audio (Delete or Backspace).");
+        delete.setOnAction(event -> deleteSelectedTracks());
+        HBox editing = new HBox(6, merge, delete);
+        HBox buttons = new HBox(6, all, selected);
 
-        VBox box = new VBox(8, title, detectedList, buttons);
+        VBox box = new VBox(8, title, new HBox(6, detect, update), detectedList, editing, buttons);
         box.setPadding(new Insets(0, 0, 0, 12));
         return box;
     }
 
     private Region buildClipTools() {
         nameField.setPromptText("Name of the clip");
-        nameField.setText(track.getName() + " 01");
+        nameField.setText(track.getName());
+        Icons.tooltip(nameField, "Name for Create clip; base name plus track number for Create selected / Create all.");
         HBox.setHgrow(nameField, Priority.ALWAYS);
 
         categoryBox.setItems(FXCollections.observableArrayList(library.categories()));
@@ -402,6 +442,56 @@ public final class AudioCutWindow {
         detected.setAll(ranges);
         status.setText(ranges.size() + (ranges.size() == 1 ? " track found" : " tracks found"));
         draw();
+    }
+
+    private void mergeSelectedTracks() {
+        List<WaveformPeaks.Range> selected = List.copyOf(detectedList.getSelectionModel().getSelectedItems());
+        if (cuttingBusy.get() || selected.size() < 2) {
+            return;
+        }
+        long start = selected.stream().mapToLong(WaveformPeaks.Range::startMs).min().orElseThrow();
+        long end = selected.stream().mapToLong(WaveformPeaks.Range::endMs).max().orElseThrow();
+        WaveformPeaks.Range merged = new WaveformPeaks.Range(start, end);
+        int index = detectedList.getSelectionModel().getSelectedIndices().getFirst();
+        List<WaveformPeaks.Range> remaining = new ArrayList<>(detected);
+        for (int selectedIndex : detectedList.getSelectionModel().getSelectedIndices().reversed()) {
+            remaining.remove(selectedIndex);
+        }
+        remaining.add(index, merged);
+        clearSelection();
+        detected.setAll(remaining);
+        detectedList.getSelectionModel().clearAndSelect(index);
+        status.setText(selected.size() + " tracks merged");
+        draw();
+    }
+
+    private void deleteSelectedTracks() {
+        List<Integer> indices = List.copyOf(detectedList.getSelectionModel().getSelectedIndices());
+        if (cuttingBusy.get() || indices.isEmpty()) {
+            return;
+        }
+        for (int index : indices.reversed()) {
+            detected.remove(index);
+        }
+        clearSelection();
+        status.setText(indices.size() + (indices.size() == 1 ? " track removed" : " tracks removed"));
+    }
+
+    private void updateSelectedTrackBounds() {
+        if (cuttingBusy.get() || detectedList.getSelectionModel().getSelectedIndices().size() != 1) {
+            return;
+        }
+        long start = parseTime(startField.getText(), -1);
+        long end = parseTime(endField.getText(), -1);
+        if (start < 0 || end <= start || end > totalMs) {
+            status.setText("Invalid bounds: enter times within the file, with the end after the start.");
+            return;
+        }
+        int index = detectedList.getSelectionModel().getSelectedIndex();
+        detected.set(index, new WaveformPeaks.Range(start, end));
+        detectedList.getSelectionModel().clearAndSelect(index);
+        setSelection(start, end);
+        status.setText("Track " + (index + 1) + " bounds updated");
     }
 
     // ---- Drawing ----
@@ -568,9 +658,13 @@ public final class AudioCutWindow {
         cancelLoopBlend();
         selectionStartMs = Math.max(0, Math.min(startMs, totalMs));
         selectionEndMs = Math.max(selectionStartMs, Math.min(endMs, totalMs));
-        startField.setText(AudioTrack.formatDuration(selectionStartMs));
-        endField.setText(AudioTrack.formatDuration(selectionEndMs));
+        startField.setText(formatSelectionTime(selectionStartMs));
+        endField.setText(formatSelectionTime(selectionEndMs));
         draw();
+    }
+
+    private static String formatSelectionTime(long millis) {
+        return String.format(Locale.ROOT, "%d:%02d.%03d", millis / 60_000, (millis / 1000) % 60, millis % 1000);
     }
 
     private void clearSelection() {
@@ -595,14 +689,17 @@ public final class AudioCutWindow {
         try {
             String[] parts = text.trim().split(":");
             double seconds = Double.parseDouble(parts[parts.length - 1].replace(',', '.'));
-            long millis = (long) (seconds * 1000);
+            if (!Double.isFinite(seconds) || seconds < 0) {
+                return fallback;
+            }
+            long millis = Math.round(seconds * 1000);
             if (parts.length > 1) {
                 millis += Long.parseLong(parts[parts.length - 2].trim()) * 60_000L;
             }
             if (parts.length > 2) {
                 millis += Long.parseLong(parts[parts.length - 3].trim()) * 3_600_000L;
             }
-            return Math.max(0, millis);
+            return millis < 0 ? fallback : millis;
         } catch (RuntimeException e) {
             return fallback;
         }
@@ -896,24 +993,51 @@ public final class AudioCutWindow {
     }
 
     private void createAllClips() {
-        if (detected.isEmpty()) {
-            detectTracks();
-        }
-        if (detected.isEmpty()) {
+        createDetectedClips(false);
+    }
+
+    private void createSelectedClips() {
+        createDetectedClips(true);
+    }
+
+    private void createDetectedClips(boolean selectedOnly) {
+        List<ClipRequest> requests = detectedClipRequests(selectedOnly);
+        if (requests.isEmpty()) {
             return;
         }
-        if (!Dialogs.confirm(stage, "Create clips", "Create " + detected.size() + " clips?",
+        if (!Dialogs.confirm(stage, "Create clips", "Create " + requests.size() + " clips?",
                 MaterialDesignC.CONTENT_CUT,
-                "Every detected track is written into the library as its own audio file.", "Create")) {
+                (selectedOnly ? "Each selected track" : "Every remaining detected track")
+                        + " is written into the library as its own audio file.", "Create")) {
             return;
-        }
-        List<ClipRequest> requests = new ArrayList<>();
-        int index = 1;
-        for (WaveformPeaks.Range range : detected) {
-            requests.add(new ClipRequest(track.getName() + " " + String.format(Locale.ROOT, "%02d", index++),
-                    range.startMs(), range.endMs()));
         }
         runClips(requests);
+    }
+
+    private List<ClipRequest> detectedClipRequests(boolean selectedOnly) {
+        List<ClipRequest> requests = new ArrayList<>();
+        String baseName = clipBaseName();
+        Pattern numberedName = Pattern.compile(Pattern.quote(baseName) + " ([0-9]+)",
+                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+        BigInteger highestNumber = BigInteger.ZERO;
+        for (AudioTrack existing : library.tracks()) {
+            if (existing.getName() != null) {
+                Matcher match = numberedName.matcher(existing.getName().trim());
+                if (match.matches()) {
+                    highestNumber = highestNumber.max(new BigInteger(match.group(1)));
+                }
+            }
+        }
+        List<Integer> indices = selectedOnly
+                ? List.copyOf(detectedList.getSelectionModel().getSelectedIndices())
+                : java.util.stream.IntStream.range(0, detected.size()).boxed().toList();
+        for (int index : indices) {
+            WaveformPeaks.Range range = detected.get(index);
+            BigInteger number = highestNumber.add(BigInteger.valueOf(index + 1L));
+            requests.add(new ClipRequest(baseName + " " + String.format(Locale.ROOT, "%02d", number),
+                    range.startMs(), range.endMs()));
+        }
+        return requests;
     }
 
     /**
@@ -963,7 +1087,6 @@ public final class AudioCutWindow {
                     ? "No clip was created"
                     : created + (created == 1 ? " clip added to the library" : " clips added to the library"));
             clipCounter += created;
-            nameField.setText(nextClipName());
             onChanged.run();
             if (!failures.isEmpty()) {
                 Dialogs.error(stage, failures.size() + (failures.size() == 1
@@ -982,11 +1105,9 @@ public final class AudioCutWindow {
     }
 
     private void setCuttingBusy(boolean busy) {
+        cuttingBusy.set(busy);
         if (createButton != null) {
             createButton.setDisable(busy);
-        }
-        if (createAllButton != null) {
-            createAllButton.setDisable(busy);
         }
         detectedList.setDisable(busy);
         nameField.setDisable(busy);
@@ -1003,7 +1124,12 @@ public final class AudioCutWindow {
     }
 
     private String nextClipName() {
-        return track.getName() + " " + String.format(Locale.ROOT, "%02d", clipCounter);
+        return clipBaseName() + " " + String.format(Locale.ROOT, "%02d", clipCounter);
+    }
+
+    private String clipBaseName() {
+        String name = nameField.getText();
+        return name == null || name.isBlank() ? track.getName() : name.trim();
     }
 
     /** One clip to write; resolved on the JavaFX thread before the background task starts. */

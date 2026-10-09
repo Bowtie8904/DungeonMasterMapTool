@@ -650,6 +650,21 @@ same application. It must never be in the way of DMs who do not use it, and must
 - A selection (drag on the waveform, or exact start/end time fields with millisecond precision) defines a clip.
   **Auto-detect tracks** proposes one selection per detected song by scanning for silence longer than
   `audio.cut.minSilenceSeconds` below `audio.cut.silenceDb`; proposals can be edited or deleted before saving.
+- The detected-tracks list supports Ctrl/Shift multi-selection. **Merge selected** replaces the selected proposals
+  with one range from their earliest start to their latest end, including intervening gaps; unselected proposals
+  remain unchanged. **Delete selected** (also Delete/Backspace while the list has focus) removes proposals and their
+  waveform markers and clears the preview selection. **Create selected**, beside **Create all**, exports only the
+  selected proposals; **Create all** exports only the remaining list and never automatically restores deleted tracks.
+  Proposal editing and detection are disabled during export.
+- **Clip name** is retained when selecting proposals and after export. **Create selected** and **Create all** use
+  its trimmed text as the base with at least two-digit list-position suffixes (e.g. `Forest 01`, `Forest 03`).
+  Before each batch, scan existing library display names (all categories/kinds, case-insensitive) for that exact base
+  followed by a space and a numeric suffix, and offset the list positions by the highest existing number. Thus after
+  `Combat 12`, exporting another file starts at `Combat 13`; gaps are not reused and unrelated names are ignored. A blank base
+  falls back to the source track name. **Create clip** uses the entered name as-is, without an added suffix.
+- Select exactly one proposal, adjust the millisecond-precision **From/to** fields or drag a new waveform range,
+  then click **Update bounds** to replace that proposal's start/end. The list, waveform markers and both batch
+  export actions use the updated range; other proposals are untouched. Reject invalid, empty or out-of-file ranges.
 - Playback **loops what is shown** (toggle "Loop", on by default): the selection when there is one, otherwise the
   visible part of the waveform, so zooming into a song is enough to audition it over and over. Reaching the end of
   the looped range jumps back to its start without stopping; playing from before the range is allowed and simply

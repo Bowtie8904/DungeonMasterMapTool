@@ -596,7 +596,20 @@ Drag across the waveform to select a
 song, fine-tune the
 start and end in the time fields, and **Create clip** writes exactly that range into the library as a standalone
 audio file. **Detect** finds the songs automatically by looking for the silent gaps (tunable with the
-`audio.cut.*` settings) and **Create all** turns every detected song into its own clip. Cutting is lossless: MP3
+`audio.cut.*` settings). In **Detected tracks**, Ctrl-click selects multiple songs and Shift-click selects a range.
+**Merge selected** replaces them with one track spanning the earliest start to the latest end, including the gaps
+between them. **Delete selected** (or `Delete`/`Backspace` with the list focused) removes proposals and their waveform
+markers without changing the source audio. **Create selected**, beside **Create all**, exports only the selected
+tracks; **Create all** exports every remaining proposal, never restoring deleted ones.
+To move a detected track's start or end, select only that track, adjust the **From/to** fields (including
+milliseconds) or drag a new range on the waveform, then click **Update bounds**. The list and exported clips use
+the updated range; other detected tracks are unchanged.
+**Clip name** supplies the base for batch exports: for example, `Forest` produces `Forest 01`, `Forest 02`, etc.,
+using each track's position in the list. If that base already has numbered tracks anywhere in the library,
+numbering continues after the highest existing number (case-insensitive): after `Combat 12`, the next file starts
+at `Combat 13`. Gaps are not reused. Selecting tracks and finishing exports keep your entered name.
+**Create clip** uses the entered name without adding a number; a blank batch base falls back to the source name.
+Cutting is lossless: MP3
 clips are copied frame by frame, WAV clips sample by sample, so nothing is re-encoded. Writing clips also happens in
 the background: the progress bar and status line at the top of the window report "Creating clip 3 of 17" and finish
 with the number of clips added to the library.
