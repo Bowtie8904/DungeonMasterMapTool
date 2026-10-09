@@ -79,7 +79,7 @@
 		{
 			"UUID": "com.dmmt.dungeonmaster.value",
 			"Name": "DM value",
-			"Tooltip": "Sets, increases or decreases a slider or spinner such as a volume, the brush size or the ambient brightness.",
+			"Tooltip": "Sets, increases or decreases a slider or spinner, or sets a color picker such as the effect color.",
 			"Icon": "imgs/actions/value/icon",
 			"Controllers": ["Keypad"],
 			"DisableAutomaticStates": true,

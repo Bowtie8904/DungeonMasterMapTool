@@ -16,7 +16,7 @@ Six generic actions cover every control, so there is no action to maintain per m
 | **Music Category** | Plays a music category, or stops it when it is already playing. | that category is playing |
 | **Sound Effect** | Starts or stops one sound effect loop. | that effect is running |
 | **DM Control** | Any button or toggle, for example `audio.play`, `lighting.night`, `player.freeze`. | the toggle is on |
-| **Value Control** | Sliders and spinners: set, increment or decrement, for example the music volume. | the value is above its minimum |
+| **Value Control** | Sliders and spinners: set, increment or decrement, or set a color picker to a chosen color. | the configured value is selected |
 | **Dropdown** | Selects one option of a dropdown, for example a weather type. | that option is selected |
 | **Switch Map** | Opens a library map, optionally a specific level. | that map (and level) is open |
 
@@ -84,6 +84,11 @@ the picker shows the stable control ID, never the short title.
 - **Value Control** keys leave **Amount** empty to use the control's own step - for the volume sliders that is
   0.1, so one press is one tenth. Fill it in only to override that; the value is in the control's own unit, so
   `0.05` on a 0..1 volume slider is five percent, not five.
+- **Value Control** also lists color pickers such as **Effects > Effect colour**. Select one to reveal a color
+  input; the key displays a solid square in that color, pressing it sets that RGB value, and the key stays
+  highlighted while it is selected. Color pickers are set-only and do not show the numeric action/amount fields.
+  The application applies the color through its normal control, so the selected effect changes just as it would
+  when choosing a color in the app.
 
 If the application runs on another machine, enable **Use network address** in its API settings and use the IP
 it shows. The API only accepts requests from processes that are not browsers; the plugin's own Node process

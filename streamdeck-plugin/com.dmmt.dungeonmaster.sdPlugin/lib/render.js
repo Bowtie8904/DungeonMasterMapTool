@@ -36,6 +36,22 @@ function parse(buffer) {
 	return png.decode(buffer);
 }
 
+/** A solid key image for a configured colour-picker value. */
+function solid(hex) {
+	if (!/^#[0-9a-f]{6}$/i.test(String(hex || ""))) {
+		return null;
+	}
+	const [r, g, b] = rgb(hex);
+	const pixels = Buffer.alloc(SIZE * SIZE * 4);
+	for (let i = 0; i < pixels.length; i += 4) {
+		pixels[i] = r;
+		pixels[i + 1] = g;
+		pixels[i + 2] = b;
+		pixels[i + 3] = 0xff;
+	}
+	return { width: SIZE, height: SIZE, pixels };
+}
+
 function rgb(hex) {
 	return [
 		parseInt(hex.slice(1, 3), 16),
@@ -95,4 +111,17 @@ function render(artwork, state) {
 	return png.encode(image).toString("base64");
 }
 
-module.exports = { parse, render, SIZE };
+/** Keeps a configured color swatch true to its value; state is shown with a border, never a color-altering veil. */
+function renderColor(hex, state) {
+	const image = solid(hex);
+	if (!image) {
+		return render(null, "error");
+	}
+	const [frame] = APPEARANCE[state] || APPEARANCE.inactive;
+	if (frame) {
+		border(image, frame);
+	}
+	return png.encode(image).toString("base64");
+}
+
+module.exports = { parse, render, renderColor, solid, SIZE };

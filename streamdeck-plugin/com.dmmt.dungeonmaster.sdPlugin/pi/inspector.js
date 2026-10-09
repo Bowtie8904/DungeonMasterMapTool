@@ -19,7 +19,7 @@ const ACTION = {
 /** Which control types each action may target, and which id prefix it expects. */
 const SCOPE = {
 	[ACTION.CONTROL]: { types: ["toggle", "button"], prefix: null, exclude: ["audio.category.", "audio.effect."] },
-	[ACTION.VALUE]: { types: ["slider", "spinner"], prefix: null, exclude: [] },
+	[ACTION.VALUE]: { types: ["slider", "spinner", "color"], prefix: null, exclude: [] },
 	[ACTION.DROPDOWN]: { types: ["dropdown"], prefix: null, exclude: [] },
 	[ACTION.MUSIC]: { types: ["toggle", "button"], prefix: "audio.category.", exclude: [] },
 	[ACTION.EFFECT]: { types: ["toggle", "button"], prefix: "audio.effect.", exclude: [] },
@@ -66,11 +66,21 @@ function set(key, value) {
 	save();
 }
 
+function rgbColor(value) {
+	const match = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.exec(String(value || ""));
+	return match ? match[0].slice(0, 7).toUpperCase() : null;
+}
+
+function selectedControl() {
+	return (controls || []).find((control) => control.id === settings.controlId);
+}
+
 // ---------------------------------------------------------------- layout
 
 function layout() {
 	const scope = SCOPE[action] || SCOPE[ACTION.CONTROL];
 	const isMap = action === ACTION.MAP;
+	const isColor = action === ACTION.VALUE && selectedControl() && selectedControl().type === "color";
 	// Scoped lists (categories, sound effects) are short enough already; the general control list is not.
 	show("sectionItem", !isMap && !scope.prefix);
 	show("controlItem", !isMap);
@@ -78,8 +88,9 @@ function layout() {
 	show("mapItem", isMap);
 	show("mapIdItem", isMap);
 	show("levelItem", isMap);
-	show("modeItem", action === ACTION.VALUE);
-	show("amountItem", action === ACTION.VALUE);
+	show("modeItem", action === ACTION.VALUE && !isColor);
+	show("amountItem", action === ACTION.VALUE && !isColor);
+	show("colorItem", isColor);
 	show("indexItem", action === ACTION.DROPDOWN);
 	// Only controls that carry a value can show one; everything can show its name.
 	for (const option of $("title").options) {
@@ -149,6 +160,18 @@ function fillControls() {
 	}
 	select.value = current;
 	fillIndexOptions();
+	const chosen = matching.find((control) => control.id === current);
+	if (action === ACTION.VALUE && chosen && chosen.type === "color") {
+		set("mode", "set");
+		$("mode").value = "set";
+		if (!rgbColor(settings.color)) {
+			const color = rgbColor(chosen.value) || "#FFFFFF";
+			settings.color = color;
+			$("color").value = color;
+			save();
+		}
+	}
+	layout();
 }
 
 function fillIndexOptions() {
@@ -194,6 +217,7 @@ function applySettings() {
 	$("level").value = settings.level === undefined ? "" : settings.level;
 	$("mode").value = settings.mode || "set";
 	$("amount").value = settings.amount === undefined ? "" : settings.amount;
+	$("color").value = rgbColor(settings.color) || "#FFFFFF";
 	$("title").value = settings.title || "none";
 	$("imageUrl").value = settings.imageUrl || "";
 	fillControls();
@@ -209,11 +233,29 @@ function wire() {
 	});
 	$("control").addEventListener("change", (event) => {
 		set("controlId", event.target.value);
+		const selected = (controls || []).find((control) => control.id === event.target.value);
+		if (action === ACTION.VALUE && selected && selected.type === "color") {
+			set("mode", "set");
+			set("color", rgbColor(selected.value) || "#FFFFFF");
+			$("mode").value = "set";
+			$("color").value = settings.color;
+		}
 		fillIndexOptions();
+		layout();
 	});
 	$("controlId").addEventListener("input", (event) => {
 		set("controlId", event.target.value.trim());
 		$("control").value = settings.controlId;
+		const selected = selectedControl();
+		if (action === ACTION.VALUE && selected && selected.type === "color") {
+			set("mode", "set");
+			$("mode").value = "set";
+		}
+		if (action === ACTION.VALUE && selected && selected.type === "color" && !rgbColor(settings.color)) {
+			set("color", rgbColor(selected.value) || "#FFFFFF");
+			$("color").value = settings.color;
+		}
+		layout();
 	});
 	$("map").addEventListener("change", (event) => {
 		set("mapId", event.target.value);
@@ -225,6 +267,7 @@ function wire() {
 	$("level").addEventListener("input", (event) => set("level", event.target.value.trim()));
 	$("mode").addEventListener("change", (event) => set("mode", event.target.value));
 	$("amount").addEventListener("input", (event) => set("amount", event.target.value.trim()));
+	$("color").addEventListener("input", (event) => set("color", event.target.value.toUpperCase()));
 	$("index").addEventListener("change", (event) => set("index", Number(event.target.value)));
 	$("title").addEventListener("change", (event) => set("title", event.target.value));
 	$("imageUrl").addEventListener("input", (event) => set("imageUrl", event.target.value.trim()));
@@ -286,10 +329,15 @@ function applyParsed(parsed) {
 			settings.index = Number(parsed.query.index);
 		}
 		if (action === ACTION.VALUE && parsed.query) {
-			for (const mode of ["increment", "decrement", "value"]) {
-				if (parsed.query[mode] !== undefined) {
-					settings.mode = mode === "value" ? "set" : mode;
-					settings.amount = parsed.query[mode];
+			if (parsed.query.value && rgbColor(parsed.query.value)) {
+				settings.mode = "set";
+				settings.color = rgbColor(parsed.query.value);
+			} else {
+				for (const mode of ["increment", "decrement", "value"]) {
+					if (parsed.query[mode] !== undefined) {
+						settings.mode = mode === "value" ? "set" : mode;
+						settings.amount = parsed.query[mode];
+					}
 				}
 			}
 		}

@@ -860,7 +860,10 @@ inspector or pastes a copied URL. Music categories and sound effects are address
 user supplies (usually by pasting a copied URL), because they are user data and change over time.
 
 - **Control toggle** - any button/toggle control, chosen from a list of the known controls or pasted.
-- **Control value** - slider/spinner control with a mode of set / increase / decrease and an amount.
+- **Control value** - slider/spinner control with a mode of set / increase / decrease and an amount, or a colour
+  picker control with a native colour input that sets its selected RGB value. Colour keys highlight while that
+  colour is selected and show a solid key-sized swatch of the configured colour instead of the control artwork.
+  Colour pickers are set-only; they do not offer numeric increment/decrement.
 - **Dropdown** - selects a dropdown option by zero-based index; highlighted while that option is selected.
 - **Music category** - toggles one music category by id; highlighted while that category is playing.
 - **Sound effect** - toggles one sound effect loop by id; highlighted while the loop runs.

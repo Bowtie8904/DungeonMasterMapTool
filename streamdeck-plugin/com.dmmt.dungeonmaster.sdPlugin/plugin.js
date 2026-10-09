@@ -107,12 +107,20 @@ function formatValue(descriptor) {
 	if (!descriptor || descriptor.value === undefined || descriptor.value === null) {
 		return "";
 	}
+	if (descriptor.type === "color") {
+		return colorValue(descriptor.value) || String(descriptor.value);
+	}
 	if (typeof descriptor.value === "number") {
 		return descriptor.type === "slider" && descriptor.max <= 1
 			? Math.round(descriptor.value * 100) + "%"
 			: String(Math.round(descriptor.value * 100) / 100);
 	}
 	return String(descriptor.value);
+}
+
+function colorValue(value) {
+	const match = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.exec(String(value || ""));
+	return match ? match[0].slice(0, 7).toUpperCase() : null;
 }
 
 /** Turns a poll snapshot into the key's appearance: `{ state, title }`. */
@@ -158,6 +166,15 @@ function evaluate(action, settings, snapshot) {
 		};
 	}
 	if (action === ACTION.VALUE) {
+		if (descriptor.type === "color") {
+			const chosen = colorValue(settings && settings.color);
+			const current = colorValue(descriptor.value);
+			return {
+				state: chosen && chosen === current ? "active" : "inactive",
+				title: titleOf(settings, name, formatValue(descriptor)),
+				problem: chosen ? null : "Choose a color to set.",
+			};
+		}
 		const mode = (settings && settings.mode) || "set";
 		const amount = amountOf(settings, descriptor);
 		const matches = mode === "set" && amount !== null && Math.abs(Number(descriptor.value) - amount) < 1e-6;
@@ -371,15 +388,25 @@ class Plugin {
 		if (tag && key.imageTag !== tag) {
 			key.imageTag = tag;
 			key.artworkFailedAt = 0;
-			this.#loadArtwork(context);
+			if (!(key.action === ACTION.VALUE && descriptor.type === "color")) {
+				this.#loadArtwork(context);
+			}
 		}
-		const appearance = `${result.state}|${key.artworkKey || ""}|${key.artwork ? "art" : "flat"}`;
+		const swatch = key.action === ACTION.VALUE && descriptor && descriptor.type === "color"
+			? colorValue(key.settings.color)
+			: null;
+		const appearance = `${result.state}|${key.artworkKey || ""}|${swatch || ""}|${key.artwork ? "art" : "flat"}`;
 		if (key.appearance !== appearance) {
 			key.appearance = appearance;
 			this.send({
 				event: "setImage",
 				context,
-				payload: { image: "data:image/png;base64," + render.render(key.artwork, result.state), target: 0 },
+				payload: {
+					image: "data:image/png;base64," + (swatch
+						? render.renderColor(swatch, result.state)
+						: render.render(key.artwork, result.state)),
+					target: 0,
+				},
 			});
 		}
 		// `null` means this key does not manage its title, so the one typed in Stream Deck survives. An empty
@@ -441,6 +468,13 @@ class Plugin {
 		if (key.action === ACTION.VALUE) {
 			const mode = settings.mode || "set";
 			const descriptor = (this.pollers.for(addr).last || { controls: new Map() }).controls.get(id);
+			if (descriptor && descriptor.type === "color") {
+				const color = colorValue(settings.color);
+				if (!color) {
+					return Promise.reject(new Error("Choose a valid color (#RRGGBB)."));
+				}
+				return api.execute(addr, id, { value: color });
+			}
 			const amount = amountOf(settings, descriptor);
 			if (amount === null) {
 				return Promise.reject(new Error("Enter an amount: the control reports no step of its own."));
@@ -551,4 +585,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { evaluate, formatValue, watchedIds, imageKey, amountOf, titleOf, ACTION };
+module.exports = { evaluate, formatValue, watchedIds, imageKey, amountOf, titleOf, colorValue, ACTION };

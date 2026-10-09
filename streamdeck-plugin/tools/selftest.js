@@ -54,7 +54,14 @@ async function main() {
 				appendChild(option) { this.options.push(option); },
 			};
 		}
-		const elements = { section: select(), control: select() };
+		const elements = Object.fromEntries([
+			"section", "control", "sectionItem", "controlItem", "controlIdItem", "mapItem", "mapIdItem", "levelItem",
+			"modeItem", "amountItem", "colorItem", "indexItem", "titleItem", "title", "pasteHint", "color", "mode",
+		].map((id) => [id, select()]));
+		for (const element of Object.values(elements)) {
+			element.classList = { toggle(name, hidden) { if (name === "hidden") element.hidden = hidden; } };
+			element.querySelector = () => ({ textContent: "" });
+		}
 		const context = vm.createContext({
 			document: { getElementById: (id) => elements[id] },
 			Option: function(text, value) { this.text = text; this.value = value; },
@@ -81,6 +88,20 @@ async function main() {
 		]);
 		assert.strictEqual(elements.control.value, "audio.musicPlay");
 		assert.strictEqual(elements.control.options[2].value, "audio.musicPlay");
+		assert.strictEqual(
+			vm.runInContext("SCOPE[ACTION.VALUE].types.includes('color')", context),
+			true,
+			"the value action must include color picker controls",
+		);
+		vm.runInContext(`
+			action = ACTION.VALUE;
+			settings = { section: "effects", controlId: "effects.color" };
+			controls = [{ id: "effects.color", type: "color", value: "#FF0000FF", tooltip: "Effect colour" }];
+			fillControls();
+		`, context);
+		assert.strictEqual(elements.colorItem.hidden, false);
+		assert.strictEqual(elements.modeItem.hidden, true);
+		assert.strictEqual(elements.amountItem.hidden, true);
 	});
 
 	await test("plugin forwards API tooltip descriptions to the property inspector", async () => {
@@ -180,6 +201,16 @@ async function main() {
 		assert.ok(decoded.pixels[0] > 150 && decoded.pixels[1] < 120);
 	});
 
+	await test("color swatches show the exact configured color in every state", () => {
+		for (const state of ["active", "inactive", "disabled", "error"]) {
+			const decoded = png.decode(Buffer.from(render.renderColor("#12AB34", state), "base64"));
+			assert.strictEqual(decoded.width, 144);
+			assert.deepStrictEqual([...decoded.pixels.slice((72 * 144 + 72) * 4, (72 * 144 + 72) * 4 + 4)], [
+				0x12, 0xab, 0x34, 0xff,
+			]);
+		}
+	});
+
 	await test("copied URLs are understood", () => {
 		const control = api.parseCopiedUrl("http://192.168.1.50:7071/api/controls/lighting/night");
 		assert.deepStrictEqual(control, {
@@ -195,6 +226,8 @@ async function main() {
 		assert.strictEqual(image.controlId, "audio.category.8f1c6d94-2b77-4f0e-9a3b-6c5a1d2e7f10");
 		const increment = api.parseCopiedUrl("http://127.0.0.1:7071/api/controls/effects/opacity?increment=0.1");
 		assert.strictEqual(increment.query.increment, "0.1");
+		const color = api.parseCopiedUrl("http://127.0.0.1:7071/api/controls/effects/color?value=%23FF0000");
+		assert.strictEqual(color.query.value, "#FF0000");
 		const map = api.parseCopiedUrl("http://127.0.0.1:7071/api/maps/abc/switch?level=2");
 		assert.strictEqual(map.kind, "map");
 		assert.strictEqual(map.mapId, "abc");
@@ -279,6 +312,87 @@ async function main() {
 		// Without a step and without an amount there is nothing sensible to send.
 		assert.strictEqual(plugin.amountOf({}, { type: "slider" }), null);
 		assert.strictEqual(plugin.amountOf({}, undefined), null);
+	});
+
+	await test("color value keys set and highlight the configured RGB color", () => {
+		const descriptor = { id: "effects.color", type: "color", value: "#FF0000FF", label: "Effect colour" };
+		const snapshot = { ok: true, controls: new Map([["effects.color", descriptor]]), state: null };
+		const matching = plugin.evaluate(
+			plugin.ACTION.VALUE,
+			{ controlId: "effects.color", color: "#ff0000" },
+			snapshot,
+		);
+		assert.strictEqual(matching.state, "active");
+		assert.strictEqual(plugin.formatValue(descriptor), "#FF0000");
+		const different = plugin.evaluate(
+			plugin.ACTION.VALUE,
+			{ controlId: "effects.color", color: "#00FF00" },
+			snapshot,
+		);
+		assert.strictEqual(different.state, "inactive");
+		assert.strictEqual(plugin.colorValue("#AABBCC80"), "#AABBCC");
+		assert.strictEqual(plugin.colorValue("red"), null);
+	});
+
+	await test("pressing a color value key sends its fixed color", async () => {
+		const commands = [];
+		let socket;
+		class FakeSocket extends require("node:events").EventEmitter {
+			constructor() {
+				super();
+				socket = this;
+			}
+			send() {}
+		}
+		class FakePollers {
+			constructor() {
+				this.poller = {
+					last: {
+						controls: new Map([
+							["effects.color", { id: "effects.color", type: "color", value: "#000000FF" }],
+						]),
+					},
+					watch() {},
+					unwatch() {},
+					refreshSoon() {},
+				};
+			}
+			for() { return this.poller; }
+			setInterval() {}
+			unwatch() {}
+		}
+		const context = vm.createContext({
+			require: (name) => {
+				if (name === "./lib/ws") return { WebSocketClient: FakeSocket };
+				if (name === "./lib/poller") return { Pollers: FakePollers, DEFAULT_INTERVAL_MS: 1000, MIN_INTERVAL_MS: 250 };
+				if (name === "./lib/api") return {
+					execute: async (...args) => {
+						commands.push(args);
+						return { id: "effects.color", type: "color", value: "#12AB34FF" };
+					},
+				};
+				if (name.startsWith("./")) return require(path.join(base, name));
+				return require(name);
+			},
+			module: { exports: {} },
+			__dirname: base,
+			process,
+		});
+		vm.runInContext(fsSync.readFileSync(path.join(base, "plugin.js"), "utf8") +
+			"\nglobalThis.instance = new Plugin(1234, 'test-plugin', 'registerPlugin');", context);
+		socket.emit("message", JSON.stringify({
+			event: "willAppear",
+			context: "color-key",
+			action: plugin.ACTION.VALUE,
+			payload: { settings: { controlId: "effects.color", mode: "increment", amount: "1", color: "#12AB34" } },
+		}));
+		socket.emit("message", JSON.stringify({ event: "keyUp", context: "color-key" }));
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.strictEqual(JSON.stringify(commands), JSON.stringify([[
+			{ host: "127.0.0.1", port: 7071 },
+			"effects.color",
+			{ value: "#12AB34" },
+		]]));
 	});
 
 	await test("every action can caption its key with the target's name", () => {
