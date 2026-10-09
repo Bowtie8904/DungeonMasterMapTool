@@ -133,17 +133,17 @@
     -fx-icon-color: white;
 }
 
-.icon-toggle:selected {
+.icon-toggle:not(.audio-transport-toggle):selected {
     -fx-background-color: -dm-accent;
     -fx-effect: dropshadow(gaussian, rgba(232, 163, 61, 0.75), 12, 0.35, 0, 0);
 }
 
-.icon-toggle:selected .ikonli-font-icon,
-.icon-toggle:selected:hover .ikonli-font-icon {
+.icon-toggle:not(.audio-transport-toggle):selected .ikonli-font-icon,
+.icon-toggle:not(.audio-transport-toggle):selected:hover .ikonli-font-icon {
     -fx-icon-color: #17130b;
 }
 
-.icon-toggle:selected:hover {
+.icon-toggle:not(.audio-transport-toggle):selected:hover {
     -fx-background-color: #f2b456;
 }
 

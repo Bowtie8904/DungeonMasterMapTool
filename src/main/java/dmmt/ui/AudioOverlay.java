@@ -190,6 +190,7 @@ public final class AudioOverlay {
         musicCentre.setAlignment(Pos.CENTER);
         musicRing.setCentre(musicCentre);
 
+        effectsPause.getStyleClass().add("audio-transport-toggle");
         effectsPause.setOnAction(event -> {
             if (!syncing) {
                 engine.setEffectsPaused(effectsPause.isSelected());

@@ -10,8 +10,13 @@ import dmmt.audio.FakeAudioOutput;
 import dmmt.audio.TestAudioFiles;
 import dmmt.service.AppSettings;
 import javafx.application.Platform;
+import javafx.css.PseudoClass;
 import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.layout.StackPane;
+import org.kordamp.ikonli.javafx.FontIcon;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -64,6 +69,48 @@ class AudioControlsTest {
     private AudioControls controls(AudioLibraryService library) {
         return new AudioControls(new AppSettings(dir.resolve("settings.ini")), () -> null, library,
                 new FakeAudioOutput());
+    }
+
+    @Test
+    void effectsPauseMatchesMusicButtonStylingWithoutChangingToggleBehavior() throws Exception {
+        AudioLibraryService library = library();
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                StackPane root = new StackPane(audio.overlayLayer());
+                Scene scene = new Scene(root);
+                scene.getStylesheets().add(Icons.STYLESHEET);
+                audio.overlay().show();
+                audio.engine().setEffectActive(library.effects().getFirst().getId(), true);
+                Button music = (Button) audio.apiControls().get("audio.musicPlay");
+                ToggleButton effects = (ToggleButton) audio.apiControls().get("audio.effectsPause");
+
+                for (boolean paused : List.of(false, true)) {
+                    if (effects.isSelected() != paused) {
+                        effects.fire();
+                    }
+                    assertEquals(paused, audio.engine().areEffectsPaused());
+                    assertEquals(paused, effects.isSelected());
+                    for (String state : List.of("normal", "hover", "pressed")) {
+                        for (Node button : List.of(music, effects)) {
+                            button.pseudoClassStateChanged(PseudoClass.getPseudoClass("hover"),
+                                    state.equals("hover"));
+                            button.pseudoClassStateChanged(PseudoClass.getPseudoClass("pressed"),
+                                    state.equals("pressed"));
+                        }
+                        root.applyCss();
+                        assertEquals(music.getBackground(), effects.getBackground(), state);
+                        assertEquals(music.getEffect(), effects.getEffect(), state);
+                        assertEquals(((FontIcon) music.getGraphic()).getIconColor(),
+                                ((FontIcon) effects.getGraphic()).getIconColor(), state);
+                    }
+                }
+                effects.fire();
+                assertFalse(audio.engine().areEffectsPaused());
+            } finally {
+                audio.shutdown();
+            }
+        });
     }
 
     @Test

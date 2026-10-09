@@ -771,7 +771,8 @@ full-screen overlay that is opened from there.
   - The centre of the left ring holds the music transport (previous, play/pause, next, stop), the **name of the
     active category**, the current track and elapsed/total time; the centre of the right ring holds the same-looking
     pause/resume button for all effects and the names of the running effects. Both centres use identical button
-    styling so the two halves of the overlay look like one control.
+    styling so the two halves of the overlay look like one control. The effects pause/resume toggle retains its
+    selected state for the API but has no yellow selected background, glow or icon tint, matching music play/pause.
   - Below the rings: master, music and effects volume sliders with percentage readouts, the mute button and the
     button that opens the audio library window.
   - Only entries that are **not hidden** (3.35.2) appear in the rings; an empty library shows a hint that links to

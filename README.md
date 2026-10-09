@@ -645,7 +645,8 @@ ambience. The overlap is limited to half the clip length; set it to 0 for no ove
 Active effects update their blends at 30 Hz (`audio.effectLoopUpdateFps`) without increasing map rendering or
 now-playing readout updates.
 The matching pause and stop buttons in the centre of that ring control all
-of them at once while listing what is running. Below the rings sit the master, music and effect volumes and the
+of them at once while listing what is running. Effects play/pause uses the same neutral styling as music play/pause,
+without a yellow highlight when paused. Below the rings sit the master, music and effect volumes and the
 speaker button, which fades everything out and back in. Crowded libraries simply grow onto further circles, and the
 overlay only updates while it is open.
 
