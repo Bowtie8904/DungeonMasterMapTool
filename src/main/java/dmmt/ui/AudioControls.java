@@ -272,6 +272,8 @@ public final class AudioControls {
                         + (track == null ? "" : " - " + track.getName()) + "\nOpen the audio overlay");
             }
             overlayButton.setSelected(overlay.isOpen());
+            hiddenToggles.forEach((id, button) ->
+                    button.setSelected(engine.isCategoryActive(id) || engine.isEffectActive(id)));
         } finally {
             syncing = false;
         }

@@ -15,6 +15,8 @@ import javafx.scene.control.ToggleButton;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -107,6 +109,77 @@ class AudioControlsTest {
             ((ToggleButton) audio.apiControls().get("audio.category." + combatId)).fire();
             assertFalse(audio.engine().isCategoryActive(combatId), "firing it again stops the category");
             audio.shutdown();
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void categoryHighlightsFollowPlaybackWithoutOpeningTheOverlay(boolean hidden) throws Exception {
+        AudioLibraryService library = library();
+        String combatId = categoryId(library, "Combat");
+        String christmasId = categoryId(library, "Christmas Eve");
+        library.importFile(file("christmas.wav"), AudioKind.MUSIC, christmasId);
+        library.setCategoryHidden(combatId, hidden);
+        library.setCategoryHidden(christmasId, hidden);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                api.replaceGroup("audio", audio.apiControls());
+                String combat = "audio.category." + combatId;
+                String christmas = "audio.category." + christmasId;
+                List<String> ids = List.of(combat, christmas);
+
+                api.execute(combat, Map.of());
+                assertEquals(List.of(true, false), api.describe(ids).stream().map(c -> c.get("value")).toList());
+                api.execute(christmas, Map.of());
+                assertEquals(christmasId, audio.engine().categoryId());
+                assertEquals(List.of(false, true), api.describe(ids).stream().map(c -> c.get("value")).toList());
+
+                audio.engine().toggleMusic();
+                assertEquals(List.of(false, true), api.describe(ids).stream().map(c -> c.get("value")).toList(),
+                        "pausing keeps the loaded category highlighted");
+                api.execute(christmas, Map.of());
+                assertEquals(List.of(false, false), api.describe(ids).stream().map(c -> c.get("value")).toList());
+
+                audio.engine().playCategory(combatId);
+                assertEquals(List.of(true, false), api.describe(ids).stream().map(c -> c.get("value")).toList());
+                audio.engine().stopMusic();
+                assertEquals(List.of(false, false), api.describe(ids).stream().map(c -> c.get("value")).toList());
+                assertFalse(audio.overlay().isOpen());
+                assertFalse(audio.overlayLayer().isVisible());
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void effectHighlightsFollowPlaybackWithoutOpeningTheOverlay(boolean hidden) throws Exception {
+        AudioLibraryService library = library();
+        String rainId = library.effects().getFirst().getId();
+        library.setTrackHidden(rainId, hidden);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                api.replaceGroup("audio", audio.apiControls());
+                String rain = "audio.effect." + rainId;
+                List<String> ids = List.of(rain);
+
+                api.execute(rain, Map.of());
+                assertEquals(true, api.describe(ids).getFirst().get("value"));
+                audio.engine().stopAllEffects();
+                assertEquals(false, api.describe(ids).getFirst().get("value"));
+                audio.engine().setEffectActive(rainId, true);
+                assertEquals(true, api.describe(ids).getFirst().get("value"));
+                api.execute(rain, Map.of());
+                assertEquals(false, api.describe(ids).getFirst().get("value"));
+                assertFalse(audio.overlay().isOpen());
+            } finally {
+                audio.shutdown();
+            }
         });
     }
 

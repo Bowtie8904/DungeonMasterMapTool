@@ -781,9 +781,11 @@ full-screen overlay that is opened from there.
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
   `audio.effect.<id>` switches that effect on or off. The id is the library id of the entry (a UUID), so an
   endpoint keeps working when the entry is **renamed** and never collides with another entry; the readable name is
-  in the `label` field of `GET /api/controls`. Hidden entries keep their endpoints. Because the audio
-  endpoints are (re-)registered after the library changed, they get the **same right-click menu as every other
-  control**: "Copy API URL" *and* "Copy key image URL"; re-registering never duplicates those menu entries. A key
+  in the `label` field of `GET /api/controls`. Hidden entries keep their endpoints. Audio
+  category/effect toggle states stay synchronized with playback even while the overlay is closed, including
+  hidden entries, so Stream Deck polling clears deselected category highlights without opening the overlay.
+  Because the endpoints are (re-)registered after the library changed, they get the **same right-click menu as
+  every other control**: "Copy API URL" *and* "Copy key image URL"; re-registering never duplicates those menu entries. A key
   image exported for a category or a sound effect is drawn in **that entry's colour** instead of plain white (very
   dark colours are lightened so the glyph stays readable on the dark key background), so a stream deck full of
   audio buttons looks like the overlay.

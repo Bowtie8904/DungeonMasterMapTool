@@ -46,7 +46,7 @@ import java.util.Map;
  * active. It is opened from the status bar group and closes with {@code Escape}, with a click on the dimmed
  * background or with the Audio button.
  *
- * <p>The overlay only refreshes while it is open, so a closed overlay costs nothing.</p>
+ * <p>Category and effect toggles stay current for the API while closed; readouts only refresh while open.</p>
  */
 public final class AudioOverlay {
     private static final double ITEM_SIZE = 44;
@@ -388,13 +388,15 @@ public final class AudioOverlay {
         return button;
     }
 
-    /** Pushes the engine state into the buttons, labels and sliders; only does work while the overlay is open. */
+    /** Keeps API toggles current even while closed; refreshes the remaining overlay content only while open. */
     public void refreshState() {
-        if (!open) {
-            return;
-        }
         syncing = true;
         try {
+            categoryButtons.forEach((id, button) -> button.setSelected(engine.isCategoryActive(id)));
+            effectButtons.forEach((id, button) -> button.setSelected(engine.isEffectActive(id)));
+            if (!open) {
+                return;
+            }
             boolean playing = engine.isMusicPlaying();
             playButton.setGraphic(Icons.icon(playing ? MaterialDesignP.PAUSE : MaterialDesignP.PLAY));
             AudioTrack track = engine.currentTrack().orElse(null);
@@ -409,8 +411,6 @@ public final class AudioOverlay {
             previousButton.setDisable(track == null);
             nextButton.setDisable(track == null);
             stopButton.setDisable(track == null);
-            categoryButtons.forEach((id, button) -> button.setSelected(engine.isCategoryActive(id)));
-            effectButtons.forEach((id, button) -> button.setSelected(engine.isEffectActive(id)));
             List<String> active = engine.activeEffects();
             effectCount.setText(active.isEmpty() ? "none running" : activeEffectNames(active));
             effectsPause.setSelected(engine.areEffectsPaused());

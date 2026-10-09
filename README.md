@@ -487,8 +487,8 @@ always matches the control's current icon and colour; the API must be running.
 A ready-made Elgato Stream Deck plugin lives in [`streamdeck-plugin/`](streamdeck-plugin/README.md). Six generic
 actions cover music categories, sound effects, DM controls, sliders, dropdowns and map switching, so there is
 nothing to maintain per category. Keys stay **highlighted while the thing they control is active** - start a
-different music category and the previous key dims by itself - and each key draws the application's own artwork
-for the control it triggers. It polls the API in one batched request per interval and goes completely silent when
+different music category and the previous key dims by itself, even with the music overlay closed - and each key
+draws the application's own artwork for the control it triggers. It polls the API in one batched request per interval and goes completely silent when
 no key is visible. See its README for installation and setup.
 
 ### 17. Keyboard and mouse reference
