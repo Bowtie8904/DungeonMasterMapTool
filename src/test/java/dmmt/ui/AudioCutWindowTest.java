@@ -7,6 +7,7 @@ import dmmt.audio.AudioOutput;
 import dmmt.audio.TestAudioFiles;
 import dmmt.audio.WaveformPeaks;
 import javafx.application.Platform;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ListView;
@@ -14,10 +15,15 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -312,11 +318,130 @@ class AudioCutWindowTest {
         });
     }
 
+    @Test
+    void draggingTheBorderOfTheHighlightedProposalMovesOnlyThatBorder() throws Exception {
+        withWindow((window, voice) -> {
+            Canvas canvas = layoutCanvas(window);
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            WaveformPeaks.Range other = new WaveformPeaks.Range(800, 1000);
+            list.getItems().setAll(new WaveformPeaks.Range(300, 700), other);
+            list.getSelectionModel().select(0);
+
+            double width = canvas.getWidth();
+            double endX = pixel(700, width);
+            assertEquals("H_RESIZE", cursorAt(window, canvas, endX));
+            assertEquals("DEFAULT", cursorAt(window, canvas, width / 2));
+
+            drag(canvas, endX, pixel(600, width), false);
+            assertRange(list.getItems().getFirst(), 300, 600);
+            assertEquals(other, list.getItems().get(1));
+            assertEquals(300, field("selectionStartMs").getLong(window));
+
+            // The start border moves on its own and cannot cross the end border.
+            drag(canvas, pixel(300, width), pixel(700, width), false);
+            assertRange(list.getItems().getFirst(), 599, 600);
+            assertEquals(other, list.getItems().get(1));
+
+            // Shift starts a new selection even on top of a border, leaving the proposal alone.
+            WaveformPeaks.Range before = list.getItems().getFirst();
+            drag(canvas, pixel(600, width), pixel(900, width), true);
+            assertEquals(List.of(before, other), list.getItems());
+            assertTrue(Math.abs(field("selectionEndMs").getLong(window) - 900) <= 3);
+        });
+    }
+
+    private static double pixel(long millis, double width) {
+        return millis / 1000.0 * width;
+    }
+
+    private static void assertRange(WaveformPeaks.Range range, long startMs, long endMs) {
+        assertTrue(Math.abs(range.startMs() - startMs) <= 3 && Math.abs(range.endMs() - endMs) <= 3,
+                "expected about " + startMs + "-" + endMs + " but was " + range);
+    }
+
+    @Test
+    void everySelectedProposalIsHighlightedAndOnlyASingleOneBecomesTheEditableRange() throws Exception {
+        withWindow((window, voice) -> {
+            ListView<WaveformPeaks.Range> list = detectedList(window);
+            WaveformPeaks.Range first = new WaveformPeaks.Range(100, 300);
+            WaveformPeaks.Range third = new WaveformPeaks.Range(700, 900);
+            list.getItems().setAll(first, new WaveformPeaks.Range(400, 600), third);
+            list.getSelectionModel().clearSelection();
+            list.getSelectionModel().selectIndices(0, 2);
+
+            assertEquals(List.of(first, third), highlightRanges(window));
+            assertEquals(-1, field("selectionStartMs").getLong(window));
+
+            list.getSelectionModel().clearAndSelect(2);
+            assertEquals(List.of(third), highlightRanges(window));
+            assertEquals(700, field("selectionStartMs").getLong(window));
+            assertEquals(900, field("selectionEndMs").getLong(window));
+        });
+    }
+
+    @Test
+    void theTransportButtonShowsPauseWhileThePreviewRunsAndPlaysFromThePlayhead() throws Exception {
+        withWindow((window, voice) -> {
+            Button play = button(window, "audioCutPlay");
+            assertEquals(MaterialDesignP.PLAY, iconOf(play));
+            seek(window, 420);
+            invoke(window, "togglePlay");
+            assertEquals(MaterialDesignP.PAUSE, iconOf(play));
+            assertEquals(420, voice.position);
+            invoke(window, "togglePlay");
+            assertEquals(MaterialDesignP.PLAY, iconOf(play));
+        });
+    }
+
+    private static Ikon iconOf(Button button) {
+        return ((FontIcon) button.getGraphic()).getIconCode();
+    }
+
+    private static void seek(AudioCutWindow window, long millis) throws Exception {
+        Method method = AudioCutWindow.class.getDeclaredMethod("seek", long.class);
+        method.setAccessible(true);
+        method.invoke(window, millis);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<WaveformPeaks.Range> highlightRanges(AudioCutWindow window) throws Exception {
+        Method method = AudioCutWindow.class.getDeclaredMethod("highlightRanges");
+        method.setAccessible(true);
+        return (List<WaveformPeaks.Range>) method.invoke(window);
+    }
+
+    /** Lays the window out without showing it, so the canvas has a width and times map to pixels. */
+    private static Canvas layoutCanvas(AudioCutWindow window) throws Exception {
+        Stage stage = (Stage) field("stage").get(window);
+        stage.getScene().getRoot().applyCss();
+        stage.getScene().getRoot().layout();
+        Canvas canvas = (Canvas) field("canvas").get(window);
+        assertTrue(canvas.getWidth() > 10, "the canvas needs a width for pixel based tests");
+        return canvas;
+    }
+
+    private static String cursorAt(AudioCutWindow window, Canvas canvas, double x) {
+        canvas.fireEvent(mouse(canvas, MouseEvent.MOUSE_MOVED, x, false));
+        return canvas.getCursor() == null ? "DEFAULT" : canvas.getCursor().toString();
+    }
+
+    private static void drag(Canvas canvas, double fromX, double toX, boolean shift) {
+        canvas.fireEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, fromX, shift));
+        canvas.fireEvent(mouse(canvas, MouseEvent.MOUSE_DRAGGED, toX, shift));
+        canvas.fireEvent(mouse(canvas, MouseEvent.MOUSE_RELEASED, toX, shift));
+    }
+
+    private static MouseEvent mouse(Canvas canvas, javafx.event.EventType<MouseEvent> type, double x, boolean shift) {
+        javafx.geometry.Point2D scene = canvas.localToScene(x, 40);
+        javafx.scene.input.PickResult pick = new javafx.scene.input.PickResult(canvas, scene.getX(), scene.getY());
+        return new MouseEvent(type, scene.getX(), scene.getY(), scene.getX(), scene.getY(), MouseButton.PRIMARY, 1,
+                shift, false, false, false, true, false, false, false, false, false, pick);
+    }
+
     @SuppressWarnings("unchecked")
     private static ListView<WaveformPeaks.Range> detectedList(AudioCutWindow window) throws Exception {
         return (ListView<WaveformPeaks.Range>) field("detectedList").get(window);
     }
-
     private static Button button(AudioCutWindow window, String id) throws Exception {
         return (Button) ((Stage) field("stage").get(window)).getScene().lookup("#" + id);
     }

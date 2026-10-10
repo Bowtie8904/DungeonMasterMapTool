@@ -203,6 +203,7 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 | `/api/controls/audio/masterVolume` | slider | Master volume, `0` to `1`. |
 | `/api/controls/audio/mute` | button | Mute: fades everything out, and back in on the next call. |
 | `/api/controls/audio/library` | button | Opens the audio library window on the DM screen. |
+| `/api/controls/audio/libraryWindow` | button | The Library button in the status bar: opens the same audio library window without opening the overlay. |
 
 ### One endpoint per category and per sound effect
 

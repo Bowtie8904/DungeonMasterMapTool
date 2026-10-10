@@ -102,6 +102,15 @@ public final class AudioCutWindow {
     private double dragAnchorX = -1;
     private long dragAnchorMs;
     private boolean dragging;
+    /** Which border of the highlighted range the current drag moves, if any. */
+    private Edge dragEdge = Edge.NONE;
+    private boolean syncingSelection;
+    /** Every detected track currently selected in the list; all of them are highlighted in the waveform. */
+    private final List<WaveformPeaks.Range> highlighted = new ArrayList<>();
+
+    private enum Edge {
+        NONE, START, END
+    }
 
     private final AudioOutput output;
     private AudioOutput.Voice voice;
@@ -122,6 +131,7 @@ public final class AudioCutWindow {
     private Task<WaveformPeaks> analysis;
     private Task<List<String>> cutting;
     private Button createButton;
+    private Button playButton;
     private final BooleanProperty cuttingBusy = new SimpleBooleanProperty();
     private int clipCounter = 1;
 
@@ -213,6 +223,7 @@ public final class AudioCutWindow {
         canvas.setOnMousePressed(this::onPressed);
         canvas.setOnMouseDragged(this::onDragged);
         canvas.setOnMouseReleased(this::onReleased);
+        canvas.setOnMouseMoved(event -> updateCursor(event.getX()));
         canvas.setOnScroll(event -> {
             if (event.isControlDown() || event.isShiftDown()) {
                 zoomAt(timeAt(event.getX()), event.getDeltaY() > 0 ? 0.8 : 1.25);
@@ -231,6 +242,8 @@ public final class AudioCutWindow {
     private Region buildTransport() {
         Button play = Icons.button(MaterialDesignP.PLAY, "Play or pause (Space)", this::togglePlay);
         play.setId("audioCutPlay");
+        playButton = play;
+        refreshPlayButton();
         Button toStart = Icons.button(MaterialDesignS.SKIP_PREVIOUS, "Jump to the start of the selection",
                 () -> seek(hasSelection() ? selectionStartMs : 0));
         loop.setSelected(true);
@@ -285,11 +298,8 @@ public final class AudioCutWindow {
                         + "  (" + AudioTrack.formatDuration(range.durationMs()) + ")");
             }
         });
-        detectedList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, range) -> {
-            if (range != null) {
-                setSelection(range.startMs(), range.endMs());
-            }
-        });
+        detectedList.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener<WaveformPeaks.Range>) change -> onDetectedSelectionChanged());
         detectedList.setPlaceholder(new Label("Use \"Detect\" to find\nthe songs in this file."));
         detectedList.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
@@ -309,7 +319,8 @@ public final class AudioCutWindow {
         update.setId("audioCutUpdateBounds");
         update.disableProperty().bind(cuttingBusy.or(
                 Bindings.size(detectedList.getSelectionModel().getSelectedItems()).isNotEqualTo(1)));
-        Icons.tooltip(update, "Select one track, adjust From/to or drag a waveform range, then apply its bounds.");
+        Icons.tooltip(update, "Select one track, adjust From/to or drag a waveform range, then apply its bounds. "
+                + "The borders of the highlighted track can also be dragged directly in the waveform.");
         update.setOnAction(event -> updateSelectedTrackBounds());
         Button all = new Button("Create all");
         all.setId("audioCutCreateAll");
@@ -369,7 +380,8 @@ public final class AudioCutWindow {
         create.setOnAction(event -> createClip());
         createButton = create;
 
-        Label hint = new Label("Drag across the waveform to select, click to listen from there, Space plays.");
+        Label hint = new Label("Drag across the waveform to select, click to listen from there, Space plays. "
+                + "Drag the borders of the highlighted range to move them.");
         hint.getStyleClass().add("muted");
 
         HBox row = new HBox(8, new Label("Clip name"), nameField, categoryBox, asEffect, create);
@@ -384,8 +396,8 @@ public final class AudioCutWindow {
     private void startAnalysis() {
         Path file = library.fileOf(track);
         Path cache = library.peaksFileOf(track);
-        int buckets = Tuning.AUDIO_WAVEFORM_BUCKETS.get();
-        WaveformPeaks cached = WaveformPeaks.readCache(cache, buckets);
+        int frameMs = Tuning.AUDIO_WAVEFORM_FRAME_MS.get();
+        WaveformPeaks cached = WaveformPeaks.readCache(cache, frameMs);
         if (cached != null) {
             usePeaks(cached);
             return;
@@ -393,7 +405,7 @@ public final class AudioCutWindow {
         analysis = new Task<>() {
             @Override
             protected WaveformPeaks call() throws Exception {
-                return WaveformPeaks.analyze(file, buckets, this::updateProgress2);
+                return WaveformPeaks.analyze(file, frameMs, this::updateProgress2);
             }
 
             private void updateProgress2(double value) {
@@ -437,10 +449,20 @@ public final class AudioCutWindow {
         if (peaks == null) {
             return;
         }
-        List<WaveformPeaks.Range> ranges = peaks.detectTracks(Tuning.AUDIO_SILENCE_DB.get(),
-                Tuning.AUDIO_MIN_SILENCE_SECONDS.get(), Tuning.AUDIO_MIN_TRACK_SECONDS.get());
+        WaveformPeaks.Detection detection = peaks.detect(new WaveformPeaks.DetectionOptions(
+                Tuning.AUDIO_CUT_AUTO_THRESHOLD.get(), Tuning.AUDIO_SILENCE_DB.get(), Tuning.AUDIO_CUT_DROP_DB.get(),
+                Tuning.AUDIO_MIN_SILENCE_SECONDS.get(), Tuning.AUDIO_MIN_TRACK_SECONDS.get(),
+                Tuning.AUDIO_CUT_MIN_GAP_DROP_DB.get(), Tuning.AUDIO_CUT_DETECT_CHANGES.get(),
+                Tuning.AUDIO_CUT_CHANGE_WINDOW_SECONDS.get(), Tuning.AUDIO_CUT_CHANGE_SENSITIVITY.get(),
+                Tuning.AUDIO_CUT_DETECT_LOOPS.get()));
+        List<WaveformPeaks.Range> ranges = detection.tracks();
         detected.setAll(ranges);
-        status.setText(ranges.size() + (ranges.size() == 1 ? " track found" : " tracks found"));
+        status.setText(ranges.size() + (ranges.size() == 1 ? " track found" : " tracks found")
+                + " (silence below " + Math.round(detection.thresholdDb()) + " dB"
+                + (detection.changeBorders() > 0 ? ", " + detection.changeBorders() + " from changes in the music" : "")
+                + (detection.loopRepetitions() > 0 ? ", looped " + detection.loopRepetitions() + " times" : "")
+                + (detection.repeatsRemoved() > 0 ? ", " + detection.repeatsRemoved() + " repeats removed" : "")
+                + ")");
         draw();
     }
 
@@ -512,9 +534,10 @@ public final class AudioCutWindow {
 
         drawRuler(g, width, rulerHeight);
 
-        if (hasSelection()) {
-            double from = xOf(selectionStartMs);
-            double to = xOf(selectionEndMs);
+        List<WaveformPeaks.Range> highlights = highlightRanges();
+        for (WaveformPeaks.Range range : highlights) {
+            double from = xOf(range.startMs());
+            double to = xOf(range.endMs());
             g.setFill(Color.web("#FFD166", 0.12));
             g.fillRect(Math.min(from, to), waveTop, Math.abs(to - from), waveHeight);
         }
@@ -545,11 +568,18 @@ public final class AudioCutWindow {
                 minimum = Math.min(minimum, peaks.minimum(bucket));
                 maximum = Math.max(maximum, peaks.maximum(bucket));
             }
-            boolean selected = hasSelection() && from >= selectionStartMs && from <= selectionEndMs;
+            boolean selected = isHighlighted(highlights, from);
             g.setStroke(selected ? WAVE_SELECTED : WAVE);
             double top = middle - maximum * (waveHeight / 2 - 2);
             double bottom = middle - minimum * (waveHeight / 2 - 2);
             g.strokeLine(x + 0.5, top, x + 0.5, Math.max(bottom, top + 0.6));
+        }
+
+        if (hasSelection()) {
+            g.setStroke(WAVE_SELECTED);
+            g.setLineWidth(2);
+            g.strokeLine(xOf(selectionStartMs), waveTop, xOf(selectionStartMs), waveTop + waveHeight);
+            g.strokeLine(xOf(selectionEndMs), waveTop, xOf(selectionEndMs), waveTop + waveHeight);
         }
 
         double playX = xOf(playheadMs);
@@ -588,14 +618,26 @@ public final class AudioCutWindow {
     // ---- Interaction ----
 
     private void onPressed(MouseEvent event) {
+        canvas.requestFocus();
+        dragEdge = event.isShiftDown() ? Edge.NONE : edgeAt(event.getX());
         dragAnchorX = event.getX();
+        if (dragEdge != Edge.NONE) {
+            // The opposite border stays where it is while this one is dragged.
+            dragAnchorMs = dragEdge == Edge.START ? selectionEndMs : selectionStartMs;
+            dragging = true;
+            canvas.setCursor(javafx.scene.Cursor.H_RESIZE);
+            return;
+        }
         dragAnchorMs = timeAt(event.getX());
         dragging = false;
-        canvas.requestFocus();
     }
 
     private void onDragged(MouseEvent event) {
         if (dragAnchorX < 0) {
+            return;
+        }
+        if (dragEdge != Edge.NONE) {
+            dragSelectionEdge(timeAt(event.getX()));
             return;
         }
         if (Math.abs(event.getX() - dragAnchorX) > 3) {
@@ -605,11 +647,129 @@ public final class AudioCutWindow {
     }
 
     private void onReleased(MouseEvent event) {
+        if (dragEdge != Edge.NONE) {
+            dragSelectionEdge(timeAt(event.getX()));
+            int index = singleSelectedTrackIndex();
+            status.setText(index < 0 ? "Selection border moved" : "Track " + (index + 1) + " bounds updated");
+            dragEdge = Edge.NONE;
+            dragAnchorX = -1;
+            dragging = false;
+            updateCursor(event.getX());
+            return;
+        }
         if (!dragging) {
             seek(timeAt(event.getX()));
         }
         dragAnchorX = -1;
         dragging = false;
+    }
+
+    /**
+     * The border of the highlighted range under the mouse (3.35.3). Only the editable range has handles, so the
+     * borders of the other detected tracks can never be moved by accident.
+     */
+    private Edge edgeAt(double x) {
+        if (!hasSelection()) {
+            return Edge.NONE;
+        }
+        double tolerance = Tuning.AUDIO_CUT_EDGE_GRAB_PIXELS.get();
+        double toStart = Math.abs(x - xOf(selectionStartMs));
+        double toEnd = Math.abs(x - xOf(selectionEndMs));
+        if (toStart <= tolerance && toStart <= toEnd) {
+            return Edge.START;
+        }
+        return toEnd <= tolerance ? Edge.END : Edge.NONE;
+    }
+
+    private void updateCursor(double x) {
+        canvas.setCursor(edgeAt(x) == Edge.NONE ? javafx.scene.Cursor.DEFAULT : javafx.scene.Cursor.H_RESIZE);
+    }
+
+    /** Moves the dragged border to {@code millis}, keeping the other one and never letting the two cross. */
+    private void dragSelectionEdge(long millis) {
+        long other = dragAnchorMs;
+        if (dragEdge == Edge.START) {
+            setSelection(Math.min(millis, other - 1), other);
+        } else {
+            setSelection(other, Math.max(millis, other + 1));
+        }
+        applySelectionToSelectedTrack();
+    }
+
+    /** Index of the only selected detected track, or -1 when none or several are selected. */
+    private int singleSelectedTrackIndex() {
+        if (detectedList.getSelectionModel().getSelectedItems().size() != 1) {
+            return -1;
+        }
+        int index = detectedList.getSelectionModel().getSelectedIndex();
+        return index >= 0 && index < detected.size() ? index : -1;
+    }
+
+    /** Writes the dragged range back into the single selected proposal, so the list follows the drag live. */
+    private void applySelectionToSelectedTrack() {
+        int index = singleSelectedTrackIndex();
+        if (cuttingBusy.get() || index < 0 || !hasSelection()) {
+            return;
+        }
+        WaveformPeaks.Range range = new WaveformPeaks.Range(selectionStartMs, selectionEndMs);
+        if (range.equals(detected.get(index))) {
+            return;
+        }
+        syncingSelection = true;
+        try {
+            detected.set(index, range);
+            detectedList.getSelectionModel().clearAndSelect(index);
+        } finally {
+            syncingSelection = false;
+        }
+        highlighted.clear();
+        highlighted.add(range);
+        draw();
+    }
+
+    /**
+     * Keeps the waveform in step with the list: every selected proposal is highlighted, and a single selected
+     * proposal also becomes the editable From/to range.
+     */
+    private void onDetectedSelectionChanged() {
+        if (syncingSelection) {
+            return;
+        }
+        List<WaveformPeaks.Range> selected = new ArrayList<>(detectedList.getSelectionModel().getSelectedItems());
+        selected.removeIf(java.util.Objects::isNull);
+        highlighted.clear();
+        highlighted.addAll(selected);
+        if (selected.size() == 1) {
+            setSelection(selected.getFirst().startMs(), selected.getFirst().endMs());
+        } else {
+            if (!selected.isEmpty()) {
+                cancelLoopBlend();
+                selectionStartMs = -1;
+                selectionEndMs = -1;
+            }
+            draw();
+        }
+    }
+
+    /** The ranges painted as highlighted: every selected proposal plus the hand-drawn selection. */
+    private List<WaveformPeaks.Range> highlightRanges() {
+        List<WaveformPeaks.Range> ranges = new ArrayList<>(highlighted);
+        if (hasSelection()) {
+            WaveformPeaks.Range selection = new WaveformPeaks.Range(selectionStartMs, selectionEndMs);
+            if (!ranges.contains(selection)) {
+                ranges.add(selection);
+            }
+        }
+        return ranges;
+    }
+
+    private static boolean isHighlighted(List<WaveformPeaks.Range> ranges, long millis) {
+        for (WaveformPeaks.Range range : ranges) {
+            if (millis >= range.startMs() && millis <= range.endMs()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void zoomAt(long anchorMs, double factor) {
@@ -671,6 +831,7 @@ public final class AudioCutWindow {
         cancelLoopBlend();
         selectionStartMs = -1;
         selectionEndMs = -1;
+        highlighted.clear();
         detectedList.getSelectionModel().clearSelection();
         draw();
     }
@@ -715,7 +876,7 @@ public final class AudioCutWindow {
             if (outgoingVoice != null) {
                 outgoingVoice.pause();
             }
-            playing = false;
+            setPlaying(false);
             return;
         }
         if (voice == null) {
@@ -728,6 +889,7 @@ public final class AudioCutWindow {
             playbackSources.put(voice, source);
             refreshPreviewVolumes();
             setPreviewEndHandler(voice);
+            // Start where the playhead is; a seek before the media is ready is applied once it becomes ready.
             voice.seek(playheadMs);
         }
         if (loop.isSelected() && playheadMs >= loopEndMs()) {
@@ -741,8 +903,20 @@ public final class AudioCutWindow {
             blend.resume();
         }
         lastPlaybackNanos = 0;
-        playing = true;
+        setPlaying(true);
         prepareLoopVoice();
+    }
+
+    private void setPlaying(boolean value) {
+        playing = value;
+        refreshPlayButton();
+    }
+
+    private void refreshPlayButton() {
+        if (playButton != null) {
+            playButton.setGraphic(Icons.icon(playing ? MaterialDesignP.PAUSE : MaterialDesignP.PLAY));
+            Icons.tooltip(playButton, playing ? "Pause (Space)" : "Play (Space)");
+        }
     }
 
     /**
@@ -825,7 +999,7 @@ public final class AudioCutWindow {
         if (loop.isSelected()) {
             restartLoop();
         } else {
-            playing = false;
+            setPlaying(false);
             seek(hasSelection() ? selectionStartMs : totalMs);
         }
     }
@@ -834,6 +1008,12 @@ public final class AudioCutWindow {
         refreshPreviewSources();
         refreshPreviewVolumes();
         if (playing && voice != null) {
+            if (!voice.isReady()) {
+                // A seek is still waiting for the media to initialise; its position would read as 0.
+                lastPlaybackNanos = 0;
+                draw();
+                return;
+            }
             long now = System.nanoTime();
             double delta = lastPlaybackNanos == 0 ? 0 : Math.min(1, (now - lastPlaybackNanos) / 1_000_000_000.0);
             lastPlaybackNanos = now;
@@ -877,7 +1057,7 @@ public final class AudioCutWindow {
                 }
             } else if (hasSelection() && positionMs >= selectionEndMs) {
                 voice.pause();
-                playing = false;
+                setPlaying(false);
                 seek(selectionStartMs);
             }
             draw();

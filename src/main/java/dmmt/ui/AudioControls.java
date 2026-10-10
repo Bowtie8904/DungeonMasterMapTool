@@ -48,7 +48,9 @@ public final class AudioControls {
     private final Button nextButton = Icons.button(MaterialDesignS.SKIP_NEXT, "Next track", null);
     private final ToggleButton overlayButton = Icons.toggle(MaterialDesignM.MUSIC_CIRCLE_OUTLINE,
             "Open the audio overlay: categories, sound effects and volumes");
-    private final HBox group = new HBox(2, previousButton, playButton, nextButton, overlayButton);
+    private final Button libraryButton = Icons.button(MaterialDesignM.MUSIC_BOX_MULTIPLE_OUTLINE,
+            "Open the audio library: import files, manage categories and cut clips", null);
+    private final HBox group = new HBox(2, previousButton, playButton, nextButton, overlayButton, libraryButton);
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
     private final Map<String, ToggleButton> hiddenToggles = new LinkedHashMap<>();
 
@@ -126,6 +128,8 @@ public final class AudioControls {
         ControlTooltips.apply("audio.previous", previousButton);
         ControlTooltips.apply("audio.next", nextButton);
         ControlTooltips.apply("audio.overlay", overlayButton);
+        ControlTooltips.apply("audio.libraryWindow", libraryButton);
+        libraryButton.setOnAction(event -> openLibrary());
         previousButton.setOnAction(event -> engine.previous());
         nextButton.setOnAction(event -> engine.next());
         overlayButton.setOnAction(event -> {
@@ -179,6 +183,7 @@ public final class AudioControls {
         controls.put("audio.play", playButton);
         controls.put("audio.next", nextButton);
         controls.put("audio.overlay", overlayButton);
+        controls.put("audio.libraryWindow", libraryButton);
         controls.putAll(overlay.apiControls());
         List<AudioCategory> categories = library.categories();
         for (AudioCategory category : categories) {

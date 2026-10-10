@@ -1278,26 +1278,59 @@ How long the audio overlay takes to fade in and out when it is opened with the A
 
 *Keywords:* audio overlay, fade in, open animation, music overlay, status bar
 
-### `audio.waveformBuckets`
-**Default:** `4000` · **Range:** 200 to 40000 · **Applies:** live
+### `audio.waveformFrameMs`
+**Default:** `50` · **Range:** 5 to 500 ms · **Applies:** live
 
-How many samples the waveform of the cut window is reduced to. Higher values show more detail when zoomed in but make
-the first analysis of a long recording slower and the cache file bigger.
+Length of one analysed frame of the waveform in the cut window. The resolution no longer depends on how long the file
+is, so zoomed views stay sharp on a two-hour recording. Smaller values detect gaps more precisely and make the cache
+file bigger; changing the value discards the cached analyses once.
 
-*Keywords:* waveform, resolution, detail, cut window, peaks, zoom
+*Keywords:* waveform, resolution, detail, cut window, peaks, zoom, frame length
+
+### `audio.cut.autoThreshold`
+**Default:** `true` · **Applies:** live
+
+Derive the silence level of the song detection from each file instead of using a fixed value. A quiet ambience mix and
+a loud battle mix then both split correctly without changing any setting. Turn this off to go back to the fixed
+`audio.cut.silenceDb`.
+
+*Keywords:* automatic detection, silence threshold, detect songs, split, out of the box
+
+### `audio.cut.dropDb`
+**Default:** `26` · **Range:** 6 to 60 dB · **Applies:** live
+
+How far below the level of the music the automatic silence threshold sits. Lower values split more eagerly. Only used
+when `audio.cut.autoThreshold` is on. If the file does not split at all, the detection automatically retries with a
+higher threshold, so this rarely needs changing. The default was measured against a corpus of real one-hour uploads:
+at `30` the threshold sits below the short fades a playlist cuts its songs with, so audible cuts are missed, while
+`audio.cut.minGapDropDb` still keeps quiet passages inside a single piece from splitting it.
+
+*Keywords:* automatic threshold, detect songs, split, sensitivity, loudness
 
 ### `audio.cut.silenceDb`
 **Default:** `-45` · **Range:** -90 to 0 dB · **Applies:** live
 
-Everything quieter than this counts as silence when the cut window detects the songs inside a long recording. Raise
-it (towards `0`) for recordings with a noisy background.
+Everything quieter than this counts as silence when the cut window detects the songs inside a long recording. Only
+used when `audio.cut.autoThreshold` is off. Raise it (towards `0`) for recordings with a noisy background.
 
 *Keywords:* silence threshold, detect songs, split, gap detection, loudness
+
+### `audio.cut.minGapDropDb`
+**Default:** `18` · **Range:** 0 to 60 dB · **Applies:** live
+
+How much quieter than the music around it a gap has to be before it counts as the border between two songs. This is
+the main defence against false positives: a quiet passage inside one long piece is not 18 dB below its own
+surroundings, so it does not split the piece. Set it to `0` to accept every gap.
+
+*Keywords:* false positives, gap contrast, detect songs, split, quiet passages
 
 ### `audio.cut.minSilenceSeconds`
 **Default:** `1.5` · **Range:** 0.1 to 60 seconds · **Applies:** live
 
-How long a quiet passage has to be before the detection treats it as the gap between two songs.
+How long a quiet passage has to be before the detection treats it as the gap between two songs, no questions asked.
+A shorter gap still counts when it is *isolated*, that is when the music runs uninterrupted for at least a minute
+either side of it: playlists often cut from one song to the next with a fade of only a few hundred milliseconds,
+while the short rests inside percussive music come in dense clusters. Gaps below 150 ms are never considered.
 
 *Keywords:* gap length, silence length, split songs, detection
 
@@ -1307,6 +1340,57 @@ How long a quiet passage has to be before the detection treats it as the gap bet
 Detected pieces shorter than this are ignored, so applause or a single chord does not become its own clip.
 
 *Keywords:* minimum song length, ignore short, detection, clip length
+
+### `audio.cut.detectChanges`
+**Default:** `true` · **Applies:** live
+
+Also propose a border where the music changes character, not only where it falls silent. Many hour-long ambience
+uploads crossfade their songs into each other and contain no gap at all; without this they cannot be split. The
+detection compares a timbre fingerprint of every second of the file and marks the points where two internally
+similar stretches meet that do not resemble each other. Repeated passes of the same looped piece are proposed only
+once.
+
+*Keywords:* crossfade, no gaps, change of music, detect songs, split, novelty
+
+### `audio.cut.changeWindowSeconds`
+**Default:** `45` · **Range:** 5 to 300 seconds · **Applies:** live
+
+How much audio before and after each moment is compared when looking for a change of character, and at the same time
+the closest two such borders can be. Longer windows find only large-scale borders and ignore the section structure
+inside a single piece; shorter windows propose more, smaller pieces.
+
+*Keywords:* change detection, window, scale, detect songs, split
+
+### `audio.cut.changeSensitivity`
+**Default:** `5` · **Range:** 0.5 to 20 · **Applies:** live
+
+How far a change of character has to stand out from the rest of the file, counted in robust deviations of the
+measured curve. Lower it if a recording is split into too few songs, raise it if too many are proposed.
+
+*Keywords:* change detection, sensitivity, too many tracks, too few tracks, split
+
+### `audio.cut.detectLoops`
+**Default:** `true` · **Applies:** live
+
+Recognise a recording that is one piece repeated back to back and propose that piece once, instead of leaving the
+whole file as a single clip. Such a file defeats the change detection above: when every border is equally strong and
+evenly spaced, none of them stands out, so nothing is proposed at all. The loop length is instead read off the
+self-similarity of the file, and the repetitions are only cut where the loop really holds, so a mix that merely
+*ends* in a loop keeps its varied beginning. The status line reports how often the piece repeats.
+
+*Keywords:* loop, repeated, same song again, one hour version, split
+
+### `audio.cut.edgeGrabPixels`
+**Default:** `6` · **Range:** 1 to 40 px · **Applies:** live
+
+How close to a border of the highlighted range in the cut window the mouse has to be before pressing drags that
+border instead of starting a new selection. Within this distance the cursor turns into a horizontal resize arrow.
+Only the highlighted range (the one selected detected track, or a range dragged by hand) has such handles, so the
+borders of the other proposals cannot be moved by accident. Raise it if you find the borders hard to grab, lower it
+if you often move a border while meaning to select a new range. Hold `Shift` while pressing to always start a new
+selection.
+
+*Keywords:* drag border, move track start, move track end, cut window, handle, grab, tolerance
 
 ### `audio.masterVolume`
 **Default:** `0.8` · **Range:** 0 to 1 · **Applies:** managed by the app

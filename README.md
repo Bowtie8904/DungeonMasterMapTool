@@ -524,8 +524,10 @@ Arrow-key nudges move lights, effects, text boxes and unlocked image layers toge
 
 The tool plays background music and layered sound effects at the table, without leaving the map. Audio is
 deliberately **not** part of the DM controls sidebar: a small transport group sits at the **bottom right of the
-status bar** (previous, play/pause, next and an **Audio** button), and that button - or the `M` key - opens the
-audio overlay on top of the map. It is optional: switch `audio.enabled` off in the settings and the status bar
+status bar** (previous, play/pause, next, an **Audio** button and a **Library** button), and the Audio button - or
+the `M` key - opens the
+audio overlay on top of the map. The Library button opens the audio library window straight away, without going
+through the overlay. It is optional: switch `audio.enabled` off in the settings and the status bar
 group, the overlay and everything audio-related stay unloaded.
 
 **The library.** The library button in the overlay opens the audio library window. Import `.mp3` and
@@ -601,7 +603,9 @@ left out of the overlay until it has a track.
 
 **Cutting long recordings.** Select a long file and choose **Cut clips** to open the waveform window. It shows the
 whole recording, so the gaps between the songs are easy to spot; click anywhere to listen from there, `Space` plays
-and pauses, the mouse wheel pans and `Ctrl` + wheel zooms. Playback repeats what you see: with **Loop** switched on
+and pauses, the mouse wheel pans and `Ctrl` + wheel zooms. Playback always starts at the playhead, so clicking into
+the waveform and pressing play auditions that spot and not the beginning of the file, and the transport button shows
+a pause icon while the preview runs. Playback repeats what you see: with **Loop** switched on
 (the default) the selected range repeats endlessly, and when nothing is selected the visible part of the waveform
 does - so zooming into a song is all it takes to listen to it again and again. Loops also restart at the end of the
 file, including selections that reach that boundary; switching Loop off stops playback at the selection or file end.
@@ -611,15 +615,42 @@ This lets you audition a smooth rain/ambience seam without changing the samples 
 Drag across the waveform to select a
 song, fine-tune the
 start and end in the time fields, and **Create clip** writes exactly that range into the library as a standalone
-audio file. **Detect** finds the songs automatically by looking for the silent gaps (tunable with the
-`audio.cut.*` settings). In **Detected tracks**, Ctrl-click selects multiple songs and Shift-click selects a range.
+audio file. **Detect** finds the songs automatically by looking for the gaps between them. It is built to work
+without tuning: it measures the perceived loudness (RMS) of every 50 ms frame, derives the silence threshold from
+the file itself (26 dB below that recording's own music level, so a quiet ambience mix and a loud battle mix both
+split correctly), retries with a higher threshold if the file does not split, and merges gaps that are broken apart
+by a single click. A candidate gap only becomes a song border when it is at least 18 dB quieter than the music
+around it, which keeps a quiet passage inside one long ambient piece from being chopped into fragments. Playlists
+that cut from one song to the next with a fade of only a few hundred milliseconds are caught too: a gap that short
+counts when the music runs uninterrupted for at least a minute either side of it, which distinguishes it from the
+dense clusters of short rests inside percussive battle music. The status
+line reports the threshold that was used. All of it is tunable with the `audio.cut.*` settings, and
+`audio.cut.autoThreshold = false` goes back to the fixed `audio.cut.silenceDb` level.
+Many hour-long ambience uploads crossfade their songs into each other and contain no silence at all, so **Detect**
+additionally looks for **changes of character**: it fingerprints the sound of every second of the file and marks the
+points where two internally similar stretches meet that do not resemble each other. That splits a recording with no
+gaps whatsoever. If the upload turns out to be one piece looped over and over, the repeats are recognised and
+proposed only once instead of as a dozen identical clips. Use `audio.cut.changeSensitivity` to get more or fewer
+songs, `audio.cut.changeWindowSeconds` for the scale it works on, and `audio.cut.detectChanges = false` to switch it
+off and rely on silence alone.
+A recording that is simply **one piece looped** for an hour defeats that too, because every border in it is equally
+strong and so none of them stands out. Those are found separately, by reading the loop length off the file's own
+self-similarity, and only one pass of the piece is proposed, starting at the beginning of the looped stretch so the
+clip is not cut out of the middle of a repetition. A 61-minute upload that used to come out as a single unusable clip
+now yields the 1:45 song it loops 35 times, and a three-hour upload of one 2:38 piece yields that piece instead of 139
+fragments of it. Turn it off with `audio.cut.detectLoops = false`.
+In **Detected tracks**, Ctrl-click selects multiple songs and Shift-click selects a range. Every selected track is
+highlighted in the waveform, so you can see exactly what the batch actions will touch.
 **Merge selected** replaces them with one track spanning the earliest start to the latest end, including the gaps
 between them. **Delete selected** (or `Delete`/`Backspace` with the list focused) removes proposals and their waveform
 markers without changing the source audio. **Create selected**, beside **Create all**, exports only the selected
 tracks; **Create all** exports every remaining proposal, never restoring deleted ones.
-To move a detected track's start or end, select only that track, adjust the **From/to** fields (including
-milliseconds) or drag a new range on the waveform, then click **Update bounds**. The list and exported clips use
-the updated range; other detected tracks are unchanged.
+To move a detected track's start or end, **drag its border in the waveform**: select that one track (or drag a range
+by hand), move the mouse onto one of the two bright borders of the highlighted range - the cursor turns into a resize
+arrow - and drag. The list entry and the exported clip follow the drag immediately; the other border and all other
+proposals stay where they are. Hold `Shift` while pressing to start a new selection on top of a border instead, and
+use `audio.cut.edgeGrabPixels` if you want a larger or smaller grab area. The **From/to** fields (including
+milliseconds) plus **Update bounds** still do the same thing by typing.
 **Clip name** supplies the base for batch exports: for example, `Forest` produces `Forest 01`, `Forest 02`, etc.,
 using each track's position in the list. If that base already has numbered tracks anywhere in the library,
 numbering continues after the highest existing number (case-insensitive): after `Combat 12`, the next file starts
@@ -651,7 +682,8 @@ speaker button, which fades everything out and back in. Crowded libraries simply
 overlay only updates while it is open.
 
 The play/pause button in the **status bar** is the quick version of all of this: it pauses and resumes the music
-*and* every running sound effect together, next to previous/next, without opening anything.
+*and* every running sound effect together, next to previous/next, the Audio button and the Library button that
+opens the audio library window directly.
 
 Audio playback is independent of maps: switching maps never changes the running music or sound effects.
 

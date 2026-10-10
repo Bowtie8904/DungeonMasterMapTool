@@ -665,14 +665,30 @@ public final class Tuning {
             "How often per second fades and the now-playing readout are updated. Higher values make fades smoother and cost a little more CPU.");
     public static final Setting<Double> AUDIO_OVERLAY_FADE_SECONDS = decimal(AUDIO, "audio.overlayFadeSeconds", 0.15, 0, 2, false,
             "How long the audio overlay takes to fade in and out when it is opened from the status bar (0 = show it instantly).");
-    public static final Setting<Integer> AUDIO_WAVEFORM_BUCKETS = integer(AUDIO, "audio.waveformBuckets", 4000, 200, 40000, false,
-            "Resolution of the waveform in the cut window: peak values computed for the whole file. Higher values show finer detail and use more memory.");
+    public static final Setting<Integer> AUDIO_WAVEFORM_FRAME_MS = integer(AUDIO, "audio.waveformFrameMs", 50, 5, 500, false,
+            "Length of one analysed frame of the waveform in the cut window. Smaller values show finer detail, detect gaps more precisely and use more memory.");
+    public static final Setting<Boolean> AUDIO_CUT_AUTO_THRESHOLD = bool(AUDIO, "audio.cut.autoThreshold", true, false,
+            "Derive the silence level of the song detection from each file instead of using the fixed audio.cut.silenceDb.");
+    public static final Setting<Double> AUDIO_CUT_DROP_DB = decimal(AUDIO, "audio.cut.dropDb", 26, 6, 60, false,
+            "How far below the level of the music the automatic silence threshold sits. Lower values split more eagerly.");
     public static final Setting<Double> AUDIO_SILENCE_DB = decimal(AUDIO, "audio.cut.silenceDb", -45, -90, 0, false,
-            "Level below which the cut window treats audio as silence when it detects the songs of a long recording.");
+            "Fixed level below which the cut window treats audio as silence; only used when audio.cut.autoThreshold is off.");
+    public static final Setting<Double> AUDIO_CUT_MIN_GAP_DROP_DB = decimal(AUDIO, "audio.cut.minGapDropDb", 18, 0, 60, false,
+            "How much quieter than the surrounding music a gap must be to count as the border between two songs. Higher values reject more false positives.");
     public static final Setting<Double> AUDIO_MIN_SILENCE_SECONDS = decimal(AUDIO, "audio.cut.minSilenceSeconds", 1.5, 0.1, 60, false,
-            "Seconds of silence that must pass before the cut window treats it as a gap between two songs.");
+            "Seconds of silence that must pass before the cut window treats it as a gap between two songs. A shorter gap still counts when the music runs uninterrupted for a minute either side of it.");
     public static final Setting<Double> AUDIO_MIN_TRACK_SECONDS = decimal(AUDIO, "audio.cut.minTrackSeconds", 20, 1, 3600, false,
             "Shortest detected song the cut window proposes as a clip; shorter sections between two gaps are ignored.");
+    public static final Setting<Boolean> AUDIO_CUT_DETECT_CHANGES = bool(AUDIO, "audio.cut.detectChanges", true, false,
+            "Also propose a border where the music changes character, so recordings whose songs fade into each other without a gap can be split.");
+    public static final Setting<Double> AUDIO_CUT_CHANGE_WINDOW_SECONDS = decimal(AUDIO, "audio.cut.changeWindowSeconds", 45, 5, 300, false,
+            "Seconds of audio compared before and after each moment when looking for a change of character, and the closest two such borders can be. Longer windows find only large-scale borders.");
+    public static final Setting<Double> AUDIO_CUT_CHANGE_SENSITIVITY = decimal(AUDIO, "audio.cut.changeSensitivity", 5, 0.5, 20, false,
+            "How much a change of character must stand out from the rest of the file to become a border. Lower values propose more songs.");
+    public static final Setting<Boolean> AUDIO_CUT_DETECT_LOOPS = bool(AUDIO, "audio.cut.detectLoops", true, false,
+            "Recognise a recording that is one piece repeated back to back and propose that piece once instead of leaving the whole file as a single clip.");
+    public static final Setting<Integer> AUDIO_CUT_EDGE_GRAB_PIXELS = integer(AUDIO, "audio.cut.edgeGrabPixels", 6, 1, 40, false,
+            "How close to the border of the highlighted range in the cut window the mouse must be to drag that border instead of starting a new selection.");
 
     // ---- Storage and caches ----
 

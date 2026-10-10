@@ -204,10 +204,11 @@ class DmControlApiTest {
             assertEquals(8, api.execute("integer", Map.of("value", "100")).get("value"));
             assertEquals(6, api.execute("integer", Map.of("decrement", "2")).get("value"));
             assertEquals(1.7, api.execute("decimal", Map.of("value", "1.7")).get("value"));
-            assertEquals("1.7", decimal.getEditor().getText());
+            String expectedEditorText = decimal.getValueFactory().getConverter().toString(1.7);
+            assertEquals(expectedEditorText, decimal.getEditor().getText());
             decimal.getEditor().setText("invalid draft");
             api.execute("decimal", Map.of("value", "1.7"));
-            assertEquals("1.7", decimal.getEditor().getText());
+            assertEquals(expectedEditorText, decimal.getEditor().getText());
             for (String invalid : List.of("NaN", "Infinity", "1e400", "0x1p2", " 2", "bad")) {
                 assertError(400, () -> api.execute("slider", Map.of("value", invalid)));
             }

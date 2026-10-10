@@ -46,6 +46,9 @@ public final class JavaFxAudioOutput implements AudioOutput {
         private final MediaPlayer player;
         private boolean disposed;
         private boolean playing;
+        /** A seek that arrived before the player was initialised; JavaFX would silently drop it. */
+        private double pendingSeekMs = -1;
+        private boolean playWhenReady;
 
         private MediaVoice(MediaPlayer player) {
             this.player = player;
@@ -55,6 +58,10 @@ public final class JavaFxAudioOutput implements AudioOutput {
         public void play() {
             if (!disposed) {
                 playing = true;
+                if (pendingSeekMs >= 0) {
+                    playWhenReady = true;
+                    return;
+                }
                 player.play();
             }
         }
@@ -63,6 +70,7 @@ public final class JavaFxAudioOutput implements AudioOutput {
         public void pause() {
             if (!disposed) {
                 playing = false;
+                playWhenReady = false;
                 player.pause();
             }
         }
@@ -112,7 +120,7 @@ public final class JavaFxAudioOutput implements AudioOutput {
 
         @Override
         public boolean isReady() {
-            return !disposed && player.getError() == null
+            return !disposed && player.getError() == null && pendingSeekMs < 0
                     && switch (player.getStatus()) {
                 case READY, PLAYING, PAUSED, STOPPED -> true;
                 default -> false;
@@ -132,8 +140,32 @@ public final class JavaFxAudioOutput implements AudioOutput {
 
         @Override
         public void seek(double millis) {
-            if (!disposed) {
-                player.seek(Duration.millis(Math.max(0, millis)));
+            if (disposed) {
+                return;
+            }
+            double target = Math.max(0, millis);
+            if (player.getStatus() == MediaPlayer.Status.UNKNOWN) {
+                // A seek on an uninitialised player is ignored by JavaFX, so it is replayed once the media is ready.
+                pendingSeekMs = target;
+                player.setOnReady(this::applyPendingSeek);
+                return;
+            }
+            pendingSeekMs = -1;
+            player.seek(Duration.millis(target));
+        }
+
+        private void applyPendingSeek() {
+            if (disposed || pendingSeekMs < 0) {
+                return;
+            }
+            double target = pendingSeekMs;
+            pendingSeekMs = -1;
+            player.seek(Duration.millis(target));
+            if (playWhenReady) {
+                playWhenReady = false;
+                if (playing) {
+                    player.play();
+                }
             }
         }
     }

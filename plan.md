@@ -649,12 +649,81 @@ same application. It must never be in the way of DMs who do not use it, and must
   in a dedicated **Cut clips** window.
 - The window shows a **waveform** of the whole file (min/max peaks per pixel column) so silent gaps between songs
   are immediately visible, plus a zoomable detail view, a time ruler and a movable playhead. Clicking the waveform
-  seeks, space toggles play/pause, so any point of the file can be auditioned at any time.
+  seeks, space toggles play/pause, so any point of the file can be auditioned at any time. Playback always starts
+  at the playhead, including the very first time the preview voice is opened: a seek issued before the media is
+  ready is remembered and applied (and the start delayed) when it becomes ready, instead of being dropped and
+  playing from the beginning of the file. The transport button shows a **pause icon while the preview is running**
+  and a play icon while it is stopped.
 - Peaks are computed once in a background thread (WAV via `javax.sound.sampled`, MP3 via a pure-Java decoder) with
-  a progress indicator, and cached in `peaks/<trackId>.peaks` so reopening is instant.
+  a progress indicator, and cached in `peaks/<trackId>.peaks` so reopening is instant. The analysis stores minimum,
+  maximum **and RMS** per fixed-length frame of `audio.waveformFrameMs` (default 50 ms) rather than a fixed number of
+  buckets per file: the resolution no longer depends on the file length, zoomed views stay sharp, and the cache stays
+  valid unless the frame length itself changes. Drawing downsamples the frames to the pixel columns it needs.
 - A selection (drag on the waveform, or exact start/end time fields with millisecond precision) defines a clip.
-  **Auto-detect tracks** proposes one selection per detected song by scanning for silence longer than
-  `audio.cut.minSilenceSeconds` below `audio.cut.silenceDb`; proposals can be edited or deleted before saving.
+  **Auto-detect tracks** proposes one selection per detected song; proposals can be edited or deleted before saving.
+- Detection works on the **RMS level per frame**, not on peaks, so a click, a reverb tail or tape hiss inside a gap no
+  longer hides it. It is designed to work without tuning:
+  - **Automatic threshold** (`audio.cut.autoThreshold`, default on): the silence threshold is derived from the file
+    itself as `musicLevel - audio.cut.dropDb` (default 26 dB), where `musicLevel` is the 90th percentile of all frame
+    levels. A quiet ambience mix and a loud battle mix therefore use different thresholds without the user changing
+    anything. When the automatic threshold is off, the fixed `audio.cut.silenceDb` is used instead.
+  - The default drop was measured against a corpus of real one-hour uploads. At 30 dB the threshold lands below the
+    short fades between the songs of a playlist, so clearly audible cuts are missed; 26 dB finds them while the
+    local-contrast rule below still keeps quiet passages inside a single piece from splitting it.
+  - **Relaxation:** if the first threshold splits the file into no more than one track, the detection retries with
+    the threshold raised in steps (up to 10 dB below the music level), so noisy recordings still split.
+  - **Hysteresis:** a frame enters silence below the threshold but only leaves it 6 dB above, and silences separated
+    by less than 300 ms of noise are merged, so single clicks do not break a gap apart.
+  - **Local contrast:** a candidate gap is only accepted when its median level is at least `audio.cut.minGapDropDb`
+    (default 18 dB) below the louder of its neighbourhoods (75th percentile of the 5 s before and after it). This is
+    what suppresses false positives in quiet passages inside a single long ambient piece.
+  - Gaps shorter than `audio.cut.minSilenceSeconds` and pieces shorter than `audio.cut.minTrackSeconds` are still
+    dropped, except that a **short gap is accepted when it is isolated**: playlists frequently cut from one song to
+    the next with a fade of only a few hundred milliseconds, far below any sensible minimum, while the short rests
+    inside percussive music come in dense clusters. A gap down to 150 ms therefore counts as a border when the music
+    runs uninterrupted for at least a minute either side of it, which tells the two apart without another setting.
+    The status line reports the threshold that was actually used.
+- **Change detection** (`audio.cut.detectChanges`, default on) splits recordings whose songs are *crossfaded* into
+  each other, where no silence exists at all - the common case for hour-long YouTube ambience mixes.
+  - The same decode pass that produces the peaks also produces a **timbre fingerprint per second**: the energy of 24
+    log-spaced frequency bands from a 1024-sample FFT, made logarithmic, mean-free and unit-length so it describes
+    the colour of the sound and not its volume. The fingerprints are stored in the peaks cache.
+  - Borders are the peaks of a **Foote novelty curve**: for every second, the audio in the
+    `audio.cut.changeWindowSeconds` (default 45) before and after it is compared with itself and with the other
+    side. The value is high exactly where two internally similar blocks meet that do not resemble each other.
+  - A peak becomes a border when it stands out `audio.cut.changeSensitivity` (default 5) robust deviations from the
+    rest of the file. Borders keep at least `max(changeWindowSeconds, minTrackSeconds)` distance from each other,
+    stronger peaks winning, which prevents the repeating section structure inside one piece from being proposed.
+  - Borders within 5 seconds of a silent gap are dropped as the same border found twice. Silent gaps are cut out of
+    the result, change borders are not, because there is nothing to trim.
+- **Loop detection** (`audio.cut.detectLoops`, default on) finds uploads that are one piece repeated back to back. Outlier-based peak picking cannot see
+  such a file: when every border is equally strong and evenly spaced, no peak stands out from the rest, so the
+  novelty detection alone returns nothing and the whole hour stays a single proposal.
+  - The mean fingerprint similarity is measured at every lag from `audio.cut.minTrackSeconds` up to 10 minutes. The
+    curve is detrended against its own moving median, so a sharp spike counts even though hour-long ambience is
+    globally self-similar. The shortest lag that stands out 6 robust deviations *and* is confirmed by a further
+    multiple of itself is the loop period.
+  - The loop is only applied where it actually holds: the file is scanned for the longest run of seconds whose
+    fingerprint matches the one a period later, so a mix that merely *ends* in a loop keeps its varied beginning.
+  - The repetitions start at the beginning of that run, not at some offset inside it. The run is where the looped
+    material begins, so it is the one repetition border the file actually tells us about; a seamless loop has
+    almost no novelty contrast between one phase and the next, so letting a search pick the phase freely only
+    drifted it off that border and left an orphaned stretch in front of the first proposal. Only the period is
+    refined against the novelty curve, within two seconds of the measured lag, so the borders land on the audible
+    seam rather than on the nearest whole second.
+  - Only one pass of the loop is proposed: everything from the start of the run to the first repetition border.
+    The repetitions after it are dropped without comparing fingerprints again, because the period is not a whole
+    number of seconds and a second-aligned comparison would drift out of alignment; the truncated repetition an
+    upload ends with goes the same way. The status line reports how often the piece repeats.
+  - A looped piece often has quiet passages of its own, so the silence detection splits every repetition into
+    several proposals and none of them spans a whole period. The kept pass is therefore whichever proposals fall
+    inside that first repetition, which may be more than one; keeping those splits is deliberate, because a loop of
+    two songs played in turn should stay two proposals. Without this a three-hour upload of one looped piece stayed
+    at 139 proposals - the same fragments over and over.
+- **Repeated pieces are proposed only once.** Hour-long uploads are frequently one piece looped verbatim; a proposal
+  whose fingerprints match the previous proposal with at least 0.95 similarity and whose length is within 10 % of it
+  is dropped. The status line reports how many repeats were removed. Together with the loop detection this turns an
+  hour of one song looped 35 times into a single proposal of that song.
 - The detected-tracks list supports Ctrl/Shift multi-selection. **Merge selected** replaces the selected proposals
   with one range from their earliest start to their latest end, including intervening gaps; unselected proposals
   remain unchanged. **Delete selected** (also Delete/Backspace while the list has focus) removes proposals and their
@@ -670,6 +739,19 @@ same application. It must never be in the way of DMs who do not use it, and must
 - Select exactly one proposal, adjust the millisecond-precision **From/to** fields or drag a new waveform range,
   then click **Update bounds** to replace that proposal's start/end. The list, waveform markers and both batch
   export actions use the updated range; other proposals are untouched. Reject invalid, empty or out-of-file ranges.
+- **Dragging the borders in the waveform** is the direct alternative to Update bounds. The two edges of the
+  *highlighted* range are grab handles: within `audio.cut.edgeGrabPixels` (default 6) of an edge the cursor turns
+  into a horizontal resize cursor and pressing there drags that edge instead of starting a new selection. The
+  opposite edge stays put and the dragged edge is clamped so the two can never cross (the range keeps at least one
+  millisecond). This works for
+  a hand-drawn selection and, when exactly one proposal is selected in the list, for that proposal: its range in the
+  list and its waveform markers follow the drag live, so no Merge/Update round-trip is needed. Only the highlighted
+  range has handles, so the borders of the other proposals can never be moved by accident. `Shift` while pressing
+  forces a new selection even on top of a handle.
+- **Every selected proposal is highlighted** in the waveform, not only the last one clicked: Ctrl/Shift
+  multi-selection paints the highlight band and the brighter wave colour over all of them, so what "Create
+  selected", "Merge selected" and "Delete selected" will act on is visible. The editable From/to range (and the
+  drag handles) still belong to a single range: the one selected proposal, or the hand-drawn selection.
 - Playback **loops what is shown** (toggle "Loop", on by default): the selection when there is one, otherwise the
   visible part of the waveform, so zooming into a song is enough to audition it over and over. Reaching the end of
   the looped range jumps back to its start without stopping; playing from before the range is allowed and simply
@@ -754,8 +836,10 @@ should not scroll past it. It lives in two places instead - a small transport gr
 full-screen overlay that is opened from there.
 
 - **Status bar group** (bottom right of the DM window, right-aligned, only present when `audio.enabled`):
-  previous, play/pause, next, and the **Audio** button that opens the overlay. Play/pause here is the "everything"
-  button: it pauses and resumes music and all running sound effects together (3.35.4). The button shows the colour
+  previous, play/pause, next, the **Audio** button that opens the overlay, and a **Library** button that opens the
+  audio library window directly, so importing, tagging and cutting do not require opening the overlay first.
+  Play/pause here is the "everything"
+  button: it pauses and resumes music and all running sound effects together (3.35.4). The Audio button shows the colour
   and icon of the running category, so the status bar doubles as an "what is playing" indicator; a tooltip names
   the current track. The transport buttons are disabled while no category is playing.
 - **Audio overlay** (3.35.6): a translucent panel drawn **inside** the main window on top of the map, not a second
@@ -779,8 +863,10 @@ full-screen overlay that is opened from there.
     the library window.
   - Everything is keyboard reachable, and the overlay repaints only while it is open, so a closed overlay costs
     nothing.
-- **Local control API:** the status bar group registers `audio.previous`, `audio.play`, `audio.next` and
-  `audio.overlay`; the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`,
+- **Local control API:** the status bar group registers `audio.previous`, `audio.play`, `audio.next`,
+  `audio.overlay` and `audio.libraryWindow` (its Library button; it opens the same window as the overlay's
+  `audio.library`, but is a different control);
+  the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`,
   `audio.effectsPause`, `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`. In addition **every
   category and every sound effect gets its own toggle endpoint**, registered dynamically whenever the library
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
@@ -830,6 +916,7 @@ application itself never depends on it and never talks to the Stream Deck.
 
 - All fixed API control names are mapped by stable control id in `src/main/resources/dmmt/api/control-names.properties`, loaded by `dmmt.api.ControlNames`. API discovery and command responses use these short names independently of UI tooltips, accessibility descriptions and sidebar settings labels. Edit this single file and rebuild/restart to change names without changing endpoints. Dynamic audio category/effect ids retain their live library names unless explicitly mapped; unknown ids fall back to control text, accessible text, then id. No new application settings.
 - Tests use an independent `src/test/resources/dmmt/api/control-names.properties` fixture rather than asserting editable production names. URL-copy menu tests explicitly enable URL options; the application default remains hidden.
+- Numeric API tests assert numeric response values independently of locale; spinner editor-text assertions use the spinner's converter rather than assuming a dot decimal separator.
 - Fixed control tooltips are mapped separately in `src/main/resources/dmmt/api/control-tooltips.properties`, keyed by the same stable ids. This mapping controls app hover help and the API descriptor's `tooltip` field (including command responses and batched discovery). The plugin preserves `tooltip` when relaying discovery to the property inspector. The Stream Deck control picker displays `tooltip`, falling back to the stable control id if a description is unavailable; the short `label` is used only for key titles, never dropdown labels. Registered wrapped controls and repeated controls share the mapping, including later tooltip refreshes. Unmapped/dynamic controls retain live tooltip/accessibility text, then their display name. Tests use an independent tooltip fixture. Edit either bundled properties file and rebuild/restart; no new application settings.
 
 - **Key images over HTTP.** Every actionable control answers
