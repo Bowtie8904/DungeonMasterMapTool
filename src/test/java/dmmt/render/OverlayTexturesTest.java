@@ -45,6 +45,64 @@ class OverlayTexturesTest {
     }
 
     @Test
+    void arcaneWanderingIsSmoothRepeatableAndChangesDirection() {
+        OverlayTextures.Layer layer = new OverlayTextures.Layer(0.004, -0.002, 0.75, 0.95);
+        for (boolean horizontal : new boolean[]{true, false}) {
+            assertEquals(0, OverlayTextures.layerPhase(OverlayTextures.ARCANE, layer, 0, horizontal));
+            boolean forward = false;
+            boolean backward = false;
+            double previous = 0;
+            for (int frame = 1; frame <= 3600; frame++) {
+                double seconds = frame / 60.0;
+                double phase = OverlayTextures.layerPhase(OverlayTextures.ARCANE, layer, seconds, horizontal);
+                assertEquals(phase, OverlayTextures.layerPhase(OverlayTextures.ARCANE, layer, seconds, horizontal));
+                double delta = phase - previous;
+                delta -= Math.round(delta);
+                assertTrue(Math.abs(delta) < 0.003, "wandering should not jump between frames");
+                forward |= delta > 0.00001;
+                backward |= delta < -0.00001;
+                previous = phase;
+            }
+            assertTrue(forward && backward, "wandering should reverse direction on both axes");
+        }
+    }
+
+    @Test
+    void wanderingHonorsStationaryLayersAndPreservesOtherTextureMotion() {
+        OverlayTextures.Layer still = new OverlayTextures.Layer(0, 0, 1, 1);
+        OverlayTextures.Layer moving = new OverlayTextures.Layer(-0.02, 0.04, 1, 1);
+        for (double seconds : new double[]{0, 2.5, 17, 10000}) {
+            assertEquals(0, OverlayTextures.layerPhase(OverlayTextures.ARCANE, still, seconds, true));
+            assertEquals(0, OverlayTextures.layerPhase(OverlayTextures.ARCANE, still, seconds, false));
+            for (boolean horizontal : new boolean[]{true, false}) {
+                double offset = seconds * (horizontal ? moving.vx() : moving.vy());
+                assertEquals(offset - Math.floor(offset),
+                        OverlayTextures.layerPhase(OverlayTextures.WATER, moving, seconds, horizontal), 1e-12);
+            }
+        }
+    }
+
+    @Test
+    void arcaneGlyphsFillTheTileAsSmallDistinctMarks() {
+        int size = 64;
+        int[] pixels = OverlayTextures.generate(OverlayTextures.ARCANE, 0xB36BFF, size);
+        for (int cellY = 0; cellY < 4; cellY++) {
+            for (int cellX = 0; cellX < 4; cellX++) {
+                int strongPixels = 0;
+                for (int y = cellY * size / 4; y < (cellY + 1) * size / 4; y++) {
+                    for (int x = cellX * size / 4; x < (cellX + 1) * size / 4; x++) {
+                        if ((pixels[y * size + x] >>> 24) > 160) {
+                            strongPixels++;
+                        }
+                    }
+                }
+                assertTrue(strongPixels >= 4, "each compact rune cell should contain visible glyph strokes");
+            }
+        }
+        assertFalse(OverlayTextures.settingsDefaults().containsKey("texture.arcane.layer2.scale"));
+    }
+
+    @Test
     void newTexturesHaveExpectedEdgeDefaultsAndAreConfigurable() {
         for (String kind : new String[]{OverlayTextures.POISON, OverlayTextures.NECROTIC, OverlayTextures.PORTAL}) {
             assertTrue(OverlayTextures.isSoft(kind), kind);
@@ -102,4 +160,3 @@ class OverlayTexturesTest {
                 + Math.abs(((a >> 8) & 0xFF) - ((b >> 8) & 0xFF)) + Math.abs((a & 0xFF) - (b & 0xFF));
     }
 }
-

@@ -1825,7 +1825,9 @@ more layers up to `layer6` by adding at least the `scale` line of the new layer 
 default to no movement, scale 1 and opacity 0.8). A new layer is only picked up if all lower numbers exist.
 
 - **`speedX`**, **`speedY`** – scroll speed in texture tiles per second (negative = left/up). Example: fire rises with
-  a negative `speedY`.
+  a negative `speedY`. Arcane uses these speeds as a gentle directional bias and to control the strength of smooth
+  random wandering; setting both to zero stops drift. Its built-in single layer uses speeds `0.004` / `-0.002`,
+  scale `0.75`, opacity `0.95`, pulse depth `0.18` and pulse frequency `0.35`. Existing layer overrides are preserved.
 - **`scale`** – size of this layer's pattern (0.1 to 16, bigger = larger pattern).
 - **`opacity`** – opacity of the layer (0 to 1).
 - **`pulseDepth`** – how much the layer opacity pulses (0 = constant, 1 = fades out completely).
@@ -1848,7 +1850,7 @@ are listed in `dmmt-settings.default.ini`.
 | `acid` | `#6BD62A` | 0.85 | false | false | 0.5 | 2 | 0 | 0.8 | 2 |
 | `ice` | `#9AD8FF` | 0.75 | false | false | 0.5 | 2 | 0 | 0.8 | 2 |
 | `lightning` | `#8FB4FF` | 0.9 | true | true | 0.9 | 3 | 0.6 | 4 | 2 |
-| `arcane` | `#B36BFF` | 0.85 | false | true | 0.6 | 2 | 0.1 | 0.8 | 2 |
+| `arcane` | `#B36BFF` | 0.85 | false | true | 0.6 | 2 | 0.1 | 0.8 | 1 |
 | `darkness` | `#3B2160` | 1 | true | false | 0.5 | 2 | 0 | 0.8 | 2 |
 | `mist` | `#D8E4EA` | 0.75 | true | false | 0.5 | 2 | 0 | 0.8 | 2 |
 | `blood` | `#8A0A0A` | 1 | false | false | 0.5 | 2 | 0 | 0.8 | 1 |

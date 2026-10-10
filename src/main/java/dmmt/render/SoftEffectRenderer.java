@@ -64,7 +64,7 @@ final class SoftEffectRenderer {
      * passes of the vector path; the mask is their continuous equivalent. {@code maxScale} caps the image resolution
      * relative to the screen. The image is only recomputed when the animation time, the view or the shape changed.
      */
-    void draw(GraphicsContext gc, DmProject.OverlayShape shape, String type, Image tile, List<OverlayTextures.Layer> layers,
+    void draw(GraphicsContext gc, DmProject.OverlayShape shape, String type, String texture, Image tile, List<OverlayTextures.Layer> layers,
               double alpha, double seconds, double tileWorld, double featherWorld, int passes, boolean playerMode,
               double maxScale, double canvasW, double canvasH, DmProject.CameraState camera) {
         if (shape.getId() == null || layers.isEmpty()) {
@@ -97,8 +97,8 @@ final class SoftEffectRenderer {
         for (int l = 0; l < layerCount; l++) {
             OverlayTextures.Layer layer = layers.get(l);
             tileScreen[l] = Math.max(8, tileWorld * layer.scale() * zoom);
-            double phaseX = ((seconds * layer.vx()) % 1.0 + 1.0) % 1.0;
-            double phaseY = ((seconds * layer.vy()) % 1.0 + 1.0) % 1.0;
+            double phaseX = OverlayTextures.layerPhase(texture, layer, seconds, true);
+            double phaseY = OverlayTextures.layerPhase(texture, layer, seconds, false);
             layerOx[l] = originX + phaseX * tileScreen[l];
             layerOy[l] = originY + phaseY * tileScreen[l];
             layerAlpha[l] = alpha * layer.alpha() * pulseFactor(layer, seconds);
@@ -124,6 +124,7 @@ final class SoftEffectRenderer {
         key = 31 * key + Double.hashCode(tileWorld);
         key = 31 * key + System.identityHashCode(tex);
         key = 31 * key + layers.hashCode();
+        key = 31 * key + texture.hashCode();
         if (out.image == null || out.key != key || out.w != ow || out.h != oh) {
             out.ensure(ow, oh);
             out.key = key;

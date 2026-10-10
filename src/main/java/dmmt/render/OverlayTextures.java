@@ -68,6 +68,21 @@ public final class OverlayTextures {
 
     private static final Map<String, Definition> DEFINITIONS = new LinkedHashMap<>();
 
+    private static final double[][][] ARCANE_RUNE_SEGMENTS = {
+            {{0, -0.34, 0, 0.34}, {-0.20, -0.23, 0.20, -0.23}, {0, -0.17, 0.20, -0.02},
+                    {0.20, -0.02, -0.08, 0.16}, {-0.08, 0.16, 0.12, 0.32}},
+            {{-0.22, -0.25, 0.18, -0.25}, {0.18, -0.25, -0.16, 0.02},
+                    {-0.16, 0.02, 0.20, 0.28}, {0.20, 0.28, -0.20, 0.28}, {0, -0.14, 0, 0.16}},
+            {{0, -0.34, 0, 0.34}, {0, -0.20, -0.22, -0.02}, {0, -0.20, 0.22, -0.02},
+                    {-0.22, -0.02, 0, 0.16}, {0.22, -0.02, 0, 0.16}, {-0.16, 0.30, 0.16, 0.30}},
+            {{0, -0.34, 0.22, -0.12}, {0.22, -0.12, 0.12, 0.10}, {0.12, 0.10, 0, 0.32},
+                    {0, 0.32, -0.20, 0.08}, {-0.20, 0.08, -0.08, -0.12}, {-0.08, -0.12, 0, -0.02}},
+            {{-0.20, -0.28, 0.20, -0.28}, {0, -0.28, 0, 0.28}, {-0.20, -0.08, 0.12, -0.08},
+                    {-0.12, 0.12, 0.20, 0.12}, {-0.20, 0.28, 0.20, 0.28}},
+            {{-0.20, -0.30, 0.20, -0.10}, {0.20, -0.10, -0.20, 0.10},
+                    {-0.20, 0.10, 0.20, 0.30}, {0, -0.20, 0, 0.20}}
+    };
+
     static {
         DEFINITIONS.put(NONE, new Definition("Flat color", null, List.of(), (u, v, rgb) -> 0));
         DEFINITIONS.put(SMOKE, new Definition("Smoke", "#9A9A9A",
@@ -85,7 +100,7 @@ public final class OverlayTextures {
         DEFINITIONS.put(LIGHTNING, new Definition("Lightning", "#8FB4FF",
                 List.of(new Layer(0.03, 0.0, 1.0, 1.0, 0.95, 3.1), new Layer(-0.02, 0.04, 0.7, 0.9, 0.95, 4.3)), OverlayTextures::lightning));
         DEFINITIONS.put(ARCANE, new Definition("Arcane runes", "#B36BFF",
-                List.of(new Layer(0.012, 0.0, 1.0, 0.9, 0.35, 0.4), new Layer(-0.010, 0.006, 0.6, 0.6, 0.5, 0.7)), OverlayTextures::arcane));
+                List.of(new Layer(0.004, -0.002, 0.75, 0.95, 0.18, 0.35)), OverlayTextures::arcane));
         DEFINITIONS.put(DARKNESS, new Definition("Darkness / void", "#3B2160",
                 List.of(new Layer(0.022, -0.016, 1.0, 0.95), new Layer(-0.017, 0.011, 1.5, 0.85)), OverlayTextures::darkness));
         DEFINITIONS.put(MIST, new Definition("Mist / fog", "#D8E4EA",
@@ -293,6 +308,30 @@ public final class OverlayTextures {
         String k = normalize(kind);
         Custom o = overrides.get(k);
         return o != null && o.layers() != null ? o.layers() : DEFINITIONS.get(k).layers();
+    }
+
+    /** Tile offset shared by the crisp and feathered renderers. */
+    static double layerPhase(String kind, Layer layer, double seconds, boolean horizontal) {
+        double speed = horizontal ? layer.vx() : layer.vy();
+        double offset = seconds * speed;
+        if (ARCANE.equals(kind) && (layer.vx() != 0 || layer.vy() != 0)) {
+            double drift = Math.hypot(layer.vx(), layer.vy());
+            int seed = Double.hashCode(layer.scale()) ^ (horizontal ? 149 : 197);
+            double time = seconds / 5.3;
+            double wander = wanderingOffset(time, seed) - wanderingOffset(0, seed);
+            offset = offset * 0.25 + wander * Math.min(0.4, drift * 32);
+        }
+        return fract(offset);
+    }
+
+    private static double wanderingOffset(double time, int seed) {
+        int step = (int) Math.floor(time);
+        double slow = lerp(hash(step, 0, seed), hash(step + 1, 0, seed), fade(fract(time)));
+        double fasterTime = time * 1.73 + 11.4;
+        int fasterStep = (int) Math.floor(fasterTime);
+        double fast = lerp(hash(fasterStep, 0, seed + 31), hash(fasterStep + 1, 0, seed + 31),
+                fade(fract(fasterTime)));
+        return slow + fast * 0.35;
     }
 
     /** World size of one texture tile, in grid cells. */
@@ -526,19 +565,39 @@ public final class OverlayTextures {
     }
 
     private static int arcane(double u, double v, int rgb) {
-        double dx = u - 0.5;
-        double dy = v - 0.5;
-        double d = Math.sqrt(dx * dx + dy * dy);
-        double angle = Math.atan2(dy, dx);
-        double ring = Math.max(band(d, 0.44, 0.012), band(d, 0.36, 0.008));
-        // Rune ticks between the two rings, 12-fold symmetric so the tile stays seamless.
-        double sector = Math.abs(fract(angle / (2 * Math.PI) * 12) - 0.5);
-        double ticks = (d > 0.375 && d < 0.435) ? smoothstep(0.42, 0.36, sector) : 0;
-        double inner = band(d, 0.18, 0.006) + band(d, 0.10, 0.006);
-        double[] w = worley(u, v, 7, 71);
-        double sparkle = smoothstep(0.09, 0.0, w[0]);
-        double a = Math.min(1, ring + ticks * 0.8 + inner * 0.7 + sparkle * 0.9);
-        return withAlpha(a, mix(rgb, 0xFFFFFF, Math.min(1, 0.25 + sparkle * 0.6)));
+        int gridX = (int) Math.floor(u * 4);
+        int gridY = (int) Math.floor(v * 4);
+        int cellX = Math.floorMod(gridX, 4);
+        int cellY = Math.floorMod(gridY, 4);
+        double x = fract(u * 4) - 0.5 - (hash(cellX, cellY, 71) - 0.5) * 0.06;
+        double y = fract(v * 4) - 0.5 - (hash(cellX, cellY, 73) - 0.5) * 0.06;
+
+        int rotation = (int) (hash(cellX, cellY, 79) * 4);
+        for (int i = 0; i < rotation; i++) {
+            double oldX = x;
+            x = -y;
+            y = oldX;
+        }
+
+        int style = (int) (hash(cellX, cellY, 83) * 6);
+        double d = runeSegments(x, y, ARCANE_RUNE_SEGMENTS[style]);
+        double core = smoothstep(0.052, 0.020, d);
+        double glow = smoothstep(0.16, 0.045, d) * 0.2;
+        double a = Math.max(core, glow);
+        int color = mix(rgb, 0xFFFFFF, 0.18 + core * 0.58);
+        return withAlpha(a, color);
+    }
+
+    private static double runeSegments(double x, double y, double[][] segments) {
+        double distance = Double.MAX_VALUE;
+        for (double[] segment : segments) {
+            double dx = segment[2] - segment[0];
+            double dy = segment[3] - segment[1];
+            double lengthSquared = dx * dx + dy * dy;
+            double t = clamp(((x - segment[0]) * dx + (y - segment[1]) * dy) / lengthSquared, 0, 1);
+            distance = Math.min(distance, Math.hypot(x - segment[0] - t * dx, y - segment[1] - t * dy));
+        }
+        return distance;
     }
 
     private static int darkness(double u, double v, int rgb) {
@@ -1138,9 +1197,6 @@ public final class OverlayTextures {
         return (int) Math.max(0, Math.min(255, Math.round(value)));
     }
 }
-
-
-
 
 
 

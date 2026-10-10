@@ -661,7 +661,7 @@ public class CanvasMapRenderer {
         if (soft && !chasm) {
             // Soft effects are cached images: stepping the clock at the animation rate lets frames above it reuse them.
             double softSeconds = Math.floor(seconds * animationFps) / animationFps;
-            softEffects.draw(gc, shape, type, tile, OverlayTextures.layers(texture), alpha, softSeconds, tileWorld,
+            softEffects.draw(gc, shape, type, texture, tile, OverlayTextures.layers(texture), alpha, softSeconds, tileWorld,
                     featherWorld, passes, playerMode, Tuning.EFFECT_SOFT_RESOLUTION.get(), width, height, camera);
             drawShapeBorder(gc, shape, type, edge, width, height, camera);
             return;
@@ -679,8 +679,8 @@ public class CanvasMapRenderer {
         }
         for (OverlayTextures.Layer layer : OverlayTextures.layers(texture)) {
             double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
-            double phaseX = ((seconds * layer.vx()) % 1.0 + 1.0) % 1.0;
-            double phaseY = ((seconds * layer.vy()) % 1.0 + 1.0) % 1.0;
+            double phaseX = OverlayTextures.layerPhase(texture, layer, seconds, true);
+            double phaseY = OverlayTextures.layerPhase(texture, layer, seconds, false);
             ImagePattern pattern = new ImagePattern(tile, originX + phaseX * tileScreen, originY + phaseY * tileScreen,
                     tileScreen, tileScreen, false);
             double layerAlpha = alpha * layer.alpha() * pulseFactor(layer, seconds);
