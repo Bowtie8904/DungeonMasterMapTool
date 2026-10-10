@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,6 +76,32 @@ class AudioControlsTest {
     private AudioControls controls(AudioLibraryService library) {
         return new AudioControls(new AppSettings(dir.resolve("settings.ini")), () -> null, library,
                 new FakeAudioOutput());
+    }
+
+    @Test
+    void iconToggleSelectionUsesAccentHighlightExceptAudioTransport() throws Exception {
+        onFx(() -> {
+            ToggleButton regular = new ToggleButton();
+            regular.getStyleClass().add("icon-toggle");
+            ToggleButton transport = new ToggleButton();
+            transport.getStyleClass().addAll("icon-toggle", "audio-transport-toggle");
+            StackPane root = new StackPane(regular, transport);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            root.applyCss();
+
+            var regularBackground = regular.getBackground();
+            regular.setSelected(true);
+            root.applyCss();
+            assertNotEquals(regularBackground, regular.getBackground());
+            assertNotNull(regular.getEffect());
+
+            var transportBackground = transport.getBackground();
+            transport.setSelected(true);
+            root.applyCss();
+            assertEquals(transportBackground, transport.getBackground());
+            assertNull(transport.getEffect());
+        });
     }
 
     @Test
