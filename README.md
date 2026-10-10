@@ -697,6 +697,8 @@ it is not saved in settings or projects. The API exposes it as `audio.musicLoop`
 The play/pause button in the **status bar** is the quick version of all of this: it pauses and resumes the music
 *and* every running sound effect together, next to previous/next, the Audio button and the Library button that
 opens the audio library window directly.
+Play/pause only resumes currently selected music and sound effects. It never reselects a category or effect
+you stopped; with nothing selected, it does nothing. The music-only play/pause button follows the same rule.
 
 Audio playback is independent of maps: switching maps never changes the running music or sound effects.
 

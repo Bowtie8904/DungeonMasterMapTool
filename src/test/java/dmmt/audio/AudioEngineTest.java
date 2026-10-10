@@ -735,6 +735,71 @@ class AudioEngineTest {
         assertEquals(2, output.playing().size());
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void theStatusBarButtonNeverRestartsADeselectedCategory(boolean withEffect) throws IOException {
+        music("a");
+        AudioTrack rain = effect("rain");
+        engine.setMusicCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        if (withEffect) {
+            engine.setEffectActive(rain.getId(), true);
+        }
+        engine.stopMusic();
+        int opened = output.opened.size();
+
+        engine.toggleAll();
+        engine.toggleAll();
+
+        assertFalse(engine.isCategoryActive(combat.getId()));
+        assertTrue(engine.currentTrack().isEmpty());
+        assertFalse(engine.isMusicPlaying());
+        assertEquals(opened, output.opened.size(), "play must not open a stopped category's track");
+        assertEquals(withEffect ? 1 : 0, output.playing().size());
+        assertEquals(withEffect, engine.isEffectActive(rain.getId()));
+        if (withEffect) {
+            assertFalse(engine.areEffectsPaused());
+        }
+    }
+
+    @Test
+    void theMusicButtonNeverRestartsStoppedMusic() throws IOException {
+        music("a");
+        engine.setMusicCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        engine.stopMusic();
+        int opened = output.opened.size();
+
+        engine.toggleMusic();
+        engine.toggleMusic();
+
+        assertFalse(engine.isCategoryActive(combat.getId()));
+        assertTrue(engine.currentTrack().isEmpty());
+        assertEquals(opened, output.opened.size());
+        assertTrue(output.playing().isEmpty());
+    }
+
+    @Test
+    void theStatusBarButtonNeverRestartsADeselectedEffect() throws IOException {
+        music("a");
+        AudioTrack rain = effect("rain");
+        engine.setEffectFadeSeconds(0);
+        engine.playCategory(combat.getId());
+        engine.setEffectActive(rain.getId(), true);
+        engine.setEffectActive(rain.getId(), false);
+        int opened = output.opened.size();
+
+        engine.toggleAll();
+        assertTrue(engine.isCategoryActive(combat.getId()));
+        assertFalse(engine.isMusicPlaying());
+        engine.toggleAll();
+
+        assertTrue(engine.isMusicPlaying());
+        assertFalse(engine.isEffectActive(rain.getId()));
+        assertEquals(opened, output.opened.size());
+        assertEquals(1, output.playing().size());
+    }
+
     @Test
     void theChannelVolumesScaleTheirOwnVoicesOnly() throws IOException {
         music("a");

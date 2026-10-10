@@ -187,6 +187,8 @@ save prompt. File operations in progress also return `409`. Frozen players keep 
 Audio is not part of the DM controls sidebar: it lives in the transport group at the bottom right of the status bar
 and in the audio overlay that opens from there. Both are exposed under `/api/controls/audio/...` and are only
 available when `audio.enabled` is on. Endpoints work whether the overlay is open or closed.
+Play/pause endpoints only resume currently selected audio; they never reselect a stopped category or sound
+effect. With nothing selected, they do nothing.
 
 | Endpoint | Type | What it does |
 |----------|------|--------------|

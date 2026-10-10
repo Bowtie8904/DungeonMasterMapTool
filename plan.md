@@ -815,7 +815,9 @@ same application. It must never be in the way of DMs who do not use it, and must
   `master x channel` (a logarithmic/perceptual curve, `volume^2.2`, so sliders feel linear). Pausing is per channel:
   pausing effects pauses **all** currently playing effects at once and resumes them together. The play/pause button
   in the status bar is the "everything" button instead: it pauses music **and** all running effects together, and
-  resumes both.
+  resumes only the currently active selections. Unselecting a category or effect stops it; no play/pause button
+  may reselect or restart a stopped entry, even when it was the last-used category. With nothing selected,
+  play/pause does nothing. Paused selections remain selected and resume normally.
 - **Mute:** the mute button in the overlay fades everything to silence over `audio.panicFadeSeconds` and keeps the
   current playlist position; pressing it again fades back in. There is no global mute hotkey.
 - Audio is DM-side only: it is never sent to the player view and is independent of freeze, maps and projects.

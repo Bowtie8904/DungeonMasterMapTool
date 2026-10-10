@@ -354,7 +354,7 @@ public class AudioEngine {
 
     /**
      * Whether this category is the one that is loaded and not stopped. The engine keeps {@link #categoryId()} after
-     * {@link #stopMusic()} so play resumes the same category, so the overlay asks this instead (3.35.6).
+     * {@link #stopMusic()} as playlist history, so the overlay asks this instead (3.35.6).
      */
     public boolean isCategoryActive(String id) {
         return id != null && id.equals(categoryId) && music != null;
@@ -419,12 +419,9 @@ public class AudioEngine {
         advance(1, crossfadeSeconds);
     }
 
-    /** Play when stopped, pause when playing, resume when paused. */
+    /** Pauses or resumes active music; stopped music stays stopped. */
     public void toggleMusic() {
         if (music == null) {
-            if (categoryId != null) {
-                playCategory(categoryId);
-            }
             return;
         }
         musicPaused = !musicPaused;
@@ -879,7 +876,7 @@ public class AudioEngine {
             }
             return;
         }
-        if (music != null || categoryId != null) {
+        if (music != null) {
             toggleMusic();
         }
         if (!effects.isEmpty()) {

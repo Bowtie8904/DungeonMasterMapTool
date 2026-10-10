@@ -205,6 +205,34 @@ class AudioControlsTest {
     }
 
     @Test
+    void playEndpointDoesNotReselectAStoppedCategory() throws Exception {
+        AudioLibraryService library = library();
+        String combatId = categoryId(library, "Combat");
+        String rainId = library.effects().getFirst().getId();
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                api.replaceGroup("audio", audio.apiControls());
+                String categoryControl = "audio.category." + combatId;
+                api.execute(categoryControl, Map.of());
+                api.execute("audio.effect." + rainId, Map.of());
+                api.execute(categoryControl, Map.of());
+                api.execute("audio.play", Map.of());
+                assertTrue(audio.engine().areEffectsPaused());
+                api.execute("audio.play", Map.of());
+                assertFalse(audio.engine().isCategoryActive(combatId));
+                assertFalse(((ToggleButton) audio.apiControls().get(categoryControl)).isSelected());
+                assertTrue(audio.engine().currentTrack().isEmpty());
+                assertTrue(audio.engine().isEffectActive(rainId));
+                assertFalse(audio.engine().areEffectsPaused());
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @Test
     void musicLoopEndpointStaysSynchronizedWhileClosedAndIsNotSaved() throws Exception {
         AudioLibraryService library = library();
         onFx(() -> {
