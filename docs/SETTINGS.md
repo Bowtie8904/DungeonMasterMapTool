@@ -1199,17 +1199,23 @@ Weather intensity of maps without saved weather and the value the intensity slid
 
 - **`particles`** – number of particles at full intensity on a 1920×1080 screen (0 to 10000; mist 0 to 500). The
   actual number scales with the intensity slider and the screen size; performance mode halves it. For **mist** the
-  value is the number of large drifting fog banks and does not depend on intensity (intensity changes their opacity).
+  value is the number of large drifting, smoke-textured fog banks and does not depend on intensity or performance
+  mode (intensity changes their opacity). Banks wrap on both axes with edge-crossing copies, maintaining coverage
+  at the screen edges as well as the centre. High-contrast smoke patches and smaller banks retain visible billows
+  instead of blending into a uniform tint. Textures are cached; changing the mist colour rebuilds them.
   `0` disables the particles (thunderstorm lightning remains active).
 - **`color`** – particle colour `#RRGGBB`.
 - **`opacity`** – highest particle opacity (0 to 1). Dust motes twinkle and embers flicker between a fraction of this
-  and the full value; mist uses one third of it at the lowest intensity and the full value at intensity 1.
+  and the full value. Mist bank opacity is this value times the square root of intensity, so smoke texture is
+  visible at intermediate intensity. A darker fog body fades in with intensity squared and becomes completely
+  opaque at 100%, hiding the map while leaving the billows visible. Nonzero mist opacity controls bank contrast,
+  not this opaque endpoint; `0` disables both the banks and fog body. Text and fog-of-war stay above weather.
 
 | Key | Default | Key | Default | Key | Default |
 |-----|---------|-----|---------|-----|---------|
 | `weather.rain.particles` | `600` | `weather.rain.color` | `#C8D7EB` | `weather.rain.opacity` | `0.42` |
 | `weather.snow.particles` | `610` | `weather.snow.color` | `#F5F8FF` | `weather.snow.opacity` | `0.5` |
-| `weather.mist.particles` | `70` | `weather.mist.color` | `#DBE3ED` | `weather.mist.opacity` | `0.12` |
+| `weather.mist.particles` | `70` | `weather.mist.color` | `#DBE3ED` | `weather.mist.opacity` | `0.65` |
 | `weather.dust.particles` | `500` | `weather.dust.color` | `#FFF0CD` | `weather.dust.opacity` | `0.48` |
 | `weather.embers.particles` | `295` | `weather.embers.color` | `#FF963C` | `weather.embers.opacity` | `0.75` |
 | `weather.thunderstorm.particles` | `600` | `weather.thunderstorm.color` | `#C8D7EB` | `weather.thunderstorm.opacity` | `0.42` |

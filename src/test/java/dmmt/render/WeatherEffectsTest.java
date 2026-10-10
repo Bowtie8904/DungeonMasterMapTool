@@ -129,4 +129,101 @@ class WeatherEffectsTest {
         assertEquals(WeatherEffects.MIN_INTENSITY, WeatherEffects.clampIntensity(-1));
         assertEquals(WeatherEffects.MAX_INTENSITY, WeatherEffects.clampIntensity(5));
     }
+
+    @Test
+    void mistTexturesHaveSmokyVariationAndTransparentBorders() {
+        int size = 64;
+        int[] pixels = WeatherEffects.mistTexturePixels(0xDBE3ED, 0, size);
+        int[] variant = WeatherEffects.mistTexturePixels(0xDBE3ED, 1, size);
+        int[] repeat = WeatherEffects.mistTexturePixels(0xDBE3ED, 0, size);
+        int min = 255;
+        int max = 0;
+        int variantsDiffer = 0;
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int p = pixels[y * size + x];
+                assertEquals(p, repeat[y * size + x]);
+                assertEquals(0xDBE3ED, p & 0xFFFFFF);
+                if (x == 0 || y == 0 || x == size - 1 || y == size - 1) {
+                    assertEquals(0, p >>> 24, "Texture borders must be fully feathered");
+                }
+                if (x >= size / 3 && x < size * 2 / 3 && y >= size / 3 && y < size * 2 / 3) {
+                    min = Math.min(min, p >>> 24);
+                    max = Math.max(max, p >>> 24);
+                    if (p != variant[y * size + x]) variantsDiffer++;
+                }
+            }
+        }
+        assertTrue(max - min > 60, "Smoke must have textured dense and thin patches, not a flat haze");
+        assertTrue(variantsDiffer > 100, "Banks should not all repeat the same texture");
+        assertTrue(Math.abs((pixels[24 * size + 32] >>> 24) - (pixels[32 * size + 24] >>> 24)) > 10,
+                "Equal-radius points should differ, unlike the old radial gradient");
+    }
+
+    @Test
+    void mistCoverageIsComparableAtEdgesAndCentreAcrossSizesAndTimes() {
+        int size = 64;
+        int[][] textures = new int[4][];
+        for (int i = 0; i < textures.length; i++) {
+            textures[i] = WeatherEffects.mistTexturePixels(0xDBE3ED, i, size);
+        }
+        for (double[] viewport : new double[][]{{1920, 1080}, {800, 1200}, {3440, 1440}, {640, 360}}) {
+            double w = viewport[0];
+            double h = viewport[1];
+            double[] total = new double[5]; // Left, right, top, bottom, centre.
+            for (int time = 0; time < 24; time++) {
+                WeatherEffects.MistBank[] banks = new WeatherEffects.MistBank[WeatherType.MIST.maxParticles()];
+                for (int i = 0; i < banks.length; i++) {
+                    banks[i] = WeatherEffects.mistBank(i, w, h, time * 17, 1);
+                    assertEquals(banks[i], WeatherEffects.mistBank(i, w, h, time * 17, 1));
+                }
+                for (int a = 0; a < 12; a++) {
+                    for (int b = 0; b < 12; b++) {
+                        double u = (a + 0.5) / 12;
+                        double v = (b + 0.5) / 12;
+                        total[0] += mistOpacity(0.15 * u * w, v * h, w, h, banks, textures, size);
+                        total[1] += mistOpacity((0.85 + 0.15 * u) * w, v * h, w, h, banks, textures, size);
+                        total[2] += mistOpacity(u * w, 0.15 * v * h, w, h, banks, textures, size);
+                        total[3] += mistOpacity(u * w, (0.85 + 0.15 * v) * h, w, h, banks, textures, size);
+                        total[4] += mistOpacity((0.3 + 0.4 * u) * w, (0.3 + 0.4 * v) * h,
+                                w, h, banks, textures, size);
+                    }
+                }
+                assertEquals(mistOpacity(0, h / 2, w, h, banks, textures, size),
+                        mistOpacity(w, h / 2, w, h, banks, textures, size), 1e-9);
+                assertEquals(mistOpacity(w / 2, 0, w, h, banks, textures, size),
+                        mistOpacity(w / 2, h, w, h, banks, textures, size), 1e-9);
+            }
+            for (int edge = 0; edge < 4; edge++) {
+                double ratio = total[edge] / total[4];
+                assertTrue(ratio >= 0.85 && ratio <= 1.15, "Edge/centre coverage ratio: " + ratio);
+            }
+        }
+    }
+
+    private static double mistOpacity(double x, double y, double w, double h,
+                                      WeatherEffects.MistBank[] banks, int[][] textures, int size) {
+        double opacity = 0;
+        for (int i = 0; i < banks.length; i++) {
+            WeatherEffects.MistBank bank = banks[i];
+            double dx = WeatherEffects.wrap(x - bank.x() + w / 2, w) - w / 2;
+            double dy = WeatherEffects.wrap(y - bank.y() + h / 2, h) - h / 2;
+            double u = (dx / bank.radiusX() + 1) / 2;
+            double v = (dy / bank.radiusY() + 1) / 2;
+            if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
+            double alpha = (textures[i % textures.length][(int) (v * size) * size + (int) (u * size)] >>> 24)
+                    / 255.0 * WeatherType.MIST.opacity();
+            opacity += (1 - opacity) * alpha;
+        }
+        return opacity;
+    }
+
+    @Test
+    void mistBankCountRemainsIndependentOfIntensityAndZeroDisablesIt() {
+        int banks = WeatherType.MIST.maxParticles();
+        assertEquals(banks, WeatherEffects.particleCount(WeatherType.MIST, 0.1, 640, 360));
+        assertEquals(banks, WeatherEffects.particleCount(WeatherType.MIST, 1, 1920, 1080));
+        Tuning.apply(key -> key.equals("weather.mist.particles") ? "0" : null);
+        assertEquals(0, WeatherEffects.particleCount(WeatherType.MIST, 1, 1920, 1080));
+    }
 }

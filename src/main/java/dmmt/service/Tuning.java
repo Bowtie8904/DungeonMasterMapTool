@@ -595,7 +595,7 @@ public final class Tuning {
     static {
         weather("rain", "Rain", 600, 10000, "#C8D7EB", 0.42);
         weather("snow", "Snow", 610, 10000, "#F5F8FF", 0.5);
-        weather("mist", "Mist (particles = fog banks)", 70, 500, "#DBE3ED", 0.12);
+        weather("mist", "Mist (particles = fog banks)", 70, 500, "#DBE3ED", 0.65);
         weather("dust", "Dust motes", 500, 10000, "#FFF0CD", 0.48);
         weather("embers", "Embers", 295, 10000, "#FF963C", 0.75);
         weather("thunderstorm", "Thunderstorm rain", 600, 10000, "#C8D7EB", 0.42);

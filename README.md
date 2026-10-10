@@ -48,6 +48,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Fog of war** with brush, area and one-click room reveal tools.
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
+- **Ambient weather**, including thick, high-contrast smoke-textured mist with dense billows, softer gaps, full-screen coverage and seamless edge wrapping. Intermediate intensity shows drifting smoke; **100% mist is opaque**, hiding the map beneath textured fog (text and fog-of-war remain above it).
 - **Handouts**: paste images from the clipboard and show them on the player screen.
 - **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips and crossfading playback.
 - Organises maps in a **folder library** with thumbnails, tags, name/tag search, drag & drop and auto-save.

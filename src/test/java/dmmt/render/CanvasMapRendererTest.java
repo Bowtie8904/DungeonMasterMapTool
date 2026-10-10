@@ -8,6 +8,7 @@ import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.effect.BlendMode;
+import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +43,98 @@ class CanvasMapRendererTest {
         assertEquals(frozen, renderer.weatherSeconds());
         renderer.setWeatherFrozen(false);
         assertEquals(0, renderer.weatherSeconds());
+    }
+
+    @Test
+    void mistRendersEvenCoverageAndKeepsLiveSettingsAndReducedFramesConsistent() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            double[] totals = new double[5];
+            for (int t = 0; t < 24; t++) {
+                var pixels = mistSnapshot(1, t * 17, false).getPixelReader();
+                for (int y = 0; y < 96; y++) {
+                    for (int x = 0; x < 160; x++) {
+                        double brightness = pixels.getColor(x, y).getRed();
+                        if (x < 24) totals[0] += brightness / (24 * 96);
+                        if (x >= 136) totals[1] += brightness / (24 * 96);
+                        if (y < 14) totals[2] += brightness / (160 * 14);
+                        if (y >= 82) totals[3] += brightness / (160 * 14);
+                        if (x >= 48 && x < 112 && y >= 29 && y < 67) {
+                            totals[4] += brightness / (64 * 38);
+                        }
+                    }
+                }
+            }
+            assertTrue(totals[4] / 24 > 0.4, "Full-intensity mist should form thick fog");
+            for (int edge = 0; edge < 4; edge++) {
+                double ratio = totals[edge] / totals[4];
+                assertTrue(ratio >= 0.85 && ratio <= 1.15, "Rendered edge/centre ratio: " + ratio);
+            }
+            var full = mistSnapshot(1, 42, false).getPixelReader();
+            var whiteBackground = mistSnapshot(1, 42, false, Color.WHITE).getPixelReader();
+            var reduced = mistSnapshot(1, 42, true).getPixelReader();
+            var low = mistSnapshot(0.1, 42, false).getPixelReader();
+            double fullBrightness = 0;
+            double lowBrightness = 0;
+            double minBrightness = 1;
+            double maxBrightness = 0;
+            for (int y = 0; y < 96; y++) {
+                for (int x = 0; x < 160; x++) {
+                    assertEquals(full.getArgb(x, y), reduced.getArgb(x, y));
+                    assertEquals(full.getArgb(x, y), whiteBackground.getArgb(x, y),
+                            "100% mist must completely hide the underlying map at every pixel");
+                    fullBrightness += full.getColor(x, y).getRed();
+                    lowBrightness += low.getColor(x, y).getRed();
+                    minBrightness = Math.min(minBrightness, full.getColor(x, y).getRed());
+                    maxBrightness = Math.max(maxBrightness, full.getColor(x, y).getRed());
+                }
+            }
+            assertTrue(fullBrightness > lowBrightness * 1.3);
+            assertTrue(maxBrightness - minBrightness > 0.2, "Mist must retain billows, not just a flat tint");
+            double defaultBrightness = 0;
+            double minDefault = 1;
+            double maxDefault = 0;
+            var defaults = mistSnapshot(WeatherEffects.defaultIntensity(), 42, false).getPixelReader();
+            for (int y = 0; y < 96; y++) {
+                for (int x = 0; x < 160; x++) {
+                    defaultBrightness += defaults.getColor(x, y).getRed();
+                    minDefault = Math.min(minDefault, defaults.getColor(x, y).getRed());
+                    maxDefault = Math.max(maxDefault, defaults.getColor(x, y).getRed());
+                }
+            }
+            assertTrue(defaultBrightness / (160 * 96) > 0.3, "Default intensity must form dense fog");
+            assertTrue(maxDefault - minDefault > 0.2, "Intermediate intensity must show textured smoke");
+            var whiteDefault = mistSnapshot(WeatherEffects.defaultIntensity(), 42, false, Color.WHITE).getPixelReader();
+            assertNotEquals(defaults.getArgb(80, 48), whiteDefault.getArgb(80, 48),
+                    "Intermediate mist should still allow the map to show through");
+            Tuning.apply(key -> key.equals("weather.mist.color") ? "#FF0000" : null);
+            Color red = mistSnapshot(1, 42, false).getPixelReader().getColor(80, 48);
+            assertTrue(red.getRed() > 0.05 && red.getBlue() == 0);
+            Tuning.apply(key -> key.equals("weather.mist.color") ? "#0000FF" : null);
+            Color blue = mistSnapshot(1, 42, false).getPixelReader().getColor(80, 48);
+            assertTrue(blue.getBlue() > 0.05 && blue.getRed() == 0);
+            Tuning.apply(key -> key.equals("weather.mist.opacity") ? "0" : null);
+            assertEquals(Color.BLACK, mistSnapshot(1, 42, false).getPixelReader().getColor(80, 48));
+            Tuning.apply(key -> key.equals("weather.mist.particles") ? "0" : null);
+            assertEquals(Color.BLACK, mistSnapshot(1, 42, false).getPixelReader().getColor(80, 48));
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    private static WritableImage mistSnapshot(double intensity, double seconds, boolean reduced) {
+        return mistSnapshot(intensity, seconds, reduced, Color.BLACK);
+    }
+
+    private static WritableImage mistSnapshot(double intensity, double seconds, boolean reduced, Color background) {
+        Canvas canvas = new Canvas(160, 96);
+        var gc = canvas.getGraphicsContext2D();
+        gc.setFill(background);
+        gc.fillRect(0, 0, 160, 96);
+        gc.setGlobalAlpha(0.65);
+        WeatherEffects.draw(gc, WeatherType.MIST, intensity, 160, 96, seconds, reduced);
+        assertEquals(0.65, gc.getGlobalAlpha());
+        return canvas.snapshot(null, null);
     }
 
     @Test

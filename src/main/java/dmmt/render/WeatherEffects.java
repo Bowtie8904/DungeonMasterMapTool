@@ -2,15 +2,15 @@ package dmmt.render;
 
 import dmmt.service.Tuning;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.CycleMethod;
-import javafx.scene.paint.RadialGradient;
-import javafx.scene.paint.Stop;
 
 /**
- * Subtle screen-space weather. Particles are stateless: every position is a pure function of the particle
+ * Screen-space weather. Particles are stateless: every position is a pure function of the particle
  * index and the clock, so the DM and player canvases show the same weather without sharing any state.
- * Opacities are deliberately low so the map always stays readable.
+ * Most weather keeps maps readable; maximum-intensity mist intentionally obscures the map.
  */
 public final class WeatherEffects {
     public static final double MIN_INTENSITY = 0.1;
@@ -20,6 +20,9 @@ public final class WeatherEffects {
 
     private static final double REFERENCE_AREA = 1920.0 * 1080.0;
     private static final double EDGE_MARGIN = 40;
+    private static final int MIST_TEXTURE_SIZE = 128;
+    private static int mistTextureColor = -1;
+    private static Image[] mistTextures;
 
     private WeatherEffects() {
     }
@@ -208,21 +211,83 @@ public final class WeatherEffects {
 
     private static void drawMist(GraphicsContext gc, double level, double w, double h, double t, double scale) {
         int blobs = WeatherType.MIST.maxParticles();
-        double alpha = WeatherType.MIST.opacity() * (1.0 / 3.0 + 2.0 / 3.0 * level);
-        Color color = WeatherType.MIST.color();
-        double longest = Math.max(w, h);
-        for (int i = 0; i < blobs; i++) {
-            double radius = (0.22 + 0.22 * unit(i, 3)) * longest;
-            double span = w + 2 * radius;
-            double drift = (5 + 9 * unit(i, 2)) * scale;
-            double x = wrap(unit(i, 1) * span + drift * t, span) - radius;
-            double y = (0.1 + 0.8 * unit(i, 4)) * h + Math.sin(t * 0.05 + unit(i, 6) * Math.PI * 2) * 0.04 * h;
-            RadialGradient gradient = new RadialGradient(0, 0, x, y, radius, false, CycleMethod.NO_CYCLE,
-                    new Stop(0, Color.color(color.getRed(), color.getGreen(), color.getBlue(), alpha)),
-                    new Stop(1, Color.color(color.getRed(), color.getGreen(), color.getBlue(), 0)));
-            gc.setGlobalAlpha(1.0);
-            gc.setFill(gradient);
-            gc.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        double opacity = WeatherType.MIST.opacity();
+        if (opacity <= 0) {
+            return;
         }
+        double alpha = opacity * Math.sqrt(level);
+        Color color = WeatherType.MIST.color();
+        int rgb = ((int) Math.round(color.getRed() * 255) << 16)
+                | ((int) Math.round(color.getGreen() * 255) << 8)
+                | (int) Math.round(color.getBlue() * 255);
+        Image[] textures = mistTextures(rgb);
+        // An opaque endpoint cannot be achieved by accumulating feathered, translucent banks alone.
+        gc.setGlobalAlpha(level * level);
+        gc.setFill(Color.color(color.getRed() * 0.35, color.getGreen() * 0.35, color.getBlue() * 0.35));
+        gc.fillRect(0, 0, w, h);
+        gc.setGlobalAlpha(alpha);
+        for (int i = 0; i < blobs; i++) {
+            MistBank bank = mistBank(i, w, h, t, scale);
+            // Draw periodic neighbours too: wrapping just the centre would thin the edges and pop on crossing.
+            for (int dy = -1; dy <= 1; dy++) {
+                double top = bank.y() + dy * h - bank.radiusY();
+                if (top >= h || top + bank.radiusY() * 2 <= 0) continue;
+                for (int dx = -1; dx <= 1; dx++) {
+                    double left = bank.x() + dx * w - bank.radiusX();
+                    if (left >= w || left + bank.radiusX() * 2 <= 0) continue;
+                    gc.drawImage(textures[i % textures.length], left, top,
+                            bank.radiusX() * 2, bank.radiusY() * 2);
+                }
+            }
+        }
+    }
+
+    record MistBank(double x, double y, double radiusX, double radiusY) {
+    }
+
+    static MistBank mistBank(int index, double w, double h, double t, double scale) {
+        double drift = (5 + 9 * unit(index, 2)) * scale;
+        double x = wrap((unit(0, 1) + index * 0.754877666) * w + drift * t, w);
+        double y = wrap((unit(0, 4) + index * 0.569840291) * h
+                + (2 + 4 * unit(index, 7)) * scale * t
+                + Math.sin(t * 0.05 + unit(index, 6) * Math.PI * 2) * 0.04 * h, h);
+        double breath = 1 + 0.06 * Math.sin(t * 0.07 + unit(index, 8) * Math.PI * 2);
+        return new MistBank(x, y, (0.18 + 0.16 * unit(index, 3)) * w * breath,
+                (0.18 + 0.16 * unit(index, 5)) * h / breath);
+    }
+
+    private static synchronized Image[] mistTextures(int rgb) {
+        if (mistTextures == null || mistTextureColor != rgb) {
+            Image[] textures = new Image[4];
+            for (int variant = 0; variant < textures.length; variant++) {
+                WritableImage image = new WritableImage(MIST_TEXTURE_SIZE, MIST_TEXTURE_SIZE);
+                image.getPixelWriter().setPixels(0, 0, MIST_TEXTURE_SIZE, MIST_TEXTURE_SIZE,
+                        PixelFormat.getIntArgbInstance(), mistTexturePixels(rgb, variant, MIST_TEXTURE_SIZE),
+                        0, MIST_TEXTURE_SIZE);
+                textures[variant] = image;
+            }
+            mistTextures = textures;
+            mistTextureColor = rgb;
+        }
+        return mistTextures;
+    }
+
+    static int[] mistTexturePixels(int rgb, int variant, int size) {
+        int[] smoke = OverlayTextures.generate(OverlayTextures.SMOKE, rgb, size);
+        int[] pixels = new int[smoke.length];
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                double distance = Math.hypot(2.0 * x / (size - 1) - 1, 2.0 * y / (size - 1) - 1);
+                double falloff = Math.max(0, 1 - distance);
+                falloff = falloff * falloff * (3 - 2 * falloff);
+                int sx = (x + variant * size / 4) % size;
+                int sy = (y + variant * size / 3) % size;
+                double density = (smoke[sy * size + sx] >>> 24) / 255.0;
+                density = Math.min(1, density * 3);
+                int alpha = (int) Math.round(255 * density * density * falloff);
+                pixels[y * size + x] = (alpha << 24) | (rgb & 0xFFFFFF);
+            }
+        }
+        return pixels;
     }
 }
