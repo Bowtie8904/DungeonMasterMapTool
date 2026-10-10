@@ -25,4 +25,11 @@ public class AudioLibrary {
     /** Replaced prepared playback copies that could not be deleted yet (e.g. still open in a playing voice). */
     @Builder.Default
     private List<String> stalePlaybackFiles = new ArrayList<>();
+    /** Retryable copy failures have no track yet because no managed source was published. */
+    @Builder.Default
+    private List<CopyFailure> copyFailures = new ArrayList<>();
+
+    public record CopyFailure(String id, String source, AudioKind kind, String categoryId, String folderCategory,
+                              boolean cancelled, String error) {
+    }
 }

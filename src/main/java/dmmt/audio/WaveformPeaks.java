@@ -161,7 +161,13 @@ public final class WaveformPeaks {
     }
 
     /** Collects peaks, squared sums and timbre fingerprints while samples arrive. */
-    private static final class Accumulator {
+    static Accumulator accumulator(long duration, int frameMs, DoubleConsumer progress) {
+        int frame = Math.max(1, frameMs);
+        int count = (int) Math.max(16, Math.min(1 << 22, (duration + frame - 1) / frame));
+        return new Accumulator(count, duration, progress);
+    }
+
+    static final class Accumulator {
         private final float[] minimums;
         private final float[] maximums;
         private final double[] squares;
@@ -351,6 +357,7 @@ public final class WaveformPeaks {
             Decoder decoder = new Decoder();
             Header header;
             while ((header = bitstream.readFrame()) != null) {
+                checkInterrupted();
                 SampleBuffer output = (SampleBuffer) decoder.decodeFrame(header, bitstream);
                 short[] buffer = output.getBuffer();
                 int length = output.getBufferLength();
@@ -388,6 +395,7 @@ public final class WaveformPeaks {
                 byte[] leftovers = new byte[channels * 2];
                 int read;
                 while ((read = pcm.read(buffer)) > 0) {
+                    checkInterrupted();
                     int at = 0;
                     while (carry > 0 && at < read) {
                         leftovers[carry++] = buffer[at++];
@@ -420,7 +428,14 @@ public final class WaveformPeaks {
                     : (data[at + 1] << 8) | (data[at] & 0xFF);
             sum += (short) sample;
         }
+
         return sum / (float) channels / 32768f;
+    }
+
+    private static void checkInterrupted() throws java.io.InterruptedIOException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new java.io.InterruptedIOException("Waveform analysis was interrupted.");
+        }
     }
 
     // ---- Silence detection ----

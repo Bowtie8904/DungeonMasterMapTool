@@ -705,6 +705,10 @@ public final class Tuning {
 
     // ---- Storage and caches ----
 
+    public static final Setting<String> WORK_MODE = choice(STORAGE, "work.mode", "session", false,
+            "Background work policy: session uses one audio preparation worker; preparation uses two. "
+                    + "Image preparation stays single-worker and file copying is limited to two workers.",
+            "session", "preparation");
     public static final Setting<String> LIBRARY_FOLDER = text(STORAGE, "library.folder", "dmmap-projects", true,
             "Folder of the map library. Relative paths start next to the settings file.");
     public static final Setting<Integer> CACHE_IMAGE_TILES = integer(STORAGE, "cache.imageTiles", 96, 8, 4096, false,
@@ -757,6 +761,7 @@ public final class Tuning {
         for (Setting<?> setting : ALL) {
             setting.load(lookup.apply(setting.key()));
         }
+        WorkScheduler.refreshSharedPolicy();
     }
 
     /** Restores every built-in default. */

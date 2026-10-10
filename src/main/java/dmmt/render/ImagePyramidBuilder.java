@@ -1,6 +1,7 @@
 package dmmt.render;
 
 import dmmt.service.Tuning;
+import dmmt.service.WorkScheduler;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -31,53 +32,72 @@ import java.util.Properties;
  * level (first level that fits into {@link #maxOverviewSize()} px) is stored as a single image.
  * Tile size, overview size and JPEG quality come from the {@code cache.*} settings ({@link Tuning}).
  */
-public final class ImagePyramidBuilder {
+public final class ImagePyramidBuilder
+{
     static final int FORMAT_VERSION = 1;
     static final String META_FILE = "pyramid.properties";
 
-    private ImagePyramidBuilder() {
+    private ImagePyramidBuilder()
+    {
     }
 
-    /** Edge length of pyramid tiles (setting cache.imageTileSize). */
-    public static int tileSize() {
+    /**
+     * Edge length of pyramid tiles (setting cache.imageTileSize).
+     */
+    public static int tileSize()
+    {
         return Tuning.CACHE_TILE_SIZE.get();
     }
 
-    /** Largest image edge drawn without a pyramid (setting cache.overviewMaxSize). */
-    public static int maxOverviewSize() {
+    /**
+     * Largest image edge drawn without a pyramid (setting cache.overviewMaxSize).
+     */
+    public static int maxOverviewSize()
+    {
         return Tuning.CACHE_OVERVIEW_SIZE.get();
     }
 
-    public record Meta(int width, int height, int overviewLevel, int tileSize, String format) {
-        public int levelWidth(int level) {
+    public record Meta(int width, int height, int overviewLevel, int tileSize, String format)
+    {
+        public int levelWidth(int level)
+        {
             return levelSize(width, level);
         }
 
-        public int levelHeight(int level) {
+        public int levelHeight(int level)
+        {
             return levelSize(height, level);
         }
 
-        public int tileColumns(int level) {
+        public int tileColumns(int level)
+        {
             return (levelWidth(level) + tileSize - 1) / tileSize;
         }
 
-        public int tileRows(int level) {
+        public int tileRows(int level)
+        {
             return (levelHeight(level) + tileSize - 1) / tileSize;
         }
     }
 
-    static int levelSize(int size, int level) {
-        for (int i = 0; i < level; i++) {
+    static int levelSize(int size, int level)
+    {
+        for (int i = 0; i < level; i++)
+        {
             size = (size + 1) / 2;
         }
         return size;
     }
 
-    /** Number of halvings needed until the image fits into {@link #maxOverviewSize()}; 0 = no pyramid needed. */
-    public static int overviewLevel(int width, int height) {
+    /**
+     * Number of halvings needed until the image fits into {@link #maxOverviewSize()}; 0 = no pyramid needed.
+     */
+    public static int overviewLevel(int width, int height)
+    {
         int level = 0;
         int max = maxOverviewSize();
-        while (Math.max(width, height) > max) {
+        while (Math.max(width, height) > max)
+        {
             width = (width + 1) / 2;
             height = (height + 1) / 2;
             level++;
@@ -85,73 +105,132 @@ public final class ImagePyramidBuilder {
         return level;
     }
 
-    public static Path tilePath(Path dir, Meta meta, int level, int tx, int ty) {
+    public static Path tilePath(Path dir, Meta meta, int level, int tx, int ty)
+    {
         return dir.resolve("L" + level).resolve(tx + "_" + ty + "." + meta.format());
     }
 
-    public static Path overviewPath(Path dir, Meta meta) {
+    public static Path overviewPath(Path dir, Meta meta)
+    {
         return dir.resolve("overview." + meta.format());
     }
 
-    /** Reads only the image header; returns {width, height} or null if the format is unsupported. */
-    public static int[] readDimensions(Path file) {
-        try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile())) {
-            if (in == null) {
-                return null;
-            }
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
-            if (!readers.hasNext()) {
-                return null;
-            }
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(in, true, true);
-                return new int[]{reader.getWidth(0), reader.getHeight(0)};
-            } finally {
-                reader.dispose();
-            }
-        } catch (IOException | RuntimeException ex) {
+    /**
+     * Reads only the image header; returns {width, height} or null if the format is unsupported.
+     */
+    public static int[] readDimensions(Path file)
+    {
+        try
+        {
+            return requireDimensions(file);
+        }
+        catch (IOException ex)
+        {
             return null;
         }
     }
 
-    /** Returns the metadata of a complete pyramid in {@code dir}, or null if there is none. */
-    public static Meta readMeta(Path dir) {
+    /**
+     * Header-only dimensions, with a useful error rather than fabricated image geometry.
+     */
+    public static int[] requireDimensions(Path file) throws IOException
+    {
+        try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile()))
+        {
+            if (in == null)
+            {
+                throw new IOException("Cannot read image: " + file);
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext())
+            {
+                throw new IOException("Unsupported or invalid image: " + file);
+            }
+            ImageReader reader = readers.next();
+            try
+            {
+                reader.setInput(in, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width <= 0 || height <= 0)
+                {
+                    throw new IOException("Invalid image dimensions: " + file);
+                }
+                return new int[] { width, height };
+            }
+            finally
+            {
+                reader.dispose();
+            }
+        }
+        catch (RuntimeException ex)
+        {
+            throw new IOException("Cannot read image header: " + file, ex);
+        }
+    }
+
+    /**
+     * Returns the metadata of a complete pyramid in {@code dir}, or null if there is none.
+     */
+    public static Meta readMeta(Path dir)
+    {
         Path metaFile = dir.resolve(META_FILE);
-        if (!Files.isRegularFile(metaFile)) {
+        if (!Files.isRegularFile(metaFile))
+        {
             return null;
         }
         Properties props = new Properties();
-        try (InputStream in = Files.newInputStream(metaFile)) {
+        try (InputStream in = Files.newInputStream(metaFile))
+        {
             props.load(in);
-            if (Integer.parseInt(props.getProperty("version", "0")) != FORMAT_VERSION) {
+            if (Integer.parseInt(props.getProperty("version", "0")) != FORMAT_VERSION)
+            {
                 return null;
             }
-            return new Meta(
+            Meta meta = new Meta(
                     Integer.parseInt(props.getProperty("width")),
                     Integer.parseInt(props.getProperty("height")),
                     Integer.parseInt(props.getProperty("overviewLevel")),
                     Integer.parseInt(props.getProperty("tileSize")),
                     props.getProperty("format"));
-        } catch (IOException | RuntimeException ex) {
+            if (meta.width() <= 0 || meta.height() <= 0 || meta.tileSize() <= 0
+                    || meta.overviewLevel() < 0 || meta.overviewLevel() > 30
+                    || !java.util.Set.of("png", "jpg").contains(meta.format())) {
+                return null;
+            }
+            return meta;
+        }
+        catch (IOException | RuntimeException ex)
+        {
             return null;
         }
     }
 
-    public static Meta build(Path source, Path dir) throws IOException {
+    public static Meta build(Path source, Path dir) throws IOException
+    {
+        return WorkScheduler.shared().run(WorkScheduler.Kind.IMAGE, () -> buildImage(source, dir));
+    }
+
+    private static Meta buildImage(Path source, Path dir) throws IOException
+    {
+        checkInterrupted();
         BufferedImage image = ImageIO.read(source.toFile());
-        if (image == null) {
+        if (image == null)
+        {
             throw new IOException("Unsupported image format: " + source);
         }
+        checkInterrupted();
         boolean alpha = image.getColorModel().hasAlpha();
         Meta meta = new Meta(image.getWidth(), image.getHeight(),
-                overviewLevel(image.getWidth(), image.getHeight()), tileSize(), alpha ? "png" : "jpg");
+                             overviewLevel(image.getWidth(), image.getHeight()), tileSize(), alpha ? "png" : "jpg");
         Files.createDirectories(dir);
         Files.deleteIfExists(dir.resolve(META_FILE));
 
         RowSource level = new ImageRows(image);
         image = null;
-        for (int l = 0; l < meta.overviewLevel(); l++) {
+        for (int l = 0; l < meta.overviewLevel(); l++)
+        {
+            checkInterrupted();
             level = writeLevel(level, dir, meta, l, alpha);
         }
         ArrayRows overview = level instanceof ArrayRows rows ? rows : ArrayRows.copyOf(level);
@@ -166,15 +245,20 @@ public final class ImagePyramidBuilder {
         props.setProperty("format", meta.format());
         props.setProperty("source", source.toAbsolutePath().toString());
         Path tmp = dir.resolve(META_FILE + ".tmp");
-        try (OutputStream out = Files.newOutputStream(tmp)) {
+        try (OutputStream out = Files.newOutputStream(tmp))
+        {
             props.store(out, "DMMT image pyramid");
         }
+        checkInterrupted();
         Files.move(tmp, dir.resolve(META_FILE), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         return meta;
     }
 
-    /** Writes the tiles of one level and returns the next (half size) level. */
-    private static ArrayRows writeLevel(RowSource source, Path dir, Meta meta, int level, boolean alpha) throws IOException {
+    /**
+     * Writes the tiles of one level and returns the next (half size) level.
+     */
+    private static ArrayRows writeLevel(RowSource source, Path dir, Meta meta, int level, boolean alpha) throws IOException
+    {
         int w = source.width();
         int h = source.height();
         int nw = (w + 1) / 2;
@@ -184,22 +268,28 @@ public final class ImagePyramidBuilder {
         int[] band = new int[Math.multiplyExact(w, t)];
         int[] tile = new int[t * t];
         Files.createDirectories(dir.resolve("L" + level));
-        for (int by = 0; by < h; by += t) {
+        for (int by = 0; by < h; by += t)
+        {
+            checkInterrupted();
             int rows = Math.min(t, h - by);
             source.read(by, rows, band);
-            for (int bx = 0; bx < w; bx += t) {
+            for (int bx = 0; bx < w; bx += t)
+            {
                 int cols = Math.min(t, w - bx);
-                for (int r = 0; r < rows; r++) {
+                for (int r = 0; r < rows; r++)
+                {
                     System.arraycopy(band, r * w + bx, tile, r * cols, cols);
                 }
                 writeImage(tile, cols, rows, alpha, meta.format(), tilePath(dir, meta, level, bx / t, by / t));
             }
             // Tile size is even, so row pairs never straddle two bands.
-            for (int r = 0; r < rows; r += 2) {
+            for (int r = 0; r < rows; r += 2)
+            {
                 int row1 = r * w;
                 int row2 = Math.min(r + 1, rows - 1) * w;
                 int out = ((by + r) / 2) * nw;
-                for (int ox = 0; ox < nw; ox++) {
+                for (int ox = 0; ox < nw; ox++)
+                {
                     int x1 = ox * 2;
                     int x2 = Math.min(x1 + 1, w - 1);
                     next[out + ox] = average(band[row1 + x1], band[row1 + x2], band[row2 + x1], band[row2 + x2]);
@@ -209,72 +299,101 @@ public final class ImagePyramidBuilder {
         return new ArrayRows(next, nw, nh);
     }
 
-    static int average(int a, int b, int c, int d) {
+    private static void checkInterrupted() throws java.io.InterruptedIOException
+    {
+        if (Thread.currentThread().isInterrupted())
+        {
+            throw new java.io.InterruptedIOException("Image preparation cancelled");
+        }
+    }
+
+    static int average(int a, int b, int c, int d)
+    {
         int result = 0;
-        for (int shift = 0; shift < 32; shift += 8) {
+        for (int shift = 0; shift < 32; shift += 8)
+        {
             int sum = ((a >>> shift) & 0xFF) + ((b >>> shift) & 0xFF) + ((c >>> shift) & 0xFF) + ((d >>> shift) & 0xFF);
             result |= ((sum + 2) >> 2) << shift;
         }
         return result;
     }
 
-    private static void writeImage(int[] argb, int width, int height, boolean alpha, String format, Path target) throws IOException {
+    private static void writeImage(int[] argb, int width, int height, boolean alpha, String format, Path target) throws IOException
+    {
         BufferedImage image = new BufferedImage(width, height, alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
-        int[] data = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+        int[] data = ((DataBufferInt)image.getRaster().getDataBuffer()).getData();
         System.arraycopy(argb, 0, data, 0, width * height);
         Files.deleteIfExists(target);
-        if ("jpg".equals(format)) {
+        if ("jpg".equals(format))
+        {
             ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
-            try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
+            try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile()))
+            {
                 ImageWriteParam param = writer.getDefaultWriteParam();
                 param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
                 param.setCompressionQuality(Tuning.CACHE_JPEG_QUALITY.get().floatValue());
                 writer.setOutput(out);
                 writer.write(null, new IIOImage(image, null, null), param);
-            } finally {
+            }
+            finally
+            {
                 writer.dispose();
             }
-        } else if (!ImageIO.write(image, format, target.toFile())) {
+        }
+        else if (!ImageIO.write(image, format, target.toFile()))
+        {
             throw new IOException("No image writer for " + format);
         }
     }
 
-    private interface RowSource {
+    private interface RowSource
+    {
         int width();
 
         int height();
 
-        /** Reads {@code rows} full rows starting at {@code y} as ARGB into {@code out}. */
+        /**
+         * Reads {@code rows} full rows starting at {@code y} as ARGB into {@code out}.
+         */
         void read(int y, int rows, int[] out);
     }
 
-    private record ArrayRows(int[] pixels, int width, int height) implements RowSource {
-        static ArrayRows copyOf(RowSource source) {
+    private record ArrayRows(int[] pixels, int width, int height) implements RowSource
+    {
+        static ArrayRows copyOf(RowSource source)
+        {
             int[] pixels = new int[Math.multiplyExact(source.width(), source.height())];
             source.read(0, source.height(), pixels);
             return new ArrayRows(pixels, source.width(), source.height());
         }
 
         @Override
-        public void read(int y, int rows, int[] out) {
+        public void read(int y, int rows, int[] out)
+        {
             System.arraycopy(pixels, y * width, out, 0, rows * width);
         }
     }
 
-    /** Row reader with fast paths for the raster layouts ImageIO produces for JPEG/PNG. */
-    private record ImageRows(BufferedImage image) implements RowSource {
+    /**
+     * Row reader with fast paths for the raster layouts ImageIO produces for JPEG/PNG.
+     */
+    private record ImageRows(BufferedImage image) implements RowSource
+    {
         @Override
-        public int width() {
+        public int width()
+        {
             return image.getWidth();
         }
 
         @Override
-        public int height() {
+        public int height()
+        {
             return image.getHeight();
         }
 
         @Override
-        public void read(int y, int rows, int[] out) {
+        public void read(int y, int rows, int[] out)
+        {
             int w = image.getWidth();
             Raster raster = image.getRaster();
             boolean plain = raster.getParent() == null
@@ -287,17 +406,20 @@ public final class ImagePyramidBuilder {
                     && !cm.isAlphaPremultiplied()
                     && (sm.getNumBands() == 3 || sm.getNumBands() == 4)
                     && sm.getNumBands() == cm.getNumComponents()
-                    && raster.getTransferType() == java.awt.image.DataBuffer.TYPE_BYTE) {
+                    && raster.getTransferType() == java.awt.image.DataBuffer.TYPE_BYTE)
+            {
                 byte[] data = bytes.getData();
                 int[] offsets = sm.getBandOffsets();
                 int stride = sm.getScanlineStride();
                 int pixelStride = sm.getPixelStride();
                 int base = bytes.getOffset();
                 boolean hasAlpha = sm.getNumBands() == 4;
-                for (int r = 0; r < rows; r++) {
+                for (int r = 0; r < rows; r++)
+                {
                     int p = base + (y + r) * stride;
                     int o = r * w;
-                    for (int x = 0; x < w; x++, p += pixelStride) {
+                    for (int x = 0; x < w; x++, p += pixelStride)
+                    {
                         int a = hasAlpha ? data[p + offsets[3]] & 0xFF : 0xFF;
                         out[o + x] = (a << 24)
                                 | ((data[p + offsets[0]] & 0xFF) << 16)
@@ -310,15 +432,18 @@ public final class ImagePyramidBuilder {
             int type = image.getType();
             if (plain && raster.getDataBuffer() instanceof DataBufferInt ints
                     && raster.getSampleModel() instanceof SinglePixelPackedSampleModel sm
-                    && (type == BufferedImage.TYPE_INT_RGB || type == BufferedImage.TYPE_INT_ARGB)) {
+                    && (type == BufferedImage.TYPE_INT_RGB || type == BufferedImage.TYPE_INT_ARGB))
+            {
                 int[] data = ints.getData();
                 int stride = sm.getScanlineStride();
                 int base = ints.getOffset();
                 int alphaMask = type == BufferedImage.TYPE_INT_RGB ? 0xFF000000 : 0;
-                for (int r = 0; r < rows; r++) {
+                for (int r = 0; r < rows; r++)
+                {
                     int p = base + (y + r) * stride;
                     int o = r * w;
-                    for (int x = 0; x < w; x++) {
+                    for (int x = 0; x < w; x++)
+                    {
                         out[o + x] = data[p + x] | alphaMask;
                     }
                 }

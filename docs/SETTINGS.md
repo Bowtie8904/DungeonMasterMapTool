@@ -83,6 +83,22 @@ API endpoint.
 
 ---
 
+## Background import work
+
+### `work.mode`
+
+**Default:** `session`. **Options:** `session`, `preparation`. **Applies:** Live.
+
+Select the background resource policy in Settings under Storage and caches. `session` limits audio
+analysis/preparation to one worker to leave more CPU time for map rendering and live playback.
+`preparation` allows two audio workers for library preparation before a session. Both policies limit
+memory-intensive image preparation to one worker and file-copy work to two workers. Foreground work
+takes precedence over queued speculative image prefetches. Changing the policy does not cancel work
+already running; it changes how much queued work can start. This is independent of Performance mode
+and never changes map quality, fog boundaries, calibrated scale or music volume.
+
+**Keywords:** import, loading, music, background, concurrency, preparation, CPU, performance.
+
 ## How the settings file works
 
 - **Location:** `dmmt-settings.ini` next to the application jar. When the application is not started from a jar (for

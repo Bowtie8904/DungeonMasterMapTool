@@ -39,13 +39,53 @@ final class LoudnessAnalyzer {
     }
 
     static Measurement analyze(Path file) throws IOException {
+        return analyze(file, null, null, 50);
+    }
+
+    static Measurement analyze(Path file, java.util.function.DoubleConsumer progress, Path waveformCache,
+                               int waveformFrameMs) throws IOException {
+        Path statistics = file.resolveSibling(file.getFileName() + "." + java.util.UUID.randomUUID() + ".energy");
+        try {
+            return collect(file, progress, waveformCache, waveformFrameMs, statistics);
+        } finally {
+            Files.deleteIfExists(statistics);
+        }
+    }
+
+    private static Measurement collect(Path file, java.util.function.DoubleConsumer progress, Path waveformCache,
+                                       int waveformFrameMs, Path statistics) throws IOException {
         WindowStats absolute = new WindowStats();
         PeakStats peak = new PeakStats();
-        decode(file, (samples, channels, rate) -> {
-            peak.accept(samples, channels, rate);
-            absolute.accept(samples, channels, rate);
-        });
-        absolute.finish();
+        long duration = Math.max(1, AudioFormats.durationMs(file));
+        WaveformPeaks.Accumulator waveform = waveformCache == null ? null
+                : WaveformPeaks.accumulator(duration, waveformFrameMs, null);
+        long[] frames = {0};
+        // Only gated block energies are spooled, never PCM; even long recordings use bounded heap.
+        try (java.io.DataOutputStream energies = new java.io.DataOutputStream(
+                new BufferedOutputStream(Files.newOutputStream(statistics)))) {
+            absolute.energies = energies;
+            decode(file, (samples, channels, rate) -> {
+                peak.accept(samples, channels, rate);
+                absolute.accept(samples, channels, rate);
+                if (waveform != null) {
+                    int sum = 0;
+                    for (float sample : samples) {
+                        sum += (int) (sample * 32768);
+                    }
+                    waveform.add(sum / (float) channels / 32768f, rate);
+                }
+                if (++frames[0] % 4096 == 0 && progress != null) {
+                    progress.accept(Math.min(0.99, frames[0] * 1000.0 / rate / duration));
+                }
+            });
+            absolute.finish();
+        }
+        if (waveform != null) {
+            waveform.finish(waveformFrameMs).writeCache(waveformCache);
+        }
+        if (progress != null) {
+            progress.accept(1);
+        }
         if (peak.maximum == 0) {
             return new Measurement(null, null, null, 0, 0, peak.channels, peak.sampleRate);
         }
@@ -57,12 +97,21 @@ final class LoudnessAnalyzer {
         }
         double relativeGate = absolute.energy / absolute.count
                 * Math.pow(10, RELATIVE_GATE_LU / 10);
-        WindowStats integrated = new WindowStats();
-        decode(file, (samples, channels, rate) -> integrated.accept(samples, channels, rate, relativeGate));
-        integrated.finish();
-        double lufs = integrated.count == 0 ? Double.NEGATIVE_INFINITY
-                : -0.691 + 10 * Math.log10(integrated.energy / integrated.count);
-        double automaticGain = integrated.count == 0 ? 0
+        double energy = 0;
+        long count = 0;
+        try (java.io.DataInputStream energies = new java.io.DataInputStream(
+                new BufferedInputStream(Files.newInputStream(statistics)))) {
+            for (long i = 0; i < absolute.count; i++) {
+                double value = energies.readDouble();
+                if (value >= relativeGate) {
+                    energy += value;
+                    count++;
+                }
+            }
+        }
+        double lufs = count == 0 ? Double.NEGATIVE_INFINITY
+                : -0.691 + 10 * Math.log10(energy / count);
+        double automaticGain = count == 0 ? 0
                 : Math.max(MIN_GAIN_DB, Math.min(maximumGain, TARGET_LUFS - lufs));
         return new Measurement(Double.isFinite(lufs) ? lufs : null, peakDbfs, headroom,
                 maximumGain, automaticGain, peak.channels, peak.sampleRate);
@@ -70,6 +119,13 @@ final class LoudnessAnalyzer {
 
     static void writePrepared(Path source, Path target, double gainDb, int channels, int sampleRate)
             throws IOException {
+        writePrepared(source, target, gainDb, channels, sampleRate, null);
+    }
+
+    static void writePrepared(Path source, Path target, double gainDb, int channels, int sampleRate,
+                              java.util.function.DoubleConsumer progress) throws IOException {
+        long duration = Math.max(1, AudioFormats.durationMs(source));
+        long[] frames = {0};
         writePreparedFile(target, channels, sampleRate, writer -> {
             double gain = Math.pow(10, gainDb / 20);
             double ceiling = Math.pow(10, PEAK_CEILING_DBFS / 20);
@@ -81,8 +137,14 @@ final class LoudnessAnalyzer {
                     samples[channel] = (float) Math.max(-ceiling, Math.min(ceiling, samples[channel] * gain));
                 }
                 writer.accept(samples);
+                if (++frames[0] % 4096 == 0 && progress != null) {
+                    progress.accept(Math.min(0.99, frames[0] * 1000.0 / rate / duration));
+                }
             }, channels, sampleRate);
         });
+        if (progress != null) {
+            progress.accept(1);
+        }
     }
 
     static void writeLimitedPrepared(Path source, Path target, double gainDb, int channels, int sampleRate)
@@ -439,10 +501,9 @@ final class LoudnessAnalyzer {
     }
 
     private static final class WindowStats {
+        private java.io.DataOutputStream energies;
         private double energy;
         private long count;
-        private double relativeThreshold = Math.pow(10, (ABSOLUTE_GATE_LUFS + 0.691) / 10);
-        private boolean absoluteOnly = true;
         private int channels;
         private int sampleRate;
         private int windowFrames;
@@ -455,10 +516,6 @@ final class LoudnessAnalyzer {
         private Biquad[] highPass;
 
         void accept(float[] samples, int channelCount, int rate) throws IOException {
-            accept(samples, channelCount, rate, Double.NaN);
-        }
-
-        void accept(float[] samples, int channelCount, int rate, double gate) throws IOException {
             if (channels == 0) {
                 channels = channelCount;
                 sampleRate = rate;
@@ -470,10 +527,6 @@ final class LoudnessAnalyzer {
                 for (int channel = 0; channel < channels; channel++) {
                     shelf[channel] = Biquad.highShelf(rate);
                     highPass[channel] = Biquad.highPass(rate);
-                }
-                absoluteOnly = Double.isNaN(gate);
-                if (!absoluteOnly) {
-                    relativeThreshold = gate;
                 }
             } else if (channels != channelCount || sampleRate != rate) {
                 throw new IOException("Audio changes channel count or sample rate while decoding.");
@@ -497,16 +550,18 @@ final class LoudnessAnalyzer {
             }
         }
 
-        private void addWindow(double meanEnergy) {
+        private void addWindow(double meanEnergy) throws IOException {
             double absoluteThreshold = Math.pow(10, (ABSOLUTE_GATE_LUFS + 0.691) / 10);
-            double threshold = absoluteOnly ? absoluteThreshold : Math.max(absoluteThreshold, relativeThreshold);
-            if (meanEnergy >= threshold) {
+            if (meanEnergy >= absoluteThreshold) {
                 energy += meanEnergy;
                 count++;
+                if (energies != null) {
+                    energies.writeDouble(meanEnergy);
+                }
             }
         }
 
-        void finish() {
+        void finish() throws IOException {
             if (frames > 0 && frames < windowFrames) {
                 addWindow(rollingEnergy / frames);
             } else if (frames >= windowFrames && lastWindowEnd < frames) {

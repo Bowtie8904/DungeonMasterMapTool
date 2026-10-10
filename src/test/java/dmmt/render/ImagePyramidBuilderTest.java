@@ -16,6 +16,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ImagePyramidBuilderTest {
 
     @Test
+    void dimensionsReadOnlyHeadersAndRejectInvalidOrMissingImages(@TempDir Path temp) throws Exception {
+        Path png = temp.resolve("header.png");
+        ImageIO.write(new BufferedImage(120, 80, BufferedImage.TYPE_INT_RGB), "png", png.toFile());
+        Files.write(png, java.util.Arrays.copyOf(Files.readAllBytes(png), 33));
+        org.junit.jupiter.api.Assertions.assertArrayEquals(new int[]{120, 80},
+                ImagePyramidBuilder.requireDimensions(png));
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> ImageIO.read(png.toFile()));
+        Path invalid = temp.resolve("invalid.png");
+        Files.writeString(invalid, "not an image");
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                () -> ImagePyramidBuilder.requireDimensions(invalid));
+        assertNull(ImagePyramidBuilder.readDimensions(invalid));
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                () -> ImagePyramidBuilder.requireDimensions(temp.resolve("missing.png")));
+    }
+
+    @Test
     void overviewLevelHalvesUntilImageFitsIntoTexture() {
         assertEquals(0, ImagePyramidBuilder.overviewLevel(4096, 1000));
         assertEquals(1, ImagePyramidBuilder.overviewLevel(4097, 10));

@@ -202,6 +202,13 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 Play/pause endpoints only resume currently selected audio; they never reselect a stopped category or sound
 effect. With nothing selected, they do nothing.
 
+Imported recordings are listed in the library after copying, before analysis and playback preparation
+finish. Pending, failed and cancelled preparations cannot play or enter music playlists; their audio
+action controls are disabled until preparation succeeds. A category plays only its ready recordings.
+Renaming, moving between categories and styling pending entries do not cancel preparation or change their
+stable IDs. Use the audio library's preparation queue to inspect progress, retry failures or prioritise
+recordings. Closing the library window does not stop that queue.
+
 | Endpoint | Type | What it does |
 |----------|------|--------------|
 | `/api/controls/audio/play` | button | Pauses or resumes the music **and** all running sound effects. |

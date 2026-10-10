@@ -50,7 +50,7 @@ public final class AudioControls {
     private final ToggleButton overlayButton = Icons.toggle(MaterialDesignM.MUSIC_CIRCLE_OUTLINE,
             "Open the audio overlay: categories, sound effects and volumes");
     private final Button libraryButton = Icons.button(MaterialDesignM.MUSIC_BOX_MULTIPLE_OUTLINE,
-            "Open the audio library: import files, manage categories and cut clips", null);
+            "Open the audio library: import files, manage categories, cut clips and view preparation tasks", null);
     private final ScrollingLabel trackName = new ScrollingLabel(180);
     private final HBox group = new HBox(2, trackName, previousButton, playButton, nextButton, overlayButton, libraryButton);
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
@@ -62,6 +62,12 @@ public final class AudioControls {
     private boolean syncing;
     private long lastTickNanos;
     private long lastReadoutNanos;
+    private volatile boolean preparationStopped;
+    private final Runnable preparationChanged = () -> javafx.application.Platform.runLater(() -> {
+        if (!preparationStopped) {
+            refreshLibraryChoices();
+        }
+    });
 
     public AudioControls(AppSettings settings, Supplier<Window> owner) {
         this(settings, owner, new AudioLibraryService(resolveFolder()), new JavaFxAudioOutput());
@@ -87,6 +93,7 @@ public final class AudioControls {
                 event -> tick()));
         ticker.setCycleCount(Animation.INDEFINITE);
         ticker.play();
+        library.preparationQueue().addListener(preparationChanged);
     }
 
     /** The audio library folder from the settings; relative paths start next to the settings file. */
@@ -210,7 +217,9 @@ public final class AudioControls {
         }
         trackButtons.keySet().removeIf(id -> !controls.containsKey("audio.track." + id));
         for (AudioTrack effect : library.effects()) {
-            controls.put("audio.effect." + effect.getId(), effectToggle(effect));
+            if (effect.isReady()) {
+                controls.put("audio.effect." + effect.getId(), effectToggle(effect));
+            }
         }
         return controls;
     }
@@ -336,6 +345,9 @@ public final class AudioControls {
 
     /** Stops playback and releases the media resources; called when the application closes. */
     public void shutdown() {
+        preparationStopped = true;
+        library.preparationQueue().removeListener(preparationChanged);
+        library.stopPreparation();
         ticker.stop();
         trackName.dispose();
         engine.shutdown();

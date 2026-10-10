@@ -46,6 +46,83 @@ class MapBuildingToolsTest {
     }
 
     @Test
+    void customImageHeadersQueueInOrderAndCancellationAndInvalidImagesLeaveHistoryIntact() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<Fixture> reference = new java.util.concurrent.atomic.AtomicReference<>();
+        Path first = directory.resolve("first.png");
+        Path second = directory.resolve("second.png");
+        Path invalid = directory.resolve("invalid.png");
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(120, 80,
+                java.awt.image.BufferedImage.TYPE_INT_RGB), "png", first.toFile());
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(90, 60,
+                java.awt.image.BufferedImage.TYPE_INT_RGB), "png", second.toFile());
+        java.nio.file.Files.writeString(invalid, "not an image");
+        onFx(() -> {
+            Fixture f = fixture();
+            reference.set(f);
+            set(f.app, "statusLabel", new javafx.scene.control.Label());
+            invoke(f.app, "addImageLayerFromFile", first);
+            invoke(f.app, "addImageLayerFromFile", second);
+            invoke(f.app, "addImageLayerFromFile", invalid);
+        });
+        for (int i = 0; i < 3; i++) {
+            dmmt.service.WorkScheduler.shared().run(dmmt.service.WorkScheduler.Kind.IMAGE, () -> null);
+            onFx(() -> {});
+        }
+        onFx(() -> {
+            Fixture f = reference.get();
+            assertEquals(2, f.project.getImageLayers().size());
+            assertEquals(first.toAbsolutePath().toString(), f.project.getImageLayers().getFirst().getPath());
+            assertEquals(120, f.project.getImageLayers().getFirst().getWidth());
+            assertEquals(80, f.project.getImageLayers().getFirst().getHeight());
+            assertEquals(second.toAbsolutePath().toString(), f.project.getImageLayers().getLast().getPath());
+            assertTrue(((javafx.scene.control.Label) get(f.app, "statusLabel")).getText().contains("Could not add image"));
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(1, f.project.getImageLayers().size());
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(2, f.project.getImageLayers().size());
+            invoke(f.app, "addImageLayerFromFile", first);
+            invoke(f.app, "cancelImageAdds");
+        });
+        dmmt.service.WorkScheduler.shared().run(dmmt.service.WorkScheduler.Kind.IMAGE, () -> null);
+        onFx(() -> assertEquals(2, reference.get().project.getImageLayers().size()));
+    }
+
+    @Test
+    void failedVisibleImagePreparationKeepsCurrentAndFrozenProjects() throws Exception {
+        Path asset = directory.resolve("broken.png");
+        java.nio.file.Files.writeString(asset, "broken image");
+        Path map = directory.resolve("broken-map").resolve("map.dmmap");
+        DmProject bad = new DmProject();
+        bad.getImageLayers().add(DmProject.ImageLayer.builder().path(asset.toAbsolutePath().toString())
+                .width(100).height(100).build());
+        new ProjectService().save(map, bad);
+        java.util.concurrent.atomic.AtomicReference<Fixture> reference = new java.util.concurrent.atomic.AtomicReference<>();
+        DmProject frozen = new DmProject();
+        onFx(() -> {
+            Fixture f = fixture();
+            reference.set(f);
+            set(f.app, "frozenPlayerProject", frozen);
+            set(f.app, "statusLabel", new javafx.scene.control.Label());
+            set(f.app, "mapCenter", new javafx.scene.layout.StackPane());
+            invoke(f.app, "switchToMap", map, null);
+        });
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        java.util.concurrent.atomic.AtomicBoolean busy = new java.util.concurrent.atomic.AtomicBoolean(true);
+        while (busy.get() && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+            onFx(() -> busy.set((boolean) get(reference.get().app, "ioBusy")));
+        }
+        onFx(() -> {
+            Fixture f = reference.get();
+            assertFalse(busy.get(), "Preparation must settle");
+            assertSame(f.project, get(f.app, "project"));
+            assertSame(frozen, get(f.app, "frozenPlayerProject"));
+            assertTrue(((javafx.scene.control.Label) get(f.app, "statusLabel")).getText().contains("Could not switch map"));
+            assertFalse(((javafx.scene.layout.StackPane) get(f.app, "loadingOverlay")).isVisible());
+        });
+    }
+
+    @Test
     void portalsDrawWithWallSnappingAndShiftOverrideAndUndoRedo() throws Exception {
         onFx(() -> {
             Fixture f = fixture();

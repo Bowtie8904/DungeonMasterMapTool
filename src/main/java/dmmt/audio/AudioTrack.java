@@ -15,6 +15,19 @@ import java.util.Locale;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AudioTrack {
+    public enum PreparationState { READY, PENDING, FAILED, CANCELLED }
+    @Builder.Default
+    private volatile PreparationState preparationState = PreparationState.READY;
+    private String preparationError;
+    @Builder.Default
+    private volatile long preparationGeneration = 0;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private transient volatile boolean preparationPublishing;
+
+    public boolean isReady() {
+        return !preparationPublishing && (preparationState == null || preparationState == PreparationState.READY);
+    }
+
     public static final String DEFAULT_EFFECT_COLOR = "#7BC67E";
     /** Ikonli description of the default sound effect icon, see {@link dmmt.ui.AudioIcons}. */
     public static final String DEFAULT_EFFECT_ICON = "mdi2w-waveform";

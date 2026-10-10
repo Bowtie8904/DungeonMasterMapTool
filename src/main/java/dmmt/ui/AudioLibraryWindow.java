@@ -9,7 +9,6 @@ import dmmt.audio.AudioTrack;
 import dmmt.service.AppSettings;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -54,11 +53,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The audio library window (3.35.6): categories with colour and icon on the left, the tracks of the selected
@@ -84,10 +81,13 @@ public final class AudioLibraryWindow {
     private final TextField search = new TextField();
     private final Label summary = new Label();
     private final Label busyLabel = new Label();
-    private final ProgressBar busyBar = new ProgressBar(0);
-    private final HBox busyBox = new HBox(8, busyBar, busyLabel);
-    private HBox tools;
-    private Task<ImportResult> importTask;
+    private final VBox activeImports = new VBox(6);
+    private final Label importHint = new Label();
+    private final Label importErrors = new Label();
+    private final VBox busyBox = new VBox(8);
+    private final Button cancelImports = new Button("Cancel unfinished imports");
+    private final Button retryImports = new Button("Retry failed / cancelled");
+    private final javafx.animation.Timeline queueRefresh = new javafx.animation.Timeline();
 
     /** One row of the left list: a music category, or the sound effects. */
     private record Entry(AudioCategory category) {
@@ -115,13 +115,17 @@ public final class AudioLibraryWindow {
         }
         Dialogs.inheritIcons(stage, owner);
         stage.setScene(new Scene(buildRoot(), 940, 600));
+        stage.setMinWidth(620);
+        stage.setMinHeight(600);
         stage.getScene().getStylesheets().add(Icons.STYLESHEET);
         stage.setOnHidden(event -> {
-            if (importTask != null) {
-                importTask.cancel();
-            }
+            queueRefresh.stop();
             open = null;
         });
+        queueRefresh.getKeyFrames().add(new javafx.animation.KeyFrame(javafx.util.Duration.seconds(0.5),
+                event -> refreshQueue()));
+        queueRefresh.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        queueRefresh.play();
     }
 
     /** Opens the library window, or brings the open one to the front. */
@@ -140,6 +144,7 @@ public final class AudioLibraryWindow {
                 settings == null ? AppSettings.load() : settings, onChanged);
         open = window.stage;
         window.refreshCategories();
+        window.refreshQueue();
         window.stage.show();
     }
 
@@ -258,7 +263,10 @@ public final class AudioLibraryWindow {
                         + (data.getValue().getGainOverrideDb() != null ? " (manual)"
                         : data.getValue().isLoudnessAnalyzed() ? " (auto)" : " (original)")));
         gain.setPrefWidth(145);
-        trackTable.getColumns().setAll(List.of(name, duration, gain, source));
+        TableColumn<AudioTrack, String> status = new TableColumn<>("Preparation");
+        status.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(preparationText(data.getValue())));
+        status.setPrefWidth(220);
+        trackTable.getColumns().setAll(List.of(name, duration, gain, source, status));
         trackTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         trackTable.setPlaceholder(new Label("No audio here yet - use \"Import files\"."));
         trackTable.setContextMenu(trackMenu());
@@ -320,32 +328,51 @@ public final class AudioLibraryWindow {
         loudness.disableProperty().bind(javafx.beans.binding.Bindings.size(
                 trackTable.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
 
-        HBox tools = new HBox(6, importFiles, importFolder, Icons.separator(), play, loudness, rename, delete,
-                Icons.separator(), cut, Icons.separator(), search);
+        javafx.scene.layout.FlowPane tools = new javafx.scene.layout.FlowPane(6, 6,
+                importFiles, importFolder, Icons.separator(), play, loudness, rename, delete,
+                Icons.separator(), cut);
         tools.setAlignment(Pos.CENTER_LEFT);
-        this.tools = tools;
 
         summary.getStyleClass().add("muted");
-        busyLabel.getStyleClass().add("muted");
-        busyBar.setPrefWidth(160);
-        busyBox.setAlignment(Pos.CENTER_LEFT);
+        busyLabel.setId("audioImportSummary");
+        busyLabel.setWrapText(true);
+        busyLabel.getStyleClass().add("panel-title");
+        activeImports.setId("audioImportProgress");
+        importHint.setWrapText(true);
+        importHint.getStyleClass().add("muted");
+        importErrors.setWrapText(true);
+        importErrors.setId("audioImportErrors");
+        cancelImports.setId("audioImportCancel");
+        cancelImports.setMinWidth(Region.USE_PREF_SIZE);
+        cancelImports.setOnAction(event -> {
+            library.preparationQueue().cancelRemaining();
+            refreshQueue();
+        });
+        Icons.tooltip(cancelImports, "Stop queued and running imports. Ready tracks are kept; cancelled files can be retried.");
+        retryImports.setId("audioImportRetry");
+        retryImports.setMinWidth(Region.USE_PREF_SIZE);
+        retryImports.setOnAction(event -> {
+            run(() -> library.preparationQueue().retryFailed(), "Could not retry preparation");
+            refreshQueue();
+        });
+        Icons.tooltip(retryImports, "Retry failed and cancelled imports, using the library copy when it is available.");
+        javafx.scene.layout.FlowPane actions = new javafx.scene.layout.FlowPane(8, 6, cancelImports, retryImports);
+        actions.setId("audioImportActions");
+        busyBox.getStyleClass().add("audio-import-panel");
+        busyBox.setId("audioImportPanel");
+        busyBox.getChildren().setAll(busyLabel, activeImports, actions, importErrors, importHint);
         showBusy(false);
 
-        HBox footer = new HBox(10, summary, busyBox);
-        footer.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, tools, trackTable, footer);
+        VBox footer = new VBox(8, summary, busyBox);
+        VBox box = new VBox(8, tools, search, trackTable, footer);
+        box.setMinWidth(0);
         return box;
     }
 
-    /** Shows or hides the import progress row and locks the toolbar while an import runs. */
+    /** Keeps metadata controls usable while preparations continue in the library-owned queue. */
     private void showBusy(boolean busy) {
         busyBox.setVisible(busy);
         busyBox.setManaged(busy);
-        if (tools != null) {
-            tools.setDisable(busy);
-        }
-        categoryList.setDisable(busy);
-        effectsList.setDisable(busy);
     }
 
     /** Right-click menu of the category list: style, hide from the audio overlay (3.35.2) and delete. */
@@ -448,7 +475,18 @@ public final class AudioLibraryWindow {
         MenuItem delete = new MenuItem("Delete");
         delete.getStyleClass().add("danger");
         delete.setOnAction(event -> deleteTracks());
+        MenuItem prioritize = new MenuItem("Prepare next");
+        prioritize.setOnAction(event -> {
+            AudioTrack selected = trackTable.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                library.preparationQueue().prioritize(selected.getId());
+            }
+        });
+        MenuItem retry = new MenuItem("Retry preparation");
+        retry.setOnAction(event -> run(() -> library.preparationQueue().retry(
+                trackTable.getSelectionModel().getSelectedItem().getId()), "Could not retry preparation"));
         menu.getItems().setAll(play, rename, loudness, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
+                prioritize, retry,
                 new javafx.scene.control.SeparatorMenuItem(), delete);
         menu.setOnShowing(event -> {
             moveTo.getItems().clear();
@@ -461,8 +499,13 @@ public final class AudioLibraryWindow {
             boolean effects = isEffectsView();
             AudioTrack selected = trackTable.getSelectionModel().getSelectedItem();
             play.setVisible(!effects);
-            play.setDisable(effects || selectedTracks().size() != 1 || importTask != null);
-            loudness.setDisable(selectedTracks().size() != 1 || importTask != null);
+            boolean notReady = selected == null || !selected.isReady();
+            play.setDisable(effects || selectedTracks().size() != 1 || notReady);
+            loudness.setDisable(selectedTracks().size() != 1 || notReady);
+            cut.setDisable(notReady);
+            prioritize.setDisable(!notReady || selected == null);
+            retry.setDisable(selected == null || selected.isReady()
+                    || selected.getPreparationState() == AudioTrack.PreparationState.PENDING);
             moveTo.setDisable(effects || moveTo.getItems().isEmpty());
             makeEffect.setDisable(effects);
             makeMusic.setDisable(!effects);
@@ -528,7 +571,9 @@ public final class AudioLibraryWindow {
         }
 
         private int count(Entry Entry) {
-            return Entry.isEffects() ? library.effects().size() : library.musicOf(Entry.category().getId()).size();
+            return (int) library.tracks().stream().filter(track -> Entry.isEffects()
+                    ? track.getKind() == AudioKind.EFFECT
+                    : track.isMusic() && java.util.Objects.equals(track.getCategoryId(), Entry.category().getId())).count();
         }
     }
 
@@ -560,9 +605,10 @@ public final class AudioLibraryWindow {
 
     private void refreshTracks() {
         Entry Entry = selectedEntry();
-        List<AudioTrack> tracks = Entry == null || Entry.isEffects()
-                ? library.effects()
-                : library.musicOf(Entry.category().getId());
+        List<AudioTrack> tracks = library.tracks().stream()
+                .filter(track -> Entry == null || Entry.isEffects() ? track.getKind() == AudioKind.EFFECT
+                        : track.isMusic() && java.util.Objects.equals(track.getCategoryId(), Entry.category().getId()))
+                .sorted(java.util.Comparator.comparing(AudioTrack::getName, String.CASE_INSENSITIVE_ORDER)).toList();
         String filter = search.getText() == null ? "" : search.getText().trim().toLowerCase(Locale.ROOT);
         if (!filter.isEmpty()) {
             tracks = tracks.stream().filter(track -> track.getName().toLowerCase(Locale.ROOT).contains(filter)).toList();
@@ -681,13 +727,16 @@ public final class AudioLibraryWindow {
             return;
         }
         rememberDirectory(folder);
-        try {
-            importAll(AudioLibraryService.scanFolder(folder.toPath()).stream()
-                    .map(found -> new ImportEntry(found.file(), found.folderCategory()))
-                    .toList());
-        } catch (IOException e) {
-            Dialogs.error(stage, "Could not read the folder", e.getMessage());
-        }
+        javafx.concurrent.Task<List<ImportEntry>> scan = new javafx.concurrent.Task<>() {
+            @Override
+            protected List<ImportEntry> call() throws IOException {
+                return AudioLibraryService.scanFolder(folder.toPath()).stream()
+                        .map(found -> new ImportEntry(found.file(), found.folderCategory())).toList();
+            }
+        };
+        scan.setOnSucceeded(event -> importAll(scan.getValue()));
+        scan.setOnFailed(event -> Dialogs.error(stage, "Could not read the folder", scan.getException().getMessage()));
+        dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.COPY).execute(scan);
     }
 
     /** One file to import, with the subfolder name that should become its category, or {@code null}. */
@@ -699,95 +748,108 @@ public final class AudioLibraryWindow {
             summary.setText("No supported audio files found (" + AudioFormats.FILTER_DESCRIPTION + ").");
             return;
         }
-        if (importTask != null && importTask.isRunning()) {
-            return;
-        }
         AudioKind kind = currentKind();
         String categoryId = currentCategoryId();
-        int total = files.size();
-        Task<ImportResult> task = new Task<>() {
-            @Override
-            protected ImportResult call() {
-                List<String> failures = new ArrayList<>();
-                Set<String> createdCategories = new LinkedHashSet<>();
-                int done = 0;
-                for (ImportEntry entry : files) {
-                    if (isCancelled()) {
-                        break;
-                    }
-                    Path file = entry.file();
-                    updateMessage("Importing " + (done + 1) + " of " + total + " - " + file.getFileName());
-                    try {
-                        library.importFile(file, kind, categoryOf(entry, kind, categoryId, createdCategories));
-                    } catch (IOException | RuntimeException e) {
-                        failures.add(file.getFileName() + ": "
-                                + (e.getMessage() == null ? e.toString() : e.getMessage()));
-                    }
-                    done++;
-                    updateProgress(done, total);
-                }
-                return new ImportResult(done - failures.size(), failures, createdCategories.size());
-            }
+        for (ImportEntry entry : files) {
+            library.preparationQueue().enqueue(entry.file(), kind, categoryId, entry.folderCategory());
+        }
+        refreshQueue();
+    }
 
-            /** Subfolder name wins for music imports; sound effects have no categories (3.35.1). */
-            private String categoryOf(ImportEntry entry, AudioKind kind, String fallback, Set<String> created)
-                    throws IOException {
-                if (kind != AudioKind.MUSIC || entry.folderCategory() == null
-                        || entry.folderCategory().isBlank()) {
-                    return fallback;
-                }
-                boolean isNew = library.categoryByName(entry.folderCategory()).isEmpty();
-                AudioCategory category = library.categoryForName(entry.folderCategory());
-                if (isNew) {
-                    created.add(category.getName());
-                }
-                return category.getId();
-            }
+    private String queueSignature = "";
+
+    private String preparationText(AudioTrack track) {
+        if (track.isReady()) {
+            return "Ready";
+        }
+        var item = library.preparationQueue().items().stream()
+                .filter(task -> track.getId().equals(task.trackId())).findFirst();
+        return item.map(task -> stageText(task.stage()) + (isActive(task.stage())
+                ? " " + Math.round(task.progress() * 100) + "%" : "")).orElse(
+                switch (track.getPreparationState()) {
+                    case READY -> "Ready";
+                    case PENDING -> "Waiting";
+                    case FAILED -> "Failed";
+                    case CANCELLED -> "Cancelled";
+                })
+                + (track.getPreparationError() == null ? "" : ": " + track.getPreparationError());
+    }
+
+    static String stageText(dmmt.audio.AudioPreparationQueue.Stage stage) {
+        return switch (stage) {
+            case QUEUED -> "Waiting";
+            case COPYING -> "Copying into library";
+            case ANALYZING -> "Analysing loudness and waveform";
+            case PLAYBACK -> "Preparing playback";
+            case READY -> "Ready";
+            case FAILED -> "Failed";
+            case CANCELLED -> "Cancelled";
         };
-        importTask = task;
-        busyBar.progressProperty().bind(task.progressProperty());
-        busyLabel.textProperty().bind(task.messageProperty());
-        showBusy(true);
-        task.setOnSucceeded(event -> {
-            finishImport();
-            ImportResult result = task.getValue();
+    }
+
+    private static boolean isActive(dmmt.audio.AudioPreparationQueue.Stage stage) {
+        return stage == dmmt.audio.AudioPreparationQueue.Stage.COPYING
+                || stage == dmmt.audio.AudioPreparationQueue.Stage.ANALYZING
+                || stage == dmmt.audio.AudioPreparationQueue.Stage.PLAYBACK;
+    }
+
+    private void refreshQueue() {
+        List<dmmt.audio.AudioPreparationQueue.Item> tasks = library.preparationQueue().items();
+        var active = tasks.stream().filter(item -> isActive(item.stage())).toList();
+        long queued = tasks.stream().filter(item -> item.stage() == dmmt.audio.AudioPreparationQueue.Stage.QUEUED).count();
+        long failed = tasks.stream().filter(item -> item.stage() == dmmt.audio.AudioPreparationQueue.Stage.FAILED).count();
+        long cancelled = tasks.stream().filter(item -> item.stage() == dmmt.audio.AudioPreparationQueue.Stage.CANCELLED).count();
+        long ready = tasks.stream().filter(item -> item.stage() == dmmt.audio.AudioPreparationQueue.Stage.READY).count();
+        // Persisted failures/cancellations remain discoverable even after restarting the application.
+        showBusy(!tasks.isEmpty() || library.tracks().stream().anyMatch(track -> !track.isReady()));
+        busyLabel.setText("Audio imports: " + ready + " ready · " + active.size() + " active · "
+                + queued + " waiting · " + failed + " failed · " + cancelled + " cancelled");
+        activeImports.getChildren().clear();
+        for (var item : active) {
+            Label name = new Label(item.source().getFileName().toString());
+            name.setMinWidth(0);
+            name.setMaxWidth(Double.MAX_VALUE);
+            Icons.tooltip(name, item.source().toString());
+            Label stage = new Label(stageText(item.stage()) + " — " + Math.round(item.progress() * 100) + "%");
+            stage.setWrapText(true);
+            ProgressBar progress = new ProgressBar(item.progress());
+            progress.setMinWidth(0);
+            progress.setMaxWidth(Double.MAX_VALUE);
+            VBox row = new VBox(3, name, stage, progress);
+            row.getStyleClass().add("audio-import-file");
+            activeImports.getChildren().add(row);
+        }
+        activeImports.setVisible(!active.isEmpty());
+        activeImports.setManaged(!active.isEmpty());
+        cancelImports.setDisable(active.isEmpty() && queued == 0);
+        retryImports.setDisable(failed + cancelled == 0);
+        importHint.setText(active.isEmpty() && queued == 0 && failed + cancelled == 0
+                ? "All imports are ready to play."
+                : "Percentages show the current step, not the whole import. Only ready tracks can play. "
+                + "Cancel stops unfinished work, not ready tracks. "
+                + "Imports continue when you close this window.");
+        String signature = tasks.stream().map(item -> item.trackId() + ":" + item.stage() + ":" + item.error())
+                .collect(java.util.stream.Collectors.joining("|"));
+        if (!signature.equals(queueSignature)) {
+            queueSignature = signature;
+            List<String> selection = selectedTracks().stream().map(AudioTrack::getId).toList();
             refreshCategories();
-            summary.setText(result.imported() + (result.imported() == 1 ? " file imported" : " files imported")
-                    + (result.newCategories() == 0 ? "" : ", " + result.newCategories()
-                    + (result.newCategories() == 1 ? " category created" : " categories created"))
-                    + (result.failures().isEmpty() ? "" : ", " + result.failures().size() + " failed"));
-            if (!result.failures().isEmpty()) {
-                Dialogs.error(stage, result.failures().size() + " of " + total + " files could not be imported",
-                        String.join("\n", result.failures()));
+            for (AudioTrack track : trackTable.getItems()) {
+                if (selection.contains(track.getId())) {
+                    trackTable.getSelectionModel().select(track);
+                }
             }
-        });
-        task.setOnFailed(event -> {
-            finishImport();
-            refreshCategories();
-            Throwable error = task.getException();
-            Dialogs.error(stage, "The import failed",
-                    error == null ? "Unknown error" : String.valueOf(error.getMessage()));
-        });
-        task.setOnCancelled(event -> {
-            finishImport();
-            refreshCategories();
-        });
-        Thread thread = new Thread(task, "audio-import");
-        thread.setDaemon(true);
-        thread.start();
-    }
-
-    private void finishImport() {
-        busyBar.progressProperty().unbind();
-        busyLabel.textProperty().unbind();
-        busyBar.setProgress(0);
-        busyLabel.setText("");
-        showBusy(false);
-        importTask = null;
-    }
-
-    /** Outcome of a background import: how many files were added, how many categories the folders created, and why the others failed. */
-    private record ImportResult(int imported, List<String> failures, int newCategories) {
+        }
+        trackTable.refresh();
+        String failures = tasks.stream().filter(item -> item.error() != null)
+                .map(item -> item.source().getFileName() + ": " + item.error())
+                .collect(java.util.stream.Collectors.joining("\n"));
+        importErrors.setText(failed + cancelled == 0 ? ""
+                : "Files needing attention: " + failed + " failed, " + cancelled
+                + " cancelled. Retry them here, or right-click a track to retry it individually.");
+        importErrors.setVisible(failed + cancelled > 0);
+        importErrors.setManaged(failed + cancelled > 0);
+        Icons.tooltip(importErrors, failures);
     }
 
     private void renameTrack() {
@@ -866,11 +928,17 @@ public final class AudioLibraryWindow {
                     "Select the long recording you want to split into clips, then choose \"Cut clips\".");
             return;
         }
+        if (!track.isReady()) {
+            return;
+        }
         AudioCutWindow.show(stage, library, track, this::refreshCategories);
     }
 
     /** Opens the waveform view, where the track can be listened to and split into clips. */
     private void preview(AudioTrack track) {
+        if (!track.isReady()) {
+            return;
+        }
         AudioCutWindow.show(stage, library, track, this::refreshCategories);
     }
 
@@ -880,6 +948,9 @@ public final class AudioLibraryWindow {
             return;
         }
         AudioTrack track = selected.get(0);
+        if (!track.isReady()) {
+            return;
+        }
         new AudioLoudnessDialog(stage, library, track, () -> {
             engine.refreshTrackVolumes();
             trackTable.refresh();

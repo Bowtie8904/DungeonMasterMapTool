@@ -79,6 +79,177 @@ class AudioControlsTest {
     }
 
     @Test
+    void pendingAndFailedTracksHaveNoPlaybackApiControls() throws Exception {
+        AudioLibraryService library = library();
+        AudioTrack music = library.tracks().stream().filter(AudioTrack::isMusic).findFirst().orElseThrow();
+        AudioTrack effect = library.effects().getFirst();
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                music.setPreparationState(AudioTrack.PreparationState.PENDING);
+                effect.setPreparationState(AudioTrack.PreparationState.FAILED);
+                library.save();
+                audio.refreshLibraryChoices();
+                assertFalse(audio.apiControls().containsKey("audio.track." + music.getId()));
+                assertFalse(audio.apiControls().containsKey("audio.effect." + effect.getId()));
+                assertTrue(audio.overlay().effectButtons().isEmpty());
+                assertTrue(audio.overlay().categoryButtons().isEmpty());
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @Test
+    void audioImportStagesUseHumanReadableNames() {
+        assertEquals("Waiting", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.QUEUED));
+        assertEquals("Copying into library", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.COPYING));
+        assertEquals("Analysing loudness and waveform", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.ANALYZING));
+        assertEquals("Preparing playback", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.PLAYBACK));
+        assertEquals("Ready", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.READY));
+        assertEquals("Failed", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.FAILED));
+        assertEquals("Cancelled", AudioLibraryWindow.stageText(dmmt.audio.AudioPreparationQueue.Stage.CANCELLED));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {640, 940})
+    void importPanelKeepsActionLabelsReadableAndExplainsFailuresAtNarrowWidths(int width) throws Exception {
+        AudioLibraryService library = library();
+        AudioTrack failed = library.tracks().getFirst();
+        failed.setPreparationState(AudioTrack.PreparationState.FAILED);
+        failed.setPreparationError("Cannot decode this recording.");
+        library.save();
+        var queue = library.preparationQueue();
+        onFx(() -> {
+            AudioLibraryWindow.show(null, library, new dmmt.audio.AudioEngine(library, new FakeAudioOutput()),
+                    new AppSettings(dir.resolve("settings.ini")), () -> {});
+            Stage window = (Stage) Window.getWindows().stream()
+                    .filter(value -> value instanceof Stage s && s.getTitle().equals("Audio library"))
+                    .findFirst().orElseThrow();
+            try {
+                window.setWidth(width);
+                window.setHeight(700);
+                Scene scene = window.getScene();
+                scene.getRoot().applyCss();
+                scene.getRoot().resize(width - 16, 660);
+                scene.getRoot().layout();
+                Button cancel = (Button) scene.lookup("#audioImportCancel");
+                Button retry = (Button) scene.lookup("#audioImportRetry");
+                assertTrue(cancel.isDisabled(), "nothing is running");
+                assertFalse(retry.isDisabled(), "failed imports are retryable");
+                assertEquals("Cancel unfinished imports", ((javafx.scene.text.Text) cancel.lookup(".text")).getText());
+                assertEquals("Retry failed / cancelled", ((javafx.scene.text.Text) retry.lookup(".text")).getText());
+                for (Button button : List.of(cancel, retry)) {
+                    var bounds = button.localToScene(button.getBoundsInLocal());
+                    assertTrue(bounds.getMinX() >= 0);
+                    assertTrue(bounds.getMaxX() <= width - 16, "button must remain inside the available width");
+                    assertTrue(button.getWidth() >= button.prefWidth(-1) - 1, "button must not shrink its text");
+                    assertFalse(button.getAccessibleText().isBlank());
+                }
+                if (width == 640) {
+                    var actions = (javafx.scene.layout.FlowPane) scene.lookup("#audioImportActions");
+                    actions.resize(240, actions.prefHeight(240));
+                    actions.layout();
+                    assertTrue(retry.getLayoutY() > cancel.getLayoutY(), "actions wrap into separate rows");
+                    assertTrue(cancel.getWidth() >= cancel.prefWidth(-1) - 1);
+                    assertTrue(retry.getWidth() >= retry.prefWidth(-1) - 1);
+                }
+                javafx.scene.control.Label summary = (javafx.scene.control.Label) scene.lookup("#audioImportSummary");
+                assertTrue(summary.getText().contains("0 active"));
+                assertTrue(summary.getText().contains("1 failed"));
+                assertTrue(summary.getText().contains("0 cancelled"));
+                javafx.scene.control.Label errors = (javafx.scene.control.Label) scene.lookup("#audioImportErrors");
+                assertTrue(errors.isVisible());
+                assertTrue(errors.getAccessibleText().contains("Cannot decode this recording."));
+                assertTrue(scene.lookup("#audioImportPanel").isVisible());
+            } finally {
+                window.close();
+            }
+        });
+        queue.close();
+    }
+
+    @Test
+    void importCancelAndRetryButtonsUpdateQueueStateWithoutRemovingReadyTracks() throws Exception {
+        AudioLibraryService library = library();
+        var queue = library.preparationQueue();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        var blocker = dmmt.service.WorkScheduler.shared().submit(dmmt.service.WorkScheduler.Kind.AUDIO, true, () -> {
+            started.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        var item = queue.enqueue(file("queued.wav"), AudioKind.MUSIC, null, null);
+        try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (item.trackId() == null && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertNotNull(item.trackId(), "source has been copied and awaits analysis");
+            onFx(() -> {
+                AudioLibraryWindow.show(null, library, new dmmt.audio.AudioEngine(library, new FakeAudioOutput()),
+                        new AppSettings(dir.resolve("settings.ini")), () -> {});
+                Stage window = (Stage) Window.getWindows().stream()
+                        .filter(value -> value instanceof Stage s && s.getTitle().equals("Audio library"))
+                        .findFirst().orElseThrow();
+                try {
+                    Button cancel = (Button) window.getScene().lookup("#audioImportCancel");
+                    Button retry = (Button) window.getScene().lookup("#audioImportRetry");
+                    assertFalse(cancel.isDisabled());
+                    assertTrue(retry.isDisabled());
+                    cancel.fire();
+                    assertTrue(cancel.isDisabled());
+                    assertFalse(retry.isDisabled());
+                    assertEquals(dmmt.audio.AudioPreparationQueue.Stage.CANCELLED, item.stage());
+                    assertEquals(2, library.tracks().stream().filter(AudioTrack::isReady).count());
+                    retry.fire();
+                    assertFalse(cancel.isDisabled());
+                    assertTrue(retry.isDisabled());
+                    assertEquals(dmmt.audio.AudioPreparationQueue.Stage.QUEUED, queue.items().getFirst().stage());
+                } finally {
+                    window.close();
+                }
+            });
+        } finally {
+            release.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            queue.close();
+        }
+    }
+
+    @Test
+    void closingLibraryWindowLeavesItsPreparationQueueUsable() throws Exception {
+        AudioLibraryService library = new AudioLibraryService(dir.resolve("audio"));
+        Path source = file("after-close.wav");
+        var queue = library.preparationQueue();
+        onFx(() -> {
+            AudioLibraryWindow.show(null, library, new dmmt.audio.AudioEngine(library, new FakeAudioOutput()),
+                    new AppSettings(dir.resolve("settings.ini")), () -> {});
+            Stage stage = (Stage) Window.getWindows().stream()
+                    .filter(window -> window instanceof Stage s && s.getTitle().equals("Audio library"))
+                    .findFirst().orElseThrow();
+            queue.enqueue(source, AudioKind.MUSIC, null, null);
+            stage.close();
+        });
+        try {
+            var second = queue.enqueue(source, AudioKind.EFFECT, null, null);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while ((second.stage() != dmmt.audio.AudioPreparationQueue.Stage.READY
+                    || library.tracks().size() != 2 || library.tracks().stream().anyMatch(track -> !track.isReady()))
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertEquals(dmmt.audio.AudioPreparationQueue.Stage.READY, second.stage());
+            assertEquals(2, library.tracks().size());
+            assertTrue(library.tracks().stream().allMatch(AudioTrack::isReady));
+        } finally {
+            queue.close();
+        }
+    }
+
+    @Test
     void statusBarNamesTheCurrentTrackBeforeTheButtonsAndTracksPlaybackAndRenames() throws Exception {
         AudioLibraryService library = library();
         String combatId = categoryId(library, "Combat");

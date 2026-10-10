@@ -25,6 +25,41 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MultiLevelServiceTest {
     @Test
+    void multilevelThumbnailSkipsImageUnchangedSavesAndRecoversMissingPackageThumbnail() throws IOException {
+        Path file = createTower().manifestFile();
+        MultiLevelService.LoadedLevel loaded = service.loadLevel(file, null);
+        Path thumbnail = ThumbnailService.thumbnailFile(file);
+        var marker = java.nio.file.attribute.FileTime.fromMillis(123456789000L);
+        Files.setLastModifiedTime(thumbnail, marker);
+        loaded.project().getLighting().setTimeOfDayPreset("NIGHT");
+        service.saveLevel(file, loaded.level().getId(), loaded.project());
+        assertEquals(marker, Files.getLastModifiedTime(thumbnail));
+        Files.delete(thumbnail);
+        service.saveLevel(file, loaded.level().getId(), loaded.project());
+        assertTrue(Files.isRegularFile(thumbnail));
+    }
+    @Test
+    void prospectiveLevelAppliesSharedSettingsWithoutChangingLastOpenedOrFrozenState() throws IOException {
+        Path file = createTower().manifestFile();
+        MultiLevelManifest manifest = service.loadManifest(file);
+        MultiLevelService.LoadedLevel first = service.loadLevel(file, manifest.getLevels().getFirst().getId());
+        first.project().getViews().getDmCamera().setZoom(2.5);
+        first.project().getLighting().setTimeOfDayPreset("NIGHT");
+        service.saveLevel(file, first.level().getId(), first.project());
+        DmProject frozen = projectService.copy(first.project());
+        byte[] before = Files.readAllBytes(file);
+        String otherId = manifest.getLevels().get(1).getId();
+        MultiLevelService.LoadedLevel prospective = service.loadLevelForPreparation(file, otherId);
+        org.junit.jupiter.api.Assertions.assertArrayEquals(before, Files.readAllBytes(file));
+        assertEquals(first.level().getId(), service.loadManifest(file).getCurrentLevelId());
+        assertEquals(2.5, prospective.project().getViews().getDmCamera().getZoom());
+        assertEquals("NIGHT", prospective.project().getLighting().getTimeOfDayPreset());
+        prospective.project().getLighting().setTimeOfDayPreset("DAY");
+        assertEquals("NIGHT", frozen.getLighting().getTimeOfDayPreset());
+        service.activateLevel(file, prospective);
+        assertEquals(otherId, service.loadManifest(file).getCurrentLevelId());
+    }
+    @Test
     void lightningIntervalIsSharedAcrossLevelsWithoutAliasing() {
         DmProject first = DmProject.builder().build();
         first.getWeather().setType("thunderstorm");

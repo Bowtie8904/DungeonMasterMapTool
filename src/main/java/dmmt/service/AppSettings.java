@@ -601,6 +601,8 @@ public final class AppSettings {
                 return key.startsWith("audio.cut.") ? new Placement("Cut clips", 2) : new Placement(null, 1);
             case "cache":
                 return key.equals("cache.textureTiles") ? new Placement(null, 0) : new Placement("Map image cache", 1);
+            case "work":
+                return new Placement(null, 1);
             case "ui":
                 if (key.matches("ui\\.tooltip\\w+")) {
                     return new Placement("Tooltips", 1);
@@ -670,6 +672,9 @@ public final class AppSettings {
     }
 
     private static String label(String key, int skip) {
+        if (key.equals("work.mode")) {
+            return "Work mode";
+        }
         String[] parts = key.split("\\.");
         List<String> words = new ArrayList<>();
         for (int i = Math.min(skip, parts.length - 1); i < parts.length; i++) {

@@ -34,6 +34,26 @@ class AppSettingsTest {
     }
 
     @Test
+    void backgroundWorkModeIsLiveSearchableAndPersists() {
+        AppSettings settings = new AppSettings(dir.resolve("work.ini"));
+        assertEquals("session", Tuning.WORK_MODE.get());
+        AppSettings.SettingInfo info = AppSettings.editableSettings().stream()
+                .filter(entry -> entry.key().equals("work.mode")).findFirst().orElseThrow();
+        assertEquals("Storage and caches", info.category());
+        assertEquals("Work mode", info.label());
+        assertEquals(java.util.List.of("session", "preparation"), info.options());
+        assertTrue(info.keywords().contains("concurrency"));
+        assertFalse(info.restart());
+        assertFalse(info.validator().test("unlimited"));
+        settings.applyEdit("work.mode", "preparation");
+        assertEquals("preparation", Tuning.WORK_MODE.get());
+        new AppSettings(settings.getFile());
+        assertEquals("preparation", Tuning.WORK_MODE.get());
+        settings.applyEdit("work.mode", null);
+        assertEquals("session", Tuning.WORK_MODE.get());
+    }
+
+    @Test
     void windowDefaultsMatchDoorsWithoutOverwritingExplicitWindowColors() throws IOException {
         AppSettings defaults = new AppSettings(dir.resolve("defaults.ini"));
         assertEquals(Tuning.DOOR_OPEN_COLOR.get(), Tuning.WINDOW_OPEN_COLOR.get());

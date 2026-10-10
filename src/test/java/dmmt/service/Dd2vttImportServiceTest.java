@@ -18,6 +18,22 @@ class Dd2vttImportServiceTest {
     Path tempDir;
 
     @Test
+    void reportsMissingAndInvalidImageInsteadOfInventingDimensions() throws Exception {
+        Path source = tempDir.resolve("bad.dd2vtt");
+        Files.writeString(source, "{\"image\":\"missing.png\"}");
+        var service = new Dd2vttImportService();
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                () -> service.importToProject(source, tempDir.resolve("missing-project")));
+        Files.writeString(tempDir.resolve("broken.png"), "broken image");
+        Files.writeString(source, "{\"image\":\"broken.png\"}");
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                () -> service.importToProject(source, tempDir.resolve("invalid-project")));
+        Files.writeString(source, "{\"image\":\"data:image/png;base64,%%%\"}");
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+                () -> service.importToProject(source, tempDir.resolve("bad-base64")));
+    }
+
+    @Test
     void importsDd2vttWithImageLargerThanDefaultJacksonStringLimit() throws Exception {
         // Jackson's default max string length is 20,000,000 chars; exceed it with a valid base64 payload.
         BufferedImage buffered = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
@@ -50,6 +66,8 @@ class Dd2vttImportServiceTest {
         assertEquals(Boolean.TRUE, project.getMap().getImageLayersLocked());
         assertTrue(Files.notExists(projectDir.resolve("imports").resolve("encounter").resolve("encounter.dd2vtt")));
         assertFalse(project.getImageLayers().isEmpty());
+        assertEquals(120, project.getImageLayers().getFirst().getWidth());
+        assertEquals(80, project.getImageLayers().getFirst().getHeight());
         assertEquals(1, project.getWalls().size());
         assertEquals(1, project.getLighting().getLights().size());
         assertEquals(1, project.getInteractables().size());

@@ -85,9 +85,12 @@ class AudioLibraryServiceTest {
                 () -> library.importFile(mp3, AudioKind.MUSIC, AudioCategory.UNCATEGORISED_ID));
 
         assertTrue(failure.getMessage().contains("decode"), failure.getMessage());
-        assertTrue(library.tracks().isEmpty());
-        assertTrue(Files.list(library.filesFolder()).findAny().isEmpty(),
-                "an MP3 that cannot be decoded must not leave an imported copy");
+        assertEquals(1, library.tracks().size(), "a safely copied source remains available for retry");
+        AudioTrack failed = library.tracks().getFirst();
+        assertEquals(AudioTrack.PreparationState.FAILED, failed.getPreparationState());
+        assertTrue(failed.getPreparationError().contains("decode"));
+        assertTrue(Files.isRegularFile(library.fileOf(failed)));
+        assertTrue(library.musicOf(AudioCategory.UNCATEGORISED_ID).isEmpty());
     }
 
     @Test

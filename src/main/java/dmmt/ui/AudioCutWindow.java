@@ -177,6 +177,9 @@ public final class AudioCutWindow {
 
     /** Opens the waveform window for a track; a second call focuses the window that is already open. */
     public static void show(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged) {
+        if (!track.isReady()) {
+            return;
+        }
         if (open != null && open.isShowing()) {
             open.close();
         }
@@ -429,9 +432,7 @@ public final class AudioCutWindow {
             progress.setProgress(0);
             status.setText("The waveform could not be read: " + analysis.getException().getMessage());
         });
-        Thread thread = new Thread(analysis, "audio-waveform");
-        thread.setDaemon(true);
-        thread.start();
+        dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.AUDIO).execute(analysis);
     }
 
     private void usePeaks(WaveformPeaks result) {
@@ -1279,9 +1280,7 @@ public final class AudioCutWindow {
             onChanged.run();
         });
         task.setOnCancelled(event -> finishCutting("Cutting cancelled"));
-        Thread thread = new Thread(task, "audio-cut");
-        thread.setDaemon(true);
-        thread.start();
+        dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.AUDIO).execute(task);
     }
 
     private void setCuttingBusy(boolean busy) {

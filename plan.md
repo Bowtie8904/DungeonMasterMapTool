@@ -356,7 +356,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Thumbnails:**
   - Every map row in the tree shows a small thumbnail (~48x32 px) left of the name; hovering a map shows a larger thumbnail (~256 px) in its tooltip.
   - The thumbnail shows **only the map image layers** at the map's current rotation. It is rendered from the image layers directly, not from the DM/player canvas, so **fog of war is never included** (otherwise a mostly unrevealed map would give a black thumbnail). Time-of-day darkness, lights, walls, doors/windows, effects, pings and the player viewport are not drawn either.
-  - Stored as `thumbnail.png` inside the map package, next to the `.dmmap` (hidden from the tree like `assets`/`imports`). It is rewritten on every save (manual and auto-save) and on import. Moving/renaming/copying a package carries it along automatically.
+  - Stored as `thumbnail.png` inside the map package, next to the `.dmmap` (hidden from the tree like `assets`/`imports`). Saves check a durable image-input signature and regenerate only when inputs change or the thumbnail is missing (3.37). Moving/renaming/copying a package carries it along automatically.
   - Maps without a thumbnail (older saves, loose `.dmmap` files) get one generated lazily on a background thread when they first become visible in the tree; a placeholder icon is shown meanwhile. Loaded thumbnails are cached in memory.
 - **Search bar** at the top of the map browser (search icon, placeholder "Search maps and folders", clear button):
   - Split the query into whitespace-separated words, matching case-insensitive substrings of map names or tags (3.34) and folder names. Every word must match; different words may match different fields on one map. Filter live while typing without changing the search bar.
@@ -1280,6 +1280,19 @@ having to know the control's units. An explicit amount overrides it.
 - Right-click library maps to copy the map-switch URL. Map switching uses the existing save/load and frozen-player workflow.
 - Document configuration, endpoint discovery, URL encoding, slider operations, map/level commands and external control setup in README and settings documentation. Accept local-interface IP Host headers, preserve browser-origin protections, and surface startup/command failures.
 
+## 3.37 Import and Loading Responsiveness
+
+- Read map image dimensions from headers, reusing the image-pyramid dimension helper; never decode full pixels merely to obtain width/height. Invalid images report an import/add-image error rather than adopting fabricated dimensions.
+- Persist a thumbnail input signature covering only visible image assets, their versions, transforms, ordering and whole-map rotation. Skip thumbnail rendering on saves whose inputs are unchanged; recover missing thumbnails and invalidate changed assets. Fog, lighting, notes and camera changes do not invalidate image-only thumbnails.
+- Image pyramid identities survive library package rename/move. Preserve asset-content/version and pyramid-option invalidation; legacy caches remain usable or migrate safely. Do not hash complete large images on the UI/render thread.
+- Prefetch only the adjacent multilevel floors' overviews and initial viewport tiles in low-priority background work. Bound retained prefetch data, cancel obsolete requests after switching/closing, preserve per-level loading/shared state and frozen output, and report preparation failures without replacing the current map.
+- Audio loudness analysis decodes once to collect peak and bounded block-energy statistics, applying both loudness gates to those statistics afterwards with unchanged loudness/peak-safety semantics. Generate waveform peaks in that decode where compatible with the existing waveform analysis/cache; do not compromise timbre fingerprints or clip detection. Playback-copy preparation may retain its necessary second pass.
+- Once an audio source is copied safely, persist and show a pending library entry. Rename/category/style edits remain available; pending/failed entries cannot play, enter playlists or open playback previews. Preparation completion atomically publishes analysis and playback sources without overwriting intervening metadata edits. Persist preparation state, surface failures, and recover interrupted preparations on next launch.
+- Audio imports use a window-independent preparation queue with per-item copy/analysis/playback stages and within-file progress, cancel remaining/pending work, retry failures and prioritise pending tracks. Closing the library window does not cancel imports; app shutdown does. The task UI remains discoverable through the existing audio library/status controls; no new DM sidebar tool is required.
+- Audio library import feedback uses a full-width, multi-row panel separate from library totals and search: explicit ready/active/waiting/failed/cancelled counts, one progress row per concurrently active file with human-readable stage names, and wrapping action buttons that retain their complete labels. Explain that cancellation stops unfinished work without deleting ready tracks, retries include cancelled items, and closing the window leaves imports running. Disable inapplicable actions; filenames/errors retain full tooltips. Keep controls readable at narrow window widths.
+- Shared resource-aware scheduling bounds concurrent copying, image preparation and audio analysis independently. Live `work.mode` choices are `session` (default; conservative CPU concurrency) and `preparation` (more background throughput); memory-intensive image preparation stays single-worker. Visible/current work takes precedence over speculative prefetch. Existing rendering/playback clocks, fog geometry, calibrated scale and project persistence stay unchanged.
+- Document the workflows in README and all new settings in `docs/SETTINGS.md` and the bundled defaults. Test header reads, thumbnail invalidation, move-stable cache identities, adjacent-only prefetch, one-pass loudness parity, pending playback exclusion, metadata preservation, cancellation/retry and scheduler bounds.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -1288,6 +1301,10 @@ having to know the control's units. An explicit amount overrides it.
 
 ## 9) Change Log
 
+- **Import/loading responsiveness (3.37):** header-only map dimensions, input-signature thumbnail reuse,
+  move-stable image pyramids and adjacent-floor prefetch; one-pass loudness with shared waveform/timbre
+  analysis, persisted pending audio and a window-independent preparation queue; bounded priority resource
+  scheduling with live session/preparation work modes.
 - **v3.13 (current):** Stream Deck plugin (3.36): control key images are served over the API
   (`GET /api/controls/<section>/<name>/image`, with `?operation=increment|decrement`), `LocalApiServer` supports
   binary responses, `GET /api/controls?ids=...` returns just the listed controls for cheap polling,

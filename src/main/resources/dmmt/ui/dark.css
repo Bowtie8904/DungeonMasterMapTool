@@ -62,6 +62,16 @@
 
 /* ---------- Buttons ---------- */
 
+.audio-import-panel {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 6;
+    -fx-padding: 10;
+}
+
+.audio-import-file {
+    -fx-padding: 0 0 4 0;
+}
+
 .button, .toggle-button {
     -fx-background-color: -dm-surface-3;
     -fx-background-radius: 6;

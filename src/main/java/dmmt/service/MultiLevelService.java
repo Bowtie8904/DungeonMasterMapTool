@@ -174,6 +174,13 @@ public class MultiLevelService {
 
     /** Loads a level ({@code null} = the level opened last, else the lowest), applies the shared settings and remembers it as the current level. */
     public LoadedLevel loadLevel(Path manifestFile, String levelId) throws IOException {
+        LoadedLevel loaded = loadLevelForPreparation(manifestFile, levelId);
+        activateLevel(manifestFile, loaded);
+        return loaded;
+    }
+
+    /** Reads a prospective level without changing the manifest or the currently open level. */
+    public LoadedLevel loadLevelForPreparation(Path manifestFile, String levelId) throws IOException {
         MultiLevelManifest manifest = loadManifest(manifestFile);
         MultiLevelManifest.Level level = levelId == null ? manifest.startLevel() : manifest.findLevel(levelId);
         if (level == null) {
@@ -181,19 +188,25 @@ public class MultiLevelService {
         }
         Path levelFile = levelFile(manifestFile, level);
         DmProject project = projectService.load(levelFile);
-        boolean changed = !level.getId().equals(manifest.getCurrentLevelId());
-        manifest.setCurrentLevelId(level.getId());
-        if (manifest.getShared() == null) {
-            manifest.setShared(captureShared(project));
-            changed = true;
-        } else {
+        if (manifest.getShared() != null) {
             applyShared(manifest.getShared(), project);
+        }
+        return new LoadedLevel(manifest, level, levelFile, project);
+    }
+
+    /** Publishes the last-opened floor only after visible preparation has succeeded. */
+    public void activateLevel(Path manifestFile, LoadedLevel loaded) throws IOException {
+        MultiLevelManifest manifest = loaded.manifest();
+        boolean changed = !loaded.level().getId().equals(manifest.getCurrentLevelId());
+        manifest.setCurrentLevelId(loaded.level().getId());
+        if (manifest.getShared() == null) {
+            manifest.setShared(captureShared(loaded.project()));
+            changed = true;
         }
         if (changed) {
             saveManifest(manifestFile, manifest);
-            writePackageThumbnail(manifestFile, levelFile);
+            writePackageThumbnail(manifestFile, loaded.levelFile());
         }
-        return new LoadedLevel(manifest, level, levelFile, project);
     }
 
     /** Saves the open level, remembers it as the current level and stores its shared settings for all levels. */
@@ -308,7 +321,9 @@ public class MultiLevelService {
             Path target = ThumbnailService.thumbnailFile(manifestFile);
             Path source = ThumbnailService.thumbnailFile(levelFile);
             if (Files.isRegularFile(source)) {
-                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                if (!Files.isRegularFile(target) || Files.mismatch(source, target) != -1) {
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                }
             } else {
                 Files.deleteIfExists(target);
             }

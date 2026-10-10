@@ -153,6 +153,12 @@ The library is the app-managed `dmmap-projects` folder shown as a tree, like a f
 - **Rename** renames the package folder and file on disk. Names cannot be empty, contain `<>:"/\|?*`, be reserved Windows names, or duplicate a name in the same folder.
 - Leaving an unsaved new map asks **Save / Discard / Cancel**.
 
+Thumbnails are refreshed only when their image inputs change, or the thumbnail is missing. Saving fog,
+lights, text or camera edits does not rebuild an unchanged image-only thumbnail. Image-pyramid caches
+survive same-volume package moves and renames; changed image assets or pyramid settings still invalidate
+them. Copies and cross-volume moves may rebuild once. Existing path-based caches migrate when opened
+at their original location; moving a legacy map before that first open may also require one rebuild.
+
 On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `assets`, `imports` and `thumbnail.png` (hidden in the tree). A multilevel map is a package `<folder>/<Map Name>/<Map Name>.dmlevels` with one ordinary map package per level below `levels/` (also hidden in the tree).
 
 **Map tags**
@@ -186,6 +192,12 @@ style, stay centred while edited and can be renamed, moved or deleted normally. 
 
 **Batch import**
 
+- Background copying, image preparation and audio preparation share a resource-aware scheduler.
+  In Settings > Storage and caches, **Work mode** (`work.mode`) defaults to `session`, which
+  uses one audio preparation worker; `preparation` allows two for library preparation before play.
+  Memory-intensive image preparation always uses one worker and copying is limited to two.
+  Changing this live setting leaves running jobs intact and adjusts queued work; it is independent
+  of the map's Performance mode toggle.
 - Select several files in the chooser, or use **Import folder…** to import every `.dd2vtt`/`.uvtt` found in a folder and its sub-folders. **Import folder…** re-creates the folder's sub-folder structure in the library (a sub-folder only appears once a suitable map is found in it; empty sub-folders are skipped). A plain multi-file selection always imports flat into the target folder.
 - The location dialog asks only for the target folder. Maps are named after their files; duplicates get a suffix (`Name (2)`).
 - Files in the same folder that look like the **levels of one building** are imported automatically as **one multilevel map** (unless you set `import.autoMergeMultiLevel=false`, see [docs/SETTINGS.md](docs/SETTINGS.md#importautomergemultilevel); then every file becomes its own map), ordered by level number:
@@ -225,6 +237,10 @@ Dungeon Alchemist can export every floor of a multi-story building as its own dd
 - `Page Up` / `Page Down` go one level up / down.
 - The open level is saved before switching; only the open level is kept in memory.
 - Saving remembers the open level; reopening the map returns to it. A map opened for the first time starts on the lowest level.
+
+Neighbouring floors are prefetched at low priority: their overviews and initial-view tiles are prepared
+without opening those levels or changing either camera. Prefetch is bounded, superseded when you switch
+maps/levels, and never changes frozen player output.
 
 **What is per level and what is shared**
 
@@ -556,15 +572,30 @@ stay still. Hover to see the full name. The name remains visible while paused an
 **The library.** The library button in the overlay opens the audio library window. Import `.mp3` and
 `.wav` files, either file by file or a whole folder; every import is copied into the library folder
 (`audio.folder`, `dmmap-audio` next to the settings file by default), so moving or deleting the original does not
-break anything. Tracks can be renamed, deleted and moved freely. Imports run in the background with a progress bar
-and a status line at the bottom of the window ("Importing 12 of 80 - rain.mp3"), so importing a large folder never
-freezes the window; files that could not be imported are listed afterwards.
+break anything. Tracks can be renamed, deleted and moved freely. Once copying finishes, a recording appears
+with its preparation state; you can rename, categorise and style it while analysis continues. It cannot play,
+enter a playlist, open a preview, or be cut/edited for loudness until preparation succeeds.
+
+The library's multi-row import panel shows ready, active, waiting, failed and cancelled counts, with a
+separate progress row for each active file. Percentages describe its current step (copying, loudness/waveform
+analysis or playback preparation), not the entire import. **Cancel unfinished imports** stops outstanding
+work without removing ready tracks; **Retry failed / cancelled** retries either kind. Buttons wrap onto
+another row in narrow windows rather than truncating their labels. A track's context menu offers
+**Prepare next** and **Retry preparation**.
+Closing the library window leaves the queue running; reopen it through the status-bar **Library** button
+to inspect progress. App shutdown stops the queue, and interrupted pending preparations resume on the next
+launch. Failures remain visible and retryable rather than being treated as playable recordings.
 
 **Consistent loudness.** Every new import and newly cut clip is analyzed in the background and automatically
 matched toward **-23 LUFS** (perceived loudness), rather than matching only its loudest peak. The adjustment is
 fixed throughout playback: dynamics stay intact, without volume pumping. Boost is limited to **+24 dB** and a
 **-1 dBFS sample-peak ceiling**, so a very dynamic recording may remain quieter than the target; silence is not
 amplified. This is per-file matching, not a limiter for the combined mix of many simultaneous effects.
+
+Loudness analysis now collects peak and gated block statistics in one decode, with bounded-memory
+temporary storage. The same decode creates the existing waveform and timbre-fingerprint cache used by
+the clip editor. A boosted playback copy may require a separate preparation pass; original files and
+the loudness/peak-safety rules remain unchanged.
 
 Select a single file in the audio library and use the **Loudness** toolbar button or right-click **Loudness...**.
 The dialog shows its measured loudness, automatic recommendation and saved gain. Choose a gain in decibels and

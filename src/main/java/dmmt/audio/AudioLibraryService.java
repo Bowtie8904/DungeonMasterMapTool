@@ -3,6 +3,8 @@ package dmmt.audio;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import dmmt.service.WorkScheduler;
+import dmmt.service.Tuning;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -35,8 +37,8 @@ import java.util.Set;
  * Index changes are synchronized; decoding and loudness analysis run outside the library lock.
  */
 public class AudioLibraryService {
-    /** Version of {@code library.json}; 4 distinguishes peak-safe sources from limiter renders (3.35.5). */
-    public static final int SCHEMA_VERSION = 4;
+    /** Version 5 persists pending preparation and retryable failures alongside peak-safe/limited sources. */
+    public static final int SCHEMA_VERSION = 5;
     /** Highest manual absolute gain, independent of the file's measured peak-safe headroom. */
     public static final double MANUAL_MAXIMUM_GAIN_DB = 24;
     public static final String INDEX_FILE = "library.json";
@@ -51,6 +53,24 @@ public class AudioLibraryService {
     private final Path root;
     private AudioLibrary library;
     private final Set<Path> clipsBeingIndexed = new HashSet<>();
+    private AudioPreparationQueue preparationQueue;
+
+    public synchronized AudioPreparationQueue preparationQueue() {
+        if (preparationQueue == null) {
+            preparationQueue = new AudioPreparationQueue(this);
+        }
+        return preparationQueue;
+    }
+
+    public void stopPreparation() {
+        AudioPreparationQueue queue;
+        synchronized (this) {
+            queue = preparationQueue;
+        }
+        if (queue != null) {
+            queue.close();
+        }
+    }
 
     public AudioLibraryService(Path root) {
         this.root = root.toAbsolutePath().normalize();
@@ -81,6 +101,9 @@ public class AudioLibraryService {
 
     /** File to play; prepared PCM copies are separate from originals and remain inside {@code files/}. */
     public synchronized Path playbackFileOf(AudioTrack track) {
+        if (!track.isReady()) {
+            throw new IllegalStateException("Audio preparation is not complete: " + track.getName());
+        }
         return track.getPlaybackFile() == null ? fileOf(track) : preparedFileOf(track.getPlaybackFile());
     }
 
@@ -126,6 +149,9 @@ public class AudioLibraryService {
         }
         if (loaded.getStalePlaybackFiles() == null) {
             loaded.setStalePlaybackFiles(new ArrayList<>());
+        }
+        if (loaded.getCopyFailures() == null) {
+            loaded.setCopyFailures(new ArrayList<>());
         }
         for (AudioTrack track : loaded.getTracks()) {
             if (track.getPeakSafePlaybackFile() == null && track.getPlaybackFile() != null
@@ -278,6 +304,7 @@ public class AudioLibraryService {
     /** Music tracks of a category, ordered by name. */
     public synchronized List<AudioTrack> musicOf(String categoryId) {
         return library.getTracks().stream()
+                .filter(AudioTrack::isReady)
                 .filter(AudioTrack::isMusic)
                 .filter(t -> Objects.equals(categoryId, t.getCategoryId()))
                 .sorted(Comparator.comparing(AudioTrack::getName, String.CASE_INSENSITIVE_ORDER))
@@ -305,7 +332,7 @@ public class AudioLibraryService {
 
     /** Sound effects that the audio overlay shows, i.e. everything that is not hidden (3.35.2). */
     public synchronized List<AudioTrack> visibleEffects() {
-        return effects().stream().filter(t -> !t.isHidden()).toList();
+        return effects().stream().filter(AudioTrack::isReady).filter(t -> !t.isHidden()).toList();
     }
 
     /** Hides a category from the overlay, or shows it again; it keeps playing and keeps its API endpoint. */
@@ -340,6 +367,22 @@ public class AudioLibraryService {
      * @param categoryId category of a music track; ignored for sound effects
      */
     public AudioTrack importFile(Path source, AudioKind kind, String categoryId) throws IOException {
+        checkImportInterrupted();
+        AudioTrack pending = copyPending(source, kind, categoryId, null);
+        try {
+            WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () -> {
+                preparePending(pending.getId(), null, null);
+                return null;
+            });
+            return pending;
+        } catch (IOException | RuntimeException e) {
+            preparationState(pending.getId(), AudioTrack.PreparationState.FAILED, e.getMessage());
+            throw e;
+        }
+    }
+
+    AudioTrack copyPending(Path source, AudioKind kind, String categoryId,
+                           java.util.function.DoubleConsumer progress) throws IOException {
         AudioFormats.validate(source);
         Path target;
         synchronized (this) {
@@ -347,22 +390,29 @@ public class AudioLibraryService {
         }
         String original = AudioFormats.stripExtension(source.getFileName().toString());
         String id = java.util.UUID.randomUUID().toString();
-        Path prepared = null;
         try {
-            Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
-            LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(target);
-            String playbackFile = null;
-            double playbackGainDb = 0;
-            if (measurement.maximumGainDb() > 0) {
-                playbackFile = id + ".playback.wav";
-                prepared = preparedFileOf(playbackFile);
-                LoudnessAnalyzer.writePrepared(target, prepared, measurement.maximumGainDb(),
-                        measurement.channels(), measurement.sampleRate());
-                playbackGainDb = measurement.maximumGainDb();
-            }
+            WorkScheduler.shared().run(WorkScheduler.Kind.COPY, () -> {
+                long size = Math.max(1, Files.size(source));
+                long copied = 0;
+                try (java.io.InputStream input = Files.newInputStream(source);
+                     java.io.OutputStream output = Files.newOutputStream(target)) {
+                    byte[] bytes = new byte[1 << 16];
+                    int count;
+                    while ((count = input.read(bytes)) >= 0) {
+                        checkImportInterrupted();
+                        output.write(bytes, 0, count);
+                        copied += count;
+                        if (progress != null) {
+                            progress.accept(Math.min(1, (double) copied / size));
+                        }
+                    }
+                }
+                return null;
+            });
             checkImportInterrupted();
-            AudioTrack track = createTrack(id, target, original, original, kind, categoryId, null, 0, 0,
-                    measurement, playbackFile, playbackGainDb);
+            AudioTrack track = AudioTrack.builder().id(id).file(target.getFileName().toString())
+                    .name(cleanName(original, "Audio")).originalFileName(original).kind(kind == null ? AudioKind.MUSIC : kind)
+                    .preparationState(AudioTrack.PreparationState.PENDING).build();
             synchronized (this) {
                 checkImportInterrupted();
                 track.setCategoryId(resolveCategory(kind, categoryId));
@@ -376,8 +426,93 @@ public class AudioLibraryService {
             }
             return track;
         } catch (IOException | RuntimeException e) {
-            cleanupOnFailure(e, target, prepared);
+            cleanupOnFailure(e, target);
             throw e;
+        }
+    }
+
+    synchronized void preparationState(String id, AudioTrack.PreparationState state, String error)
+            throws IOException {
+        AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
+        track.setPreparationState(state);
+        track.setPreparationError(error);
+        track.setPreparationGeneration(track.getPreparationGeneration() + 1);
+        save();
+    }
+
+    synchronized List<AudioLibrary.CopyFailure> copyFailures() {
+        return List.copyOf(library.getCopyFailures());
+    }
+
+    synchronized void copyFailure(AudioLibrary.CopyFailure failure) throws IOException {
+        library.getCopyFailures().removeIf(previous -> previous.id().equals(failure.id()));
+        library.getCopyFailures().add(failure);
+        save();
+    }
+
+    synchronized void forgetCopyFailure(String id) throws IOException {
+        if (library.getCopyFailures().removeIf(failure -> id.equals(failure.id()))) {
+            save();
+        }
+    }
+
+    void preparePending(String id, java.util.function.DoubleConsumer progress, Runnable playbackStage)
+            throws IOException {
+        AudioTrack track = track(id).orElseThrow(() -> new IOException("The audio track was deleted."));
+        Path original = fileOf(track);
+        long generation = track.getPreparationGeneration();
+        long duration = AudioFormats.durationMs(original);
+        LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(original, progress, peaksFileOf(track),
+                Tuning.AUDIO_WAVEFORM_FRAME_MS.get());
+        if (playbackStage != null) {
+            playbackStage.run();
+        }
+        PreparedSources sources = prepareSources(generation == 0 ? id : id + "." + generation,
+                original, measurement, null, progress, true);
+        boolean committed = false;
+        try {
+            checkImportInterrupted();
+            synchronized (this) {
+                checkImportInterrupted();
+                AudioTrack current = track(id).orElseThrow(() -> new IOException("The audio track was deleted."));
+                if (current.getPreparationState() != AudioTrack.PreparationState.PENDING
+                        || current.getPreparationGeneration() != generation) {
+                    throw new InterruptedIOException("Audio preparation was cancelled.");
+                }
+                TrackAnalysis previous = TrackAnalysis.of(current);
+                long previousDuration = current.getDurationMs();
+                current.setPreparationPublishing(true);
+                current.setDurationMs(duration);
+                current.setLoudnessLufs(measurement.loudnessLufs());
+                current.setSamplePeakDbfs(measurement.samplePeakDbfs());
+                current.setPeakHeadroomDb(measurement.peakHeadroomDb());
+                current.setPeakCeilingDbfs(LoudnessAnalyzer.PEAK_CEILING_DBFS);
+                current.setAutoGainDb(measurement.autoGainDb());
+                current.setMaxGainDb(measurement.maximumGainDb());
+                current.setAudioChannels(measurement.channels());
+                current.setAudioSampleRate(measurement.sampleRate());
+                current.setPlaybackFile(sources.playbackFile);
+                current.setPlaybackGainDb(sources.playbackGainDb);
+                current.setPeakSafePlaybackFile(sources.peakSafeFile);
+                current.setPeakSafePlaybackGainDb(sources.peakSafeGainDb);
+                current.setPreparationState(AudioTrack.PreparationState.READY);
+                current.setPreparationError(null);
+                try {
+                    save();
+                    committed = true;
+                } catch (IOException | RuntimeException e) {
+                    previous.restore(current);
+                    current.setDurationMs(previousDuration);
+                    current.setPreparationState(AudioTrack.PreparationState.PENDING);
+                    throw e;
+                } finally {
+                    current.setPreparationPublishing(false);
+                }
+            }
+        } finally {
+            if (!committed) {
+                cleanupOnFailure(new IOException("Preparation was not published"), sources.createdFiles.toArray(Path[]::new));
+            }
         }
     }
 
@@ -429,6 +564,13 @@ public class AudioLibraryService {
      */
     public AudioTrack addClip(Path fileInLibrary, String name, AudioKind kind, String categoryId,
                               AudioTrack sourceTrack, long startMs, long endMs) throws IOException {
+        checkImportInterrupted();
+        return WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () ->
+                addPreparedClip(fileInLibrary, name, kind, categoryId, sourceTrack, startMs, endMs));
+    }
+
+    private AudioTrack addPreparedClip(Path fileInLibrary, String name, AudioKind kind, String categoryId,
+                                      AudioTrack sourceTrack, long startMs, long endMs) throws IOException {
         Path clip = fileInLibrary.toAbsolutePath().normalize();
         if (!clip.startsWith(filesFolder())) {
             throw new IOException("A clip must be written into the library's files folder.");
@@ -516,10 +658,21 @@ public class AudioLibraryService {
 
     /** Re-measures a legacy entry or refreshes the analysis of an existing one. */
     public void analyzeLoudness(String id) throws IOException {
+        checkImportInterrupted();
+        WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () -> {
+            analyzeLoudnessPrepared(id);
+            return null;
+        });
+    }
+
+    private void analyzeLoudnessPrepared(String id) throws IOException {
         TrackAnalysis snapshot;
         Path original;
         synchronized (this) {
             AudioTrack current = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
+            if (!current.isReady()) {
+                throw new IOException("Wait for audio preparation before changing loudness.");
+            }
             snapshot = TrackAnalysis.of(current);
             original = fileOf(current);
         }
@@ -571,6 +724,12 @@ public class AudioLibraryService {
 
     private PreparedSources prepareSources(String id, Path original, LoudnessAnalyzer.Measurement measurement,
                                            Double overrideDb) throws IOException {
+        return prepareSources(id, original, measurement, overrideDb, null, false);
+    }
+
+    private PreparedSources prepareSources(String id, Path original, LoudnessAnalyzer.Measurement measurement,
+                                           Double overrideDb, java.util.function.DoubleConsumer progress,
+                                           boolean initialImport) throws IOException {
         List<Path> createdFiles = new ArrayList<>();
         try {
             String safeFile = null;
@@ -578,11 +737,12 @@ public class AudioLibraryService {
             String playbackFile;
             double playbackGainDb;
             if (measurement.maximumGainDb() > 0) {
-                safeFile = id + "." + java.util.UUID.randomUUID() + ".peak-safe.wav";
+                safeFile = initialImport ? id + ".playback.wav"
+                        : id + "." + java.util.UUID.randomUUID() + ".peak-safe.wav";
                 Path safePath = preparedFileOf(safeFile);
                 createdFiles.add(safePath);
                 LoudnessAnalyzer.writePrepared(original, safePath, measurement.maximumGainDb(),
-                        measurement.channels(), measurement.sampleRate());
+                        measurement.channels(), measurement.sampleRate(), progress);
                 safeGainDb = measurement.maximumGainDb();
             }
             double selectedGain = overrideDb == null ? measurement.autoGainDb() : overrideDb;
@@ -701,6 +861,14 @@ public class AudioLibraryService {
     /** Sets an absolute gain override; {@code null} restores the automatic recommendation. */
     public void setGainOverride(String id, Double gainDb) throws IOException {
         checkImportInterrupted();
+        WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () -> {
+            setPreparedGainOverride(id, gainDb);
+            return null;
+        });
+    }
+
+    private void setPreparedGainOverride(String id, Double gainDb) throws IOException {
+        checkImportInterrupted();
         if (gainDb != null && (!Double.isFinite(gainDb) || gainDb < LoudnessAnalyzer.MIN_GAIN_DB
                 || gainDb > MANUAL_MAXIMUM_GAIN_DB)) {
             throw new IOException("Gain must be between " + LoudnessAnalyzer.MIN_GAIN_DB + " dB and "
@@ -710,6 +878,9 @@ public class AudioLibraryService {
         Path original;
         synchronized (this) {
             AudioTrack current = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
+            if (!current.isReady()) {
+                throw new IOException("Wait for audio preparation before changing loudness.");
+            }
             snapshot = TrackAnalysis.of(current);
             original = fileOf(current);
             if (Objects.equals(snapshot.gainOverrideDb, gainDb) && current.isLoudnessAnalyzed()) {

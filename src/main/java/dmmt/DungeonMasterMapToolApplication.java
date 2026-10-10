@@ -112,8 +112,10 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
+import dmmt.render.ImagePyramidBuilder;
+import dmmt.render.ImagePyramidStore;
+import dmmt.service.AdjacentLevelPrefetch;
+import dmmt.service.WorkScheduler;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -191,6 +193,12 @@ public class DungeonMasterMapToolApplication extends Application {
     private Label levelPositionLabel;
     private boolean syncingLevelSelector;
     private final dmmt.ui.LevelPreviewCache levelPreviews = new dmmt.ui.LevelPreviewCache(projectService);
+    private AdjacentLevelPrefetch<ImagePyramidStore.PreparedImages> adjacentPrefetch;
+    private long prefetchGeneration;
+    private boolean stopping;
+    private final java.util.ArrayDeque<Path> pendingImageAdds = new java.util.ArrayDeque<>();
+    private java.util.concurrent.Future<?> imageAddTask;
+    private long imageAddGeneration;
 
     private Canvas dmBaseCanvas;
     private final CanvasMapRenderer.BaseLayerState dmBaseState = new CanvasMapRenderer.BaseLayerState();
@@ -1454,10 +1462,18 @@ public class DungeonMasterMapToolApplication extends Application {
 
     @Override
     public void stop() {
+        stopping = true;
+        prefetchGeneration++;
+        cancelImageAdds();
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.close();
+        }
+        levelPreviews.close();
         if (localApiServer != null) {
             localApiServer.close();
             localApiServer = null;
         }
+        WorkScheduler.shutdownShared();
     }
 
     private Object handleLocalApi(String path, Map<String, String> query) {
@@ -3651,6 +3667,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 status("Still working on the previous file operation.");
                 return;
             }
+            ImagePyramidStore.Viewport dm = imageViewport(dmBaseCanvas);
+            ImagePyramidStore.Viewport player = imageViewport(playerBaseCanvas);
             setMapLoading(true, "Importing " + sourceName + "...");
             runInBackground("Importing " + sourceName + "...", "Import failed: ", () -> {
                 Path targetPath = mapLibrary.newMapFile(target.folder(), target.name());
@@ -3660,7 +3678,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     DmProject imported = dd2vttImportService.importToProject(sourcePath, projectDir);
                     new MapTagService(mapLibrary, projectService).applyKnownTags(imported, sourcePath);
                     projectService.save(targetPath, imported);
-                    return new LoadedProject(imported, targetPath);
+                    return prepareLoadedProject(imported, targetPath, null, dm, player);
                 } catch (IOException | RuntimeException ex) {
                     try {
                         MapLibraryService.deleteRecursive(projectDir);
@@ -3670,6 +3688,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
             }, loaded -> {
                 try {
+                    ImagePyramidStore.shared().adopt(loaded.images());
                     switchProject(loaded.project(), loaded.file());
                     mapBrowser.refresh();
                     mapBrowser.select(loaded.file());
@@ -4084,6 +4103,10 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         }
         DmProject toSave = snapshot;
+        if (touchesOpenMap && adjacentPrefetch != null) {
+            prefetchGeneration++;
+            adjacentPrefetch.clear();
+        }
         runInBackground(busyMessage, "Library operation failed: ", () -> {
             if (toSave != null) {
                 saveTo(saveTarget, toSave);
@@ -4118,12 +4141,18 @@ public class DungeonMasterMapToolApplication extends Application {
             onDone.accept(outcome.result());
             mapBrowser.updateCurrentMap();
             updateWindowTitle();
+            if (touchesOpenMap) {
+                scheduleAdjacentPrefetch();
+            }
             if (statusLabel.getText().equals(busyMessage)) {
                 status("Done.");
             }
         }, ex -> {
             Dialogs.error(primaryStage, "That did not work", ex.getMessage());
             mapBrowser.refresh();
+            if (touchesOpenMap) {
+                scheduleAdjacentPrefetch();
+            }
         });
     }
 
@@ -4167,10 +4196,24 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private record LoadedProject(DmProject project, Path file, LevelContext level) {
+    private record LoadedProject(DmProject project, Path file, LevelContext level,
+                                 ImagePyramidStore.PreparedImages images) {
         LoadedProject(DmProject project, Path file) {
-            this(project, file, null);
+            this(project, file, null, null);
         }
+
+        LoadedProject(DmProject project, Path file, LevelContext level) {
+            this(project, file, level, null);
+        }
+    }
+
+    private LoadedProject prepareLoadedProject(DmProject loaded, Path file, LevelContext level,
+                                               ImagePyramidStore.Viewport dm, ImagePyramidStore.Viewport player)
+            throws IOException {
+        centerUnsetCameras(loaded);
+        ImagePyramidStore.PreparedImages images = ImagePyramidStore.shared().prepareProject(
+                loaded, file, dm, player, false, () -> false);
+        return new LoadedProject(loaded, file, level, images);
     }
 
     /** The multilevel map a loaded level belongs to. */
@@ -4212,6 +4255,15 @@ public class DungeonMasterMapToolApplication extends Application {
                         onFailure.accept(ex);
                     }
                 });
+            } catch (OutOfMemoryError ex) {
+                IOException failure = new IOException("Not enough memory to prepare the map.", ex);
+                Platform.runLater(() -> {
+                    ioBusy = false;
+                    status(failurePrefix + failure.getMessage());
+                    if (onFailure != null) {
+                        onFailure.accept(failure);
+                    }
+                });
             }
         }, "dmmt-io");
         thread.setDaemon(true);
@@ -4219,44 +4271,89 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void addImageLayerFromFile(Path imagePath) {
-        try {
-            BufferedImage image = ImageIO.read(imagePath.toFile());
-            if (image == null) {
-                return;
-            }
-            if (project == null) {
-                project = DmProject.builder().build();
-            }
-            project.getMap().setSourceType("custom");
-            if (isImageLayerLocked()) {
-                setImageLayerLocked(false);
-            }
-            DmProject.ImageLayer layer = DmProject.ImageLayer.builder()
-                    .id("layer-" + UUID.randomUUID())
-                    .path(imagePath.toAbsolutePath().toString())
-                    .x(0)
-                    .y(0)
-                    .width(image.getWidth())
-                    .height(image.getHeight())
-                    .zIndex(project.getImageLayers().size())
-                    .build();
-            project.getImageLayers().add(layer);
-            clearGroup();
-            selectedLayer = layer;
-            selectedLight = null;
-            executeWithHistory(
-                    "Add image layer",
-                    () -> {
-                        if (findLayerById(layer.getId()) == null) {
-                            project.getImageLayers().add(cloneLayer(layer));
-                        }
-                    },
-                    () -> project.getImageLayers().removeIf(l -> l.getId().equals(layer.getId()))
-            );
-            status("Added image layer: " + imagePath.getFileName());
-        } catch (IOException ex) {
-            status("Could not add image: " + ex.getMessage());
+        if (pendingImageAdds.size() >= 128) {
+            status("Too many queued images. Wait for the current images to finish.");
+            return;
         }
+        pendingImageAdds.addLast(imagePath);
+        startNextImageAdd();
+    }
+
+    private void cancelImageAdds() {
+        imageAddGeneration++;
+        pendingImageAdds.clear();
+        if (imageAddTask != null) {
+            imageAddTask.cancel(true);
+            imageAddTask = null;
+        }
+    }
+
+    private void startNextImageAdd() {
+        if (imageAddTask != null || pendingImageAdds.isEmpty()) {
+            return;
+        }
+        Path imagePath = pendingImageAdds.removeFirst();
+        DmProject destination = project;
+        long generation = imageAddGeneration;
+        try {
+            imageAddTask = WorkScheduler.shared().submit(WorkScheduler.Kind.IMAGE, true, () -> {
+                try {
+                    int[] size = ImagePyramidBuilder.requireDimensions(imagePath);
+                    Platform.runLater(() -> {
+                        if (generation == imageAddGeneration && project == destination) {
+                            imageAddTask = null;
+                            applyImageLayer(imagePath, size);
+                            startNextImageAdd();
+                        }
+                    });
+                } catch (IOException | RuntimeException ex) {
+                    Platform.runLater(() -> {
+                        if (generation == imageAddGeneration) {
+                            imageAddTask = null;
+                            status("Could not add image: " + ex.getMessage());
+                            startNextImageAdd();
+                        }
+                    });
+                }
+                return null;
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ex) {
+            status("Could not queue image: " + ex.getMessage());
+            pendingImageAdds.clear();
+        }
+    }
+
+    private void applyImageLayer(Path imagePath, int[] size) {
+        if (project == null) {
+            project = DmProject.builder().build();
+        }
+        project.getMap().setSourceType("custom");
+        if (isImageLayerLocked()) {
+            setImageLayerLocked(false);
+        }
+        DmProject.ImageLayer layer = DmProject.ImageLayer.builder()
+                .id("layer-" + UUID.randomUUID())
+                .path(imagePath.toAbsolutePath().toString())
+                .x(0)
+                .y(0)
+                .width(size[0])
+                .height(size[1])
+                .zIndex(project.getImageLayers().size())
+                .build();
+        project.getImageLayers().add(layer);
+        clearGroup();
+        selectedLayer = layer;
+        selectedLight = null;
+        executeWithHistory(
+                "Add image layer",
+                () -> {
+                    if (findLayerById(layer.getId()) == null) {
+                        project.getImageLayers().add(cloneLayer(layer));
+                    }
+                },
+                () -> project.getImageLayers().removeIf(l -> l.getId().equals(layer.getId()))
+        );
+        status("Added image layer: " + imagePath.getFileName());
     }
 
     private void deleteSelectedLayer() {
@@ -5034,6 +5131,13 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void switchProject(DmProject next, Path file, LevelContext level) {
+        prefetchGeneration++;
+        cancelImageAdds();
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.close();
+            adjacentPrefetch = null;
+        }
+        levelPreviews.clear();
         finishNudge();
         finishPlayerViewportDrag();
         commitTextEdit();
@@ -5077,6 +5181,44 @@ public class DungeonMasterMapToolApplication extends Application {
             mapBrowser.updateCurrentMap();
         }
         updateWindowTitle();
+        scheduleAdjacentPrefetch();
+    }
+
+    private static ImagePyramidStore.Viewport imageViewport(Canvas canvas) {
+        if (canvas == null) {
+            return null;
+        }
+        var window = canvas.getScene() == null ? null : canvas.getScene().getWindow();
+        double scale = window == null ? 1 : Math.max(window.getOutputScaleX(), window.getOutputScaleY());
+        return new ImagePyramidStore.Viewport(canvas.getWidth(), canvas.getHeight(), Math.max(1, scale));
+    }
+
+    private void scheduleAdjacentPrefetch() {
+        long generation = ++prefetchGeneration;
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.close();
+            adjacentPrefetch = null;
+        }
+        if (stopping || multiLevelFile == null || multiLevelManifest == null) {
+            return;
+        }
+        Path manifestFile = multiLevelFile;
+        List<MultiLevelManifest.Level> levels = List.copyOf(multiLevelManifest.getLevels());
+        DmProject expectedProject = project;
+        ImagePyramidStore.Viewport dm = imageViewport(dmBaseCanvas);
+        ImagePyramidStore.Viewport player = imageViewport(playerBaseCanvas);
+        adjacentPrefetch = new AdjacentLevelPrefetch<>((file, cancelled) -> {
+            String id = levels.stream().filter(level -> MultiLevelService.levelFile(manifestFile, level).equals(file))
+                    .map(MultiLevelManifest.Level::getId).findFirst().orElseThrow();
+            DmProject floor = mapLibrary.multiLevels().loadLevelForPreparation(manifestFile, id).project();
+            centerUnsetCameras(floor);
+            return ImagePyramidStore.shared().prepareProject(floor, file, dm, player, true, cancelled);
+        }, (file, failure) -> Platform.runLater(() -> {
+            if (generation == prefetchGeneration && project == expectedProject) {
+                status("Could not prepare adjacent level " + MapBrowser.displayName(file) + ": " + failure.getMessage());
+            }
+        }));
+        adjacentPrefetch.update(AdjacentLevelPrefetch.adjacentFiles(multiLevelFile, multiLevelManifest, currentLevelId));
     }
 
     /** Cameras still at the origin have never been positioned, so start them at the middle of the map. */
@@ -5475,6 +5617,15 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean sameMultiLevel = multiLevel && multiLevelFile != null
                 && target.equals(multiLevelFile.toAbsolutePath().normalize());
         MultiLevelManifest.Level wanted = sameMultiLevel ? multiLevelManifest.findLevel(levelId) : null;
+        ImagePyramidStore.PreparedImages prefetched = adjacentPrefetch != null && wanted != null
+                ? adjacentPrefetch.take(MultiLevelService.levelFile(target, wanted)) : null;
+        prefetchGeneration++;
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.clear();
+        }
+        levelPreviews.clear();
+        ImagePyramidStore.Viewport dmViewport = imageViewport(dmBaseCanvas);
+        ImagePyramidStore.Viewport playerViewport = imageViewport(playerBaseCanvas);
         String loadingName = wanted != null ? wanted.getName() : MapBrowser.displayName(file);
         setMapLoading(true, "Loading " + loadingName + "...");
         runInBackground(sameMultiLevel ? "Switching level..." : "Loading map...", "Could not switch map: ", () -> {
@@ -5482,12 +5633,23 @@ public class DungeonMasterMapToolApplication extends Application {
                 saveTo(current, snapshot);
             }
             if (multiLevel) {
-                MultiLevelService.LoadedLevel loaded = mapLibrary.multiLevels().loadLevel(target, levelId);
-                return new LoadedProject(loaded.project(), loaded.levelFile(), LevelContext.of(target, loaded));
+                MultiLevelService.LoadedLevel loaded = mapLibrary.multiLevels().loadLevelForPreparation(target, levelId);
+                centerUnsetCameras(loaded.project());
+                ImagePyramidStore.PreparedImages images = prefetched != null
+                        && prefetched.matches(loaded.project(), loaded.levelFile(), dmViewport, playerViewport)
+                        ? prefetched : ImagePyramidStore.shared().prepareProject(loaded.project(), loaded.levelFile(),
+                        dmViewport, playerViewport, false, () -> false);
+                mapLibrary.multiLevels().activateLevel(target, loaded);
+                return new LoadedProject(loaded.project(), loaded.levelFile(), LevelContext.of(target, loaded), images);
             }
-            return new LoadedProject(projectService.load(file), file);
+            DmProject loaded = projectService.load(file);
+            centerUnsetCameras(loaded);
+            ImagePyramidStore.PreparedImages images = ImagePyramidStore.shared().prepareProject(loaded, file,
+                    dmViewport, playerViewport, false, () -> false);
+            return new LoadedProject(loaded, file, null, images);
         }, loaded -> {
             try {
+                ImagePyramidStore.shared().adopt(loaded.images());
                 switchProject(loaded.project(), loaded.file(), loaded.level());
                 String frozenNote = frozenPlayerProject != null
                         ? ". Player view is still frozen on the previous " + (sameMultiLevel ? "level." : "map.") : ".";
@@ -5506,6 +5668,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }, ex -> {
             setMapLoading(false, null);
             updateLevelSwitcher();
+            scheduleAdjacentPrefetch();
         });
     }
 
@@ -5903,6 +6066,13 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         DmProject toSave = snapshot;
         // The open map may be moved or replaced, so it must not be edited while the change runs.
+        ImagePyramidStore.Viewport dm = imageViewport(dmBaseCanvas);
+        ImagePyramidStore.Viewport player = imageViewport(playerBaseCanvas);
+        prefetchGeneration++;
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.clear();
+        }
+        levelPreviews.clear();
         setMapLoading(true, busy);
         runInBackground(busy, failureTitle + ": ", () -> {
             if (toSave != null) {
@@ -5915,21 +6085,23 @@ public class DungeonMasterMapToolApplication extends Application {
             Path movedTo = openFile == null ? null
                     : movedLocation(new MapLibraryService.Result(result.movedMaps(), null), openFile);
             if (openResult && result.manifestFile() != null) {
-                MultiLevelService.LoadedLevel loaded = levels.loadLevel(result.manifestFile(), null);
-                return new LevelPlanOutcome(result, new LoadedProject(loaded.project(), loaded.levelFile(),
-                        LevelContext.of(result.manifestFile(), loaded)), false, null);
+                MultiLevelService.LoadedLevel loaded = levels.loadLevelForPreparation(result.manifestFile(), null);
+                LoadedProject ready = prepareLoadedProject(loaded.project(), loaded.levelFile(),
+                        LevelContext.of(result.manifestFile(), loaded), dm, player);
+                levels.activateLevel(result.manifestFile(), loaded);
+                return new LevelPlanOutcome(result, ready, false, null);
             }
             if (movedTo != null) {
-                return new LevelPlanOutcome(result, loadAnyMap(levels, movedTo, null), false, null);
+                return new LevelPlanOutcome(result, loadAnyMap(levels, movedTo, null, dm, player), false, null);
             }
             if (openFile != null && !Files.exists(openFile)) {
                 if (openManifest != null && Files.isRegularFile(openManifest)) {
-                    return new LevelPlanOutcome(result, loadAnyMap(levels, openManifest, null), false, null);
+                    return new LevelPlanOutcome(result, loadAnyMap(levels, openManifest, null, dm, player), false, null);
                 }
                 Path collapsed = result.collapsedMap();
                 if (openManifest != null && collapsed != null
                         && collapsed.toAbsolutePath().normalize().getParent().equals(openManifest.getParent())) {
-                    return new LevelPlanOutcome(result, loadAnyMap(levels, collapsed, null), false, null);
+                    return new LevelPlanOutcome(result, loadAnyMap(levels, collapsed, null, dm, player), false, null);
                 }
                 return new LevelPlanOutcome(result, null, true, null);
             }
@@ -5944,6 +6116,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     markSaved(toSave, version);
                 }
                 if (outcome.loaded() != null) {
+                    ImagePyramidStore.shared().adopt(outcome.loaded().images());
                     switchProject(outcome.loaded().project(), outcome.loaded().file(), outcome.loaded().level());
                 } else if (outcome.fresh()) {
                     switchProject(freshProject(), null);
@@ -5952,6 +6125,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     updateLevelSwitcher();
                     updateWindowTitle();
                     mapBrowser.updateCurrentMap();
+                    scheduleAdjacentPrefetch();
                 }
                 if (frozenPlayerProjectFile != null) {
                     Path frozenMoved = movedLocation(new MapLibraryService.Result(result.movedMaps(), null),
@@ -5981,19 +6155,23 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     /** Loads {@code file} as whatever it is now: a multilevel map, a level of one, or an ordinary map. */
-    private LoadedProject loadAnyMap(MultiLevelService levels, Path file, String levelId) throws IOException {
+    private LoadedProject loadAnyMap(MultiLevelService levels, Path file, String levelId,
+                                     ImagePyramidStore.Viewport dm, ImagePyramidStore.Viewport player) throws IOException {
         Path manifestFile = file;
         String id = levelId;
         if (!MultiLevelService.isMultiLevelFile(file)) {
             MultiLevelService.LevelRef ref = levels.locateLevel(file);
             if (ref == null) {
-                return new LoadedProject(projectService.load(file), file);
+                return prepareLoadedProject(projectService.load(file), file, null, dm, player);
             }
             manifestFile = ref.manifestFile();
             id = ref.levelId();
         }
-        MultiLevelService.LoadedLevel loaded = levels.loadLevel(manifestFile, id);
-        return new LoadedProject(loaded.project(), loaded.levelFile(), LevelContext.of(manifestFile, loaded));
+        MultiLevelService.LoadedLevel loaded = levels.loadLevelForPreparation(manifestFile, id);
+        LoadedProject ready = prepareLoadedProject(loaded.project(), loaded.levelFile(),
+                LevelContext.of(manifestFile, loaded), dm, player);
+        levels.activateLevel(manifestFile, loaded);
+        return ready;
     }
 
     /** Shows or hides a spinner over the DM canvas while a map is being switched. */

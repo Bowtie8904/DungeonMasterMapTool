@@ -209,7 +209,7 @@ public class AudioEngine {
      * Such voices stay correct but cannot exceed their old copy's baked gain until the track is reopened.
      */
     public boolean needsReopen(String trackId) {
-        Optional<AudioTrack> track = library.track(trackId);
+        Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
         if (track.isEmpty()) {
             return false;
         }
@@ -388,6 +388,7 @@ public class AudioEngine {
     /** Starts the track's category at this song, retaining the usual playlist order afterwards. */
     public void playTrack(String trackId) {
         AudioTrack track = library.track(trackId)
+                .filter(AudioTrack::isReady)
                 .filter(t -> t.getKind() == AudioKind.MUSIC)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown music track: " + trackId));
         playCategory(track.getCategoryId(), trackId);
@@ -515,7 +516,7 @@ public class AudioEngine {
     /** Forgets tracks that were deleted from the library since the category started. */
     private void dropDeletedTracks() {
         for (int i = playlist.size() - 1; i >= 0; i--) {
-            if (library.track(playlist.get(i)).isEmpty()) {
+            if (library.track(playlist.get(i)).filter(AudioTrack::isReady).isEmpty()) {
                 playlist.remove(i);
                 nextCycle = null;
                 if (i <= playlistIndex) {
@@ -549,7 +550,7 @@ public class AudioEngine {
 
     /** Manual transition: the playing song fades out linearly while the new one fades in. */
     private void startMusic(String trackId, double fadeSeconds) {
-        Optional<AudioTrack> track = library.track(trackId);
+        Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
         if (track.isEmpty()) {
             return;
         }
@@ -670,7 +671,7 @@ public class AudioEngine {
 
     /** Opens a silent, unstarted voice that a chain continues into. */
     private Voice openPrepared(String trackId, boolean musicChannel) {
-        Optional<AudioTrack> track = library.track(trackId);
+        Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
         if (track.isEmpty()) {
             return null;
         }
@@ -785,14 +786,14 @@ public class AudioEngine {
         if (effects.containsKey(trackId)) {
             return;
         }
+        Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
+        if (track.isEmpty()) {
+            return;
+        }
         if (effects.size() >= maxEffects) {
             // Oldest effect makes room, so the cap can never be exceeded on low-end hardware.
             String oldest = effects.keySet().iterator().next();
             stopEffect(effects.remove(oldest), effectFadeSeconds);
-        }
-        Optional<AudioTrack> track = library.track(trackId);
-        if (track.isEmpty()) {
-            return;
         }
         AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
         AudioOutput.Voice handle = output.open(source.file(), false);

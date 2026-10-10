@@ -179,9 +179,7 @@ final class AudioLoudnessDialog {
             refresh();
             onChanged.run();
         });
-        Thread thread = new Thread(task, "audio-loudness");
-        thread.setDaemon(true);
-        thread.start();
+        dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.AUDIO).execute(task);
     }
 
     private void setBusy(boolean busy) {
