@@ -3,6 +3,7 @@ package dmmt.render;
 import lombok.Setter;
 import lombok.Getter;
 import dmmt.lighting.LightFlicker;
+import dmmt.lighting.IndoorLighting;
 import dmmt.lighting.LightingEngine;
 import dmmt.lighting.PolygonRaster;
 import dmmt.lighting.TimeOfDayPreset;
@@ -1144,7 +1145,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
             return;
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
@@ -1161,7 +1162,7 @@ public class CanvasMapRenderer {
      * map underneath by a per-pixel {@code lerp(white, presetColor, darknessHere)} colour darkens/tints it in
      * proportion to the map's own brightness and detail instead of overwriting it with a flat colour, so
      * texture and contrast stay visible even in heavily darkened areas (most noticeable at Dawn/Dusk, which
-     * previously washed the whole map toward one flat colour). A no-op (and free) at Day (no darkness).
+     * previously washed the whole map toward one flat colour). Day still darkens enclosed rooms.
      */
     public void renderAmbientLight(GraphicsContext gc, DmProject project, double width, double height,
                                     DmProject.CameraState camera, boolean playerMode) {
@@ -1169,7 +1170,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
             return;
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
@@ -1202,6 +1203,9 @@ public class CanvasMapRenderer {
         buffer.ensureSize(bw, bh);
 
         double lightTint = clampLightTint(project.getLighting().getLightTint());
+        IndoorLighting indoors = lightingEngine.getIndoorLighting();
+        double nightDarkness = TimeOfDayPreset.NIGHT.darkness(project.getLighting().ambientBrightnessFor("NIGHT"))
+                * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         List<DmProject.LightSource> lights = project.getLighting().getLights();
         int fps = animationFps;
         long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
@@ -1210,6 +1214,14 @@ public class CanvasMapRenderer {
         // Rasterising the light map is the expensive part, so it is redone only when one of its inputs changed.
         long key = 1125899906842597L;
         key = 31 * key + Double.hashCode(darkness);
+        key = 31 * key + indoors.version();
+        key = 31 * key + Double.hashCode(nightDarkness);
+        key = 31 * key + Double.hashCode(TimeOfDayPreset.NIGHT.red());
+        key = 31 * key + Double.hashCode(TimeOfDayPreset.NIGHT.green());
+        key = 31 * key + Double.hashCode(TimeOfDayPreset.NIGHT.blue());
+        key = 31 * key + Double.hashCode(preset.red());
+        key = 31 * key + Double.hashCode(preset.green());
+        key = 31 * key + Double.hashCode(preset.blue());
         key = 31 * key + lightMapScale();
         key = 31 * key + Double.hashCode(lightTint);
         key = 31 * key + preset.name().hashCode();
@@ -1219,7 +1231,8 @@ public class CanvasMapRenderer {
         key = 31 * key + Double.hashCode(zoom);
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
-            boolean relevant = light.isEnabled() && lightRangeTouchesScreen(light, width, height, camera);
+            boolean relevant = light.isEnabled() && indoors.lightActive(preset, light.getX(), light.getY())
+                    && lightRangeTouchesScreen(light, width, height, camera);
             key = 31 * key + (relevant ? 1 : 0);
             if (!relevant) {
                 continue;
@@ -1260,7 +1273,8 @@ public class CanvasMapRenderer {
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             int rgb = parseRgb(light.getColor());
-            if (!light.isEnabled() || !lightRangeTouchesScreen(light, width, height, camera)) {
+            if (!light.isEnabled() || !indoors.lightActive(preset, light.getX(), light.getY())
+                    || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;
             }
             double flicker = flickers[li];
@@ -1297,10 +1311,12 @@ public class CanvasMapRenderer {
             emitShapeLight(buffer, shape, rgb, ppc, emitterFlickers.get(ei), bw, bh, width, height, camera);
         }
 
-        double glowStrength = lightTint * Math.sqrt(darkness);
         double ambRNorm = preset.red();
         double ambGNorm = preset.green();
         double ambBNorm = preset.blue();
+        double nightR = TimeOfDayPreset.NIGHT.red();
+        double nightG = TimeOfDayPreset.NIGHT.green();
+        double nightB = TimeOfDayPreset.NIGHT.blue();
         int[] argb = buffer.argb;
         int[] ambientArgb = buffer.ambientArgb;
         final float[] litArr = buffer.lit;
@@ -1310,17 +1326,22 @@ public class CanvasMapRenderer {
         final double fDarkness = darkness;
         IntStream.range(0, bh).parallel().forEach(row -> {
             for (int i = row * bw, end = i + bw; i < end; i++) {
-                double total = litArr[i];
+                double wx = camera.getX() + ((i % bw + 0.5) * lightMapScale() - width / 2) / zoom;
+                double wy = camera.getY() + ((row + 0.5) * lightMapScale() - height / 2) / zoom;
+                boolean inside = indoors.isInside(wx, wy);
+                double sun = inside && preset != TimeOfDayPreset.NIGHT ? indoors.daylightAt(wx, wy) : 0;
+                double baseDarkness = inside ? nightDarkness : fDarkness;
+                double total = preset == TimeOfDayPreset.NIGHT || inside ? litArr[i] : 0;
                 double l = Math.min(1.0, total);
-                double dark = fDarkness * (1.0 - l);
+                double dark = (baseDarkness * (1.0 - sun) + fDarkness * sun) * (1.0 - l);
 
                 // Ambient tint: an always-opaque colour that lerps from "no change" (white) toward the
                 // preset's ambient colour as this pixel gets darker. Meant to be drawn on a multiply-blended
                 // layer, so it darkens/tints the map proportionally to the map's own colour instead of
                 // overwriting it with a flat tone.
-                double tr = 1.0 - dark + dark * ambRNorm;
-                double tg = 1.0 - dark + dark * ambGNorm;
-                double tb = 1.0 - dark + dark * ambBNorm;
+                double tr = 1.0 - dark + dark * (inside ? nightR * (1 - sun) + ambRNorm * sun : ambRNorm);
+                double tg = 1.0 - dark + dark * (inside ? nightG * (1 - sun) + ambGNorm * sun : ambGNorm);
+                double tb = 1.0 - dark + dark * (inside ? nightB * (1 - sun) + ambBNorm * sun : ambBNorm);
                 ambientArgb[i] = 0xFF000000
                         | (clampByte(tr * 255) << 16)
                         | (clampByte(tg * 255) << 8)
@@ -1329,7 +1350,7 @@ public class CanvasMapRenderer {
                 // Light glow: tints lit areas toward the blended colour of every overlapping light, weighted
                 // by how much each contributed. Independent of the ambient darkening above (now handled
                 // entirely by the multiply layer), so this is zero wherever nothing is lit.
-                double glow = l > 0 ? glowStrength * l : 0;
+                double glow = l > 0 ? lightTint * Math.sqrt(baseDarkness) * l : 0;
                 double a = Math.min(1.0, glow);
                 if (a <= 0.002 || total <= 0) {
                     argb[i] = 0;
@@ -1359,7 +1380,7 @@ public class CanvasMapRenderer {
      * bright highlights some map art already has at lamp/torch positions. The caller must draw this on a
      * canvas layer whose (node-level) blend mode is {@code ADD}, stacked directly above the base map canvas
      * and below the walls/overlays/tokens/fog layer, so only the base map is brightened. A no-op (and free)
-     * when the bright core slider is at 0% or at Day (no darkness, lights are not shown at all).
+     * when the bright core slider is at 0%. Outside Night, only indoor lights get bright cores.
      */
     public void renderBrightCore(GraphicsContext gc, DmProject project, double width, double height,
                                   DmProject.CameraState camera, boolean playerMode) {
@@ -1371,7 +1392,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
             return;
         }
         double radiusFraction = Tuning.BRIGHT_CORE_RADIUS.get();
@@ -1379,7 +1400,8 @@ public class CanvasMapRenderer {
         long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
         double zoom = camera.getZoom();
         for (DmProject.LightSource light : project.getLighting().getLights()) {
-            if (!light.isEnabled() || !lightRangeTouchesScreen(light, width, height, camera)) {
+            if (!light.isEnabled() || !lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
+                    || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;
             }
             double flicker = flickerOn(project) ? LightFlicker.amount(light, now) : 0;

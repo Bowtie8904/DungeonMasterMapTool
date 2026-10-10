@@ -17,6 +17,8 @@ import java.util.Set;
  * once per frame before rendering.
  */
 public class LightingEngine {
+    @Getter
+    private final IndoorLighting indoorLighting = new IndoorLighting();
     private final VisibilityService visibilityService = new VisibilityService();
     private final FogService fogService = new FogService();
     private final Map<String, CachedVisibility> cache = new HashMap<>();
@@ -46,6 +48,7 @@ public class LightingEngine {
         }
         fogService.ensureMask(project);
         refreshGeometry(project);
+        indoorLighting.update(project);
 
         Set<String> activeIds = new HashSet<>();
         FogMask mask = project.getFog().getMask();

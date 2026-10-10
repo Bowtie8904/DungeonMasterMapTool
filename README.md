@@ -323,7 +323,10 @@ The *Lighting* section controls lights and ambience.
 
 **Time of day**
 
-- Four buttons: **Day, Dawn, Dusk, Night**. Day means no darkness (dd2vtt maps have baked lighting). The DM view shows darkness at reduced strength so the map stays readable.
+- Four buttons: **Day, Dawn, Dusk, Night**. Day means no outdoor darkness. Enclosed rooms stay at **Night** darkness and tint, using this map's Night ambient-brightness setting, even during Day/Dawn/Dusk. The DM view shows darkness at reduced strength so the map stays readable.
+- Rooms use the same wall/door/window boundaries as Reveal room, regardless of portal state. Indoor lights illuminate and flicker normally (subject to the flicker toggle and Performance mode); outdoor lights are visually off except at Night. Their saved on/off state and fog-reveal modes are unchanged.
+- During Day/Dawn/Dusk, sunlight enters from **open exterior windows and doors**. Closed windows and doors block it. Each source fans only through its own opening, so closing one exterior door does not change sunlight through a nearby door. Sunlight stays bright through the inner 30% of its reach, then fades gently over a reach of eight tiles or eight opening widths (whichever is larger). Only openings connected to the outside create sunlight; open interior doors/windows can transmit it. Sunlight never reveals fog.
+- A neighbouring room at least **one map tile away** from an exterior opening does not block its incoming sunlight. A closer wall can block it, and walls inside the receiving room still cast shadows. This clearance is independent of the opening's length, so long doors do not place their sunlight source inside distant buildings.
 - **Ambient brightness** slider (−50 % to +100 %): adjusts the darkness of the current preset for this map only. Double-click resets; disabled at Day.
 - The Dawn/Dusk/Night darkening and colour tint blend with the map using a multiply blend instead of a flat colour painted over everything, so the map's own texture and contrast stay visible underneath instead of washing toward one flat colour.
 

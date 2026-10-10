@@ -131,6 +131,22 @@ public final class RoomFillService {
         return enclosedRoomCenters(mask, barrier, 0);
     }
 
+    /** Interior cells of all enclosed components, without the boundary cells. */
+    public static BitSet enclosedCells(FogMask mask, BitSet barrier) {
+        BitSet inside = new BitSet();
+        BitSet visited = (BitSet) barrier.clone();
+        int total = mask.getCols() * mask.getRows();
+        for (int seed = visited.nextClearBit(0); seed < total; seed = visited.nextClearBit(seed + 1)) {
+            Component room = flood(mask, barrier, visited, seed);
+            if (!room.leaked()) {
+                for (int cell : room.cells()) {
+                    inside.set(cell);
+                }
+            }
+        }
+        return inside;
+    }
+
     public static List<double[]> enclosedRoomCenters(FogMask mask, BitSet barrier, double minimumDimension) {
         List<double[]> centers = new java.util.ArrayList<>();
         BitSet visited = (BitSet) barrier.clone();
@@ -230,8 +246,10 @@ public final class RoomFillService {
         int steps = Math.max(1, (int) Math.ceil(total / (cell * 0.5)));
         for (int i = 0; i <= steps; i++) {
             double t = total * i / steps;
-            int col = (int) Math.floor((sx + ux * t - mask.getOriginX()) / cell);
-            int row = (int) Math.floor((sy + uy * t - mask.getOriginY()) / cell);
+            double gx = (sx + ux * t - mask.getOriginX()) / cell;
+            double gy = (sy + uy * t - mask.getOriginY()) / cell;
+            int col = Math.abs(gx - mask.getCols()) < 1e-9 ? mask.getCols() - 1 : (int) Math.floor(gx);
+            int row = Math.abs(gy - mask.getRows()) < 1e-9 ? mask.getRows() - 1 : (int) Math.floor(gy);
             if (col >= 0 && row >= 0 && col < mask.getCols() && row < mask.getRows()) {
                 barrier.set(row * mask.getCols() + col);
             }

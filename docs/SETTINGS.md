@@ -1161,8 +1161,19 @@ Flicker speed used when a light without saved flicker values gets flicker.
 
 ## Time of day
 
-The time-of-day buttons (Day, Dawn, Dusk, Night) darken everything that is not lit by a light and give the darkness a
-colour. Each preset has four values, all **live**, range 0 to 1:
+The time-of-day buttons (Day, Dawn, Dusk, Night) control outdoor darkness and tint. Enclosed rooms always use the
+Night values and the map's Night ambient-brightness adjustment. Day/Dawn/Dusk daylight enters through exterior
+open windows and doors, constrained to each source's own opening. Walls and all closed doors/windows block it.
+Interior portals never generate sunlight; open ones can transmit it. Sunlight stays at full strength through the
+inner 30% of its eight-tile/eight-aperture-width reach (whichever is larger), then fades gently;
+it does not reveal fog. Indoor lights retain their glow and flicker; outdoor lights are visually inactive outside Night.
+There are no additional settings.
+
+Exterior sunlight sources sit one map grid tile from their opening, independent of its length. Neighbouring
+rooms/walls at least one tile away do not block incoming sunlight; closer walls can block it. Walls inside the
+receiving room still cast shadows. Clearance uses the map's grid scale, not fog resolution or camera zoom.
+
+Each preset has four values, all **live**, range 0 to 1:
 
 - **`darkness`** – opacity of the darkness over unlit areas for the players (`0` = no darkness, `1` = black). The DM
   sees `lighting.dmDarknessFactor` of it. The per-map ambient brightness slider scales this value.
