@@ -583,7 +583,11 @@ enter a playlist, open a preview, or be cut/edited for loudness until preparatio
 
 The library's multi-row import panel shows ready, active, waiting, failed and cancelled counts, with a
 separate progress row for each active file. Percentages describe its current step (copying, loudness/waveform
-analysis or playback preparation), not the entire import. **Cancel unfinished imports** stops outstanding
+analysis or playback preparation), not the entire import. The table's **Preparation** column also shows
+a progress bar beside each importing track; waiting tracks use an indeterminate bar, and ready, failed
+or cancelled tracks show just their status. Preparation is the first column and hides automatically
+when all tracks in the current category/search results are ready; it reappears for pending, failed or
+cancelled tracks. **Cancel unfinished imports** stops outstanding
 work without removing ready tracks; **Retry failed / cancelled** retries either kind. Buttons wrap onto
 another row in narrow windows rather than truncating their labels. A track's context menu offers
 **Prepare next** and **Retry preparation**.

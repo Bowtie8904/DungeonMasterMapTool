@@ -78,6 +78,7 @@ public final class AudioLibraryWindow {
             FXCollections.observableArrayList(new Entry(null)));
     private boolean selectionSyncing;
     private final TableView<AudioTrack> trackTable = new TableView<>();
+    private final TableColumn<AudioTrack, String> preparationColumn = new TableColumn<>("Preparation");
     private final TextField search = new TextField();
     private final Label summary = new Label();
     private final Label busyLabel = new Label();
@@ -263,10 +264,43 @@ public final class AudioLibraryWindow {
                         + (data.getValue().getGainOverrideDb() != null ? " (manual)"
                         : data.getValue().isLoudnessAnalyzed() ? " (auto)" : " (original)")));
         gain.setPrefWidth(145);
-        TableColumn<AudioTrack, String> status = new TableColumn<>("Preparation");
+        TableColumn<AudioTrack, String> status = preparationColumn;
         status.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(preparationText(data.getValue())));
         status.setPrefWidth(220);
-        trackTable.getColumns().setAll(List.of(name, duration, gain, source, status));
+        status.setCellFactory(column -> new javafx.scene.control.TableCell<>() {
+            @Override
+            protected void updateItem(String text, boolean empty) {
+                super.updateItem(text, empty);
+                setText(null);
+                setGraphic(null);
+                if (empty || getIndex() < 0 || getIndex() >= getTableView().getItems().size()) {
+                    return;
+                }
+                AudioTrack track = getTableView().getItems().get(getIndex());
+                Label label = new Label(text);
+                label.setMinWidth(0);
+                label.setMaxWidth(Double.MAX_VALUE);
+                Icons.tooltip(label, text);
+                VBox content = new VBox(4, label);
+                content.setMinWidth(0);
+                var task = library.preparationQueue().items().stream()
+                        .filter(item -> track.getId().equals(item.trackId())).findFirst();
+                if (!track.isReady() && task.isPresent()
+                        && (isActive(task.get().stage())
+                        || task.get().stage() == dmmt.audio.AudioPreparationQueue.Stage.QUEUED)) {
+                    ProgressBar progress = new ProgressBar(isActive(task.get().stage())
+                            ? task.get().progress() : ProgressBar.INDETERMINATE_PROGRESS);
+                    progress.getStyleClass().add("audio-track-progress");
+                    progress.setMinWidth(0);
+                    progress.setMaxWidth(Double.MAX_VALUE);
+                    content.getChildren().add(progress);
+                }
+                setGraphic(content);
+            }
+        });
+        trackTable.getColumns().setAll(List.of(status, name, duration, gain, source));
+        trackTable.getItems().addListener((javafx.collections.ListChangeListener<AudioTrack>)
+                change -> updatePreparationColumn());
         trackTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         trackTable.setPlaceholder(new Label("No audio here yet - use \"Import files\"."));
         trackTable.setContextMenu(trackMenu());
@@ -614,6 +648,7 @@ public final class AudioLibraryWindow {
             tracks = tracks.stream().filter(track -> track.getName().toLowerCase(Locale.ROOT).contains(filter)).toList();
         }
         trackTable.getItems().setAll(tracks);
+        updatePreparationColumn();
         long totalMs = tracks.stream().mapToLong(AudioTrack::getDurationMs).sum();
         summary.setText(tracks.size() + (tracks.size() == 1 ? " track, " : " tracks, ")
                 + AudioTrack.formatDuration(totalMs) + " total - library folder: " + library.root());
@@ -627,6 +662,10 @@ public final class AudioLibraryWindow {
     private boolean isEffectsView() {
         Entry Entry = selectedEntry();
         return Entry == null || Entry.isEffects();
+    }
+
+    private void updatePreparationColumn() {
+        preparationColumn.setVisible(trackTable.getItems().stream().anyMatch(track -> !track.isReady()));
     }
 
     private List<AudioTrack> selectedTracks() {
@@ -840,6 +879,7 @@ public final class AudioLibraryWindow {
                 }
             }
         }
+        updatePreparationColumn();
         trackTable.refresh();
         String failures = tasks.stream().filter(item -> item.error() != null)
                 .map(item -> item.source().getFileName() + ": " + item.error())

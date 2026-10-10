@@ -115,7 +115,7 @@ class AudioControlsTest {
     @ValueSource(ints = {640, 940})
     void importPanelKeepsActionLabelsReadableAndExplainsFailuresAtNarrowWidths(int width) throws Exception {
         AudioLibraryService library = library();
-        AudioTrack failed = library.tracks().getFirst();
+        AudioTrack failed = library.musicOf(categoryId(library, "Combat")).getFirst();
         failed.setPreparationState(AudioTrack.PreparationState.FAILED);
         failed.setPreparationError("Cannot decode this recording.");
         library.save();
@@ -162,6 +162,37 @@ class AudioControlsTest {
                 assertTrue(errors.isVisible());
                 assertTrue(errors.getAccessibleText().contains("Cannot decode this recording."));
                 assertTrue(scene.lookup("#audioImportPanel").isVisible());
+                @SuppressWarnings("unchecked")
+                TableView<AudioTrack> table = (TableView<AudioTrack>) scene.lookup(".table-view");
+                var preparation = table.getColumns().getFirst();
+                assertEquals("Preparation", preparation.getText());
+                for (Node node : scene.getRoot().lookupAll(".list-view")) {
+                    ListView<?> list = (ListView<?>) node;
+                    if (list.getItems().size() == 1) {
+                        list.getSelectionModel().clearSelection();
+                    }
+                }
+                for (Node node : scene.getRoot().lookupAll(".list-view")) {
+                    ListView<?> list = (ListView<?>) node;
+                    if (list.getItems().size() > 1) {
+                        list.getSelectionModel().select(1);
+                    }
+                }
+                assertTrue(preparation.isVisible(), "failed track keeps preparation visible");
+                javafx.scene.control.TextField search = (javafx.scene.control.TextField) scene.lookup(".text-field");
+                search.setText("no matching recording");
+                assertFalse(preparation.isVisible(), "empty results hide preparation");
+                search.clear();
+                assertTrue(preparation.isVisible());
+                failed.setPreparationState(AudioTrack.PreparationState.CANCELLED);
+                search.setText(failed.getName());
+                assertTrue(preparation.isVisible(), "cancelled track keeps preparation visible");
+                failed.setPreparationState(AudioTrack.PreparationState.READY);
+                search.clear();
+                assertFalse(preparation.isVisible(), "all-ready results hide preparation");
+                failed.setPreparationState(AudioTrack.PreparationState.PENDING);
+                search.setText(failed.getName());
+                assertTrue(preparation.isVisible(), "pending track restores preparation");
             } finally {
                 window.close();
             }
@@ -199,11 +230,25 @@ class AudioControlsTest {
                     Button retry = (Button) window.getScene().lookup("#audioImportRetry");
                     assertFalse(cancel.isDisabled());
                     assertTrue(retry.isDisabled());
+                    @SuppressWarnings("unchecked")
+                    TableView<AudioTrack> table = (TableView<AudioTrack>) window.getScene().getRoot()
+                            .lookup(".table-view");
+                    table.getItems().setAll(library.tracks());
+                    window.getScene().getRoot().applyCss();
+                    window.getScene().getRoot().layout();
+                    var bars = window.getScene().getRoot().lookupAll(".audio-track-progress");
+                    assertEquals(1, bars.size(), "only the queued track has a table progress bar");
+                    assertTrue(((javafx.scene.control.ProgressBar) bars.iterator().next()).isIndeterminate());
                     cancel.fire();
                     assertTrue(cancel.isDisabled());
                     assertFalse(retry.isDisabled());
                     assertEquals(dmmt.audio.AudioPreparationQueue.Stage.CANCELLED, item.stage());
                     assertEquals(2, library.tracks().stream().filter(AudioTrack::isReady).count());
+                    table.getItems().setAll(library.tracks());
+                    window.getScene().getRoot().applyCss();
+                    window.getScene().getRoot().layout();
+                    assertTrue(window.getScene().getRoot().lookupAll(".audio-track-progress").isEmpty(),
+                            "cancelled rows clear their old progress graphics");
                     retry.fire();
                     assertFalse(cancel.isDisabled());
                     assertTrue(retry.isDisabled());
