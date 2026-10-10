@@ -116,6 +116,39 @@ public final class RoomFillService {
         return new Result(cells, leaked);
     }
 
+    /** Nearest interior cell to the room centroid, even when that centroid lies outside a concave room. */
+    public static double[] labelPosition(FogMask mask, BitSet barrier, Result room, double x, double y) {
+        if (room == null || room.leaked() || room.isEmpty()) {
+            return new double[]{x, y};
+        }
+        BitSet interior = (BitSet) room.cells().clone();
+        interior.andNot(barrier);
+        if (interior.isEmpty()) {
+            return new double[]{x, y};
+        }
+        double cx = 0;
+        double cy = 0;
+        for (int i = interior.nextSetBit(0); i >= 0; i = interior.nextSetBit(i + 1)) {
+            cx += i % mask.getCols();
+            cy += i / mask.getCols();
+        }
+        cx /= interior.cardinality();
+        cy /= interior.cardinality();
+        int nearest = -1;
+        double best = Double.POSITIVE_INFINITY;
+        for (int i = interior.nextSetBit(0); i >= 0; i = interior.nextSetBit(i + 1)) {
+            double dx = i % mask.getCols() - cx;
+            double dy = i / mask.getCols() - cy;
+            double distance = dx * dx + dy * dy;
+            if (distance < best) {
+                best = distance;
+                nearest = i;
+            }
+        }
+        return new double[]{mask.getOriginX() + (nearest % mask.getCols() + 0.5) * mask.getCellSize(),
+                mask.getOriginY() + (nearest / mask.getCols() + 0.5) * mask.getCellSize()};
+    }
+
     // Segments are extended by half a cell at both ends so tiny gaps where walls meet do not leak.
     private static void rasterise(FogMask mask, BitSet barrier, double x1, double y1, double x2, double y2) {
         double cell = mask.getCellSize();

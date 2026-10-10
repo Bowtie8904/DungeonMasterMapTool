@@ -62,6 +62,12 @@ public class MapRotationService {
             Point center = rotatePoint(box.getX() + box.getWidth() / 2.0, box.getY() + box.getHeight() / 2.0, cx, cy, clockwise);
             box.setX(center.x - box.getWidth() / 2.0);
             box.setY(center.y - box.getHeight() / 2.0);
+            if (box.isRoomLabelAnchored()) {
+                Point anchor = rotatePoint(box.getRoomLabelCenterX(), box.getRoomLabelCenterY(), cx, cy, clockwise);
+                box.setRoomLabelCenterX(anchor.x);
+                box.setRoomLabelCenterY(anchor.y);
+                box.recenterRoomLabel();
+            }
         }
 
         if (project.getFog() != null && project.getFog().getMask() != null) {

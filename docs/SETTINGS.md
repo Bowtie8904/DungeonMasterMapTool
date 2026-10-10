@@ -185,11 +185,13 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `weather` | `type`, `intensity`, `lightningInterval` |
 | `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `animations`, `brushSize` |
 | `text` | `add`, `layer`, `autoSize`, `players`, `delete`, `size`, `color`, `rotateLeft`, `rotateRight`, `background`, `noBackground`, `border`, `noBorder` |
-| `building` | `drawWall`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
+| `building` | `drawWall`, `drawDoor`, `drawWindow`, `roomLabel`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
 | `player` | `window`, `freeze`, `scaleTest`, `handout`, `grid`, `gridOpacity`, `screen`, `diagonal`, `tileSize`, `zoom` |
 | `performance` | `target`, `animation`, `idle` |
 
-*Keywords:* hide control, show control, individual controls, candle, screen diagonal, diameter, brush size slider, declutter, sidebar
+The Map building choices include **Draw door**, **Draw window** and **Room label**. Hiding their buttons does not disable their local API controls (`building.drawDoor`, `building.drawWindow`, `building.roomLabel`) or remove existing doors, windows or labels.
+
+*Keywords:* hide control, show control, individual controls, candle, screen diagonal, diameter, brush size slider, declutter, sidebar, draw door, draw window, room label
 
 ### `ui.recentMaps`
 **Default:** empty · **Values:** full map file paths separated by `|` · **Applies:** managed by the app
@@ -574,6 +576,41 @@ How often in seconds the auto-save timer checks whether a save is due. The actua
 *Keywords:* autosave timer, check interval, save delay, polling
 
 ---
+
+## Room label defaults
+
+These settings give new DM-only room labels an independent, subtle style. They are editable in the Settings window
+(search for **room label**) and have no dedicated DM controls. Changes apply to labels created afterwards, not existing
+labels. The normal Text controls still style an individual label without changing these defaults.
+
+### `roomLabel.fontSize`
+**Default:** `30` · **Range:** 1 to 2000 · **Applies:** live, new room labels
+
+Font size used when creating a room label, independent of selected or last-used Text options.
+
+*Keywords:* room label, room name, label defaults, font size, subtle text
+
+### `roomLabel.textColor`
+**Default:** `#EEEEEE` · **Format:** `#RRGGBB` or `#RRGGBBAA` · **Applies:** live, new room labels
+
+Light text colour for new room labels.
+
+*Keywords:* room label, room name, label defaults, text colour, text color
+
+### `roomLabel.backgroundColor`
+**Default:** `#1E1E1E99` · **Format:** `#RRGGBB` or `#RRGGBBAA` · **Applies:** live, new room labels
+
+Subtle dark background for new room labels, with 60% opacity by default. The final two hex digits set opacity;
+use `00` for no background.
+
+*Keywords:* room label, room name, label defaults, background, opacity, subtle
+
+### `roomLabel.borderColor`
+**Default:** `#00000000` · **Format:** `#RRGGBB` or `#RRGGBBAA` · **Applies:** live, new room labels
+
+Border colour for new room labels; transparent by default.
+
+*Keywords:* room label, room name, label defaults, border, outline
 
 ## Text defaults
 
@@ -1624,16 +1661,18 @@ Colour of **closed doors** in the DM view (line, badge ring and icon). Pick a co
 *Keywords:* door colour, door color, closed door, locked door, door state, door badge, door icon, interactable, portal
 
 ### `ui.windowOpenColor`
-**Default:** `#00BFFF` (light blue) · **Format:** `#RRGGBB` · **Applies:** live
+**Default:** `#32CD32` (green) · **Format:** `#RRGGBB` · **Applies:** live
 
-Colour of **open windows** in the DM view (line, badge ring and icon).
+Colour of **open windows** in the DM view (line, badge ring and icon). The built-in default matches open doors,
+but this remains an independent setting; existing explicit window colours are preserved.
 
 *Keywords:* window colour, window color, open window, window state, window badge, interactable, portal
 
 ### `ui.windowClosedColor`
-**Default:** `#3B6FD8` (blue) · **Format:** `#RRGGBB` · **Applies:** live
+**Default:** `#E0473C` (red) · **Format:** `#RRGGBB` · **Applies:** live
 
-Colour of **closed windows** in the DM view (line, badge ring and icon).
+Colour of **closed windows** in the DM view (line, badge ring and icon). The built-in default matches closed doors,
+but this remains an independent setting; existing explicit window colours are preserved.
 
 *Keywords:* window colour, window color, closed window, window state, window badge, interactable, portal
 

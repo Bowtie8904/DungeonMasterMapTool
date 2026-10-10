@@ -34,6 +34,55 @@ class AppSettingsTest {
     }
 
     @Test
+    void windowDefaultsMatchDoorsWithoutOverwritingExplicitWindowColors() throws IOException {
+        AppSettings defaults = new AppSettings(dir.resolve("defaults.ini"));
+        assertEquals(Tuning.DOOR_OPEN_COLOR.get(), Tuning.WINDOW_OPEN_COLOR.get());
+        assertEquals(Tuning.DOOR_CLOSED_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
+        assertTrue(Files.readString(defaults.getFile()).contains("ui.windowOpenColor = #32CD32"));
+        assertTrue(Files.readString(defaults.getFile()).contains("ui.windowClosedColor = #E0473C"));
+        Path custom = dir.resolve("custom.ini");
+        Files.writeString(custom, "ui.windowOpenColor = #00BFFF\nui.windowClosedColor = #3B6FD8\n");
+        AppSettings settings = new AppSettings(custom);
+        assertEquals("#00BFFF", Tuning.WINDOW_OPEN_COLOR.get());
+        assertEquals("#3B6FD8", Tuning.WINDOW_CLOSED_COLOR.get());
+        settings.applyEdit("ui.doorOpenColor", "#123456");
+        assertEquals("#00BFFF", Tuning.WINDOW_OPEN_COLOR.get(), "window colors remain independently configurable");
+        AppSettings reloaded = new AppSettings(custom);
+        assertEquals("#00BFFF", reloaded.get("ui.windowOpenColor", null));
+        assertEquals("#3B6FD8", reloaded.get("ui.windowClosedColor", null));
+        reloaded.applyEdit("ui.windowOpenColor", null);
+        assertEquals("#32CD32", Tuning.WINDOW_OPEN_COLOR.get());
+    }
+
+    @Test
+    void roomLabelDefaultsAreLiveSearchableSettingsAndAlphaColorsPersist() {
+        AppSettings settings = new AppSettings(dir.resolve("labels.ini"));
+        assertEquals(30, Tuning.ROOM_LABEL_FONT_SIZE.get());
+        assertEquals("#EEEEEE", Tuning.ROOM_LABEL_TEXT_COLOR.get());
+        assertEquals("#1E1E1E99", Tuning.ROOM_LABEL_BACKGROUND_COLOR.get());
+        assertEquals("#00000000", Tuning.ROOM_LABEL_BORDER_COLOR.get());
+        for (String key : java.util.List.of("roomLabel.fontSize", "roomLabel.textColor",
+                "roomLabel.backgroundColor", "roomLabel.borderColor")) {
+            AppSettings.SettingInfo info = AppSettings.editableSettings().stream()
+                    .filter(entry -> entry.key().equals(key)).findFirst().orElseThrow();
+            assertEquals("Room label defaults", info.group());
+            assertTrue(info.keywords().contains("room label"));
+            assertFalse(info.restart());
+            assertTrue(info.validator().test(info.defaultValue()));
+        }
+        settings.applyEdit("roomLabel.fontSize", "27");
+        settings.applyEdit("roomLabel.backgroundColor", "#10203040");
+        settings.applyEdit("roomLabel.borderColor", "#50607080");
+        AppSettings reloaded = new AppSettings(settings.getFile());
+        assertEquals(27, Tuning.ROOM_LABEL_FONT_SIZE.get());
+        assertEquals("#10203040", Tuning.ROOM_LABEL_BACKGROUND_COLOR.get());
+        assertEquals("#50607080", Tuning.ROOM_LABEL_BORDER_COLOR.get());
+        assertEquals("#10203040", reloaded.get("roomLabel.backgroundColor", null));
+        reloaded.applyEdit("roomLabel.backgroundColor", null);
+        assertEquals("#1E1E1E99", Tuning.ROOM_LABEL_BACKGROUND_COLOR.get());
+    }
+
+    @Test
     void resolvesRelativeStorageFoldersBesideSettingsAndLeavesAbsoluteFoldersAlone() {
         Path settingsFile = dir.resolve("config").resolve("dmmt-settings.ini");
         Path projectsFolder = AppSettings.resolveConfiguredFolder(settingsFile, "dmmap-projects", "dmmap-projects");

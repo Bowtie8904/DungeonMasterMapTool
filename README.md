@@ -302,11 +302,12 @@ The *Lighting* section controls lights and ambience.
 
 ### 8. Doors and windows
 
-Imported doors and windows are interactive objects.
+Imported doors and windows, and those drawn with the Map building tools, are interactive objects.
 
-- Each has a round **icon badge** in the DM view (open/closed glyph, red/green for doors, blue for windows) above the fog.
+- Each has a round **icon badge** in the DM view (open/closed glyph, green when open and red when closed by default for both doors and windows) above the fog. Door and window colours remain independently configurable; existing settings are preserved.
 - With the Select tool, **click the badge or the door line** to open or close it. Hovering highlights it.
 - State affects line of sight and lighting immediately, is undoable and is saved with the map.
+- With Select, **right-click a badge or line** to change its type to **Door** or **Window**, or choose **Delete** to remove it. Type changes preserve position, length and open/closed state; both changes and deletion are undoable.
 
 ### 9. Effects (AOE shapes and textures)
 
@@ -341,11 +342,15 @@ Draw areas of effect that both DM and players see (below fog, above map and ligh
 - **Text** tool: click-drag to draw a box (a plain click creates an auto-sized one) and start typing. Click a box with the Text tool, or double-click it with Select, to edit. `Esc`, clicking outside or switching tools finishes editing.
 - Text wraps to the box width, is centred and clipped at the edge. **Auto-size** boxes grow and shrink with the text (maximum width 12 cells); manually resizing turns auto-size off. The *Auto-size* toggle switches it per box.
 - **Font size** and **text colour** apply to newly typed text or to the selected text (or all text when a box is selected but not edited).
+- The insertion caret matches the active text colour, so it stays visible on dark text boxes and room labels.
 - **Background** and **border** colours (transparent by default, opacity supported, "no fill" / "no border" buttons). Corners are rounded.
 - Select tool: click to select, drag to move, use the 8 handles to resize, `Delete` removes.
 - **Text layer** toggle shows/hides all text in DM and player views. Text boxes are drawn below fog.
 - Last-used settings are remembered per map (with a global fallback).
 - `Ctrl+C` / `Ctrl+V` copy and paste a box, including into another map.
+- **Room labels** created from Map building use the same text editing, styling, movement, resize, deletion and copy/paste controls. They are always DM-only: there is no crossed-out eye badge or *Visible to players* option, and the Text section's *Players see* control cannot publish them.
+- New room labels use their own subtle default style: 30px light text on a translucent dark background, without a border. Configure font size and colours in **Settings** by searching for **room label**; current Text options do not affect new labels. Each label can still be styled individually with the Text controls.
+- A new label stays **centred on its room** as you type, delete text or change its size, including during in-place editing. Dragging or nudging it manually (also in a group) disables automatic centring for that label. Undoing the move restores it. Centring persists when saved and rotated; pasted labels are manually placed and no longer anchored to the source room.
 
 ### 11. Map building
 
@@ -354,8 +359,11 @@ Draw areas of effect that both DM and players see (below fog, above map and ligh
 - **Add image** (or drag & drop): adds an image layer, which starts unlocked so you can position it.
 - **Move and resize** layers with drag handles. **Snap layers** snaps in half-tile steps. `Delete`/`Backspace` removes the selected layer. Per-layer rotation is not supported; use whole-map rotation.
 - **Lock image layer** toggle: while locked, layers cannot be selected, moved, resized or deleted. It is locked by default for imported dd2vtt maps and unlocked for new custom maps, and is saved per map. A banner on the canvas warns while layers are unlocked and offers a **Lock** button.
-- **Wall tools:** *Wall* draws segments (half-tile snap, hold `Shift` for free placement) and *Erase wall* removes them, so custom maps get line-of-sight lighting too.
-- **Wall layer** toggle: shows or hides walls in red together with door/window lines and badges (DM only, session-only). Choosing a wall tool shows it again.
+- **Wall tools:** *Wall* draws segments (half-tile snap, hold `Shift` for free placement). *Erase wall* removes walls, doors and windows, including imported ones. Hover highlights the exact segment or portal the next click will delete. Deletion is undoable and updates lighting and room boundaries.
+- **Draw door / Draw window:** drag from one endpoint to the other, with flexible length and the same half-tile snap (`Shift` for free placement) as walls. The result behaves like an imported door or window, including opening/closing, lighting and room boundaries. Creation is undoable and saved with the map.
+- **Room label:** hover to see a **blue room highlight**, then click to place an auto-sized name box and start typing. Preview and placement use the same wall, door and window boundaries as Reveal room, regardless of their open state, to find an interior position. An unenclosed area uses the clicked position. This works with fog disabled; Shift does not change the blue preview, and neither preview nor placement changes the reveal mask. Labels stay DM-only, persist with the map and can be edited or moved like [text boxes](#10-text-boxes).
+- **Wall layer** toggle: shows or hides walls in red together with door/window lines and badges (DM only, session-only). Choosing a wall, door or window drawing tool shows it again.
+- These tools can be hidden individually in **Settings > DM controls tabs > Map building** and armed through the local API (`building.drawDoor`, `building.drawWindow`, `building.roomLabel`).
 - **Multi-selection (Select tool):** drag a rectangle on empty space to select lights, text boxes, effects and unlocked image layers (the rectangle turns green while it would select something). `Ctrl+click` adds or removes items. Drag any member to move the group, `Delete` removes it, all as one undo step. Doors and windows are not part of groups.
 
 ### 12. Ping and laser pointer

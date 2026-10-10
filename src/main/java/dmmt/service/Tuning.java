@@ -363,6 +363,17 @@ public final class Tuning {
 
     // ---- Text ----
 
+    public static final Setting<Integer> ROOM_LABEL_FONT_SIZE = integer(TEXT, "roomLabel.fontSize", 30, 1, 2000, false,
+            "Font size of newly created DM-only room labels.");
+    public static final Setting<String> ROOM_LABEL_TEXT_COLOR = color(TEXT, "roomLabel.textColor", "#EEEEEE", false,
+            "Text colour of newly created DM-only room labels.");
+    public static final Setting<String> ROOM_LABEL_BACKGROUND_COLOR = new Setting<>(TEXT, "roomLabel.backgroundColor",
+            "#1E1E1E99", false, "Background colour of newly created room labels, including alpha (#RRGGBB or #RRGGBBAA).",
+            Tuning::parseColor).meta(Kind.COLOR, Double.NaN, Double.NaN);
+    public static final Setting<String> ROOM_LABEL_BORDER_COLOR = new Setting<>(TEXT, "roomLabel.borderColor",
+            "#00000000", false, "Border colour of newly created room labels, including alpha (#RRGGBB or #RRGGBBAA).",
+            Tuning::parseColor).meta(Kind.COLOR, Double.NaN, Double.NaN);
+
     public static final Setting<Double> HIDDEN_TEXT_OPACITY = decimal(TEXT, "text.dmHiddenOpacity", 0.85, 0, 1, false,
             "Opacity of text boxes hidden from players, as drawn in the DM view.");
     public static final Setting<Integer> TEXT_MIN_FONT = integer(TEXT, "text.minFontSize", 6, 1, 100, true,
@@ -725,9 +736,9 @@ public final class Tuning {
             "Colour of open doors (line and badge) in the DM view.");
     public static final Setting<String> DOOR_CLOSED_COLOR = color(UI, "ui.doorClosedColor", "#E0473C", false,
             "Colour of closed doors (line and badge) in the DM view.");
-    public static final Setting<String> WINDOW_OPEN_COLOR = color(UI, "ui.windowOpenColor", "#00BFFF", false,
+    public static final Setting<String> WINDOW_OPEN_COLOR = color(UI, "ui.windowOpenColor", "#32CD32", false,
             "Colour of open windows (line and badge) in the DM view.");
-    public static final Setting<String> WINDOW_CLOSED_COLOR = color(UI, "ui.windowClosedColor", "#3B6FD8", false,
+    public static final Setting<String> WINDOW_CLOSED_COLOR = color(UI, "ui.windowClosedColor", "#E0473C", false,
             "Colour of closed windows (line and badge) in the DM view.");
     public static final Setting<Double> GRID_OPACITY = decimal(UI, "ui.gridOpacity", 0.08, 0, 1, false,
             "Opacity of the grid lines.");

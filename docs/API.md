@@ -182,6 +182,18 @@ name for multilevel maps.
 Save an unsaved new map before switching through the API; it returns `409` instead of discarding it or opening a
 save prompt. File operations in progress also return `409`. Frozen players keep their snapshot until unfrozen.
 
+## Map building tools
+
+| Endpoint | Action |
+|---|---|
+| `/api/controls/building/drawDoor` | Arms Draw door; drag endpoints on the DM canvas. |
+| `/api/controls/building/drawWindow` | Arms Draw window; drag endpoints on the DM canvas. |
+| `/api/controls/building/roomLabel` | Arms Room label; click a room on the DM canvas and type its name. |
+
+These use the same tool toggles as the DM controls, including cancellation with Esc or right-click.
+They remain callable when their buttons are hidden in Settings. Door/window creation and room-label editing
+use the existing map history and persistence; room labels never appear in player output.
+
 ## Audio controls
 
 Audio is not part of the DM controls sidebar: it lives in the transport group at the bottom right of the status bar

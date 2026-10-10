@@ -280,6 +280,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private RoomFillService.Result roomPreview;
     private boolean roomHidePreview;
     private boolean hoverInsideCanvas;
+    private boolean geometryPreviewHover;
     private String lastDoorToggleId;
     private long lastDoorToggleNanos;
     private double hoverWorldX;
@@ -1090,7 +1091,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 "Players see the selected text box - turn off for DM-only notes");
         textPlayerToggle.setSelected(true);
         textPlayerToggle.setOnAction(e -> {
-            if (!syncingControls && findTextBox(selectedTextId) != null) {
+            if (!syncingControls && findTextBox(selectedTextId) != null && !findTextBox(selectedTextId).isRoomLabel()) {
                 boolean value = textPlayerToggle.isSelected();
                 executeTextChange(value ? "Show text box to players" : "Hide text box from players", selectedTextId,
                         b -> b.setPlayerVisible(value));
@@ -1170,6 +1171,8 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         updateImageLockToggle();
+        HBox portalRow = row(toolButtons.get(EditorTool.DOOR_DRAW), toolButtons.get(EditorTool.WINDOW_DRAW),
+                toolButtons.get(EditorTool.ROOM_LABEL));
         HBox buildRow = row(toolButtons.get(EditorTool.WALL_DRAW), toolButtons.get(EditorTool.WALL_ERASE), wallLayerToggle,
                 Icons.separator(), imageLockToggle, snapLayers,
                 Icons.button(MaterialDesignI.IMAGE_PLUS,
@@ -1324,6 +1327,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.registerRow("text", textSizeRow, "size", "size", "color", "color", "rotateLeft", "rotateRight");
         dmControlVisibility.registerRow("text", textBoxColorRow, "background", "background", "noBackground", "border", "border", "noBorder");
         dmControlVisibility.registerRow("building", buildRow, "drawWall", "eraseWall", "wallLayer", null, "lock", "snap", "addImage");
+        dmControlVisibility.registerRow("building", portalRow, "drawDoor", "drawWindow", "roomLabel");
         dmControlVisibility.registerRow("player", playerRow, "window", "freeze", "scaleTest", "handout");
         dmControlVisibility.registerRow("player", playerGridRow, "grid", "gridOpacity", "gridOpacity");
         dmControlVisibility.register("player.screen", screenRow);
@@ -1344,7 +1348,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
                 new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
                         textToolsRow, textSizeRow, textBoxColorRow),
-                new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow),
+                new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow, portalRow),
                 new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
                         playerRow, playerGridRow, screenRow, scaleGrid, playerZoomRow),
                 new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
@@ -1693,6 +1697,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */    private void applySectionVisibility() {
         dmControlVisibility.apply(preferences.hiddenControls());
+        updateSelectionControls();
         java.util.Set<String> hidden = preferences.hiddenSections();
         dmSections.forEach((id, section) -> {
             boolean show = !hidden.contains(id);
@@ -2307,8 +2312,8 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_BRUSH -> Icons.tipCursor(MaterialDesignB.BRUSH, 0.0, 1.0);
             case AOE_PEN -> Icons.tipCursor(MaterialDesignP.PEN, 0.0, 1.0);
             case AOE_LINE -> Cursor.CROSSHAIR;
-            case TEXT -> Cursor.TEXT;
-            case WALL_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
+            case TEXT, ROOM_LABEL -> Cursor.TEXT;
+            case WALL_DRAW, DOOR_DRAW, WINDOW_DRAW -> Icons.tipCursor(MaterialDesignP.PENCIL, 0.0, 1.0);
             case WALL_ERASE -> Icons.cursor(MaterialDesignE.ERASER_VARIANT, 0.2, 0.82);
             case LIGHT_ADD, LIGHT_CANDLE, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     Icons.cursor(activeTool.icon, 0.5, 0.5);
@@ -2697,6 +2702,8 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.setOnMouseExited(event -> {
             showViewportTitleTooltip(false);
             hoverInsideCanvas = false;
+            geometryPreviewHover = false;
+            roomPreview = null;
             hideBrushSizeLabel();
             if (laserToolActive && !event.isPrimaryButtonDown()) {
                 laserTrail.clear();
@@ -2725,6 +2732,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 rightClickCancelCandidate = pingArmed || laserToolActive || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
+                DmProject.Interactable portal = rightClickCancelCandidate ? null : pickInteractableForClick(world.x(), world.y());
+                if (portal != null) {
+                    showInteractableContextMenu(portal, event.getScreenX(), event.getScreenY());
+                    return;
+                }
                 DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
                 if (light != null) {
                     selectedLight = light;
@@ -2792,6 +2804,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 revealRoomAt(world.x(), world.y(), !event.isShiftDown());
                 return;
             }
+            if (activeTool == EditorTool.ROOM_LABEL) {
+                placeRoomLabel(world.x(), world.y());
+                return;
+            }
 
             if (activeTool.isFogTool()) {
                 if (!project.getFog().isEnabled()) {
@@ -2826,7 +2842,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (activeTool == EditorTool.WALL_DRAW) {
+            if (activeTool.isSegmentDrawTool()) {
                 double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
                 draftWall = DmProject.WallSegment.builder().x1(p[0]).y1(p[1]).x2(p[0]).y2(p[1]).build();
                 return;
@@ -3024,6 +3040,9 @@ public class DungeonMasterMapToolApplication extends Application {
             if (draggingText) {
                 DmProject.TextBox moving = findTextBox(selectedTextId);
                 if (moving != null) {
+                    if (!same(world.x(), textLastX) || !same(world.y(), textLastY)) {
+                        moving.setRoomLabelAnchored(false);
+                    }
                     moving.setX(moving.getX() + world.x() - textLastX);
                     moving.setY(moving.getY() + world.y() - textLastY);
                 }
@@ -4288,6 +4307,37 @@ public class DungeonMasterMapToolApplication extends Application {
         return true;
     }
 
+    private void changeInteractableType(DmProject.Interactable portal, String type) {
+        if (portal == null || !List.of("door", "window").contains(type) || type.equals(portal.getType())) {
+            return;
+        }
+        String before = portal.getType();
+        executeWithFogHistory("Change portal type", () -> portal.setType(type), () -> portal.setType(before));
+    }
+
+    private void showInteractableContextMenu(DmProject.Interactable portal, double screenX, double screenY) {
+        ContextMenu menu = new ContextMenu();
+        ToggleGroup types = new ToggleGroup();
+        for (String type : List.of("door", "window")) {
+            RadioMenuItem item = new RadioMenuItem(type.equals("door") ? "Door" : "Window");
+            item.setToggleGroup(types);
+            item.setSelected(type.equalsIgnoreCase(portal.getType()));
+            item.setOnAction(e -> changeInteractableType(portal, type));
+            menu.getItems().add(item);
+        }
+        MenuItem delete = new MenuItem("Delete");
+        delete.setOnAction(e -> deleteInteractable(portal));
+        menu.getItems().addAll(new SeparatorMenuItem(), delete);
+        hideLightMenu();
+        activeLightMenu = menu;
+        menu.setOnHidden(e -> {
+            if (activeLightMenu == menu) {
+                activeLightMenu = null;
+            }
+        });
+        menu.show(dmCanvas, screenX, screenY);
+    }
+
     /** Door/window whose icon badge (drawn at the middle of the door line) is under the given world point. */
     private DmProject.Interactable pickInteractableBadge(double worldX, double worldY) {
         double zoom = Math.max(0.01, project.getViews().getDmCamera().getZoom());
@@ -4561,6 +4611,8 @@ public class DungeonMasterMapToolApplication extends Application {
         CanvasMapRenderer.WorldPoint world = renderer.screenToWorld(
                 screenX, screenY, dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
         hoverInsideCanvas = true;
+        geometryPreviewHover = screenX >= 0 && screenY >= 0
+                && screenX < dmCanvas.getWidth() && screenY < dmCanvas.getHeight();
         hoverWorldX = world.x();
         hoverWorldY = world.y();
     }
@@ -4644,7 +4696,9 @@ public class DungeonMasterMapToolApplication extends Application {
         draggingText = false;
         resizingTextHandle = -1;
         activeTool = tool == null ? EditorTool.SELECT : tool;
-        if (activeTool == EditorTool.TEXT) {
+        roomPreview = null;
+        geometryPreviewHover = false;
+        if (activeTool == EditorTool.TEXT || activeTool == EditorTool.ROOM_LABEL) {
             if (!project.isTextLayerVisible()) {
                 setTextLayerVisible(true);
             }
@@ -4681,7 +4735,9 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_LINE -> status("Line: drag to draw a straight line (brush size and color, no texture).");
             case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it.");
             case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
-            case WALL_ERASE -> status("Erase wall: click a wall segment to remove it.");
+            case DOOR_DRAW, WINDOW_DRAW -> status(activeTool.label + ": drag endpoints (half-tile snap; Shift for free placement).");
+            case ROOM_LABEL -> status("Room label: preview a room in blue; click and type its DM-only name.");
+            case WALL_ERASE -> status("Erase walls: hover to highlight a wall, door or window; click to remove it.");
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
             case LIGHT_CANDLE, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     status(activeTool.label + ": click the map where the light should go.");
@@ -4820,7 +4876,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void drawRoomPreview(GraphicsContext gc) {
         FogMask mask = project.getFog().getMask();
-        if (!hoverInsideCanvas || mask == null || !project.getFog().isEnabled()) {
+        boolean labelPreview = activeTool == EditorTool.ROOM_LABEL;
+        if (!hoverInsideCanvas || (labelPreview && !geometryPreviewHover) || mask == null
+                || editingTextId != null || pingArmed || laserToolActive
+                || panningDmCamera || (!labelPreview && !project.getFog().isEnabled())) {
             return;
         }
         RoomFillService.Result room = roomAt(hoverWorldX, hoverWorldY);
@@ -4838,7 +4897,7 @@ public class DungeonMasterMapToolApplication extends Application {
         int maxCol = Math.min(cols - 1, (int) Math.floor((Math.max(topLeft.x(), bottomRight.x()) - mask.getOriginX()) / cell));
         int minRow = Math.max(0, (int) Math.floor((Math.min(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
         int maxRow = Math.min(mask.getRows() - 1, (int) Math.floor((Math.max(topLeft.y(), bottomRight.y()) - mask.getOriginY()) / cell));
-        gc.setFill(roomHidePreview ? Color.web("#FF8A7A", 0.3)
+        gc.setFill(labelPreview ? Color.web("#429BFF", 0.3) : roomHidePreview ? Color.web("#FF8A7A", 0.3)
                 : room.leaked() ? Color.web("#FFB020", 0.35) : Color.web("#7CFFB2", 0.3));
         BitSet cells = room.cells();
         double cellScreen = cell * camera.getZoom();
@@ -4903,6 +4962,14 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void drawToolPreview(GraphicsContext gc) {
+        if (activeTool == EditorTool.ROOM_LABEL) {
+            drawRoomPreview(gc);
+            return;
+        }
+        if (activeTool == EditorTool.WALL_ERASE) {
+            drawErasePreview(gc);
+            return;
+        }
         if (draftOverlay != null) {
             drawOverlaySizeLabel(gc);
         }
@@ -4985,6 +5052,7 @@ public class DungeonMasterMapToolApplication extends Application {
         lightingEngine.reset();
         roomBarrier = null;
         roomPreview = null;
+        geometryPreviewHover = false;
         clearGroup();
         selectedLayer = null;
         selectedLight = null;
@@ -5103,10 +5171,29 @@ public class DungeonMasterMapToolApplication extends Application {
         if (distance(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2()) < 2) {
             return;
         }
-        executeWithHistory("Add wall", () -> project.getWalls().add(wall), () -> project.getWalls().remove(wall));
+        if (activeTool == EditorTool.DOOR_DRAW || activeTool == EditorTool.WINDOW_DRAW) {
+            DmProject.Interactable portal = DmProject.Interactable.builder()
+                    .id("portal-" + UUID.randomUUID())
+                    .type(activeTool == EditorTool.DOOR_DRAW ? "door" : "window")
+                    .x1(wall.getX1()).y1(wall.getY1()).x2(wall.getX2()).y2(wall.getY2()).build();
+            executeWithFogHistory("Add " + portal.getType(), () -> project.getInteractables().add(portal),
+                    () -> project.getInteractables().remove(portal));
+        } else {
+            executeWithHistory("Add wall", () -> project.getWalls().add(wall), () -> project.getWalls().remove(wall));
+        }
     }
 
-    private void eraseWallAt(double worldX, double worldY, double zoom) {
+    private record EraseTarget(DmProject.WallSegment wall, DmProject.Interactable portal) {
+    }
+
+    private EraseTarget pickEraseTarget(double worldX, double worldY, double zoom) {
+        if (!renderer.isWallLayerVisible()) {
+            return null;
+        }
+        DmProject.Interactable badge = pickInteractableBadge(worldX, worldY);
+        if (badge != null) {
+            return new EraseTarget(null, badge);
+        }
         double tolerance = Tuning.WALL_PICK_RADIUS.get() / Math.max(0.01, zoom);
         DmProject.WallSegment nearest = null;
         double best = tolerance;
@@ -5117,13 +5204,69 @@ public class DungeonMasterMapToolApplication extends Application {
                 nearest = wall;
             }
         }
-        if (nearest == null) {
+        DmProject.Interactable portal = pickInteractableLine(worldX, worldY);
+        if (portal != null && pointToSegmentDistance(worldX, worldY,
+                portal.getX1(), portal.getY1(), portal.getX2(), portal.getY2()) <= best) {
+            return new EraseTarget(null, portal);
+        }
+        return nearest == null ? null : new EraseTarget(nearest, null);
+    }
+
+    private void eraseWallAt(double worldX, double worldY, double zoom) {
+        EraseTarget target = pickEraseTarget(worldX, worldY, zoom);
+        if (target == null) {
             return;
         }
-        DmProject.WallSegment target = nearest;
-        int index = project.getWalls().indexOf(target);
-        executeWithHistory("Erase wall", () -> project.getWalls().remove(target),
-                () -> project.getWalls().add(Math.min(index, project.getWalls().size()), target));
+        if (target.portal() != null) {
+            deleteInteractable(target.portal());
+        } else {
+            DmProject.WallSegment wall = target.wall();
+            int index = project.getWalls().indexOf(wall);
+            executeWithFogHistory("Erase wall", () -> project.getWalls().remove(wall),
+                    () -> project.getWalls().add(Math.min(index, project.getWalls().size()), wall));
+        }
+    }
+
+    private void deleteInteractable(DmProject.Interactable portal) {
+        int index = project.getInteractables().indexOf(portal);
+        if (index < 0) {
+            return;
+        }
+        executeWithFogHistory("Delete " + portal.getType(), () -> project.getInteractables().remove(portal),
+                () -> project.getInteractables().add(Math.min(index, project.getInteractables().size()), portal));
+    }
+
+    private void drawErasePreview(GraphicsContext gc) {
+        if (!hoverInsideCanvas || !geometryPreviewHover || editingTextId != null
+                || panningDmCamera || pingArmed || laserToolActive) {
+            return;
+        }
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        EraseTarget target = pickEraseTarget(hoverWorldX, hoverWorldY, camera.getZoom());
+        if (target == null) {
+            return;
+        }
+        double x1 = target.portal() == null ? target.wall().getX1() : target.portal().getX1();
+        double y1 = target.portal() == null ? target.wall().getY1() : target.portal().getY1();
+        double x2 = target.portal() == null ? target.wall().getX2() : target.portal().getX2();
+        double y2 = target.portal() == null ? target.wall().getY2() : target.portal().getY2();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double sx1 = renderer.worldToScreenX(x1, w, camera);
+        double sy1 = renderer.worldToScreenY(y1, h, camera);
+        double sx2 = renderer.worldToScreenX(x2, w, camera);
+        double sy2 = renderer.worldToScreenY(y2, h, camera);
+        gc.save();
+        gc.setStroke(Color.web("#FF6B6B", 0.95));
+        gc.setLineWidth(8);
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        gc.strokeLine(sx1, sy1, sx2, sy2);
+        if (target.portal() != null) {
+            double radius = CanvasMapRenderer.INTERACTABLE_BADGE_RADIUS + 3;
+            gc.setLineWidth(3);
+            gc.strokeOval((sx1 + sx2) / 2 - radius, (sy1 + sy2) / 2 - radius, radius * 2, radius * 2);
+        }
+        gc.restore();
     }
 
     private double distanceToSegment(double px, double py, DmProject.WallSegment wall) {
@@ -6171,7 +6314,11 @@ public class DungeonMasterMapToolApplication extends Application {
         DmProject.TextBox text = findTextBox(selectedTextId);
         deleteTextButton.setDisable(text == null);
         textAutoSizeToggle.setDisable(text == null);
-        textPlayerToggle.setDisable(text == null);
+        boolean roomLabel = text != null && text.isRoomLabel();
+        textPlayerToggle.setDisable(text == null || roomLabel);
+        boolean showPlayerControl = !roomLabel && !preferences.hiddenControls().contains("text.players");
+        textPlayerToggle.setVisible(showPlayerControl);
+        textPlayerToggle.setManaged(showPlayerControl);
         if (text == null && (textPlayerToggle.isSelected() || textAutoSizeToggle.isSelected())) {
             syncingControls = true;
             try {
@@ -6352,7 +6499,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 syncTextControls(current);
             }
         });
-        menu.getItems().add(visible);
+        if (!box.isRoomLabel()) {
+            menu.getItems().add(visible);
+        }
+        MenuItem edit = new MenuItem("Edit text");
+        edit.setOnAction(e -> beginTextEdit(box, false));
+        MenuItem delete = new MenuItem("Delete text");
+        delete.setOnAction(e -> deleteSelectedText());
+        menu.getItems().addAll(edit, delete);
         hideLightMenu();
         activeLightMenu = menu;
         menu.setOnHidden(e -> {
@@ -6386,6 +6540,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 .borderColor(source.getBorderColor())
                 .autoSize(source.isAutoSize())
                 .playerVisible(source.isPlayerVisible())
+                .roomLabel(source.isRoomLabel())
+                .roomLabelAnchored(source.isRoomLabelAnchored())
+                .roomLabelCenterX(source.getRoomLabelCenterX())
+                .roomLabelCenterY(source.getRoomLabelCenterY())
                 .build();
     }
 
@@ -6567,6 +6725,7 @@ public class DungeonMasterMapToolApplication extends Application {
         box.setY(top);
         box.setWidth(right - left);
         box.setHeight(bottom - top);
+        box.recenterRoomLabel();
     }
 
     private boolean pressTextWithSelectTool(double worldX, double worldY, double zoom, int clickCount) {
@@ -6627,6 +6786,31 @@ public class DungeonMasterMapToolApplication extends Application {
         draftText = box;
     }
 
+    private void placeRoomLabel(double worldX, double worldY) {
+        if (!project.isTextLayerVisible()) {
+            setTextLayerVisible(true);
+        }
+        RoomFillService.Result room = roomAt(worldX, worldY);
+        FogMask mask = project.getFog().getMask();
+        double[] position = mask == null ? new double[]{worldX, worldY}
+                : RoomFillService.labelPosition(mask, roomBarrier, room, worldX, worldY);
+        DmProject.TextBox box = DmProject.TextBox.builder()
+                .id("text-" + UUID.randomUUID()).x(position[0]).y(position[1])
+                .roomLabel(true).playerVisible(false).autoSize(true)
+                .roomLabelAnchored(true).roomLabelCenterX(position[0]).roomLabelCenterY(position[1])
+                .backgroundColor(Tuning.ROOM_LABEL_BACKGROUND_COLOR.get())
+                .borderColor(Tuning.ROOM_LABEL_BORDER_COLOR.get()).build();
+        project.getTextBoxes().add(box);
+        selectedTextId = box.getId();
+        selectedOverlayId = null;
+        selectedLayer = null;
+        selectedLight = null;
+        syncTextControls(box);
+        syncTextStyleControls(clampFontSize(Tuning.ROOM_LABEL_FONT_SIZE.get()), Tuning.ROOM_LABEL_TEXT_COLOR.get());
+        beginTextEdit(box, true);
+        updateSelectionControls();
+    }
+
     private void updateTextDraft(double worldX, double worldY) {
         DmProject.TextBox box = draftText;
         box.setX(Math.min(textStartX, worldX));
@@ -6653,13 +6837,16 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void beginTextEdit(DmProject.TextBox box, boolean isNew) {
         commitTextEdit();
+        roomPreview = null;
+        geometryPreviewHover = false;
         editingTextId = box.getId();
         editingTextIsNew = isNew;
         editingTextBefore = isNew ? null : cloneText(box);
         selectedTextId = box.getId();
         renderer.setEditingTextBoxId(box.getId());
         textEditor.setBoxColors(box.getBackgroundColor(), box.getBorderColor());
-        textEditor.show(box.getRuns(), textSizeSpinner.getValue(), toHex(textColorPicker.getValue()));
+        int typingSize = isNew && box.isRoomLabel() ? Tuning.ROOM_LABEL_FONT_SIZE.get() : textSizeSpinner.getValue();
+        textEditor.show(box.getRuns(), typingSize, toHex(textColorPicker.getValue()));
         if (box.isAutoSize()) {
             fitTextBox(box);
         }
@@ -6670,6 +6857,7 @@ public class DungeonMasterMapToolApplication extends Application {
         } finally {
             syncingControls = false;
         }
+        updateSelectionControls();
         updateTextEditorPlacement();
         syncTextStyleControls(textEditor.typingSize(), textEditor.typingColor());
         status("Editing text — Esc or click outside to finish. Change size and color with the Text controls.");
@@ -6680,6 +6868,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (editingTextId == null) {
             return;
         }
+        roomPreview = null;
+        geometryPreviewHover = false;
         String id = editingTextId;
         boolean isNew = editingTextIsNew;
         DmProject.TextBox before = editingTextBefore;
@@ -6851,6 +7041,7 @@ public class DungeonMasterMapToolApplication extends Application {
         java.util.List<DmProject.TextBox> texts = new java.util.ArrayList<>();
         for (DmProject.TextBox source : content.texts) {
             DmProject.TextBox copy = cloneText(source);
+            copy.setRoomLabelAnchored(false);
             copy.setId("text-" + UUID.randomUUID());
             copy.setX(copy.getX() + dx);
             copy.setY(copy.getY() + dy);
@@ -6964,6 +7155,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Stores the current text settings as this map's last used ones and as the global fallback. */
     private void rememberTextSettings() {
+        DmProject.TextBox selected = findTextBox(editingTextId != null ? editingTextId : selectedTextId);
+        if (selected != null && selected.isRoomLabel()) {
+            return;
+        }
         DmProject.TextSettings settings = currentTextSettings();
         project.setLastTextSettings(settings);
         preferences.putInt(PREF_TEXT_FONT_SIZE, settings.getFontSize());
@@ -7010,6 +7205,7 @@ public class DungeonMasterMapToolApplication extends Application {
         } finally {
             syncingControls = false;
         }
+        updateSelectionControls();
     }
 
     private void syncTextStyleControls(int size, String color) {
@@ -7182,7 +7378,10 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (key.startsWith("text:")) {
             DmProject.TextBox box = findTextBox(id);
-            return box == null ? null : new double[]{box.getX(), box.getY()};
+            return box == null ? null : box.isRoomLabel()
+                    ? new double[]{box.getX(), box.getY(), box.isRoomLabelAnchored() ? 1 : 0,
+                    box.getRoomLabelCenterX(), box.getRoomLabelCenterY()}
+                    : new double[]{box.getX(), box.getY()};
         }
         if (key.startsWith("overlay:")) {
             DmProject.OverlayShape shape = findOverlay(id);
@@ -7227,6 +7426,9 @@ public class DungeonMasterMapToolApplication extends Application {
         } else if (key.startsWith("text:")) {
             DmProject.TextBox box = findTextBox(id);
             if (box != null) {
+                if (!same(box.getX(), x) || !same(box.getY(), y)) {
+                    box.setRoomLabelAnchored(false);
+                }
                 box.setX(x);
                 box.setY(y);
             }
@@ -7260,7 +7462,7 @@ public class DungeonMasterMapToolApplication extends Application {
                                     FogMask.Snapshot fogBefore) {
         boolean changed = before.entrySet().stream().anyMatch(e -> {
             double[] now = after.get(e.getKey());
-            return now != null && (!same(e.getValue()[0], now[0]) || !same(e.getValue()[1], now[1]));
+            return now != null && !java.util.Arrays.equals(e.getValue(), now);
         });
         if (!changed) {
             FogMask.Snapshot fogAfter = fogBefore == null ? null : snapshotFog();
@@ -7268,12 +7470,24 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
         }
-        Runnable redo = () -> after.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
-        Runnable undo = () -> before.forEach((key, p) -> moveGroupItemTo(key, p[0], p[1]));
+        Runnable redo = () -> after.forEach(this::restoreGroupPosition);
+        Runnable undo = () -> before.forEach(this::restoreGroupPosition);
         if (fogBefore != null) {
             recordWithFog("Move selection", fogBefore, redo, undo);
         } else {
             recordHistory("Move selection", redo, undo);
+        }
+    }
+
+    private void restoreGroupPosition(String key, double[] position) {
+        moveGroupItemTo(key, position[0], position[1]);
+        if (key.startsWith("text:") && position.length >= 5) {
+            DmProject.TextBox box = findTextBox(keyId(key));
+            if (box != null) {
+                box.setRoomLabelAnchored(position[2] != 0);
+                box.setRoomLabelCenterX(position[3]);
+                box.setRoomLabelCenterY(position[4]);
+            }
         }
     }
 
@@ -8206,7 +8420,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
         WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WALL, false, false),
-        WALL_ERASE("Erase walls", "click a wall to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
+        DOOR_DRAW("Draw door", "drag to draw a door; snaps to half tiles, hold Shift for free placement",
+                MaterialDesignD.DOOR_CLOSED, false, false),
+        WINDOW_DRAW("Draw window", "drag to draw a window; snaps to half tiles, hold Shift for free placement",
+                MaterialDesignW.WINDOW_CLOSED, false, false),
+        ROOM_LABEL("Room label", "hover to preview a room in blue; click to place and edit its permanently DM-only name",
+                MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
+        WALL_ERASE("Erase walls", "hover to highlight a wall, door or window; click to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
         LIGHT_ADD("Add light", "click the map to place a torch", MaterialDesignL.LIGHTBULB_ON, false, false),
         LIGHT_CANDLE("Candle", "click the map to place a candle", MaterialDesignC.CANDLE, false, false),
         LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire", MaterialDesignC.CAMPFIRE, false, false),
@@ -8239,7 +8459,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isWallTool() {
-            return this == WALL_DRAW || this == WALL_ERASE;
+            return isSegmentDrawTool() || this == WALL_ERASE;
+        }
+
+        boolean isSegmentDrawTool() {
+            return this == WALL_DRAW || this == DOOR_DRAW || this == WINDOW_DRAW;
         }
 
         boolean isLightTool() {
@@ -8252,7 +8476,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         boolean isFogTool() {
-            return this != SELECT && this != TEXT && !isAoeTool() && !isWallTool() && !isLightTool();
+            return this != SELECT && this != TEXT && this != ROOM_LABEL && !isAoeTool() && !isWallTool() && !isLightTool();
         }
     }
 

@@ -436,6 +436,23 @@ public class DmProject {
         /** When false, only the DM sees the box. */
         @Builder.Default
         private boolean playerVisible = true;
+        /** Room names are permanently DM-only annotations, not hidden player text. */
+        private boolean roomLabel;
+        /** Missing metadata on older labels leaves their saved placement unchanged. */
+        private boolean roomLabelAnchored;
+        private double roomLabelCenterX;
+        private double roomLabelCenterY;
+
+        public void recenterRoomLabel() {
+            if (roomLabel && roomLabelAnchored) {
+                x = roomLabelCenterX - width / 2.0;
+                y = roomLabelCenterY - height / 2.0;
+            }
+        }
+
+        public boolean isPlayerVisible() {
+            return !roomLabel && playerVisible;
+        }
     }
 
     /** A stretch of text with one font size and color; line breaks are "\n" inside the text. */

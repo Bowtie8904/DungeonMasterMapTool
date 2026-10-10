@@ -842,8 +842,11 @@
 }
 
 /* ---------- Text box editor (in-place rich text) ---------- */
+.text-box-editor.styled-text-area {
+    -dm-caret-color: #FFFFFF;
+}
 .text-box-editor.styled-text-area .caret {
-    -fx-stroke: #000000;
+    -fx-stroke: -dm-caret-color;
     -fx-stroke-width: 2;
 }
 .text-box-editor.styled-text-area .selection {

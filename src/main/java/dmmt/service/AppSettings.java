@@ -77,7 +77,8 @@ public final class AppSettings {
                 "players|Players see text", "delete|Delete selected text", "size|Font size", "color|Text colour",
                 "rotateLeft|Rotate text left", "rotateRight|Rotate text right", "background|Background colour",
                 "noBackground|No background", "border|Border colour", "noBorder|No border");
-        addControls(controls, "building", "drawWall|Draw wall", "eraseWall|Erase wall", "wallLayer|Show/hide wall layer",
+        addControls(controls, "building", "drawWall|Draw wall", "drawDoor|Draw door", "drawWindow|Draw window",
+                "roomLabel|Room label", "eraseWall|Erase wall", "wallLayer|Show/hide wall layer",
                 "lock|Lock image layer", "snap|Snap image layers", "addImage|Add image layer");
         addControls(controls, "player", "window|Player window", "freeze|Freeze player view", "scaleTest|1-inch test square",
                 "handout|Handout", "grid|Show player grid", "gridOpacity|Grid opacity", "screen|Player screen",
@@ -555,6 +556,8 @@ public final class AppSettings {
                 return new Placement("Brush", 1);
             case "effects":
                 return new Placement("Effect shapes", 1);
+            case "roomLabel":
+                return new Placement("Room label defaults", 1);
             case "text":
                 if (key.matches("text\\.(minFontSize|maxFontSize)")) {
                     return new Placement("Font size limits", 1);

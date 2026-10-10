@@ -970,7 +970,7 @@ public class CanvasMapRenderer {
             double centerX = worldToScreenX(TextBoxGeometry.centerX(box), width, camera);
             double centerY = worldToScreenY(TextBoxGeometry.centerY(box), height, camera);
             gc.save();
-            if (!playerMode && !box.isPlayerVisible()) {
+            if (!playerMode && !box.isPlayerVisible() && !box.isRoomLabel()) {
                 gc.setGlobalAlpha(Tuning.HIDDEN_TEXT_OPACITY.get());
             }
             gc.translate(centerX, centerY);
@@ -1030,7 +1030,7 @@ public class CanvasMapRenderer {
                                       DmProject.CameraState camera) {
         double r = 11;
         for (DmProject.TextBox box : project.getTextBoxes()) {
-            if (box.isPlayerVisible() || (box.getId() != null && box.getId().equals(editingTextBoxId))) {
+            if (box.isRoomLabel() || box.isPlayerVisible() || (box.getId() != null && box.getId().equals(editingTextBoxId))) {
                 continue;
             }
             double cx = worldToScreenX(box.getX() + box.getWidth() / 2.0, width, camera);
@@ -1079,6 +1079,7 @@ public class CanvasMapRenderer {
         double textWidth = layout.extentWidth() > 0 ? layout.extentWidth() : lastSize;
         box.setWidth(Math.ceil(Math.min(maxWidth, textWidth + 2 * TEXT_BOX_PADDING + 4)));
         box.setHeight(Math.ceil(textHeight + 2 * TEXT_BOX_PADDING));
+        box.recenterRoomLabel();
     }
 
     private Font fontFor(int size) {
@@ -2258,4 +2259,3 @@ public class CanvasMapRenderer {
         }
     }
 }
-

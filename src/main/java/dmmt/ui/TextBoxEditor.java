@@ -106,6 +106,7 @@ public final class TextBoxEditor {
             loading = false;
         }
         centerParagraphs();
+        applyBoxStyle();
         area.setVisible(true);
         area.requestFocus();
         Platform.runLater(area::requestFocus);
@@ -169,6 +170,7 @@ public final class TextBoxEditor {
 
     public void applyTextColor(String color) {
         typingColor = normalizeColor(color);
+        applyBoxStyle();
         String normalized = typingColor;
         restyleSelection(current -> style(current.size, normalized));
     }
@@ -226,10 +228,10 @@ public final class TextBoxEditor {
         String borderCss = hasBorder ? css(border) : "rgba(255,213,74,0.9)";
         String css = String.format(Locale.ROOT,
                 "-fx-background-color: %s; -fx-background-insets: %.1f; -fx-background-radius: %.1f; -fx-border-color: %s; -fx-border-radius: %.1f;"
-                        + " -fx-border-width: %.1f; -fx-border-style: %s; -fx-padding: %.1f %.1f %.1f %.1f;",
+                        + " -fx-border-width: %.1f; -fx-border-style: %s; -fx-padding: %.1f %.1f %.1f %.1f; -dm-caret-color: %s;",
                 css(background), hasBorder ? borderWidth / 2 : 0, Math.max(0, CORNER_RADIUS - (hasBorder ? borderWidth / 2 : 0)), borderCss, CORNER_RADIUS, borderWidth,
                 hasBorder ? "solid" : "segments(6, 4)", PADDING - borderWidth + topExtra, PADDING - borderWidth,
-                PADDING - borderWidth, PADDING - borderWidth);
+                PADDING - borderWidth, PADDING - borderWidth, typingColor);
         if (!css.equals(lastBoxStyle)) {
             lastBoxStyle = css;
             area.setStyle(css);
@@ -260,6 +262,7 @@ public final class TextBoxEditor {
             if (style != null) {
                 typingSize = style.size;
                 typingColor = style.color;
+                applyBoxStyle();
                 onCaretStyleChanged.accept(style.size, style.color);
             }
         });
