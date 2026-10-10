@@ -2300,6 +2300,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setPingArmed(boolean armed) {
+        if (armed && activeTool == EditorTool.WALL_DRAW) {
+            draftWall = null;
+        }
         if (armed && laserToolActive) {
             setLaserToolActive(false);
         }
@@ -2701,6 +2704,9 @@ public class DungeonMasterMapToolApplication extends Application {
                     event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
             camera.setX(camera.getX() + (before.x() - after.x()));
             camera.setY(camera.getY() + (before.y() - after.y()));
+            if (activeTool == EditorTool.WALL_DRAW) {
+                updateHover(event.getX(), event.getY());
+            }
         });
 
         dmCanvas.setOnMouseMoved(event -> {
@@ -2855,6 +2861,12 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (activeTool == EditorTool.TEXT) {
                 pressWithTextTool(world.x(), world.y());
+                return;
+            }
+
+            if (activeTool == EditorTool.WALL_DRAW) {
+                updateHover(event.getX(), event.getY());
+                placeWallPoint(world.x(), world.y(), event.isShiftDown());
                 return;
             }
 
@@ -3042,6 +3054,9 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             if (draftWall != null) {
+                if (activeTool == EditorTool.WALL_DRAW) {
+                    return;
+                }
                 double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
                 draftWall.setX2(p[0]);
                 draftWall.setY2(p[1]);
@@ -3112,6 +3127,9 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnMouseReleased(event -> {
+            if (activeTool == EditorTool.WALL_DRAW) {
+                updateHover(event.getX(), event.getY());
+            }
             if (event.getButton() == MouseButton.PRIMARY) {
                 finishPlayerViewportDrag();
             }
@@ -3190,7 +3208,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (draftWall != null) {
+            if (draftWall != null && activeTool != EditorTool.WALL_DRAW) {
                 finishWallDraw();
                 return;
             }
@@ -3966,7 +3984,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean interactionInProgress() {
         return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
                 || draggingText || resizingTextHandle >= 0 || draftText != null
-                || draggingPlayerViewport || panningDmCamera || draftWall != null || draftOverlay != null;
+                || draggingPlayerViewport || panningDmCamera
+                || (draftWall != null && (activeTool != EditorTool.WALL_DRAW || canvasMouseDown))
+                || draftOverlay != null;
     }
 
     private void installNudgeFocusListener(Scene scene) {
@@ -4831,7 +4851,7 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_PEN -> status("Pen: draw a thin freehand line in the selected color.");
             case AOE_LINE -> status("Line: drag to draw a straight line (brush size and color, no texture).");
             case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it.");
-            case WALL_DRAW -> status("Wall: drag to draw a wall that blocks light (snaps to half tiles, hold Shift for free placement).");
+            case WALL_DRAW -> status("Wall: click points to draw connected walls; Esc or right-click ends the chain (half-tile snap; Shift for free placement).");
             case DOOR_DRAW, WINDOW_DRAW -> status(activeTool.label + ": drag endpoints (half-tile snap; Shift for free placement).");
             case ROOM_LABEL -> status("Room label: preview a room in blue; click and type its DM-only name.");
             case WALL_ERASE -> status("Erase walls: hover to highlight a wall, door or window; click to remove it.");
@@ -5070,14 +5090,25 @@ public class DungeonMasterMapToolApplication extends Application {
         if (draftOverlay != null) {
             drawOverlaySizeLabel(gc);
         }
-        if (draftWall != null) {
+        if (draftWall != null && (activeTool != EditorTool.WALL_DRAW
+                || (hoverInsideCanvas && geometryPreviewHover && !panningDmCamera && !pingArmed && !laserToolActive))) {
             DmProject.CameraState wallCamera = project.getViews().getDmCamera();
             double ww = dmFogCanvas.getWidth();
             double wh = dmFogCanvas.getHeight();
+            double[] endpoint = activeTool == EditorTool.WALL_DRAW
+                    ? snapWallPoint(hoverWorldX, hoverWorldY, roomHidePreview)
+                    : new double[]{draftWall.getX2(), draftWall.getY2()};
             gc.setStroke(Color.web("#FFD24A"));
             gc.setLineWidth(3);
             gc.strokeLine(renderer.worldToScreenX(draftWall.getX1(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY1(), wh, wallCamera),
-                    renderer.worldToScreenX(draftWall.getX2(), ww, wallCamera), renderer.worldToScreenY(draftWall.getY2(), wh, wallCamera));
+                    renderer.worldToScreenX(endpoint[0], ww, wallCamera), renderer.worldToScreenY(endpoint[1], wh, wallCamera));
+            if (activeTool == EditorTool.WALL_DRAW) {
+                gc.setFill(Color.web("#FFD24A"));
+                gc.fillOval(renderer.worldToScreenX(draftWall.getX1(), ww, wallCamera) - 4,
+                        renderer.worldToScreenY(draftWall.getY1(), wh, wallCamera) - 4, 8, 8);
+                gc.fillOval(renderer.worldToScreenX(endpoint[0], ww, wallCamera) - 4,
+                        renderer.worldToScreenY(endpoint[1], wh, wallCamera) - 4, 8, 8);
+            }
         }
         if ((activeTool == EditorTool.AOE_BRUSH || activeTool == EditorTool.AOE_LINE) && hoverInsideCanvas) {
             DmProject.CameraState brushCamera = project.getViews().getDmCamera();
@@ -5162,6 +5193,7 @@ public class DungeonMasterMapToolApplication extends Application {
         selectedLight = null;
         selectedOverlayId = null;
         draftOverlay = null;
+        draftWall = null;
         draggingOverlay = false;
         resizingOverlay = false;
         selectedTextId = null;
@@ -5305,6 +5337,21 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         double step = project.getMap().getGrid().getPixelsPerCell() / 2.0;
         return new double[]{Math.round(worldX / step) * step, Math.round(worldY / step) * step};
+    }
+
+    private void placeWallPoint(double worldX, double worldY, boolean free) {
+        double[] point = snapWallPoint(worldX, worldY, free);
+        if (draftWall != null) {
+            if (distance(draftWall.getX1(), draftWall.getY1(), point[0], point[1]) < 2) {
+                return;
+            }
+            DmProject.WallSegment wall = DmProject.WallSegment.builder()
+                    .x1(draftWall.getX1()).y1(draftWall.getY1()).x2(point[0]).y2(point[1]).build();
+            executeWithFogHistory("Add wall", () -> project.getWalls().add(wall),
+                    () -> project.getWalls().remove(wall));
+        }
+        draftWall = DmProject.WallSegment.builder()
+                .x1(point[0]).y1(point[1]).x2(point[0]).y2(point[1]).build();
     }
 
     private void finishWallDraw() {
@@ -8441,6 +8488,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void undo() {
+        if (activeTool == EditorTool.WALL_DRAW) {
+            draftWall = null;
+        }
         finishNudge();
         finishPlayerViewportDrag();
         commitTextEdit();
@@ -8459,6 +8509,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void redo() {
+        if (activeTool == EditorTool.WALL_DRAW) {
+            draftWall = null;
+        }
         finishNudge();
         finishPlayerViewportDrag();
         commitTextEdit();
@@ -8596,7 +8649,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 MaterialDesignV.VECTOR_LINE, false, false),
         TEXT("Text box", "drag on the map to draw a text box and type; click a text box to edit it",
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
-        WALL_DRAW("Draw walls", "drag to draw a wall that blocks light; snaps to half tiles, hold Shift for free placement",
+        WALL_DRAW("Draw walls", "click points to draw connected walls; Esc or right-click ends the chain; half-tile snap, Shift for free placement",
                 MaterialDesignW.WALL, false, false),
         DOOR_DRAW("Draw door", "drag to draw a door; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignD.DOOR_CLOSED, false, false),

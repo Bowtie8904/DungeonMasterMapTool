@@ -123,6 +123,166 @@ class MapBuildingToolsTest {
     }
 
     @Test
+    void wallClicksChainIndependentSnappedAndFreeSegmentsAndPersistWithoutPendingPreview() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.api.execute("building.drawWall", Map.of());
+            f.click(23, 28, MouseButton.PRIMARY, false);
+            assertTrue(f.project.getWalls().isEmpty());
+            assertTrue(((Deque<?>) get(f.app, "undoStack")).isEmpty());
+            f.move(176, 131);
+            assertTrue(previewPixel(f, 100, 100).getOpacity() > 0);
+            String before = new ProjectService().fingerprint(f.project);
+            f.move(180, 140);
+            assertEquals(before, new ProjectService().fingerprint(f.project));
+            f.click(176, 131, MouseButton.PRIMARY, false);
+            DmProject.WallSegment first = f.project.getWalls().getFirst();
+            assertEquals(DmProject.WallSegment.builder().x1(0).y1(50).x2(200).y2(150).build(), first);
+            f.click(203, 152, MouseButton.PRIMARY, false);
+            f.click(201, 150, MouseButton.PRIMARY, true);
+            assertEquals(1, f.project.getWalls().size(), "repeated or too-short points do not advance the chain");
+            f.click(267, 219, MouseButton.PRIMARY, true);
+            DmProject.WallSegment second = f.project.getWalls().getLast();
+            assertEquals(DmProject.WallSegment.builder().x1(200).y1(150).x2(267).y2(219).build(), second);
+            f.click(310, 260, MouseButton.PRIMARY, false);
+            DmProject.WallSegment third = f.project.getWalls().getLast();
+            assertEquals(DmProject.WallSegment.builder().x1(267).y1(219).x2(300).y2(250).build(), third);
+            assertEquals(3, ((Deque<?>) get(f.app, "undoStack")).size());
+            assertFalse((boolean) invoke(f.app, "interactionInProgress"), "auto-save can run between clicks");
+            Path file = directory.resolve("wall-chain.dmmap");
+            new ProjectService().save(file, f.project);
+            assertEquals(f.project.getWalls(), new ProjectService().load(file).getWalls());
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(java.util.List.of(first, second), f.project.getWalls());
+            assertNull(get(f.app, "draftWall"));
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(java.util.List.of(first, second, third), f.project.getWalls());
+            f.click(50, 50, MouseButton.PRIMARY, false);
+            assertEquals(3, f.project.getWalls().size(), "undo/redo ends the old chain");
+            f.click(150, 50, MouseButton.PRIMARY, false);
+            assertEquals(50, f.project.getWalls().getLast().getX1());
+        });
+    }
+
+    @Test
+    void wallChainIgnoresDragsAndCancelsWithoutRemovingCommittedWalls() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.api.execute("building.drawWall", Map.of());
+            f.drag(50, 50, 150, 50, false);
+            assertTrue(f.project.getWalls().isEmpty(), "release never commits a wall");
+            f.click(150, 50, MouseButton.PRIMARY, false);
+            assertEquals(1, f.project.getWalls().size());
+            f.move(150, 150);
+            assertTrue(previewPixel(f, 150, 100).getOpacity() > 0);
+            f.canvas.getOnMouseExited().handle(f.mouse(MouseEvent.MOUSE_EXITED, 400, 150, MouseButton.NONE, false));
+            assertEquals(0, previewPixel(f, 150, 100).getOpacity());
+            assertNotNull(get(f.app, "draftWall"), "leaving the canvas preserves the anchor");
+            f.move(150, 150);
+            f.click(150, 150, MouseButton.SECONDARY, false);
+            assertEquals("SELECT", get(f.app, "activeTool").toString());
+            assertNull(get(f.app, "draftWall"));
+            assertEquals(1, f.project.getWalls().size());
+            for (String tool : new String[]{"building.drawDoor", "tools.ping", "tools.select"}) {
+                f.api.execute("building.drawWall", Map.of());
+                f.click(50, 50, MouseButton.PRIMARY, false);
+                f.api.execute(tool, Map.of());
+                assertNull(get(f.app, "draftWall"), tool);
+                assertEquals(1, f.project.getWalls().size());
+                invoke(f.app, "cancelActiveTool");
+            }
+            f.api.execute("building.drawWall", Map.of());
+            f.click(50, 50, MouseButton.PRIMARY, false);
+            invoke(f.app, "cancelActiveTool");
+            assertNull(get(f.app, "draftWall"));
+            assertEquals(1, f.project.getWalls().size());
+        });
+    }
+
+    @Test
+    void wallChainCompletesRoomBoundariesAndRefreshesLightingWithIndividualHistory() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.project.getLighting().getLights().add(DmProject.LightSource.builder().id("persistent")
+                    .x(100).y(100).range(200).revealMode(DmProject.RevealMode.PERSISTENT).build());
+            f.api.execute("building.drawWall", Map.of());
+            for (double[] point : new double[][]{{30, 30}, {170, 30}, {170, 170}, {30, 170}, {30, 30}}) {
+                f.click(point[0], point[1], MouseButton.PRIMARY, true);
+            }
+            assertEquals(4, f.project.getWalls().size());
+            assertFalse(((RoomFillService.Result) invoke(f.app, "roomAt", 100.0, 100.0)).leaked());
+            var engine = (dmmt.lighting.LightingEngine) get(f.app, "lightingEngine");
+            FogMask mask = f.project.getFog().getMask();
+            FogMask.Snapshot completed = mask.snapshot();
+            f.api.execute("tools.undo", Map.of());
+            assertTrue(((RoomFillService.Result) invoke(f.app, "roomAt", 100.0, 100.0)).leaked());
+            engine.update(f.project);
+            FogMask.Snapshot undone = mask.snapshot();
+            f.api.execute("tools.redo", Map.of());
+            engine.update(f.project);
+            assertTrue(completed.sameBits(mask.snapshot()), "redo restores the segment's fog snapshot");
+            assertFalse(((RoomFillService.Result) invoke(f.app, "roomAt", 100.0, 100.0)).leaked());
+            f.api.execute("tools.undo", Map.of());
+            engine.update(f.project);
+            assertTrue(undone.sameBits(mask.snapshot()));
+        });
+    }
+
+    @Test
+    void wallPreviewTracksShiftZoomAndPanStaysDmOnlyAndClearsAcrossMaps() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.project.getFog().setEnabled(false);
+            f.api.execute("building.drawWall", Map.of());
+            f.click(50, 50, MouseButton.PRIMARY, false);
+            f.move(176, 131);
+            assertTrue(previewPixel(f, 200, 150).getOpacity() > 0, "snapped endpoint");
+            javafx.event.Event.fireEvent(f.canvas, new javafx.scene.input.KeyEvent(
+                    javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.SHIFT,
+                    true, false, false, false));
+            assertTrue(previewPixel(f, 176, 131).getOpacity() > 0, "Shift updates the preview without moving");
+            assertEquals(0, previewPixel(f, 200, 150).getOpacity());
+            javafx.event.Event.fireEvent(f.canvas, new javafx.scene.input.KeyEvent(
+                    javafx.scene.input.KeyEvent.KEY_RELEASED, "", "", javafx.scene.input.KeyCode.SHIFT,
+                    false, false, false, false));
+            assertTrue(previewPixel(f, 200, 150).getOpacity() > 0);
+            f.canvas.getOnScroll().handle(new javafx.scene.input.ScrollEvent(
+                    javafx.scene.input.ScrollEvent.SCROLL, 200, 150, 200, 150,
+                    false, false, false, false, false, false, 0, 40, 0, 40,
+                    javafx.scene.input.ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+                    javafx.scene.input.ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0,
+                    new PickResult(f.canvas, 200, 150)));
+            assertNotNull(get(f.app, "draftWall"));
+            f.press(200, 150, MouseButton.SECONDARY, false);
+            f.canvas.getOnMouseDragged().handle(f.mouse(
+                    MouseEvent.MOUSE_DRAGGED, 250, 150, MouseButton.SECONDARY, false));
+            f.canvas.getOnMouseReleased().handle(f.mouse(
+                    MouseEvent.MOUSE_RELEASED, 250, 150, MouseButton.SECONDARY, false));
+            assertEquals("WALL_DRAW", get(f.app, "activeTool").toString());
+            assertTrue(f.project.getWalls().isEmpty());
+            f.click(250, 150, MouseButton.PRIMARY, true);
+            DmProject.WallSegment wall = f.project.getWalls().getFirst();
+            assertEquals(50, wall.getX1());
+            assertEquals(50, wall.getY1());
+            assertEquals(200, wall.getX2(), 1e-9);
+            assertEquals(150, wall.getY2(), 1e-9);
+            Canvas player = new Canvas(400, 300);
+            CanvasMapRenderer renderer = (CanvasMapRenderer) get(f.app, "renderer");
+            renderer.render(player.getGraphicsContext2D(), f.project, null, 400, 300,
+                    f.project.getViews().getDmCamera(), true, null);
+            javafx.scene.SnapshotParameters transparent = new javafx.scene.SnapshotParameters();
+            transparent.setFill(javafx.scene.paint.Color.TRANSPARENT);
+            assertEquals(0, player.snapshot(transparent, null).getPixelReader().getColor(200, 150).getOpacity());
+            DmProject next = DmProject.builder().build();
+            invoke(f.app, "switchProject", next, null);
+            assertNull(get(f.app, "draftWall"));
+            f.click(50, 50, MouseButton.PRIMARY, false);
+            assertTrue(next.getWalls().isEmpty(), "first click on the new map starts a fresh chain");
+            assertEquals(1, f.project.getWalls().size());
+        });
+    }
+
+    @Test
     void portalsDrawWithWallSnappingAndShiftOverrideAndUndoRedo() throws Exception {
         onFx(() -> {
             Fixture f = fixture();
@@ -299,7 +459,7 @@ class MapBuildingToolsTest {
         onFx(() -> {
             Fixture f = fixture();
             ControlVisibility controls = (ControlVisibility) get(f.app, "dmControlVisibility");
-            Set<String> ids = Set.of("building.drawDoor", "building.drawWindow", "building.roomLabel");
+            Set<String> ids = Set.of("building.drawWall", "building.drawDoor", "building.drawWindow", "building.roomLabel");
             controls.apply(ids);
             for (String id : ids) {
                 assertFalse(controls.registeredNodes().get(id).getFirst().isVisible());
@@ -1012,6 +1172,11 @@ class MapBuildingToolsTest {
         }
         void press(double x, double y, MouseButton button, boolean shift) {
             canvas.getOnMousePressed().handle(mouse(MouseEvent.MOUSE_PRESSED, x, y, button, shift));
+        }
+
+        void click(double x, double y, MouseButton button, boolean shift) {
+            press(x, y, button, shift);
+            canvas.getOnMouseReleased().handle(mouse(MouseEvent.MOUSE_RELEASED, x, y, button, shift));
         }
 
         void drag(double x1, double y1, double x2, double y2, boolean shift) {
