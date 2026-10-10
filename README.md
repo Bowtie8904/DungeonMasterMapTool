@@ -172,6 +172,8 @@ Suggestions are ranked by how closely they fit your input: exact matches first, 
 
 Imports automatically inherit known tags whose full name appears in the source filename, case-insensitively: if `tavern` is already used, importing `haven small criminal tavern.dd2vtt` adds it. This applies to single, batch and multilevel imports.
 
+**Settings > Import > Auto tags** (`import.autoTags`) supplies additional filename-matching tags even in an empty library. Edit the comma-separated list and press Enter or leave the field to save it. It starts with `TAVERN, INN, DUNGEON, CAVE, FOREST, CASTLE, VILLAGE, TOWN, CITY, SEWER, TEMPLE, CRYPT, RUINS, CAMP, BRIDGE, HARBOR, SHOP, RIVER, SWAMP`; tags are trimmed, uppercased and deduplicated. Changes affect future imports only, without a restart. Clear the list to keep only existing-library tag inheritance, or use the reset button to restore the examples.
+
 ### 3. Creating and importing maps
 
 ![Import dialog](docs/images/import-location-dialog.png)

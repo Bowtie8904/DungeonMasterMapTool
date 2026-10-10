@@ -2,6 +2,7 @@ package dmmt.service;
 
 import dmmt.model.DmProject;
 import dmmt.model.MultiLevelManifest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,6 +37,7 @@ class MapTagServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
+        Tuning.reset();
         root = tempDir.resolve("library");
         sources = tempDir.resolve("sources");
         Files.createDirectories(root);
@@ -43,6 +45,11 @@ class MapTagServiceTest {
         projectService = new ProjectService();
         library = new MapLibraryService(root, projectService);
         tags = new MapTagService(library, projectService);
+    }
+
+    @AfterEach
+    void resetTuning() {
+        Tuning.reset();
     }
 
     private Path map(String name, String... mapTags) throws IOException {
@@ -296,6 +303,63 @@ class MapTagServiceTest {
     }
 
     // ---- Import matching ----
+
+    @Test
+    void defaultAutoTagsWorkInAnEmptyLibraryAndPreserveProjectTags() throws IOException {
+        assertTrue(tags.knownTags().isEmpty());
+        DmProject project = DmProject.builder().build();
+        project.getMap().setTags(List.of("custom"));
+        tags.applyKnownTags(project, Path.of("Dark_Forest_Tavern.uvtt"));
+        assertEquals(List.of("CUSTOM", "FOREST", "TAVERN"), project.getMap().getTags());
+        assertTrue(tags.knownTags().isEmpty(), "configured tags do not become library suggestions");
+        DmProject addedThemes = DmProject.builder().build();
+        tags.applyKnownTags(addedThemes, Path.of("shop_by_the_river_swamp.dd2vtt"));
+        assertEquals(List.of("RIVER", "SHOP", "SWAMP"), addedThemes.getMap().getTags());
+    }
+
+    @Test
+    void configuredAutoTagsSupplementLibraryTagsAndCanBeClearedLive() throws IOException {
+        AppSettings settings = new AppSettings(tempDir.resolve("settings.ini"));
+        map("Other", "Unique", "Haunted Keep");
+        settings.applyEdit("import.autoTags", " haunted keep, OASIS, haunted KEEP, , ");
+        assertEquals(List.of("HAUNTED KEEP", "OASIS", "UNIQUE"), tags.importTags());
+        DmProject project = DmProject.builder().build();
+        tags.applyKnownTags(project, Path.of("Unique Haunted Keep Oasis Forest.dd2vtt"));
+        assertEquals(List.of("HAUNTED KEEP", "OASIS", "UNIQUE"), project.getMap().getTags());
+
+        settings.applyEdit("import.autoTags", "");
+        DmProject next = DmProject.builder().build();
+        tags.applyKnownTags(next, Path.of("Unique Oasis Forest.dd2vtt"));
+        assertEquals(List.of("UNIQUE"), next.getMap().getTags());
+        assertEquals(List.of("HAUNTED KEEP", "OASIS", "UNIQUE"), project.getMap().getTags(),
+                "editing settings does not retroactively change maps");
+    }
+
+    @Test
+    void whitelistAppliesToFolderBatchGroupedMapsAndAddedLevels() throws IOException {
+        AppSettings settings = new AppSettings(tempDir.resolve("settings.ini"));
+        settings.applyEdit("import.autoTags", "OASIS, HAUNTED KEEP");
+        BatchImportService batch = new BatchImportService(library, projectService, new Dd2vttImportService());
+        BatchImportService.Result result = batch.importAll(
+                List.of(dd2vtt("oasis"), dd2vtt("haunted keep_01"), dd2vtt("haunted keep_02")),
+                root, sources, null);
+        assertTrue(result.failures().isEmpty(), result.failures().toString());
+        Path ordinary = result.imported().stream().filter(p -> !MultiLevelService.isMultiLevelFile(p))
+                .findFirst().orElseThrow();
+        assertEquals(List.of("OASIS"), tags.readTags(ordinary));
+        Path manifest = result.imported().stream().filter(MultiLevelService::isMultiLevelFile)
+                .findFirst().orElseThrow();
+        assertEquals(List.of("HAUNTED KEEP", "HAUNTED KEEP"), levelTags(manifest));
+
+        MultiLevelManifest loaded = library.multiLevels().loadManifest(manifest);
+        List<MultiLevelService.PlanItem> plan = new ArrayList<>();
+        for (MultiLevelManifest.Level level : loaded.getLevels()) {
+            plan.add(item(new MultiLevelService.Existing(level.getId()), level.getName()));
+        }
+        plan.add(item(new MultiLevelService.Dd2vtt(dd2vtt("oasis_roof")), "Roof"));
+        library.multiLevels().apply(manifest, plan, null);
+        assertEquals(List.of("HAUNTED KEEP", "HAUNTED KEEP", "OASIS"), levelTags(manifest));
+    }
 
     @Test
     void matchingUsesFullTagNamesInTheFileNameIgnoringCase() {

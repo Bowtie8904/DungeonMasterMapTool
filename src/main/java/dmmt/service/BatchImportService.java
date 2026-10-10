@@ -70,7 +70,7 @@ public class BatchImportService {
         List<String> knownTags;
         try {
             // Read before anything is imported; matching tags are applied to every new ordinary map.
-            knownTags = library.tags().knownTags();
+            knownTags = library.tags().importTags();
         } catch (IOException | RuntimeException ex) {
             String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             for (Path source : sources) {

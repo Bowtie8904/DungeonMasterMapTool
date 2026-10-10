@@ -780,6 +780,22 @@ Non-duplicate files in the same import are never affected and are always importe
 
 *Keywords:* duplicate, duplicate import, re-import, already imported, ask, always import, never import
 
+### `import.autoTags`
+**Default:** `TAVERN, INN, DUNGEON, CAVE, FOREST, CASTLE, VILLAGE, TOWN, CITY, SEWER, TEMPLE, CRYPT, RUINS, CAMP, BRIDGE, HARBOR, SHOP, RIVER, SWAMP` · **Applies:** live (next import)
+
+Comma-separated whitelist of additional tags to match against imported dd2vtt/uvtt filenames, even when no
+map in the library has those tags yet. Configure **Auto tags** in Settings > Import; press Enter or leave the
+field to save. Tags are trimmed, normalized to uppercase and deduplicated case-insensitively. Multi-word tags
+are supported; commas separate tags. The full tag must occur anywhere in the source filename without its
+extension, ignoring case (for example, `FOREST` matches `Dark_Forest.dd2vtt`).
+
+The list supplements, rather than restricts, tags already used in the library. Single, batch, folder,
+automatically grouped multilevel imports and newly imported levels all use it. Existing maps are not
+retagged. An explicitly empty value (`import.autoTags =`) removes whitelist tags but keeps library-tag
+inheritance; the reset button restores the examples.
+
+*Keywords:* map tags, automatic tags, whitelist, allowlist, filename, inheritance, default tags
+
 ---
 
 ## DM view navigation

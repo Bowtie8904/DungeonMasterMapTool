@@ -34,6 +34,36 @@ class AppSettingsTest {
     }
 
     @Test
+    void autoTagsAreEditableLiveAndEmptyValuesPersistWithoutRestoringDefaults() throws IOException {
+        Path file = dir.resolve("tags.ini");
+        Files.writeString(file, "import.autoLabelRooms = false\n");
+        AppSettings settings = new AppSettings(file);
+        assertTrue(Tuning.IMPORT_AUTO_TAGS.get().contains("TAVERN"));
+        assertTrue(Files.readString(file).contains("import.autoTags = TAVERN"));
+        AppSettings.SettingInfo info = AppSettings.editableSettings().stream()
+                .filter(entry -> entry.key().equals("import.autoTags")).findFirst().orElseThrow();
+        assertEquals("Import", info.category());
+        assertEquals("Auto tags", info.label());
+        assertEquals(Tuning.Kind.LIST, info.kind());
+        assertFalse(info.restart());
+        assertTrue(info.validator().test(""));
+        assertTrue(info.keywords().contains("whitelist"));
+
+        settings.applyEdit(info.key(), " oasis, Haunted Keep, OASIS, , ");
+        assertEquals(java.util.List.of("OASIS", "HAUNTED KEEP"), Tuning.IMPORT_AUTO_TAGS.get());
+        new AppSettings(file);
+        assertEquals(java.util.List.of("OASIS", "HAUNTED KEEP"), Tuning.IMPORT_AUTO_TAGS.get());
+
+        settings.applyEdit(info.key(), "");
+        assertTrue(Tuning.IMPORT_AUTO_TAGS.get().isEmpty());
+        assertEquals("", settings.get(info.key(), info.defaultValue()));
+        new AppSettings(file);
+        assertTrue(Tuning.IMPORT_AUTO_TAGS.get().isEmpty());
+        settings.applyEdit(info.key(), null);
+        assertEquals(Tuning.IMPORT_AUTO_TAGS.defaultValue(), Tuning.IMPORT_AUTO_TAGS.get());
+    }
+
+    @Test
     void backgroundWorkModeIsLiveSearchableAndPersists() {
         AppSettings settings = new AppSettings(dir.resolve("work.ini"));
         assertEquals("session", Tuning.WORK_MODE.get());

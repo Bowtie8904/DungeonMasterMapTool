@@ -169,7 +169,8 @@ public final class AppSettings {
 
     public synchronized String get(String key, String defaultValue) {
         String value = values.get(key);
-        return value == null || value.isBlank() ? defaultValue : value;
+        return value == null || (value.isBlank()
+                && Tuning.all().stream().noneMatch(s -> s.key().equals(key) && s.allowsEmpty())) ? defaultValue : value;
     }
 
     public synchronized int getInt(String key, int defaultValue) {
@@ -274,8 +275,7 @@ public final class AppSettings {
     }
 
     private synchronized String lookup(String key) {
-        String value = values.get(key);
-        return value == null || value.isBlank() ? null : value;
+        return get(key, null);
     }
 
     /** True once if the file was edited by hand since the last check; the new values are already loaded. */
@@ -593,7 +593,7 @@ public final class AppSettings {
             case "autosave":
                 return new Placement("Auto-save timing", 1);
             case "import":
-                if (key.equals("import.autoLabelRooms")) {
+                if (key.equals("import.autoLabelRooms") || key.equals("import.autoTags")) {
                     return new Placement(null, 1);
                 }
                 return key.startsWith("import.dd2vtt.") ? new Placement("dd2vtt lights", 2) : new Placement(null, 0);

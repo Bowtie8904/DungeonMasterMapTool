@@ -416,7 +416,7 @@ public class MultiLevelService {
         try {
             // Taken once before any level is written, so half-built levels never take part in the library scan.
             List<String> knownTags = plan.stream().anyMatch(item -> item.source() instanceof Dd2vtt)
-                    ? library.tags().knownTags() : List.of();
+                    ? library.tags().importTags() : List.of();
             // Imports can fail on bad files, so they run before anything in the library is moved.
             for (PlanItem item : plan) {
                 if (item.source() instanceof Dd2vtt || item.source() instanceof Empty) {

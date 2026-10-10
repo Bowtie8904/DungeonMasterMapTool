@@ -67,6 +67,7 @@ public final class Tuning {
         private double min = Double.NaN;
         private double max = Double.NaN;
         private List<String> options = List.of();
+        private boolean allowsEmpty;
 
         private Setting(String section, String key, String defaultText, boolean restart, String comment,
                         Function<String, T> parser) {
@@ -83,6 +84,15 @@ public final class Tuning {
 
         public T get() {
             return value;
+        }
+
+        private Setting<T> allowEmpty() {
+            allowsEmpty = true;
+            return this;
+        }
+
+        public boolean allowsEmpty() {
+            return allowsEmpty;
         }
 
         private Setting<T> meta(Kind kind, double min, double max, String... options) {
@@ -148,7 +158,7 @@ public final class Tuning {
         }
 
         void load(String raw) {
-            if (raw == null || raw.isBlank()) {
+            if (raw == null || (raw.isBlank() && !allowsEmpty)) {
                 value = defaultValue;
                 return;
             }
@@ -641,6 +651,13 @@ public final class Tuning {
 
     // ---- Import ----
 
+    public static final Setting<List<String>> IMPORT_AUTO_TAGS = new Setting<>(IMPORT, "import.autoTags",
+            "TAVERN, INN, DUNGEON, CAVE, FOREST, CASTLE, VILLAGE, TOWN, CITY, SEWER, TEMPLE, CRYPT, RUINS, CAMP, BRIDGE, HARBOR, SHOP, RIVER, SWAMP",
+            false, "Comma-separated automatic tags applied when their full name occurs in an imported filename, "
+            + "in addition to existing library tags. Case-insensitive; leave empty to use only library tags. "
+            + "Changes affect future imports only.",
+            text -> List.copyOf(MapTagService.normalize(List.of(text.split(",")))))
+            .meta(Kind.LIST, Double.NaN, Double.NaN).allowEmpty();
     public static final Setting<Boolean> IMPORT_AUTO_LABEL_ROOMS = bool(IMPORT, "import.autoLabelRooms", true, false,
             "Create numbered DM-only labels for enclosed rooms when importing dd2vtt/uvtt maps.");
     public static final Setting<Double> DD2VTT_LIGHT_FLICKER = decimal(IMPORT, "import.dd2vtt.lightFlicker", 0.22, 0, 1, false,

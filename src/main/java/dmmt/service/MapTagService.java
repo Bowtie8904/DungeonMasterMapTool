@@ -136,9 +136,18 @@ public class MapTagService {
         }
     }
 
-    /** Adds the known library tags contained in the import file name of {@code source} to {@code project}. */
+    /** Library tags plus configured automatic tags, deduplicated and sorted case-insensitively. */
+    public List<String> importTags() throws IOException {
+        List<String> all = new ArrayList<>(knownTags());
+        all.addAll(Tuning.IMPORT_AUTO_TAGS.get());
+        List<String> result = normalize(all);
+        result.sort(String.CASE_INSENSITIVE_ORDER);
+        return result;
+    }
+
+    /** Adds library and configured automatic tags contained in the import file name to {@code project}. */
     public void applyKnownTags(DmProject project, Path source) throws IOException {
-        applyMatchingTags(project, source, knownTags());
+        applyMatchingTags(project, source, importTags());
     }
 
     // ---- Reading ----
