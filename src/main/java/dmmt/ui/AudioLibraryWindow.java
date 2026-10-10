@@ -422,6 +422,12 @@ public final class AudioLibraryWindow {
 
     private ContextMenu trackMenu() {
         ContextMenu menu = new ContextMenu();
+        MenuItem play = new MenuItem("Play", Icons.icon(MaterialDesignP.PLAY));
+        play.setOnAction(event -> {
+            AudioTrack track = trackTable.getSelectionModel().getSelectedItem();
+            settings.put("audio.lastCategory", track.getCategoryId());
+            engine.playTrack(track.getId());
+        });
         Menu moveTo = new Menu("Move to");
         MenuItem rename = new MenuItem("Rename...");
         rename.setOnAction(event -> renameTrack());
@@ -442,7 +448,7 @@ public final class AudioLibraryWindow {
         MenuItem delete = new MenuItem("Delete");
         delete.getStyleClass().add("danger");
         delete.setOnAction(event -> deleteTracks());
-        menu.getItems().setAll(rename, loudness, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
+        menu.getItems().setAll(play, rename, loudness, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
                 new javafx.scene.control.SeparatorMenuItem(), delete);
         menu.setOnShowing(event -> {
             moveTo.getItems().clear();
@@ -454,6 +460,8 @@ public final class AudioLibraryWindow {
             }
             boolean effects = isEffectsView();
             AudioTrack selected = trackTable.getSelectionModel().getSelectedItem();
+            play.setVisible(!effects);
+            play.setDisable(effects || selectedTracks().size() != 1 || importTask != null);
             loudness.setDisable(selectedTracks().size() != 1 || importTask != null);
             moveTo.setDisable(effects || moveTo.getItems().isEmpty());
             makeEffect.setDisable(effects);

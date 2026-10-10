@@ -666,20 +666,32 @@ click on the dimmed background). The overlay shows two rings: music categories o
 right. Each entry is a small round button showing only its icon **in its own colour** - the name is in the tooltip -
 and every active button lights up with the same accent ring and glow, so what is running is obvious at a glance.
 Categories that are hidden or hold no music are left out of the rings.
+To start at a particular song, right-click a music file in the library and choose **Play**. This starts its
+category at that song, then continues with the usual playlist order (or shuffle); waveform preview is unchanged.
 Click a category to play it - its tracks run one after another, shuffled by default (`audio.shuffle`), crossfading
-into each other (`audio.crossfadeSeconds`) - and click it again to stop. The centre of the left ring holds previous,
+into each other - and click it again to stop. Music transitions use the same preloaded second voice and
+equal-power overlap as sound effects, with their own setting `audio.musicCrossfadeSeconds` (default 4 seconds, 0 = hard
+cut): the upcoming song is preloaded shortly before the current one ends, so songs following each other, a
+single-song category repeating itself and **Loop current song** all blend smoothly without a loudness dip. The centre of the left ring holds previous,
 play/pause, next and stop plus the **name of the running category**, the current track and its time. On the right,
 switch on any number of sound effects (up to `audio.maxEffects`, 32 by default); they loop seamlessly and fade in
 and out (`audio.effectFadeSeconds`). Repetitions preload the next play and overlap with an equal-power crossfade
 (`audio.effectLoopCrossfadeSeconds`, default 0.5 seconds), masking small restart gaps in rain, wind and other
 ambience. The overlap is limited to half the clip length; set it to 0 for no overlap.
-Active effects update their blends at 30 Hz (`audio.effectLoopUpdateFps`) without increasing map rendering or
+Active effects and music crossfades update their blends at 30 Hz (`audio.effectLoopUpdateFps`) without increasing map rendering or
 now-playing readout updates.
 The matching pause and stop buttons in the centre of that ring control all
 of them at once while listing what is running. Effects play/pause uses the same neutral styling as music play/pause,
 without a yellow highlight when paused. Below the rings sit the master, music and effect volumes and the
 speaker button, which fades everything out and back in. Crowded libraries simply grow onto further circles, and the
 overlay only updates while it is open.
+
+The **Loop current song** toggle beside the music transport highlights with an accent background and glow when
+on, and repeats the current song at its end (crossfading into its own beginning) instead of
+automatically advancing to another song. Previous/next and choosing another category or file
+still work, and the newly selected song then loops. Looping defaults to **off** on every application start;
+it is not saved in settings or projects. The API exposes it as `audio.musicLoop`, alongside an
+`audio.track.<id>` play endpoint for every music file.
 
 The play/pause button in the **status bar** is the quick version of all of this: it pauses and resumes the music
 *and* every running sound effect together, next to previous/next, the Audio button and the Library button that
@@ -688,7 +700,7 @@ opens the audio library window directly.
 Audio playback is independent of maps: switching maps never changes the running music or sound effects.
 
 Playback controls are also reachable from the [local control API](docs/API.md#audio-controls) - including **one endpoint per
-category and per sound effect**, addressed by the entry's library id
-(`/api/controls/audio/category/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
+category, music file and sound effect**, addressed by the entry's library id
+(`/api/controls/audio/category/<id>`, `/api/controls/audio/track/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
 button and a stream deck can switch the whole ambience with one press. `GET /api/controls` lists every endpoint
 with its current name.

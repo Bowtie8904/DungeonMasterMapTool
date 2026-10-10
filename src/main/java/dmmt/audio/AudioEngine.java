@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.function.Consumer;
 
 /**
  * Plays one music category and any number of looping sound effects on top of it (3.35.4).
  * <p>
- * Everything about playback lives here: the shuffled category playlist, the crossfade between two music tracks,
+ * Everything about playback lives here: the shuffled category playlist, the preloaded equal-power crossfades of
+ * music transitions and effect repetitions (one shared {@link VoiceChain} mechanism),
  * the separate music/effects/master volumes, the per-channel pause and the global panic fade. The engine never
  * touches JavaFX directly - it drives {@link AudioOutput} voices and is advanced by {@link #tick(double)}, which
  * the UI calls a few times per second. That makes the whole behaviour unit-testable without sound hardware.
@@ -20,6 +22,8 @@ public class AudioEngine {
     /** Perceptual volume curve: slider value ^ this exponent, so the sliders feel linear to the ear. */
     private static final double VOLUME_EXPONENT = 2.2;
     private static final double MIN_FADE_SECONDS = 0.01;
+    /** Seconds before a music crossfade (or the end of a track) at which the upcoming song is preloaded. */
+    static final double MUSIC_PRELOAD_LEAD_SECONDS = 10;
 
     private final AudioLibraryService library;
     private final AudioOutput output;
@@ -34,20 +38,25 @@ public class AudioEngine {
     private double effectLoopCrossfadeSeconds = 0.5;
     private double panicFadeSeconds = 1;
     private boolean shuffle = true;
+    private boolean musicLoop;
     private int maxEffects = 8;
 
     private String categoryId;
     private List<String> playlist = new ArrayList<>();
     private int playlistIndex = -1;
-    private Voice music;
+    /** The reshuffled order that follows the current cycle; peeked by preloading, committed on the transition. */
+    private List<String> nextCycle;
+    /** The music chain: playing song, preloaded upcoming song and the song blending out. {@code null} = stopped. */
+    private VoiceChain music;
+    /** The previous song during a manual (linear) transition. */
     private Voice fadingOut;
+    /** Upcoming song whose preload failed; not retried every tick, only at the end-of-track fallback. */
+    private String failedMusicPreload;
     private boolean musicPaused;
     private boolean effectsPaused;
     private boolean panic;
-    /** Guards against starting the crossfade twice for the same track. */
-    private boolean crossfadeStarted;
 
-    private final Map<String, EffectLoop> effects = new LinkedHashMap<>();
+    private final Map<String, VoiceChain> effects = new LinkedHashMap<>();
     /** Voices that are fading out and get disposed once they are silent. */
     private final List<Voice> stopping = new ArrayList<>();
     /** Global fade factor of the panic mute, 1 = normal, 0 = silent. */
@@ -127,14 +136,24 @@ public class AudioEngine {
         }
     }
 
-    private static final class EffectLoop {
+    /**
+     * A playing voice that continues into a preloaded, silent second voice with an equal-power overlap. Sound effects
+     * continue into another copy of themselves; music continues into the upcoming song (or itself when looping).
+     */
+    private static final class VoiceChain {
         private Voice current;
         private Voice prepared;
         private Voice outgoing;
         private LoopCrossfade blend;
 
-        EffectLoop(Voice current) {
+        VoiceChain(Voice current) {
             this.current = current;
+        }
+
+        void resumeBlend() {
+            if (blend != null) {
+                blend.resume();
+            }
         }
 
         List<Voice> voices() {
@@ -258,7 +277,7 @@ public class AudioEngine {
     private List<Voice> allVoices() {
         List<Voice> voices = new ArrayList<>();
         if (music != null) {
-            voices.add(music);
+            voices.addAll(music.voices());
         }
         if (fadingOut != null) {
             voices.add(fadingOut);
@@ -281,10 +300,23 @@ public class AudioEngine {
     }
 
     public void setShuffle(boolean shuffle) {
+        if (this.shuffle != shuffle) {
+            nextCycle = null;
+        }
         this.shuffle = shuffle;
     }
 
-    public void setCrossfadeSeconds(double seconds) {
+    public boolean isMusicLoop() {
+        return musicLoop;
+    }
+
+    public void setMusicLoop(boolean loop) {
+        musicLoop = loop;
+        fireChanged();
+    }
+
+    /** Overlap of every automatic music transition: next song, single-song repeat and loop current song. */
+    public void setMusicCrossfadeSeconds(double seconds) {
         this.crossfadeSeconds = Math.max(0, seconds);
     }
 
@@ -329,7 +361,7 @@ public class AudioEngine {
     }
 
     public Optional<AudioTrack> currentTrack() {
-        return music == null ? Optional.empty() : library.track(music.trackId);
+        return music == null ? Optional.empty() : library.track(music.current.trackId);
     }
 
     public boolean isMusicPlaying() {
@@ -341,34 +373,46 @@ public class AudioEngine {
     }
 
     public double positionMs() {
-        return music == null ? 0 : music.handle.positionMs();
+        return music == null ? 0 : music.current.handle.positionMs();
     }
 
     public double durationMs() {
-        if (music == null) {
-            return 0;
-        }
-        double fromStream = music.handle.durationMs();
-        if (fromStream > 0) {
-            return fromStream;
-        }
-        return library.track(music.trackId).map(AudioTrack::getDurationMs).orElse(0L);
+        return music == null ? 0 : durationOf(music.current);
     }
 
     /** Starts (or restarts) a category; {@code null} stops the music. */
     public void playCategory(String categoryId) {
+        playCategory(categoryId, null);
+    }
+
+    /** Starts the track's category at this song, retaining the usual playlist order afterwards. */
+    public void playTrack(String trackId) {
+        AudioTrack track = library.track(trackId)
+                .filter(t -> t.getKind() == AudioKind.MUSIC)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown music track: " + trackId));
+        playCategory(track.getCategoryId(), trackId);
+    }
+
+    private void playCategory(String categoryId, String firstTrackId) {
         if (categoryId == null) {
             stopMusic();
             return;
         }
         this.categoryId = categoryId;
         playlist = new ArrayList<>(library.musicOf(categoryId).stream().map(AudioTrack::getId).toList());
-        shufflePlaylist(null);
+        nextCycle = null;
+        shuffleOrder(playlist, null);
         playlistIndex = -1;
+        if (firstTrackId != null) {
+            if (shuffle) {
+                playlist.remove(firstTrackId);
+                playlist.addFirst(firstTrackId);
+            }
+            playlistIndex = playlist.indexOf(firstTrackId) - 1;
+        }
         musicPaused = false;
         if (playlist.isEmpty()) {
-            stopVoice(music, 0.2);
-            music = null;
+            releaseMusic(0.2);
             fireChanged();
             return;
         }
@@ -384,16 +428,19 @@ public class AudioEngine {
             return;
         }
         musicPaused = !musicPaused;
+        List<Voice> audible = new ArrayList<>();
+        audible.add(music.current);
+        if (music.outgoing != null) {
+            audible.add(music.outgoing);
+        }
+        if (fadingOut != null) {
+            audible.add(fadingOut);
+        }
         if (musicPaused) {
-            music.pause();
-            if (fadingOut != null) {
-                fadingOut.pause();
-            }
+            audible.forEach(Voice::pause);
         } else {
-            music.play();
-            if (fadingOut != null) {
-                fadingOut.play();
-            }
+            music.resumeBlend();
+            audible.forEach(Voice::play);
         }
         fireChanged();
     }
@@ -418,79 +465,299 @@ public class AudioEngine {
 
     /** Fades the music out and forgets the playlist position. */
     public void stopMusic() {
-        stopVoice(music, Math.min(crossfadeSeconds, 2));
-        music = null;
+        releaseMusic(Math.min(crossfadeSeconds, 2));
         playlistIndex = -1;
         musicPaused = false;
-        crossfadeStarted = false;
         fireChanged();
     }
 
-    private void advance(int direction, double fadeSeconds) {
-        if (playlist.isEmpty()) {
-            return;
+    /** Fades out both sides of the music chain and drops its preloaded voice. */
+    private void releaseMusic(double fadeSeconds) {
+        if (music != null) {
+            disposeVoice(music.prepared);
+            stopVoice(music.current, fadeSeconds);
+            stopVoice(music.outgoing, fadeSeconds);
         }
-        int next;
-        if (direction == 0) {
-            next = Math.max(0, playlistIndex);
-        } else if (playlistIndex < 0) {
-            next = direction > 0 ? 0 : playlist.size() - 1;
-        } else {
-            next = playlistIndex + direction;
-            if (next >= playlist.size()) {
-                shufflePlaylist(playlist.get(playlistIndex));
-                next = 0;
-            } else if (next < 0) {
-                next = playlist.size() - 1;
-            }
-        }
-        playlistIndex = next;
-        startMusic(playlist.get(next), fadeSeconds);
+        music = null;
+        failedMusicPreload = null;
     }
 
+    /** A playlist position (and the order it belongs to) that has not necessarily been committed yet. */
+    private record Upcoming(List<String> order, int index) {
+        String trackId() {
+            return order.get(index);
+        }
+    }
+
+    /**
+     * Where a step in {@code direction} (0 = restart, 1 = next, -1 = previous) would lead, without moving the
+     * playlist: the reshuffle at the end of a cycle is prepared in {@link #nextCycle} and applied on commit.
+     */
+    private Upcoming peek(int direction) {
+        dropDeletedTracks();
+        if (playlist.isEmpty()) {
+            return null;
+        }
+        if (direction == 0) {
+            return new Upcoming(playlist, Math.max(0, playlistIndex));
+        }
+        if (playlistIndex < 0) {
+            return new Upcoming(playlist, direction > 0 ? 0 : playlist.size() - 1);
+        }
+        int next = playlistIndex + direction;
+        if (next >= playlist.size()) {
+            if (nextCycle == null) {
+                nextCycle = new ArrayList<>(playlist);
+                shuffleOrder(nextCycle, playlist.get(playlistIndex));
+            }
+            return new Upcoming(nextCycle, 0);
+        }
+        return new Upcoming(playlist, next < 0 ? playlist.size() - 1 : next);
+    }
+
+    /** Forgets tracks that were deleted from the library since the category started. */
+    private void dropDeletedTracks() {
+        for (int i = playlist.size() - 1; i >= 0; i--) {
+            if (library.track(playlist.get(i)).isEmpty()) {
+                playlist.remove(i);
+                nextCycle = null;
+                if (i <= playlistIndex) {
+                    playlistIndex--;
+                }
+            }
+        }
+    }
+
+    private void commit(Upcoming upcoming) {
+        if (upcoming.order() != playlist) {
+            playlist = upcoming.order();
+            nextCycle = null;
+        }
+        playlistIndex = upcoming.index();
+    }
+
+    /** Direction of the automatic transition at the end of a song. */
+    private int automaticDirection() {
+        return musicLoop ? 0 : 1;
+    }
+
+    private void advance(int direction, double fadeSeconds) {
+        Upcoming upcoming = peek(direction);
+        if (upcoming == null) {
+            return;
+        }
+        commit(upcoming);
+        startMusic(upcoming.trackId(), fadeSeconds);
+    }
+
+    /** Manual transition: the playing song fades out linearly while the new one fades in. */
     private void startMusic(String trackId, double fadeSeconds) {
         Optional<AudioTrack> track = library.track(trackId);
         if (track.isEmpty()) {
             return;
         }
         stopVoice(fadingOut, 0);
-        fadingOut = music;
-        if (fadingOut != null) {
+        fadingOut = null;
+        if (music != null) {
+            fadingOut = music.current;
             fadingOut.fadeTo(0, fadeSeconds);
             fadingOut.disposeWhenSilent = true;
+            disposeVoice(music.prepared);
+            stopVoice(music.outgoing, fadeSeconds);
         }
+        failedMusicPreload = null;
         AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
         AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
+            System.err.println("Could not play music track " + trackId);
             music = null;
             fireChanged();
             return;
         }
         Voice voice = new Voice(handle, trackId, source, true, fadeSeconds > 0 ? 0 : 1);
         voice.fadeTo(1, fadeSeconds);
-        music = voice;
-        crossfadeStarted = false;
+        music = new VoiceChain(voice);
         handle.setVolume(voiceVolume(voice));
-        voice.setOnEnd(() -> {
-            if (music == voice) {
-                advance(1, 0);
-            }
-        });
+        voice.setOnEnd(() -> musicEnded(voice));
         if (!musicPaused) {
             voice.play();
         }
         fireChanged();
     }
 
-    /** Reshuffles the playlist, avoiding {@code lastPlayed} as the new first track. */
-    private void shufflePlaylist(String lastPlayed) {
-        if (!shuffle || playlist.size() < 2) {
+    /**
+     * Keeps the preloaded music voice in line with the song that would follow automatically, replacing it when the
+     * loop toggle, shuffle or library changed that song. Preloads only within the lead time before the end unless
+     * {@code now}.
+     */
+    private void syncPreparedMusic(boolean now) {
+        Upcoming upcoming = peek(automaticDirection());
+        String trackId = upcoming == null || library.track(upcoming.trackId()).isEmpty() ? null : upcoming.trackId();
+        if (music.prepared != null && !music.prepared.trackId.equals(trackId)) {
+            disposeVoice(music.prepared);
+            music.prepared = null;
+        }
+        if (music.prepared != null || trackId == null) {
             return;
         }
-        Collections.shuffle(playlist, random);
-        if (lastPlayed != null && playlist.size() > 1 && playlist.get(0).equals(lastPlayed)) {
-            Collections.swap(playlist, 0, 1);
+        if (!now) {
+            double duration = durationOf(music.current);
+            double remaining = duration - music.current.handle.positionMs();
+            if (duration <= 0 || remaining > (crossfadeSeconds + MUSIC_PRELOAD_LEAD_SECONDS) * 1000
+                    || trackId.equals(failedMusicPreload)) {
+                return;
+            }
         }
+        music.prepared = openPrepared(trackId, true);
+        if (music.prepared == null) {
+            if (!trackId.equals(failedMusicPreload)) {
+                System.err.println("Could not preload music track " + trackId);
+            }
+            failedMusicPreload = trackId;
+        } else {
+            failedMusicPreload = null;
+        }
+    }
+
+    private void stepMusic(double delta) {
+        if (musicPaused) {
+            step(music.current, delta);
+            if (music.outgoing != null) {
+                step(music.outgoing, delta);
+            }
+            return;
+        }
+        stepChain(music, delta);
+        if (music.outgoing != null) {
+            return;
+        }
+        syncPreparedMusic(false);
+        double overlap = overlapDue(music, crossfadeSeconds);
+        if (overlap > 0) {
+            commit(peek(automaticDirection()));
+            continueChain(music, overlap, crossfadeSeconds, this::musicEnded);
+            fireChanged();
+        }
+    }
+
+    /** End-of-track fallback for hard cuts, unknown durations, unready preloads or a delayed tick. */
+    private void musicEnded(Voice ended) {
+        if (music == null || music.current != ended || musicPaused) {
+            return;
+        }
+        finishBlend(music);
+        syncPreparedMusic(true);
+        if (music.prepared == null) {
+            System.err.println("Could not continue the music after " + ended.trackId);
+            releaseMusic(0);
+            fireChanged();
+            return;
+        }
+        commit(peek(automaticDirection()));
+        continueChain(music, 0, crossfadeSeconds, this::musicEnded);
+        fireChanged();
+    }
+
+    /** Shuffles an order, avoiding {@code lastPlayed} as its first track so nothing repeats back to back. */
+    private void shuffleOrder(List<String> order, String lastPlayed) {
+        if (!shuffle || order.size() < 2) {
+            return;
+        }
+        Collections.shuffle(order, random);
+        if (lastPlayed != null && order.get(0).equals(lastPlayed)) {
+            Collections.swap(order, 0, 1);
+        }
+    }
+
+    // ---- Shared preloaded overlap ----
+
+    /** Opens a silent, unstarted voice that a chain continues into. */
+    private Voice openPrepared(String trackId, boolean musicChannel) {
+        Optional<AudioTrack> track = library.track(trackId);
+        if (track.isEmpty()) {
+            return null;
+        }
+        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
+        AudioOutput.Voice handle = output.open(source.file(), false);
+        if (handle == null) {
+            return null;
+        }
+        handle.setVolume(0);
+        Voice voice = new Voice(handle, trackId, source, musicChannel, 1);
+        voice.loopGain = 0;
+        return voice;
+    }
+
+    /** Length of a voice: the stream's own duration, else the analysed library duration, else 0. */
+    private double durationOf(Voice voice) {
+        double duration = voice.handle.durationMs();
+        if (Double.isFinite(duration) && duration > 0) {
+            return duration;
+        }
+        return library.track(voice.trackId).map(AudioTrack::getDurationMs).orElse(0L);
+    }
+
+    /**
+     * Seconds of overlap to start now, or 0: the prepared voice must be ready and the current one within its last
+     * {@code overlapSeconds} (capped at half its length).
+     */
+    private double overlapDue(VoiceChain chain, double overlapSeconds) {
+        if (chain.outgoing != null || chain.prepared == null || !chain.prepared.handle.isReady()) {
+            return 0;
+        }
+        double duration = durationOf(chain.current);
+        double remaining = duration - chain.current.handle.positionMs();
+        double overlap = Math.min(overlapSeconds, duration / 2000);
+        return overlap > 0 && remaining > 0 && remaining <= overlap * 1000 ? remaining / 1000 : 0;
+    }
+
+    /** Starts the prepared voice, overlapping the current one for {@code overlapSeconds} (0 = hard cut). */
+    private void continueChain(VoiceChain chain, double overlapSeconds, double fadeSeconds, Consumer<Voice> onEnd) {
+        Voice previous = chain.current;
+        Voice current = chain.prepared;
+        chain.current = current;
+        chain.prepared = null;
+        current.gain = previous.gain;
+        current.fadeTo(1, fadeSeconds);
+        if (overlapSeconds > 0) {
+            chain.outgoing = previous;
+            chain.blend = new LoopCrossfade(0, overlapSeconds);
+        } else {
+            previous.dispose();
+            chain.blend = null;
+            current.loopGain = 1;
+        }
+        current.setOnEnd(() -> onEnd.accept(current));
+        current.handle.setVolume(voiceVolume(current));
+        current.play();
+    }
+
+    /** Advances fades and the equal-power blend; returns whether a blend finished during this step. */
+    private boolean stepChain(VoiceChain chain, double delta) {
+        if (chain.outgoing != null) {
+            chain.blend.advance(chain.current.handle.positionMs(), delta);
+            chain.current.loopGain = chain.blend.incomingGain();
+            chain.outgoing.loopGain = chain.blend.outgoingGain();
+        }
+        step(chain.current, delta);
+        if (chain.outgoing == null) {
+            return false;
+        }
+        step(chain.outgoing, delta);
+        if (!chain.blend.finished()) {
+            return false;
+        }
+        finishBlend(chain);
+        return true;
+    }
+
+    private void finishBlend(VoiceChain chain) {
+        if (chain.outgoing != null) {
+            chain.outgoing.dispose();
+            chain.outgoing = null;
+        }
+        chain.blend = null;
+        chain.current.loopGain = 1;
     }
 
     // ---- Sound effects ----
@@ -538,7 +805,7 @@ public class AudioEngine {
         Voice voice = new Voice(handle, trackId, source, false, 0);
         voice.fadeTo(1, effectFadeSeconds);
         handle.setVolume(voiceVolume(voice));
-        EffectLoop effect = new EffectLoop(voice);
+        VoiceChain effect = new VoiceChain(voice);
         effects.put(trackId, effect);
         prepareEffect(effect);
         voice.setOnEnd(() -> effectEnded(effect, voice));
@@ -548,29 +815,16 @@ public class AudioEngine {
         fireChanged();
     }
 
-    private void prepareEffect(EffectLoop effect) {
-        Optional<AudioTrack> track = library.track(effect.current.trackId);
-        if (track.isEmpty()) {
-            return;
-        }
-        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
-        AudioOutput.Voice handle = output.open(source.file(), false);
-        if (handle != null) {
-            handle.setVolume(0);
-            effect.prepared = new Voice(handle, effect.current.trackId, source, false, 1);
-            effect.prepared.loopGain = 0;
-        }
+    private void prepareEffect(VoiceChain effect) {
+        effect.prepared = openPrepared(effect.current.trackId, false);
     }
 
-    private void effectEnded(EffectLoop effect, Voice ended) {
+    private void effectEnded(VoiceChain effect, Voice ended) {
         if (effects.get(ended.trackId) != effect || effect.current != ended || effectsPaused) {
             return;
         }
         // End events are a fallback for unknown durations or a delayed UI tick.
-        if (effect.outgoing != null) {
-            effect.outgoing.dispose();
-            effect.outgoing = null;
-        }
+        finishBlend(effect);
         if (effect.prepared == null) {
             prepareEffect(effect);
         }
@@ -581,65 +835,26 @@ public class AudioEngine {
             fireChanged();
             return;
         }
-        repeatEffect(effect, 0);
+        continueChain(effect, 0, effectFadeSeconds, voice -> effectEnded(effect, voice));
+        prepareEffect(effect);
     }
 
-    private void repeatEffect(EffectLoop effect, double overlapSeconds) {
-        Voice previous = effect.current;
-        effect.current = effect.prepared;
-        effect.prepared = null;
-        effect.blend = overlapSeconds > 0 ? new LoopCrossfade(0, overlapSeconds) : null;
-        if (overlapSeconds > 0) {
-            effect.outgoing = previous;
-            effect.current.gain = previous.gain;
-            effect.current.fadeTo(1, effectFadeSeconds);
-        } else {
-            previous.dispose();
-            effect.current.loopGain = 1;
-        }
-        Voice current = effect.current;
-        current.setOnEnd(() -> effectEnded(effect, current));
-        current.handle.setVolume(voiceVolume(current));
-        current.play();
-        if (overlapSeconds <= 0) {
+    private void stepEffect(VoiceChain effect, double delta) {
+        if (stepChain(effect, delta)) {
             prepareEffect(effect);
-        }
-    }
-
-    private void stepEffect(EffectLoop effect, double delta) {
-        step(effect.current, delta);
-        if (effect.outgoing != null) {
-            effect.blend.advance(effect.current.handle.positionMs(), delta);
-            effect.current.loopGain = effect.blend.incomingGain();
-            effect.outgoing.loopGain = effect.blend.outgoingGain();
-            effect.current.handle.setVolume(voiceVolume(effect.current));
-            step(effect.outgoing, delta);
-            if (effect.blend.finished()) {
-                effect.outgoing.dispose();
-                effect.outgoing = null;
-                prepareEffect(effect);
-            }
             return;
         }
-        double duration = effect.current.handle.durationMs();
-        if (!Double.isFinite(duration) || duration <= 0) {
-            duration = library.track(effect.current.trackId).map(AudioTrack::getDurationMs).orElse(0L);
-        }
-        double remaining = duration - effect.current.handle.positionMs();
-        double overlap = Math.min(effectLoopCrossfadeSeconds, duration / 2000);
-        if (overlap > 0 && remaining > 0 && remaining <= overlap * 1000
-                && effect.prepared != null && effect.prepared.handle.isReady()) {
-            repeatEffect(effect, remaining / 1000);
+        double overlap = overlapDue(effect, effectLoopCrossfadeSeconds);
+        if (overlap > 0) {
+            continueChain(effect, overlap, effectFadeSeconds, voice -> effectEnded(effect, voice));
         }
     }
 
-    private void stopEffect(EffectLoop effect, double fadeSeconds) {
+    private void stopEffect(VoiceChain effect, double fadeSeconds) {
         if (effect == null) {
             return;
         }
-        if (effect.prepared != null) {
-            effect.prepared.dispose();
-        }
+        disposeVoice(effect.prepared);
         stopVoice(effect.current, effectsPaused ? 0 : fadeSeconds);
         stopVoice(effect.outgoing, effectsPaused ? 0 : fadeSeconds);
     }
@@ -679,11 +894,7 @@ public class AudioEngine {
         }
         effectsPaused = paused;
         if (!paused) {
-            effects.values().forEach(effect -> {
-                if (effect.blend != null) {
-                    effect.blend.resume();
-                }
-            });
+            effects.values().forEach(VoiceChain::resumeBlend);
         }
         effects.values().stream().flatMap(effect -> effect.outgoing == null
                         ? java.util.stream.Stream.of(effect.current)
@@ -727,16 +938,26 @@ public class AudioEngine {
     // ---- Ticking ----
 
     /**
-     * Advances all fades and starts the crossfade into the next track. Call a few times per second;
-     * {@code deltaSeconds} is the time since the previous call.
+     * Whether playback needs the fast loop cadence: running effects, or music that is about to blend, blending or
+     * fading out after a manual switch. Otherwise the slower readout cadence is enough.
+     */
+    public boolean needsSmoothUpdates() {
+        boolean effectsRunning = !effects.isEmpty() && !effectsPaused;
+        boolean musicBlending = music != null && !musicPaused
+                && (music.prepared != null || music.outgoing != null || fadingOut != null);
+        return effectsRunning || musicBlending;
+    }
+
+    /**
+     * Advances all fades, preloads the upcoming song and starts the music and effect overlaps. Call a few times per
+     * second; {@code deltaSeconds} is the time since the previous call.
      */
     public void tick(double deltaSeconds) {
         allVoices().forEach(this::requestReplacement);
         double delta = Math.max(0, Math.min(1, deltaSeconds));
         stepPanic(delta);
         if (music != null) {
-            step(music, delta);
-            maybeCrossfade();
+            stepMusic(delta);
         }
         if (fadingOut != null) {
             step(fadingOut, delta);
@@ -746,7 +967,7 @@ public class AudioEngine {
             }
         }
         if (!effectsPaused) {
-            for (EffectLoop effect : List.copyOf(effects.values())) {
+            for (VoiceChain effect : List.copyOf(effects.values())) {
                 stepEffect(effect, delta);
             }
         }
@@ -782,22 +1003,6 @@ public class AudioEngine {
         voice.handle.setVolume(voiceVolume(voice));
     }
 
-    /** Starts the next track early enough to cross-fade it with the one that is ending. */
-    private void maybeCrossfade() {
-        if (crossfadeStarted || crossfadeSeconds <= 0 || musicPaused || playlist.size() < 2) {
-            return;
-        }
-        double duration = durationMs();
-        double position = positionMs();
-        if (duration <= 0 || position <= 0) {
-            return;
-        }
-        if (duration - position <= crossfadeSeconds * 1000) {
-            crossfadeStarted = true;
-            advance(1, crossfadeSeconds);
-        }
-    }
-
     private void stopVoice(Voice voice, double fadeSeconds) {
         if (voice == null) {
             return;
@@ -811,16 +1016,14 @@ public class AudioEngine {
         stopping.add(voice);
     }
 
+    private void disposeVoice(Voice voice) {
+        if (voice != null) {
+            voice.dispose();
+        }
+    }
+
     private void applyVolumes() {
-        if (music != null) {
-            music.handle.setVolume(voiceVolume(music));
-        }
-        if (fadingOut != null) {
-            fadingOut.handle.setVolume(voiceVolume(fadingOut));
-        }
-        effects.values().stream().flatMap(effect -> effect.voices().stream())
-                .forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
-        stopping.forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
+        allVoices().forEach(voice -> voice.handle.setVolume(voiceVolume(voice)));
     }
 
     /** Output volume of a voice: its fade gain times the channel, master and panic factors on a perceptual curve. */
@@ -846,9 +1049,8 @@ public class AudioEngine {
 
     /** Stops everything and releases the output. */
     public void shutdown() {
-        stopVoice(music, 0);
+        releaseMusic(0);
         stopVoice(fadingOut, 0);
-        music = null;
         fadingOut = null;
         effects.values().forEach(effect -> stopEffect(effect, 0));
         effects.clear();

@@ -1174,6 +1174,9 @@ The ambient audio feature: a library of music and sound effects, one playing mus
 looping sound effects, and the waveform window that cuts long recordings into clips. See
 [the audio chapter of the README](../README.md#18-ambient-audio) for how it is used.
 
+**Loop current song** in the audio overlay is session-only and defaults to off on every application start.
+It is also available through the `audio.musicLoop` API control, but has no persisted settings-file entry.
+
 Loudness matching and manual per-file gain overrides are stored in the audio library's `library.json`, not in
 this settings file. New imports and clips are automatically matched toward -23 LUFS, with peak-safe boosting;
 use **Loudness...** in the audio library to override a file or restore its automatic level. Manual overrides allow
@@ -1209,13 +1212,19 @@ never repeats a track until the category has been played through.
 
 *Keywords:* shuffle, random, playlist order, repeat, music order
 
-### `audio.crossfadeSeconds`
+### `audio.musicCrossfadeSeconds`
 **Default:** `4` · **Range:** 0 to 30 seconds · **Applies:** live
 
-How long the previous track fades out while the next one fades in, so a category never falls silent between tracks.
-`0` switches hard.
+The music channel's own crossfade, used for **every automatic music transition**: one song following another, a
+single-song category repeating itself (even with Loop current song off) and Loop current song repeating the current
+track. It reuses the sound-effect loop mechanism: about this many seconds plus 10 s before a song ends, the
+upcoming song is preloaded as a silent second voice, then both overlap with an equal-power blend, so a category
+never falls silent or dips in loudness between songs. Limited to half the ending track's length. `0` switches hard
+at the end of the track (still using the preloaded voice). Unknown track lengths, preloads that are not ready in
+time and failed preloads fall back to the end-of-track event. Manual previous/next use a short linear fade of at
+most 1.5 s. Independent of `audio.effectLoopCrossfadeSeconds`.
 
-*Keywords:* crossfade, fade, blend tracks, gapless, transition
+*Keywords:* crossfade, fade, blend tracks, gapless, transition, music loop, repeat song, single song, preload
 
 ### `audio.effectFadeSeconds`
 **Default:** `1.5` · **Range:** 0 to 30 seconds · **Applies:** live
@@ -1238,11 +1247,12 @@ range; exported clips still contain the original samples. This is separate from 
 ### `audio.effectLoopUpdateFps`
 **Default:** `30` · **Range:** 1 to 60 · **Applies:** restart required
 
-Audio-only update rate while effects are running, so their short loop crossfades blend smoothly. This does not
+Audio-only update rate while effects are running and while a music crossfade is pending or running (including
+linear manual-skip fades), so loop and music blends progress smoothly. This does not
 wake the map renderer or increase the now-playing readout rate (`audio.updateFps`). Higher values cost a little
 more CPU. The timer runs at the higher of the two configured rates.
 
-*Keywords:* loop, crossfade, smooth, sound effects, audio fps, performance
+*Keywords:* loop, crossfade, smooth, sound effects, music crossfade, audio fps, performance
 
 ### `audio.panicFadeSeconds`
 **Default:** `1` · **Range:** 0 to 10 seconds · **Applies:** live
@@ -1264,9 +1274,9 @@ hardware; switching on one more effect than allowed stops the one that has been 
 ### `audio.updateFps`
 **Default:** `4` · **Range:** 1 to 60 · **Applies:** restart required
 
-How often per second the audio engine updates fades, crossfades and the now-playing readout. The default is enough
-for long fades and costs almost no frame time. While effects are playing, `audio.effectLoopUpdateFps` provides
-faster audio updates for their shorter loop blends; readouts remain at this rate.
+How often per second the audio engine updates long fades and the now-playing readout. The default costs almost no
+frame time. While effects or music crossfades are active, `audio.effectLoopUpdateFps` provides faster updates for
+their short equal-power blends; readouts remain at this rate.
 
 *Keywords:* audio update rate, fade smoothness, audio performance, tick rate
 

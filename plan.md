@@ -780,9 +780,28 @@ same application. It must never be in the way of DMs who do not use it, and must
 ### 3.35.4 Playback
 
 - **Music channel:** exactly one category plays at a time. Its tracks play in shuffled order
-  (`audio.shuffle`, default on; off = library order) and are faded into each other over `audio.crossfadeSeconds`
-  (default 4 s, 0 = hard cut). The channel loops the category endlessly, never replaying the same track twice in a
-  row unless the category has a single track. Controls: play/pause, previous, next, stop (fades out).
+  (`audio.shuffle`, default on; off = library order). The channel loops the category endlessly, never replaying the
+  same track twice in a row unless the category has a single track. Controls: play/pause, previous, next, stop
+  (fades out).
+  **Music crossfades** reuse the sound-effect loop mechanism (preloaded second voice + equal-power overlap) with
+  their own music setting `audio.musicCrossfadeSeconds` (default 4 s, 0 = hard cut, capped at half the ending track's
+  length; independent of `audio.effectLoopCrossfadeSeconds`). Shortly before a song ends (crossfade + 10 s) the
+  upcoming song is preloaded as a silent second voice; the overlap starts once it is ready. This covers every
+  automatic music transition: a song following another, a single-song category repeating itself (even with
+  looping off), and Loop current song repeating the current track. Preloading only peeks at the playlist: the
+  playlist position and any end-of-cycle reshuffle are committed when the transition actually starts, and a
+  preloaded voice is replaced when the upcoming song changes (loop toggle, shuffle change, removed track).
+  Unknown durations, voices that are not ready in time and failed preloads fall back to the end-of-track event
+  (hard cut; failures are logged and stop the music). Pause freezes a blend, mute/volumes/source replacements
+  apply to both sides, and stop, manual previous/next and category/track changes release the preloaded voice and
+  fade out both sides. Manual previous/next keep their short linear fade. Pending and running music blends use
+  the smooth `audio.effectLoopUpdateFps` cadence.
+  A session-only **Loop current song** toggle (off at startup) repeats the current track at its end (crossfading
+  into its own beginning) instead of automatically advancing to another track. Manual previous/next and category/track selection
+  still work; the toggle then applies to the newly selected song. While on, its button has an accent background,
+  glow and contrasting icon so the active state is clearly visible. It is never saved in settings or projects.
+  Starting an individual music track starts its category with that song first, then follows the normal playlist
+  ordering and shuffle behavior.
 - **Effects channel:** any number of sound effects (capped by `audio.maxEffects`, default 32) play as **seamless
   loops** at the same time. Starting and stopping an effect fades it in/out over
   `audio.effectFadeSeconds` so it never clicks.
@@ -790,7 +809,7 @@ same application. It must never be in the way of DMs who do not use it, and must
   default 0.5 s, capped at half the clip length) instead of native media repeat, masking restart gaps in ambience
   such as rain. Setting this to 0 disables the overlap. Pause/resume, mute, stop and the effect cap apply to both
   sides of an overlap; pausing freezes its progress.
-  Active effects advance at `audio.effectLoopUpdateFps` (default 30) for smooth short blends, independently of the
+  Active effects and pending/running music crossfades advance at `audio.effectLoopUpdateFps` (default 30) for smooth blends, independently of the
   slower `audio.updateFps` readout updates; neither timer wakes the map renderer.
 - **Volumes:** master, music and effects volumes are independent, persisted in the settings file and applied as
   `master x channel` (a logarithmic/perceptual curve, `volume^2.2`, so sliders feel linear). Pausing is per channel:
@@ -853,7 +872,7 @@ full-screen overlay that is opened from there.
     (filled accent ring plus glow when the category plays / the effect runs) while the colours stay a property of
     the icons.
   - The centre of the left ring holds the music transport (previous, play/pause, next, stop), the **name of the
-    active category**, the current track and elapsed/total time; the centre of the right ring holds the same-looking
+    active category**, the current track and elapsed/total time, plus the **Loop current song** toggle; the centre of the right ring holds the same-looking
     pause/resume button for all effects and the names of the running effects. Both centres use identical button
     styling so the two halves of the overlay look like one control. The effects pause/resume toggle retains its
     selected state for the API but has no yellow selected background, glow or icon tint, matching music play/pause.
@@ -867,7 +886,10 @@ full-screen overlay that is opened from there.
   `audio.overlay` and `audio.libraryWindow` (its Library button; it opens the same window as the overlay's
   `audio.library`, but is a different control);
   the overlay registers `audio.musicPlay` (the play/pause button in the centre of the music ring; music only, unlike `audio.play`), `audio.stop`, `audio.mute`, `audio.library`,
-  `audio.effectsPause`, `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`. In addition **every
+  `audio.effectsPause`, `audio.musicLoop` (session-only loop-current-song toggle), `audio.masterVolume`, `audio.musicVolume` and `audio.effectsVolume`.
+  Every music file has an `audio.track.<id>` button endpoint that starts its category at that track, including
+  files in hidden categories; track endpoints follow library changes and expose the file's current name.
+  In addition **every
   category and every sound effect gets its own toggle endpoint**, registered dynamically whenever the library
   changes: `audio.category.<id>` plays that category (or stops it when it is already playing) and
   `audio.effect.<id>` switches that effect on or off. The id is the library id of the entry (a UUID), so an
@@ -886,6 +908,7 @@ full-screen overlay that is opened from there.
   separator, a single **"Sound effects"** entry under its own heading, so the two kinds never look alike. The
   right side shows the track table of the selected category or of the sound effects (name, duration, source), with
   import, rename, delete, change kind, move, search and the **Cut clips** action. The right-click menu of a
+  music file offers **"Play"**, starting its category at that song (not the waveform preview). The menu of a
   category and of a sound effect offers **"Choose colour..."**, **"Choose icon..."** and **Hide in overlay** /
   **Show in overlay**.
 - The whole feature can be switched off with `audio.enabled = false`: no audio is loaded, the status bar group and

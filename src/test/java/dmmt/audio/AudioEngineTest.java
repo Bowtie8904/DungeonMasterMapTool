@@ -3,6 +3,8 @@ package dmmt.audio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -12,6 +14,7 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Playlist, crossfade, sound effect layering, volumes and the panic mute (3.35.4). */
@@ -63,7 +66,7 @@ class AudioEngineTest {
     @Test
     void limiterSourceSwitchPreservesPausedMusicPositionAndPreparedEffectState() throws IOException {
         AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
-        engine.setCrossfadeSeconds(0);
+        engine.setMusicCrossfadeSeconds(0);
         engine.playCategory(combat.getId());
         FakeAudioOutput.FakeVoice old = output.last();
         old.advanceTo(720);
@@ -101,7 +104,7 @@ class AudioEngineTest {
     @Test
     void changingLimiterDuringMusicCrossfadePreservesOutgoingFadeAndOtherTrack() throws IOException {
         engine.setShuffle(false);
-        engine.setCrossfadeSeconds(1);
+        engine.setMusicCrossfadeSeconds(1);
         AudioTrack first = transientTrack("a-transient", AudioKind.MUSIC, combat.getId());
         transientTrack("b-transient", AudioKind.MUSIC, combat.getId());
         engine.playCategory(combat.getId());
@@ -161,7 +164,7 @@ class AudioEngineTest {
     @Test
     void sourceSwitchWaitsUntilReadyAndSeeksToTheThenCurrentPosition() throws IOException {
         AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
-        engine.setCrossfadeSeconds(0);
+        engine.setMusicCrossfadeSeconds(0);
         engine.playCategory(combat.getId());
         FakeAudioOutput.FakeVoice old = output.last();
         old.advanceTo(300);
@@ -184,7 +187,7 @@ class AudioEngineTest {
     @Test
     void aLimiterReplacementMustNotResumePausedMusicThatWasStopped() throws IOException {
         AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
-        engine.setCrossfadeSeconds(1);
+        engine.setMusicCrossfadeSeconds(1);
         engine.playCategory(combat.getId());
         engine.tick(1);
         engine.toggleMusic();
@@ -224,6 +227,122 @@ class AudioEngineTest {
 
         assertTrue(output.playing().isEmpty());
         assertFalse(engine.isMusicPlaying());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void playingATrackStartsItsCategoryAtThatSong(boolean shuffle) throws IOException {
+        music("a");
+        AudioTrack selected = music("b");
+        music("c");
+        engine.setShuffle(shuffle);
+        engine.setMusicCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        engine.toggleMusic();
+
+        engine.playTrack(selected.getId());
+        assertEquals(combat.getId(), engine.categoryId());
+        assertEquals(selected.getId(), engine.currentTrack().orElseThrow().getId());
+        assertTrue(engine.isMusicPlaying(), "direct playback resumes paused music");
+        FakeAudioOutput.FakeVoice first = output.last();
+        first.advanceTo(5000);
+        engine.playTrack(selected.getId());
+        assertEquals(0, output.last().position, "playing the file again restarts it");
+        output.last().reachEnd();
+        assertNotEquals(selected.getId(), engine.currentTrack().orElseThrow().getId());
+        if (!shuffle) {
+            assertEquals("c", engine.currentTrack().orElseThrow().getName());
+        }
+        engine.shutdown();
+    }
+
+    @Test
+    void directPlaybackRejectsMissingTracksAndSoundEffects() throws IOException {
+        AudioTrack effect = effect("rain");
+        assertThrows(IllegalArgumentException.class, () -> engine.playTrack("missing"));
+        assertThrows(IllegalArgumentException.class, () -> engine.playTrack(effect.getId()));
+        assertFalse(engine.isMusicPlaying());
+    }
+
+    @Test
+    void loopCurrentSongCrossfadesIntoItself() throws IOException {
+        AudioTrack first = music("a");
+        engine.setShuffle(false);
+        engine.setMusicCrossfadeSeconds(4);
+        assertFalse(engine.isMusicLoop());
+        engine.setMusicLoop(true);
+        engine.playTrack(first.getId());
+        FakeAudioOutput.FakeVoice voice = output.last();
+        for (int i = 0; i < 4; i++) {
+            engine.tick(1);
+        }
+        voice.advanceTo(voice.duration - 1000);
+        engine.tick(1);
+        assertEquals(2, output.opened.size(), "a repeat voice is preloaded before the current song ends");
+        FakeAudioOutput.FakeVoice incoming = output.last();
+        assertEquals(voice.file, incoming.file);
+        incoming.advanceTo(500);
+        engine.tick(0);
+        assertEquals(Math.sqrt(0.5), voice.volume, 0.0001);
+        assertEquals(Math.sqrt(0.5), incoming.volume, 0.0001,
+                "the equal-power overlap reaches unity combined power at its midpoint");
+        incoming.reachEnd();
+        assertEquals(first.getId(), engine.currentTrack().orElseThrow().getId());
+        assertEquals(3, output.opened.size());
+        assertEquals(first.getId(), engine.currentTrack().orElseThrow().getId());
+        engine.shutdown();
+        assertTrue(output.live().isEmpty());
+    }
+
+    @Test
+    void aSingleSongCategoryCrossfadesEvenWhenLoopCurrentSongIsOff() throws IOException {
+        music("only");
+        engine.setMusicCrossfadeSeconds(2);
+        engine.playCategory(combat.getId());
+        FakeAudioOutput.FakeVoice outgoing = output.last();
+        outgoing.advanceTo(outgoing.duration - 1000);
+
+        engine.tick(0.25);
+
+        assertFalse(engine.isMusicLoop());
+        assertEquals(2, output.opened.size());
+        assertEquals(outgoing.file, output.last().file);
+        assertEquals(2, output.playing().size(),
+                "the single song repeats with both voices playing during the overlap");
+        engine.shutdown();
+    }
+
+    @Test
+    void loopModeAllowsManualNavigationAndSurvivesPauseStopAndCategoryChanges() throws IOException {
+        music("a");
+        music("b");
+        engine.setShuffle(false);
+        engine.setMusicCrossfadeSeconds(0);
+        engine.playCategory(combat.getId());
+        engine.setMusicLoop(true);
+        engine.next();
+        assertEquals("b", engine.currentTrack().orElseThrow().getName());
+        output.last().reachEnd();
+        assertEquals("b", engine.currentTrack().orElseThrow().getName());
+        engine.previous();
+        assertEquals("a", engine.currentTrack().orElseThrow().getName());
+        engine.toggleMusic();
+        engine.tick(1);
+        assertTrue(engine.isMusicPaused());
+        engine.toggleMusic();
+        assertTrue(output.last().playing);
+        engine.stopMusic();
+        assertTrue(engine.isMusicLoop());
+        engine.playCategory(combat.getId());
+        output.last().reachEnd();
+        assertEquals("a", engine.currentTrack().orElseThrow().getName());
+        AudioCategory other = library.createCategory("Other", AudioCategory.DEFAULT_COLOR, AudioCategory.DEFAULT_ICON);
+        AudioTrack selected = importTrack("other", AudioKind.MUSIC, other.getId());
+        engine.playTrack(selected.getId());
+        output.last().reachEnd();
+        assertEquals(selected.getId(), engine.currentTrack().orElseThrow().getId());
+        assertFalse(new AudioEngine(library, new FakeAudioOutput()).isMusicLoop());
+        engine.shutdown();
     }
 
     @Test
@@ -275,7 +394,7 @@ class AudioEngineTest {
     @Test
     void theNextTrackIsStartedBeforeTheCurrentOneEnds() throws IOException {
         engine.setShuffle(false);
-        engine.setCrossfadeSeconds(4);
+        engine.setMusicCrossfadeSeconds(4);
         music("a");
         music("b");
         engine.playCategory(combat.getId());
@@ -297,7 +416,7 @@ class AudioEngineTest {
     @Test
     void aFinishedCrossfadeDisposesTheOldVoice() throws IOException {
         engine.setShuffle(false);
-        engine.setCrossfadeSeconds(2);
+        engine.setMusicCrossfadeSeconds(2);
         music("a");
         music("b");
         engine.playCategory(combat.getId());
@@ -306,6 +425,7 @@ class AudioEngineTest {
         engine.tick(0.25);
 
         for (int i = 0; i < 20; i++) {
+            output.last().advanceTo((i + 1) * 250);
             engine.tick(0.25);
         }
 
@@ -412,9 +532,11 @@ class AudioEngineTest {
         assertFalse(next.playing);
         next.ready = true;
         engine.tick(0.25);
-        engine.tick(0.25);
         assertEquals(1, first.volume, 0.0001, "startup delay must not fade the outgoing voice");
         assertEquals(0, next.volume);
+        engine.tick(0.25);
+        assertEquals(Math.sqrt(0.5), first.volume, 0.0001,
+                "the equal-power fade begins once the prepared voice is ready");
     }
 
     @Test

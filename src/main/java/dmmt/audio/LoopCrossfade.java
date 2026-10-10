@@ -18,9 +18,11 @@ public final class LoopCrossfade {
 
     public void advance(double positionMs, double deltaSeconds) {
         double positionSeconds = Math.max(0, (positionMs - startMs) / 1000);
-        elapsed = elapsed > 0 && !resumed
-                ? Math.max(positionSeconds, elapsed + Math.max(0, deltaSeconds))
-                : Math.max(elapsed, positionSeconds);
+        if (resumed) {
+            elapsed = Math.max(elapsed, positionSeconds);
+        } else {
+            elapsed = Math.max(positionSeconds, elapsed + Math.max(0, deltaSeconds));
+        }
         resumed = false;
     }
 

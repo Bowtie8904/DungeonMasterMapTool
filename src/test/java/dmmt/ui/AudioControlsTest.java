@@ -15,7 +15,12 @@ import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.TableView;
+import javafx.scene.control.ListView;
 import javafx.scene.layout.StackPane;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -33,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,6 +75,45 @@ class AudioControlsTest {
     private AudioControls controls(AudioLibraryService library) {
         return new AudioControls(new AppSettings(dir.resolve("settings.ini")), () -> null, library,
                 new FakeAudioOutput());
+    }
+
+    @Test
+    void musicLoopHasAVisibleHighlightOnlyWhenEnabled() throws Exception {
+        AudioLibraryService library = library();
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                StackPane root = new StackPane(audio.overlayLayer());
+                Scene scene = new Scene(root);
+                scene.getStylesheets().add(Icons.STYLESHEET);
+                audio.overlay().show();
+                ToggleButton loop = (ToggleButton) audio.apiControls().get("audio.musicLoop");
+                FontIcon icon = (FontIcon) loop.getGraphic();
+
+                for (String state : List.of("normal", "hover", "pressed")) {
+                    loop.pseudoClassStateChanged(PseudoClass.getPseudoClass("hover"), state.equals("hover"));
+                    loop.pseudoClassStateChanged(PseudoClass.getPseudoClass("pressed"), state.equals("pressed"));
+                    audio.engine().setMusicLoop(false);
+                    root.applyCss();
+                    var inactiveBackground = loop.getBackground();
+                    var inactiveIconColor = icon.getIconColor();
+                    var inactiveEffect = loop.getEffect();
+                    audio.engine().setMusicLoop(true);
+                    root.applyCss();
+                    assertNotEquals(inactiveBackground, loop.getBackground(), state);
+                    assertNotEquals(inactiveIconColor, icon.getIconColor(), state);
+                    assertNotEquals(inactiveEffect, loop.getEffect(), state);
+                    assertNotNull(loop.getEffect(), state);
+                    audio.engine().setMusicLoop(false);
+                    root.applyCss();
+                    assertEquals(inactiveBackground, loop.getBackground(), state);
+                    assertEquals(inactiveIconColor, icon.getIconColor(), state);
+                    assertEquals(inactiveEffect, loop.getEffect(), state);
+                }
+            } finally {
+                audio.shutdown();
+            }
+        });
     }
 
     @Test
@@ -156,6 +201,118 @@ class AudioControlsTest {
             ((ToggleButton) audio.apiControls().get("audio.category." + combatId)).fire();
             assertFalse(audio.engine().isCategoryActive(combatId), "firing it again stops the category");
             audio.shutdown();
+        });
+    }
+
+    @Test
+    void musicLoopEndpointStaysSynchronizedWhileClosedAndIsNotSaved() throws Exception {
+        AudioLibraryService library = library();
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                api.replaceGroup("audio", audio.apiControls());
+                List<String> ids = List.of("audio.musicLoop");
+                assertEquals(false, api.describe(ids).getFirst().get("value"));
+                api.execute("audio.musicLoop", Map.of());
+                assertTrue(audio.engine().isMusicLoop());
+                assertEquals(true, api.describe(ids).getFirst().get("value"));
+                audio.applySettings();
+                assertTrue(audio.engine().isMusicLoop(), "settings refresh must not reset session state");
+                audio.engine().setMusicLoop(false);
+                assertEquals(false, api.describe(ids).getFirst().get("value"));
+                audio.engine().setMusicLoop(true);
+                audio.overlay().show();
+                assertTrue(((ToggleButton) audio.apiControls().get("audio.musicLoop")).isSelected());
+                audio.closeOverlay();
+                AudioControls restarted = controls(library);
+                try {
+                    assertFalse(restarted.engine().isMusicLoop());
+                } finally {
+                    restarted.shutdown();
+                }
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @Test
+    void musicFileEndpointsStartHiddenCategoriesAndFollowRenameMoveAndKindChanges() throws Exception {
+        AudioLibraryService library = library();
+        String combatId = categoryId(library, "Combat");
+        AudioTrack track = library.musicOf(combatId).getFirst();
+        library.setCategoryHidden(combatId, true);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                audio.setApiControlsChangedHandler(() -> api.replaceGroup("audio", audio.apiControls()));
+                api.replaceGroup("audio", audio.apiControls());
+                String id = "audio.track." + track.getId();
+                api.execute(id, Map.of());
+                assertEquals(track.getId(), audio.engine().currentTrack().orElseThrow().getId());
+                assertEquals(combatId, audio.engine().categoryId());
+                library.renameTrack(track.getId(), "Boss fight");
+                String other = categoryId(library, "Christmas Eve");
+                library.moveTrack(track.getId(), other);
+                audio.refreshLibraryChoices();
+                assertEquals("Boss fight", api.describe(List.of(id)).getFirst().get("label"));
+                api.execute(id, Map.of());
+                assertEquals(other, audio.engine().categoryId());
+                library.changeKind(track.getId(), AudioKind.EFFECT, null);
+                audio.refreshLibraryChoices();
+                assertTrue(api.describe(List.of(id)).isEmpty());
+                assertTrue(audio.apiControls().containsKey("audio.effect." + track.getId()));
+                library.changeKind(track.getId(), AudioKind.MUSIC, combatId);
+                audio.refreshLibraryChoices();
+                assertFalse(api.describe(List.of(id)).isEmpty());
+                library.deleteTrack(track.getId());
+                audio.refreshLibraryChoices();
+                assertTrue(api.describe(List.of(id)).isEmpty());
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @Test
+    void musicFileContextMenuStartsItsCategoryAtTheSelectedSong() throws Exception {
+        AudioLibraryService library = library();
+        String combatId = categoryId(library, "Combat");
+        AudioTrack second = library.importFile(file("second.wav"), AudioKind.MUSIC, combatId);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            AudioLibraryWindow.show(null, library, audio.engine(), new AppSettings(dir.resolve("settings.ini")),
+                    audio::refreshLibraryChoices);
+            Stage stage = (Stage) Window.getWindows().stream()
+                    .filter(window -> window instanceof Stage s && s.getTitle().equals("Audio library"))
+                    .findFirst().orElseThrow();
+            try {
+                ListView<?> categories = stage.getScene().getRoot().lookupAll(".list-view").stream()
+                        .filter(node -> node instanceof ListView<?> list
+                                && list.getItems().size() == library.categories().size())
+                        .map(node -> (ListView<?>) node).findFirst().orElseThrow();
+                categories.getSelectionModel().select(library.categories().indexOf(
+                        library.category(combatId).orElseThrow()));
+                TableView<?> table = (TableView<?>) stage.getScene().lookup(".table-view");
+                MenuItem play = table.getContextMenu().getItems().stream()
+                        .filter(item -> "Play".equals(item.getText())).findFirst().orElseThrow();
+                table.getSelectionModel().select(table.getItems().indexOf(second));
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertFalse(play.isDisable());
+                play.fire();
+                assertEquals(second.getId(), audio.engine().currentTrack().orElseThrow().getId());
+                assertEquals(combatId, audio.engine().categoryId());
+                table.getSelectionModel().select(0);
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertTrue(play.isDisable(), "playing requires one selected file");
+            } finally {
+                stage.close();
+                audio.shutdown();
+            }
         });
     }
 

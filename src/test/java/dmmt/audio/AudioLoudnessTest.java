@@ -376,7 +376,7 @@ class AudioLoudnessTest {
         FakeAudioOutput output = new FakeAudioOutput();
         AudioEngine engine = new AudioEngine(library, output, new Random(1));
         engine.setVolumes(1, 1, 1);
-        engine.setCrossfadeSeconds(1);
+        engine.setMusicCrossfadeSeconds(1);
         engine.setEffectFadeSeconds(0);
         engine.setEffectLoopCrossfadeSeconds(0.5);
         AudioCategory category = library.createCategory("Test", null, null);

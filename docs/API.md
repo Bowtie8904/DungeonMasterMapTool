@@ -195,6 +195,7 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 | `/api/controls/audio/next` | button | Next track of the category. |
 | `/api/controls/audio/overlay` | button | Opens or closes the audio overlay on the DM screen. |
 | `/api/controls/audio/musicPlay` | button | The play/pause button in the middle of the music ring: pauses or resumes only the music (sound effects are untouched). |
+| `/api/controls/audio/musicLoop` | toggle | Toggles repeating the current song (crossfading into itself over `audio.musicCrossfadeSeconds`) instead of automatically advancing to another song. Off at startup, session-only; manual previous/next still work. |
 | `/api/controls/audio/stop` | button | Stops the music (sound effects keep playing). |
 | `/api/controls/audio/musicVolume` | slider | Music volume, `0` to `1`. |
 | `/api/controls/audio/effectsPause` | button | Pauses or resumes all running sound effects at once. |
@@ -205,22 +206,29 @@ available when `audio.enabled` is on. Endpoints work whether the overlay is open
 | `/api/controls/audio/library` | button | Opens the audio library window on the DM screen. |
 | `/api/controls/audio/libraryWindow` | button | The Library button in the status bar: opens the same audio library window without opening the overlay. |
 
-### One endpoint per category and per sound effect
+### One endpoint per category, music file and sound effect
 
 In addition, **every music category and every sound effect has its own toggle**:
 
 | Endpoint | Type | What it does |
 |----------|------|--------------|
 | `/api/controls/audio/category/<id>` | button | Plays that category, or stops it when it is already playing. |
+| `/api/controls/audio/track/<id>` | button | Starts the music file's category at that song, then follows normal playlist ordering/shuffle. Repeated calls restart the song. |
 | `/api/controls/audio/effect/<id>` | button | Starts or stops that sound effect loop. |
 
-`<id>` is the library id of the category or sound effect - the UUID that also appears in the library's
+`<id>` is the library id of the category, music file or sound effect - the UUID that also appears in the library's
 `library.json`, for example
 `/api/controls/audio/category/8f1c6d94-2b77-4f0e-9a3b-6c5a1d2e7f10`. Ids never change, so an endpoint survives
 **renaming** the entry and can never collide with another one; `GET /api/controls` lists every endpoint together
 with the entry's current name, which is the easiest way to look an id up. Hiding an entry from the overlay does
 **not** affect its endpoint - hidden entries keep working over the API. The endpoints are rebuilt whenever the
 library changes, so `GET /api/controls` always lists the current set.
+
+Call `POST /api/controls/audio/musicLoop` without parameters to toggle looping. Its boolean `value` is exposed
+by `GET /api/controls` (also with `?ids=audio.musicLoop`), and stays synchronized even while the overlay is closed.
+Music file endpoints use control IDs `audio.track.<id>` and also work for files in hidden categories.
+Moving a file to another music category updates what its endpoint starts; converting it to a sound effect or
+deleting it removes its music-file endpoint.
 
 A stream deck page for a scene typically uses one `audio/category/<id>` button plus a few `audio/effect/<id>`
 buttons to control its ambience.

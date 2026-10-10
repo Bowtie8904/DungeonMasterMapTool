@@ -53,6 +53,7 @@ public final class AudioControls {
     private final HBox group = new HBox(2, previousButton, playButton, nextButton, overlayButton, libraryButton);
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
     private final Map<String, ToggleButton> hiddenToggles = new LinkedHashMap<>();
+    private final Map<String, Button> trackButtons = new LinkedHashMap<>();
 
     private Runnable apiControlsChanged = () -> {
     };
@@ -173,7 +174,7 @@ public final class AudioControls {
 
     /**
      * Every audio control the local API exposes, keyed by its id (3.35.6): the fixed transport, overlay and volume
-     * ids plus one toggle per category and per sound effect, addressed by their library id so that renaming an
+     * ids plus one play button per music track and one toggle per category and per sound effect, addressed by their library id so that renaming an
      * entry never changes its endpoint. Hidden entries keep their endpoint, so the map is rebuilt whenever the
      * library changes.
      */
@@ -188,7 +189,23 @@ public final class AudioControls {
         List<AudioCategory> categories = library.categories();
         for (AudioCategory category : categories) {
             controls.put("audio.category." + category.getId(), categoryToggle(category));
+            for (AudioTrack track : library.musicOf(category.getId())) {
+                Button button = trackButtons.computeIfAbsent(track.getId(), id -> {
+                    Button play = new Button();
+                    play.setOnAction(event -> {
+                        AudioTrack current = library.track(id).orElseThrow();
+                        settings.put("audio.lastCategory", current.getCategoryId());
+                        engine.playTrack(id);
+                    });
+                    return play;
+                });
+                button.setText(track.getName());
+                button.setGraphic(Icons.icon(MaterialDesignP.PLAY));
+                Icons.tooltip(button, "Play " + track.getName() + " and start its music category");
+                controls.put("audio.track." + track.getId(), button);
+            }
         }
+        trackButtons.keySet().removeIf(id -> !controls.containsKey("audio.track." + id));
         for (AudioTrack effect : library.effects()) {
             controls.put("audio.effect." + effect.getId(), effectToggle(effect));
         }
@@ -241,7 +258,7 @@ public final class AudioControls {
                 settings.getDouble("audio.musicVolume", 0.7),
                 settings.getDouble("audio.effectsVolume", 0.6));
         engine.setShuffle(Tuning.AUDIO_SHUFFLE.get());
-        engine.setCrossfadeSeconds(Tuning.AUDIO_CROSSFADE_SECONDS.get());
+        engine.setMusicCrossfadeSeconds(Tuning.AUDIO_MUSIC_CROSSFADE_SECONDS.get());
         engine.setEffectFadeSeconds(Tuning.AUDIO_EFFECT_FADE_SECONDS.get());
         engine.setEffectLoopCrossfadeSeconds(Tuning.AUDIO_EFFECT_LOOP_CROSSFADE_SECONDS.get());
         engine.setPanicFadeSeconds(Tuning.AUDIO_PANIC_FADE_SECONDS.get());
@@ -285,13 +302,12 @@ public final class AudioControls {
         overlay.refreshState();
     }
 
-    /** Advances active loop blends smoothly, keeping readouts and inactive playback on their slower cadence. */
+    /** Advances effect loops and music crossfades smoothly, keeping readouts and other playback on their slower cadence. */
     private void tick() {
         long now = System.nanoTime();
         double delta = lastTickNanos == 0 ? 0 : (now - lastTickNanos) / 1_000_000_000.0;
         double readoutInterval = 1.0 / Tuning.AUDIO_UPDATE_FPS.get();
-        if (lastTickNanos == 0 || (!engine.activeEffects().isEmpty() && !engine.areEffectsPaused())
-                || delta >= readoutInterval) {
+        if (lastTickNanos == 0 || engine.needsSmoothUpdates() || delta >= readoutInterval) {
             lastTickNanos = now;
             engine.tick(delta);
         }

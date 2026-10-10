@@ -31,6 +31,7 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignV;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
@@ -70,6 +71,8 @@ public final class AudioOverlay {
     private final Button previousButton = Icons.button(MaterialDesignS.SKIP_PREVIOUS, "Previous track", null);
     private final Button nextButton = Icons.button(MaterialDesignS.SKIP_NEXT, "Next track", null);
     private final Button stopButton = Icons.button(MaterialDesignS.STOP, "Stop the music (fades out)", null);
+    private final ToggleButton musicLoop = Icons.toggle(MaterialDesignR.REPEAT_ONCE,
+            "Loop the current song (crossfading into itself) instead of automatically playing the next track");
     private final ToggleButton effectsPause = Icons.toggle(MaterialDesignP.PAUSE,
             "Pause or resume all running sound effects");
     private final Button effectsStop = Icons.button(MaterialDesignS.STOP, "Stop all sound effects (fades out)", null);
@@ -175,7 +178,13 @@ public final class AudioOverlay {
         previousButton.setOnAction(event -> engine.previous());
         nextButton.setOnAction(event -> engine.next());
         stopButton.setOnAction(event -> engine.stopMusic());
-        HBox transport = new HBox(6, previousButton, playButton, nextButton, stopButton);
+        musicLoop.getStyleClass().add("audio-music-loop");
+        musicLoop.setOnAction(event -> {
+            if (!syncing) {
+                engine.setMusicLoop(musicLoop.isSelected());
+            }
+        });
+        HBox transport = new HBox(6, previousButton, playButton, nextButton, stopButton, musicLoop);
         transport.setAlignment(Pos.CENTER);
         nowCategory.getStyleClass().add("audio-overlay-now");
         nowCategory.setWrapText(true);
@@ -395,6 +404,7 @@ public final class AudioOverlay {
         try {
             categoryButtons.forEach((id, button) -> button.setSelected(engine.isCategoryActive(id)));
             effectButtons.forEach((id, button) -> button.setSelected(engine.isEffectActive(id)));
+            musicLoop.setSelected(engine.isMusicLoop());
             if (!open) {
                 return;
             }
@@ -457,6 +467,7 @@ public final class AudioOverlay {
     public Map<String, Node> apiControls() {
         Map<String, Node> controls = new LinkedHashMap<>();
         controls.put("audio.musicPlay", playButton);
+        controls.put("audio.musicLoop", musicLoop);
         controls.put("audio.stop", stopButton);
         controls.put("audio.mute", muteButton);
         controls.put("audio.library", libraryButton);
