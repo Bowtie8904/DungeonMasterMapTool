@@ -467,6 +467,61 @@
     -fx-text-fill: -dm-muted;
 }
 
+.status-bar .status-message {
+    -fx-text-fill: -dm-text;
+}
+
+.status-bar .status-heading {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 0 4;
+}
+
+.status-bar .player-output-status {
+    -fx-padding: 0 8;
+    -fx-border-color: transparent transparent transparent -dm-border;
+    -fx-border-insets: 0 0 0 -4;
+}
+
+.status-bar .player-output-live {
+    -fx-text-fill: #8fd6a2;
+}
+
+.status-bar .player-output-frozen {
+    -fx-text-fill: #80c7ff;
+    -fx-font-weight: bold;
+}
+
+.status-audio-section {
+    -fx-padding: 0 0 0 20;
+    -fx-border-color: transparent transparent transparent -dm-border;
+    -fx-border-insets: 4 0 4 0;
+    -fx-alignment: center-right;
+}
+
+.status-bar .player-output-off {
+    -fx-text-fill: -dm-muted;
+}
+
+.diagnostics-popup {
+    -fx-background-color: -dm-surface;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-padding: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 16, 0.2, 0, 4);
+}
+
+.diagnostics-title {
+    -fx-text-fill: -dm-text;
+    -fx-font-weight: bold;
+}
+
+.diagnostics-metrics {
+    -fx-text-fill: -dm-muted;
+}
+
 /* ---------- Sidebar / map browser ---------- */
 
 .sidebar {

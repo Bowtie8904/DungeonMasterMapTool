@@ -544,6 +544,7 @@ public class MapBrowser extends VBox {
     /** Tooltip with the map name and a larger preview of its thumbnail (when loaded). */
     public static Tooltip previewTooltip(String text, Image image) {
         Tooltip tooltip = Icons.tooltip(text);
+        tooltip.setMaxWidth(420);
         if (image != null) {
             ImageView large = new ImageView(image);
             large.setPreserveRatio(true);

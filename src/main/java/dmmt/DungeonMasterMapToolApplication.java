@@ -215,6 +215,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private Stage playerStage;
     private PlayerViewTransition playerTransition;
     private Label statusLabel;
+    private Label playerOutputLabel;
+    private javafx.scene.control.Tooltip statusTooltip;
     private ComboBox<String> playerScreenSelector;
     private DmProject.CameraState frozenPlayerCamera;
     private DmProject frozenPlayerProject;
@@ -267,6 +269,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private long lastFrameNanos;
     private Label metricsLabel;
     private javafx.scene.control.Tooltip metricsTooltip;
+    private javafx.stage.Popup diagnosticsPopup;
+    private ToggleButton diagnosticsToggle;
     private final Map<String, Long> metricsSectionNanos = new java.util.HashMap<>();
     private long metricsWindowStart;
     private int metricsFrames;
@@ -513,6 +517,12 @@ public class DungeonMasterMapToolApplication extends Application {
         root.setLeft(mapBrowser);
 
         statusLabel = new Label("Ready");
+        statusLabel.setMinWidth(0);
+        statusLabel.setMaxWidth(Double.MAX_VALUE);
+        statusLabel.setTextOverrun(javafx.scene.control.OverrunStyle.ELLIPSIS);
+        statusLabel.getStyleClass().add("status-message");
+        statusTooltip = Icons.tooltip("Current application activity");
+        statusLabel.setTooltip(statusTooltip);
         ToggleButton sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map library");
         sidebarToggle.setSelected(preferences.getBoolean(PREF_SIDEBAR_VISIBLE, true));
         sidebarToggle.selectedProperty().addListener((obs, was, visible) -> {
@@ -532,13 +542,59 @@ public class DungeonMasterMapToolApplication extends Application {
             preferences.putBoolean(PREF_PERFORMANCE_MODE, on);
             status(on ? "Performance mode on." : "Performance mode off.");
         });
-        metricsLabel = new Label();
-        metricsLabel.setMinWidth(430);
+        metricsLabel = new Label("Waiting for the first frames...");
+        metricsLabel.setWrapText(true);
+        metricsLabel.setMaxWidth(460);
+        metricsLabel.getStyleClass().add("diagnostics-metrics");
         metricsTooltip = Icons.tooltip("Waiting for the first frames...");
         javafx.scene.control.Tooltip.install(metricsLabel, metricsTooltip);
+        Label diagnosticsTitle = new Label("Rendering diagnostics");
+        diagnosticsTitle.getStyleClass().add("diagnostics-title");
+        VBox diagnosticsContent = new VBox(6, diagnosticsTitle, metricsLabel);
+        diagnosticsContent.getStyleClass().add("diagnostics-popup");
+        diagnosticsContent.getStylesheets().add(Icons.STYLESHEET);
+        diagnosticsPopup = new javafx.stage.Popup();
+        diagnosticsPopup.getContent().add(diagnosticsContent);
+        diagnosticsPopup.setAutoHide(false);
+        diagnosticsPopup.setHideOnEscape(false);
+        diagnosticsToggle = Icons.toggle(MaterialDesignC.CHART_BOX_OUTLINE,
+                "Show rendering diagnostics (FPS, frame timing and memory)");
+        diagnosticsToggle.setOnAction(event -> {
+            if (diagnosticsToggle.isSelected()) {
+                javafx.geometry.Bounds anchor = diagnosticsToggle.localToScreen(diagnosticsToggle.getBoundsInLocal());
+                if (anchor == null) {
+                    diagnosticsToggle.setSelected(false);
+                    return;
+                }
+                diagnosticsPopup.show(diagnosticsToggle, anchor.getMinX(), anchor.getMinY());
+                Platform.runLater(() -> {
+                    if (!diagnosticsPopup.isShowing()) {
+                        return;
+                    }
+                    javafx.geometry.Rectangle2D screen = javafx.stage.Screen.getScreensForRectangle(
+                                    anchor.getMinX(), anchor.getMinY(), 1, 1).stream()
+                            .findFirst().orElse(javafx.stage.Screen.getPrimary()).getVisualBounds();
+                    double x = Math.max(screen.getMinX(),
+                            Math.min(anchor.getMinX(), screen.getMaxX() - diagnosticsPopup.getWidth()));
+                    double y = Math.max(screen.getMinY(), anchor.getMinY() - diagnosticsPopup.getHeight() - 8);
+                    diagnosticsPopup.setX(x);
+                    diagnosticsPopup.setY(y);
+                });
+            } else {
+                diagnosticsPopup.hide();
+            }
+        });
+        diagnosticsPopup.setOnHidden(event -> diagnosticsToggle.setSelected(false));
+        playerOutputLabel = new Label();
+        playerOutputLabel.setMinWidth(Region.USE_PREF_SIZE);
+        playerOutputLabel.getStyleClass().add("player-output-status");
+        updatePlayerOutputStatus();
+        Label activityHeading = new Label("Activity");
+        activityHeading.getStyleClass().add("status-heading");
         Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings", this::openSettings);
         extraApiControls.put("ui.library", sidebarToggle);
         extraApiControls.put("ui.performance", performanceToggle);
+        extraApiControls.put("ui.diagnostics", diagnosticsToggle);
         extraApiControls.put("ui.settings", settingsButton);
         extraApiControls.put("maps.previous", mapBrowser.previousMapButton());
         controlApi = new DmControlApi(dmControlVisibility);
@@ -546,12 +602,13 @@ public class DungeonMasterMapToolApplication extends Application {
         controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
         mapBrowser.setApiUrlProvider(this::mapApiUrl);
         applyApiUrlOptionVisibility();
-        Region statusSpacer = new Region();
-        HBox.setHgrow(statusSpacer, Priority.ALWAYS);
-        HBox statusBar = new HBox(sidebarToggle, performanceToggle, settingsButton, metricsLabel, statusLabel,
-                statusSpacer);
+        HBox statusBar = new HBox(sidebarToggle, performanceToggle, diagnosticsToggle, settingsButton, activityHeading,
+                statusLabel, playerOutputLabel);
+        HBox.setHgrow(statusLabel, Priority.ALWAYS);
         if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
-            statusBar.getChildren().add(audioControls.statusBarGroup());
+            HBox audioStatus = new HBox(audioControls.statusBarGroup());
+            audioStatus.getStyleClass().add("status-audio-section");
+            statusBar.getChildren().add(audioStatus);
             registerAudioApiControls();
         }
         statusBar.getStyleClass().add("status-bar");
@@ -657,6 +714,9 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.getIcons().setAll(appIcons());
         stage.setOnCloseRequest(event -> {
             saveOnExit();
+            if (diagnosticsPopup != null) {
+                diagnosticsPopup.hide();
+            }
             if (handoutWindow != null) {
                 handoutWindow.close();
             }
@@ -780,10 +840,10 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         }
         detail.append("\n\n'player total' includes the player parts listed above it. 'base redraw' only appears when the map image layer had to be redrawn.");
-        metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms (max %.1f)         | %d/%d MB | %s",
+        metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms average (max %.1f) | %d/%d MB | %s",
                 metricsFrames * 1e9 / elapsed, targetFramesPerSecond,
                         metricsNanosSum / 1e6 / metricsFrames, metricsNanosMax / 1e6, usedMb, allocatedMb, top));
-                metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | heap in use/allocated | slowest parts\n\n" + detail);
+        metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | heap in use/allocated | slowest parts\n\n" + detail);
         metricsSectionNanos.clear();
         metricsWindowStart = nowNanos;
         metricsFrames = 0;
@@ -3361,6 +3421,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerAmbientCanvas = null;
             playerFogCanvas = null;
             syncPlayerWindowToggle();
+            updatePlayerOutputStatus();
         });
 
         Screen target = resolveSelectedPlayerScreen();
@@ -3371,6 +3432,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setHeight(bounds.getHeight());
         playerStage.show();
         syncPlayerWindowToggle();
+        updatePlayerOutputStatus();
         status("Player window opened.");
     }
 
@@ -3389,6 +3451,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (playerWindowToggle != null) {
             playerWindowToggle.setSelected(playerStage != null);
         }
+        updatePlayerOutputStatus();
     }
 
     private void closePlayerWindow() {
@@ -8373,7 +8436,41 @@ public class DungeonMasterMapToolApplication extends Application {
     private void status(String text) {
         if (statusLabel != null) {
             statusLabel.setText(text);
+            if (statusTooltip != null) {
+                statusTooltip.setText("Current activity: " + text);
+            }
+            statusLabel.setAccessibleText("Current activity: " + text);
         }
+    }
+
+    private void updatePlayerOutputStatus() {
+        if (playerOutputLabel == null) {
+            return;
+        }
+        String text;
+        String tooltip;
+        String stateClass;
+        if (frozenPlayerProject != null) {
+            text = playerStage == null ? "Player view: Frozen (window off)" : "Player view: Frozen";
+            tooltip = playerStage == null
+                    ? "The player window is closed. Its frozen snapshot is retained for when it is reopened."
+                    : "Players see a frozen snapshot while you prepare changes in the DM view.";
+            stateClass = "player-output-frozen";
+        } else if (playerStage == null) {
+            text = "Player view: Off";
+            tooltip = "The player window is closed; no player output is currently visible.";
+            stateClass = "player-output-off";
+        } else {
+            text = "Player view: Live";
+            tooltip = "The player window is open and follows the current DM player view.";
+            stateClass = "player-output-live";
+        }
+        playerOutputLabel.setText(text);
+        playerOutputLabel.setAccessibleText(text);
+        playerOutputLabel.setTooltip(Icons.tooltip(tooltip));
+        playerOutputLabel.getStyleClass().removeAll(
+                "player-output-off", "player-output-frozen", "player-output-live");
+        playerOutputLabel.getStyleClass().add(stateClass);
     }
 
     /**
@@ -8392,6 +8489,7 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerCamera = null;
             playerRenderer.setWeatherFrozen(false);
             playerLightingEngine.reset();
+            updatePlayerOutputStatus();
             return;
         }
         try {
@@ -8400,8 +8498,10 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
             playerRenderer.setWeatherFrozen(true);
             playerLightingEngine.reset();
+            updatePlayerOutputStatus();
         } catch (IOException ex) {
             frozenPlayerProject = null;
+            updatePlayerOutputStatus();
             status("Could not freeze player view: " + ex.getMessage());
             syncControlsFromProject();
         }

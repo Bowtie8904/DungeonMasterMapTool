@@ -130,7 +130,7 @@ Maps are saved in a versioned JSON format (`.dmmap`) that is identical for impor
 - **Left:** the collapsible **map browser** (library and map actions).
 - **Centre:** the **map canvas**. A floating **tool chip** at the top names the active tool ("Esc or right-click to exit").
 - **Right:** the **DM controls** overlay, made of collapsible sections: *Tools, Fog of war, Lighting, Effects, Text, Map building, Player view, Performance*. Collapsed/expanded state is remembered. The whole panel can be collapsed and scrolls in small windows. Tabs you never use can be hidden completely in the **Settings** window (see [Settings file](#16-settings-file)).
-- **Bottom:** a slim status bar with messages (auto-save, import progress, errors) and the performance toggle and readout.
+- **Bottom:** a status bar whose activity message reports saves, imports, loading and errors; a persistent **Player view: Off / Live / Frozen** indicator is separated from the current song by extra spacing and a divider. **Frozen** is bold blue text; if the player window is closed while frozen, it reads **Frozen (window off)**. Use the chart button to toggle optional rendering diagnostics; the panel stays open until toggled off.
 
 ### 2. Map library (left sidebar)
 
@@ -431,10 +431,8 @@ Closing the handout window stops showing it but keeps the images for reopening d
 
 ### 15. Performance
 
-![Performance toggle](docs/images/performance-status-bar.png)
-
 - The base layer (background, grid, images) is drawn on its own canvas, the light map is cached and only recomputed when needed, and the frame rate drops automatically when nothing moves (see the `render.*` settings).
-- **Performance readout** in the status bar: actual/limit fps, average and worst render time, heap usage and the two slowest render parts (the tooltip lists all).
+- Click the **speedometer diagnostics** button in the status bar to view actual/limit FPS, average and worst frame time, heap usage and the slowest render parts (hover for the detailed breakdown). The metrics stay out of the way when the diagnostics popover is closed.
 - **Performance mode** toggle (bottom-left): a temporary override for weaker machines. It lowers light-map resolution, slows texture animation, disables flicker, uses coarser tiles and merges fog cells, without touching your data or other settings. How much it reduces is configurable with the `performance.*` settings (see [docs/SETTINGS.md](docs/SETTINGS.md#performance-mode)).
 - The **Animations** toggle in the Effects section disables texture animation per map.
 
