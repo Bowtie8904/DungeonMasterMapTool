@@ -79,6 +79,45 @@ class AudioControlsTest {
     }
 
     @Test
+    void statusBarNamesTheCurrentTrackBeforeTheButtonsAndTracksPlaybackAndRenames() throws Exception {
+        AudioLibraryService library = library();
+        String combatId = categoryId(library, "Combat");
+        AudioTrack first = library.musicOf(combatId).getFirst();
+        AudioTrack second = library.importFile(file("second.wav"), AudioKind.MUSIC, combatId);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                var children = audio.statusBarGroup().getChildrenUnmodifiable();
+                ScrollingLabel readout = (ScrollingLabel) children.getFirst();
+                assertSame(audio.apiControls().get("audio.previous"), children.get(1));
+                assertEquals("", readout.getText());
+                assertEquals(180, readout.getMinWidth());
+                assertEquals(180, readout.getPrefWidth());
+                assertEquals(180, readout.getMaxWidth());
+
+                audio.engine().setShuffle(false);
+                audio.engine().playTrack(first.getId());
+                assertEquals(first.getName(), readout.getText());
+                audio.engine().toggleAll();
+                assertTrue(audio.engine().isMusicPaused());
+                assertEquals(first.getName(), readout.getText());
+                audio.engine().toggleAll();
+                audio.engine().next();
+                assertEquals(second.getName(), readout.getText());
+                library.renameTrack(second.getId(), "Renamed current song");
+                audio.refreshLibraryChoices();
+                assertEquals("Renamed current song", readout.getText());
+                audio.engine().stopMusic();
+                assertEquals("", readout.getText());
+                audio.engine().setEffectActive(library.effects().getFirst().getId(), true);
+                assertEquals("", readout.getText(), "effects alone must not show a music name");
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @Test
     void iconToggleSelectionUsesAccentHighlightExceptAudioTransport() throws Exception {
         onFx(() -> {
             ToggleButton regular = new ToggleButton();

@@ -863,6 +863,11 @@ full-screen overlay that is opened from there.
   button: it pauses and resumes music and all running sound effects together (3.35.4). The Audio button shows the colour
   and icon of the running category, so the status bar doubles as an "what is playing" indicator; a tooltip names
   the current track. The transport buttons are disabled while no category is playing.
+  A fixed-width, 180-logical-pixel track-name display sits immediately to the left of the transport buttons.
+  It keeps the current name while paused and is blank when music is stopped. Names that fit remain still;
+  longer names scroll left automatically at 30 logical pixels/second, with a one-second pause at each end
+  before repeating from the beginning. The full name is also available as a tooltip. Track changes and renames
+  restart the scroll; scrolling stops while the display is detached or its window is hidden and on shutdown.
 - **Audio overlay** (3.35.6): a translucent panel drawn **inside** the main window on top of the map, not a second
   window. It fades in over `audio.overlayFadeSeconds`, toggles with the `M` key, closes with `Escape`, with the
   Audio button, or with a click on the dimmed background, and never blocks the map while it is closed.

@@ -531,6 +531,10 @@ audio overlay on top of the map. The Library button opens the audio library wind
 through the overlay. It is optional: switch `audio.enabled` off in the settings and the status bar
 group, the overlay and everything audio-related stay unloaded.
 
+The **current music track name** appears immediately to the left of the transport buttons in a fixed-width
+180-pixel display. Long names scroll automatically, pausing briefly at each end before repeating; short names
+stay still. Hover to see the full name. The name remains visible while paused and clears when music is stopped.
+
 **The library.** The library button in the overlay opens the audio library window. Import `.mp3` and
 `.wav` files, either file by file or a whole folder; every import is copied into the library folder
 (`audio.folder`, `dmmap-audio` next to the settings file by default), so moving or deleting the original does not

@@ -13,6 +13,7 @@ import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.geometry.Pos;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ToggleButton;
@@ -50,7 +51,8 @@ public final class AudioControls {
             "Open the audio overlay: categories, sound effects and volumes");
     private final Button libraryButton = Icons.button(MaterialDesignM.MUSIC_BOX_MULTIPLE_OUTLINE,
             "Open the audio library: import files, manage categories and cut clips", null);
-    private final HBox group = new HBox(2, previousButton, playButton, nextButton, overlayButton, libraryButton);
+    private final ScrollingLabel trackName = new ScrollingLabel(180);
+    private final HBox group = new HBox(2, trackName, previousButton, playButton, nextButton, overlayButton, libraryButton);
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
     private final Map<String, ToggleButton> hiddenToggles = new LinkedHashMap<>();
     private final Map<String, Button> trackButtons = new LinkedHashMap<>();
@@ -140,6 +142,7 @@ public final class AudioControls {
         });
         group.getStyleClass().add("audio-status-group");
         group.setAlignment(Pos.CENTER_RIGHT);
+        HBox.setMargin(trackName, new Insets(0, 6, 0, 0));
     }
 
     private void setOverlayOpen(boolean open) {
@@ -281,6 +284,7 @@ public final class AudioControls {
                     || (!engine.activeEffects().isEmpty() && !engine.areEffectsPaused());
             playButton.setGraphic(Icons.icon(playing ? MaterialDesignP.PAUSE : MaterialDesignP.PLAY));
             AudioTrack track = engine.currentTrack().orElse(null);
+            trackName.setText(track == null ? "" : track.getName());
             previousButton.setDisable(track == null);
             nextButton.setDisable(track == null);
             AudioCategory category = engine.categoryId() == null || track == null ? null
@@ -333,6 +337,7 @@ public final class AudioControls {
     /** Stops playback and releases the media resources; called when the application closes. */
     public void shutdown() {
         ticker.stop();
+        trackName.dispose();
         engine.shutdown();
     }
 }
