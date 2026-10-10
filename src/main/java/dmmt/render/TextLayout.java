@@ -50,6 +50,21 @@ public final class TextLayout {
         return new Result(builder.lines, builder.y, builder.contentWidth, builder.extentWidth);
     }
 
+    public static void fitBox(DmProject.TextBox box, double maxWidth, int emptyFontSize, double padding, Metrics metrics) {
+        List<DmProject.TextRun> runs = box.getRuns();
+        int lastSize = runs.isEmpty() ? emptyFontSize : runs.getLast().getFontSize();
+        Result layout = layout(runs, Math.max(1, maxWidth - 2 * padding), metrics);
+        double textHeight = layout.totalHeight();
+        String lastText = runs.isEmpty() ? "" : runs.getLast().getText();
+        if (textHeight == 0 || (lastText != null && lastText.endsWith("\n"))) {
+            textHeight += metrics.lineHeight(lastSize);
+        }
+        double textWidth = layout.extentWidth() > 0 ? layout.extentWidth() : lastSize;
+        box.setWidth(Math.ceil(Math.min(maxWidth, textWidth + 2 * padding + 4)));
+        box.setHeight(Math.ceil(textHeight + 2 * padding));
+        box.recenterRoomLabel();
+    }
+
     private static List<Token> tokenize(List<DmProject.TextRun> runs) {
         List<Token> tokens = new ArrayList<>();
         Token current = null;

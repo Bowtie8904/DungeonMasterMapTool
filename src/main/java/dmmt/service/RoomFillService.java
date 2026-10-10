@@ -68,15 +68,38 @@ public final class RoomFillService {
             return new Result(new BitSet(), false);
         }
 
-        BitSet filled = new BitSet(cols * rows);
-        int[] stack = new int[1024];
-        int size = 0;
         int start = row * cols + col;
-        filled.set(start);
-        stack[size++] = start;
+        Component component = flood(mask, barrier, new BitSet(cols * rows), start);
+        BitSet cells = new BitSet(cols * rows);
+        for (int idx : component.cells()) {
+            cells.set(idx);
+            int r = idx / cols;
+            int c = idx % cols;
+            for (int nr = Math.max(0, r - 1); nr <= Math.min(rows - 1, r + 1); nr++) {
+                for (int nc = Math.max(0, c - 1); nc <= Math.min(cols - 1, c + 1); nc++) {
+                    int next = nr * cols + nc;
+                    if (barrier.get(next)) {
+                        cells.set(next);
+                    }
+                }
+            }
+        }
+        return new Result(cells, component.leaked());
+    }
+
+    private record Component(int[] cells, boolean leaked) {
+    }
+
+    private static Component flood(FogMask mask, BitSet barrier, BitSet visited, int start) {
+        int cols = mask.getCols();
+        int rows = mask.getRows();
+        int[] queue = new int[64];
+        int size = 1;
+        queue[0] = start;
+        visited.set(start);
         boolean leaked = false;
-        while (size > 0) {
-            int idx = stack[--size];
+        for (int head = 0; head < size; head++) {
+            int idx = queue[head];
             int r = idx / cols;
             int c = idx % cols;
             if (r == 0 || c == 0 || r == rows - 1 || c == cols - 1) {
@@ -89,31 +112,70 @@ public final class RoomFillService {
                     continue;
                 }
                 int next = nr * cols + nc;
-                if (filled.get(next) || barrier.get(next)) {
+                if (visited.get(next) || barrier.get(next)) {
                     continue;
                 }
-                filled.set(next);
-                if (size == stack.length) {
-                    stack = java.util.Arrays.copyOf(stack, size * 2);
+                visited.set(next);
+                if (size == queue.length) {
+                    queue = java.util.Arrays.copyOf(queue, size * 2);
                 }
-                stack[size++] = next;
+                queue[size++] = next;
             }
         }
 
-        BitSet cells = (BitSet) filled.clone();
-        for (int idx = filled.nextSetBit(0); idx >= 0; idx = filled.nextSetBit(idx + 1)) {
-            int r = idx / cols;
-            int c = idx % cols;
-            for (int nr = Math.max(0, r - 1); nr <= Math.min(rows - 1, r + 1); nr++) {
-                for (int nc = Math.max(0, c - 1); nc <= Math.min(cols - 1, c + 1); nc++) {
-                    int next = nr * cols + nc;
-                    if (barrier.get(next)) {
-                        cells.set(next);
-                    }
-                }
+        return new Component(java.util.Arrays.copyOf(queue, size), leaked);
+    }
+
+    /** One interior centre per enclosed component in row-major seed order; every grid cell is visited once. */
+    public static List<double[]> enclosedRoomCenters(FogMask mask, BitSet barrier) {
+        return enclosedRoomCenters(mask, barrier, 0);
+    }
+
+    public static List<double[]> enclosedRoomCenters(FogMask mask, BitSet barrier, double minimumDimension) {
+        List<double[]> centers = new java.util.ArrayList<>();
+        BitSet visited = (BitSet) barrier.clone();
+        int total = mask.getCols() * mask.getRows();
+        BitSet squareEnds = minimumDimension > 0 ? fullSquareEnds(mask, barrier, minimumDimension) : null;
+        for (int seed = visited.nextClearBit(0); seed < total; seed = visited.nextClearBit(seed + 1)) {
+            Component room = flood(mask, barrier, visited, seed);
+            if (!room.leaked() && containsFullSquare(room.cells(), squareEnds)) {
+                centers.add(interiorCenter(mask, room.cells()));
             }
         }
-        return new Result(cells, leaked);
+        return centers;
+    }
+
+    private static BitSet fullSquareEnds(FogMask mask, BitSet barrier, double minimumDimension) {
+        int cols = mask.getCols();
+        BitSet ends = new BitSet(cols * mask.getRows());
+        int[] sizes = new int[cols];
+        for (int row = 0; row < mask.getRows(); row++) {
+            int diagonal = 0;
+            for (int col = 0; col < cols; col++) {
+                int above = sizes[col];
+                int index = row * cols + col;
+                // Largest clear square ending here depends on the squares above, left and diagonally above-left.
+                sizes[col] = barrier.get(index) ? 0
+                        : 1 + Math.min(above, Math.min(col > 0 ? sizes[col - 1] : 0, diagonal));
+                if (sizes[col] * mask.getCellSize() >= minimumDimension) {
+                    ends.set(index);
+                }
+                diagonal = above;
+            }
+        }
+        return ends;
+    }
+
+    private static boolean containsFullSquare(int[] cells, BitSet squareEnds) {
+        if (squareEnds == null) {
+            return true;
+        }
+        for (int cell : cells) {
+            if (squareEnds.get(cell)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Nearest interior cell to the room centroid, even when that centroid lies outside a concave room. */
@@ -126,21 +188,25 @@ public final class RoomFillService {
         if (interior.isEmpty()) {
             return new double[]{x, y};
         }
+        return interiorCenter(mask, interior.stream().toArray());
+    }
+
+    private static double[] interiorCenter(FogMask mask, int[] interior) {
         double cx = 0;
         double cy = 0;
-        for (int i = interior.nextSetBit(0); i >= 0; i = interior.nextSetBit(i + 1)) {
+        for (int i : interior) {
             cx += i % mask.getCols();
             cy += i / mask.getCols();
         }
-        cx /= interior.cardinality();
-        cy /= interior.cardinality();
+        cx /= interior.length;
+        cy /= interior.length;
         int nearest = -1;
         double best = Double.POSITIVE_INFINITY;
-        for (int i = interior.nextSetBit(0); i >= 0; i = interior.nextSetBit(i + 1)) {
+        for (int i : interior) {
             double dx = i % mask.getCols() - cx;
             double dy = i / mask.getCols() - cy;
             double distance = dx * dx + dy * dy;
-            if (distance < best) {
+            if (distance < best || (distance == best && i < nearest)) {
                 best = distance;
                 nearest = i;
             }

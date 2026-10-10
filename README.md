@@ -174,6 +174,14 @@ Imports automatically inherit known tags whose full name appears in the source f
 3. A location dialog shows the library folder tree only. Choose or create a folder and confirm the map name (pre-filled from the file).
 4. The map image, walls, lights, doors, windows and grid are converted and copied into the library. The original file is no longer used.
 
+Enclosed rooms are automatically given DM-only labels **Room 01**, **Room 02**, etc., using the same boundaries as
+Reveal room. Outside areas (regions touching the map's outer bounds) and regions that cannot fit a complete grid-square-sized
+square inside their detected interior are skipped, without gaps in numbering. This excludes thin L-shaped gaps even when
+their overall bounding box is wide and high. This applies to single, batch,
+folder and multilevel imports; numbering starts anew on each imported map/level. Labels use the configured room-label
+style, stay centred while edited and can be renamed, moved or deleted normally. Turn off **Auto label rooms**
+(`import.autoLabelRooms`) in Settings to disable this for future imports; existing maps are not relabelled.
+
 **Batch import**
 
 - Select several files in the chooser, or use **Import folder…** to import every `.dd2vtt`/`.uvtt` found in a folder and its sub-folders. **Import folder…** re-creates the folder's sub-folder structure in the library (a sub-folder only appears once a suitable map is found in it; empty sub-folders are skipped). A plain multi-file selection always imports flat into the target folder.
@@ -361,7 +369,7 @@ Draw areas of effect that both DM and players see (below fog, above map and ligh
 - **Lock image layer** toggle: while locked, layers cannot be selected, moved, resized or deleted. It is locked by default for imported dd2vtt maps and unlocked for new custom maps, and is saved per map. A banner on the canvas warns while layers are unlocked and offers a **Lock** button.
 - **Wall tools:** *Wall* draws segments (half-tile snap, hold `Shift` for free placement). *Erase wall* removes walls, doors and windows, including imported ones. Hover highlights the exact segment or portal the next click will delete. Deletion is undoable and updates lighting and room boundaries.
 - **Draw door / Draw window:** drag from one endpoint to the other, with flexible length and the same half-tile snap (`Shift` for free placement) as walls. The result behaves like an imported door or window, including opening/closing, lighting and room boundaries. Creation is undoable and saved with the map.
-- **Room label:** hover to see a **blue room highlight**, then click to place an auto-sized name box and start typing. Preview and placement use the same wall, door and window boundaries as Reveal room, regardless of their open state, to find an interior position. An unenclosed area uses the clicked position. This works with fog disabled; Shift does not change the blue preview, and neither preview nor placement changes the reveal mask. Labels stay DM-only, persist with the map and can be edited or moved like [text boxes](#10-text-boxes).
+- **Room label:** hover to see a **blue room highlight**, then click to place an auto-sized name box and start typing. Preview and placement use the same wall, door and window boundaries as Reveal room, regardless of their open state, to find an interior position. Outside areas (those touching the map's outer bounds) place the label at your clicked cursor position, not the region's centre, so you can name several small parts of one large outside area. The label stays centred on that clicked point while typing. This works with fog disabled; Shift does not change the blue preview, and neither preview nor placement changes the reveal mask. Labels stay DM-only, persist with the map and can be edited or moved like [text boxes](#10-text-boxes).
 - **Wall layer** toggle: shows or hides walls in red together with door/window lines and badges (DM only, session-only). Choosing a wall, door or window drawing tool shows it again.
 - These tools can be hidden individually in **Settings > DM controls tabs > Map building** and armed through the local API (`building.drawDoor`, `building.drawWindow`, `building.roomLabel`).
 - **Multi-selection (Select tool):** drag a rectangle on empty space to select lights, text boxes, effects and unlocked image layers (the rectangle turns green while it would select something). `Ctrl+click` adds or removes items. Drag any member to move the group, `Delete` removes it, all as one undo step. Doors and windows are not part of groups.

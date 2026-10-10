@@ -593,6 +593,9 @@ public final class AppSettings {
             case "autosave":
                 return new Placement("Auto-save timing", 1);
             case "import":
+                if (key.equals("import.autoLabelRooms")) {
+                    return new Placement(null, 1);
+                }
                 return key.startsWith("import.dd2vtt.") ? new Placement("dd2vtt lights", 2) : new Placement(null, 0);
             case "audio":
                 return key.startsWith("audio.cut.") ? new Placement("Cut clips", 2) : new Placement(null, 1);

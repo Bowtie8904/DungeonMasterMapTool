@@ -834,6 +834,45 @@ class MapBuildingToolsTest {
         return f.project.getTextBoxes().getLast();
     }
 
+    @Test
+    void multipleOutsideLabelsAnchorExactlyAtDistinctClicksEvenWhenSameLargeOutsidePreviewIsCached() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            f.project.getImageLayers().add(DmProject.ImageLayer.builder().width(3000).height(2000).build());
+            new dmmt.service.FogService().ensureMask(f.project);
+            enclose(f.project);
+            f.project.getViews().getDmCamera().setZoom(0.1);
+            f.project.getViews().getDmCamera().setX(1500);
+            f.project.getViews().getDmCamera().setY(1000);
+            f.api.execute("building.roomLabel", Map.of());
+            FogMask.Snapshot fogBefore = f.project.getFog().getMask().snapshot();
+            double[][] clicks = {{1033.25, 744.75}, {2457.5, 1356.25}};
+            for (double[] click : clicks) {
+                double sx = (click[0] - 1500) * 0.1 + 200;
+                double sy = (click[1] - 1000) * 0.1 + 150;
+                f.move(sx, sy);
+                previewPixel(f, 200, 150);
+                RoomFillService.Result outside = (RoomFillService.Result) get(f.app, "roomPreview");
+                assertTrue(outside.leaked(), "uses the exact Reveal room boundary definition");
+                f.move(sx + 1, sy + 1);
+                previewPixel(f, 200, 150);
+                assertSame(outside, get(f.app, "roomPreview"));
+                f.press(sx, sy, MouseButton.PRIMARY, false);
+                DmProject.TextBox label = f.project.getTextBoxes().getLast();
+                dmmt.ui.TextBoxEditor editor = (dmmt.ui.TextBoxEditor) get(f.app, "textEditor");
+                for (String text : new String[]{"Outside", "Large outdoor district", "Courtyard"}) {
+                    editor.node().replaceText(text);
+                    assertCentered(label, click[0], click[1]);
+                }
+                invoke(f.app, "commitTextEdit");
+            }
+            assertEquals(2, f.project.getTextBoxes().size());
+            assertTrue(fogBefore.sameBits(f.project.getFog().getMask().snapshot()));
+            assertNotEquals(f.project.getTextBoxes().getFirst().getRoomLabelCenterX(),
+                    f.project.getTextBoxes().getLast().getRoomLabelCenterX());
+        });
+    }
+
     private static void assertCentered(DmProject.TextBox box, double x, double y) {
         assertEquals(x, box.getX() + box.getWidth() / 2, 1e-9);
         assertEquals(y, box.getY() + box.getHeight() / 2, 1e-9);

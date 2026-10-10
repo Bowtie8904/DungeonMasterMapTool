@@ -721,6 +721,25 @@ Flicker speed of lights imported from dd2vtt/uvtt files (`1` = normal speed). No
 
 *Keywords:* dd2vtt, uvtt, Dungeondraft, imported lights, flicker speed
 
+### `import.autoLabelRooms`
+**Default:** `true` · **Applies:** live (next import)
+
+Automatically detect enclosed rooms when importing `.dd2vtt`/`.uvtt` maps and create DM-only labels named
+`Room 01`, `Room 02`, etc., in deterministic map-grid order. Numbering restarts per imported map/level. Uses
+the same flood-fill boundaries as Reveal room, including doors/windows in any open state; regions touching
+the outer map bounds are outside areas and receive no automatic label.
+
+Regions must fit at least one complete, axis-aligned map-grid-square-sized square inside their detected interior.
+The square can be anywhere, without alignment to tile lines. Thin L-shaped gaps are skipped even if their overall
+bounding box is wide and high; L-shaped rooms with a full-square interior section still qualify.
+Skipped regions do not consume room numbers.
+
+Applies to single, batch, folder and multilevel imports. Labels use the `roomLabel.*` style defaults and remain
+centred on their room while edited until manually moved. Detection does not reveal fog. Turn off to skip labels
+on future imports; existing saved maps and their labels are unchanged.
+
+*Keywords:* room label, room name, automatic labels, enclosed rooms, import, dd2vtt, uvtt
+
 ### `import.autoMergeMultiLevel`
 **Default:** `true` · **Applies:** live (next import)
 

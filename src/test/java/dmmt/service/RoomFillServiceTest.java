@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class RoomFillServiceTest {
     private final FogMask mask = new FogMask(0, 0, 10, 100, 100);
@@ -103,5 +104,30 @@ class RoomFillServiceTest {
     void clickingOnAWallOrOutsideTheMaskDoesNothing() {
         assertTrue(fillAt(square(), List.of(), 200, 400).isEmpty());
         assertTrue(fillAt(square(), List.of(), -50, 400).isEmpty());
+    }
+
+    @Test
+    void sharedComponentTraversalPreservesExactRevealCellsIncludingAdjacentBarriersAndOutsideLeak() {
+        FogMask small = new FogMask(0, 0, 10, 10, 10);
+        List<DmProject.WallSegment> walls = List.of(wall(20, 20, 70, 20), wall(70, 20, 70, 70),
+                wall(70, 70, 20, 70), wall(20, 70, 20, 20));
+        BitSet barrier = RoomFillService.buildBarrier(small, walls, List.of());
+        BitSet insideExpected = new BitSet(100);
+        BitSet outsideExpected = new BitSet(100);
+        outsideExpected.set(0, 100);
+        for (int row = 2; row <= 7; row++) {
+            insideExpected.set(row * 10 + 2, row * 10 + 8);
+        }
+        for (int row = 3; row <= 6; row++) {
+            outsideExpected.clear(row * 10 + 3, row * 10 + 7);
+        }
+        RoomFillService.Result inside = RoomFillService.fill(small, barrier, 45, 45);
+        RoomFillService.Result outside = RoomFillService.fill(small, barrier, 5, 5);
+        assertEquals(insideExpected, inside.cells());
+        assertFalse(inside.leaked());
+        assertEquals(outsideExpected, outside.cells());
+        assertTrue(outside.leaked());
+        assertEquals(1, RoomFillService.enclosedRoomCenters(small, barrier).size());
+        assertTrue(small.copyBits().isEmpty(), "neither detection path reveals fog");
     }
 }

@@ -641,6 +641,8 @@ public final class Tuning {
 
     // ---- Import ----
 
+    public static final Setting<Boolean> IMPORT_AUTO_LABEL_ROOMS = bool(IMPORT, "import.autoLabelRooms", true, false,
+            "Create numbered DM-only labels for enclosed rooms when importing dd2vtt/uvtt maps.");
     public static final Setting<Double> DD2VTT_LIGHT_FLICKER = decimal(IMPORT, "import.dd2vtt.lightFlicker", 0.22, 0, 1, false,
             "Flicker depth given to lights imported from dd2vtt/uvtt files (0 = flicker off).");
     public static final Setting<Double> DD2VTT_LIGHT_FLICKER_SPEED = decimal(IMPORT, "import.dd2vtt.lightFlickerSpeed", 1.4, 0.05, 20, false,

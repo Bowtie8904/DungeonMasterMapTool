@@ -44,6 +44,9 @@ public class Dd2vttImportService {
         parseLights(root, project, pixelsPerGrid);
         parsePortals(root, project, pixelsPerGrid);
         new FogService().ensureMask(project);
+        if (Tuning.IMPORT_AUTO_LABEL_ROOMS.get()) {
+            RoomLabelService.addImportedRoomLabels(project);
+        }
         return project;
     }
 

@@ -1066,20 +1066,7 @@ public class CanvasMapRenderer {
      * An empty box is one line of {@code emptyFontSize} high.
      */
     public void fitTextBox(DmProject.TextBox box, double maxWidth, int emptyFontSize) {
-        TextLayout.Metrics metrics = new FxMetrics();
-        List<DmProject.TextRun> runs = box.getRuns();
-        int lastSize = runs.isEmpty() ? emptyFontSize : runs.getLast().getFontSize();
-        TextLayout.Result layout = TextLayout.layout(runs, Math.max(1, maxWidth - 2 * TEXT_BOX_PADDING), metrics);
-        double textHeight = layout.totalHeight();
-        String lastText = runs.isEmpty() ? "" : runs.getLast().getText();
-        if (textHeight == 0 || (lastText != null && lastText.endsWith("\n"))) {
-            textHeight += metrics.lineHeight(lastSize);
-        }
-        // Trailing spaces count so the editor never wraps the caret onto a new line before the box has grown.
-        double textWidth = layout.extentWidth() > 0 ? layout.extentWidth() : lastSize;
-        box.setWidth(Math.ceil(Math.min(maxWidth, textWidth + 2 * TEXT_BOX_PADDING + 4)));
-        box.setHeight(Math.ceil(textHeight + 2 * TEXT_BOX_PADDING));
-        box.recenterRoomLabel();
+        TextLayout.fitBox(box, maxWidth, emptyFontSize, TEXT_BOX_PADDING, new FxMetrics());
     }
 
     private Font fontFor(int size) {
