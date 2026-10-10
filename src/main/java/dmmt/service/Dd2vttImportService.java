@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Base64;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.UUID;
 
 public class Dd2vttImportService {
@@ -236,7 +237,7 @@ public class Dd2vttImportService {
         if (hex.length() != 6 || !hex.matches("[0-9a-fA-F]{6}")) {
             return "#FFD9A0";
         }
-        return "#" + hex.toUpperCase();
+        return "#" + hex.toUpperCase(Locale.ROOT);
     }
 
     private void parsePortals(JsonNode root, DmProject project, double pixelsPerGrid) {

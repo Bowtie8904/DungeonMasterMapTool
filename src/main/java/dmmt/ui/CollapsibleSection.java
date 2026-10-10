@@ -14,6 +14,8 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 
 import dmmt.service.AppSettings;
 
+import java.util.Locale;
+
 /**
  * A compact, collapsible panel section. The expanded state is remembered in the given settings.
  */
@@ -25,7 +27,7 @@ public class CollapsibleSection extends VBox {
         getStyleClass().add("dm-section");
 
         FontIcon sectionIcon = Icons.icon(ikon);
-        Label label = new Label(title.toUpperCase());
+        Label label = new Label(title.toUpperCase(Locale.ROOT));
         label.getStyleClass().add("section-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

@@ -2795,7 +2795,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 LightPreset preset = LightPreset.forTool(activeTool);
                 addLightAt(world.x(), world.y(), preset);
                 setActiveTool(EditorTool.SELECT);
-                String name = activeTool == EditorTool.LIGHT_ADD ? "torch" : activeTool.label.toLowerCase();
+                String name = activeTool == EditorTool.LIGHT_ADD ? "torch" : activeTool.label.toLowerCase(Locale.ROOT);
                 status("Added " + name + ". Drag it to move; right-click for range, flicker, color and fog reveal.");
                 return;
             }
@@ -6463,7 +6463,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private static String toHex(Color color) {
-        return String.format("#%02X%02X%02X",
+        return String.format(Locale.ROOT, "#%02X%02X%02X",
                 (int) Math.round(color.getRed() * 255),
                 (int) Math.round(color.getGreen() * 255),
                 (int) Math.round(color.getBlue() * 255));
@@ -7244,7 +7244,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private static String toRgba(Color color) {
-        return String.format("#%02X%02X%02X%02X",
+        return String.format(Locale.ROOT, "#%02X%02X%02X%02X",
                 (int) Math.round(color.getRed() * 255),
                 (int) Math.round(color.getGreen() * 255),
                 (int) Math.round(color.getBlue() * 255),
@@ -8061,7 +8061,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean isImageFile(File file) {
-        String name = file.getName().toLowerCase();
+        String name = file.getName().toLowerCase(Locale.ROOT);
         return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 

@@ -68,6 +68,7 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3.1 Import and Map Model
 
+- The application UI is English-only: JavaFX-provided control labels must remain English regardless of the computer's display locale, so they do not introduce mixed-language dialogs.
 - Import dd2vtt map files.
 - Create custom maps by drag-and-drop image import (png/jpg/webp) into a map canvas.
 - Allow image layer transform editing (move, resize/scale) directly with drag handles. Per-layer rotation is intentionally not supported; use whole-map rotation.

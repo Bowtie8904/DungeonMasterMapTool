@@ -1099,7 +1099,7 @@ public class MultiLevelService {
             groupFiles.add(base);
             java.math.BigInteger below = lowest.value().subtract(java.math.BigInteger.ONE);
             levelNames.add(below.signum() < 0 ? "Base"
-                    : "Level " + String.format("%0" + lowest.number().length() + "d", below));
+                    : "Level " + String.format(Locale.ROOT, "%0" + lowest.number().length() + "d", below));
         }
         for (Path file : ordered) {
             LevelFileName name = parsed.get(file);

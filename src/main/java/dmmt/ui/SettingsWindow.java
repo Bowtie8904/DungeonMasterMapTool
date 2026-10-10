@@ -451,9 +451,9 @@ public final class SettingsWindow {
     }
 
     private static String formatColor(Color color) {
-        String rgb = String.format("#%02X%02X%02X", Math.round(color.getRed() * 255), Math.round(color.getGreen() * 255),
+        String rgb = String.format(Locale.ROOT, "#%02X%02X%02X", Math.round(color.getRed() * 255), Math.round(color.getGreen() * 255),
                 Math.round(color.getBlue() * 255));
-        return color.getOpacity() < 0.999 ? rgb + String.format("%02X", Math.round(color.getOpacity() * 255)) : rgb;
+        return color.getOpacity() < 0.999 ? rgb + String.format(Locale.ROOT, "%02X", Math.round(color.getOpacity() * 255)) : rgb;
     }
 
     // ---- filtering ----

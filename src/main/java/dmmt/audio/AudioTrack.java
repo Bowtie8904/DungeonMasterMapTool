@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Locale;
+
 /** One audio file in the library: a music track of a category, or a sound effect loop (3.35.1). */
 @Data
 @Builder
@@ -135,7 +137,7 @@ public class AudioTrack {
         long minutes = (totalSeconds % 3600) / 60;
         long seconds = totalSeconds % 60;
         return hours > 0
-                ? String.format("%d:%02d:%02d", hours, minutes, seconds)
-                : String.format("%d:%02d", minutes, seconds);
+                ? String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+                : String.format(Locale.ROOT, "%d:%02d", minutes, seconds);
     }
 }

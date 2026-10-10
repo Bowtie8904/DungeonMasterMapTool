@@ -56,6 +56,8 @@ A desktop application for tabletop game masters who run in-person sessions with 
 
 Everything you need is copied into the app's own project storage on import, so original files (for example on a USB drive) are not needed afterwards.
 
+The in-app interface is English-only, including JavaFX-provided labels such as dialog buttons; it does not switch languages based on the computer's display locale.
+
 ## Who it is for
 
 Game masters of D&D, Pathfinder and similar tabletop RPGs who play **in person** with a horizontal display (TV, monitor or projector) as the battle map and want to keep control (fog, lights, secrets) on a separate screen. Also useful for anyone who wants a light, offline alternative to online virtual tabletops.
