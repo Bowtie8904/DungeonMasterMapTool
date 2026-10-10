@@ -476,7 +476,8 @@ an existing OS firewall or Wi-Fi client-isolation policy can still prevent acces
 
 **Control key artwork:** right-click a control and choose **Copy key image URL**. The copied address serves a
 144x144 PNG based on the control's tool icon (dropdowns use their tab's icon, and value controls use fitting
-symbols), ready for a Stream Deck or any other device that fetches its own key images. Music categories and sound
+symbols), ready for a Stream Deck or any other device that fetches its own key images. Master, music and effects
+volume controls all use a speaker/volume icon, including their increment/decrement variants. Music categories and sound
 effects use **their own colour** instead of white, so a deck full of audio buttons matches the overlay (very dark
 colours are lightened so the glyph stays readable). Numeric controls also offer **Copy increment key image URL**
 and **Copy decrement key image URL**, with distinct plus/minus badges. The image is rendered on request, so it

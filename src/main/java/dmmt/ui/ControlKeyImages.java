@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -10,6 +11,7 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.scene.text.TextAlignment;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
@@ -77,7 +79,11 @@ public final class ControlKeyImages {
             graphics.fillOval(94, 94, 44, 44);
             graphics.setFill(Color.WHITE);
             graphics.setFont(Font.font("Arial", 34));
-            graphics.fillText(operation.equals("increment") ? "+" : "-", 105, 128);
+            graphics.setTextAlign(TextAlignment.CENTER);
+            graphics.setTextBaseline(VPos.CENTER);
+            String symbol = operation.equals("increment") ? "+" : "-";
+            double centerY = operation.equals("decrement") ? 113 : 116;
+            graphics.fillText(symbol, 116, centerY);
         }
         WritableImage image = canvas.snapshot(new SnapshotParameters(), null);
         BufferedImage png = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
@@ -109,11 +115,8 @@ public final class ControlKeyImages {
             case "player.diagonal", "player.tileSize" -> MaterialDesignR.RULER_SQUARE;
             case "player.zoom" -> MaterialDesignM.MAGNIFY;
             case "performance.target", "performance.animation", "performance.idle" -> MaterialDesignS.SPEEDOMETER;
-            // The volume sliders are registered on their own, so the icon beside them in the overlay is not
-            // among this entry's nodes; mirror it here to avoid the generic fallback glyph.
-            case "audio.masterVolume" -> MaterialDesignV.VOLUME_HIGH;
-            case "audio.musicVolume" -> MaterialDesignM.MUSIC_NOTE;
-            case "audio.effectsVolume" -> MaterialDesignW.WAVES;
+            // Volume sliders are registered without an icon node.
+            case "audio.masterVolume", "audio.musicVolume", "audio.effectsVolume" -> MaterialDesignV.VOLUME_HIGH;
             default -> null;
         };
         if (specific != null) {

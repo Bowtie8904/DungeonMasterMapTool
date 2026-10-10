@@ -11,9 +11,11 @@ import org.junit.jupiter.api.Test;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.*;
 
+import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import javax.imageio.ImageIO;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -51,11 +53,11 @@ class ControlKeyImagesTest {
                     ControlKeyImages.selectIcon("player.freeze", List.of(freeze)));
 
             // The volume sliders carry no icon of their own and must not fall back to the generic glyph.
-            assertEquals(MaterialDesignM.MUSIC_NOTE,
+            assertEquals(MaterialDesignV.VOLUME_HIGH,
                     ControlKeyImages.selectIcon("audio.musicVolume", List.of(new Slider())));
             assertEquals(MaterialDesignV.VOLUME_HIGH,
                     ControlKeyImages.selectIcon("audio.masterVolume", List.of(new Slider())));
-            assertEquals(MaterialDesignW.WAVES,
+            assertEquals(MaterialDesignV.VOLUME_HIGH,
                     ControlKeyImages.selectIcon("audio.effectsVolume", List.of(new Slider())));
             return null;
         });
@@ -93,6 +95,39 @@ class ControlKeyImagesTest {
             Color lightened = ControlKeyImages.selectColor(List.of(dark));
             assertTrue(lightened.getBrightness() >= 0.45,
                     "a nearly black colour must be lightened to stay readable: " + lightened);
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void decrementBadgeMinusIsCenteredInDot() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            byte[] png = ControlKeyImages.png("effects.opacity", List.of(new Slider()), "decrement");
+            var image = ImageIO.read(new ByteArrayInputStream(png));
+            int minX = image.getWidth();
+            int maxX = -1;
+            int minY = image.getHeight();
+            int maxY = -1;
+            for (int y = 100; y <= 132; y++) {
+                for (int x = 100; x <= 132; x++) {
+                    int pixel = image.getRGB(x, y);
+                    if (((pixel >>> 16) & 0xff) > 230
+                            && ((pixel >>> 8) & 0xff) > 230
+                            && (pixel & 0xff) > 230) {
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+            assertTrue(maxX >= minX, "the decrement badge must contain a visible white minus");
+            assertEquals(116, (minX + maxX) / 2, 1,
+                    "the minus should be centered on the red badge");
+            assertEquals(116, (minY + maxY) / 2, 1,
+                    "the minus should be centered vertically on the red badge");
             return null;
         });
         Platform.runLater(task);

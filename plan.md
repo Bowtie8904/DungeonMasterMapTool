@@ -948,6 +948,8 @@ application itself never depends on it and never talks to the Stream Deck.
   `image` is a reserved final path segment: no control id may end in `.image`. The image is rendered on demand on
   the JavaFX thread from the live control, so a music category or sound effect always exports its current colour
   and icon. Nothing is written to disk. The endpoint needs no window focus but does require the API to be enabled.
+- Master, music and effects volume key images all use the volume-high speaker glyph, including their
+  increment/decrement variants, rather than music-note or waves glyphs.
 - Right-click on an actionable control offers **"Copy key image URL"** below the "Copy API URL" items, and the
   numeric controls offer increment/decrement variants. This is the URL the user pastes into a Stream Deck action.
   This replaces the earlier "Open key image" browser-page export, which is gone: the URL covers the same need
