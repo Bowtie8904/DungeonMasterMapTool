@@ -1254,6 +1254,15 @@ Weather intensity of maps without saved weather and the value the intensity slid
 | `weather.embers.particles` | `295` | `weather.embers.color` | `#FF963C` | `weather.embers.opacity` | `0.75` |
 | `weather.thunderstorm.particles` | `600` | `weather.thunderstorm.color` | `#C8D7EB` | `weather.thunderstorm.opacity` | `0.42` |
 
+| Indoor setting | Default |
+|---|---|
+| `weather.rain.indoors` | `false` |
+| `weather.snow.indoors` | `false` |
+| `weather.mist.indoors` | `true` |
+| `weather.dust.indoors` | `true` |
+| `weather.embers.indoors` | `true` |
+| `weather.thunderstorm.indoors` | `false` |
+
 *Keywords:* rain, snow, mist, fog bank, dust, embers, sparks, ash, particles, weather effect, storm, blizzard, thunderstorm, lightning, flash, frequency, interval
 
 ### Thunderstorm lightning
