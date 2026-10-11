@@ -362,6 +362,7 @@ public class DungeonMasterMapToolApplication extends Application {
     /** Last committed ambient brightness of the current preset; the "before" value for undo. */
     private double ambientBrightnessCommitted;
     private ComboBox<WeatherType> weatherBox;
+    private ToggleButton weatherIndoorsToggle;
     private Slider weatherIntensitySlider;
     private Label weatherIntensityValue;
     private double weatherIntensityCommitted = WeatherEffects.defaultIntensity();
@@ -740,6 +741,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 // The reload already applied tuning values and texture settings edited by hand.
                 applySectionVisibility();
                 applyPlayerGridSetting();
+                syncWeatherIndoorsToggle();
                 applyApiUrlOptionVisibility();
                 if (audioControls != null) {
                     audioControls.applySettings();
@@ -1369,6 +1371,17 @@ public class DungeonMasterMapToolApplication extends Application {
         HBox.setHgrow(playerZoomRow, Priority.ALWAYS);
 
         HBox weatherRow = weatherRow();
+        weatherIndoorsToggle = Icons.toggle(org.kordamp.ikonli.materialdesign2.MaterialDesignH.HOME_OUTLINE,
+                "Weather indoors - allow the selected weather inside enclosed rooms; saved globally for this weather type.");
+        weatherIndoorsToggle.setOnAction(e -> {
+            WeatherType type = WeatherType.from(currentWeather().getType());
+            if (type != WeatherType.NONE) {
+                preferences.applyEdit(Tuning.weather(type.key()).indoors().key(),
+                        String.valueOf(weatherIndoorsToggle.isSelected()));
+            }
+            syncWeatherIndoorsToggle();
+        });
+        HBox weatherIndoorsRow = row(weatherIndoorsToggle, new Label("Weather indoors"));
         HBox lightningIntervalRow = lightningIntervalRow();
 
         dmControlVisibility.registerRow("tools", toolsRow, "select", "ping", "laser", null, "undo", "redo");
@@ -1385,6 +1398,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("lighting.brightCore", brightCoreRow);
         dmControlVisibility.register("lighting.hint", lightHint);
         dmControlVisibility.registerRow("weather", weatherRow, "type", "intensity", "intensity");
+        dmControlVisibility.register("weather.indoors", weatherIndoorsRow);
         dmControlVisibility.registerRow("weather", lightningIntervalRow,
                 "lightningInterval", "lightningInterval", "lightningInterval");
         dmControlVisibility.registerRow("effects", effectToolsRow, "circle", "rectangle", "brush", "pen", "line", null, "delete", "clear");
@@ -1411,7 +1425,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
                 new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather",
-                        weatherRow, lightningIntervalRow),
+                        weatherRow, weatherIndoorsRow, lightningIntervalRow),
                 new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
                 new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
@@ -1726,6 +1740,7 @@ public class DungeonMasterMapToolApplication extends Application {
         SettingsWindow.show(primaryStage, preferences, () -> {
             applySectionVisibility();
             applyPlayerGridSetting();
+            syncWeatherIndoorsToggle();
             applyApiUrlOptionVisibility();
             applyLocalApiSettings();
             if (audioControls != null) {
@@ -2099,6 +2114,14 @@ public class DungeonMasterMapToolApplication extends Application {
             project.setWeather(DmProject.WeatherState.builder().build());
         }
         return project.getWeather();
+    }
+
+    private void syncWeatherIndoorsToggle() {
+        if (weatherIndoorsToggle != null) {
+            WeatherType type = WeatherType.from(currentWeather().getType());
+            weatherIndoorsToggle.setSelected(type.indoors());
+            weatherIndoorsToggle.setDisable(type == WeatherType.NONE);
+        }
     }
 
     private HBox lightningIntervalRow() {
@@ -3493,6 +3516,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void renderDm() {
+        renderer.beginWeatherFrame();
         if (nudgeStartPositions != null && !nudgeStartPositions.keySet().equals(selectedMovementKeys())) {
             finishNudge();
         }
@@ -3562,6 +3586,7 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean frozen = frozenPlayerProject != null;
         DmProject shown = frozen ? frozenPlayerProject : project;
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
+        playerView.beginWeatherFrame();
         playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
@@ -5363,6 +5388,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 lightningIntervalSlider.setValue(weather.getLightningIntervalSeconds());
                 lightningIntervalValue.setText(String.format(java.util.Locale.ROOT, "%.1f s", weather.getLightningIntervalSeconds()));
                 lightningIntervalSlider.setDisable(WeatherType.from(weather.getType()) != WeatherType.THUNDERSTORM);
+                syncWeatherIndoorsToggle();
             }
             if (lightTintSlider != null) {
                 double tint = CanvasMapRenderer.clampLightTint(project.getLighting().getLightTint());

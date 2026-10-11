@@ -5,10 +5,12 @@ import dmmt.model.DmProject;
 import dmmt.render.WeatherType;
 import dmmt.service.AppSettings;
 import dmmt.service.FogService;
+import dmmt.service.Tuning;
 import dmmt.ui.ControlVisibility;
 import javafx.application.Platform;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,58 @@ class LocalControlApiTest {
     @BeforeAll
     static void startJavaFx() throws Exception {
         FxTestSupport.startJavaFx();
+    }
+
+    @Test
+    void indoorWeatherApiPersistsSelectedTypeAndWorksWhenHidden() throws Exception {
+        onFx(() -> {
+            Fixture fixture = fixture();
+            try {
+                ToggleButton toggle = (ToggleButton) get(fixture.app(), "weatherIndoorsToggle");
+                AppSettings preferences = (AppSettings) get(fixture.app(), "preferences");
+                assertTrue(toggle.isDisabled());
+                var disabled = assertThrows(dmmt.api.LocalApiServer.ApiException.class,
+                        () -> fixture.api().execute("weather.indoors", Map.of()));
+                assertEquals(409, disabled.status());
+                fixture.api().execute("weather.type", Map.of("value", "Rain"));
+                assertFalse(toggle.isSelected());
+                assertFalse(toggle.isDisabled());
+                int history = fixture.undoSize();
+                Map<String, Object> result = fixture.api().execute("weather.indoors", Map.of());
+                assertEquals(true, result.get("value"));
+                assertTrue(WeatherType.RAIN.indoors());
+                assertEquals("true", preferences.get("weather.rain.indoors", null));
+                assertEquals(history, fixture.undoSize(), "Global setting is not per-map undo");
+                assertFalse(WeatherType.SNOW.indoors());
+
+                fixture.api().execute("weather.type", Map.of("value", "Snow"));
+                assertFalse(toggle.isSelected());
+                fixture.api().execute("weather.type", Map.of("value", "Rain"));
+                assertTrue(toggle.isSelected());
+                ControlVisibility visibility = (ControlVisibility) get(fixture.app(), "dmControlVisibility");
+                preferences.setHiddenControls(java.util.Set.of("weather.indoors"));
+                visibility.apply(preferences.hiddenControls());
+                assertFalse(toggle.getParent().isVisible());
+                assertFalse(toggle.getParent().isManaged());
+                assertEquals(1, fixture.api().describe(java.util.List.of("weather.indoors")).size());
+                assertTrue(fixture.api().keyImage("weather.indoors", null).length > 100);
+                fixture.api().execute("weather.indoors", Map.of());
+                assertFalse(WeatherType.RAIN.indoors());
+                assertEquals("false", new AppSettings(preferences.getFile()).get("weather.rain.indoors", null));
+                preferences.applyEdit("weather.rain.indoors", "true");
+                Method sync = fixture.app().getClass().getDeclaredMethod("syncWeatherIndoorsToggle");
+                sync.setAccessible(true);
+                sync.invoke(fixture.app());
+                assertTrue(toggle.isSelected(), "Settings edits refresh toggle without firing an action");
+                fixture.api().execute("weather.type", Map.of("value", "Mist"));
+                assertTrue(toggle.isSelected());
+                fixture.api().execute("weather.type", Map.of("value", "None"));
+                assertFalse(toggle.isSelected());
+                assertTrue(toggle.isDisabled());
+            } finally {
+                Tuning.reset();
+            }
+        });
     }
 
     @Test

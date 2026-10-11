@@ -110,6 +110,7 @@ public final class ControlKeyImages {
             case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
             case "weather.lightningInterval" -> MaterialDesignW.WEATHER_LIGHTNING;
+            case "weather.indoors" -> org.kordamp.ikonli.materialdesign2.MaterialDesignH.HOME_OUTLINE;
             case "fog.brushSize", "effects.brushSize" -> MaterialDesignF.FORMAT_PAINT;
             case "text.size" -> MaterialDesignF.FORMAT_SIZE;
             case "player.diagonal", "player.tileSize" -> MaterialDesignR.RULER_SQUARE;

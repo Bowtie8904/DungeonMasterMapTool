@@ -146,6 +146,21 @@ Values are seconds between strikes on average (2-120, default 7, with natural va
 means more frequent. It is enabled only when Thunderstorm is selected (otherwise `409`).
 Changes use normal UI undo/redo, persist as `weather.lightningIntervalSeconds` and are shared across levels.
 Global flash appearance and the initial interval are settings, not separate control endpoints.
+The house-icon **Weather indoors** toggle is exposed as `weather.indoors`:
+
+```text
+/api/controls/weather/indoors
+/api/controls/weather/indoors/image
+```
+
+The first endpoint toggles the selected weather type's indoor behavior (no parameters, like other toggles).
+It saves the global `weather.<type>.indoors` setting immediately, affecting all maps rather than creating a
+per-map undo entry. `GET /api/controls?ids=weather.indoors` reports its selected and disabled state, command URL,
+and key-image URL. The second endpoint serves its house-icon PNG. Right-click URL copying is supported.
+The toggle is disabled for None (`409`), remains callable when hidden via `ui.controls.hidden` or a hidden
+Weather tab, and refreshes when weather or settings change. Rain, snow and
+thunderstorms default to outside-only. Thunderstorm light enters through open exterior doors/windows in sync
+with outdoor flashes, including at Night; closed openings and walls block it.
 Lightning pierces ambient darkness but not fog; it never reveals hidden map content.
 
 ## Maps and levels

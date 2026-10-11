@@ -85,6 +85,12 @@ public class CanvasMapRenderer {
     @Setter
     private static volatile boolean effectAnimationsEnabled = true;
     private Double frozenWeatherSeconds;
+    private Double frameWeatherSeconds;
+
+    /** Sample once before drawing a view's layers so opening light and outdoor flashes are identical. */
+    public void beginWeatherFrame() {
+        frameWeatherSeconds = animatedWeatherSeconds();
+    }
 
     public void setWeatherFrozen(boolean frozen) {
         frozenWeatherSeconds = frozen ? weatherSeconds() : null;
@@ -315,7 +321,7 @@ public class CanvasMapRenderer {
             drawHiddenOverlayBadges(gc, project, width, height, camera);
         }
         t = FrameProfiler.lap(who + "effects", t);
-        drawWeather(gc, project, width, height);
+        drawWeather(gc, project, width, height, camera, playerMode);
         t = FrameProfiler.lap(who + "weather", t);
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
@@ -363,7 +369,8 @@ public class CanvasMapRenderer {
         }
     }
 
-    private void drawWeather(GraphicsContext gc, DmProject project, double width, double height) {
+    private void drawWeather(GraphicsContext gc, DmProject project, double width, double height,
+                             DmProject.CameraState camera, boolean playerMode) {
         DmProject.WeatherState weather = project.getWeather();
         WeatherType type = weather == null ? WeatherType.NONE : WeatherType.from(weather.getType());
         if (type == WeatherType.NONE) {
@@ -371,16 +378,60 @@ public class CanvasMapRenderer {
         }
         double seconds = weatherSeconds();
         if (type == WeatherType.THUNDERSTORM) {
-            WeatherEffects.drawLightning(gc, width, height,
-                    WeatherEffects.lightningFlash(seconds, weather.getLightningIntervalSeconds()));
+            double flash = WeatherEffects.lightningFlash(seconds, weather.getLightningIntervalSeconds());
+            if (flash > 0) {
+                TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
+                double ambient = project.getLighting().ambientBrightnessFor(preset.name());
+                double darkness = preset.darkness(ambient) * (playerMode ? 1 : Tuning.DM_DARKNESS_FACTOR.get());
+                LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambient, darkness);
+                gc.save();
+                gc.setGlobalAlpha(flash * Tuning.WEATHER_FLASH_OPACITY.get());
+                gc.setImageSmoothing(true);
+                gc.drawImage(composite.buffer().lightningImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
+                        composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
+                gc.restore();
+            }
+        }
+        gc.save();
+        if (!type.indoors()) {
+            clipOutdoorWeather(gc, width, height, camera);
         }
         WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
+        gc.restore();
     }
 
-    double weatherSeconds() {
+    private void clipOutdoorWeather(GraphicsContext gc, double width, double height, DmProject.CameraState camera) {
+        gc.beginPath();
+        gc.rect(0, 0, width, height);
+        for (IndoorLighting.Region region : lightingEngine.getIndoorLighting().indoorRegions()) {
+            double x = worldToScreenX(region.x(), width, camera);
+            double y = worldToScreenY(region.y(), height, camera);
+            double w = region.width() * camera.getZoom();
+            double h = region.height() * camera.getZoom();
+            if (x < width && y < height && x + w > 0 && y + h > 0) {
+                double left = Math.max(0, x);
+                double top = Math.max(0, y);
+                double right = Math.min(width, x + w);
+                double bottom = Math.min(height, y + h);
+                // Canvas.clip uses nonzero winding even when the fill rule is EVEN_ODD.
+                gc.moveTo(left, top);
+                gc.lineTo(left, bottom);
+                gc.lineTo(right, bottom);
+                gc.lineTo(right, top);
+                gc.closePath();
+            }
+        }
+        gc.clip();
+    }
+
+    protected double weatherSeconds() {
         if (frozenWeatherSeconds != null) {
             return frozenWeatherSeconds;
         }
+        return frameWeatherSeconds != null ? frameWeatherSeconds : animatedWeatherSeconds();
+    }
+
+    private double animatedWeatherSeconds() {
         double seconds = effectAnimationsEnabled ? System.nanoTime() / 1_000_000_000.0 : 0;
         if (PerformanceMode.isEnabled()) {
             seconds = Math.floor(seconds * PerformanceMode.textureAnimationFps()) / PerformanceMode.textureAnimationFps();
@@ -1176,10 +1227,20 @@ public class CanvasMapRenderer {
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
         LightBuffer buffer = composite.buffer();
         gc.setImageSmoothing(true);
-        // Fade only ambient darkness, not light visibility or fog, during a lightning strike.
+        // Only exposed pixels lose ambient darkness; the aperture footprint is available even at Night.
+        double flash = lightningBrightness(project);
+        Image ambientImage = buffer.ambientImage;
+        if (flash > 0) {
+            for (int i = 0; i < buffer.ambientArgb.length; i++) {
+                buffer.flashAmbientArgb[i] = (clampByte(255 * (1 - flash * buffer.lightningExposure[i])) << 24)
+                        | (buffer.ambientArgb[i] & 0xFFFFFF);
+            }
+            buffer.flashAmbientImage.getPixelWriter().setPixels(0, 0, composite.bw(), composite.bh(),
+                    PixelFormat.getIntArgbInstance(), buffer.flashAmbientArgb, 0, composite.bw());
+            ambientImage = buffer.flashAmbientImage;
+        }
         gc.save();
-        gc.setGlobalAlpha(1 - lightningBrightness(project));
-        gc.drawImage(buffer.ambientImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
+        gc.drawImage(ambientImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
                 composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
         gc.restore();
     }
@@ -1229,6 +1290,10 @@ public class CanvasMapRenderer {
         key = 31 * key + Double.hashCode(camera.getX());
         key = 31 * key + Double.hashCode(camera.getY());
         key = 31 * key + Double.hashCode(zoom);
+        boolean indoorStorm = WeatherType.THUNDERSTORM.indoors();
+        int lightningRgb = parseRgb(Tuning.WEATHER_FLASH_COLOR.get());
+        key = 31 * key + Boolean.hashCode(indoorStorm);
+        key = 31 * key + lightningRgb;
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             boolean relevant = light.isEnabled() && indoors.lightActive(preset, light.getX(), light.getY())
@@ -1329,6 +1394,9 @@ public class CanvasMapRenderer {
                 double wx = camera.getX() + ((i % bw + 0.5) * lightMapScale() - width / 2) / zoom;
                 double wy = camera.getY() + ((row + 0.5) * lightMapScale() - height / 2) / zoom;
                 boolean inside = indoors.isInside(wx, wy);
+                double exposure = indoors.lightningExposureAt(wx, wy, indoorStorm);
+                buffer.lightningExposure[i] = (float) exposure;
+                buffer.lightningArgb[i] = (clampByte(255 * exposure) << 24) | lightningRgb;
                 double sun = inside && preset != TimeOfDayPreset.NIGHT ? indoors.daylightAt(wx, wy) : 0;
                 double baseDarkness = inside ? nightDarkness : fDarkness;
                 double total = preset == TimeOfDayPreset.NIGHT || inside ? litArr[i] : 0;
@@ -1367,6 +1435,7 @@ public class CanvasMapRenderer {
         });
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         buffer.ambientImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), ambientArgb, 0, bw);
+        buffer.lightningImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), buffer.lightningArgb, 0, bw);
         return new LightComposite(buffer, bw, bh);
     }
 
@@ -2247,6 +2316,11 @@ public class CanvasMapRenderer {
         // detail, instead of a flat overlay painted over everything (see renderAmbientLight).
         private int[] ambientArgb = new int[0];
         private WritableImage ambientImage;
+        private float[] lightningExposure = new float[0];
+        private int[] lightningArgb = new int[0];
+        private WritableImage lightningImage;
+        private int[] flashAmbientArgb = new int[0];
+        private WritableImage flashAmbientImage;
         private long key;
         private boolean valid;
 
@@ -2265,6 +2339,11 @@ public class CanvasMapRenderer {
             image = new WritableImage(w, h);
             ambientArgb = new int[w * h];
             ambientImage = new WritableImage(w, h);
+            lightningExposure = new float[w * h];
+            lightningArgb = new int[w * h];
+            lightningImage = new WritableImage(w, h);
+            flashAmbientArgb = new int[w * h];
+            flashAmbientImage = new WritableImage(w, h);
         }
     }
 }

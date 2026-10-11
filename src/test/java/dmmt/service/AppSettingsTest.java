@@ -22,6 +22,24 @@ class AppSettingsTest {
     }
 
     @Test
+    void indoorWeatherFlagsAreSearchableLiveAndPersisted() throws IOException {
+        AppSettings settings = new AppSettings(dir.resolve("weather.ini"));
+        assertTrue(Files.readString(settings.getFile()).contains("weather.rain.indoors = false"));
+        assertTrue(Files.readString(settings.getFile()).contains("weather.mist.indoors = true"));
+        AppSettings.SettingInfo info = AppSettings.editableSettings().stream()
+                .filter(entry -> entry.key().equals("weather.thunderstorm.indoors")).findFirst().orElseThrow();
+        assertEquals(Tuning.Kind.BOOLEAN, info.kind());
+        assertFalse(info.restart());
+        assertTrue(info.keywords().contains("enclosed rooms"));
+        settings.applyEdit(info.key(), "true");
+        assertTrue(Tuning.weather("thunderstorm").indoors().get());
+        new AppSettings(settings.getFile());
+        assertTrue(Tuning.weather("thunderstorm").indoors().get());
+        settings.applyEdit(info.key(), null);
+        assertFalse(Tuning.weather("thunderstorm").indoors().get());
+    }
+
+    @Test
     void createsCommentedFileWithAllDefaults() throws IOException {
         Path file = dir.resolve("settings.ini");
         AppSettings settings = new AppSettings(file);

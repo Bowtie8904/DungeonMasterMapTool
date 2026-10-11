@@ -198,7 +198,7 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `tools` | `select`, `ping`, `laser`, `undo`, `redo` |
 | `fog` | `enabled`, `revealBrush`, `hideBrush`, `revealRect`, `hideRect`, `revealAll`, `hideAll`, `revealRoom`, `brushSize`, `sharpness`, `fade`, `softness` |
 | `lighting` | `torch`, `candle`, `campfire`, `magic`, `remove`, `flicker`, `revealPersistent`, `revealWhileLit`, `revealNone`, `day`, `dawn`, `dusk`, `night`, `on`, `off`, `ambient`, `tint`, `brightCore`, `hint` |
-| `weather` | `type`, `intensity`, `lightningInterval` |
+| `weather` | `type`, `intensity`, `lightningInterval`, `indoors` |
 | `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `animations`, `brushSize` |
 | `text` | `add`, `layer`, `autoSize`, `players`, `delete`, `size`, `color`, `rotateLeft`, `rotateRight`, `background`, `noBackground`, `border`, `noBorder` |
 | `building` | `drawWall`, `drawDoor`, `drawWindow`, `roomLabel`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
@@ -1232,6 +1232,13 @@ Weather intensity of maps without saved weather and the value the intensity slid
   instead of blending into a uniform tint. Textures are cached; changing the mist colour rebuilds them.
   `0` disables the particles (thunderstorm lightning remains active).
 - **`color`** – particle colour `#RRGGBB`.
+- **`indoors`** – render weather inside enclosed rooms (`true`/`false`). Defaults to `false` for rain, snow and
+  thunderstorms, `true` for mist, dust and embers. Room detection uses map walls and portals, not fog or the
+  visible wall layer. Open doors/windows do not remove enclosure. Outside-only particles are clipped to room
+  boundaries in both views, including when panning, zooming or using Performance mode.
+  The house-icon **Weather indoors** toggle in the DM Weather tab reads and saves this setting for the selected
+  weather type, affecting all maps. It is disabled for None and can be hidden with `ui.controls.hidden = weather.indoors`.
+  It remains available via the local API when hidden.
 - **`opacity`** – highest particle opacity (0 to 1). Dust motes twinkle and embers flicker between a fraction of this
   and the full value. Mist bank opacity is this value times the square root of intensity, so smoke texture is
   visible at intermediate intensity. A darker fog body fades in with intensity squared and becomes completely
@@ -1242,7 +1249,7 @@ Weather intensity of maps without saved weather and the value the intensity slid
 |-----|---------|-----|---------|-----|---------|
 | `weather.rain.particles` | `600` | `weather.rain.color` | `#C8D7EB` | `weather.rain.opacity` | `0.42` |
 | `weather.snow.particles` | `610` | `weather.snow.color` | `#F5F8FF` | `weather.snow.opacity` | `0.5` |
-| `weather.mist.particles` | `70` | `weather.mist.color` | `#DBE3ED` | `weather.mist.opacity` | `0.65` |
+| `weather.mist.particles` | `70` | `weather.mist.color` | `#DBE3ED` | `weather.mist.opacity` | `0.15` |
 | `weather.dust.particles` | `500` | `weather.dust.color` | `#FFF0CD` | `weather.dust.opacity` | `0.48` |
 | `weather.embers.particles` | `295` | `weather.embers.color` | `#FF963C` | `weather.embers.opacity` | `0.75` |
 | `weather.thunderstorm.particles` | `600` | `weather.thunderstorm.color` | `#C8D7EB` | `weather.thunderstorm.opacity` | `0.42` |
@@ -1252,6 +1259,11 @@ Weather intensity of maps without saved weather and the value the intensity slid
 ### Thunderstorm lightning
 
 Thunderstorms combine rain with screen-wide lightning bursts that lift ambient map darkness but never reveal fog of war.
+With `weather.thunderstorm.indoors = false` (the default), lightning only lights outdoor areas and the occluded
+light footprint entering through open exterior windows/doors. Indoor opening light follows the exact same flash
+and fade as outdoors, including at Night when no daylight is present. Walls and closed openings block it;
+open interior portals may transmit it but do not generate it. Setting this flag to `true` restores unrestricted
+indoor rain and lightning. Flash brightness, opacity and colour apply to opening light too.
 Each strike contains 3-5 closely clustered flashes with irregular spacing, varied brightness and overlapping fade-outs.
 The flashes arrive within the first 40% of the burst, leaving a lingering glow that fades smoothly through the rest.
 The Weather intensity slider controls only rain. **Lightning interval** in the Weather tab controls the average

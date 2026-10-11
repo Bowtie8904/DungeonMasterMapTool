@@ -35,6 +35,8 @@ class ControlKeyImagesTest {
                     ControlKeyImages.selectIcon("weather.type", List.of(dropdown)));
             assertEquals(MaterialDesignW.WEATHER_LIGHTNING,
                     ControlKeyImages.selectIcon("weather.lightningInterval", List.of(new Slider())));
+            assertEquals(MaterialDesignH.HOME_OUTLINE,
+                    ControlKeyImages.selectIcon("weather.indoors", List.of(new Button())));
             assertEquals(MaterialDesignF.FORMAT_PAINT,
                     ControlKeyImages.selectIcon("effects.texture", List.of(dropdown)));
             assertEquals(MaterialDesignM.MONITOR,

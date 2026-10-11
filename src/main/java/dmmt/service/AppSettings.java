@@ -68,7 +68,7 @@ public final class AppSettings {
                 "on|Turn selected lights on", "off|Turn selected lights off", "ambient|Ambient brightness",
                 "tint|Light colour tint", "brightCore|Bright core strength", "hint|Right-click light hint");
         addControls(controls, "weather", "type|Weather type", "intensity|Weather intensity",
-                "lightningInterval|Lightning interval");
+                "lightningInterval|Lightning interval", "indoors|Weather indoors");
         addControls(controls, "effects", "circle|Circle", "rectangle|Box", "brush|Draw", "pen|Pen", "line|Line",
                 "delete|Delete selected effect", "clear|Remove all effects", "color|Effect colour", "opacity|Effect opacity",
                 "players|Players see effect", "texture|Effect texture", "border|Effect border",

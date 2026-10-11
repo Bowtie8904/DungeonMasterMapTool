@@ -588,7 +588,8 @@ public final class Tuning {
             "Colour of the screen-wide lightning highlight.");
 
     /** Look of one weather type. */
-    public record WeatherSettings(Setting<Integer> particles, Setting<String> color, Setting<Double> opacity) {
+    public record WeatherSettings(Setting<Integer> particles, Setting<String> color, Setting<Double> opacity,
+                                  Setting<Boolean> indoors) {
     }
 
     private static final Map<String, WeatherSettings> WEATHER_TYPES = new LinkedHashMap<>();
@@ -599,13 +600,16 @@ public final class Tuning {
                 integer(WEATHER, p + "particles", particles, 0, maxParticles, false,
                         label + ": particles at full intensity on a 1920x1080 screen."),
                 color(WEATHER, p + "color", color, false, label + ": particle colour."),
-                decimal(WEATHER, p + "opacity", opacity, 0, 1, false, label + ": highest particle opacity.")));
+                decimal(WEATHER, p + "opacity", opacity, 0, 1, false, label + ": highest particle opacity."),
+                bool(WEATHER, p + "indoors", !List.of("rain", "snow", "thunderstorm").contains(id), false,
+                        label + ": render inside enclosed rooms."
+                                + ("thunderstorm".equals(id) ? " When off, lightning enters only through open exterior doors/windows." : ""))));
     }
 
     static {
         weather("rain", "Rain", 600, 10000, "#C8D7EB", 0.42);
         weather("snow", "Snow", 610, 10000, "#F5F8FF", 0.5);
-        weather("mist", "Mist (particles = fog banks)", 70, 500, "#DBE3ED", 0.65);
+        weather("mist", "Mist (particles = fog banks)", 70, 500, "#DBE3ED", 0.15);
         weather("dust", "Dust motes", 500, 10000, "#FFF0CD", 0.48);
         weather("embers", "Embers", 295, 10000, "#FF963C", 0.75);
         weather("thunderstorm", "Thunderstorm rain", 600, 10000, "#C8D7EB", 0.42);

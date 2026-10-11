@@ -43,6 +43,10 @@ public enum WeatherType {
         return this == NONE ? 0 : Tuning.weather(key()).opacity().get();
     }
 
+    public boolean indoors() {
+        return this != NONE && Tuning.weather(key()).indoors().get();
+    }
+
     public String key() {
         return name().toLowerCase(Locale.ROOT);
     }

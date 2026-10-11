@@ -466,6 +466,13 @@ undoable and saved with the map; the interval is shared across multilevel maps. 
 The global Animations toggle disables flashes; a frozen player view retains its captured frame.
 Rain appearance, default interval, flash duration, brightness, opacity and colour are configurable in
 **Settings > Weather > Thunderstorm** (see [Weather settings](docs/SETTINGS.md#weather)).
+Each weather type has an **indoors** setting. Rain, snow and thunderstorms default to outside-only in enclosed
+rooms; mist, dust and embers still appear indoors by default. Lightning enters rooms through open exterior
+doors and windows in sync with outdoor flashes, with walls and closed openings blocking it, even at Night.
+Enable `weather.thunderstorm.indoors` for unrestricted indoor lightning and rain.
+The house-icon **Weather indoors** toggle in the Weather tab changes and saves the global setting for the
+currently selected weather type. It is disabled for None, can be hidden in Settings, and is also available as
+the `weather.indoors` API control.
 The control API exposes the appended Thunderstorm choice and `weather.lightningInterval`
 (see [API](docs/API.md#weather)).
 

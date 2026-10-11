@@ -101,8 +101,9 @@ class CanvasMapRendererTest {
                     maxDefault = Math.max(maxDefault, defaults.getColor(x, y).getRed());
                 }
             }
-            assertTrue(defaultBrightness / (160 * 96) > 0.3, "Default intensity must form dense fog");
-            assertTrue(maxDefault - minDefault > 0.2, "Intermediate intensity must show textured smoke");
+            assertTrue(defaultBrightness / (160 * 96) > 0.1, "Default mist must remain visible");
+            assertTrue(defaultBrightness / (160 * 96) < 0.3, "Lower default opacity should produce lighter mist");
+            assertTrue(maxDefault - minDefault > 0.05, "Intermediate intensity must show textured smoke");
             var whiteDefault = mistSnapshot(WeatherEffects.defaultIntensity(), 42, false, Color.WHITE).getPixelReader();
             assertNotEquals(defaults.getArgb(80, 48), whiteDefault.getArgb(80, 48),
                     "Intermediate mist should still allow the map to show through");
@@ -153,7 +154,7 @@ class CanvasMapRendererTest {
             double[] seconds = {0};
             CanvasMapRenderer renderer = new CanvasMapRenderer(engine) {
                 @Override
-                double weatherSeconds() {
+                protected double weatherSeconds() {
                     return seconds[0];
                 }
             };

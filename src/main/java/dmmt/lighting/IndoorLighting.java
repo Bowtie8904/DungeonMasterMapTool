@@ -19,6 +19,7 @@ public final class IndoorLighting {
     private BitSet barrier = new BitSet();
     private BitSet outsideCells = new BitSet();
     private float[] daylight = new float[0];
+    private List<Region> indoorRegions = List.of();
     private long version;
 
     public long version() {
@@ -37,6 +38,17 @@ public final class IndoorLighting {
     public double daylightAt(double x, double y) {
         int cell = cellAt(x, y);
         return cell >= 0 ? daylight[cell] : 0;
+    }
+
+    public double lightningExposureAt(double x, double y, boolean indoors) {
+        return indoors || !isInside(x, y) ? 1 : daylightAt(x, y);
+    }
+
+    public record Region(double x, double y, double width, double height) {
+    }
+
+    public List<Region> indoorRegions() {
+        return indoorRegions;
     }
 
     public boolean lightActive(TimeOfDayPreset preset, double x, double y) {
@@ -82,6 +94,18 @@ public final class IndoorLighting {
                 }
             }
         }
+        List<Region> regions = new ArrayList<>();
+        for (int row = 0; row < rows; row++) {
+            int end = (row + 1) * cols;
+            for (int start = shaded.nextSetBit(row * cols); start >= 0 && start < end; ) {
+                int stop = Math.min(end, shaded.nextClearBit(start));
+                regions.add(new Region(mask.getOriginX() + start % cols * mask.getCellSize(),
+                        mask.getOriginY() + row * mask.getCellSize(),
+                        (stop - start) * mask.getCellSize(), mask.getCellSize()));
+                start = shaded.nextSetBit(stop);
+            }
+        }
+        indoorRegions = List.copyOf(regions);
         daylight = new float[cols * rows];
         if (!hasRooms()) {
             return;

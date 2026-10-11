@@ -2,6 +2,7 @@ package dmmt.render;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -11,6 +12,22 @@ class WeatherEffectsTest {
     @AfterEach
     void resetTuning() {
         Tuning.reset();
+    }
+
+    @Test
+    void indoorWeatherDefaultsAndLiveOverridesArePerType() {
+        for (WeatherType type : new WeatherType[]{WeatherType.RAIN, WeatherType.SNOW, WeatherType.THUNDERSTORM}) {
+            assertFalse(type.indoors());
+            Tuning.apply(key -> key.equals("weather." + type.key() + ".indoors") ? "true" : null);
+            assertTrue(type.indoors());
+            Tuning.reset();
+        }
+        for (WeatherType type : new WeatherType[]{WeatherType.MIST, WeatherType.DUST, WeatherType.EMBERS}) {
+            assertTrue(type.indoors());
+            Tuning.apply(key -> key.equals("weather." + type.key() + ".indoors") ? "false" : null);
+            assertFalse(type.indoors());
+            Tuning.reset();
+        }
     }
 
     @Test
@@ -220,6 +237,7 @@ class WeatherEffectsTest {
 
     @Test
     void mistBankCountRemainsIndependentOfIntensityAndZeroDisablesIt() {
+        assertEquals(0.15, WeatherType.MIST.opacity());
         int banks = WeatherType.MIST.maxParticles();
         assertEquals(banks, WeatherEffects.particleCount(WeatherType.MIST, 0.1, 640, 360));
         assertEquals(banks, WeatherEffects.particleCount(WeatherType.MIST, 1, 1920, 1080));
