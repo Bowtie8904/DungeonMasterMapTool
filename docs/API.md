@@ -201,8 +201,8 @@ save prompt. File operations in progress also return `409`. Frozen players keep 
 
 | Endpoint | Action |
 |---|---|
-| `/api/controls/building/drawDoor` | Arms Draw door; drag endpoints on the DM canvas. |
-| `/api/controls/building/drawWindow` | Arms Draw window; drag endpoints on the DM canvas. |
+| `/api/controls/building/drawDoor` | Arms Draw door; click a wall for a one-tile door or drag endpoints on the DM canvas. |
+| `/api/controls/building/drawWindow` | Arms Draw window; click a wall for a one-tile window or drag endpoints on the DM canvas. |
 | `/api/controls/building/roomLabel` | Arms Room label; click a room on the DM canvas and type its name. |
 
 These use the same tool toggles as the DM controls, including cancellation with Esc or right-click.

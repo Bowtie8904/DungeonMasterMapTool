@@ -324,6 +324,94 @@ class MapBuildingToolsTest {
     }
 
     @Test
+    void portalToolsSuggestOneTileOnHoveredWallAndSplitItUnlessShiftOrDrag() throws Exception {
+        onFx(() -> {
+            for (String tool : new String[]{"building.drawDoor", "building.drawWindow"}) {
+                Fixture f = fixture();
+                DmProject.WallSegment wall = DmProject.WallSegment.builder().x1(0).y1(100).x2(300).y2(100).build();
+                DmProject.WallSegment overlap = DmProject.WallSegment.builder().x1(50).y1(100).x2(150).y2(100).build();
+                DmProject.WallSegment other = DmProject.WallSegment.builder().x1(350).y1(0).x2(350).y2(250).build();
+                f.project.getWalls().addAll(java.util.List.of(wall, overlap, other));
+                f.api.execute(tool, Map.of());
+                f.move(160, 103);
+                assertTrue(previewPixel(f, 150, 100).getOpacity() > 0, "hover previews the suggested portal");
+                assertEquals(0, previewPixel(f, 60, 100).getOpacity());
+                set(f.app, "roomHidePreview", true);
+                assertEquals(0, previewPixel(f, 150, 100).getOpacity(), "Shift suppresses the suggestion");
+                set(f.app, "roomHidePreview", false);
+
+                f.click(160, 103, MouseButton.PRIMARY, false);
+                DmProject.Interactable portal = f.project.getInteractables().getLast();
+                assertEquals(tool.endsWith("Door") ? "door" : "window", portal.getType());
+                assertEquals(100, portal.getX1(), 1e-9);
+                assertEquals(100, portal.getY1(), 1e-9);
+                assertEquals(200, portal.getX2(), 1e-9);
+                assertEquals(100, portal.getY2(), 1e-9);
+                assertEquals(4, f.project.getWalls().size());
+                assertSegment(f.project.getWalls().get(0), 0, 100, 100, 100);
+                assertSegment(f.project.getWalls().get(1), 200, 100, 300, 100);
+                assertSegment(f.project.getWalls().get(2), 50, 100, 100, 100);
+                assertSame(other, f.project.getWalls().get(3));
+                assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size(), "placement and split are one undo step");
+                f.api.execute("tools.undo", Map.of());
+                assertEquals(java.util.List.of(wall, overlap, other), f.project.getWalls());
+                assertTrue(f.project.getInteractables().isEmpty());
+                f.api.execute("tools.redo", Map.of());
+                assertEquals(4, f.project.getWalls().size());
+                assertEquals(portal, f.project.getInteractables().getLast());
+
+                f.api.execute("tools.undo", Map.of());
+                f.click(160, 103, MouseButton.PRIMARY, true);
+                assertTrue(f.project.getInteractables().isEmpty(), "Shift click places no suggested portal");
+                f.drag(100, 0, 100, 200, false);
+                assertEquals(1, f.project.getInteractables().size(), "dragging still draws a free-length portal");
+                assertEquals(java.util.List.of(wall, overlap, other), f.project.getWalls());
+
+                f.project.getWalls().clear();
+                f.project.getInteractables().clear();
+                DmProject.WallSegment reversed = DmProject.WallSegment.builder().x1(300).y1(100).x2(0).y2(100).build();
+                f.project.getWalls().add(reversed);
+                f.click(290, 98, MouseButton.PRIMARY, false);
+                portal = f.project.getInteractables().getLast();
+                assertEquals(300, portal.getX1(), 1e-9);
+                assertEquals(200, portal.getX2(), 1e-9);
+                assertEquals(1, f.project.getWalls().size(), "suggestion is clamped inside the wall");
+                assertSegment(f.project.getWalls().getFirst(), 200, 100, 0, 100);
+
+                f.project.getWalls().clear();
+                f.project.getInteractables().clear();
+                f.project.getWalls().add(DmProject.WallSegment.builder().x1(0).y1(100).x2(100).y2(100).build());
+                f.project.getWalls().add(DmProject.WallSegment.builder().x1(300).y1(100).x2(100).y2(100).build());
+                f.click(110, 100, MouseButton.PRIMARY, false);
+                portal = f.project.getInteractables().getLast();
+                assertEquals(50, Math.min(portal.getX1(), portal.getX2()), 1e-9, "half-tile snap across a wall joint");
+                assertEquals(150, Math.max(portal.getX1(), portal.getX2()), 1e-9);
+                assertEquals(2, f.project.getWalls().size(), "both walls at the joint are cut");
+                assertSegment(f.project.getWalls().get(0), 0, 100, 50, 100);
+                assertSegment(f.project.getWalls().get(1), 300, 100, 150, 100);
+
+                f.project.getWalls().clear();
+                f.project.getInteractables().clear();
+                f.project.getWalls().add(DmProject.WallSegment.builder().x1(0).y1(100).x2(60).y2(100).build());
+                f.project.getWalls().add(DmProject.WallSegment.builder().x1(60).y1(100).x2(60).y2(200).build());
+                f.click(30, 100, MouseButton.PRIMARY, false);
+                portal = f.project.getInteractables().getLast();
+                assertSegment(DmProject.WallSegment.builder().x1(portal.getX1()).y1(portal.getY1())
+                        .x2(portal.getX2()).y2(portal.getY2()).build(), 0, 100, 60, 100);
+                assertEquals(1, f.project.getWalls().size(), "a short wall is fully replaced by a matching portal");
+                assertSegment(f.project.getWalls().getFirst(), 60, 100, 60, 200);
+            }
+        });
+    }
+
+    private static void assertSegment(DmProject.WallSegment wall, double x1, double y1, double x2, double y2) {
+        assertEquals(x1, wall.getX1(), 1e-9);
+        assertEquals(y1, wall.getY1(), 1e-9);
+        assertEquals(x2, wall.getX2(), 1e-9);
+        assertEquals(y2, wall.getY2(), 1e-9);
+    }
+
+    @Test
     void typeMenuPreservesEndpointsOpenStateAndSightBehaviorAndHonorsWallLayer() throws Exception {
         onFx(() -> {
             Fixture f = fixture();
@@ -702,9 +790,10 @@ class MapBuildingToolsTest {
             assertEquals(0, previewPixel(f, 50, 80).getOpacity());
             f.press(100, 87, MouseButton.PRIMARY, false);
             assertTrue(f.project.getInteractables().isEmpty());
-            assertEquals(1, f.project.getWalls().size());
+            assertEquals(2, f.project.getWalls().size(), "the erased window is replaced by a wall");
             f.api.execute("tools.undo", Map.of());
             assertEquals(portal, f.project.getInteractables().getFirst());
+            assertEquals(1, f.project.getWalls().size());
             f.api.execute("building.wallLayer", Map.of());
             assertEquals(0, previewPixel(f, 50, 100).getOpacity());
             f.press(100, 87, MouseButton.PRIMARY, false);
@@ -739,6 +828,23 @@ class MapBuildingToolsTest {
                         + (int) ((200 - mask.getOriginX()) / mask.getCellSize());
                 assertFalse(mask.isRevealedCell(behind));
                 FogMask.Snapshot before = mask.snapshot();
+                if (!type.equals("wall")) {
+                    invoke(f.app, "eraseWallAt", 150.0, 150.0, 1.0);
+                    assertFalse(mask.isRevealedCell(behind), type + " removal leaves a wall in its place");
+                    assertTrue(f.project.getInteractables().isEmpty());
+                    DmProject.WallSegment replacement = f.project.getWalls().getFirst();
+                    assertEquals(boundary, replacement);
+                    assertEquals(1, ((Deque<?>) get(f.app, "undoStack")).size());
+                    f.api.execute("tools.undo", Map.of());
+                    assertEquals(portal, f.project.getInteractables().getFirst());
+                    assertTrue(f.project.getWalls().isEmpty());
+                    f.api.execute("tools.redo", Map.of());
+                    assertTrue(f.project.getInteractables().isEmpty());
+                    assertEquals(1, f.project.getWalls().size());
+                    ((Deque<?>) get(f.app, "undoStack")).clear();
+                    f.project.getWalls().clear();
+                    f.project.getWalls().add(boundary);
+                }
                 invoke(f.app, "eraseWallAt", 150.0, 150.0, 1.0);
                 assertTrue(mask.isRevealedCell(behind), type + " removal updates persistent lights immediately");
                 FogMask.Snapshot after = mask.snapshot();
@@ -747,8 +853,7 @@ class MapBuildingToolsTest {
                 engine.update(f.project);
                 assertTrue(before.sameBits(mask.snapshot()));
                 assertFalse(mask.isRevealedCell(behind));
-                if (type.equals("wall")) assertEquals(boundary, f.project.getWalls().getFirst());
-                else assertEquals(portal, f.project.getInteractables().getFirst());
+                assertEquals(boundary, f.project.getWalls().getFirst());
                 f.api.execute("tools.redo", Map.of());
                 engine.update(f.project);
                 assertTrue(after.sameBits(mask.snapshot()));
@@ -783,14 +888,26 @@ class MapBuildingToolsTest {
                     ContextMenu menu = (ContextMenu) get(f.app, "activeLightMenu");
                     menu.getItems().stream().filter(item -> "Delete".equals(item.getText())).findFirst().orElseThrow().fire();
                     assertEquals(java.util.List.of(before, after), f.project.getInteractables());
-                    assertTrue(((RoomFillService.Result) invoke(f.app, "roomAt", 60.0, 60.0)).leaked());
+                    DmProject.WallSegment replacement = f.project.getWalls().getLast();
+                    assertEquals(4, f.project.getWalls().size());
+                    assertEquals(30, replacement.getX1());
+                    assertEquals(170, replacement.getY1());
+                    assertEquals(30, replacement.getX2());
+                    assertEquals(30, replacement.getY2());
+                    assertFalse(((RoomFillService.Result) invoke(f.app, "roomAt", 60.0, 60.0)).leaked(),
+                            "the replacement wall keeps the room closed");
                     assertNotSame(oldBarrier, get(f.app, "roomBarrier"));
                     f.api.execute("tools.undo", Map.of());
                     assertEquals(java.util.List.of(before, target, after), f.project.getInteractables());
+                    assertEquals(3, f.project.getWalls().size());
                     assertEquals("open", target.getState());
                     assertFalse(((RoomFillService.Result) invoke(f.app, "roomAt", 60.0, 60.0)).leaked());
                     f.api.execute("tools.redo", Map.of());
                     assertEquals(java.util.List.of(before, after), f.project.getInteractables());
+                    assertEquals(4, f.project.getWalls().size());
+                    invoke(f.app, "eraseWallAt", 30.0, 100.0, 1.0);
+                    assertTrue(((RoomFillService.Result) invoke(f.app, "roomAt", 60.0, 60.0)).leaked(),
+                            "erasing the replacement wall opens the room");
                 } finally {
                     stage.close();
                 }

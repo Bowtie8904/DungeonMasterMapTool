@@ -251,6 +251,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean showScaleTestSquare;
     private HandoutWindow handoutWindow;
     private DmProject.WallSegment draftWall;
+    /** One-tile door/window suggested on the wall under the cursor when the current portal stroke was pressed. */
+    private PortalSuggestion pressedPortalSuggestion;
     private boolean snapLayersToGrid;
     private volatile boolean ioBusy;
     private StackPane mapCenter;
@@ -2954,6 +2956,8 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             if (activeTool.isSegmentDrawTool()) {
+                pressedPortalSuggestion = event.isShiftDown() ? null
+                        : suggestPortalOnWall(world.x(), world.y(), camera.getZoom());
                 double[] p = snapWallPoint(world.x(), world.y(), event.isShiftDown());
                 draftWall = DmProject.WallSegment.builder().x1(p[0]).y1(p[1]).x2(p[0]).y2(p[1]).build();
                 return;
@@ -4940,9 +4944,10 @@ public class DungeonMasterMapToolApplication extends Application {
             case AOE_LINE -> status("Line: drag to draw a straight line (brush size and color, no texture).");
             case TEXT -> status("Text box: drag to draw a box and type; click a text box to edit it.");
             case WALL_DRAW -> status("Wall: click points to draw connected walls; Esc or right-click ends the chain (half-tile snap; Shift for free placement).");
-            case DOOR_DRAW, WINDOW_DRAW -> status(activeTool.label + ": drag endpoints (half-tile snap; Shift for free placement).");
+            case DOOR_DRAW, WINDOW_DRAW -> status(activeTool.label + ": click a wall to place a one-tile " + activeTool.label.substring(5).toLowerCase(java.util.Locale.ROOT)
+                    + " there, or drag endpoints (half-tile snap; Shift for free placement without wall suggestion).");
             case ROOM_LABEL -> status("Room label: preview a room in blue; click and type its DM-only name.");
-            case WALL_ERASE -> status("Erase walls: hover to highlight a wall, door or window; click to remove it.");
+            case WALL_ERASE -> status("Erase walls: hover to highlight a wall, door or window; click to remove it (doors/windows become walls).");
             case LIGHT_ADD -> status("Add light: click the map where the torch should go.");
             case LIGHT_CANDLE, LIGHT_CAMPFIRE, LIGHT_MAGIC ->
                     status(activeTool.label + ": click the map where the light should go.");
@@ -5178,7 +5183,10 @@ public class DungeonMasterMapToolApplication extends Application {
         if (draftOverlay != null) {
             drawOverlaySizeLabel(gc);
         }
-        if (draftWall != null && (activeTool != EditorTool.WALL_DRAW
+        PortalSuggestion portalSuggestion = previewPortalSuggestion();
+        if (portalSuggestion != null) {
+            drawPortalSuggestion(gc, portalSuggestion);
+        } else if (draftWall != null && (activeTool != EditorTool.WALL_DRAW
                 || (hoverInsideCanvas && geometryPreviewHover && !panningDmCamera && !pingArmed && !laserToolActive))) {
             DmProject.CameraState wallCamera = project.getViews().getDmCamera();
             double ww = dmFogCanvas.getWidth();
@@ -5445,11 +5453,17 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void finishWallDraw() {
         DmProject.WallSegment wall = draftWall;
+        PortalSuggestion suggestion = pressedPortalSuggestion;
         draftWall = null;
+        pressedPortalSuggestion = null;
+        boolean portalTool = activeTool == EditorTool.DOOR_DRAW || activeTool == EditorTool.WINDOW_DRAW;
         if (distance(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2()) < 2) {
+            if (portalTool && suggestion != null) {
+                placeSuggestedPortal(suggestion, activeTool == EditorTool.DOOR_DRAW ? "door" : "window");
+            }
             return;
         }
-        if (activeTool == EditorTool.DOOR_DRAW || activeTool == EditorTool.WINDOW_DRAW) {
+        if (portalTool) {
             DmProject.Interactable portal = DmProject.Interactable.builder()
                     .id("portal-" + UUID.randomUUID())
                     .type(activeTool == EditorTool.DOOR_DRAW ? "door" : "window")
@@ -5459,6 +5473,197 @@ public class DungeonMasterMapToolApplication extends Application {
         } else {
             executeWithHistory("Add wall", () -> project.getWalls().add(wall), () -> project.getWalls().remove(wall));
         }
+    }
+
+    record PortalSuggestion(DmProject.WallSegment wall, double x1, double y1, double x2, double y2) {
+    }
+
+    /** One-tile door/window on the wall nearest the cursor, or {@code null} when no wall is close enough. */
+    private PortalSuggestion suggestPortalOnWall(double worldX, double worldY, double zoom) {
+        if (!renderer.isWallLayerVisible()) {
+            return null;
+        }
+        double tile = project.getMap().getGrid().getPixelsPerCell();
+        if (tile <= 0) {
+            return null;
+        }
+        double tolerance = Tuning.WALL_PICK_RADIUS.get() / Math.max(0.01, zoom);
+        DmProject.WallSegment nearest = null;
+        double best = tolerance;
+        for (DmProject.WallSegment wall : project.getWalls()) {
+            if (distance(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2()) < 2) {
+                continue;
+            }
+            double d = distanceToSegment(worldX, worldY, wall);
+            if (d <= best) {
+                best = d;
+                nearest = wall;
+            }
+        }
+        if (nearest == null) {
+            return null;
+        }
+        double dx = nearest.getX2() - nearest.getX1();
+        double dy = nearest.getY2() - nearest.getY1();
+        double length = Math.hypot(dx, dy);
+        double[] run = collinearWallRun(nearest, length);
+        double ux = dx / length;
+        double uy = dy / length;
+        if (run[1] - run[0] < tile - 1e-6) {
+            return new PortalSuggestion(nearest,
+                    nearest.getX1() + ux * run[0], nearest.getY1() + uy * run[0],
+                    nearest.getX1() + ux * run[1], nearest.getY1() + uy * run[1]);
+        }
+        double half = tile / 2.0;
+        double start = (worldX - nearest.getX1()) * ux + (worldY - nearest.getY1()) * uy - half;
+        boolean horizontal = Math.abs(dy) < 1e-6;
+        boolean vertical = Math.abs(dx) < 1e-6;
+        if (horizontal || vertical) {
+            double origin = horizontal ? nearest.getX1() : nearest.getY1();
+            double sign = Math.signum(horizontal ? dx : dy);
+            double low = sign > 0 ? origin + start : origin - start - tile;
+            low = Math.round(low / half) * half;
+            start = sign > 0 ? low - origin : origin - low - tile;
+        } else {
+            start = Math.round(start / half) * half;
+        }
+        start = clamp(start, run[0], run[1] - tile);
+        return new PortalSuggestion(nearest,
+                nearest.getX1() + ux * start, nearest.getY1() + uy * start,
+                nearest.getX1() + ux * (start + tile), nearest.getY1() + uy * (start + tile));
+    }
+
+    /**
+     * Extent, measured along {@code base} from its first endpoint, of the continuous line formed by {@code base}
+     * and every collinear wall that touches or overlaps it (directly or through other such walls).
+     */
+    private double[] collinearWallRun(DmProject.WallSegment base, double length) {
+        double eps = 0.5;
+        double ux = (base.getX2() - base.getX1()) / length;
+        double uy = (base.getY2() - base.getY1()) / length;
+        List<double[]> intervals = new ArrayList<>();
+        for (DmProject.WallSegment wall : project.getWalls()) {
+            double off1 = Math.abs((wall.getX1() - base.getX1()) * uy - (wall.getY1() - base.getY1()) * ux);
+            double off2 = Math.abs((wall.getX2() - base.getX1()) * uy - (wall.getY2() - base.getY1()) * ux);
+            if (off1 > eps || off2 > eps) {
+                continue;
+            }
+            double a = (wall.getX1() - base.getX1()) * ux + (wall.getY1() - base.getY1()) * uy;
+            double b = (wall.getX2() - base.getX1()) * ux + (wall.getY2() - base.getY1()) * uy;
+            intervals.add(new double[]{Math.min(a, b), Math.max(a, b)});
+        }
+        double lo = 0;
+        double hi = length;
+        boolean grown = true;
+        while (grown) {
+            grown = false;
+            for (double[] interval : intervals) {
+                if (interval[0] <= hi + eps && interval[1] >= lo - eps
+                        && (interval[0] < lo || interval[1] > hi)) {
+                    lo = Math.min(lo, interval[0]);
+                    hi = Math.max(hi, interval[1]);
+                    grown = true;
+                }
+            }
+        }
+        return new double[]{lo, hi};
+    }
+
+    /** Pieces of {@code wall} left after cutting out the portal span, or {@code null} if the wall does not run through it. */
+    static List<DmProject.WallSegment> cutWallAroundPortal(DmProject.WallSegment wall,
+                                                           double px1, double py1, double px2, double py2) {
+        double eps = 0.5;
+        double dx = px2 - px1;
+        double dy = py2 - py1;
+        double span = Math.hypot(dx, dy);
+        if (span < 1e-9) {
+            return null;
+        }
+        double ux = dx / span;
+        double uy = dy / span;
+        double off1 = Math.abs((wall.getX1() - px1) * uy - (wall.getY1() - py1) * ux);
+        double off2 = Math.abs((wall.getX2() - px1) * uy - (wall.getY2() - py1) * ux);
+        if (off1 > eps || off2 > eps) {
+            return null;
+        }
+        double a = (wall.getX1() - px1) * ux + (wall.getY1() - py1) * uy;
+        double b = (wall.getX2() - px1) * ux + (wall.getY2() - py1) * uy;
+        if (Math.max(a, b) <= eps || Math.min(a, b) >= span - eps) {
+            return null;
+        }
+        List<DmProject.WallSegment> pieces = new ArrayList<>();
+        double nearEnd = a < b ? 0 : span;
+        double farEnd = a < b ? span : 0;
+        if (Math.abs(nearEnd - a) > eps && (a < b ? a < nearEnd : a > nearEnd)) {
+            pieces.add(DmProject.WallSegment.builder().x1(wall.getX1()).y1(wall.getY1())
+                    .x2(px1 + ux * nearEnd).y2(py1 + uy * nearEnd).build());
+        }
+        if (Math.abs(b - farEnd) > eps && (a < b ? b > farEnd : b < farEnd)) {
+            pieces.add(DmProject.WallSegment.builder().x1(px1 + ux * farEnd).y1(py1 + uy * farEnd)
+                    .x2(wall.getX2()).y2(wall.getY2()).build());
+        }
+        return pieces;
+    }
+
+    private void placeSuggestedPortal(PortalSuggestion suggestion, String type) {
+        DmProject.Interactable portal = DmProject.Interactable.builder()
+                .id("portal-" + UUID.randomUUID())
+                .type(type)
+                .x1(suggestion.x1()).y1(suggestion.y1()).x2(suggestion.x2()).y2(suggestion.y2()).build();
+        List<DmProject.WallSegment> before = new ArrayList<>(project.getWalls());
+        List<DmProject.WallSegment> after = new ArrayList<>();
+        for (DmProject.WallSegment wall : before) {
+            List<DmProject.WallSegment> pieces = cutWallAroundPortal(wall,
+                    suggestion.x1(), suggestion.y1(), suggestion.x2(), suggestion.y2());
+            if (pieces == null) {
+                after.add(wall);
+            } else {
+                after.addAll(pieces);
+            }
+        }
+        executeWithFogHistory("Add " + type, () -> {
+            project.getWalls().clear();
+            project.getWalls().addAll(after);
+            project.getInteractables().add(portal);
+        }, () -> {
+            project.getInteractables().remove(portal);
+            project.getWalls().clear();
+            project.getWalls().addAll(before);
+        });
+    }
+
+    private PortalSuggestion previewPortalSuggestion() {
+        if (activeTool != EditorTool.DOOR_DRAW && activeTool != EditorTool.WINDOW_DRAW) {
+            return null;
+        }
+        if (draftWall != null) {
+            return distance(draftWall.getX1(), draftWall.getY1(), draftWall.getX2(), draftWall.getY2()) < 2
+                    ? pressedPortalSuggestion : null;
+        }
+        if (!hoverInsideCanvas || !geometryPreviewHover || roomHidePreview || editingTextId != null
+                || panningDmCamera || pingArmed || laserToolActive) {
+            return null;
+        }
+        return suggestPortalOnWall(hoverWorldX, hoverWorldY, project.getViews().getDmCamera().getZoom());
+    }
+
+    private void drawPortalSuggestion(GraphicsContext gc, PortalSuggestion suggestion) {
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double w = dmFogCanvas.getWidth();
+        double h = dmFogCanvas.getHeight();
+        double sx1 = renderer.worldToScreenX(suggestion.x1(), w, camera);
+        double sy1 = renderer.worldToScreenY(suggestion.y1(), h, camera);
+        double sx2 = renderer.worldToScreenX(suggestion.x2(), w, camera);
+        double sy2 = renderer.worldToScreenY(suggestion.y2(), h, camera);
+        gc.save();
+        gc.setStroke(Color.web("#FFD24A", 0.95));
+        gc.setLineWidth(6);
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.BUTT);
+        gc.strokeLine(sx1, sy1, sx2, sy2);
+        gc.setFill(Color.web("#FFD24A"));
+        gc.fillOval(sx1 - 4, sy1 - 4, 8, 8);
+        gc.fillOval(sx2 - 4, sy2 - 4, 8, 8);
+        gc.restore();
     }
 
     private record EraseTarget(DmProject.WallSegment wall, DmProject.Interactable portal) {
@@ -5510,8 +5715,15 @@ public class DungeonMasterMapToolApplication extends Application {
         if (index < 0) {
             return;
         }
-        executeWithFogHistory("Delete " + portal.getType(), () -> project.getInteractables().remove(portal),
-                () -> project.getInteractables().add(Math.min(index, project.getInteractables().size()), portal));
+        DmProject.WallSegment wall = DmProject.WallSegment.builder()
+                .x1(portal.getX1()).y1(portal.getY1()).x2(portal.getX2()).y2(portal.getY2()).build();
+        executeWithFogHistory("Delete " + portal.getType(), () -> {
+            project.getInteractables().remove(portal);
+            project.getWalls().add(wall);
+        }, () -> {
+            project.getWalls().removeIf(existing -> existing == wall);
+            project.getInteractables().add(Math.min(index, project.getInteractables().size()), portal);
+        });
     }
 
     private void drawErasePreview(GraphicsContext gc) {
@@ -8777,13 +8989,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
         WALL_DRAW("Draw walls", "click points to draw connected walls; Esc or right-click ends the chain; half-tile snap, Shift for free placement",
                 MaterialDesignW.WALL, false, false),
-        DOOR_DRAW("Draw door", "drag to draw a door; snaps to half tiles, hold Shift for free placement",
+        DOOR_DRAW("Draw door", "click a wall to place a one-tile door there (splits the wall), or drag to draw a door; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignD.DOOR_CLOSED, false, false),
-        WINDOW_DRAW("Draw window", "drag to draw a window; snaps to half tiles, hold Shift for free placement",
+        WINDOW_DRAW("Draw window", "click a wall to place a one-tile window there (splits the wall), or drag to draw a window; snaps to half tiles, hold Shift for free placement",
                 MaterialDesignW.WINDOW_CLOSED, false, false),
         ROOM_LABEL("Room label", "hover to preview a room in blue; click to place and edit its permanently DM-only name",
                 MaterialDesignT.TEXT_BOX_OUTLINE, false, false),
-        WALL_ERASE("Erase walls", "hover to highlight a wall, door or window; click to remove it", MaterialDesignE.ERASER_VARIANT, false, false),
+        WALL_ERASE("Erase walls", "hover to highlight a wall, door or window; click to remove it (a removed door or window becomes a wall)", MaterialDesignE.ERASER_VARIANT, false, false),
         LIGHT_ADD("Add light", "click the map to place a torch", MaterialDesignL.LIGHTBULB_ON, false, false),
         LIGHT_CANDLE("Candle", "click the map to place a candle", MaterialDesignC.CANDLE, false, false),
         LIGHT_CAMPFIRE("Campfire", "click the map to place a campfire", MaterialDesignC.CAMPFIRE, false, false),
