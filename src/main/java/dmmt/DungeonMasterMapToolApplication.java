@@ -3635,13 +3635,11 @@ public class DungeonMasterMapToolApplication extends Application {
             playerTransition.cancel();
             renderer.invalidatePlayerLayerCaches();
             playerRenderer.invalidatePlayerLayerCaches();
-            for (Canvas layer : List.of(playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
-                layer.getGraphicsContext2D().clearRect(0, 0, layer.getWidth(), layer.getHeight());
+            for (Canvas layer : List.of(playerBaseCanvas, playerWeatherCanvas, playerLightningCanvas,
+                    playerForegroundCanvas, playerFogMaskCanvas, playerFogCanvas, playerBrightCoreCanvas, playerAmbientCanvas)) {
+                layer.setVisible(false);
             }
-            playerFogMaskCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogMaskCanvas.getWidth(), playerFogMaskCanvas.getHeight());
-            playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
-            playerBrightCoreCanvas.getGraphicsContext2D().clearRect(0, 0, playerBrightCoreCanvas.getWidth(), playerBrightCoreCanvas.getHeight());
-            playerAmbientCanvas.getGraphicsContext2D().clearRect(0, 0, playerAmbientCanvas.getWidth(), playerAmbientCanvas.getHeight());
+            playerCanvas.setVisible(true);
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, playerCanvas.getWidth(), playerCanvas.getHeight());
             HandoutWindow.drawBoard(gc, handoutWindow.getImages(), handoutWindow.getRotation(),
@@ -3649,6 +3647,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         boolean frozen = frozenPlayerProject != null;
+        playerBaseCanvas.setVisible(true);
         DmProject shown = frozen ? frozenPlayerProject : project;
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
         if (lastPlayerLayerRenderer != playerView) {
@@ -3686,17 +3685,23 @@ public class DungeonMasterMapToolApplication extends Application {
                 true
         );
         FrameProfiler.lap("player fog", section);
-        playerView.renderFogOverlayLayer(
-                playerFogCanvas.getGraphicsContext2D(), shown,
-                playerFogCanvas.getWidth(), playerFogCanvas.getHeight(),
-                getEffectivePlayerCamera(), true, null, null, null);
-        if (!frozen) {
-            drawLaser(playerFogCanvas.getGraphicsContext2D(), playerFogCanvas, getEffectivePlayerCamera(),
-                    Math.max(Tuning.LASER_PLAYER_DOT_MIN.get(), Tuning.LASER_PLAYER_DOT_INCHES.get() * playerPixelsPerInch()));
+        long pointerTime = System.currentTimeMillis();
+        shown.getActivePings().removeIf(p -> pointerTime - p.getCreatedAtMillis() > p.getDurationMillis());
+        boolean pointers = showScaleTestSquare || (!frozen && !laserTrail.isEmpty()) || !shown.getActivePings().isEmpty();
+        if (pointers || playerFogCanvas.isVisible()) {
+            playerView.renderFogOverlayLayer(
+                    playerFogCanvas.getGraphicsContext2D(), shown,
+                    playerFogCanvas.getWidth(), playerFogCanvas.getHeight(),
+                    getEffectivePlayerCamera(), true, null, null, null);
+            if (!frozen) {
+                drawLaser(playerFogCanvas.getGraphicsContext2D(), playerFogCanvas, getEffectivePlayerCamera(),
+                        Math.max(Tuning.LASER_PLAYER_DOT_MIN.get(), Tuning.LASER_PLAYER_DOT_INCHES.get() * playerPixelsPerInch()));
+            }
+            if (showScaleTestSquare) {
+                drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
+            }
         }
-        if (showScaleTestSquare) {
-            drawScaleTestSquare(playerFogCanvas.getGraphicsContext2D());
-        }
+        playerFogCanvas.setVisible(pointers);
         playerTransition.frameRendered();
     }
 

@@ -14,6 +14,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -21,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class CanvasMapRendererTest {
     @BeforeAll
@@ -29,9 +31,276 @@ class CanvasMapRendererTest {
     }
 
     @AfterEach
+    @BeforeEach
     void resetTuning() {
         Tuning.reset();
+        OverlayTextures.applySettings(key -> null);
+        PerformanceMode.setEnabled(false);
+        CanvasMapRenderer.setAnimationFps(30);
         CanvasMapRenderer.setEffectAnimationsEnabled(true);
+        CanvasMapRenderer.setTextQuarterTurns(0);
+    }
+
+    @Test
+    void playerEffectsAndTextRetainImmutableInputsAndRestoreReplacementCanvases() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            CanvasMapRenderer.setEffectAnimationsEnabled(false);
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            var shape = DmProject.OverlayShape.builder().id("shape").type("brush").strokeWidth(20)
+                    .points(new java.util.ArrayList<>(java.util.List.of(20.0, 40.0, 80.0, 40.0))).build();
+            project.getOverlays().add(shape);
+            var box = DmProject.TextBox.builder().id("text").x(10).y(10).width(100).height(70)
+                    .runs(new java.util.ArrayList<>(java.util.List.of(DmProject.TextRun.builder().text("Hello").build()))).build();
+            project.getTextBoxes().add(box);
+            Canvas effects = new Canvas(128, 96);
+            Canvas text = new Canvas(128, 96);
+            Runnable render = () -> {
+                renderer.renderEffectsLayer(effects.getGraphicsContext2D(), project, 128, 96, camera, true);
+                renderer.renderForegroundLayer(text.getGraphicsContext2D(), project, 128, 96, camera, true);
+            };
+            render.run();
+            assertTrue(effects.isVisible());
+            assertTrue(text.isVisible());
+            assertEquals(1, renderer.playerEffectsRedrawCount());
+            assertEquals(1, renderer.playerTextRedrawCount());
+            project.getViews().getDmCamera().setX(999);
+            project.getOverlays().add(DmProject.OverlayShape.builder().id("hidden").playerVisible(false).build());
+            project.getTextBoxes().add(DmProject.TextBox.builder().id("hidden").playerVisible(false).build());
+            render.run();
+            assertEquals(1, renderer.playerEffectsRedrawCount());
+            assertEquals(1, renderer.playerTextRedrawCount());
+
+            shape.getPoints().set(0, 30.0);
+            box.getRuns().getFirst().setText("Changed");
+            render.run();
+            assertEquals(2, renderer.playerEffectsRedrawCount(), "In-place point edits invalidate effects");
+            assertEquals(2, renderer.playerTextRedrawCount(), "In-place rich-text edits invalidate text");
+            box.setBackgroundColor("#FF0000");
+            render.run();
+            assertEquals(3, renderer.playerTextRedrawCount());
+            CanvasMapRenderer.setTextQuarterTurns(1);
+            render.run();
+            assertEquals(4, renderer.playerTextRedrawCount());
+            camera.setX(65);
+            render.run();
+            assertEquals(3, renderer.playerEffectsRedrawCount());
+            assertEquals(5, renderer.playerTextRedrawCount());
+
+            renderer.invalidatePlayerLayerCaches();
+            effects.setVisible(false);
+            text.setVisible(false);
+            render.run();
+            assertTrue(effects.isVisible());
+            assertTrue(text.isVisible());
+            assertEquals(4, renderer.playerEffectsRedrawCount());
+            assertEquals(6, renderer.playerTextRedrawCount());
+            Canvas replacement = new Canvas(128, 96);
+            renderer.renderEffectsLayer(replacement.getGraphicsContext2D(), project, 128, 96, camera, true);
+            assertEquals(5, renderer.playerEffectsRedrawCount());
+            renderer.renderForegroundLayer(replacement.getGraphicsContext2D(), project, 128, 96, camera, true);
+            assertEquals(7, renderer.playerTextRedrawCount());
+
+            shape.setPlayerVisible(false);
+            box.setPlayerVisible(false);
+            render.run();
+            assertFalse(effects.isVisible());
+            assertFalse(text.isVisible());
+            long effectsCount = renderer.playerEffectsRedrawCount();
+            long textCount = renderer.playerTextRedrawCount();
+            render.run();
+            assertEquals(effectsCount, renderer.playerEffectsRedrawCount());
+            assertEquals(textCount, renderer.playerTextRedrawCount());
+            shape.setPlayerVisible(true);
+            box.setPlayerVisible(true);
+            project.setTextLayerVisible(false);
+            render.run();
+            assertTrue(effects.isVisible());
+            assertFalse(text.isVisible());
+            project.setTextLayerVisible(true);
+            render.run();
+            assertTrue(text.isVisible());
+            long populatedEffects = renderer.playerEffectsRedrawCount();
+            long populatedText = renderer.playerTextRedrawCount();
+            renderer.renderEffectsLayer(effects.getGraphicsContext2D(), null, 128, 96, camera, true);
+            renderer.renderForegroundLayer(text.getGraphicsContext2D(), null, 128, 96, camera, true);
+            render.run();
+            assertEquals(populatedEffects + 1, renderer.playerEffectsRedrawCount());
+            assertEquals(populatedText + 1, renderer.playerTextRedrawCount());
+            effects.setWidth(160);
+            renderer.renderEffectsLayer(effects.getGraphicsContext2D(), project, 160, 96, camera, true);
+            assertEquals(populatedEffects + 2, renderer.playerEffectsRedrawCount());
+            text.setWidth(160);
+            renderer.renderForegroundLayer(text.getGraphicsContext2D(), project, 160, 96, camera, true);
+            assertEquals(populatedText + 2, renderer.playerTextRedrawCount());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void retainedPlayerEffectsRespectTextureCadenceLiveSettingsAndLightingGlow() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            var shape = DmProject.OverlayShape.builder().id("smoke").type("circle")
+                    .x(64).y(48).radius(35).texture("smoke").build();
+            project.getOverlays().add(shape);
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            double[] clock = {1};
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine) {
+                @Override
+                protected double effectSeconds() {
+                    return effectAnimationsOn() ? clock[0] : 0;
+                }
+            };
+            Canvas canvas = new Canvas(128, 96);
+            Runnable render = () -> renderer.renderEffectsLayer(canvas.getGraphicsContext2D(), project, 128, 96, camera, true);
+            render.run();
+            clock[0] += 0.001;
+            render.run();
+            assertEquals(1, renderer.playerEffectsRedrawCount(), "Soft textures retain frames within their animation tick");
+            clock[0] = 1.1;
+            render.run();
+            assertEquals(2, renderer.playerEffectsRedrawCount());
+            shape.setTexture("water");
+            render.run();
+            clock[0] += 0.001;
+            render.run();
+            assertEquals(4, renderer.playerEffectsRedrawCount(), "Hard textures keep their continuous animation");
+            CanvasMapRenderer.setEffectAnimationsEnabled(false);
+            render.run();
+            long staticCount = renderer.playerEffectsRedrawCount();
+            clock[0] += 1;
+            render.run();
+            assertEquals(staticCount, renderer.playerEffectsRedrawCount());
+            OverlayTextures.applySettings(key -> key.equals("texture.featherCells") ? "1.3" : null);
+            render.run();
+            assertEquals(staticCount + 1, renderer.playerEffectsRedrawCount(), "Live texture tuning invalidates retained pixels");
+            OverlayTextures.applySettings(key -> switch (key) {
+                case "texture.featherCells" -> "1.3";
+                case "texture.water.softEdges" -> "true";
+                case "texture.water.layer1.scale" -> "2";
+                default -> null;
+            });
+            render.run();
+            assertEquals(staticCount + 2, renderer.playerEffectsRedrawCount());
+            Tuning.apply(key -> key.equals("effects.softResolution") ? "0.25" : null);
+            render.run();
+            assertEquals(staticCount + 3, renderer.playerEffectsRedrawCount());
+            project.getOverlays().clear();
+            project.getLighting().setTimeOfDayPreset("NIGHT");
+            project.getLighting().getLights().add(DmProject.LightSource.builder().id("light")
+                    .x(64).y(48).range(80).intensity(1)
+                    .flicker(DmProject.Flicker.builder().enabled(false).build()).build());
+            engine.update(project);
+            render.run();
+            assertTrue(canvas.isVisible(), "Light glow stays visible even with no effects");
+            long lightCount = renderer.playerEffectsRedrawCount();
+            project.getLighting().getLights().getFirst().setColor("#FF0000");
+            engine.update(project);
+            render.run();
+            assertEquals(lightCount + 1, renderer.playerEffectsRedrawCount());
+            project.getLighting().getLights().clear();
+            engine.update(project);
+            render.run();
+            assertFalse(canvas.isVisible());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void inactivePlayerCompositingLayersHideAndRestoreWithoutAffectingCombinedRendering() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            project.getFog().setEnabled(false);
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            renderer.setWeatherFrozen(true);
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            Canvas ambient = new Canvas(128, 96);
+            Canvas bright = new Canvas(128, 96);
+            Canvas fog = new Canvas(128, 96);
+            Canvas weather = new Canvas(128, 96);
+            Canvas flash = new Canvas(128, 96);
+            renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderBrightCore(bright.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderWeatherLayer(weather, flash, project, 128, 96, camera, true);
+            assertFalse(ambient.isVisible());
+            assertFalse(bright.isVisible());
+            assertFalse(fog.isVisible());
+            assertFalse(weather.isVisible());
+            assertFalse(flash.isVisible());
+            project.getLighting().setTimeOfDayPreset("NIGHT");
+            project.getLighting().setBrightCore(1);
+            project.getLighting().getLights().add(DmProject.LightSource.builder().id("light")
+                    .x(64).y(48).range(30).intensity(1)
+                    .flicker(DmProject.Flicker.builder().enabled(false).build()).build());
+            project.getWeather().setType("rain");
+            project.getWeather().setIntensity(1);
+            project.getFog().setEnabled(true);
+            engine.update(project);
+            renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderBrightCore(bright.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, camera, true);
+            renderer.renderWeatherLayer(weather, flash, project, 128, 96, camera, true);
+            assertTrue(ambient.isVisible());
+            assertTrue(bright.isVisible());
+            assertTrue(fog.isVisible());
+            assertTrue(weather.isVisible());
+            bright.setVisible(false);
+            renderer.renderBrightCore(bright.getGraphicsContext2D(), project, 128, 96, camera, true);
+            assertTrue(bright.isVisible(), "A retained core restores node visibility");
+            project.getLighting().getLights().clear();
+            engine.update(project);
+            renderer.renderBrightCore(bright.getGraphicsContext2D(), project, 128, 96, camera, true);
+            assertFalse(bright.isVisible(), "No lights means no ADD surface, even at Night");
+
+            Canvas combined = new Canvas(128, 96);
+            project.getLighting().setTimeOfDayPreset("DAY");
+            project.getFog().setEnabled(false);
+            project.getWeather().setType("none");
+            project.getOverlays().add(DmProject.OverlayShape.builder().id("flat").type("circle")
+                    .x(64).y(48).radius(20).build());
+            renderer.render(combined.getGraphicsContext2D(), project, null, 128, 96, camera, true, null);
+            assertTrue(combined.isVisible());
+            Color effectColor = combined.snapshot(null, null).getPixelReader().getColor(64, 48);
+            assertTrue(effectColor.getGreen() > effectColor.getRed());
+            assertTrue(effectColor.getGreen() > effectColor.getBlue());
+
+            double[] flashTime = {0};
+            CanvasMapRenderer storm = new CanvasMapRenderer(engine) {
+                @Override
+                protected double weatherSeconds() {
+                    return flashTime[0];
+                }
+            };
+            project.getWeather().setType("thunderstorm");
+            Tuning.apply(key -> key.equals("weather.thunderstorm.particles") ? "0" : null);
+            flashTime[0] = (0.25 + 0.5 * WeatherEffects.unit(0, 83))
+                    * project.getWeather().getLightningIntervalSeconds();
+            storm.renderWeatherLayer(weather, flash, project, 128, 96, camera, true);
+            assertFalse(weather.isVisible());
+            assertTrue(flash.isVisible(), "Lightning is independent of particle visibility");
+            flashTime[0] = 0;
+            storm.renderWeatherLayer(weather, flash, project, 128, 96, camera, true);
+            assertFalse(flash.isVisible());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
     }
 
     @Test
