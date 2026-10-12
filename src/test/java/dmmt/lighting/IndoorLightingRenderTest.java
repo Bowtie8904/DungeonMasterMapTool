@@ -244,8 +244,11 @@ class IndoorLightingRenderTest {
             double flicker = ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness();
             assertTrue(flicker < steady - 0.01);
             PerformanceMode.setEnabled(true);
-            assertEquals(steady, ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness(), 0.01);
+            engine.update(project);
+            assertTrue(ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness() > 0.99);
+            assertEquals(0, coreOpacity(renderer, project, 100, 100));
             PerformanceMode.setEnabled(false);
+            engine.update(project);
             light.setX(100);
             light.setY(100);
             light.setCastsShadows(false);
@@ -258,6 +261,56 @@ class IndoorLightingRenderTest {
             }
             project.getLighting().setTimeOfDayPreset("NIGHT");
             assertTrue(ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness() > unlit);
+        });
+    }
+
+    @Test
+    void indoorDarknessSwitchAndPerformanceModeApplyToBothViewsAndRestoreCachedLighting() throws Exception {
+        runFx(() -> {
+            DmProject project = IndoorLightingTest.room("door", "closed");
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            for (boolean player : new boolean[]{false, true}) {
+                for (TimeOfDayPreset preset : TimeOfDayPreset.values()) {
+                    project.getLighting().setTimeOfDayPreset(preset.name());
+                    int indoor = ambient(renderer, project, player).getPixelReader().getArgb(100, 100);
+                    Tuning.apply(key -> key.equals("lighting.indoorDarkness") ? "false" : null);
+                    var switched = ambient(renderer, project, player).getPixelReader();
+                    assertEquals(switched.getArgb(20, 20), switched.getArgb(100, 100),
+                            "Rooms follow outdoor ambient: " + preset);
+                    if (preset == TimeOfDayPreset.NIGHT) {
+                        assertEquals(indoor, switched.getArgb(100, 100));
+                    }
+                    Tuning.reset();
+                    assertEquals(indoor, ambient(renderer, project, player).getPixelReader().getArgb(100, 100));
+
+                    PerformanceMode.setEnabled(true);
+                    engine.update(project);
+                    var reduced = ambient(renderer, project, player).getPixelReader();
+                    assertEquals(reduced.getArgb(20, 20), reduced.getArgb(100, 100));
+                    if (preset == TimeOfDayPreset.NIGHT) {
+                        assertEquals(indoor, reduced.getArgb(100, 100));
+                    }
+                    PerformanceMode.setEnabled(false);
+                    engine.update(project);
+                    assertEquals(indoor, ambient(renderer, project, player).getPixelReader().getArgb(100, 100));
+                }
+            }
+
+            project.getInteractables().getFirst().setState("open");
+            project.getLighting().setTimeOfDayPreset("DAY");
+            engine.update(project);
+            for (boolean player : new boolean[]{false, true}) {
+                double sun = ambient(renderer, project, player).getPixelReader().getColor(60, 100).getBrightness();
+                Tuning.apply(key -> key.equals("lighting.daylightThroughOpenings") ? "false" : null);
+                engine.update(project);
+                double dark = ambient(renderer, project, player).getPixelReader().getColor(60, 100).getBrightness();
+                assertTrue(sun > dark + 0.2);
+                Tuning.reset();
+                engine.update(project);
+                assertEquals(sun, ambient(renderer, project, player).getPixelReader().getColor(60, 100).getBrightness());
+            }
         });
     }
 

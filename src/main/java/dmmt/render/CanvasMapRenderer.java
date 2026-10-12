@@ -54,11 +54,15 @@ public class CanvasMapRenderer {
         return activeLightMapScale;
     }
 
-    private static int lightMapScaleFor(double width, double height) {
+    static int lightMapScaleFor(double width, double height) {
         int base = PerformanceMode.isEnabled() ? PerformanceMode.lightMapScale() : Tuning.LIGHT_MAP_SCALE.get();
-        double budget = Math.max(1, Tuning.LIGHT_MAP_MAX_PIXELS.get());
+        double budget = PerformanceMode.isEnabled() ? PerformanceMode.lightMapMaxPixels() : Tuning.LIGHT_MAP_MAX_PIXELS.get();
         int forBudget = (int) Math.ceil(Math.sqrt(Math.max(1, width * height) / budget));
-        return Math.max(base, forBudget);
+        int scale = Math.max(base, forBudget);
+        while (Math.max(1, Math.ceil(width / scale)) * Math.max(1, Math.ceil(height / scale)) > budget) {
+            scale++;
+        }
+        return scale;
     }
     /** Screen-pixel height of the grab bar drawn above the player viewport rectangle in the DM view. */
     public static final double VIEWPORT_TITLE_BAR_HEIGHT = 22;
@@ -1196,7 +1200,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
             return;
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
@@ -1213,7 +1217,7 @@ public class CanvasMapRenderer {
      * map underneath by a per-pixel {@code lerp(white, presetColor, darknessHere)} colour darkens/tints it in
      * proportion to the map's own brightness and detail instead of overwriting it with a flat colour, so
      * texture and contrast stay visible even in heavily darkened areas (most noticeable at Dawn/Dusk, which
-     * previously washed the whole map toward one flat colour). Day still darkens enclosed rooms.
+     * previously washed the whole map toward one flat colour). Day darkens enclosed rooms only when indoor darkness is on.
      */
     public void renderAmbientLight(GraphicsContext gc, DmProject project, double width, double height,
                                     DmProject.CameraState camera, boolean playerMode) {
@@ -1221,7 +1225,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
             return;
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
@@ -1265,6 +1269,7 @@ public class CanvasMapRenderer {
 
         double lightTint = clampLightTint(project.getLighting().getLightTint());
         IndoorLighting indoors = lightingEngine.getIndoorLighting();
+        boolean indoorDarkness = preset == TimeOfDayPreset.NIGHT || PerformanceMode.indoorDarkness();
         double nightDarkness = TimeOfDayPreset.NIGHT.darkness(project.getLighting().ambientBrightnessFor("NIGHT"))
                 * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         List<DmProject.LightSource> lights = project.getLighting().getLights();
@@ -1276,6 +1281,8 @@ public class CanvasMapRenderer {
         long key = 1125899906842597L;
         key = 31 * key + Double.hashCode(darkness);
         key = 31 * key + indoors.version();
+        key = 31 * key + Boolean.hashCode(indoorDarkness);
+        key = 31 * key + Boolean.hashCode(PerformanceMode.daylightThroughOpenings());
         key = 31 * key + Double.hashCode(nightDarkness);
         key = 31 * key + Double.hashCode(TimeOfDayPreset.NIGHT.red());
         key = 31 * key + Double.hashCode(TimeOfDayPreset.NIGHT.green());
@@ -1393,7 +1400,7 @@ public class CanvasMapRenderer {
             for (int i = row * bw, end = i + bw; i < end; i++) {
                 double wx = camera.getX() + ((i % bw + 0.5) * lightMapScale() - width / 2) / zoom;
                 double wy = camera.getY() + ((row + 0.5) * lightMapScale() - height / 2) / zoom;
-                boolean inside = indoors.isInside(wx, wy);
+                boolean inside = indoorDarkness && indoors.isInside(wx, wy);
                 double exposure = indoors.lightningExposureAt(wx, wy, indoorStorm);
                 buffer.lightningExposure[i] = (float) exposure;
                 buffer.lightningArgb[i] = (clampByte(255 * exposure) << 24) | lightningRgb;
@@ -1449,7 +1456,7 @@ public class CanvasMapRenderer {
      * bright highlights some map art already has at lamp/torch positions. The caller must draw this on a
      * canvas layer whose (node-level) blend mode is {@code ADD}, stacked directly above the base map canvas
      * and below the walls/overlays/tokens/fog layer, so only the base map is brightened. A no-op (and free)
-     * when the bright core slider is at 0%. Outside Night, only indoor lights get bright cores.
+     * when the bright core slider is at 0%. Outside Night, only lights in darkened indoor rooms get bright cores.
      */
     public void renderBrightCore(GraphicsContext gc, DmProject project, double width, double height,
                                   DmProject.CameraState camera, boolean playerMode) {
@@ -1461,7 +1468,7 @@ public class CanvasMapRenderer {
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasRooms()) {
+        if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
             return;
         }
         double radiusFraction = Tuning.BRIGHT_CORE_RADIUS.get();

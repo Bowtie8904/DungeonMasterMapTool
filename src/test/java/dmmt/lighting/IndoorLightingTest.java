@@ -2,11 +2,74 @@ package dmmt.lighting;
 
 import dmmt.model.DmProject;
 import dmmt.service.FogService;
+import dmmt.render.PerformanceMode;
+import dmmt.service.Tuning;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.BitSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class IndoorLightingTest {
+    @AfterEach
+    void resetSettings() {
+        PerformanceMode.setEnabled(false);
+        Tuning.reset();
+    }
+
+    @Test
+    void independentSettingsAndPerformanceOverridesPreserveRoomDetectionAndRestoreDaylight() {
+        DmProject project = room("window", "open");
+        IndoorLighting lighting = new IndoorLighting();
+        lighting.update(project);
+        double daylight = lighting.daylightAt(300, 500);
+        assertTrue(daylight > 0.5);
+
+        Tuning.apply(key -> key.equals("lighting.indoorDarkness") ? "false" : null);
+        lighting.update(project);
+        assertFalse(lighting.hasIndoorDarkness(TimeOfDayPreset.DAY));
+        assertFalse(lighting.lightActive(TimeOfDayPreset.DAWN, 500, 500));
+        assertTrue(lighting.lightActive(TimeOfDayPreset.NIGHT, 500, 500));
+        assertEquals(daylight, lighting.daylightAt(300, 500));
+
+        Tuning.apply(key -> key.equals("lighting.daylightThroughOpenings") ? "false" : null);
+        lighting.update(project);
+        assertTrue(lighting.hasIndoorDarkness(TimeOfDayPreset.DAY));
+        assertEquals(0, lighting.daylightAt(300, 500));
+        assertEquals(0, lighting.lightningExposureAt(300, 500, false));
+        assertEquals(1, lighting.lightningExposureAt(300, 500, true));
+
+        Tuning.reset();
+        lighting.update(project);
+        long before = lighting.version();
+        PerformanceMode.setEnabled(true);
+        lighting.update(project);
+        assertTrue(lighting.version() > before);
+        assertTrue(lighting.isInside(500, 500));
+        assertFalse(lighting.indoorRegions().isEmpty(), "Weather clipping must retain room boundaries");
+        for (TimeOfDayPreset preset : TimeOfDayPreset.values()) {
+            assertEquals(preset == TimeOfDayPreset.NIGHT, lighting.hasIndoorDarkness(preset));
+            assertEquals(preset == TimeOfDayPreset.NIGHT, lighting.lightActive(preset, 500, 500));
+        }
+        assertEquals(0, lighting.daylightAt(300, 500));
+        assertTrue(Tuning.INDOOR_DARKNESS.get());
+        assertTrue(Tuning.DAYLIGHT_THROUGH_OPENINGS.get());
+        PerformanceMode.setEnabled(false);
+        lighting.update(project);
+        assertEquals(daylight, lighting.daylightAt(300, 500));
+        assertTrue(lighting.hasIndoorDarkness(TimeOfDayPreset.DAY));
+
+        PerformanceMode.setEnabled(true);
+        lighting.update(project);
+        project.getInteractables().getFirst().setState("closed");
+        lighting.update(project);
+        PerformanceMode.setEnabled(false);
+        lighting.update(project);
+        assertEquals(0, lighting.daylightAt(300, 500), "Restore must use current portal state");
+        assertTrue(project.getFog().getMask().copyBits().isEmpty());
+    }
+
     public static DmProject room(String type, String state) {
         DmProject project = DmProject.builder().build();
         project.getImageLayers().add(DmProject.ImageLayer.builder().width(1000).height(1000).build());
@@ -19,6 +82,31 @@ class IndoorLightingTest {
                 .id("portal").type(type).state(state).x1(200).y1(450).x2(200).y2(550).build());
         new FogService().ensureMask(project);
         return project;
+    }
+
+    @Test
+    void performanceModeDoesNotChangeLightFogRevealOrConfiguredDisabledSettings() {
+        DmProject project = room("door", "closed");
+        project.getLighting().getLights().add(DmProject.LightSource.builder().id("torch")
+                .x(500).y(500).range(200).revealMode(DmProject.RevealMode.WHILE_LIT).build());
+        LightingEngine engine = new LightingEngine();
+        engine.update(project);
+        var reveal = (BitSet) engine.getLiveReveal().clone();
+        var savedFog = project.getFog().getMask().copyBits();
+        assertFalse(reveal.isEmpty());
+        Tuning.apply(key -> key.equals("lighting.indoorDarkness") || key.equals("lighting.daylightThroughOpenings")
+                ? "false" : null);
+        PerformanceMode.setEnabled(true);
+        engine.update(project);
+        assertEquals(reveal, engine.getLiveReveal());
+        assertEquals(savedFog, project.getFog().getMask().copyBits());
+        PerformanceMode.setEnabled(false);
+        engine.update(project);
+        assertFalse(PerformanceMode.indoorDarkness());
+        assertFalse(PerformanceMode.daylightThroughOpenings());
+        assertFalse(Tuning.INDOOR_DARKNESS.get());
+        assertFalse(Tuning.DAYLIGHT_THROUGH_OPENINGS.get());
+        assertEquals(reveal, engine.getLiveReveal());
     }
 
     private static void wall(DmProject project, double x1, double y1, double x2, double y2) {

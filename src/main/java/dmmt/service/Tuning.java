@@ -418,6 +418,10 @@ public final class Tuning {
 
     // ---- Lights ----
 
+    public static final Setting<Boolean> INDOOR_DARKNESS = bool(LIGHTS, "lighting.indoorDarkness", true, false,
+            "Keep enclosed rooms dark at Day, Dawn and Dusk. Always off in performance mode; Night is unchanged.");
+    public static final Setting<Boolean> DAYLIGHT_THROUGH_OPENINGS = bool(LIGHTS, "lighting.daylightThroughOpenings", true, false,
+            "Calculate daylight and lightning transmission through open exterior doors/windows. Always off in performance mode.");
     public static final Setting<Double> LIGHT_TINT_MAX = decimal(LIGHTS, "lighting.tint.max", 0.3, 0, 1, true,
             "Upper limit of the light tint slider.");
     public static final Setting<Double> BRIGHT_CORE_MAX = decimal(LIGHTS, "lighting.brightCore.max", 0.5, 0, 1, true,
@@ -639,6 +643,8 @@ public final class Tuning {
             "Frame rate of moving effect textures and weather in performance mode.");
     public static final Setting<Integer> PERF_LIGHT_MAP_SCALE = integer(PERFORMANCE_MODE, "performance.lightMapScale", 8, 1, 32, false,
             "Light map resolution divisor in performance mode (see lighting.lightMapScale).");
+    public static final Setting<Integer> PERF_LIGHT_MAP_MAX_PIXELS = integer(PERFORMANCE_MODE, "performance.lightMapMaxPixels", 5000, 1000, 8000000, false,
+            "Pixel budget of one light map in performance mode (the normal budget is used if lower).");
     public static final Setting<Integer> PERF_MAX_FEATHER_PASSES = integer(PERFORMANCE_MODE, "performance.maxFeatherPasses", 6, 1, 24, false,
             "Most soft-edge passes of effect textures in performance mode.");
     public static final Setting<Integer> PERF_IMAGE_LEVEL_BIAS = integer(PERFORMANCE_MODE, "performance.imageLevelBias", 2, 0, 8, false,

@@ -1051,6 +1051,26 @@ difference is hard to see. Lower it if busy maps use a lot of CPU, raise it to `
 
 ## Lights
 
+### `lighting.indoorDarkness`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** live
+
+Keep enclosed rooms at Night darkness/tint during Day, Dawn and Dusk. Off makes rooms follow the outdoor
+ambient lighting instead; indoor lights and bright cores are then visually inactive outside Night.
+Night lighting, saved light states and fog reveal are unchanged. Performance mode temporarily treats this
+setting as off without saving the override. Room detection still keeps outdoor-only weather out of buildings.
+
+*Keywords:* indoor darkness, daytime, rooms, lighting performance
+
+### `lighting.daylightThroughOpenings`
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** live
+
+Calculate occluded daylight through open exterior doors/windows. Off skips the aperture light-field calculations;
+rooms remain dark if indoor darkness is enabled. This also disables indoor lightning transmission through openings
+(the weather type's explicit indoors override still applies). Performance mode temporarily treats this setting as
+off without saving the override. Re-enabling it rebuilds the cached field from the current geometry and portal states.
+
+*Keywords:* daylight, sunlight, doors, windows, raycasting, lighting performance
+
 ### `lighting.tint.max`
 **Default:** `0.3` · **Range:** 0 to 1 · **Applies:** restart
 
@@ -1177,13 +1197,14 @@ Flicker speed used when a light without saved flicker values gets flicker.
 
 ## Time of day
 
-The time-of-day buttons (Day, Dawn, Dusk, Night) control outdoor darkness and tint. Enclosed rooms always use the
+The time-of-day buttons (Day, Dawn, Dusk, Night) control outdoor darkness and tint. By default, enclosed rooms use the
 Night values and the map's Night ambient-brightness adjustment. Day/Dawn/Dusk daylight enters through exterior
 open windows and doors, constrained to each source's own opening. Walls and all closed doors/windows block it.
 Interior portals never generate sunlight; open ones can transmit it. Sunlight stays at full strength through the
 inner 30% of its eight-tile/eight-aperture-width reach (whichever is larger), then fades gently;
 it does not reveal fog. Indoor lights retain their glow and flicker; outdoor lights are visually inactive outside Night.
-There are no additional settings.
+The global `lighting.indoorDarkness` and `lighting.daylightThroughOpenings` switches control these features;
+both are effectively off during Performance mode.
 
 Exterior sunlight sources sit one map grid tile from their opening, independent of its length. Neighbouring
 rooms/walls at least one tile away do not block incoming sunlight; closer walls can block it. Walls inside the
@@ -1570,6 +1591,9 @@ The folder the last audio import came from, used as the starting folder of the i
 These values are used only while **performance mode** is on (`ui.performanceMode`, toggle at the bottom left). They
 never change a project. All values are **live**.
 
+Performance mode also temporarily disables `lighting.indoorDarkness` and `lighting.daylightThroughOpenings`.
+Their configured values are preserved and restored when the mode is switched off.
+
 ### `performance.interactionFps`
 **Default:** `20` · **Range:** 1 to 240 · **Applies:** live
 
@@ -1596,9 +1620,19 @@ this rate. Light flicker is always off in performance mode.
 **Default:** `8` · **Range:** 1 to 32 · **Applies:** live
 
 Light map resolution divisor in performance mode (see `lighting.lightMapScale`). `8` computes a quarter of the light
-pixels of the normal value `4`.
+pixels of the normal value `4`, before the pixel budget raises the divisor further.
 
 *Keywords:* performance lighting, light quality, shadow resolution
+
+### `performance.lightMapMaxPixels`
+**Default:** `5000` · **Range:** 1000 to 8000000 · **Applies:** live
+
+Maximum pixels in each DM/player light map during performance mode. The lower of this budget and
+`lighting.lightMapMaxPixels` is used, so a stricter normal budget is preserved. The resolution divisor is raised
+until the rounded image dimensions fit this budget. This reduces lighting work on large displays even when
+the normal automatic pixel budget already requires a divisor greater than `performance.lightMapScale`.
+
+*Keywords:* performance lighting, pixel budget, 4K, low end, light map
 
 ### `performance.maxFeatherPasses`
 **Default:** `6` · **Range:** 1 to 24 · **Applies:** live

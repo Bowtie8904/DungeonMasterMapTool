@@ -22,6 +22,18 @@ public final class PerformanceMode {
         return Tuning.PERF_LIGHT_MAP_SCALE.get();
     }
 
+    public static int lightMapMaxPixels() {
+        return Math.min(Tuning.LIGHT_MAP_MAX_PIXELS.get(), Tuning.PERF_LIGHT_MAP_MAX_PIXELS.get());
+    }
+
+    public static boolean indoorDarkness() {
+        return !enabled && Tuning.INDOOR_DARKNESS.get();
+    }
+
+    public static boolean daylightThroughOpenings() {
+        return !enabled && Tuning.DAYLIGHT_THROUGH_OPENINGS.get();
+    }
+
     /** Soft texture edges use at most this many feather passes while active. */
     public static int maxFeatherPasses() {
         return Tuning.PERF_MAX_FEATHER_PASSES.get();

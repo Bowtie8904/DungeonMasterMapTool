@@ -2,6 +2,7 @@ package dmmt.lighting;
 
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.render.PerformanceMode;
 import dmmt.service.RoomFillService;
 import dmmt.service.Tuning;
 
@@ -30,6 +31,10 @@ public final class IndoorLighting {
         return !interior.isEmpty();
     }
 
+    public boolean hasIndoorDarkness(TimeOfDayPreset preset) {
+        return hasRooms() && (preset == TimeOfDayPreset.NIGHT || PerformanceMode.indoorDarkness());
+    }
+
     public boolean isInside(double x, double y) {
         int cell = cellAt(x, y);
         return cell >= 0 && shaded.get(cell);
@@ -37,7 +42,7 @@ public final class IndoorLighting {
 
     public double daylightAt(double x, double y) {
         int cell = cellAt(x, y);
-        return cell >= 0 ? daylight[cell] : 0;
+        return PerformanceMode.daylightThroughOpenings() && cell >= 0 && cell < daylight.length ? daylight[cell] : 0;
     }
 
     public double lightningExposureAt(double x, double y, boolean indoors) {
@@ -52,7 +57,7 @@ public final class IndoorLighting {
     }
 
     public boolean lightActive(TimeOfDayPreset preset, double x, double y) {
-        return preset == TimeOfDayPreset.NIGHT || isInside(x, y);
+        return preset == TimeOfDayPreset.NIGHT || PerformanceMode.indoorDarkness() && isInside(x, y);
     }
 
     public void update(DmProject candidate) {
@@ -63,6 +68,8 @@ public final class IndoorLighting {
         long next = RoomFillService.geometrySignature(nextMask, candidate.getWalls(), candidate.getInteractables());
         next = next * 31 + Double.hashCode(candidate.getMap().getGrid().getPixelsPerCell());
         next = next * 31 + Tuning.SHADOW_RAYS.get();
+        boolean daylightEnabled = PerformanceMode.daylightThroughOpenings();
+        next = next * 31 + Boolean.hashCode(daylightEnabled);
         for (DmProject.Interactable portal : candidate.getInteractables()) {
             next = next * 31 + (isOpen(portal) ? 1 : 0);
         }
@@ -106,10 +113,11 @@ public final class IndoorLighting {
             }
         }
         indoorRegions = List.copyOf(regions);
-        daylight = new float[cols * rows];
-        if (!hasRooms()) {
+        daylight = new float[0];
+        if (!hasRooms() || !daylightEnabled) {
             return;
         }
+        daylight = new float[cols * rows];
         List<Double> segments = new ArrayList<>();
         for (DmProject.WallSegment wall : candidate.getWalls()) {
             addSegment(segments, wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2());
