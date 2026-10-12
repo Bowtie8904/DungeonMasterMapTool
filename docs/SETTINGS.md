@@ -1382,7 +1382,9 @@ most 1.5 s. Independent of `audio.effectLoopCrossfadeSeconds`.
 ### `audio.effectFadeSeconds`
 **Default:** `1.5` · **Range:** 0 to 30 seconds · **Applies:** live
 
-Fade in and fade out time of a sound effect when it is switched on or off, so rain or wind never starts abruptly.
+Fade in and fade out time of a looping sound effect when it is switched on or off, so rain or wind never starts
+abruptly. Momentary (non-looping) effects ignore this setting: they start at the configured volume immediately
+and stop without a fade, including when evicted by the simultaneous-play limit. Global mute still affects them.
 
 *Keywords:* effect fade, ambience fade, fade in, fade out, sound effect
 
@@ -1394,6 +1396,9 @@ an equal-power crossfade to mask small playback restart gaps, especially for rai
 to half the clip length. `0` disables the overlap. Pause freezes both repetitions and their blend; stop and mute
 affect both. The clip editor uses the same blend for its selected or visible loop range, limited to half that
 range; exported clips still contain the original samples. This is separate from the effect's start/stop fade.
+Effects with **Looping** unchecked in the library right-click menu do not repeat or use this overlap. They are
+momentary triggers, never selected; each click or API call starts an independent, potentially overlapping play.
+Looping defaults to on and is saved per effect in the library, not in the settings file.
 
 *Keywords:* loop, rain, wind, seamless, gapless, overlap, effect crossfade
 
@@ -1418,7 +1423,8 @@ again.
 ### `audio.maxEffects`
 **Default:** `32` · **Range:** 1 to 64 · **Applies:** live
 
-How many sound effects may loop at the same time. Each effect uses a playing stream and a preloaded next stream
+How many sound effect instances may play at the same time, counting every overlapping play-once trigger separately.
+Each looping effect uses a playing stream and a preloaded next stream
 (both play during an overlap), so lower values protect weak
 hardware; switching on one more effect than allowed stops the one that has been running longest.
 

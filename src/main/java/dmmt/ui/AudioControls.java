@@ -56,6 +56,7 @@ public final class AudioControls {
     /** Stand-in toggles for entries that are hidden from the overlay, kept so their endpoints stay stable. */
     private final Map<String, ToggleButton> hiddenToggles = new LinkedHashMap<>();
     private final Map<String, Button> trackButtons = new LinkedHashMap<>();
+    private final Map<String, Button> hiddenEffectButtons = new LinkedHashMap<>();
 
     private Runnable apiControlsChanged = () -> {
     };
@@ -218,9 +219,10 @@ public final class AudioControls {
         trackButtons.keySet().removeIf(id -> !controls.containsKey("audio.track." + id));
         for (AudioTrack effect : library.effects()) {
             if (effect.isReady()) {
-                controls.put("audio.effect." + effect.getId(), effectToggle(effect));
+                controls.put("audio.effect." + effect.getId(), effectControl(effect));
             }
         }
+        hiddenEffectButtons.keySet().removeIf(id -> !controls.containsKey("audio.effect." + id));
         return controls;
     }
 
@@ -249,10 +251,25 @@ public final class AudioControls {
         });
     }
 
-    private ToggleButton effectToggle(AudioTrack effect) {
-        ToggleButton visible = overlay.effectButtons().get(effect.getId());
+    private javafx.scene.control.ButtonBase effectControl(AudioTrack effect) {
+        javafx.scene.control.ButtonBase visible = overlay.effectButtons().get(effect.getId());
+        if (effect.isLooping()) {
+            hiddenEffectButtons.remove(effect.getId());
+        } else {
+            hiddenToggles.remove(effect.getId());
+        }
         if (visible != null) {
             return visible;
+        }
+        if (!effect.isLooping()) {
+            Button button = hiddenEffectButtons.computeIfAbsent(effect.getId(), id -> {
+                Button trigger = new Button();
+                trigger.setOnAction(event -> engine.setEffectActive(id, true));
+                return trigger;
+            });
+            button.setText(effect.getName());
+            button.setGraphic(AudioIcons.tintedEffect(effect.getIcon(), effect.getColor(), 22));
+            return button;
         }
         return hiddenToggles.computeIfAbsent(effect.getId(), id -> {
             ToggleButton button = new ToggleButton(effect.getName());
@@ -281,6 +298,7 @@ public final class AudioControls {
 
     /** Rebuilds the overlay rings and the per-entry API endpoints after the library changed. */
     public void refreshLibraryChoices() {
+        engine.refreshEffectLooping();
         overlay.refreshLibrary();
         refreshPlaybackState();
     }
@@ -290,7 +308,7 @@ public final class AudioControls {
         syncing = true;
         try {
             boolean playing = engine.isMusicPlaying()
-                    || (!engine.activeEffects().isEmpty() && !engine.areEffectsPaused());
+                    || (engine.hasRunningEffects() && !engine.areEffectsPaused());
             playButton.setGraphic(Icons.icon(playing ? MaterialDesignP.PAUSE : MaterialDesignP.PLAY));
             AudioTrack track = engine.currentTrack().orElse(null);
             trackName.setText(track == null ? "" : track.getName());

@@ -1006,6 +1006,21 @@ public class AudioLibraryService {
         save();
     }
 
+    public synchronized void setEffectLooping(String id, boolean looping) throws IOException {
+        AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
+        if (track.isMusic()) {
+            throw new IOException("Only sound effects have a looping preference.");
+        }
+        boolean previous = track.isLooping();
+        track.setLooping(looping);
+        try {
+            save();
+        } catch (IOException | RuntimeException e) {
+            track.setLooping(previous);
+            throw e;
+        }
+    }
+
     /** Moves a music track into another category (ignored for sound effects). */
     public synchronized void moveTrack(String id, String categoryId) throws IOException {
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));

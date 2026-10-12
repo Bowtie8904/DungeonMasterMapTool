@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.Locale;
 
-/** One audio file in the library: a music track of a category, or a sound effect loop (3.35.1). */
+/** One audio file in the library: a music track of a category, or a sound effect (3.35.1). */
 @Data
 @Builder
 @NoArgsConstructor
@@ -68,6 +68,9 @@ public class AudioTrack {
     /** Hidden sound effects keep working but are left out of the audio overlay (3.35.2). */
     @Builder.Default
     private boolean hidden = false;
+    /** Whether this sound effect repeats; ignored for music. Missing legacy values default to looping. */
+    @Builder.Default
+    private boolean looping = true;
     /** Measured integrated loudness; {@code null} for legacy entries and digital silence. */
     private Double loudnessLufs;
     /** Measured sample peak in dBFS; {@code null} when the file is silent or has not been analyzed. */

@@ -33,6 +33,30 @@ class AudioLibraryServiceTest {
     }
 
     @Test
+    void effectLoopingDefaultsToTrueAndPersistsPerTrack() throws IOException {
+        AudioTrack track = library.importFile(sourceFile("once.wav"), AudioKind.EFFECT, null);
+        assertTrue(track.isLooping());
+        assertTrue(new AudioTrack().isLooping());
+        assertTrue(AudioTrack.builder().build().isLooping());
+        library.setEffectLooping(track.getId(), false);
+        AudioLibraryService reloaded = new AudioLibraryService(dir.resolve("audio"));
+        assertFalse(reloaded.track(track.getId()).orElseThrow().isLooping());
+        reloaded.setEffectLooping(track.getId(), true);
+        assertTrue(new AudioLibraryService(dir.resolve("audio")).track(track.getId()).orElseThrow().isLooping());
+        AudioTrack legacy = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue("{\"id\":\"legacy\",\"kind\":\"EFFECT\"}", AudioTrack.class);
+        assertTrue(legacy.isLooping(), "a missing legacy flag must not disable repetition");
+    }
+
+    @Test
+    void loopingPreferenceRejectsMissingTracksAndMusic() throws IOException {
+        AudioTrack music = library.importFile(sourceFile("music.wav"), AudioKind.MUSIC, null);
+        assertThrows(IOException.class, () -> library.setEffectLooping(music.getId(), false));
+        assertThrows(IOException.class, () -> library.setEffectLooping("missing", false));
+        assertTrue(music.isLooping());
+    }
+
+    @Test
     void importsCopyIntoTheLibraryAndKeepTheOriginalUntouched() throws IOException {
         Path source = sourceFile("Tavern brawl.wav");
         AudioTrack track = library.importFile(source, AudioKind.MUSIC, AudioCategory.UNCATEGORISED_ID);

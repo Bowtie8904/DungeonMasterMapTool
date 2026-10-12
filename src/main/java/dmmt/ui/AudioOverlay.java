@@ -85,7 +85,7 @@ public final class AudioOverlay {
     private final Slider effectsVolume = new Slider(0, 1, 0.6);
 
     private final Map<String, ToggleButton> categoryButtons = new LinkedHashMap<>();
-    private final Map<String, ToggleButton> effectButtons = new LinkedHashMap<>();
+    private final Map<String, javafx.scene.control.ButtonBase> effectButtons = new LinkedHashMap<>();
 
     private Runnable openLibrary = () -> {
     };
@@ -366,12 +366,13 @@ public final class AudioOverlay {
         }
         List<Node> effectNodes = new ArrayList<>();
         for (AudioTrack effect : library.visibleEffects()) {
-            ToggleButton button = ringButton(AudioIcons.tintedEffect(effect.getIcon(), effect.getColor(), 22), effect.getName());
+            javafx.scene.control.ButtonBase button = effect.isLooping() ? new ToggleButton() : new Button();
+            styleRingButton(button, AudioIcons.tintedEffect(effect.getIcon(), effect.getColor(), 22), effect.getName());
             button.setOnAction(event -> {
                 if (syncing) {
                     return;
                 }
-                engine.setEffectActive(effect.getId(), button.isSelected());
+                engine.toggleEffect(effect.getId());
                 refreshState();
             });
             effectButtons.put(effect.getId(), button);
@@ -388,14 +389,19 @@ public final class AudioOverlay {
     }
 
     private ToggleButton ringButton(Node icon, String tooltip) {
-        ToggleButton button = new ToggleButton(null, icon);
+        ToggleButton button = new ToggleButton();
+        styleRingButton(button, icon, tooltip);
+        return button;
+    }
+
+    private void styleRingButton(javafx.scene.control.ButtonBase button, Node icon, String tooltip) {
+        button.setGraphic(icon);
         button.getStyleClass().add("audio-ring-button");
         button.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
         button.setPrefSize(ITEM_SIZE, ITEM_SIZE);
         button.setMinSize(ITEM_SIZE, ITEM_SIZE);
         button.setMaxSize(ITEM_SIZE, ITEM_SIZE);
         Icons.tooltip(button, tooltip);
-        return button;
     }
 
     /** Keeps API toggles current even while closed; refreshes the remaining overlay content only while open. */
@@ -403,8 +409,18 @@ public final class AudioOverlay {
         syncing = true;
         try {
             categoryButtons.forEach((id, button) -> button.setSelected(engine.isCategoryActive(id)));
-            effectButtons.forEach((id, button) -> button.setSelected(engine.isEffectActive(id)));
+            effectButtons.forEach((id, button) -> {
+                if (button instanceof ToggleButton toggle) {
+                    toggle.setSelected(engine.isEffectActive(id));
+                }
+            });
             musicLoop.setSelected(engine.isMusicLoop());
+            List<String> active = engine.runningEffects();
+            effectsPause.setSelected(engine.areEffectsPaused());
+            effectsPause.setGraphic(Icons.icon(engine.areEffectsPaused()
+                    ? MaterialDesignP.PLAY : MaterialDesignP.PAUSE));
+            effectsPause.setDisable(active.isEmpty());
+            effectsStop.setDisable(active.isEmpty());
             if (!open) {
                 return;
             }
@@ -422,13 +438,7 @@ public final class AudioOverlay {
             previousButton.setDisable(track == null);
             nextButton.setDisable(track == null);
             stopButton.setDisable(track == null);
-            List<String> active = engine.activeEffects();
             effectCount.setText(active.isEmpty() ? "none running" : activeEffectNames(active));
-            effectsPause.setSelected(engine.areEffectsPaused());
-            effectsPause.setGraphic(Icons.icon(engine.areEffectsPaused()
-                    ? MaterialDesignP.PLAY : MaterialDesignP.PAUSE));
-            effectsPause.setDisable(active.isEmpty());
-            effectsStop.setDisable(active.isEmpty());
             muteButton.setSelected(engine.isPanic());
             masterVolume.setValue(engine.masterVolume());
             musicVolume.setValue(engine.musicVolume());
@@ -484,8 +494,8 @@ public final class AudioOverlay {
         return Map.copyOf(categoryButtons);
     }
 
-    /** The per-effect toggles, keyed by track id, in ring order. */
-    public Map<String, ToggleButton> effectButtons() {
+    /** Loop toggles and momentary one-shot buttons, keyed by track id, in ring order. */
+    public Map<String, javafx.scene.control.ButtonBase> effectButtons() {
         return Map.copyOf(effectButtons);
     }
 

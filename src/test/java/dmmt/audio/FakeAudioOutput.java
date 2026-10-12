@@ -30,6 +30,10 @@ public final class FakeAudioOutput implements AudioOutput {
         return opened.isEmpty() ? null : opened.get(opened.size() - 1);
     }
 
+    public void finishFirstPlayingVoice() {
+        playing().getFirst().reachEnd();
+    }
+
     public static final class FakeVoice implements Voice {
         final Path file;
         final boolean loop;

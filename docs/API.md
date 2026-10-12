@@ -214,8 +214,9 @@ use the existing map history and persistence; room labels never appear in player
 Audio is not part of the DM controls sidebar: it lives in the transport group at the bottom right of the status bar
 and in the audio overlay that opens from there. Both are exposed under `/api/controls/audio/...` and are only
 available when `audio.enabled` is on. Endpoints work whether the overlay is open or closed.
-Play/pause endpoints only resume currently selected audio; they never reselect a stopped category or sound
-effect. With nothing selected, they do nothing.
+Play/pause endpoints only resume currently selected audio and paused one-shot instances; they never reselect
+a stopped category or looping effect or retrigger a completed one-shot. With nothing selected or running,
+they do nothing.
 
 Imported recordings are listed in the library after copying, before analysis and playback preparation
 finish. Pending, failed and cancelled preparations cannot play or enter music playlists; their audio
@@ -244,13 +245,18 @@ recordings. Closing the library window does not stop that queue.
 
 ### One endpoint per category, music file and sound effect
 
-In addition, **every music category and every sound effect has its own toggle**:
+In addition, **every music category and every sound effect has its own control**:
 
 | Endpoint | Type | What it does |
 |----------|------|--------------|
 | `/api/controls/audio/category/<id>` | button | Plays that category, or stops it when it is already playing. |
 | `/api/controls/audio/track/<id>` | button | Starts the music file's category at that song, then follows normal playlist ordering/shuffle. Repeated calls restart the song. |
-| `/api/controls/audio/effect/<id>` | button | Starts or stops that sound effect loop. |
+| `/api/controls/audio/effect/<id>` | toggle / button | Looping effects toggle on/off. Non-looping effects are momentary buttons: every call starts a separate play, never selected, allowing multiple plays of the same sound to overlap. |
+
+Effect controls are described as `toggle` for looping entries and `button` otherwise. The endpoint and control ID
+stay the same when the library's **Looping** checkbox changes. All running instances, including one-shots, share
+effects pause/stop, volumes, mute and `audio.maxEffects`; each one-shot counts separately toward the limit.
+Momentary effects have no fade-in or fade-out; effects stop or limit eviction stops them immediately.
 
 `<id>` is the library id of the category, music file or sound effect - the UUID that also appears in the library's
 `library.json`, for example

@@ -673,6 +673,18 @@ trees, leaves, mushrooms, waterfalls, wildlife, water and weather - rather than 
 Deleting a category keeps its files and moves them to *Uncategorised*. Changing a music track into a sound effect
 (and back) is a right click away.
 
+**Looping or play once.** Sound effects loop by default. In the library, right-click one or more sound effects
+and uncheck **Looping** to make them momentary trigger buttons: they never stay selected in the overlay or API.
+Every click or API call starts a fresh play, so multiple plays of the same sound can overlap. Instances finish
+independently and share the effects pause/stop, volumes, mute and simultaneous-play limit.
+Momentary effects have no fade-in or fade-out: their attack plays at the configured volume immediately,
+and stop or limit eviction cuts them off immediately. The effect fade setting only applies to loops.
+Checking **Looping** restores seamless repetition. Looping effects show a small repeat icon beside their name
+in the library. This preference is saved per effect, not per map, and
+applies to effects started from the overlay or local API. Changing it while an effect is active keeps its
+current playback position. Disabling looping clears its selection and lets the current play finish once;
+enabling looping applies to future triggers, not one-shots already playing.
+
 **Hiding entries from the overlay.** Right-click a category or a sound effect and choose **Hide in overlay** to keep
 it out of the audio overlay without deleting anything - useful for a *Christmas* category you only need once a year.
 Hidden entries are **greyed out** in the library window, still play, and keep their API endpoint; **Show in overlay**

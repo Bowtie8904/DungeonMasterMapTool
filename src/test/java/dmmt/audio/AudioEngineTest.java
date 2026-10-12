@@ -64,6 +64,211 @@ class AudioEngineTest {
     }
 
     @Test
+    void playOnceEffectNeverSelectsOrPreloadsAndReleasesAtItsEnd() throws IOException {
+        AudioTrack once = effect("once");
+        AudioTrack loop = effect("loop");
+        library.setEffectLooping(once.getId(), false);
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectActive(once.getId(), true);
+        assertFalse(engine.isEffectActive(once.getId()));
+        assertEquals(List.of(once.getId()), engine.runningEffects());
+        FakeAudioOutput.FakeVoice voice = output.last();
+        engine.setEffectActive(loop.getId(), true);
+        voice.advanceTo(voice.duration - 100);
+        engine.tick(0.1);
+        assertEquals(3, output.opened.size(), "one play-once voice and two looping voices");
+        assertFalse(voice.loop);
+        int[] changes = {0};
+        engine.addListener(() -> changes[0]++);
+        voice.reachEnd();
+        assertFalse(engine.isEffectActive(once.getId()));
+        assertTrue(voice.disposed);
+        assertEquals(List.of(loop.getId()), engine.activeEffects());
+        assertEquals(1, changes[0], "completion must notify the overlay and API");
+        engine.toggleAll();
+        engine.toggleAll();
+        assertFalse(engine.isEffectActive(once.getId()), "resume must not reselect completed effects");
+        engine.setEffectActive(once.getId(), true);
+        assertEquals(0, output.last().position, "a new activation starts at the beginning");
+        engine.shutdown();
+    }
+
+    @Test
+    void changingLoopPreferencePreservesPositionAndReleasesPreparedAndOverlappingVoices() throws IOException {
+        AudioTrack track = effect("rain");
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectActive(track.getId(), true);
+        FakeAudioOutput.FakeVoice original = output.opened.getFirst();
+        FakeAudioOutput.FakeVoice prepared = output.last();
+        original.advanceTo(400);
+        engine.setEffectsPaused(true);
+        library.setEffectLooping(track.getId(), false);
+        engine.refreshEffectLooping();
+        assertTrue(prepared.disposed);
+        assertEquals(400, original.position);
+        assertFalse(original.playing);
+        assertFalse(engine.isEffectActive(track.getId()));
+        engine.setEffectsPaused(false);
+        assertTrue(original.playing);
+        library.setEffectLooping(track.getId(), true);
+        engine.refreshEffectLooping();
+        assertEquals(1, output.live().size(), "an already-triggered one-shot never becomes a loop");
+        original.reachEnd();
+        engine.setEffectActive(track.getId(), true);
+        FakeAudioOutput.FakeVoice loop = output.opened.get(output.opened.size() - 2);
+        loop.advanceTo(loop.duration - 200);
+        engine.tick(0);
+        FakeAudioOutput.FakeVoice incoming = output.last();
+        assertEquals(2, output.playing().size());
+        incoming.advanceTo(100);
+        library.setEffectLooping(track.getId(), false);
+        engine.refreshEffectLooping();
+        assertTrue(loop.disposed);
+        assertEquals(1, output.live().size());
+        assertEquals(100, incoming.position);
+        incoming.reachEnd();
+        assertFalse(engine.isEffectActive(track.getId()));
+        assertTrue(output.live().isEmpty());
+        engine.shutdown();
+    }
+
+    @Test
+    void playOnceUnknownDurationReleasesOnEnd() throws IOException {
+        AudioTrack track = effect("unknown");
+        track.setDurationMs(0);
+        library.setEffectLooping(track.getId(), false);
+        engine.setEffectActive(track.getId(), true);
+        output.last().duration = Double.NaN;
+        engine.tick(1);
+        output.last().reachEnd();
+        assertFalse(engine.isEffectActive(track.getId()));
+        assertTrue(output.live().isEmpty());
+        engine.shutdown();
+    }
+
+    @Test
+    void repeatedOneShotsOverlapAndEndIndependentlyEvenAfterLoopingIsEnabled() throws IOException {
+        AudioTrack track = effect("thunder");
+        library.setEffectLooping(track.getId(), false);
+        engine.toggleEffect(track.getId());
+        FakeAudioOutput.FakeVoice first = output.last();
+        first.advanceTo(500);
+        engine.toggleEffect(track.getId());
+        FakeAudioOutput.FakeVoice second = output.last();
+        assertEquals(2, output.playing().size());
+        assertEquals(500, first.position);
+        assertEquals(0, second.position);
+        assertTrue(engine.activeEffects().isEmpty());
+        assertEquals(List.of(track.getId(), track.getId()), engine.runningEffects());
+        library.setEffectLooping(track.getId(), true);
+        engine.refreshEffectLooping();
+        engine.toggleEffect(track.getId());
+        assertTrue(engine.isEffectActive(track.getId()));
+        assertEquals(3, engine.runningEffects().size());
+        first.reachEnd();
+        assertTrue(first.disposed);
+        assertFalse(second.disposed);
+        assertTrue(engine.isEffectActive(track.getId()), "one-shot completion must not unselect the new loop");
+        second.reachEnd();
+        assertEquals(List.of(track.getId()), engine.runningEffects());
+        engine.shutdown();
+        assertTrue(output.live().isEmpty());
+    }
+
+    @Test
+    void oneShotsSharePauseStopVolumesMuteAndTheEffectInstanceLimit() throws IOException {
+        AudioTrack shot = effect("shot");
+        library.setEffectLooping(shot.getId(), false);
+        AudioTrack loop = effect("rain");
+        engine.setMaxEffects(2);
+        engine.setEffectFadeSeconds(0);
+        engine.setEffectActive(loop.getId(), true);
+        FakeAudioOutput.FakeVoice loopVoice = output.opened.getFirst();
+        engine.setEffectActive(shot.getId(), true);
+        FakeAudioOutput.FakeVoice first = output.last();
+        engine.setEffectActive(shot.getId(), true);
+        FakeAudioOutput.FakeVoice second = output.last();
+        assertTrue(loopVoice.disposed, "oldest instance makes room regardless of kind");
+        assertFalse(engine.isEffectActive(loop.getId()));
+        assertEquals(2, engine.runningEffects().size());
+        engine.tick(1);
+        engine.setEffectsVolume(0.5);
+        assertEquals(engine.effectiveVolume(0.5), first.volume, 0.0001);
+        assertEquals(first.volume, second.volume, 0.0001);
+        engine.toggleAll();
+        assertTrue(engine.areEffectsPaused());
+        assertTrue(output.playing().isEmpty());
+        engine.setEffectActive(shot.getId(), true);
+        FakeAudioOutput.FakeVoice third = output.last();
+        assertTrue(first.disposed);
+        assertFalse(third.playing, "triggers respect the paused effects channel");
+        engine.toggleAll();
+        assertEquals(2, output.playing().size());
+        engine.setPanic(true);
+        engine.tick(1);
+        assertEquals(0, second.volume);
+        assertEquals(0, third.volume);
+        engine.stopAllEffects();
+        assertFalse(engine.hasRunningEffects());
+        assertTrue(output.live().isEmpty());
+        engine.toggleAll();
+        assertFalse(engine.hasRunningEffects(), "play/pause never retriggers finished instances");
+        engine.shutdown();
+    }
+
+    @Test
+    void momentaryEffectsIgnoreStartAndStopFadesButKeepConfiguredVolume() throws IOException {
+        AudioTrack shot = effect("shot");
+        library.setEffectLooping(shot.getId(), false);
+        engine.setEffectFadeSeconds(30);
+        engine.setVolumes(0.8, 1, 0.6);
+        engine.setMaxEffects(1);
+        double expected = engine.effectiveVolume(0.6);
+        engine.toggleEffect(shot.getId());
+        FakeAudioOutput.FakeVoice first = output.last();
+        assertEquals(expected, first.volume, 0.0001, "full configured volume before any tick");
+        engine.tick(0.01);
+        assertEquals(expected, first.volume, 0.0001);
+        engine.toggleEffect(shot.getId());
+        FakeAudioOutput.FakeVoice second = output.last();
+        assertTrue(first.disposed, "cap eviction must not leave a fading momentary voice");
+        assertEquals(expected, second.volume, 0.0001);
+        engine.stopAllEffects();
+        assertTrue(second.disposed, "stop must release immediately without a tick");
+        assertTrue(output.live().isEmpty());
+
+        AudioTrack loop = effect("rain");
+        engine.toggleEffect(loop.getId());
+        FakeAudioOutput.FakeVoice current = output.opened.get(output.opened.size() - 2);
+        assertEquals(0, current.volume, "loops still fade in");
+        engine.tick(0.5);
+        assertTrue(current.volume > 0 && current.volume < expected);
+        engine.toggleEffect(loop.getId());
+        assertFalse(current.disposed, "loops still fade out");
+        engine.shutdown();
+    }
+
+    @Test
+    void disablingLoopingDuringFadeRestoresFullVolumeWithoutRestarting() throws IOException {
+        AudioTrack track = effect("rain");
+        engine.setEffectFadeSeconds(30);
+        engine.toggleEffect(track.getId());
+        FakeAudioOutput.FakeVoice current = output.opened.getFirst();
+        current.advanceTo(100);
+        engine.tick(0.1);
+        assertTrue(current.volume < 1);
+        library.setEffectLooping(track.getId(), false);
+        engine.refreshEffectLooping();
+        assertEquals(1, current.volume);
+        assertEquals(100, current.position);
+        engine.tick(0.1);
+        assertEquals(1, current.volume, "the old fade target must not dampen later ticks");
+        engine.stopAllEffects();
+        assertTrue(output.live().isEmpty());
+        engine.shutdown();
+    }
+
+    @Test
     void limiterSourceSwitchPreservesPausedMusicPositionAndPreparedEffectState() throws IOException {
         AudioTrack track = transientTrack("transient", AudioKind.MUSIC, combat.getId());
         engine.setMusicCrossfadeSeconds(0);

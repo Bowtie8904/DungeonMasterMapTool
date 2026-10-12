@@ -13,6 +13,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -245,10 +246,21 @@ public final class AudioLibraryWindow {
             protected void updateItem(String text, boolean empty) {
                 super.updateItem(text, empty);
                 setText(empty ? null : text);
-                AudioTrack track = empty || getIndex() >= getTableView().getItems().size()
+                AudioTrack track = empty || getIndex() < 0 || getIndex() >= getTableView().getItems().size()
                         ? null : getTableView().getItems().get(getIndex());
-                setGraphic(track == null || track.getKind() != AudioKind.EFFECT ? null
-                        : AudioIcons.tintedEffect(track.getIcon(), track.getColor(), 14));
+                setGraphic(null);
+                if (track != null && track.getKind() == AudioKind.EFFECT) {
+                    HBox icons = new HBox(5, AudioIcons.tintedEffect(track.getIcon(), track.getColor(), 14));
+                    icons.setAlignment(Pos.CENTER_LEFT);
+                    if (track.isLooping()) {
+                        var repeat = Icons.icon(MaterialDesignR.REPEAT);
+                        repeat.setIconSize(14);
+                        repeat.getStyleClass().add("audio-effect-looping");
+                        javafx.scene.control.Tooltip.install(repeat, new javafx.scene.control.Tooltip("Looping"));
+                        icons.getChildren().add(repeat);
+                    }
+                    setGraphic(icons);
+                }
             }
         });
         TableColumn<AudioTrack, String> duration = new TableColumn<>("Length");
@@ -470,6 +482,16 @@ public final class AudioLibraryWindow {
                 run(() -> library.styleTrack(track.getId(), null, icon), "Could not change the icon"));
     }
 
+    private void setEffectsLooping(boolean looping) {
+        List<AudioTrack> tracks = selectedTracks();
+        run(() -> {
+            for (AudioTrack track : tracks) {
+                library.setEffectLooping(track.getId(), looping);
+            }
+        }, "Could not change sound effect playback");
+        engine.refreshEffectLooping();
+    }
+
     private void chooseEffectColor() {
         AudioTrack track = trackTable.getSelectionModel().getSelectedItem();
         if (track == null) {
@@ -506,6 +528,8 @@ public final class AudioLibraryWindow {
         effectColor.setOnAction(event -> chooseEffectColor());
         MenuItem hide = new MenuItem("Hide in overlay");
         hide.setOnAction(event -> toggleEffectsHidden());
+        CheckMenuItem looping = new CheckMenuItem("Looping");
+        looping.setOnAction(event -> setEffectsLooping(looping.isSelected()));
         MenuItem delete = new MenuItem("Delete");
         delete.getStyleClass().add("danger");
         delete.setOnAction(event -> deleteTracks());
@@ -519,7 +543,7 @@ public final class AudioLibraryWindow {
         MenuItem retry = new MenuItem("Retry preparation");
         retry.setOnAction(event -> run(() -> library.preparationQueue().retry(
                 trackTable.getSelectionModel().getSelectedItem().getId()), "Could not retry preparation"));
-        menu.getItems().setAll(play, rename, loudness, moveTo, makeEffect, makeMusic, cut, effectColor, effectIcon, hide,
+        menu.getItems().setAll(play, rename, loudness, moveTo, makeEffect, makeMusic, cut, looping, effectColor, effectIcon, hide,
                 prioritize, retry,
                 new javafx.scene.control.SeparatorMenuItem(), delete);
         menu.setOnShowing(event -> {
@@ -548,6 +572,10 @@ public final class AudioLibraryWindow {
             effectIcon.setDisable(selected == null);
             effectColor.setDisable(selected == null);
             hide.setVisible(effects);
+            looping.setVisible(effects);
+            looping.setDisable(selected == null);
+            List<AudioTrack> tracks = selectedTracks();
+            looping.setSelected(!tracks.isEmpty() && tracks.stream().allMatch(AudioTrack::isLooping));
             hide.setDisable(selected == null);
             hide.setText(selected != null && selected.isHidden() ? "Show in overlay" : "Hide in overlay");
         });
@@ -914,7 +942,7 @@ public final class AudioLibraryWindow {
         }
         run(() -> {
             for (AudioTrack track : tracks) {
-                engine.setEffectActive(track.getId(), false);
+                engine.stopEffectsForTrack(track.getId());
                 library.deleteTrack(track.getId());
             }
         }, "Could not delete the audio");

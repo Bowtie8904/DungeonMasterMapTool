@@ -658,6 +658,19 @@ same application. It must never be in the way of DMs who do not use it, and must
 - A category has a **colour** (`#RRGGBB`) and an **icon**. The icon is always tinted with the category colour, in
   the picker, the library window and the audio overlay.
 - **Sound effects have a colour and an icon too.** They are a flat list (no categories) and searchable by name.
+- Sound effects store a per-track `looping` flag in the global library, defaulting to true for new and existing
+  entries. Their library right-click menu offers a single checked **Looping** toggle, including multi-selection.
+  It is checked when every selected effect loops; toggling applies the chosen state to all selected effects.
+  Looping effects display a small repeat icon beside their name in the library; play-once effects and music do not.
+  Play-once effects are momentary buttons in both the overlay and local API, never selected. Every click or API
+  trigger starts an independent play from the beginning, allowing overlapping plays of the same effect.
+  They start immediately at their configured volume without fade-in, play to their end without preparing or
+  crossfading into a repetition, and stop immediately without fade-out when stopped or evicted at the limit.
+  `audio.effectFadeSeconds` applies only to looping effects; global mute still applies to all audio.
+  All running instances share the
+  effects pause/stop, volume, mute and `audio.maxEffects` limit; the oldest instance makes room at the limit.
+  Disabling looping on an active loop clears its selection and lets its current playback finish once without
+  restarting it. Enabling looping affects future triggers only; already-triggered one-shots still finish once.
 - The **icon picker** offers the **complete Material Design icon set** (all ~7400 icons of the bundled pack), not a
   short curated list, because a DM names categories anything from "Dragon" to "Submarine". It also includes custom
   illustrated mountain and cave icons, searchable alongside the bundled set. Its **suggested** icons favour
@@ -837,8 +850,8 @@ same application. It must never be in the way of DMs who do not use it, and must
   glow and contrasting icon so the active state is clearly visible. It is never saved in settings or projects.
   Starting an individual music track starts its category with that song first, then follows the normal playlist
   ordering and shuffle behavior.
-- **Effects channel:** any number of sound effects (capped by `audio.maxEffects`, default 32) play as **seamless
-  loops** at the same time. Starting and stopping an effect fades it in/out over
+- **Effects channel:** any number of sound effects (capped by `audio.maxEffects`, default 32) play at the same
+  time, as **seamless loops** by default or once when configured in the library. Starting and stopping a looping effect fades it in/out over
   `audio.effectFadeSeconds` so it never clicks.
   Repetitions use a preloaded second voice and an equal-power overlap (`audio.effectLoopCrossfadeSeconds`,
   default 0.5 s, capped at half the clip length) instead of native media repeat, masking restart gaps in ambience
@@ -850,9 +863,9 @@ same application. It must never be in the way of DMs who do not use it, and must
   `master x channel` (a logarithmic/perceptual curve, `volume^2.2`, so sliders feel linear). Pausing is per channel:
   pausing effects pauses **all** currently playing effects at once and resumes them together. The play/pause button
   in the status bar is the "everything" button instead: it pauses music **and** all running effects together, and
-  resumes only the currently active selections. Unselecting a category or effect stops it; no play/pause button
+  resumes only the currently active selections and paused one-shot instances. Unselecting a category or looping effect stops it; no play/pause button
   may reselect or restart a stopped entry, even when it was the last-used category. With nothing selected,
-  play/pause does nothing. Paused selections remain selected and resume normally.
+  and no one-shots running, play/pause does nothing. Paused selections remain selected and resume normally.
 - **Mute:** the mute button in the overlay fades everything to silence over `audio.panicFadeSeconds` and keeps the
   current playlist position; pressing it again fades back in. There is no global mute hotkey.
 - Audio is DM-side only: it is never sent to the player view and is independent of freeze, maps and projects.

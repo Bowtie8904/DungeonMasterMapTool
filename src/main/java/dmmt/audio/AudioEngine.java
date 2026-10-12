@@ -10,7 +10,7 @@ import java.util.Random;
 import java.util.function.Consumer;
 
 /**
- * Plays one music category and any number of looping sound effects on top of it (3.35.4).
+ * Plays one music category and any number of looping or play-once sound effects on top of it (3.35.4).
  * <p>
  * Everything about playback lives here: the shuffled category playlist, the preloaded equal-power crossfades of
  * music transitions and effect repetitions (one shared {@link VoiceChain} mechanism),
@@ -57,6 +57,8 @@ public class AudioEngine {
     private boolean panic;
 
     private final Map<String, VoiceChain> effects = new LinkedHashMap<>();
+    /** Every running effect instance in start order, including unselected, overlapping one-shots. */
+    private final List<VoiceChain> effectInstances = new ArrayList<>();
     /** Voices that are fading out and get disposed once they are silent. */
     private final List<Voice> stopping = new ArrayList<>();
     /** Global fade factor of the panic mute, 1 = normal, 0 = silent. */
@@ -145,6 +147,7 @@ public class AudioEngine {
         private Voice prepared;
         private Voice outgoing;
         private LoopCrossfade blend;
+        private boolean effectLooping = true;
 
         VoiceChain(Voice current) {
             this.current = current;
@@ -282,7 +285,7 @@ public class AudioEngine {
         if (fadingOut != null) {
             voices.add(fadingOut);
         }
-        effects.values().forEach(effect -> voices.addAll(effect.voices()));
+        effectInstances.forEach(effect -> voices.addAll(effect.voices()));
         voices.addAll(stopping);
         return voices;
     }
@@ -760,9 +763,18 @@ public class AudioEngine {
 
     // ---- Sound effects ----
 
-    /** Ids of the effects that are currently running, in the order they were started. */
+    /** Ids of selected looping effects, in the order they were started. */
     public List<String> activeEffects() {
         return List.copyOf(effects.keySet());
+    }
+
+    /** Track ids of all running instances, including duplicate one-shots. */
+    public List<String> runningEffects() {
+        return effectInstances.stream().map(effect -> effect.current.trackId).toList();
+    }
+
+    public boolean hasRunningEffects() {
+        return !effectInstances.isEmpty();
     }
 
     public boolean isEffectActive(String trackId) {
@@ -773,38 +785,50 @@ public class AudioEngine {
         return effectsPaused;
     }
 
-    /** Starts or stops one looping sound effect with a fade. */
+    /** Starts a looping selection with a fade or triggers an unfaded one-shot; stops looping selections. */
     public void setEffectActive(String trackId, boolean active) {
         if (trackId == null) {
             return;
         }
         if (!active) {
-            stopEffect(effects.remove(trackId), effectFadeSeconds);
+            VoiceChain effect = effects.get(trackId);
+            if (effect != null) {
+                removeEffect(effect);
+                stopEffect(effect, effectFadeSeconds);
+            }
             fireChanged();
             return;
         }
-        if (effects.containsKey(trackId)) {
-            return;
-        }
+        refreshEffectLooping();
         Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
         if (track.isEmpty()) {
             return;
         }
-        if (effects.size() >= maxEffects) {
+        if (track.get().isLooping() && effects.containsKey(trackId)) {
+            return;
+        }
+        if (effectInstances.size() >= maxEffects) {
             // Oldest effect makes room, so the cap can never be exceeded on low-end hardware.
-            String oldest = effects.keySet().iterator().next();
-            stopEffect(effects.remove(oldest), effectFadeSeconds);
+            VoiceChain oldest = effectInstances.getFirst();
+            removeEffect(oldest);
+            stopEffect(oldest, effectFadeSeconds);
         }
         AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
         AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
             return;
         }
-        Voice voice = new Voice(handle, trackId, source, false, 0);
-        voice.fadeTo(1, effectFadeSeconds);
+        Voice voice = new Voice(handle, trackId, source, false, track.get().isLooping() ? 0 : 1);
+        if (track.get().isLooping()) {
+            voice.fadeTo(1, effectFadeSeconds);
+        }
         handle.setVolume(voiceVolume(voice));
         VoiceChain effect = new VoiceChain(voice);
-        effects.put(trackId, effect);
+        effect.effectLooping = track.get().isLooping();
+        effectInstances.add(effect);
+        if (effect.effectLooping) {
+            effects.put(trackId, effect);
+        }
         prepareEffect(effect);
         voice.setOnEnd(() -> effectEnded(effect, voice));
         if (!effectsPaused) {
@@ -814,11 +838,52 @@ public class AudioEngine {
     }
 
     private void prepareEffect(VoiceChain effect) {
-        effect.prepared = openPrepared(effect.current.trackId, false);
+        if (effect.effectLooping) {
+            effect.prepared = openPrepared(effect.current.trackId, false);
+        }
+    }
+
+    private void removeEffect(VoiceChain effect) {
+        effects.remove(effect.current.trackId, effect);
+        effectInstances.remove(effect);
+    }
+
+    /** Applies library playback preferences without restarting active effects, including paused ones. */
+    public void refreshEffectLooping() {
+        boolean changed = false;
+        for (VoiceChain effect : effectInstances) {
+            changed |= syncEffectLooping(effect);
+        }
+        if (changed) {
+            fireChanged();
+        }
+    }
+
+    private boolean syncEffectLooping(VoiceChain effect) {
+        if (!effect.effectLooping
+                || library.track(effect.current.trackId).map(AudioTrack::isLooping).orElse(false)) {
+            return false;
+        }
+        effect.effectLooping = false;
+        effects.remove(effect.current.trackId, effect);
+        disposeVoice(effect.prepared);
+        effect.prepared = null;
+        finishBlend(effect);
+        effect.current.gain = 1;
+        effect.current.targetGain = 1;
+        effect.current.handle.setVolume(voiceVolume(effect.current));
+        return true;
     }
 
     private void effectEnded(VoiceChain effect, Voice ended) {
-        if (effects.get(ended.trackId) != effect || effect.current != ended || effectsPaused) {
+        if (!effectInstances.contains(effect) || effect.current != ended || effectsPaused) {
+            return;
+        }
+        syncEffectLooping(effect);
+        if (!effect.effectLooping) {
+            removeEffect(effect);
+            stopEffect(effect, 0);
+            fireChanged();
             return;
         }
         // End events are a fallback for unknown durations or a delayed UI tick.
@@ -828,7 +893,7 @@ public class AudioEngine {
         }
         if (effect.prepared == null) {
             System.err.println("Could not repeat sound effect " + ended.trackId);
-            effects.remove(ended.trackId);
+            removeEffect(effect);
             stopEffect(effect, 0);
             fireChanged();
             return;
@@ -838,6 +903,10 @@ public class AudioEngine {
     }
 
     private void stepEffect(VoiceChain effect, double delta) {
+        if (!effect.effectLooping) {
+            step(effect.current, delta);
+            return;
+        }
         if (stepChain(effect, delta)) {
             prepareEffect(effect);
             return;
@@ -853,12 +922,24 @@ public class AudioEngine {
             return;
         }
         disposeVoice(effect.prepared);
-        stopVoice(effect.current, effectsPaused ? 0 : fadeSeconds);
-        stopVoice(effect.outgoing, effectsPaused ? 0 : fadeSeconds);
+        double duration = effectsPaused || !effect.effectLooping ? 0 : fadeSeconds;
+        stopVoice(effect.current, duration);
+        stopVoice(effect.outgoing, duration);
     }
 
     public void toggleEffect(String trackId) {
         setEffectActive(trackId, !isEffectActive(trackId));
+    }
+
+    /** Releases all instances of a removed library track, including unselected one-shots. */
+    public void stopEffectsForTrack(String trackId) {
+        for (VoiceChain effect : List.copyOf(effectInstances)) {
+            if (effect.current.trackId.equals(trackId)) {
+                removeEffect(effect);
+                stopEffect(effect, 0);
+            }
+        }
+        fireChanged();
     }
 
     /**
@@ -867,7 +948,7 @@ public class AudioEngine {
      */
     public void toggleAll() {
         boolean musicRunning = isMusicPlaying();
-        boolean effectsRunning = !effects.isEmpty() && !effectsPaused;
+        boolean effectsRunning = hasRunningEffects() && !effectsPaused;
         if (musicRunning || effectsRunning) {
             if (musicRunning) {
                 toggleMusic();
@@ -880,7 +961,7 @@ public class AudioEngine {
         if (music != null) {
             toggleMusic();
         }
-        if (!effects.isEmpty()) {
+        if (hasRunningEffects()) {
             setEffectsPaused(false);
         }
     }
@@ -892,9 +973,9 @@ public class AudioEngine {
         }
         effectsPaused = paused;
         if (!paused) {
-            effects.values().forEach(VoiceChain::resumeBlend);
+            effectInstances.forEach(VoiceChain::resumeBlend);
         }
-        effects.values().stream().flatMap(effect -> effect.outgoing == null
+        effectInstances.stream().flatMap(effect -> effect.outgoing == null
                         ? java.util.stream.Stream.of(effect.current)
                         : java.util.stream.Stream.of(effect.current, effect.outgoing))
                 .forEach(voice -> {
@@ -908,7 +989,8 @@ public class AudioEngine {
     }
 
     public void stopAllEffects() {
-        effects.values().forEach(effect -> stopEffect(effect, effectFadeSeconds));
+        effectInstances.forEach(effect -> stopEffect(effect, effectFadeSeconds));
+        effectInstances.clear();
         effects.clear();
         fireChanged();
     }
@@ -940,7 +1022,7 @@ public class AudioEngine {
      * fading out after a manual switch. Otherwise the slower readout cadence is enough.
      */
     public boolean needsSmoothUpdates() {
-        boolean effectsRunning = !effects.isEmpty() && !effectsPaused;
+        boolean effectsRunning = hasRunningEffects() && !effectsPaused;
         boolean musicBlending = music != null && !musicPaused
                 && (music.prepared != null || music.outgoing != null || fadingOut != null);
         return effectsRunning || musicBlending;
@@ -965,7 +1047,8 @@ public class AudioEngine {
             }
         }
         if (!effectsPaused) {
-            for (VoiceChain effect : List.copyOf(effects.values())) {
+            refreshEffectLooping();
+            for (VoiceChain effect : List.copyOf(effectInstances)) {
                 stepEffect(effect, delta);
             }
         }
@@ -1050,7 +1133,8 @@ public class AudioEngine {
         releaseMusic(0);
         stopVoice(fadingOut, 0);
         fadingOut = null;
-        effects.values().forEach(effect -> stopEffect(effect, 0));
+        effectInstances.forEach(effect -> stopEffect(effect, 0));
+        effectInstances.clear();
         effects.clear();
         stopping.forEach(Voice::dispose);
         stopping.clear();

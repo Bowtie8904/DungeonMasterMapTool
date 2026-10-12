@@ -626,6 +626,172 @@ class AudioControlsTest {
         });
     }
 
+    @Test
+    void effectPlaybackContextMenuSupportsSavedModesAndMultipleSelection() throws Exception {
+        AudioLibraryService library = library();
+        AudioTrack first = library.effects().getFirst();
+        AudioTrack second = library.importFile(file("thunder.wav"), AudioKind.EFFECT, null);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            AudioLibraryWindow.show(null, library, audio.engine(), new AppSettings(dir.resolve("settings.ini")),
+                    audio::refreshLibraryChoices);
+            Stage stage = (Stage) Window.getWindows().stream()
+                    .filter(window -> window instanceof Stage s && s.getTitle().equals("Audio library"))
+                    .findFirst().orElseThrow();
+            try {
+                ListView<?> effects = stage.getScene().getRoot().lookupAll(".list-view").stream()
+                        .filter(node -> node instanceof ListView<?> list && list.getItems().size() == 1)
+                        .map(node -> (ListView<?>) node).findFirst().orElseThrow();
+                effects.getSelectionModel().select(0);
+                TableView<?> table = (TableView<?>) stage.getScene().lookup(".table-view");
+                javafx.scene.control.CheckMenuItem loop = (javafx.scene.control.CheckMenuItem)
+                        table.getContextMenu().getItems().stream()
+                                .filter(item -> "Looping".equals(item.getText())).findFirst().orElseThrow();
+                table.getSelectionModel().select(table.getItems().indexOf(first));
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertTrue(loop.isVisible());
+                assertTrue(loop.isSelected());
+                stage.getScene().getRoot().applyCss();
+                stage.getScene().getRoot().layout();
+                assertEquals(2, table.lookupAll(".audio-effect-looping").size());
+                loop.setSelected(false);
+                loop.fire();
+                assertFalse(first.isLooping());
+                assertTrue(second.isLooping());
+                stage.getScene().getRoot().applyCss();
+                stage.getScene().getRoot().layout();
+                assertEquals(1, table.lookupAll(".audio-effect-looping").size());
+                table.getSelectionModel().selectAll();
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertFalse(loop.isSelected(), "mixed selections are unchecked");
+                loop.setSelected(true);
+                loop.fire();
+                assertTrue(library.effects().stream().allMatch(AudioTrack::isLooping));
+                table.getSelectionModel().selectAll();
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertTrue(loop.isSelected());
+                loop.setSelected(false);
+                loop.fire();
+                assertFalse(first.isLooping());
+                assertFalse(second.isLooping());
+                stage.getScene().getRoot().applyCss();
+                stage.getScene().getRoot().layout();
+                assertTrue(table.lookupAll(".audio-effect-looping").isEmpty());
+                AudioLibraryService reloaded = new AudioLibraryService(dir.resolve("audio"));
+                assertTrue(reloaded.effects().stream().noneMatch(AudioTrack::isLooping));
+                table.getSelectionModel().selectAll();
+                loop.setSelected(true);
+                loop.fire();
+                assertTrue(library.effects().stream().allMatch(AudioTrack::isLooping));
+                ListView<?> categories = stage.getScene().getRoot().lookupAll(".list-view").stream()
+                        .filter(node -> node instanceof ListView<?> list
+                                && list.getItems().size() == library.categories().size())
+                        .map(node -> (ListView<?>) node).findFirst().orElseThrow();
+                categories.getSelectionModel().select(library.categories().indexOf(
+                        library.categoryByName("Combat").orElseThrow()));
+                stage.getScene().getRoot().applyCss();
+                stage.getScene().getRoot().layout();
+                assertTrue(table.lookupAll(".audio-effect-looping").isEmpty(), "music has no loop indicator");
+                table.getContextMenu().getOnShowing().handle(new javafx.stage.WindowEvent(
+                        table.getContextMenu(), javafx.stage.WindowEvent.WINDOW_SHOWING));
+                assertFalse(loop.isVisible(), "the looping preference applies only to effects");
+            } finally {
+                stage.close();
+                audio.shutdown();
+            }
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void oneShotButtonsNeverSelectAndEachApiCallLayersAnotherPlay(boolean hidden) throws Exception {
+        AudioLibraryService library = library();
+        AudioTrack track = library.effects().getFirst();
+        library.setEffectLooping(track.getId(), false);
+        library.setTrackHidden(track.getId(), hidden);
+        onFx(() -> {
+            FakeAudioOutput output = new FakeAudioOutput();
+            AudioControls audio = new AudioControls(new AppSettings(dir.resolve("settings.ini")), () -> null,
+                    library, output);
+            try {
+                String id = "audio.effect." + track.getId();
+                Button trigger = (Button) audio.apiControls().get(id);
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                api.replaceGroup("audio", audio.apiControls());
+                assertEquals("button", api.describe(List.of(id)).getFirst().get("type"));
+                trigger.fire();
+                assertFalse(audio.engine().isEffectActive(track.getId()));
+                api.execute(id, Map.of());
+                assertEquals(2, audio.engine().runningEffects().size());
+                assertFalse(audio.engine().isEffectActive(track.getId()));
+                assertEquals(false, api.describe(List.of("audio.effectsPause")).getFirst().get("disabled"));
+                api.execute("audio.effectsPause", Map.of());
+                assertTrue(audio.engine().areEffectsPaused());
+                api.execute("audio.effectsPause", Map.of());
+                assertFalse(audio.engine().areEffectsPaused());
+                output.finishFirstPlayingVoice();
+                assertFalse(audio.engine().isEffectActive(track.getId()));
+                assertEquals(1, audio.engine().runningEffects().size());
+                output.finishFirstPlayingVoice();
+                assertFalse(audio.engine().hasRunningEffects());
+                audio.engine().toggleAll();
+                assertFalse(audio.engine().hasRunningEffects(), "global play must not retrigger completed effects");
+                api.execute(id, Map.of());
+                assertEquals(1, audio.engine().runningEffects().size());
+                assertEquals(false, api.describe(List.of("audio.effectsStop")).getFirst().get("disabled"));
+                api.execute("audio.effectsStop", Map.of());
+                assertFalse(audio.engine().hasRunningEffects());
+                assertEquals(true, api.describe(List.of("audio.effectsStop")).getFirst().get("disabled"));
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void changingLoopPreferenceRebuildsApiControlTypeWithoutInterruptingCurrentPlayback(boolean hidden)
+            throws Exception {
+        AudioLibraryService library = library();
+        AudioTrack track = library.effects().getFirst();
+        library.setTrackHidden(track.getId(), hidden);
+        onFx(() -> {
+            AudioControls audio = controls(library);
+            try {
+                String id = "audio.effect." + track.getId();
+                DmControlApi api = new DmControlApi(new ControlVisibility());
+                audio.setApiControlsChangedHandler(() -> api.replaceGroup("audio", audio.apiControls()));
+                api.replaceGroup("audio", audio.apiControls());
+                api.execute(id, Map.of());
+                assertTrue(audio.engine().isEffectActive(track.getId()));
+                library.setEffectLooping(track.getId(), false);
+                audio.refreshLibraryChoices();
+                assertEquals("button", api.describe(List.of(id)).getFirst().get("type"));
+                assertFalse(api.describe(List.of(id)).getFirst().containsKey("value"));
+                assertFalse(audio.engine().isEffectActive(track.getId()));
+                assertEquals(1, audio.engine().runningEffects().size(), "old loop finishes once");
+                api.execute(id, Map.of());
+                assertEquals(2, audio.engine().runningEffects().size());
+                library.setEffectLooping(track.getId(), true);
+                audio.refreshLibraryChoices();
+                assertEquals("toggle", api.describe(List.of(id)).getFirst().get("type"));
+                assertEquals(false, api.describe(List.of(id)).getFirst().get("value"));
+                assertEquals(2, audio.engine().runningEffects().size(), "existing one-shots stay unselected");
+                api.execute(id, Map.of());
+                assertEquals(true, api.describe(List.of(id)).getFirst().get("value"));
+                assertEquals(3, audio.engine().runningEffects().size());
+                api.execute(id, Map.of());
+                assertEquals(2, audio.engine().runningEffects().size(),
+                        "unselecting the loop does not cancel older one-shots");
+            } finally {
+                audio.shutdown();
+            }
+        });
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void categoryHighlightsFollowPlaybackWithoutOpeningTheOverlay(boolean hidden) throws Exception {
@@ -787,7 +953,7 @@ class AudioControlsTest {
             // Discovery must name the category, not repeat its UUID, so a control device can offer a pick list.
             var described = controlApi.describe(List.of("audio.category." + combatId));
             assertEquals("Combat", described.getFirst().get("label"));
-            ToggleButton effect = audio.overlay().effectButtons().get(library.effects().get(0).getId());
+            var effect = audio.overlay().effectButtons().get(library.effects().get(0).getId());
             assertNotNull(effect.getContextMenu());
             assertEquals(onScreen.getContextMenu().getItems().size(), effect.getContextMenu().getItems().size());
 
