@@ -210,11 +210,20 @@ public class DungeonMasterMapToolApplication extends Application {
     private Canvas dmAmbientCanvas;
     private Canvas playerAmbientCanvas;
     private Canvas dmCanvas;
+    private Canvas dmWeatherCanvas;
+    private Canvas dmLightningCanvas;
+    private Canvas dmForegroundCanvas;
+    private Canvas dmFogMaskCanvas;
     private Canvas dmFogCanvas;
     private Canvas playerCanvas;
+    private Canvas playerWeatherCanvas;
+    private Canvas playerLightningCanvas;
+    private Canvas playerForegroundCanvas;
+    private Canvas playerFogMaskCanvas;
     private Canvas playerFogCanvas;
     private Stage playerStage;
     private PlayerViewTransition playerTransition;
+    private CanvasMapRenderer lastPlayerLayerRenderer;
     private Label statusLabel;
     private Label playerOutputLabel;
     private javafx.scene.control.Tooltip statusTooltip;
@@ -477,11 +486,23 @@ public class DungeonMasterMapToolApplication extends Application {
         dmAmbientCanvas.setMouseTransparent(true);
         dmAmbientCanvas.setBlendMode(BlendMode.MULTIPLY);
         dmCanvas = new Canvas(1280, 800);
+        dmWeatherCanvas = new Canvas(1280, 800);
+        dmLightningCanvas = new Canvas(1280, 800);
+        dmForegroundCanvas = new Canvas(1280, 800);
+        dmFogMaskCanvas = new Canvas(1280, 800);
+        dmFogMaskCanvas.setMouseTransparent(true);
         dmFogCanvas = new Canvas(1280, 800);
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas, dmFogCanvas, textEditor.node());
+        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas,
+                dmLightningCanvas, dmWeatherCanvas, dmForegroundCanvas,
+                dmFogMaskCanvas, dmFogCanvas, textEditor.node());
+        for (Canvas layer : List.of(dmWeatherCanvas, dmLightningCanvas, dmForegroundCanvas)) {
+            layer.setMouseTransparent(true);
+            layer.widthProperty().bind(center.widthProperty());
+            layer.heightProperty().bind(center.heightProperty());
+        }
         center.setMinSize(0, 0);
         mapCenter = center;
         Region controls = createControlsPanel(stage);
@@ -512,6 +533,8 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.heightProperty().bind(center.heightProperty());
         dmCanvas.widthProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
         dmCanvas.heightProperty().addListener((obs, oldValue, newValue) -> positionBrushSizeLabel());
+        dmFogMaskCanvas.widthProperty().bind(center.widthProperty());
+        dmFogMaskCanvas.heightProperty().bind(center.heightProperty());
         dmFogCanvas.widthProperty().bind(center.widthProperty());
         dmFogCanvas.heightProperty().bind(center.heightProperty());
         root.setCenter(center);
@@ -806,9 +829,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 FrameProfiler.lap("light engine", section);
                 renderDm();
-                section = FrameProfiler.start();
-                renderPlayer();
-                FrameProfiler.lap("player total", section);
+                FrameProfiler.measure("player overhead", () -> renderPlayer());
                 recordFrame(System.nanoTime() - frameStart, now, fps);
             }
         };
@@ -835,20 +856,21 @@ public class DungeonMasterMapToolApplication extends Application {
         List<Map.Entry<String, Long>> sections = metricsSectionNanos.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed()).toList();
         StringBuilder top = new StringBuilder();
-        StringBuilder detail = new StringBuilder("Average time per frame by part (ms):");
+        StringBuilder detail = new StringBuilder("Exclusive application-thread elapsed time per frame (ms; not GPU time):");
         for (int i = 0; i < sections.size(); i++) {
             Map.Entry<String, Long> entry = sections.get(i);
             String ms = String.format(Locale.ROOT, "%.1f", entry.getValue() / 1e6 / frames);
             detail.append("\n").append(entry.getKey()).append(": ").append(ms);
-            if (i < 2 && !entry.getKey().equals("player total")) {
+            if (i < 2) {
                 top.append(top.length() == 0 ? "" : ", ").append(entry.getKey()).append(' ').append(ms);
             }
         }
-        detail.append("\n\n'player total' includes the player parts listed above it. 'base redraw' only appears when the map image layer had to be redrawn.");
+        detail.append("\n\n'base redraw' only appears when the map image layer had to be redrawn.");
         metricsLabel.setText(String.format(Locale.ROOT, "%.0f/%d fps | %.1f ms average (max %.1f) | %d/%d MB | %s",
                 metricsFrames * 1e9 / elapsed, targetFramesPerSecond,
                         metricsNanosSum / 1e6 / metricsFrames, metricsNanosMax / 1e6, usedMb, allocatedMb, top));
-        metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | heap in use/allocated | slowest parts\n\n" + detail);
+        metricsTooltip.setText("Frames per second (actual/limit) | average and worst frame time | heap in use/allocated | slowest parts\n"
+                + "Render-part timings are exclusive application-thread elapsed time, not GPU timings.\n\n" + detail);
         metricsSectionNanos.clear();
         metricsWindowStart = nowNanos;
         metricsFrames = 0;
@@ -3407,6 +3429,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         playerBaseCanvas = new Canvas(1280, 720);
+        lastPlayerLayerRenderer = null;
         playerBaseCanvas.setMouseTransparent(true);
         playerBaseState = new CanvasMapRenderer.BaseLayerState();
         playerBrightCoreCanvas = new Canvas(1280, 720);
@@ -3416,9 +3439,21 @@ public class DungeonMasterMapToolApplication extends Application {
         playerAmbientCanvas.setMouseTransparent(true);
         playerAmbientCanvas.setBlendMode(BlendMode.MULTIPLY);
         playerCanvas = new Canvas(1280, 720);
+        playerWeatherCanvas = new Canvas(1280, 720);
+        playerLightningCanvas = new Canvas(1280, 720);
+        playerForegroundCanvas = new Canvas(1280, 720);
+        playerFogMaskCanvas = new Canvas(1280, 720);
+        playerFogMaskCanvas.setMouseTransparent(true);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerAmbientCanvas, playerCanvas, playerFogCanvas);
+        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerAmbientCanvas,
+                playerCanvas, playerLightningCanvas, playerWeatherCanvas, playerForegroundCanvas,
+                playerFogMaskCanvas, playerFogCanvas);
+        for (Canvas layer : List.of(playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
+            layer.setMouseTransparent(true);
+            layer.widthProperty().bind(root.widthProperty());
+            layer.heightProperty().bind(root.heightProperty());
+        }
         playerBaseCanvas.widthProperty().bind(root.widthProperty());
         playerBaseCanvas.heightProperty().bind(root.heightProperty());
         playerBrightCoreCanvas.widthProperty().bind(root.widthProperty());
@@ -3427,6 +3462,8 @@ public class DungeonMasterMapToolApplication extends Application {
         playerAmbientCanvas.heightProperty().bind(root.heightProperty());
         playerCanvas.widthProperty().bind(root.widthProperty());
         playerCanvas.heightProperty().bind(root.heightProperty());
+        playerFogMaskCanvas.widthProperty().bind(root.widthProperty());
+        playerFogMaskCanvas.heightProperty().bind(root.heightProperty());
         playerFogCanvas.widthProperty().bind(root.widthProperty());
         playerFogCanvas.heightProperty().bind(root.heightProperty());
         playerTransition = new PlayerViewTransition(root);
@@ -3444,9 +3481,13 @@ public class DungeonMasterMapToolApplication extends Application {
             playerTransition = null;
             playerStage = null;
             playerCanvas = null;
+            playerWeatherCanvas = null;
+            playerLightningCanvas = null;
+            playerForegroundCanvas = null;
             playerBaseCanvas = null;
             playerBrightCoreCanvas = null;
             playerAmbientCanvas = null;
+            playerFogMaskCanvas = null;
             playerFogCanvas = null;
             syncPlayerWindowToggle();
             updatePlayerOutputStatus();
@@ -3489,9 +3530,13 @@ public class DungeonMasterMapToolApplication extends Application {
             playerStage.close();
             playerStage = null;
             playerCanvas = null;
+            playerWeatherCanvas = null;
+            playerLightningCanvas = null;
+            playerForegroundCanvas = null;
             playerBaseCanvas = null;
             playerBrightCoreCanvas = null;
             playerAmbientCanvas = null;
+            playerFogMaskCanvas = null;
             playerFogCanvas = null;
         }
         syncPlayerWindowToggle();
@@ -3530,29 +3575,37 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
+        long section = FrameProfiler.start();
         renderer.renderBrightCore(dmBrightCoreCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
                 dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        FrameProfiler.lap("dm bright-core", section);
+        section = FrameProfiler.start();
         renderer.renderAmbientLight(dmAmbientCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
                 dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        FrameProfiler.lap("dm ambient/light-map", section);
         GraphicsContext gc = dmCanvas.getGraphicsContext2D();
-        renderer.render(
-                gc,
+        renderer.renderEffectsLayer(gc, project, dmCanvas.getWidth(), dmCanvas.getHeight(),
+                project.getViews().getDmCamera(), false);
+        section = FrameProfiler.start();
+        renderer.renderWeatherLayer(dmWeatherCanvas, dmLightningCanvas, project,
+                dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        FrameProfiler.lap("dm weather", section);
+        renderer.renderForegroundLayer(dmForegroundCanvas.getGraphicsContext2D(), project,
+                dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        section = FrameProfiler.start();
+        renderer.renderFogMaskLayer(
+                dmFogMaskCanvas.getGraphicsContext2D(),
                 project,
-                projectFile,
-                dmCanvas.getWidth(),
-                dmCanvas.getHeight(),
+                dmFogMaskCanvas.getWidth(),
+                dmFogMaskCanvas.getHeight(),
                 project.getViews().getDmCamera(),
-                false,
-                getPlayerViewportRect()
+                false
         );
+        FrameProfiler.lap("dm fog", section);
         GraphicsContext fogGc = dmFogCanvas.getGraphicsContext2D();
-        renderer.renderFogLayer(
-                fogGc,
-                project,
-                dmFogCanvas.getWidth(),
-                dmFogCanvas.getHeight(),
-                project.getViews().getDmCamera(),
-                false,
+        renderer.renderFogOverlayLayer(
+                fogGc, project, dmFogCanvas.getWidth(), dmFogCanvas.getHeight(),
+                project.getViews().getDmCamera(), false,
                 getPlayerViewportRect(),
                 selectedLight == null ? null : selectedLight.getId(),
                 hoveredInteractableId()
@@ -3580,6 +3633,12 @@ public class DungeonMasterMapToolApplication extends Application {
         GraphicsContext gc = playerCanvas.getGraphicsContext2D();
         if (handoutWindow != null && handoutWindow.isShownToPlayers()) {
             playerTransition.cancel();
+            renderer.invalidatePlayerLayerCaches();
+            playerRenderer.invalidatePlayerLayerCaches();
+            for (Canvas layer : List.of(playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
+                layer.getGraphicsContext2D().clearRect(0, 0, layer.getWidth(), layer.getHeight());
+            }
+            playerFogMaskCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogMaskCanvas.getWidth(), playerFogMaskCanvas.getHeight());
             playerFogCanvas.getGraphicsContext2D().clearRect(0, 0, playerFogCanvas.getWidth(), playerFogCanvas.getHeight());
             playerBrightCoreCanvas.getGraphicsContext2D().clearRect(0, 0, playerBrightCoreCanvas.getWidth(), playerBrightCoreCanvas.getHeight());
             playerAmbientCanvas.getGraphicsContext2D().clearRect(0, 0, playerAmbientCanvas.getWidth(), playerAmbientCanvas.getHeight());
@@ -3592,36 +3651,45 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean frozen = frozenPlayerProject != null;
         DmProject shown = frozen ? frozenPlayerProject : project;
         CanvasMapRenderer playerView = frozen ? playerRenderer : renderer;
+        if (lastPlayerLayerRenderer != playerView) {
+            playerView.invalidatePlayerLayerCaches();
+            lastPlayerLayerRenderer = playerView;
+        }
         playerView.beginWeatherFrame();
         playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
                         ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
+        long section = FrameProfiler.start();
         playerView.renderBrightCore(playerBrightCoreCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
                 playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
+        FrameProfiler.lap("player bright-core", section);
+        section = FrameProfiler.start();
         playerView.renderAmbientLight(playerAmbientCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
                 playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
-        playerView.render(
-                gc,
+        FrameProfiler.lap("player ambient/light-map", section);
+        playerView.renderEffectsLayer(gc, shown, playerCanvas.getWidth(), playerCanvas.getHeight(),
+                getEffectivePlayerCamera(), true);
+        section = FrameProfiler.start();
+        playerView.renderWeatherLayer(playerWeatherCanvas, playerLightningCanvas, shown,
+                playerCanvas.getWidth(), playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
+        FrameProfiler.lap("player weather", section);
+        playerView.renderForegroundLayer(playerForegroundCanvas.getGraphicsContext2D(), shown,
+                playerCanvas.getWidth(), playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
+        section = FrameProfiler.start();
+        playerView.renderFogMaskLayer(
+                playerFogMaskCanvas.getGraphicsContext2D(),
                 shown,
-                frozen ? frozenPlayerProjectFile : projectFile,
-                playerCanvas.getWidth(),
-                playerCanvas.getHeight(),
+                playerFogMaskCanvas.getWidth(),
+                playerFogMaskCanvas.getHeight(),
                 getEffectivePlayerCamera(),
-                true,
-                null
+                true
         );
-        playerView.renderFogLayer(
-                playerFogCanvas.getGraphicsContext2D(),
-                shown,
-                playerFogCanvas.getWidth(),
-                playerFogCanvas.getHeight(),
-                getEffectivePlayerCamera(),
-                true,
-                null,
-                null,
-                null
-        );
+        FrameProfiler.lap("player fog", section);
+        playerView.renderFogOverlayLayer(
+                playerFogCanvas.getGraphicsContext2D(), shown,
+                playerFogCanvas.getWidth(), playerFogCanvas.getHeight(),
+                getEffectivePlayerCamera(), true, null, null, null);
         if (!frozen) {
             drawLaser(playerFogCanvas.getGraphicsContext2D(), playerFogCanvas, getEffectivePlayerCamera(),
                     Math.max(Tuning.LASER_PLAYER_DOT_MIN.get(), Tuning.LASER_PLAYER_DOT_INCHES.get() * playerPixelsPerInch()));

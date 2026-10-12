@@ -456,6 +456,9 @@ class ContextualBrushSizeTest {
         set(app, "dmBaseCanvas", new Canvas(400, 300));
         set(app, "dmBrightCoreCanvas", new Canvas(400, 300));
         set(app, "dmAmbientCanvas", new Canvas(400, 300));
+        for (String field : new String[]{"dmWeatherCanvas", "dmLightningCanvas", "dmForegroundCanvas", "dmFogMaskCanvas"}) {
+            set(app, field, new Canvas(400, 300));
+        }
         Canvas fogCanvas = new Canvas(400, 300);
         fogCanvas.setMouseTransparent(true);
         set(app, "dmFogCanvas", fogCanvas);

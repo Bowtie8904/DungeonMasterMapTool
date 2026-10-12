@@ -14,6 +14,7 @@ import dmmt.service.FogService;
 import dmmt.service.Tuning;
 import dmmt.ui.Icons;
 import javafx.geometry.VPos;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -26,6 +27,9 @@ import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
+import javafx.scene.shape.ClosePath;
+import javafx.scene.shape.LineTo;
+import javafx.scene.shape.MoveTo;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -163,6 +167,16 @@ public class CanvasMapRenderer {
     private final LightingEngine lightingEngine;
     private final LightBuffer dmLightBuffer = new LightBuffer();
     private final LightBuffer playerLightBuffer = new LightBuffer();
+    private final LayerCache dmBrightCoreCache = new LayerCache();
+    private final LayerCache playerBrightCoreCache = new LayerCache();
+    private final LayerCache dmAmbientCache = new LayerCache();
+    private final LayerCache playerAmbientCache = new LayerCache();
+    private final FogLayerCache dmFogCache = new FogLayerCache();
+    private final FogLayerCache playerFogCache = new FogLayerCache();
+    private final WeatherLayerCache dmWeatherCache = new WeatherLayerCache();
+    private final WeatherLayerCache playerWeatherCache = new WeatherLayerCache();
+    private final LayerCache dmFlashCache = new LayerCache();
+    private final LayerCache playerFlashCache = new LayerCache();
 
     private WritableImage fogImage;
     private FogMask fogImageMask;
@@ -170,6 +184,7 @@ public class CanvasMapRenderer {
     private long fogImageLiveVersion = -1;
     private int fogImageFactor = 1;
     private int fogImageRadius;
+    private long fogImageGeneration;
     private double fogImageOriginX;
     private double fogImageOriginY;
     private double fogImageCellSize;
@@ -200,6 +215,34 @@ public class CanvasMapRenderer {
 
     public CanvasMapRenderer(LightingEngine lightingEngine) {
         this.lightingEngine = lightingEngine;
+    }
+
+    long brightCoreRedrawCount(boolean playerMode) {
+        return (playerMode ? playerBrightCoreCache : dmBrightCoreCache).redraws;
+    }
+
+    long ambientRedrawCount(boolean playerMode) {
+        return (playerMode ? playerAmbientCache : dmAmbientCache).redraws;
+    }
+
+    long fogRedrawCount(boolean playerMode) {
+        return (playerMode ? playerFogCache : dmFogCache).redraws;
+    }
+
+    long weatherRedrawCount(boolean playerMode) {
+        return (playerMode ? playerWeatherCache : dmWeatherCache).redraws;
+    }
+
+    long outdoorClipBuildCount(boolean playerMode) {
+        return (playerMode ? playerWeatherCache : dmWeatherCache).clipBuilds;
+    }
+
+    public void invalidatePlayerLayerCaches() {
+        playerBrightCoreCache.valid = false;
+        playerAmbientCache.valid = false;
+        playerFogCache.valid = false;
+        playerWeatherCache.valid = false;
+        playerFlashCache.valid = false;
     }
 
     /** Remembers what a base canvas currently shows, so it is only redrawn when that changes. */
@@ -309,6 +352,16 @@ public class CanvasMapRenderer {
             boolean playerMode,
             WorldRect playerViewportWorld
     ) {
+        renderContent(gc, project, width, height, camera, playerMode, false);
+    }
+
+    public void renderEffectsLayer(GraphicsContext gc, DmProject project, double width, double height,
+                                   DmProject.CameraState camera, boolean playerMode) {
+        renderContent(gc, project, width, height, camera, playerMode, true);
+    }
+
+    private void renderContent(GraphicsContext gc, DmProject project, double width, double height,
+                               DmProject.CameraState camera, boolean playerMode, boolean separateWeather) {
         gc.clearRect(0, 0, width, height);
         if (project == null) {
             return;
@@ -325,8 +378,25 @@ public class CanvasMapRenderer {
             drawHiddenOverlayBadges(gc, project, width, height, camera);
         }
         t = FrameProfiler.lap(who + "effects", t);
-        drawWeather(gc, project, width, height, camera, playerMode);
-        t = FrameProfiler.lap(who + "weather", t);
+        if (!separateWeather) {
+            drawWeather(gc, project, width, height, camera, playerMode);
+            t = FrameProfiler.lap(who + "weather", t);
+            drawForeground(gc, project, width, height, camera, playerMode);
+        }
+    }
+
+    public void renderForegroundLayer(GraphicsContext gc, DmProject project, double width, double height,
+                                      DmProject.CameraState camera, boolean playerMode) {
+        gc.clearRect(0, 0, width, height);
+        if (project != null) {
+            drawForeground(gc, project, width, height, camera, playerMode);
+        }
+    }
+
+    private void drawForeground(GraphicsContext gc, DmProject project, double width, double height,
+                                DmProject.CameraState camera, boolean playerMode) {
+        String who = playerMode ? "player " : "dm ";
+        long t = FrameProfiler.start();
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
@@ -373,14 +443,78 @@ public class CanvasMapRenderer {
         }
     }
 
+    /** Retains the opaque fog image until the mask, fade, view, or displayed project changes. */
+    public void renderFogMaskLayer(GraphicsContext gc, DmProject project, double width, double height,
+                                   DmProject.CameraState camera, boolean playerMode) {
+        FogMask mask = project == null || project.getFog() == null ? null : project.getFog().getMask();
+        boolean enabled = project != null && project.getFog() != null && project.getFog().isEnabled();
+        if (enabled && mask != null) {
+            refreshFogImage(mask);
+        }
+        double opacity = playerMode ? 1.0 : Tuning.FOG_DM_OPACITY.get();
+        FogLayerKey key = new FogLayerKey(enabled, mask == null ? -1 : mask.getVersion(),
+                fogImageGeneration, width, height, camera.getX(), camera.getY(), camera.getZoom(),
+                opacity, fogDownsample(), fogSoftRadius(fogDownsample()), playerMode);
+        FogLayerCache cache = playerMode ? playerFogCache : dmFogCache;
+        if (cache.canvas != gc.getCanvas()) {
+            cache.canvas = gc.getCanvas();
+            cache.valid = false;
+        }
+        if (cache.matches(project, mask, key)) {
+            return;
+        }
+
+        gc.clearRect(0, 0, width, height);
+        if (project != null) {
+            drawFogImage(gc, project, width, height, camera, playerMode);
+        }
+        cache.update(project, mask, key);
+    }
+
+    /** Dynamic pings, tokens, badges and viewport affordances are kept above the retained fog image. */
+    public void renderFogOverlayLayer(GraphicsContext gc, DmProject project, double width, double height,
+                                      DmProject.CameraState camera, boolean playerMode,
+                                      WorldRect playerViewportWorld, String selectedLightId,
+                                      String hoveredInteractableId) {
+        gc.clearRect(0, 0, width, height);
+        if (project == null) {
+            return;
+        }
+        drawPings(gc, project, width, height, camera);
+        if (!playerMode) {
+            drawLightTokens(gc, project, width, height, camera, selectedLightId);
+            if (wallLayerVisible) {
+                drawInteractableBadges(gc, project.getInteractables(), width, height, camera, hoveredInteractableId);
+            }
+            if (playerViewportWorld != null) {
+                drawViewportRect(gc, playerViewportWorld, width, height, camera);
+            }
+        }
+    }
+
     private void drawWeather(GraphicsContext gc, DmProject project, double width, double height,
                              DmProject.CameraState camera, boolean playerMode) {
         DmProject.WeatherState weather = project.getWeather();
         WeatherType type = weather == null ? WeatherType.NONE : WeatherType.from(weather.getType());
-        if (type == WeatherType.NONE) {
-            return;
-        }
         double seconds = weatherSeconds();
+        drawWeatherFlash(gc, project, width, height, camera, playerMode, type, weather, seconds);
+        WeatherLayerCache cache = playerMode ? playerWeatherCache : dmWeatherCache;
+        if (!type.indoors() && type != WeatherType.NONE) {
+            updateOutdoorClip(cache, project, new OutdoorClipKey(lightingEngine.getIndoorLighting().version(),
+                    width, height, camera.getX(), camera.getY(), camera.getZoom()), width, height, camera);
+        }
+        gc.save();
+        if (!type.indoors() && type != WeatherType.NONE) {
+            applyOutdoorClip(gc, cache.clipPath);
+        }
+        WeatherEffects.draw(gc, type, weather == null ? 0 : weather.getIntensity(),
+                width, height, seconds, PerformanceMode.isEnabled());
+        gc.restore();
+    }
+
+    private void drawWeatherFlash(GraphicsContext gc, DmProject project, double width, double height,
+                                  DmProject.CameraState camera, boolean playerMode, WeatherType type,
+                                  DmProject.WeatherState weather, double seconds) {
         if (type == WeatherType.THUNDERSTORM) {
             double flash = WeatherEffects.lightningFlash(seconds, weather.getLightningIntervalSeconds());
             if (flash > 0) {
@@ -396,17 +530,87 @@ public class CanvasMapRenderer {
                 gc.restore();
             }
         }
-        gc.save();
-        if (!type.indoors()) {
-            clipOutdoorWeather(gc, width, height, camera);
-        }
-        WeatherEffects.draw(gc, type, weather.getIntensity(), width, height, seconds, PerformanceMode.isEnabled());
-        gc.restore();
     }
 
-    private void clipOutdoorWeather(GraphicsContext gc, double width, double height, DmProject.CameraState camera) {
-        gc.beginPath();
-        gc.rect(0, 0, width, height);
+    public void renderWeatherLayer(Canvas particlesCanvas, Canvas flashCanvas, DmProject project,
+                                   double width, double height, DmProject.CameraState camera, boolean playerMode) {
+        DmProject.WeatherState weather = project.getWeather();
+        WeatherType type = weather == null ? WeatherType.NONE : WeatherType.from(weather.getType());
+        double seconds = weatherSeconds();
+        GraphicsContext flashGc = flashCanvas.getGraphicsContext2D();
+        LayerCache flashCache = playerMode ? playerFlashCache : dmFlashCache;
+        flashCache.bind(flashCanvas);
+        double flash = type == WeatherType.THUNDERSTORM
+                ? WeatherEffects.lightningFlash(seconds, weather.getLightningIntervalSeconds()) : 0;
+        Object flashKey = null;
+        if (flash > 0) {
+            TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
+            double ambient = project.getLighting().ambientBrightnessFor(preset.name());
+            double darkness = preset.darkness(ambient) * (playerMode ? 1 : Tuning.DM_DARKNESS_FACTOR.get());
+            LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambient, darkness);
+            flashKey = new FlashLayerKey(composite.key(), flash, Tuning.WEATHER_FLASH_OPACITY.get());
+        }
+        if (!flashCache.matches(flashKey, flash > 0)) {
+            flashGc.clearRect(0, 0, width, height);
+            drawWeatherFlash(flashGc, project, width, height, camera, playerMode, type, weather, seconds);
+            flashCache.update(flashKey, flash > 0);
+        }
+        WeatherLayerCache cache = playerMode ? playerWeatherCache : dmWeatherCache;
+        boolean indoors = type.indoors();
+        OutdoorClipKey clipKey = indoors || type == WeatherType.NONE ? null
+                : new OutdoorClipKey(lightingEngine.getIndoorLighting().version(), width, height,
+                camera.getX(), camera.getY(), camera.getZoom());
+        double animationTime = type == WeatherType.NONE ? 0 : Math.floor(seconds * animationFps) / animationFps;
+        int particles = WeatherEffects.particleCount(type, weather == null ? 0 : weather.getIntensity(), width, height);
+        WeatherFrameKey key = new WeatherFrameKey(type, weather == null ? 0 : weather.getIntensity(),
+                animationTime, particles, type.color(), type.opacity(), indoors, PerformanceMode.isEnabled(),
+                width, height, clipKey);
+        if (cache.canvas != particlesCanvas || !cache.matches(project, key)) {
+            if (cache.canvas != null && cache.canvas != particlesCanvas
+                    && cache.canvas.getClip() == cache.clipPath) {
+                cache.canvas.setClip(null);
+            }
+            cache.canvas = particlesCanvas;
+            cache.project = project;
+            cache.key = key;
+            cache.valid = true;
+            cache.redraws++;
+            if (type == WeatherType.NONE || width <= 0 || height <= 0) {
+                particlesCanvas.setClip(null);
+                particlesCanvas.getGraphicsContext2D().clearRect(0, 0, width, height);
+            } else {
+                if (!indoors) {
+                    updateOutdoorClip(cache, project, clipKey, width, height, camera);
+                } else if (!cache.clipConfigured || cache.clipPath != null || cache.clipKey != null) {
+                    cache.clipPath = null;
+                    cache.clipProject = project;
+                    cache.clipKey = null;
+                    cache.clipConfigured = true;
+                }
+                particlesCanvas.setClip(cache.clipPath);
+                GraphicsContext gc = cache.canvas.getGraphicsContext2D();
+                gc.clearRect(0, 0, width, height);
+                WeatherEffects.draw(gc, type, weather == null ? 0 : weather.getIntensity(),
+                        width, height, animationTime, PerformanceMode.isEnabled());
+            }
+        }
+    }
+
+    private void updateOutdoorClip(WeatherLayerCache cache, DmProject project, OutdoorClipKey key,
+                                   double width, double height, DmProject.CameraState camera) {
+        if (cache.clipConfigured && cache.clipProject == project && Objects.equals(cache.clipKey, key)) {
+            return;
+        }
+        cache.clipProject = project;
+        cache.clipKey = key;
+        cache.clipConfigured = true;
+        cache.clipBuilds++;
+        javafx.scene.shape.Path clip = new javafx.scene.shape.Path();
+        clip.setFill(Color.BLACK);
+        clip.setStroke(null);
+        clip.getElements().addAll(
+                new MoveTo(0, 0), new LineTo(width, 0), new LineTo(width, height),
+                new LineTo(0, height), new ClosePath());
         for (IndoorLighting.Region region : lightingEngine.getIndoorLighting().indoorRegions()) {
             double x = worldToScreenX(region.x(), width, camera);
             double y = worldToScreenY(region.y(), height, camera);
@@ -417,11 +621,24 @@ public class CanvasMapRenderer {
                 double top = Math.max(0, y);
                 double right = Math.min(width, x + w);
                 double bottom = Math.min(height, y + h);
-                // Canvas.clip uses nonzero winding even when the fill rule is EVEN_ODD.
-                gc.moveTo(left, top);
-                gc.lineTo(left, bottom);
-                gc.lineTo(right, bottom);
-                gc.lineTo(right, top);
+                clip.getElements().addAll(new MoveTo(left, top), new LineTo(left, bottom),
+                        new LineTo(right, bottom), new LineTo(right, top), new ClosePath());
+            }
+        }
+        cache.clipPath = clip.getElements().size() > 5 ? clip : null;
+    }
+
+    private static void applyOutdoorClip(GraphicsContext gc, javafx.scene.shape.Path clip) {
+        if (clip == null) {
+            return;
+        }
+        gc.beginPath();
+        for (var element : clip.getElements()) {
+            if (element instanceof MoveTo move) {
+                gc.moveTo(move.getX(), move.getY());
+            } else if (element instanceof LineTo line) {
+                gc.lineTo(line.getX(), line.getY());
+            } else if (element instanceof ClosePath) {
                 gc.closePath();
             }
         }
@@ -1221,18 +1438,29 @@ public class CanvasMapRenderer {
      */
     public void renderAmbientLight(GraphicsContext gc, DmProject project, double width, double height,
                                     DmProject.CameraState camera, boolean playerMode) {
-        gc.clearRect(0, 0, width, height);
+        LayerCache cache = playerMode ? playerAmbientCache : dmAmbientCache;
+        cache.bind(gc.getCanvas());
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
+            if (!cache.matches(null, false)) {
+                gc.clearRect(0, 0, width, height);
+                cache.update(null, false);
+            }
             return;
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
         LightBuffer buffer = composite.buffer();
-        gc.setImageSmoothing(true);
         // Only exposed pixels lose ambient darkness; the aperture footprint is available even at Night.
         double flash = lightningBrightness(project);
+        AmbientLayerKey key = new AmbientLayerKey(composite.key(), Double.doubleToLongBits(flash),
+                Double.doubleToLongBits(width), Double.doubleToLongBits(height));
+        if (cache.matches(key, true)) {
+            return;
+        }
+        gc.clearRect(0, 0, width, height);
+        gc.setImageSmoothing(true);
         Image ambientImage = buffer.ambientImage;
         if (flash > 0) {
             for (int i = 0; i < buffer.ambientArgb.length; i++) {
@@ -1247,9 +1475,13 @@ public class CanvasMapRenderer {
         gc.drawImage(ambientImage, 0, 0, composite.bw(), composite.bh(), 0, 0,
                 composite.bw() * (double) lightMapScale(), composite.bh() * (double) lightMapScale());
         gc.restore();
+        cache.update(key, true);
     }
 
-    private record LightComposite(LightBuffer buffer, int bw, int bh) {
+    private record AmbientLayerKey(long compositeKey, long flash, long width, long height) {
+    }
+
+    private record LightComposite(LightBuffer buffer, int bw, int bh, long key) {
     }
 
     /**
@@ -1268,6 +1500,7 @@ public class CanvasMapRenderer {
         buffer.ensureSize(bw, bh);
 
         double lightTint = clampLightTint(project.getLighting().getLightTint());
+        double pixelsPerCell = project.getMap().getGrid().getPixelsPerCell();
         IndoorLighting indoors = lightingEngine.getIndoorLighting();
         boolean indoorDarkness = preset == TimeOfDayPreset.NIGHT || PerformanceMode.indoorDarkness();
         double nightDarkness = TimeOfDayPreset.NIGHT.darkness(project.getLighting().ambientBrightnessFor("NIGHT"))
@@ -1279,6 +1512,7 @@ public class CanvasMapRenderer {
         double[] flickers = new double[lights.size()];
         // Rasterising the light map is the expensive part, so it is redone only when one of its inputs changed.
         long key = 1125899906842597L;
+        key = 31 * key + Double.hashCode(pixelsPerCell);
         key = 31 * key + Double.hashCode(darkness);
         key = 31 * key + indoors.version();
         key = 31 * key + Boolean.hashCode(indoorDarkness);
@@ -1294,6 +1528,8 @@ public class CanvasMapRenderer {
         key = 31 * key + Double.hashCode(lightTint);
         key = 31 * key + preset.name().hashCode();
         key = 31 * key + Double.hashCode(ambientBrightness);
+        key = 31 * key + Double.hashCode(width);
+        key = 31 * key + Double.hashCode(height);
         key = 31 * key + Double.hashCode(camera.getX());
         key = 31 * key + Double.hashCode(camera.getY());
         key = 31 * key + Double.hashCode(zoom);
@@ -1332,7 +1568,7 @@ public class CanvasMapRenderer {
             }
         }
         if (buffer.valid && buffer.key == key) {
-            return new LightComposite(buffer, bw, bh);
+            return new LightComposite(buffer, bw, bh, key);
         }
         buffer.key = key;
         buffer.valid = true;
@@ -1376,11 +1612,10 @@ public class CanvasMapRenderer {
         }
         rasterizeLights(buffer, rasters, bw, bh);
 
-        double ppc = project.getMap().getGrid().getPixelsPerCell();
         for (int ei = 0; ei < emitters.size(); ei++) {
             DmProject.OverlayShape shape = emitters.get(ei);
             int rgb = parseRgb(shape.getColor());
-            emitShapeLight(buffer, shape, rgb, ppc, emitterFlickers.get(ei), bw, bh, width, height, camera);
+            emitShapeLight(buffer, shape, rgb, pixelsPerCell, emitterFlickers.get(ei), bw, bh, width, height, camera);
         }
 
         double ambRNorm = preset.red();
@@ -1443,7 +1678,7 @@ public class CanvasMapRenderer {
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         buffer.ambientImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), ambientArgb, 0, bw);
         buffer.lightningImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), buffer.lightningArgb, 0, bw);
-        return new LightComposite(buffer, bw, bh);
+        return new LightComposite(buffer, bw, bh, key);
     }
 
     private static int clampByte(double value) {
@@ -1460,33 +1695,71 @@ public class CanvasMapRenderer {
      */
     public void renderBrightCore(GraphicsContext gc, DmProject project, double width, double height,
                                   DmProject.CameraState camera, boolean playerMode) {
-        gc.clearRect(0, 0, width, height);
+        LayerCache cache = playerMode ? playerBrightCoreCache : dmBrightCoreCache;
+        cache.bind(gc.getCanvas());
+        if (project == null) {
+            if (!cache.matches(null, false)) {
+                gc.clearRect(0, 0, width, height);
+                cache.update(null, false);
+            }
+            return;
+        }
         double brightCore = clampBrightCore(project.getLighting().getBrightCore());
         if (brightCore <= 0) {
+            if (!cache.matches(null, false)) {
+                gc.clearRect(0, 0, width, height);
+                cache.update(null, false);
+            }
             return;
         }
         TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
+            if (!cache.matches(null, false)) {
+                gc.clearRect(0, 0, width, height);
+                cache.update(null, false);
+            }
             return;
         }
         double radiusFraction = Tuning.BRIGHT_CORE_RADIUS.get();
         int fps = animationFps;
-        long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
+        boolean flicker = flickerOn(project);
+        long now = flicker
+                ? (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps)
+                : 0;
         double zoom = camera.getZoom();
+        List<BrightCoreLight> lightKeys = new java.util.ArrayList<>();
+        for (DmProject.LightSource light : project.getLighting().getLights()) {
+            boolean active = light.isEnabled()
+                    && lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
+                    && lightRangeTouchesScreen(light, width, height, camera);
+            double amount = active && flicker ? LightFlicker.amount(light, now) : 0;
+            lightKeys.add(new BrightCoreLight(light.isEnabled(), active, light.getX(), light.getY(),
+                    light.getRange(), light.getIntensity(), parseRgb(light.getColor()), amount));
+        }
+        BrightCoreKey key = new BrightCoreKey(Double.doubleToLongBits(width), Double.doubleToLongBits(height),
+                Double.doubleToLongBits(camera.getX()), Double.doubleToLongBits(camera.getY()),
+                Double.doubleToLongBits(zoom), Double.doubleToLongBits(brightCore),
+                Double.doubleToLongBits(radiusFraction), Double.doubleToLongBits(ambientBrightness),
+                Double.doubleToLongBits(darkness),
+                lightingEngine.getIndoorLighting().version(), playerMode, preset, List.copyOf(lightKeys));
+        if (cache.matches(key, true)) {
+            return;
+        }
+        gc.clearRect(0, 0, width, height);
         for (DmProject.LightSource light : project.getLighting().getLights()) {
             if (!light.isEnabled() || !lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
                     || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;
             }
-            double flicker = flickerOn(project) ? LightFlicker.amount(light, now) : 0;
-            double brightness = (0.35 + 0.65 * Math.min(1.0, Math.max(0, light.getIntensity()))) * (1.0 - 0.6 * flicker);
+            double amount = flicker ? LightFlicker.amount(light, now) : 0;
+            double brightness = (0.35 + 0.65 * Math.min(1.0, Math.max(0, light.getIntensity()))) * (1.0 - 0.6 * amount);
             double peak = Math.min(1.0, brightCore * brightness);
             if (peak <= 0.002) {
                 continue;
             }
-            double radius = light.getRange() * zoom * radiusFraction * (1.0 - 0.25 * flicker);
+            double radius = light.getRange() * zoom * radiusFraction * (1.0 - 0.25 * amount);
             if (radius < 0.5) {
                 continue;
             }
@@ -1503,6 +1776,17 @@ public class CanvasMapRenderer {
             gc.setFill(gradient);
             gc.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
         }
+        cache.update(key, true);
+    }
+
+    private record BrightCoreLight(boolean enabled, boolean active, double x, double y, double range,
+                                   double intensity, int color, double flicker) {
+    }
+
+    private record BrightCoreKey(long width, long height, long cameraX, long cameraY, long zoom,
+                                 long brightCore, long radiusFraction, long ambientBrightness,
+                                 long darkness, long indoorVersion, boolean playerMode,
+                                 TimeOfDayPreset preset, List<BrightCoreLight> lights) {
     }
 
     private record LightRaster(double[] xs, double[] ys, double lx, double ly, double radius,
@@ -1960,17 +2244,33 @@ public class CanvasMapRenderer {
         if (project.getFog() == null || !project.getFog().isEnabled()) {
             return;
         }
-        gc.save();
-        gc.setGlobalAlpha(playerMode ? 1.0 : Tuning.FOG_DM_OPACITY.get());
-        gc.setFill(Color.BLACK);
         FogMask mask = project.getFog().getMask();
         if (mask == null) {
+            gc.save();
+            gc.setGlobalAlpha(playerMode ? 1.0 : Tuning.FOG_DM_OPACITY.get());
+            gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, width, height);
             gc.restore();
             return;
         }
         refreshFogImage(mask);
+        drawFogImage(gc, project, width, height, camera, playerMode);
+    }
 
+    private void drawFogImage(GraphicsContext gc, DmProject project, double width, double height,
+                              DmProject.CameraState camera, boolean playerMode) {
+        if (project.getFog() == null || !project.getFog().isEnabled()) {
+            return;
+        }
+        FogMask mask = project.getFog().getMask();
+        gc.save();
+        gc.setGlobalAlpha(playerMode ? 1.0 : Tuning.FOG_DM_OPACITY.get());
+        gc.setFill(Color.BLACK);
+        if (mask == null) {
+            gc.fillRect(0, 0, width, height);
+            gc.restore();
+            return;
+        }
         double sx = worldToScreenX(mask.getOriginX(), width, camera);
         double sy = worldToScreenY(mask.getOriginY(), height, camera);
         double sw = mask.getWidth() * camera.getZoom();
@@ -2195,6 +2495,7 @@ public class CanvasMapRenderer {
         }
         fogImage.getPixelWriter().setPixels(0, firstRow, cols, lastRow - firstRow + 1,
                 PixelFormat.getIntArgbInstance(), fogPixels, 0, cols);
+        fogImageGeneration++;
     }
     private void drawViewportRect(GraphicsContext gc, WorldRect rect, double width, double height, DmProject.CameraState camera) {
         double x = worldToScreenX(rect.x(), width, camera);
@@ -2307,6 +2608,88 @@ public class CanvasMapRenderer {
     }
 
     public record WorldRect(double x, double y, double width, double height) {
+    }
+
+    private static final class LayerCache {
+        private Canvas canvas;
+        private Object key;
+        private boolean active;
+        private boolean valid;
+        private long redraws;
+
+        private void bind(Canvas target) {
+            if (canvas != target) {
+                canvas = target;
+                valid = false;
+            }
+        }
+
+        private boolean matches(Object candidate, boolean candidateActive) {
+            return valid && active == candidateActive && Objects.equals(key, candidate);
+        }
+
+        private void update(Object candidate, boolean candidateActive) {
+            key = candidate;
+            active = candidateActive;
+            valid = true;
+            redraws++;
+        }
+    }
+
+    private record FogLayerKey(boolean enabled, long maskVersion, long imageGeneration,
+                               double width, double height, double cameraX, double cameraY,
+                               double zoom, double opacity, int downsample, int softness,
+                               boolean playerMode) {
+    }
+
+    private static final class FogLayerCache {
+        private Canvas canvas;
+        private DmProject project;
+        private FogMask mask;
+        private FogLayerKey key;
+        private boolean valid;
+        private long redraws;
+
+        private boolean matches(DmProject candidateProject, FogMask candidateMask, FogLayerKey candidateKey) {
+            return valid && project == candidateProject && mask == candidateMask && key.equals(candidateKey);
+        }
+
+        private void update(DmProject candidateProject, FogMask candidateMask, FogLayerKey candidateKey) {
+            project = candidateProject;
+            mask = candidateMask;
+            key = candidateKey;
+            valid = true;
+            redraws++;
+        }
+    }
+
+    private record OutdoorClipKey(long indoorVersion, double width, double height,
+                                  double cameraX, double cameraY, double zoom) {
+    }
+
+    private record FlashLayerKey(long compositeKey, double flash, double opacity) {
+    }
+
+    private record WeatherFrameKey(WeatherType type, double intensity, double seconds, int particles,
+                                   Color color, double opacity, boolean indoors, boolean reduced,
+                                   double width, double height, OutdoorClipKey clipKey) {
+    }
+
+    private static final class WeatherLayerCache {
+        private DmProject project;
+        private WeatherFrameKey key;
+        private boolean valid;
+        private Canvas canvas;
+        private javafx.scene.shape.Path clipPath;
+        private DmProject clipProject;
+        private OutdoorClipKey clipKey;
+        private boolean clipConfigured;
+        private long redraws;
+        private long clipBuilds;
+
+        private boolean matches(DmProject candidateProject, WeatherFrameKey candidateKey) {
+            return valid && project == candidateProject && key.equals(candidateKey);
+        }
     }
 
     private static final class LightBuffer {

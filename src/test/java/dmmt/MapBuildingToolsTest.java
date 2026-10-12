@@ -1255,7 +1255,8 @@ class MapBuildingToolsTest {
             set(app, "project", project);
             Canvas canvas = new Canvas(400, 300);
             set(app, "dmCanvas", canvas);
-            for (String field : new String[]{"dmBaseCanvas", "dmBrightCoreCanvas", "dmAmbientCanvas", "dmFogCanvas"}) {
+            for (String field : new String[]{"dmBaseCanvas", "dmBrightCoreCanvas", "dmAmbientCanvas", "dmFogCanvas",
+                    "dmFogMaskCanvas", "dmWeatherCanvas", "dmLightningCanvas", "dmForegroundCanvas"}) {
                 set(app, field, new Canvas(400, 300));
             }
             Stage owner = new Stage();

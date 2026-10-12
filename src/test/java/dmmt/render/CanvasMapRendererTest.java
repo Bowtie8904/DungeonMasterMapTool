@@ -9,6 +9,7 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.effect.BlendMode;
 import javafx.scene.image.WritableImage;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.AfterEach;
@@ -186,6 +187,179 @@ class CanvasMapRendererTest {
             assertTrue(engine.getLiveReveal().isEmpty());
             CanvasMapRenderer.setEffectAnimationsEnabled(false);
             assertEquals(0, new CanvasMapRenderer(engine).weatherSeconds());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void retainedLayersAndOutdoorWeatherClippingInvalidatePerView() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            Tuning.apply(key -> key.equals("weather.rain.particles") ? "10000" : null);
+            DmProject project = DmProject.builder().build();
+            project.getImageLayers().add(DmProject.ImageLayer.builder().width(1000).height(1000).build());
+            project.getLighting().setTimeOfDayPreset("NIGHT");
+            project.getWeather().setType("rain");
+            project.getWeather().setIntensity(1);
+            project.getWalls().addAll(java.util.List.of(
+                    DmProject.WallSegment.builder().x1(200).y1(200).x2(800).y2(200).build(),
+                    DmProject.WallSegment.builder().x1(800).y1(200).x2(800).y2(800).build(),
+                    DmProject.WallSegment.builder().x1(800).y1(800).x2(200).y2(800).build(),
+                    DmProject.WallSegment.builder().x1(200).y1(800).x2(200).y2(200).build()));
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            assertTrue(!engine.getIndoorLighting().indoorRegions().isEmpty(),
+                    "The enclosed-room fixture must provide outdoor-weather clipping geometry");
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            renderer.setWeatherFrozen(true);
+            DmProject.CameraState insideRoom = DmProject.CameraState.builder().x(500).y(500).zoom(1).build();
+            Canvas brightCore = new Canvas(128, 96);
+            Canvas ambient = new Canvas(128, 96);
+            Canvas fog = new Canvas(128, 96);
+            Canvas weather = new Canvas(128, 96);
+            Canvas lightning = new Canvas(128, 96);
+
+            renderer.renderBrightCore(brightCore.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, insideRoom, true);
+            SnapshotParameters transparentSnapshot = new SnapshotParameters();
+            transparentSnapshot.setFill(Color.TRANSPARENT);
+            var insidePixels = weather.snapshot(transparentSnapshot, null).getPixelReader();
+            for (int y = 0; y < 96; y++) {
+                for (int x = 0; x < 128; x++) {
+                    assertEquals(0, insidePixels.getArgb(x, y) >>> 24,
+                            "Outdoor rain must not be visible inside a fully enclosed room");
+                }
+            }
+            assertEquals(1, renderer.brightCoreRedrawCount(true));
+            assertEquals(1, renderer.ambientRedrawCount(true));
+            assertEquals(1, renderer.fogRedrawCount(true));
+            assertEquals(1, renderer.weatherRedrawCount(true));
+            assertEquals(1, renderer.outdoorClipBuildCount(true));
+
+            renderer.renderBrightCore(brightCore.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, insideRoom, true);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, insideRoom, true);
+            assertEquals(1, renderer.brightCoreRedrawCount(true));
+            assertEquals(1, renderer.ambientRedrawCount(true));
+            assertEquals(1, renderer.fogRedrawCount(true));
+            assertEquals(1, renderer.weatherRedrawCount(true));
+            assertEquals(1, renderer.outdoorClipBuildCount(true));
+
+            DmProject.CameraState outdoors = DmProject.CameraState.builder().x(100).y(100).zoom(1).build();
+            renderer.renderBrightCore(brightCore.getGraphicsContext2D(), project, 128, 96, outdoors, true);
+            renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, outdoors, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, outdoors, true);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, outdoors, true);
+            var outdoorPixels = weather.snapshot(transparentSnapshot, null).getPixelReader();
+            boolean rainVisible = false;
+            for (int y = 0; y < 96 && !rainVisible; y++) {
+                for (int x = 0; x < 128; x++) {
+                    if ((outdoorPixels.getArgb(x, y) >>> 24) != 0) {
+                        rainVisible = true;
+                        break;
+                    }
+                }
+            }
+            assertTrue(rainVisible, "Outdoor rain remains visible beyond enclosed rooms");
+            assertEquals(2, renderer.brightCoreRedrawCount(true));
+            assertEquals(2, renderer.ambientRedrawCount(true));
+            assertEquals(2, renderer.fogRedrawCount(true));
+            assertEquals(2, renderer.weatherRedrawCount(true));
+            assertEquals(2, renderer.outdoorClipBuildCount(true));
+
+            long clipsBeforeGeometryChange = renderer.outdoorClipBuildCount(true);
+            project.getWalls().add(DmProject.WallSegment.builder().x1(900).y1(900).x2(950).y2(900).build());
+            engine.update(project);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, outdoors, true);
+            assertEquals(clipsBeforeGeometryChange + 1, renderer.outdoorClipBuildCount(true));
+
+            Tuning.apply(key -> key.equals("weather.rain.indoors") ? "true" : null);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, outdoors, true);
+            Tuning.apply(key -> key.equals("weather.rain.indoors") ? "false" : null);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(weather, lightning, project, 128, 96, outdoors, true);
+            assertEquals(clipsBeforeGeometryChange + 2, renderer.outdoorClipBuildCount(true));
+
+            Canvas dmWeather = new Canvas(128, 96);
+            renderer.beginWeatherFrame();
+            renderer.renderWeatherLayer(dmWeather, new Canvas(128, 96), project, 128, 96, outdoors, false);
+            assertEquals(1, renderer.weatherRedrawCount(false), "DM and player weather caches must remain independent");
+            assertEquals(1, renderer.outdoorClipBuildCount(false));
+
+            project.getFog().getMask().applyRect(10, 10, 10, 10, true);
+            renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, outdoors, true);
+            assertEquals(3, renderer.fogRedrawCount(true), "Fog edits invalidate the retained fog image");
+
+            weather.setWidth(160);
+            lightning.setWidth(160);
+            long redraws = renderer.weatherRedrawCount(true);
+            long clips = renderer.outdoorClipBuildCount(true);
+            renderer.renderWeatherLayer(weather, lightning, project, 160, 96, outdoors, true);
+            assertEquals(redraws + 1, renderer.weatherRedrawCount(true));
+            assertEquals(clips + 1, renderer.outdoorClipBuildCount(true), "Resizing invalidates screen-space clipping");
+            Tuning.apply(key -> key.equals("weather.rain.color") ? "#FF0000" : null);
+            renderer.renderWeatherLayer(weather, lightning, project, 160, 96, outdoors, true);
+            assertEquals(redraws + 2, renderer.weatherRedrawCount(true), "Live colors invalidate frozen weather");
+            assertEquals(clips + 1, renderer.outdoorClipBuildCount(true), "Color changes reuse geometry");
+            renderer.invalidatePlayerLayerCaches();
+            renderer.renderWeatherLayer(weather, lightning, project, 160, 96, outdoors, true);
+            assertEquals(redraws + 3, renderer.weatherRedrawCount(true), "Returning from a handout restores weather");
+
+            Canvas replacement = new Canvas(128, 96);
+            renderer.renderAmbientLight(replacement.getGraphicsContext2D(), project, 128, 96, outdoors, true);
+            assertEquals(3, renderer.ambientRedrawCount(true), "A replacement canvas needs its own retained content");
+            project.getWeather().setType("none");
+            renderer.renderWeatherLayer(weather, lightning, project, 160, 96, outdoors, true);
+            var cleared = weather.snapshot(transparentSnapshot, null).getPixelReader();
+            for (int y = 0; y < 96; y++) {
+                for (int x = 0; x < 160; x++) assertEquals(0, cleared.getArgb(x, y) >>> 24);
+            }
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(30, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void weatherCadenceReusesClipAndFrozenFramesButRespondsToLiveChanges() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            CanvasMapRenderer.setAnimationFps(30);
+            DmProject project = DmProject.builder().build();
+            project.getWeather().setType("rain");
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            double[] time = {10};
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine) {
+                @Override
+                protected double weatherSeconds() {
+                    return time[0];
+                }
+            };
+            Canvas particles = new Canvas(160, 96);
+            Canvas lightning = new Canvas(160, 96);
+            DmProject.CameraState camera = DmProject.CameraState.builder().zoom(1).build();
+            renderer.renderWeatherLayer(particles, lightning, project, 160, 96, camera, true);
+            time[0] += 0.01;
+            renderer.renderWeatherLayer(particles, lightning, project, 160, 96, camera, true);
+            assertEquals(1, renderer.weatherRedrawCount(true), "Interaction frames reuse the same animation frame");
+            time[0] += 0.05;
+            renderer.renderWeatherLayer(particles, lightning, project, 160, 96, camera, true);
+            assertEquals(2, renderer.weatherRedrawCount(true));
+            assertEquals(1, renderer.outdoorClipBuildCount(true), "Animation does not rebuild the clip");
+            renderer.renderWeatherLayer(particles, lightning, project, 160, 96, camera, true);
+            assertEquals(2, renderer.weatherRedrawCount(true), "A frozen clock retains the same frame");
+            project.getWeather().setIntensity(0.8);
+            renderer.renderWeatherLayer(particles, lightning, project, 160, 96, camera, true);
+            assertEquals(3, renderer.weatherRedrawCount(true), "Intensity updates even when the clock is frozen");
             return null;
         });
         Platform.runLater(task);

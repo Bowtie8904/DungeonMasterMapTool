@@ -435,7 +435,10 @@ Closing the handout window stops showing it but keeps the images for reopening d
 ### 15. Performance
 
 - The base layer (background, grid, images) is drawn on its own canvas, the light map is cached and only recomputed when needed, and the frame rate drops automatically when nothing moves (see the `render.*` settings).
+- Unchanged ambient lighting, bright-core highlights and fog are retained rather than redrawn just because weather moves. Weather has its own cached layer, updated at the animation rate even while interaction frames run faster; outdoor clipping is reused until the view or indoor geometry changes.
+- Rain and snow retain their native particle primitives: rendered-frame comparisons found batched rain slower and snow sprites inconsistently faster. Weather caching avoids redundant draws without assuming those alternatives are improvements.
 - Click the **speedometer diagnostics** button in the status bar to view actual/limit FPS, average and worst frame time, heap usage and the slowest render parts (hover for the detailed breakdown). The metrics stay out of the way when the diagnostics popover is closed.
+- Render timings measure **application-thread elapsed time**, not JavaFX render-thread or GPU time. The breakdown includes bright-core, ambient/light-map and remaining player overhead as exclusive, non-overlapping sections. An actual FPS close to the displayed limit can be intentional throttling rather than a hardware bottleneck.
 - **Performance mode** toggle (bottom-left): a temporary override for weaker machines. It lowers light-map resolution, caps each light map at 5,000 pixels (`performance.lightMapMaxPixels`, or the normal budget if lower), disables daytime indoor darkness and daylight through openings, slows texture animation, disables flicker, uses coarser tiles and merges fog cells, without touching your data or other settings. Switching it off restores your configured values. How much it reduces is configurable with the `performance.*` settings (see [docs/SETTINGS.md](docs/SETTINGS.md#performance-mode)).
 - The **Animations** toggle in the Effects section disables texture animation per map.
 

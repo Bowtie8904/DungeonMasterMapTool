@@ -146,7 +146,7 @@ public final class WeatherEffects {
         gc.setGlobalAlpha(previousAlpha);
     }
 
-    private static void drawRain(GraphicsContext gc, WeatherType type, int count, double w, double h, double t, double scale) {
+    static void drawRain(GraphicsContext gc, WeatherType type, int count, double w, double h, double t, double scale) {
         gc.setStroke(type.color());
         gc.setLineWidth(Math.max(1.0, scale));
         gc.setGlobalAlpha(type.opacity());
@@ -163,7 +163,7 @@ public final class WeatherEffects {
         }
     }
 
-    private static void drawSnow(GraphicsContext gc, int count, double w, double h, double t, double scale) {
+    static void drawSnow(GraphicsContext gc, int count, double w, double h, double t, double scale) {
         gc.setFill(WeatherType.SNOW.color());
         gc.setGlobalAlpha(WeatherType.SNOW.opacity());
         double spanX = w + 2 * EDGE_MARGIN;

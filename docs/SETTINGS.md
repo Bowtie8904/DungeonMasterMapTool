@@ -535,7 +535,8 @@ the DM and the player view. Set with "Target FPS" in the Performance section of 
 **Default:** `30` · **Range:** 1 to `render.maxFps` (never above `render.targetFps`) · **Applies:** managed by the app
 
 Frame rate while only animated effect textures, weather or light flicker move and nobody interacts ("Animation FPS"
-in the Performance section). Light flicker never updates faster than this, even while you interact.
+in the Performance section). Light flicker and the cached weather layer never update their animation faster than
+this, even while you interact; camera, geometry and live setting changes still update immediately.
 
 *Keywords:* fps, animation frame rate, texture animation, flicker speed, CPU usage
 
@@ -1256,7 +1257,9 @@ Weather intensity of maps without saved weather and the value the intensity slid
 - **`indoors`** – render weather inside enclosed rooms (`true`/`false`). Defaults to `false` for rain, snow and
   thunderstorms, `true` for mist, dust and embers. Room detection uses map walls and portals, not fog or the
   visible wall layer. Open doors/windows do not remove enclosure. Outside-only particles are clipped to room
-  boundaries in both views, including when panning, zooming or using Performance mode.
+  boundaries in both views, including when panning, zooming or using Performance mode. The outdoor clipping
+  representation is cached independently for each view and refreshed when indoor geometry, the camera or
+  canvas dimensions change, rather than rebuilding it for every particle animation frame.
   The house-icon **Weather indoors** toggle in the DM Weather tab reads and saves this setting for the selected
   weather type, affecting all maps. It is disabled for None and can be hidden with `ui.controls.hidden = weather.indoors`.
   It remains available via the local API when hidden.

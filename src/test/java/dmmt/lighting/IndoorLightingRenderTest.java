@@ -11,6 +11,8 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.image.WritableImage;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.paint.Color;
+import javafx.scene.Scene;
+import javafx.scene.layout.StackPane;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -184,11 +186,15 @@ class IndoorLightingRenderTest {
     }
 
     private static WritableImage weather(CanvasMapRenderer renderer, DmProject project, boolean player) {
-        Canvas canvas = new Canvas(200, 200);
-        renderer.render(canvas.getGraphicsContext2D(), project, null, 200, 200, camera(), player, null);
+        Canvas particles = new Canvas(200, 200);
+        Canvas lightning = new Canvas(200, 200);
+        renderer.renderWeatherLayer(particles, lightning, project, 200, 200, camera(), player);
+        StackPane layers = new StackPane(lightning, particles);
+        layers.setStyle("-fx-background-color: transparent;");
+        new Scene(layers, 200, 200, Color.TRANSPARENT);
         SnapshotParameters parameters = new SnapshotParameters();
         parameters.setFill(Color.TRANSPARENT);
-        return canvas.snapshot(parameters, null);
+        return layers.snapshot(parameters, null);
     }
 
     @Test
