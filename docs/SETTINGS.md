@@ -1694,6 +1694,16 @@ the number of texture/colour combinations visible at once, otherwise textures ar
 
 *Keywords:* texture cache, effect textures, memory, stutter
 
+### `handout.recentMax`
+**Default:** `100` · **Range:** 0 to 1000 · **Applies:** live
+
+Number of pasted images kept in the **Recent** list of the handout window. Every pasted image is stored there (as a PNG
+in the folder `dmmap-handouts` next to `dmmt-settings.ini`) so it survives restarts; when the limit is exceeded the
+oldest images are deleted. Lowering the value trims the list the next time the handout window opens or an image is
+pasted. `0` turns the recent list off and stores nothing.
+
+*Keywords:* recent handouts, handout history, pasted images, image library, reuse handouts, disk space
+
 ---
 
 ## User interface

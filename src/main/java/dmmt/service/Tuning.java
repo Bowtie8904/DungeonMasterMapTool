@@ -746,6 +746,8 @@ public final class Tuning {
             "JPEG quality of cached image tiles. Changing it rebuilds the image caches.");
     public static final Setting<Integer> CACHE_TEXTURE_TILES = integer(STORAGE, "cache.textureTiles", 128, 8, 4096, false,
             "Generated effect texture tiles (one per texture and colour) kept in memory.");
+    public static final Setting<Integer> HANDOUT_RECENT_MAX = integer(STORAGE, "handout.recentMax", 100, 0, 1000, false,
+            "Pasted handout images kept in the recent handouts list of the handout window; 0 turns the list off.");
 
     // ---- User interface ----
 

@@ -122,6 +122,43 @@ class HandoutWindowTest {
         });
     }
 
+    @Test
+    void addingFromRecentsAddsImageAndMovesItToTheTop(@org.junit.jupiter.api.io.TempDir java.nio.file.Path folder)
+            throws Exception {
+        RecentHandouts recents = new RecentHandouts(folder);
+        WritableImage red = new WritableImage(4, 4);
+        red.getPixelWriter().setColor(0, 0, javafx.scene.paint.Color.RED);
+        String redId = recents.add(red, 100);
+        String blankId = recents.add(new WritableImage(4, 4), 100);
+        onFx(() -> {
+            HandoutWindow window = new HandoutWindow(new Stage(), List.of(), () -> true, () -> {}, () -> {}, recents);
+            try {
+                @SuppressWarnings("unchecked")
+                javafx.scene.control.ListView<String> list =
+                        (javafx.scene.control.ListView<String>) get(window, "recentList");
+                assertEquals(List.of(blankId, redId), list.getItems());
+                invoke(window, "addFromRecent", new Class<?>[]{String.class}, redId);
+                assertEquals(1, window.getImages().size());
+                assertEquals(List.of(redId, blankId), list.getItems());
+            } finally {
+                window.close();
+            }
+        });
+        waitForRecentWorker();
+        assertEquals(List.of(redId, blankId), new RecentHandouts(folder).ids());
+    }
+
+    private static void waitForRecentWorker() throws Exception {
+        java.util.concurrent.ExecutorService worker = (java.util.concurrent.ExecutorService) staticField("RECENT_WORKER");
+        worker.submit(() -> {}).get(10, TimeUnit.SECONDS);
+    }
+
+    private static Object staticField(String name) throws Exception {
+        Field field = HandoutWindow.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(null);
+    }
+
     @SuppressWarnings("unchecked")
     private static void addImages(HandoutWindow window, Image... images) throws Exception {
         ((List<Image>) get(window, "images")).addAll(List.of(images));

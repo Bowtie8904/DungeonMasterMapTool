@@ -49,7 +49,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
 - **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
 - **Ambient weather**, including thick, high-contrast smoke-textured mist with dense billows, softer gaps, full-screen coverage and seamless edge wrapping. Intermediate intensity shows drifting smoke; **100% mist is opaque**, hiding the map beneath textured fog (text and fog-of-war remain above it).
-- **Handouts**: paste images from the clipboard and show them on the player screen.
+- **Handouts**: paste images from the clipboard and show them on the player screen; a persistent recent list lets you reuse earlier handouts.
 - **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips and crossfading playback.
 - Organises maps in a **folder library** with thumbnails, tags, name/tag search, drag & drop and auto-save.
 - **Multilevel maps**: several floors of a building (e.g. Dungeon Alchemist level exports) shown as one map, with quick up/down level switching.
@@ -419,7 +419,9 @@ Show images such as NPC portraits or letters to your players.
 
 Enable **Mirror for opposite side** using the opposing vertical arrows icon toggle beside the rotation buttons to show two copies facing opposite sides of the table, with one rotated 180 degrees (text is not reflected). The layout is recalculated to fit each half, rather than shrinking the full-screen arrangement. At 0/180 degrees the copies occupy the top and bottom halves; rotate to 90/270 degrees for left and right halves. Both copies show the same images, including when showing only a selection. The DM preview stays unrotated and selectable. Mirroring is off by default and is not saved.
 
-Closing the handout window stops showing it but keeps the images for reopening during the same application session. Reopening leaves **Show to players** off and clears the selection; use **Delete** or **Remove all images** to remove retained images. Handouts are session-only and are not kept after exiting the application.
+Closing the handout window stops showing it but keeps the images for reopening during the same application session. Reopening leaves **Show to players** off and clears the selection; use **Delete** or **Remove all images** to remove retained images. The current handout is session-only and is not kept after exiting the application.
+
+**Recent handouts:** the **Recent** list on the right of the handout window keeps every image you paste (whether you showed it or deleted it), newest first, and survives restarts. **Double-click** a recent image (or right-click → **Add to handout**) to add it to the current handout; it moves to the top of the list instead of being added again. Pasting an identical image also just moves it to the top. Right-click → **Remove from recent handouts** deletes it from the list, so you can keep a permanent set of recurring handouts and drop one-off images. Images are stored as PNGs in the `dmmap-handouts` folder next to `dmmt-settings.ini`; the oldest are removed beyond `handout.recentMax` (default 100, `0` turns the list off; see [docs/SETTINGS.md](docs/SETTINGS.md)).
 
 ### 14. Saving, auto-save and undo/redo
 

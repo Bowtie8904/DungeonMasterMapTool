@@ -1,9 +1,11 @@
 package dmmt.ui;
 
+import dmmt.service.Tuning;
 import lombok.Getter;
 import dmmt.ui.HandoutLayout.Rect;
 import dmmt.ui.HandoutLayout.Size;
 import dmmt.ui.HandoutLayout.Panel;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -12,9 +14,12 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -29,27 +34,40 @@ import javafx.stage.Stage;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
 
 /**
  * Non-modal DM window for pasting images from the clipboard and showing them together to the players.
- * Images are retained when the window closes, for reuse during the same application session.
+ * Images are retained when the window closes, for reuse during the same application session; every pasted image is
+ * also kept in the persistent recent handouts list on the right.
  */
 public final class HandoutWindow {
 
     private static final List<String> IMAGE_EXTENSIONS = List.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp");
     private static final Color SELECTION_COLOR = Color.web("#4da3ff");
     private static final Color SHOWN_COLOR = Color.web("#46c46b");
+    private static final int RECENT_THUMBNAIL_WIDTH = 160;
+    private static final ExecutorService RECENT_WORKER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "recent-handouts");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     // Remembered for the whole session and reused for the next handout.
     private static int lastRotation;
@@ -66,6 +84,10 @@ public final class HandoutWindow {
     private final Runnable onChange;
     private final List<Image> images = new ArrayList<>();
     private final Set<Image> selection = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final RecentHandouts recents;
+    private final ListView<String> recentList = new ListView<>();
+    private final Label recentPlaceholder = new Label();
+    private final Map<String, Image> thumbnails = new HashMap<>();
     /** Images the players see while shown; null means all of them. */
     private Set<Image> showOnly;
     @Getter
@@ -76,8 +98,15 @@ public final class HandoutWindow {
 
     public HandoutWindow(Stage owner, java.util.List<Image> icons, BooleanSupplier playerWindowOpen,
                          Runnable onChange, Runnable onClosed) {
+        this(owner, icons, playerWindowOpen, onChange, onClosed, null);
+    }
+
+    /** {@code recents} may be null to run without the persistent recent handouts list. */
+    public HandoutWindow(Stage owner, java.util.List<Image> icons, BooleanSupplier playerWindowOpen,
+                         Runnable onChange, Runnable onClosed, RecentHandouts recents) {
         this.playerWindowOpen = playerWindowOpen;
         this.onChange = onChange;
+        this.recents = recents;
 
         emptyLabel = new Label("Press Ctrl+V to paste an image");
         emptyLabel.getStyleClass().add("muted");
@@ -137,11 +166,14 @@ public final class HandoutWindow {
                 mirrorToggle, spacer, showSelectedToggle, showToggle);
         controls.setAlignment(Pos.CENTER_LEFT);
 
-        VBox root = new VBox(8, previewPane, hint, controls);
+        VBox main = new VBox(8, previewPane, hint, controls);
+        HBox.setHgrow(main, Priority.ALWAYS);
+        VBox recentPane = createRecentPane();
+        HBox root = new HBox(10, main, recentPane);
         root.setPadding(new Insets(10));
         root.getStyleClass().add("handout-root");
 
-        Scene scene = new Scene(root, 520, 460);
+        Scene scene = new Scene(root, recents == null ? 520 : 720, 460);
         scene.getStylesheets().add(Icons.STYLESHEET);
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isShortcutDown() && event.getCode() == KeyCode.V) {
@@ -168,6 +200,7 @@ public final class HandoutWindow {
             onClosed.run();
         });
         refreshState();
+        trimRecents();
     }
 
     public void show() {
@@ -175,8 +208,156 @@ public final class HandoutWindow {
             stage.toFront();
             stage.requestFocus();
         } else {
+            trimRecents();
             stage.show();
         }
+    }
+
+    private VBox createRecentPane() {
+        Label title = new Label("Recent");
+        title.getStyleClass().add("muted");
+        recentPlaceholder.getStyleClass().add("muted");
+        recentPlaceholder.setWrapText(true);
+        recentList.setPlaceholder(recentPlaceholder);
+        recentList.setFocusTraversable(false);
+        recentList.setPrefWidth(RECENT_THUMBNAIL_WIDTH + 30);
+        recentList.setMinWidth(RECENT_THUMBNAIL_WIDTH + 30);
+        Icons.tooltip(recentList, "Recently pasted images. Double-click to add one to the handout; right-click to remove it from this list.");
+        recentList.setCellFactory(list -> new RecentCell());
+        VBox.setVgrow(recentList, Priority.ALWAYS);
+        VBox pane = new VBox(6, title, recentList);
+        pane.setVisible(recents != null);
+        pane.setManaged(recents != null);
+        if (recents != null) {
+            recentList.getItems().setAll(recents.ids());
+        }
+        return pane;
+    }
+
+    private final class RecentCell extends ListCell<String> {
+        private final ImageView view = new ImageView();
+        private final ContextMenu menu;
+
+        RecentCell() {
+            view.setFitWidth(RECENT_THUMBNAIL_WIDTH);
+            view.setFitHeight(RECENT_THUMBNAIL_WIDTH * 1.5);
+            view.setPreserveRatio(true);
+            view.setSmooth(true);
+            setAlignment(Pos.CENTER);
+            setOnMouseClicked(event -> {
+                if (!isEmpty() && event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+                    addFromRecent(getItem());
+                }
+            });
+            MenuItem add = new MenuItem("Add to handout", Icons.icon(MaterialDesignP.PLUS));
+            add.setOnAction(e -> addFromRecent(getItem()));
+            MenuItem remove = new MenuItem("Remove from recent handouts", Icons.icon(MaterialDesignD.DELETE_OUTLINE));
+            remove.setOnAction(e -> removeRecent(getItem()));
+            menu = new ContextMenu(add, remove);
+        }
+
+        @Override
+        protected void updateItem(String id, boolean empty) {
+            super.updateItem(id, empty);
+            if (empty || id == null) {
+                setGraphic(null);
+                setContextMenu(null);
+            } else {
+                view.setImage(thumbnails.computeIfAbsent(id, key ->
+                        new Image(recents.file(key).toUri().toString(), RECENT_THUMBNAIL_WIDTH * 2,
+                                RECENT_THUMBNAIL_WIDTH * 3, true, true, true)));
+                setGraphic(view);
+                setContextMenu(menu);
+            }
+        }
+    }
+
+    private static int recentMax() {
+        return Tuning.HANDOUT_RECENT_MAX.get();
+    }
+
+    private void trimRecents() {
+        if (recents == null) {
+            return;
+        }
+        recentPlaceholder.setText(recentMax() <= 0
+                ? "Recent handouts are turned off (setting handout.recentMax)."
+                : "Pasted images appear here.");
+        int max = recentMax();
+        runRecentTask(() -> recents.trim(max));
+    }
+
+    private void storeRecents(List<Image> pasted) {
+        if (recents == null) {
+            return;
+        }
+        int max = recentMax();
+        runRecentTask(() -> {
+            for (Image image : pasted) {
+                recents.add(image, max);
+            }
+        });
+    }
+
+    private void addFromRecent(String id) {
+        if (recents == null || id == null) {
+            return;
+        }
+        Image image = new Image(recents.file(id).toUri().toString(), false);
+        if (image.isError() || image.getWidth() <= 0) {
+            hint.setText("The recent handout image could not be loaded.");
+            removeRecent(id);
+            return;
+        }
+        images.add(image);
+        selection.clear();
+        refreshState();
+        onChange.run();
+        recentList.getItems().remove(id);
+        recentList.getItems().addFirst(id);
+        recentList.scrollTo(0);
+        runRecentTask(() -> recents.moveToTop(id));
+    }
+
+    private void removeRecent(String id) {
+        if (recents == null || id == null) {
+            return;
+        }
+        recentList.getItems().remove(id);
+        thumbnails.remove(id);
+        runRecentTask(() -> recents.remove(id));
+    }
+
+    /** Runs disk work of the recent list on the background worker, then refreshes the list on the FX thread. */
+    private void runRecentTask(RecentTask task) {
+        RECENT_WORKER.execute(() -> {
+            String error = null;
+            try {
+                task.run();
+            } catch (IOException | RuntimeException e) {
+                error = "Could not update the recent handouts: " + e.getMessage();
+            }
+            String message = error;
+            Platform.runLater(() -> {
+                refreshRecentList();
+                if (message != null) {
+                    hint.setText(message);
+                }
+            });
+        });
+    }
+
+    private void refreshRecentList() {
+        List<String> ids = recents.ids();
+        if (!recentList.getItems().equals(ids)) {
+            recentList.getItems().setAll(ids);
+        }
+        thumbnails.keySet().retainAll(ids);
+    }
+
+    @FunctionalInterface
+    private interface RecentTask {
+        void run() throws IOException;
     }
 
     public void close() {
@@ -332,6 +513,7 @@ public final class HandoutWindow {
             return;
         }
         images.addAll(pasted);
+        storeRecents(pasted);
         selection.clear();
         refreshState();
         onChange.run();

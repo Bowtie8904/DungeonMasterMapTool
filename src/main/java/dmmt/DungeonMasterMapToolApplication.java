@@ -33,6 +33,7 @@ import dmmt.ui.ControlVisibility;
 import dmmt.ui.Dialogs;
 import dmmt.ui.DuplicateMapsDialog;
 import dmmt.ui.HandoutWindow;
+import dmmt.ui.RecentHandouts;
 import dmmt.ui.Icons;
 import dmmt.ui.LevelListDialog;
 import dmmt.ui.MapBrowser;
@@ -3466,7 +3467,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private void openHandoutWindow(Stage owner) {
         if (handoutWindow == null) {
             handoutWindow = new HandoutWindow(owner, appIcons(), () -> playerStage != null,
-                    () -> lastInputNanos = System.nanoTime(), () -> lastInputNanos = System.nanoTime());
+                    () -> lastInputNanos = System.nanoTime(), () -> lastInputNanos = System.nanoTime(),
+                    RecentHandouts.openDefault());
         }
         handoutWindow.show();
     }
