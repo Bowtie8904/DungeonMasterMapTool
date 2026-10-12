@@ -1119,6 +1119,9 @@ The lighting (darkness and light circles) is computed at 1/N of the screen resol
 Upper limit for the number of pixels in one light map. On large screens (for example a 4K player display) the light
 map divisor from `lighting.lightMapScale` is raised until the light map fits this budget, so big canvases do not make
 lighting much slower. Raise it for sharper lighting on big screens, lower it for more speed.
+Indoor/daylight samples and lightning exposure are cached separately from flickering lights; changing the
+resolution invalidates those per-view samples. Processing is serial below 1,024 actual raster pixels and parallel
+above that on multicore systems. This scheduling cutoff is internal, not an additional setting.
 
 *Keywords:* light quality, lighting performance, 4K, large screen, pixel budget, light map
 

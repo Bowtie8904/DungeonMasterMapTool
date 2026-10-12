@@ -44,6 +44,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +53,15 @@ import java.util.stream.IntStream;
 public class CanvasMapRenderer {
     /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
     private int activeLightMapScale = 4;
+
+    protected boolean parallelLighting(int pixels) {
+        return pixels >= 1_024 && Runtime.getRuntime().availableProcessors() > 1;
+    }
+
+    private static IntStream lightingRows(int count, boolean parallel) {
+        IntStream rows = IntStream.range(0, count);
+        return parallel ? rows.parallel() : rows;
+    }
 
     /** Light map divisor of the frame being drawn: the configured one, raised on large canvases to fit the pixel budget. */
     private int lightMapScale() {
@@ -223,6 +233,18 @@ public class CanvasMapRenderer {
 
     long ambientRedrawCount(boolean playerMode) {
         return (playerMode ? playerAmbientCache : dmAmbientCache).redraws;
+    }
+
+    long environmentSampleCount(boolean playerMode) {
+        return (playerMode ? playerLightBuffer : dmLightBuffer).environmentSamples;
+    }
+
+    long polygonTransformCount(boolean playerMode) {
+        return (playerMode ? playerLightBuffer : dmLightBuffer).polygonTransforms;
+    }
+
+    long lightningImageUpdateCount(boolean playerMode) {
+        return (playerMode ? playerLightBuffer : dmLightBuffer).lightningUpdates;
     }
 
     long fogRedrawCount(boolean playerMode) {
@@ -1498,6 +1520,12 @@ public class CanvasMapRenderer {
         int bh = Math.max(1, (int) Math.ceil(height / lightMapScale()));
         LightBuffer buffer = playerMode ? playerLightBuffer : dmLightBuffer;
         buffer.ensureSize(bw, bh);
+        if (buffer.project != project) {
+            buffer.project = project;
+            buffer.valid = false;
+            buffer.environmentKey = null;
+            buffer.viewKey = null;
+        }
 
         double lightTint = clampLightTint(project.getLighting().getLightTint());
         double pixelsPerCell = project.getMap().getGrid().getPixelsPerCell();
@@ -1535,8 +1563,17 @@ public class CanvasMapRenderer {
         key = 31 * key + Double.hashCode(zoom);
         boolean indoorStorm = WeatherType.THUNDERSTORM.indoors();
         int lightningRgb = parseRgb(Tuning.WEATHER_FLASH_COLOR.get());
+        LightViewKey viewKey = new LightViewKey(width, height, camera.getX(), camera.getY(), zoom, lightMapScale());
+        if (!viewKey.equals(buffer.viewKey)) {
+            buffer.viewKey = viewKey;
+            buffer.polygons.clear();
+        }
+        EnvironmentKey environmentKey = new EnvironmentKey(viewKey, indoors, indoors.version(),
+                PerformanceMode.daylightThroughOpenings(), indoorStorm);
+        refreshLightEnvironment(buffer, environmentKey, camera, bw, bh, lightningRgb);
         key = 31 * key + Boolean.hashCode(indoorStorm);
         key = 31 * key + lightningRgb;
+        Map<VisibilityService.Polygon, Boolean> usedPolygons = new IdentityHashMap<>();
         for (int li = 0; li < lights.size(); li++) {
             DmProject.LightSource light = lights.get(li);
             boolean relevant = light.isEnabled() && indoors.lightActive(preset, light.getX(), light.getY())
@@ -1550,8 +1587,13 @@ public class CanvasMapRenderer {
             key = 31 * key + Double.hashCode(light.getRange());
             key = 31 * key + Double.hashCode(light.getIntensity());
             key = 31 * key + (light.getColor() == null ? 0 : light.getColor().hashCode());
-            key = 31 * key + System.identityHashCode(lightingEngine.polygonFor(light));
+            VisibilityService.Polygon polygon = lightingEngine.polygonFor(light);
+            usedPolygons.put(polygon, Boolean.TRUE);
+            key = 31 * key + System.identityHashCode(polygon);
+            key = 31 * key + Double.hashCode(light.getX());
+            key = 31 * key + Double.hashCode(light.getY());
         }
+        buffer.polygons.keySet().retainAll(usedPolygons.keySet());
         List<DmProject.OverlayShape> emitters = new java.util.ArrayList<>();
         List<Double> emitterFlickers = new java.util.ArrayList<>();
         for (DmProject.OverlayShape shape : project.getOverlays()) {
@@ -1597,20 +1639,27 @@ public class CanvasMapRenderer {
             }
             double brightness = (0.35 + 0.65 * Math.min(1.0, Math.max(0, light.getIntensity()))) * (1.0 - 0.6 * flicker);
             VisibilityService.Polygon polygon = lightingEngine.polygonFor(light);
-            double[] xs = new double[polygon.size()];
-            double[] ys = new double[polygon.size()];
-            double minY = Double.POSITIVE_INFINITY;
-            double maxY = Double.NEGATIVE_INFINITY;
-            for (int i = 0; i < xs.length; i++) {
-                xs[i] = worldToScreenX(polygon.xs()[i], width, camera) / lightMapScale();
-                ys[i] = worldToScreenY(polygon.ys()[i], height, camera) / lightMapScale();
-                minY = Math.min(minY, ys[i]);
-                maxY = Math.max(maxY, ys[i]);
+            ScreenPolygon screen = buffer.polygons.get(polygon);
+            if (screen == null) {
+                double[] xs = new double[polygon.size()];
+                double[] ys = new double[polygon.size()];
+                double minY = Double.POSITIVE_INFINITY;
+                double maxY = Double.NEGATIVE_INFINITY;
+                for (int i = 0; i < xs.length; i++) {
+                    xs[i] = worldToScreenX(polygon.xs()[i], width, camera) / lightMapScale();
+                    ys[i] = worldToScreenY(polygon.ys()[i], height, camera) / lightMapScale();
+                    minY = Math.min(minY, ys[i]);
+                    maxY = Math.max(maxY, ys[i]);
+                }
+                screen = new ScreenPolygon(xs, ys, minY, maxY);
+                buffer.polygons.put(polygon, screen);
+                buffer.polygonTransforms++;
             }
-            rasters.add(new LightRaster(xs, ys, lx, ly, radius, brightness, minY, maxY,
+            rasters.add(new LightRaster(screen.xs(), screen.ys(), lx, ly, radius, brightness, screen.minY(), screen.maxY(),
                     (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
         }
-        rasterizeLights(buffer, rasters, bw, bh);
+        boolean parallel = parallelLighting(bw * bh);
+        rasterizeLights(buffer, rasters, bw, bh, parallel);
 
         for (int ei = 0; ei < emitters.size(); ei++) {
             DmProject.OverlayShape shape = emitters.get(ei);
@@ -1631,15 +1680,10 @@ public class CanvasMapRenderer {
         final float[] litGArr = buffer.litG;
         final float[] litBArr = buffer.litB;
         final double fDarkness = darkness;
-        IntStream.range(0, bh).parallel().forEach(row -> {
+        lightingRows(bh, parallel).forEach(row -> {
             for (int i = row * bw, end = i + bw; i < end; i++) {
-                double wx = camera.getX() + ((i % bw + 0.5) * lightMapScale() - width / 2) / zoom;
-                double wy = camera.getY() + ((row + 0.5) * lightMapScale() - height / 2) / zoom;
-                boolean inside = indoorDarkness && indoors.isInside(wx, wy);
-                double exposure = indoors.lightningExposureAt(wx, wy, indoorStorm);
-                buffer.lightningExposure[i] = (float) exposure;
-                buffer.lightningArgb[i] = (clampByte(255 * exposure) << 24) | lightningRgb;
-                double sun = inside && preset != TimeOfDayPreset.NIGHT ? indoors.daylightAt(wx, wy) : 0;
+                boolean inside = indoorDarkness && buffer.inside[i];
+                double sun = inside && preset != TimeOfDayPreset.NIGHT ? buffer.daylight[i] : 0;
                 double baseDarkness = inside ? nightDarkness : fDarkness;
                 double total = preset == TimeOfDayPreset.NIGHT || inside ? litArr[i] : 0;
                 double l = Math.min(1.0, total);
@@ -1677,8 +1721,47 @@ public class CanvasMapRenderer {
         });
         buffer.image.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), argb, 0, bw);
         buffer.ambientImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), ambientArgb, 0, bw);
-        buffer.lightningImage.getPixelWriter().setPixels(0, 0, bw, bh, PixelFormat.getIntArgbInstance(), buffer.lightningArgb, 0, bw);
         return new LightComposite(buffer, bw, bh, key);
+    }
+
+    private void refreshLightEnvironment(LightBuffer buffer, EnvironmentKey key, DmProject.CameraState camera,
+                                         int bw, int bh, int lightningRgb) {
+        boolean changed = !key.equals(buffer.environmentKey);
+        if (changed) {
+            LightViewKey view = key.view();
+            lightingRows(bh, parallelLighting(bw * bh)).forEach(row -> {
+                double wy = camera.getY() + ((row + 0.5) * view.scale() - view.height() / 2) / camera.getZoom();
+                for (int i = row * bw, end = i + bw; i < end; i++) {
+                    double wx = camera.getX() + ((i % bw + 0.5) * view.scale() - view.width() / 2) / camera.getZoom();
+                    buffer.inside[i] = key.indoors().isInside(wx, wy);
+                    buffer.daylight[i] = key.indoors().daylightAt(wx, wy);
+                    double exposure = key.indoors().lightningExposureAt(wx, wy, key.indoorStorm());
+                    buffer.lightningExposure[i] = (float) exposure;
+                    buffer.lightningAlpha[i] = clampByte(255 * exposure);
+                }
+            });
+            buffer.environmentKey = key;
+            buffer.environmentSamples++;
+        }
+        if (changed || buffer.lightningRgb != lightningRgb) {
+            for (int i = 0; i < buffer.lightningArgb.length; i++) {
+                buffer.lightningArgb[i] = (buffer.lightningAlpha[i] << 24) | lightningRgb;
+            }
+            buffer.lightningImage.getPixelWriter().setPixels(0, 0, bw, bh,
+                    PixelFormat.getIntArgbInstance(), buffer.lightningArgb, 0, bw);
+            buffer.lightningRgb = lightningRgb;
+            buffer.lightningUpdates++;
+        }
+    }
+
+    private record LightViewKey(double width, double height, double cameraX, double cameraY, double zoom, int scale) {
+    }
+
+    private record EnvironmentKey(LightViewKey view, IndoorLighting indoors, long version,
+                                  boolean daylightEnabled, boolean indoorStorm) {
+    }
+
+    private record ScreenPolygon(double[] xs, double[] ys, double minY, double maxY) {
     }
 
     private static int clampByte(double value) {
@@ -1797,7 +1880,7 @@ public class CanvasMapRenderer {
      * Rasterises all lights into the light map. Rows are split into bands that are filled in parallel; inside a
      * band the lights run in their original order so the result is identical to a sequential pass.
      */
-    private static void rasterizeLights(LightBuffer buffer, List<LightRaster> rasters, int bw, int bh) {
+    private static void rasterizeLights(LightBuffer buffer, List<LightRaster> rasters, int bw, int bh, boolean parallel) {
         if (rasters.isEmpty()) {
             return;
         }
@@ -1805,9 +1888,9 @@ public class CanvasMapRenderer {
         final float[] litR = buffer.litR;
         final float[] litG = buffer.litG;
         final float[] litB = buffer.litB;
-        int bandHeight = Math.max(8, (bh + 31) / 32);
+        int bandHeight = parallel ? Math.max(8, (bh + 31) / 32) : bh;
         int bands = (bh + bandHeight - 1) / bandHeight;
-        IntStream.range(0, bands).parallel().forEach(band -> {
+        lightingRows(bands, parallel).forEach(band -> {
             int first = band * bandHeight;
             int end = Math.min(bh, first + bandHeight);
             for (LightRaster r : rasters) {
@@ -2693,6 +2776,17 @@ public class CanvasMapRenderer {
     }
 
     private static final class LightBuffer {
+        private DmProject project;
+        private EnvironmentKey environmentKey;
+        private LightViewKey viewKey;
+        private final Map<VisibilityService.Polygon, ScreenPolygon> polygons = new IdentityHashMap<>();
+        private boolean[] inside = new boolean[0];
+        private double[] daylight = new double[0];
+        private int[] lightningAlpha = new int[0];
+        private int lightningRgb = -1;
+        private long environmentSamples;
+        private long polygonTransforms;
+        private long lightningUpdates;
         private int width;
         private int height;
         private float[] lit = new float[0];
@@ -2719,6 +2813,9 @@ public class CanvasMapRenderer {
                 return;
             }
             valid = false;
+            environmentKey = null;
+            viewKey = null;
+            polygons.clear();
             width = w;
             height = h;
             lit = new float[w * h];
@@ -2730,6 +2827,9 @@ public class CanvasMapRenderer {
             ambientArgb = new int[w * h];
             ambientImage = new WritableImage(w, h);
             lightningExposure = new float[w * h];
+            inside = new boolean[w * h];
+            daylight = new double[w * h];
+            lightningAlpha = new int[w * h];
             lightningArgb = new int[w * h];
             lightningImage = new WritableImage(w, h);
             flashAmbientArgb = new int[w * h];
