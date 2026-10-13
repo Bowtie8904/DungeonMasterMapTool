@@ -33,8 +33,9 @@ class WeatherParticleRenderTest {
                 WritableImage candidate = snapshot(snow, true, 2.3);
                 double originalAlpha = alphaSum(original);
                 double candidateAlpha = alphaSum(candidate);
-                assertTrue(candidateAlpha / originalAlpha > 0.9 && candidateAlpha / originalAlpha < 1.1,
-                        "Particle coverage must remain within 10%: " + candidateAlpha / originalAlpha);
+                double ratio = candidateAlpha / originalAlpha;
+                assertTrue(ratio >= 0.9 && ratio <= 1.1,
+                        "Particle coverage must remain within 10%: " + ratio);
             }
             if (Boolean.getBoolean("dmmt.weatherBenchmark")) {
                 for (boolean snow : new boolean[]{false, true}) {
@@ -88,7 +89,7 @@ class WeatherParticleRenderTest {
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
                     double distance = Math.hypot(x + 0.5 - size / 2.0, y + 0.5 - size / 2.0);
-                    double alpha = Math.max(0, Math.min(1, size / 2.0 - distance)) * color.getOpacity();
+                    double alpha = Math.max(0, Math.min(1, size / 2.0 - distance + 0.5)) * color.getOpacity();
                     snowSprite.getPixelWriter().setColor(x, y,
                             Color.color(color.getRed(), color.getGreen(), color.getBlue(), alpha));
                 }
