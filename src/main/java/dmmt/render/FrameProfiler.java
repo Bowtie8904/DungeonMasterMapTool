@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 /**
  * Accumulates how long named parts of the render loop take, so the metrics readout can show what is slow.
@@ -34,12 +35,16 @@ public final class FrameProfiler {
 
     /** Records a section excluding any profiled child work, so the reported parts do not overlap. */
     public static void measure(String section, Runnable action) {
-        Section current = new Section(section, System.nanoTime());
+        measure(section, action, System::nanoTime);
+    }
+
+    static void measure(String section, Runnable action, LongSupplier nanoTime) {
+        Section current = new Section(section, nanoTime.getAsLong());
         SECTIONS.push(current);
         try {
             action.run();
         } finally {
-            long elapsed = System.nanoTime() - current.startedNanos;
+            long elapsed = nanoTime.getAsLong() - current.startedNanos;
             SECTIONS.pop();
             NANOS.merge(current.name, Math.max(0, elapsed - current.childrenNanos), Long::sum);
             Section parent = SECTIONS.peek();

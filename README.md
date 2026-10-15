@@ -97,6 +97,12 @@ mvn test
 
 Main class: `dmmt.DungeonMasterMapToolLauncher`.
 
+Tests use temporary copies of `src/test/resources/dmmt/service/test-settings.ini`, never the project-root
+settings files, in both Maven and IDE JUnit runs. Keep any additional settings fixtures in test resources.
+Profiler accounting tests use deterministic timing rather than real-time waits.
+To regenerate the optional built-in defaults reference, explicitly run
+`mvn test -Dtest=DefaultSettingsFileTest -Dupdate.default.settings=true`.
+
 Data locations:
 
 - **Map library:** `dmmap-projects` beside `dmmap-audio` by default (created on first use, git-ignored; configurable with `library.folder`).

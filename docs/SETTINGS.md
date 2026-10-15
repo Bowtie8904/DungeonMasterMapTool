@@ -105,6 +105,10 @@ and never changes map quality, fog boundaries, calibrated scale or music volume.
   example from the IDE) the file is created in the working directory. Start the application with
   `-Ddmmt.settings=<path>` to use a different file. `dmmt-settings.default.ini` in the repository is an exact copy of a
   freshly created file.
+- **Tests:** Maven and IDE JUnit runs redirect settings to temporary copies of
+  `src/test/resources/dmmt/service/test-settings.ini`; neither project-root settings file is read.
+  Regenerate the defaults reference explicitly with
+  `mvn test -Dtest=DefaultSettingsFileTest -Dupdate.default.settings=true`.
 - **Format:** one `key = value` per line. Lines starting with `#` (or `;`) are comments. The comment above each entry
   repeats its allowed range and whether a restart is needed.
 - **Creation and new settings:** the file is created with every setting and its default on first start. When a newer
