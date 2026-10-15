@@ -465,7 +465,26 @@ public class MapLibraryService {
         }
     }
 
-    private void regenerateCopyIds(Path mapFile) throws IOException {
+    /**
+     * Writes a self-contained package directory for a loose map into {@code packageDir} (assets are copied in), so
+     * it can be exported like any packaged map. Returns the map file inside {@code packageDir}.
+     */
+    public Path packageLooseMap(Entry entry, Path packageDir) throws IOException {
+        Path newFile = packageDir.resolve(packageDir.getFileName() + EXTENSION);
+        DmProject project = projectService.load(entry.mapFile());
+        Path base = entry.mapFile().getParent();
+        if (project.getMap() != null) {
+            project.getMap().setImagePath(absolutize(base, project.getMap().getImagePath()));
+        }
+        for (DmProject.ImageLayer layer : project.getImageLayers()) {
+            layer.setPath(absolutize(base, layer.getPath()));
+        }
+        projectService.save(newFile, project);
+        return newFile;
+    }
+
+    /** Gives a map (and all levels of a multilevel map) fresh ids, as needed for an independent copy. */
+    public void regenerateCopyIds(Path mapFile) throws IOException {
         if (MultiLevelService.isMultiLevelFile(mapFile)) {
             var manifest = multiLevels().loadManifest(mapFile);
             manifest.setId(UUID.randomUUID().toString());

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 
-/** Imports several dd2vtt maps into a library folder, one after another. */
+/** Imports several dd2vtt/uvtt maps and exported {@code .dmmpack} archives into a library folder, one after another. */
 public class BatchImportService {
 
     public record Failure(Path source, String reason) {
@@ -36,7 +36,8 @@ public class BatchImportService {
 
     public static boolean isSuitable(Path file) {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
-        return Files.isRegularFile(file) && (name.endsWith(".dd2vtt") || name.endsWith(".uvtt"));
+        return Files.isRegularFile(file) && (name.endsWith(".dd2vtt") || name.endsWith(".uvtt")
+                || name.endsWith(MapExportService.EXTENSION));
     }
 
     /** All importable maps in {@code folder} and its sub-folders, sorted by path. */
@@ -79,6 +80,19 @@ public class BatchImportService {
             return new Result(imported, failures, total);
         }
         int[] index = {0};
+        List<Path> packs = sources.stream().filter(MapExportService::isPackFile).toList();
+        sources = sources.stream().filter(source -> !MapExportService.isPackFile(source)).toList();
+        MapExportService exporter = new MapExportService(library);
+        for (Path pack : packs) {
+            if (progress != null) {
+                progress.report(++index[0], total, MapLibraryService.stripExtension(pack.getFileName().toString()));
+            }
+            try {
+                imported.addAll(exporter.importPack(pack, resolveTargetFolder(targetFolder, sourceRoot, pack)));
+            } catch (IOException | RuntimeException ex) {
+                failures.add(new Failure(pack, ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
+            }
+        }
         boolean autoMerge = Tuning.IMPORT_AUTO_MERGE_MULTILEVEL.get();
         List<MultiLevelService.ImportGroup> groups = new ArrayList<>();
         if (autoMerge) {

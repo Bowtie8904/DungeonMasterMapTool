@@ -20,6 +20,7 @@ import dmmt.service.Dd2vttImportService;
 import dmmt.service.DuplicateCheckService;
 import dmmt.service.FogService;
 import dmmt.service.MapRotationService;
+import dmmt.service.MapExportService;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapTagService;
 import dmmt.service.MultiLevelService;
@@ -2583,6 +2584,11 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             @Override
+            public void exportMaps(List<MapLibraryService.Entry> maps) {
+                handleExportMaps(maps);
+            }
+
+            @Override
             public void dropMapOnMap(List<MapLibraryService.Entry> dragged, MapLibraryService.Entry target) {
                 handleDropMapOnMap(dragged, target);
             }
@@ -3815,10 +3821,44 @@ public class DungeonMasterMapToolApplication extends Application {
         }));
     }
 
+    private void handleExportMaps(List<MapLibraryService.Entry> maps) {
+        if (maps.isEmpty()) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(maps.size() == 1 ? "Export map" : "Export " + maps.size() + " maps");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("DMMT map pack", "*" + MapExportService.EXTENSION));
+        chooser.setInitialFileName((maps.size() == 1 ? maps.getFirst().name() : "Maps") + MapExportService.EXTENSION);
+        applyInitialImportDirectory(chooser);
+        File chosen = chooser.showSaveDialog(primaryStage);
+        if (chosen == null) {
+            return;
+        }
+        Path target = chosen.toPath();
+        if (!MapExportService.isPackFile(target)) {
+            target = target.resolveSibling(target.getFileName() + MapExportService.EXTENSION);
+        }
+        rememberImportDirectory(target.getParent());
+        Path exportTarget = target;
+        Path openFile = projectFile;
+        Path affected = openFile == null ? null : maps.stream()
+                .filter(map -> openFile.toAbsolutePath().normalize().startsWith(map.path().toAbsolutePath().normalize()))
+                .map(MapLibraryService.Entry::path).findFirst().orElse(null);
+        MapExportService exporter = new MapExportService(mapLibrary);
+        runLibraryOperation("Exporting maps...", affected, () -> {
+            exporter.export(maps, exportTarget);
+            return new MapLibraryService.Result(Map.of(), null);
+        }, result -> status("Exported " + (maps.size() == 1 ? maps.getFirst().name() : maps.size() + " maps")
+                + " to " + exportTarget.getFileName() + "."));
+    }
+
     private void handleImportDd2vtt(Path suggestedFolder) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Select DD2VTT maps");
+        chooser.setTitle("Select maps to import");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Maps (Universal VTT, exported)",
+                "*.dd2vtt", "*.uvtt", "*" + MapExportService.EXTENSION));
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Universal VTT", "*.dd2vtt", "*.uvtt"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Exported maps", "*" + MapExportService.EXTENSION));
         applyInitialImportDirectory(chooser);
         List<File> selected = chooser.showOpenMultipleDialog(primaryStage);
         if (selected == null || selected.isEmpty()) {
@@ -3833,7 +3873,7 @@ public class DungeonMasterMapToolApplication extends Application {
             status("Nothing to import: every selected file is already in the library.");
             return;
         }
-        if (sources.size() > 1) {
+        if (sources.size() > 1 || MapExportService.isPackFile(sources.get(0))) {
             importBatch(sources, suggestedFolder);
             return;
         }
@@ -3929,7 +3969,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void handleImportDd2vttFolder(Path suggestedFolder) {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Select a folder with DD2VTT maps");
+        chooser.setTitle("Select a folder with maps to import");
         applyInitialImportDirectory(chooser);
         File folder = chooser.showDialog(primaryStage);
         if (folder == null) {
@@ -3945,7 +3985,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (maps.isEmpty()) {
             Dialogs.error(primaryStage, "No maps found", "The folder \"" + folder.getName()
-                    + "\" (including its sub-folders) contains no .dd2vtt or .uvtt files.");
+                    + "\" (including its sub-folders) contains no .dd2vtt, .uvtt or .dmmpack files.");
             return;
         }
         List<Path> filtered = filterOutDuplicates(primaryStage, maps);
@@ -3984,8 +4024,8 @@ public class DungeonMasterMapToolApplication extends Application {
                     }
                     int multiLevel = (int) result.imported().stream().filter(MultiLevelService::isMultiLevelFile).count();
                     int failed = result.failures().size();
-                    int importedFiles = result.total() - failed;
-                    status("Imported " + importedFiles + " of " + result.total() + " maps"
+                    int importedFiles = result.imported().size();
+                    status("Imported " + importedFiles + (failed == 0 ? " maps" : " of " + result.total() + " files")
                             + (multiLevel == 0 ? "." : " (" + multiLevel + (multiLevel == 1 ? " multilevel map" : " multilevel maps")
                             + " from files numbered like levels)."));
                     if (!result.failures().isEmpty()) {

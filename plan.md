@@ -602,6 +602,12 @@ Dungeon Alchemist can build multi-storey buildings and export every level as its
 - The existing search bar checks each whitespace-separated search word against the map name or any tag, using case-insensitive partial matches and AND between words. For example, `tav haven` can match tag `tavern` and map name `Haven`. Preserve matching-folder visibility and ancestor folders.
 - Tag edits persist immediately through the library-operation workflow, preserving unsaved open-map changes and synchronizing the open level so later saves cannot overwrite tag edits.
 
+## 3.34.1 Map Export and Import (implemented)
+
+- Right-click one map or multilevel map (or a multi-selection of maps) in the map browser and choose **Export...** (**Export N maps...**). A save dialog writes one `.dmmpack` archive (a zip with one top-level folder per map holding the map package as stored in the library; loose legacy maps are packaged on the fly). The open map is saved first if it is part of the export.
+- **Import maps here...**, **Import folder here...** (which also finds `.dmmpack` files in sub-folders and re-creates their folder structure) and the import file dialog all accept `.dmmpack` files next to `.dd2vtt`/`.uvtt`, mixed freely; archives go through `BatchImportService` like every other file (duplicate-name check applies to dd2vtt/uvtt only). Every map in the archive is extracted as a new package, renamed `Name (2)`, ... when the name is taken, and receives fresh ids. Archive paths are validated (no path escapes) and a partially extracted import is rolled back.
+- Implemented by `MapExportService`; no DM-controls tool is involved, so no settings or local API entry is needed.
+
 ## 3.35 Audio: Ambient Music and Sound Effects (implemented)
 
 Optional, fully self-contained audio subsystem so the DM can run ambient music and layered sound effects from the

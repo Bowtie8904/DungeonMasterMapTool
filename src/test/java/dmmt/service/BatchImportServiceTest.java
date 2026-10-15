@@ -52,6 +52,29 @@ class BatchImportServiceTest {
     }
 
     @Test
+    void findsAndImportsExportedPacksInFolderStructure() throws Exception {
+        MapLibraryService library = new MapLibraryService(libraryRoot, new ProjectService());
+        Path map = library.newMapFile(libraryRoot, "Cave");
+        Files.createDirectories(map.getParent());
+        Files.writeString(map, "{\"id\":\"a\"}");
+        Path pack = source.resolve("sub").resolve("cave" + MapExportService.EXTENSION);
+        Files.createDirectories(pack.getParent());
+        new MapExportService(library).export(List.of(new MapLibraryService.Entry(MapLibraryService.Kind.MAP, "Cave",
+                map.getParent(), map, List.of())), pack);
+
+        List<Path> found = BatchImportService.findMaps(source);
+        assertEquals(List.of(pack), found);
+
+        Path target = libraryRoot.resolve("Imported");
+        Files.createDirectories(target);
+        BatchImportService.Result result = service.importAll(found, target, source, null);
+
+        assertEquals(0, result.failures().size());
+        assertEquals(1, result.imported().size());
+        assertTrue(Files.exists(target.resolve("sub").resolve("Cave").resolve("Cave.dmmap")));
+    }
+
+    @Test
     void importsAllMapsWithUniqueNames() throws Exception {
         Path a = write(source, "cave.dd2vtt", "{\"pixels_per_grid\":100}");
         Path b = write(source.resolve("other"), "cave.dd2vtt", "{\"pixels_per_grid\":100}");

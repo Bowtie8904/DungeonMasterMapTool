@@ -130,6 +130,9 @@ public class MapBrowser extends VBox {
         /** Opens the level dialog of a multilevel map. */
         void manageLevels(Path manifestFile);
 
+        /** Exports the maps into one {@code .dmmpack} archive chosen by the user. */
+        void exportMaps(java.util.List<Entry> maps);
+
         /** Edits one map's tags, or adds tags to every selected map. */
         void manageTags(java.util.List<Entry> maps);
 
@@ -783,6 +786,9 @@ public class MapBrowser extends VBox {
         MenuItem tags = item(selected.size() > 1 ? "Add tags…" : "Manage tags…",
                 MaterialDesignT.TAG_MULTIPLE_OUTLINE, () -> host.manageTags(selected));
         tags.setDisable(selected.isEmpty());
+        MenuItem export = item(selected.size() > 1 ? "Export " + selected.size() + " maps…" : "Export…",
+                MaterialDesignF.FILE_EXPORT_OUTLINE, () -> host.exportMaps(selected));
+        export.setDisable(selected.isEmpty());
         if (entry.isMultiLevel()) {
             menu.getItems().addAll(
                     item("Open", MaterialDesignM.MAP_OUTLINE, () -> host.openMap(target.mapFile())),
@@ -793,6 +799,7 @@ public class MapBrowser extends VBox {
                     new SeparatorMenuItem(),
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                     duplicate,
+                    export,
                     new SeparatorMenuItem(),
                     delete);
         } else if (entry.isMap()) {
@@ -803,6 +810,7 @@ public class MapBrowser extends VBox {
                     item("Rename…", MaterialDesignR.RENAME_BOX, () -> rename(target)),
                     duplicate,
                     merge,
+                    export,
                     new SeparatorMenuItem(),
                     delete);
         } else {
@@ -827,7 +835,7 @@ public class MapBrowser extends VBox {
         }
         if (tree.getSelectionModel().getSelectedItems().size() > 1) {
             for (MenuItem action : menu.getItems()) {
-                if (action != duplicate && action != merge && action != tags
+                if (action != duplicate && action != merge && action != tags && action != export
                         && !(action == delete && target.isMap())) {
                     action.setDisable(true);
                 }

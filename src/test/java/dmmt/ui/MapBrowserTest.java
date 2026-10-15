@@ -79,7 +79,7 @@ class MapBrowserTest {
                 ContextMenu menu = fixture.browser.buildMenu(map.getValue());
                 for (MenuItem item : menu.getItems()) {
                     if (!(item instanceof SeparatorMenuItem)) {
-                        assertEquals(!List.of("Add tags…", "Duplicate", "Delete…").contains(item.getText()), item.isDisable(),
+                        assertEquals(!List.of("Add tags…", "Duplicate", "Export 2 maps…", "Delete…").contains(item.getText()), item.isDisable(),
                                 item.getText());
                     }
                 }
@@ -115,7 +115,7 @@ class MapBrowserTest {
                 ContextMenu menu = fixture.browser.buildMenu(target);
                 for (MenuItem item : menu.getItems()) {
                     if (!(item instanceof SeparatorMenuItem)) {
-                        assertEquals(!List.of("Add tags…", "Duplicate", "Delete…", "Combine into multilevel map")
+                        assertEquals(!List.of("Add tags…", "Duplicate", "Export 2 maps…", "Delete…", "Combine into multilevel map")
                                 .contains(item.getText()), item.isDisable(), item.getText());
                     }
                 }
@@ -623,6 +623,7 @@ class MapBrowserTest {
         @Override public void mergeIntoMultiLevelMap(List<Entry> maps) { merged = maps; }
         @Override public void manageLevels(Path file) {}
         @Override public void manageTags(List<Entry> maps) { tagged = maps; }
+        @Override public void exportMaps(List<Entry> maps) {}
         @Override public void dropMapOnMap(List<Entry> dragged, Entry target) {}
         @Override public void dissolveMultiLevel(Path file) {}
 

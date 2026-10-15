@@ -162,6 +162,10 @@ at their original location; moving a legacy map before that first open may also 
 
 On disk each map is a package: `<folder>/<Map Name>/<Map Name>.dmmap` plus `assets`, `imports` and `thumbnail.png` (hidden in the tree). A multilevel map is a package `<folder>/<Map Name>/<Map Name>.dmlevels` with one ordinary map package per level below `levels/` (also hidden in the tree).
 
+**Exporting and importing maps**
+
+Select one or several maps in the map browser, right-click and choose **Export...**. All selected maps are written into a single `.dmmpack` file (including multilevel maps, with their assets). To bring them back, right-click a folder, choose **Import maps here...** and pick the `.dmmpack` file, just like a `.dd2vtt` or `.uvtt` file. **Import folder here...** also finds `.dmmpack` files in the chosen folder and its sub-folders, and all file types can be mixed in one import. Imported maps get new names (`Name (2)`) if the name is already taken.
+
 **Map tags**
 
 Right-click a map and choose **Manage tags...**. Type a tag and click **Add** (or press `Enter`); remove a tag with its small cross button. Tag names are trimmed, stored and displayed in **UPPERCASE**, including older tags and suggestions, and cannot appear twice on the same map, regardless of capitalization. The tag input also displays uppercase as you type. Suggestions come from tags already used in the library: typing `tav` displays `TAV` and suggests `TAVERN`, without autocompleting the name. An overlay below the field shows up to **five suggestions**, all visible without scrolling: navigate with **Up/Down** and accept with **Enter**, or click a row to fill the field, then add it. **Escape** dismisses suggestions. **Apply** saves the edits; **Cancel** discards them.
