@@ -16,7 +16,7 @@ Desktop tool for tabletop dungeon masters that:
 
 1. Imports universal-export **dd2vtt** maps (e.g., from Dungeon Alchemist).
 2. Provides smooth DM-side map navigation (zoom, pan, camera controls).
-3. Supports optional borderless fullscreen **player view** on a second display (owned by the DM window, so it has no taskbar button of its own).
+3. Supports optional borderless fullscreen **player view** on a second display as an independent window with its own taskbar entry.
 4. Supports fog of war, lighting, and overlay drawing workflows fast enough for live sessions on a mid-range laptop.
 5. Supports creating custom maps from imported images while keeping full feature parity with imported dd2vtt maps.
 
@@ -106,6 +106,7 @@ Desktop tool for tabletop dungeon masters that:
 ## 3.3 Player View (Second Screen)
 
 - Optional separate window on selected monitor.
+- The player window has no owner and is not always on top. Minimizing the DM window leaves the player view visible; other applications can cover either window normally. The player view has its own taskbar entry. Closing the DM window still closes the player view and exits the application.
 - DM can choose the exact target monitor for player view from an in-app screen selector (supports 2+ monitor setups reliably).
 - Borderless fullscreen mode.
 - **Show grid** icon-only toggle on the second row of the Player view DM controls section, with a grid-opacity slider and percentage beside it: draws the map-aligned grid over the player map images and below lighting/effects/fog. Off by default; stored globally as `player.showGrid` in the settings file, not in projects. Applies immediately, including while frozen, and leaves DM grid visibility unchanged. The opacity slider edits the existing global `ui.gridOpacity` setting (0-100%, default 8%), shared with the DM background grid. It cannot remove grid lines baked into a map image.
