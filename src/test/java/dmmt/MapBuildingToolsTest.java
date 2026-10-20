@@ -46,6 +46,171 @@ class MapBuildingToolsTest {
     }
 
     @Test
+    void plainHoverDoesNotBoostEitherRenderModeButMapPreviewsAndRealInputDo() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            dmmt.render.CanvasMapRenderer.setEffectAnimationsEnabled(true);
+            dmmt.render.CanvasMapRenderer.setLightFlickerEnabled(false);
+            try {
+                set(f.app, "targetFps", 60);
+                set(f.app, "animationFps", 30);
+                set(f.app, "idleFps", 10);
+                for (boolean performance : new boolean[]{false, true}) {
+                    dmmt.render.PerformanceMode.setEnabled(performance);
+                    set(f.app, "lastInputNanos", 0L);
+                    for (var type : java.util.List.of(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_ENTERED,
+                            MouseEvent.MOUSE_EXITED, MouseEvent.MOUSE_ENTERED_TARGET, MouseEvent.MOUSE_EXITED_TARGET)) {
+                        invoke(f.app, "recordInteractionInput", f.mouse(type, 20, 20, MouseButton.NONE, false));
+                    }
+                    f.move(20, 20);
+                    assertEquals(0L, get(f.app, "lastInputNanos"));
+                    assertEquals(performance ? 5 : 10, invoke(f.app, "renderFps", System.nanoTime(), false, false));
+                    f.project.getWeather().setType("MIST");
+                    f.move(25, 20);
+                    assertEquals(performance ? 10 : 30, invoke(f.app, "renderFps", System.nanoTime(), false, false));
+                    invoke(f.app, "recordInteractionInput",
+                            f.mouse(MouseEvent.MOUSE_DRAGGED, 30, 20, MouseButton.PRIMARY, false));
+                    assertEquals(performance ? 20 : 60, invoke(f.app, "renderFps", System.nanoTime(), false, false));
+                    long lastInput = (long) get(f.app, "lastInputNanos");
+                    f.move(35, 20);
+                    long afterTimeout = lastInput + dmmt.service.Tuning.RECENT_INPUT_MS.get() * 1_000_000L + 1;
+                    assertEquals(performance ? 10 : 30, invoke(f.app, "renderFps", afterTimeout, false, false),
+                            "Ordinary hovering does not prolong the interaction interval");
+                    set(f.app, "lastInputNanos", 0L);
+                    invoke(f.app, "recordInteractionInput", new javafx.scene.input.KeyEvent(
+                            javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.RIGHT,
+                            false, false, false, false));
+                    assertEquals(performance ? 20 : 60, invoke(f.app, "renderFps", System.nanoTime(), false, false));
+                    f.project.getWeather().setType("NONE");
+                }
+                dmmt.render.PerformanceMode.setEnabled(false);
+                for (String enumName : java.util.List.of("REVEAL_BRUSH", "WALL_DRAW", "WALL_ERASE")) {
+                    Object value = java.util.Arrays.stream(get(f.app, "activeTool").getClass().getEnumConstants())
+                            .filter(candidate -> candidate.toString().equals(enumName)).findFirst().orElseThrow();
+                    set(f.app, "activeTool", value);
+                    set(f.app, "lastInputNanos", 0L);
+                    f.move(50, 50);
+                    assertEquals(60, invoke(f.app, "renderFps", System.nanoTime(), false, false));
+                }
+            } finally {
+                dmmt.render.PerformanceMode.setEnabled(false);
+                dmmt.render.CanvasMapRenderer.setLightFlickerEnabled(true);
+            }
+        });
+    }
+
+    @Test
+    void dmHoverHighlightsRetainUnchangedOverlaysAndExpirePointers() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            var portal = DmProject.Interactable.builder().id("door").x1(80).y1(100).x2(120).y2(100).build();
+            f.project.getInteractables().add(portal);
+            set(f.app, "lastInputNanos", 0L);
+            f.move(20, 20);
+            invoke(f.app, "renderDmPointerOverlay");
+            long count = (long) get(f.app, "dmOverlayRedraws");
+            Canvas canvas = (Canvas) get(f.app, "dmFogCanvas");
+            javafx.scene.SnapshotParameters parameters = new javafx.scene.SnapshotParameters();
+            parameters.setFill(javafx.scene.paint.Color.TRANSPARENT);
+            int normal = canvas.snapshot(parameters, null).getPixelReader().getArgb(100, 85);
+            f.move(30, 20);
+            assertFalse((boolean) get(f.app, "dmHoverPending"));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(count, get(f.app, "dmOverlayRedraws"));
+            f.move(100, 100);
+            assertTrue((boolean) get(f.app, "dmHoverPending"));
+            assertEquals(0L, get(f.app, "lastInputNanos"), "Hover highlights never promote the map frame rate");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            assertNotEquals(normal, canvas.snapshot(parameters, null).getPixelReader().getArgb(100, 85));
+            f.move(101, 100);
+            assertFalse((boolean) get(f.app, "dmHoverPending"));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(count, get(f.app, "dmOverlayRedraws"));
+            f.canvas.getOnMouseExited().handle(f.mouse(MouseEvent.MOUSE_EXITED, 401, 100, MouseButton.NONE, false));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            assertEquals(normal, canvas.snapshot(parameters, null).getPixelReader().getArgb(100, 85));
+            portal.setState("open");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"), "In-place portal edits refresh retained pixels");
+            f.project.getViews().getDmCamera().setX(190);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            f.project.getActivePings().add(DmProject.PingEvent.builder().x(150).y(150)
+                    .createdAtMillis(System.currentTimeMillis()).durationMillis(10000).build());
+            invoke(f.app, "renderDmPointerOverlay");
+            invoke(f.app, "renderDmPointerOverlay");
+            count += 2;
+            assertEquals(count, get(f.app, "dmOverlayRedraws"), "Live pointers still animate");
+            f.project.getActivePings().getFirst().setCreatedAtMillis(0);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"), "Expired pointers are cleared once");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(count, get(f.app, "dmOverlayRedraws"));
+        });
+    }
+
+    @Test
+    void retainedDmSelectionsRefreshForGeometryLiveStylesAndLaserExpiry() throws Exception {
+        onFx(() -> {
+            Fixture f = fixture();
+            var token = DmProject.TokenInstance.builder().id("hero").definitionId("hero")
+                    .x(160).y(120).sizeTiles(.5).playerVisible(true).build();
+            f.project.getTokens().add(token);
+            set(f.app, "selectedTokenId", token.getId());
+            invoke(f.app, "renderDmPointerOverlay");
+            long count = (long) get(f.app, "dmOverlayRedraws");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(count, get(f.app, "dmOverlayRedraws"), "Static selection handles are retained");
+            token.setX(170);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            set(f.app, "selectedTokenId", null);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"), "Clearing selection removes its handles");
+            @SuppressWarnings("unchecked")
+            Set<String> group = (Set<String>) get(f.app, "groupKeys");
+            group.add("token:hero");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            token.setSizeTiles(.75);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"), "In-place group geometry edits refresh outlines");
+            f.project.getInteractables().add(DmProject.Interactable.builder().id("door")
+                    .x1(80).y1(100).x2(120).y2(100).build());
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            try {
+                dmmt.service.Tuning.apply(key -> key.equals("ui.doorClosedColor") ? "#112233" : null);
+                invoke(f.app, "renderDmPointerOverlay");
+                assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            } finally {
+                dmmt.service.Tuning.reset();
+            }
+            invoke(f.app, "addLaserPoint", 200.0, 200.0);
+            invoke(f.app, "renderDmPointerOverlay");
+            @SuppressWarnings("unchecked")
+            java.util.List<CanvasMapRenderer.LaserPoint> trail =
+                    (java.util.List<CanvasMapRenderer.LaserPoint>) get(f.app, "laserTrail");
+            trail.set(0, new CanvasMapRenderer.LaserPoint(200, 200, 0));
+            invoke(f.app, "renderDmPointerOverlay");
+            count += 2;
+            assertEquals(count, get(f.app, "dmOverlayRedraws"));
+            assertTrue(trail.isEmpty());
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(count, get(f.app, "dmOverlayRedraws"), "Expired trails clear once, then retain the overlay");
+            Canvas replacement = new Canvas(400, 300);
+            set(f.app, "dmFogCanvas", replacement);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+            replacement.setWidth(420);
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(++count, get(f.app, "dmOverlayRedraws"));
+        });
+    }
+
+    @Test
     void customImageHeadersQueueInOrderAndCancellationAndInvalidImagesLeaveHistoryIntact() throws Exception {
         java.util.concurrent.atomic.AtomicReference<Fixture> reference = new java.util.concurrent.atomic.AtomicReference<>();
         Path first = directory.resolve("first.png");

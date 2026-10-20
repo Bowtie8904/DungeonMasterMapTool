@@ -298,6 +298,9 @@ public class DungeonMasterMapToolApplication extends Application {
     private volatile int animationFps = DEFAULT_FPS_ANIMATION;
     private volatile int idleFps = DEFAULT_FPS_IDLE;
     private long lastFrameNanos;
+    private List<?> dmOverlayKey;
+    private boolean dmHoverPending;
+    private long dmOverlayRedraws;
     private Label metricsLabel;
     private javafx.scene.control.Tooltip metricsTooltip;
     private javafx.stage.Popup diagnosticsPopup;
@@ -801,20 +804,7 @@ public class DungeonMasterMapToolApplication extends Application {
         autoSaveTicker.setCycleCount(javafx.animation.Animation.INDEFINITE);
         autoSaveTicker.play();
 
-        scene.addEventFilter(javafx.scene.input.InputEvent.ANY, e -> {
-            // In performance mode plain hovering with the select tool is not interaction and must not raise the frame rate.
-            boolean hoverOnly = e instanceof javafx.scene.input.MouseEvent me && !me.isPrimaryButtonDown()
-                    && !me.isSecondaryButtonDown() && !me.isMiddleButtonDown()
-                    && (me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_MOVED
-                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED
-                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED
-                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED_TARGET
-                    || me.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED_TARGET);
-            if (hoverOnly && PerformanceMode.isEnabled() && activeTool == EditorTool.SELECT && !pingArmed && !laserToolActive) {
-                return;
-            }
-            lastInputNanos = System.nanoTime();
-        });
+        scene.addEventFilter(javafx.scene.input.InputEvent.ANY, this::recordInteractionInput);
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
@@ -824,17 +814,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 // Frame rates are configurable: target while interacting, animation for moving effects, idle otherwise.
                 boolean fogFading = renderer.isFogAnimating() || playerRenderer.isFogAnimating();
-                boolean animated = hasAnimation(project)
-                        || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
-                boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L || laserActive || laserToolActive || !laserTrail.isEmpty()
-                        || fogFading || historyFeedback.active(now) || viewportScrolling;
-                int fps = PerformanceMode.isEnabled()
-                        ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
-                        : animated ? PerformanceMode.textureAnimationFps() : Math.min(PerformanceMode.idleFps(), idleFps)
-                        : recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
+                int fps = renderFps(now, fogFading, viewportScrolling);
                 // 10% slack so vsync jitter does not push a frame to the next tick.
                 long minInterval = (long) (900_000_000L / fps);
                 if (now - lastFrameNanos < minInterval) {
+                    if (dmHoverPending) {
+                        renderDmPointerOverlay();
+                    }
                     return;
                 }
                 lastFrameNanos = now;
@@ -853,6 +839,40 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         };
         timer.start();
+    }
+
+    private int renderFps(long now, boolean fogFading, boolean viewportScrolling) {
+        boolean animated = hasAnimation(project)
+                || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
+        boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L
+                || laserActive || laserToolActive || !laserTrail.isEmpty()
+                || fogFading || historyFeedback.active(now) || viewportScrolling;
+        return PerformanceMode.isEnabled()
+                ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
+                : animated ? PerformanceMode.textureAnimationFps() : Math.min(PerformanceMode.idleFps(), idleFps)
+                : recentInput ? targetFps : animated ? Math.min(animationFps, targetFps) : idleFps;
+    }
+
+    private void recordInteractionInput(javafx.scene.input.InputEvent event) {
+        if (event instanceof javafx.scene.input.MouseEvent mouse
+                && !mouse.isPrimaryButtonDown() && !mouse.isSecondaryButtonDown() && !mouse.isMiddleButtonDown()
+                && (mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_MOVED
+                || mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED
+                || mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED
+                || mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_ENTERED_TARGET
+                || mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_EXITED_TARGET)) {
+            return;
+        }
+        lastInputNanos = System.nanoTime();
+    }
+
+    private void mapHoverChanged(String previousPortal) {
+        if (!java.util.Objects.equals(previousPortal, hoveredInteractableId())) {
+            dmHoverPending = true;
+        }
+        if (hoverInsideCanvas && (activeTool != EditorTool.SELECT || pingArmed || laserToolActive)) {
+            lastInputNanos = System.nanoTime();
+        }
     }
 
     /** Collects per-frame render times and refreshes the status bar readout about once a second. */
@@ -2892,6 +2912,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
 
         dmCanvas.setOnMouseMoved(event -> {
+            String previousPortal = hoveredInteractableId();
             updateHover(event.getX(), event.getY());
             showViewportTitleTooltip(activeTool == EditorTool.SELECT
                     && isOnPlayerViewportTitleBar(hoverWorldX, hoverWorldY));
@@ -2902,8 +2923,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 addLaserPoint(hoverWorldX, hoverWorldY);
             }
             updateCanvasCursor();
+            mapHoverChanged(previousPortal);
         });
         dmCanvas.setOnMouseExited(event -> {
+            String previousPortal = hoveredInteractableId();
             showViewportTitleTooltip(false);
             hoverInsideCanvas = false;
             geometryPreviewHover = false;
@@ -2912,6 +2935,8 @@ public class DungeonMasterMapToolApplication extends Application {
             if (laserToolActive && !event.isPrimaryButtonDown()) {
                 laserTrail.clear();
             }
+            dmHoverPending = true;
+            mapHoverChanged(previousPortal);
         });
 
         // Runs after the press/release handlers below have updated the drag state.
@@ -3737,20 +3762,54 @@ public class DungeonMasterMapToolApplication extends Application {
                 false
         );
         FrameProfiler.lap("dm fog", section);
+        long toolsStart = FrameProfiler.start();
+        updateEffectStyleControls();
+        updateSelectionControls();
+        renderDmPointerOverlay();
+        updateTextEditorPlacement();
+        FrameProfiler.lap("dm tools/ui", toolsStart);
+    }
+
+    private void renderDmPointerOverlay() {
+        dmHoverPending = false;
+        pruneLaserTrail();
+        long now = System.currentTimeMillis();
+        project.getActivePings().removeIf(p -> now - p.getCreatedAtMillis() > p.getDurationMillis());
+        String hoveredPortal = hoveredInteractableId();
+        CanvasMapRenderer.WorldRect viewport = getPlayerViewportRect();
+        var camera = project.getViews().getDmCamera();
+        // Store hashes, not mutable model objects, so in-place edits invalidate retained decorations.
+        List<?> key = java.util.Arrays.asList(dmFogCanvas, project, dmFogCanvas.getWidth(), dmFogCanvas.getHeight(),
+                camera.getX(), camera.getY(), camera.getZoom(), project.getMap().getGrid().getPixelsPerCell(),
+                project.getLighting().getLights().hashCode(), project.getInteractables().hashCode(),
+                renderer.isWallLayerVisible(), hoveredPortal, viewport, project.getViews().getPlayerZoomStep(),
+                selectedLight == null ? null : selectedLight.getId(),
+                java.util.Objects.hashCode(selectedLayer), isImageLayerLocked(),
+                java.util.Objects.hashCode(findOverlay(selectedOverlayId)),
+                java.util.Objects.hashCode(findTextBox(selectedTextId)), editingTextId, project.isTextLayerVisible(),
+                java.util.Objects.hashCode(findToken(selectedTokenId)), List.copyOf(groupKeys),
+                groupKeys.isEmpty() ? 0 : java.util.Objects.hash(project.getImageLayers(), project.getTextBoxes(),
+                        project.getOverlays(), project.getTokens()),
+                Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
+                Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
+        boolean dynamic = activeTool != EditorTool.SELECT || draftOverlay != null || draftWall != null
+                || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty()
+                || !project.getActivePings().isEmpty() || historyFeedback.active(System.nanoTime());
+        if (!dynamic && key.equals(dmOverlayKey)) {
+            return;
+        }
+        dmOverlayKey = dynamic ? null : key;
+        dmOverlayRedraws++;
         GraphicsContext fogGc = dmFogCanvas.getGraphicsContext2D();
         renderer.renderFogOverlayLayer(
                 fogGc, project, dmFogCanvas.getWidth(), dmFogCanvas.getHeight(),
                 project.getViews().getDmCamera(), false,
-                getPlayerViewportRect(),
+                viewport,
                 selectedLight == null ? null : selectedLight.getId(),
-                hoveredInteractableId()
+                hoveredPortal
         );
-        long toolsStart = FrameProfiler.start();
-        pruneLaserTrail();
         drawLaser(fogGc, dmFogCanvas, project.getViews().getDmCamera(), Tuning.LASER_DM_DOT.get());
         drawSelectionHandle(fogGc);
-        updateEffectStyleControls();
-        updateSelectionControls();
         drawOverlaySelection(fogGc);
         drawTextSelection(fogGc);
         drawTokenSelection(fogGc);
@@ -3758,8 +3817,6 @@ public class DungeonMasterMapToolApplication extends Application {
         drawToolPreview(fogGc);
         historyFeedback.draw(fogGc, dmCanvas.getWidth(), dmCanvas.getHeight(),
                 project.getViews().getDmCamera(), System.nanoTime());
-        updateTextEditorPlacement();
-        FrameProfiler.lap("dm tools/ui", toolsStart);
     }
 
     private void renderPlayer() {

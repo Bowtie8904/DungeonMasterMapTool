@@ -42,6 +42,227 @@ class CanvasMapRendererTest {
     }
 
     @Test
+    void dmEffectsRetainFramesAndInvalidateHiddenStylesGeometryAndView() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            var shape = DmProject.OverlayShape.builder().id("smoke").type("circle")
+                    .x(64).y(48).radius(30).texture("smoke").build();
+            project.getOverlays().add(shape);
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            double[] clock = {1};
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine) {
+                @Override
+                protected double effectSeconds() {
+                    return effectAnimationsOn() ? clock[0] : 0;
+                }
+            };
+            Canvas effects = new Canvas(128, 96);
+            Runnable render = () -> renderer.renderEffectsLayer(effects.getGraphicsContext2D(), project, 128, 96, camera, false);
+            render.run();
+            clock[0] += .001;
+            render.run();
+            assertEquals(1, renderer.dmEffectsRedrawCount(), "DM soft textures retain the existing animation cadence");
+            clock[0] = 1.1;
+            render.run();
+            assertEquals(2, renderer.dmEffectsRedrawCount());
+            CanvasMapRenderer.setEffectAnimationsEnabled(false);
+            render.run();
+            long count = renderer.dmEffectsRedrawCount();
+            render.run();
+            assertEquals(count, renderer.dmEffectsRedrawCount());
+            shape.setPlayerVisible(false);
+            render.run();
+            assertEquals(++count, renderer.dmEffectsRedrawCount(), "Hidden styling and badge must refresh");
+            Tuning.apply(key -> key.equals("effects.dmHiddenOpacity") ? "0.2" : null);
+            render.run();
+            assertEquals(++count, renderer.dmEffectsRedrawCount());
+            shape.setRadius(20);
+            render.run();
+            assertEquals(++count, renderer.dmEffectsRedrawCount());
+            camera.setX(66);
+            render.run();
+            assertEquals(++count, renderer.dmEffectsRedrawCount());
+            Canvas expected = new Canvas(128, 96);
+            renderer.render(expected.getGraphicsContext2D(), project, null, 128, 96, camera, false, null);
+            assertSamePixels(expected, effects);
+
+            project.getOverlays().clear();
+            render.run();
+            assertTrue(effects.isVisible(), "The empty DM effects canvas must keep receiving map input");
+            assertEquals(0, transparentSnapshot(effects).getPixelReader().getArgb(64, 48));
+            long emptyCount = renderer.dmEffectsRedrawCount();
+            render.run();
+            assertEquals(emptyCount, renderer.dmEffectsRedrawCount());
+            project.getOverlays().add(shape);
+            Canvas replacement = new Canvas(128, 96);
+            renderer.renderEffectsLayer(replacement.getGraphicsContext2D(), project, 128, 96, camera, false);
+            assertEquals(emptyCount + 1, renderer.dmEffectsRedrawCount());
+            replacement.setWidth(160);
+            renderer.renderEffectsLayer(replacement.getGraphicsContext2D(), project, 160, 96, camera, false);
+            assertEquals(emptyCount + 2, renderer.dmEffectsRedrawCount());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void dmForegroundRetainsImmutableTextTokenAndPortalInputs() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            var box = DmProject.TextBox.builder().id("text").x(10).y(10).width(100).height(60)
+                    .runs(new java.util.ArrayList<>(java.util.List.of(DmProject.TextRun.builder().text("Hello").build()))).build();
+            project.getTextBoxes().add(box);
+            var wall = DmProject.WallSegment.builder().x1(10).y1(80).x2(110).y2(80).build();
+            var portal = DmProject.Interactable.builder().id("door").x1(30).y1(80).x2(60).y2(80).build();
+            project.getWalls().add(wall);
+            project.getInteractables().add(portal);
+            var definition = DmProject.TokenDefinition.builder().id("hero").name("Hero").build();
+            project.getTokenDefinitions().put("hero", definition);
+            var token = DmProject.TokenInstance.builder().id("token").definitionId("hero")
+                    .x(64).y(48).sizeTiles(.25).playerVisible(false).nameVisible(true).build();
+            project.getTokens().add(token);
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            Canvas foreground = new Canvas(128, 96);
+            Runnable render = () -> renderer.renderForegroundLayer(foreground.getGraphicsContext2D(), project, 128, 96, camera, false);
+            render.run();
+            render.run();
+            assertEquals(1, renderer.dmForegroundRedrawCount());
+            assertTrue(foreground.isVisible());
+
+            java.util.List<Runnable> changes = java.util.List.of(
+                    () -> box.getRuns().getFirst().setText("Changed"),
+                    () -> box.setPlayerVisible(false),
+                    () -> box.setRoomLabel(true),
+                    () -> renderer.setEditingTextBoxId("text"),
+                    () -> renderer.setEditingTextBoxId(null),
+                    () -> wall.setX2(100),
+                    () -> portal.setState("open"),
+                    () -> {
+                        portal.setType("window");
+                        Tuning.apply(key -> key.equals("ui.windowOpenColor") ? "#FF0000" : null);
+                    },
+                    () -> Tuning.apply(key -> key.equals("ui.wallOpacity") ? "0.3" : null),
+                    () -> definition.setName("Renamed"),
+                    () -> token.setNameVisible(false),
+                    () -> token.setX(70),
+                    () -> token.setPlayerVisible(true),
+                    () -> renderer.setWallLayerVisible(false),
+                    () -> renderer.setWallLayerVisible(true),
+                    () -> project.setTextLayerVisible(false),
+                    () -> project.setTextLayerVisible(true),
+                    () -> camera.setZoom(1.1));
+            long count = 1;
+            for (Runnable change : changes) {
+                change.run();
+                render.run();
+                assertEquals(++count, renderer.dmForegroundRedrawCount());
+                Canvas expected = new Canvas(128, 96);
+                renderer.render(expected.getGraphicsContext2D(), project, null, 128, 96, camera, false, null);
+                assertSamePixels(expected, foreground);
+                render.run();
+                assertEquals(count, renderer.dmForegroundRedrawCount(), "Unchanged content stays retained");
+            }
+            Canvas replacement = new Canvas(128, 96);
+            renderer.renderForegroundLayer(replacement.getGraphicsContext2D(), project, 128, 96, camera, false);
+            assertEquals(++count, renderer.dmForegroundRedrawCount());
+            replacement.setWidth(160);
+            renderer.renderForegroundLayer(replacement.getGraphicsContext2D(), project, 160, 96, camera, false);
+            assertEquals(++count, renderer.dmForegroundRedrawCount());
+            project.getTextBoxes().clear();
+            project.getTokens().clear();
+            project.getWalls().clear();
+            project.getInteractables().clear();
+            render.run();
+            assertFalse(foreground.isVisible());
+            assertEquals(0, transparentSnapshot(foreground).getPixelReader().getArgb(64, 48));
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void inactiveDmLayersHideAndRestoreWithoutChangingResolution() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("DAY");
+            project.getFog().setEnabled(false);
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            Canvas ambient = new Canvas(128, 96);
+            Canvas core = new Canvas(128, 96);
+            Canvas fog = new Canvas(128, 96);
+            Canvas weather = new Canvas(128, 96);
+            Canvas flash = new Canvas(128, 96);
+            Runnable render = () -> {
+                renderer.renderBrightCore(core.getGraphicsContext2D(), project, 128, 96, camera, false);
+                renderer.renderAmbientLight(ambient.getGraphicsContext2D(), project, 128, 96, camera, false);
+                renderer.renderFogMaskLayer(fog.getGraphicsContext2D(), project, 128, 96, camera, false);
+                renderer.renderWeatherLayer(weather, flash, project, 128, 96, camera, false);
+            };
+            render.run();
+            for (Canvas layer : java.util.List.of(ambient, core, fog, weather, flash)) {
+                assertFalse(layer.isVisible());
+            }
+            project.getLighting().setTimeOfDayPreset("NIGHT");
+            project.getLighting().setBrightCore(.5);
+            project.getLighting().getLights().add(DmProject.LightSource.builder().id("light")
+                    .x(64).y(48).range(80).intensity(1)
+                    .flicker(DmProject.Flicker.builder().enabled(false).build()).build());
+            project.getWeather().setType("MIST");
+            project.getFog().setEnabled(true);
+            engine.update(project);
+            render.run();
+            for (Canvas layer : java.util.List.of(ambient, core, fog, weather)) {
+                assertTrue(layer.isVisible());
+                assertEquals(128, layer.getWidth());
+                assertEquals(96, layer.getHeight());
+            }
+            render.run();
+            assertTrue(core.isVisible(), "A retained active blend layer stays visible");
+            project.getLighting().setBrightCore(0);
+            project.getWeather().setType("NONE");
+            project.getFog().setEnabled(false);
+            project.getLighting().setTimeOfDayPreset("DAY");
+            engine.update(project);
+            render.run();
+            for (Canvas layer : java.util.List.of(ambient, core, fog, weather, flash)) {
+                assertFalse(layer.isVisible());
+            }
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    private static WritableImage transparentSnapshot(Canvas canvas) {
+        SnapshotParameters parameters = new SnapshotParameters();
+        parameters.setFill(Color.TRANSPARENT);
+        return canvas.snapshot(parameters, null);
+    }
+
+    private static void assertSamePixels(Canvas expected, Canvas actual) {
+        WritableImage reference = transparentSnapshot(expected);
+        WritableImage retained = transparentSnapshot(actual);
+        for (int y = 0; y < (int) reference.getHeight(); y++) {
+            for (int x = 0; x < (int) reference.getWidth(); x++) {
+                assertEquals(reference.getPixelReader().getArgb(x, y), retained.getPixelReader().getArgb(x, y),
+                        "Pixel mismatch at " + x + "," + y);
+            }
+        }
+    }
+
+    @Test
     void playerEffectsAndTextRetainImmutableInputsAndRestoreReplacementCanvases() throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> {
             CanvasMapRenderer.setEffectAnimationsEnabled(false);

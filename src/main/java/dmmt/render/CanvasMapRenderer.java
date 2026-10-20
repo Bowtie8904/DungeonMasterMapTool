@@ -189,7 +189,9 @@ public class CanvasMapRenderer {
     private final LayerCache playerFlashCache = new LayerCache();
     private final LayerCache playerEffectsCache = new LayerCache();
     private final LayerCache playerTextCache = new LayerCache();
-    private Double playerEffectSeconds;
+    private final LayerCache dmEffectsCache = new LayerCache();
+    private final LayerCache dmForegroundCache = new LayerCache();
+    private Double frameEffectSeconds;
 
     private WritableImage fogImage;
     private FogMask fogImageMask;
@@ -278,6 +280,14 @@ public class CanvasMapRenderer {
 
     long playerTextRedrawCount() {
         return playerTextCache.redraws;
+    }
+
+    long dmEffectsRedrawCount() {
+        return dmEffectsCache.redraws;
+    }
+
+    long dmForegroundRedrawCount() {
+        return dmForegroundCache.redraws;
     }
 
     /** Remembers what a base canvas currently shows, so it is only redrawn when that changes. */
@@ -392,17 +402,18 @@ public class CanvasMapRenderer {
 
     public void renderEffectsLayer(GraphicsContext gc, DmProject project, double width, double height,
                                    DmProject.CameraState camera, boolean playerMode) {
-        if (playerMode && project != null) {
+        LayerCache cache = playerMode ? playerEffectsCache : dmEffectsCache;
+        if (project != null) {
             long section = FrameProfiler.start();
             TimeOfDayPreset preset = TimeOfDayPreset.from(project.getLighting().getTimeOfDayPreset());
             double ambient = project.getLighting().ambientBrightnessFor(preset.name());
-            double darkness = preset.darkness(ambient);
+            double darkness = preset.darkness(ambient) * (playerMode ? 1 : Tuning.DM_DARKNESS_FACTOR.get());
             boolean lighting = darkness >= 0.01 || lightingEngine.getIndoorLighting().hasIndoorDarkness(preset);
             LightComposite composite = lighting
-                    ? ensureLightComposite(project, width, height, camera, true, preset, ambient, darkness) : null;
+                    ? ensureLightComposite(project, width, height, camera, playerMode, preset, ambient, darkness) : null;
             List<EffectState> effects = project.getOverlays().stream()
-                    .filter(DmProject.OverlayShape::isPlayerVisible)
-                    .filter(shape -> overlayTouchesScreen(shape, width, height, camera))
+                    .filter(shape -> !playerMode || shape.isPlayerVisible())
+                    .filter(shape -> !playerMode || overlayTouchesScreen(shape, width, height, camera))
                     .map(EffectState::of).toList();
             boolean moving = effectAnimationsEnabled && effects.stream()
                     .anyMatch(effect -> OverlayTextures.isMoving(effect.texture()));
@@ -411,29 +422,31 @@ public class CanvasMapRenderer {
             double seconds = effectSeconds();
             double tick = moving ? (hardMoving ? seconds : Math.floor(seconds * animationFps) / animationFps) : 0;
             boolean active = !effects.isEmpty() || composite != null && composite.buffer().hasGlow;
-            PlayerEffectsKey key = new PlayerEffectsKey(project, viewKey(width, height, camera),
+            EffectsLayerKey key = new EffectsLayerKey(project, viewKey(width, height, camera),
                     composite == null ? 0 : composite.key(), project.getMap().getGrid().getPixelsPerCell(),
                     effects, tick, PerformanceMode.isEnabled(), OverlayTextures.tileCells(),
-                    OverlayTextures.featherCells(), OverlayTextures.featherPasses(), Tuning.EFFECT_SOFT_RESOLUTION.get());
-            playerEffectsCache.bind(gc.getCanvas());
-            gc.getCanvas().setVisible(active);
-            FrameProfiler.lap("player effects", section);
-            if (playerEffectsCache.matches(key, active)) {
+                    OverlayTextures.featherCells(), OverlayTextures.featherPasses(), Tuning.EFFECT_SOFT_RESOLUTION.get(),
+                    playerMode ? 1 : Tuning.HIDDEN_SHAPE_OPACITY.get());
+            cache.bind(gc.getCanvas());
+            // The DM effects canvas also receives map input and must remain visible even when empty.
+            gc.getCanvas().setVisible(!playerMode || active);
+            FrameProfiler.lap(playerMode ? "player effects" : "dm effects", section);
+            if (cache.matches(key, active)) {
                 return;
             }
-            playerEffectSeconds = seconds;
+            frameEffectSeconds = seconds;
             try {
-                renderContent(gc, project, width, height, camera, true, true);
+                renderContent(gc, project, width, height, camera, playerMode, true);
             } finally {
-                playerEffectSeconds = null;
+                frameEffectSeconds = null;
             }
-            playerEffectsCache.update(key, active);
+            cache.update(key, active);
             return;
         }
         if (playerMode) {
             gc.getCanvas().setVisible(false);
-            playerEffectsCache.valid = false;
         }
+        cache.valid = false;
         renderContent(gc, project, width, height, camera, playerMode, true);
     }
 
@@ -444,18 +457,19 @@ public class CanvasMapRenderer {
     private record EffectState(String id, String type, double x, double y, double width, double height,
                                double radius, double strokeWidth, List<Double> points, String color,
                                double alpha, String texture, boolean border, boolean emitsLight,
-                               boolean soft, List<OverlayTextures.Layer> layers) {
+                               boolean soft, List<OverlayTextures.Layer> layers, boolean playerVisible) {
         private static EffectState of(DmProject.OverlayShape shape) {
             return new EffectState(shape.getId(), shape.getType(), shape.getX(), shape.getY(), shape.getWidth(),
                     shape.getHeight(), shape.getRadius(), shape.getStrokeWidth(), List.copyOf(shape.getPoints()),
                     shape.getColor(), shape.getAlpha(), shape.getTexture(), shape.isBorder(), shape.isEmitsLight(),
-                    OverlayTextures.isSoft(shape.getTexture()), List.copyOf(OverlayTextures.layers(shape.getTexture())));
+                    OverlayTextures.isSoft(shape.getTexture()), List.copyOf(OverlayTextures.layers(shape.getTexture())),
+                    shape.isPlayerVisible());
         }
     }
 
-    private record PlayerEffectsKey(DmProject project, LightViewKey view, long lightKey, double grid,
-                                    List<EffectState> effects, double tick, boolean reduced, double tileCells,
-                                    double featherCells, int featherPasses, double softResolution) {
+    private record EffectsLayerKey(DmProject project, LightViewKey view, long lightKey, double grid,
+                                   List<EffectState> effects, double tick, boolean reduced, double tileCells,
+                                   double featherCells, int featherPasses, double softResolution, double hiddenOpacity) {
     }
 
     private void renderContent(GraphicsContext gc, DmProject project, double width, double height,
@@ -504,17 +518,68 @@ public class CanvasMapRenderer {
             playerTextCache.update(key, active);
             return;
         }
-        if (playerMode) {
-            gc.getCanvas().setVisible(false);
-            playerTextCache.valid = false;
+        if (!playerMode) {
+            renderDmForeground(gc, project, width, height, camera);
+            return;
         }
+        gc.getCanvas().setVisible(false);
+        playerTextCache.valid = false;
         gc.clearRect(0, 0, width, height);
-        if (project != null) {
-            drawForeground(gc, project, width, height, camera, playerMode);
-        }
     }
 
     private record TextRunState(String text, int size, String color) {
+    }
+
+    private void renderDmForeground(GraphicsContext gc, DmProject project, double width, double height,
+                                    DmProject.CameraState camera) {
+        List<DmTextState> boxes = project != null && project.isTextLayerVisible()
+                ? project.getTextBoxes().stream()
+                .filter(box -> box.getId() == null || !box.getId().equals(editingTextBoxId))
+                .map(box -> new DmTextState(TextState.of(box), box.isPlayerVisible(), box.isRoomLabel())).toList()
+                : List.of();
+        List<TokenDecorationState> tokens = project == null ? List.of() : project.getTokens().stream()
+                .filter(token -> !token.isPlayerVisible() || token.isNameVisible())
+                .filter(token -> project.getTokenDefinitions().get(token.getDefinitionId()) != null)
+                .map(token -> new TokenDecorationState(token.getX(), token.getY(), token.getSizeTiles(),
+                        token.isPlayerVisible(), token.isNameVisible(),
+                        project.getTokenDefinitions().get(token.getDefinitionId()).getName())).toList();
+        List<SegmentState> walls = project != null && wallLayerVisible ? project.getWalls().stream()
+                .map(wall -> new SegmentState(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2())).toList() : List.of();
+        List<PortalState> portals = project != null && wallLayerVisible ? project.getInteractables().stream()
+                .map(portal -> new PortalState(new SegmentState(portal.getX1(), portal.getY1(), portal.getX2(), portal.getY2()),
+                        interactableColor(portal))).toList() : List.of();
+        DmForegroundKey key = new DmForegroundKey(project, viewKey(width, height, camera), boxes, tokens, walls, portals,
+                project == null ? 0 : project.getMap().getGrid().getPixelsPerCell(),
+                Tuning.HIDDEN_TEXT_OPACITY.get(), Tuning.WALL_COLOR.get(), Tuning.WALL_OPACITY.get());
+        boolean active = !boxes.isEmpty() || !tokens.isEmpty() || !walls.isEmpty() || !portals.isEmpty();
+        dmForegroundCache.bind(gc.getCanvas());
+        gc.getCanvas().setVisible(active);
+        if (dmForegroundCache.matches(key, active)) {
+            return;
+        }
+        gc.clearRect(0, 0, width, height);
+        if (project != null && active) {
+            drawForeground(gc, project, width, height, camera, false);
+        }
+        dmForegroundCache.update(key, active);
+    }
+
+    private record DmTextState(TextState text, boolean playerVisible, boolean roomLabel) {
+    }
+
+    private record TokenDecorationState(double x, double y, double size, boolean playerVisible,
+                                        boolean nameVisible, String name) {
+    }
+
+    private record SegmentState(double x1, double y1, double x2, double y2) {
+    }
+
+    private record PortalState(SegmentState segment, Color color) {
+    }
+
+    private record DmForegroundKey(DmProject project, LightViewKey view, List<DmTextState> boxes,
+                                   List<TokenDecorationState> tokens, List<SegmentState> walls, List<PortalState> portals,
+                                   double grid, double hiddenOpacity, String wallColor, double wallOpacity) {
     }
 
     private record TextState(double x, double y, double width, double height, String background, String border,
@@ -655,9 +720,7 @@ public class CanvasMapRenderer {
                                    DmProject.CameraState camera, boolean playerMode) {
         FogMask mask = project == null || project.getFog() == null ? null : project.getFog().getMask();
         boolean enabled = project != null && project.getFog() != null && project.getFog().isEnabled();
-        if (playerMode) {
-            gc.getCanvas().setVisible(enabled);
-        }
+        gc.getCanvas().setVisible(enabled);
         if (enabled && mask != null) {
             refreshFogImage(mask);
         }
@@ -765,9 +828,7 @@ public class CanvasMapRenderer {
             drawWeatherFlash(flashGc, project, width, height, camera, playerMode, type, weather, seconds);
             flashCache.update(flashKey, flash > 0);
         }
-        if (playerMode) {
-            flashCanvas.setVisible(flash > 0 && Tuning.WEATHER_FLASH_OPACITY.get() > 0);
-        }
+        flashCanvas.setVisible(flash > 0 && Tuning.WEATHER_FLASH_OPACITY.get() > 0);
         WeatherLayerCache cache = playerMode ? playerWeatherCache : dmWeatherCache;
         boolean indoors = type.indoors();
         OutdoorClipKey clipKey = indoors || type == WeatherType.NONE ? null
@@ -775,9 +836,7 @@ public class CanvasMapRenderer {
                 camera.getX(), camera.getY(), camera.getZoom());
         double animationTime = type == WeatherType.NONE ? 0 : Math.floor(seconds * animationFps) / animationFps;
         int particles = WeatherEffects.particleCount(type, weather == null ? 0 : weather.getIntensity(), width, height);
-        if (playerMode) {
-            particlesCanvas.setVisible(type != WeatherType.NONE && particles > 0 && type.opacity() > 0);
-        }
+        particlesCanvas.setVisible(type != WeatherType.NONE && particles > 0 && type.opacity() > 0);
         WeatherFrameKey key = new WeatherFrameKey(type, weather == null ? 0 : weather.getIntensity(),
                 animationTime, particles, type.color(), type.opacity(), indoors, PerformanceMode.isEnabled(),
                 width, height, clipKey);
@@ -1133,7 +1192,7 @@ public class CanvasMapRenderer {
                                    String texture, Color base, Color edge, double visibility, double width, double height,
                                    DmProject.CameraState camera, boolean playerMode) {
         double zoom = camera.getZoom();
-        double seconds = playerMode && playerEffectSeconds != null ? playerEffectSeconds : effectSeconds();
+        double seconds = frameEffectSeconds != null ? frameEffectSeconds : effectSeconds();
         double tileWorld = project.getMap().getGrid().getPixelsPerCell() * OverlayTextures.tileCells();
         int rgb = ((int) Math.round(base.getRed() * 255) << 16) | ((int) Math.round(base.getGreen() * 255) << 8)
                 | (int) Math.round(base.getBlue() * 255);
@@ -1670,9 +1729,7 @@ public class CanvasMapRenderer {
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
-            if (playerMode) {
-                gc.getCanvas().setVisible(false);
-            }
+            gc.getCanvas().setVisible(false);
             if (!cache.matches(null, false)) {
                 gc.clearRect(0, 0, width, height);
                 cache.update(null, false);
@@ -1681,9 +1738,7 @@ public class CanvasMapRenderer {
         }
         LightComposite composite = ensureLightComposite(project, width, height, camera, playerMode, preset, ambientBrightness, darkness);
         LightBuffer buffer = composite.buffer();
-        if (playerMode) {
-            gc.getCanvas().setVisible(buffer.hasAmbient);
-        }
+        gc.getCanvas().setVisible(buffer.hasAmbient);
         // Only exposed pixels lose ambient darkness; the aperture footprint is available even at Night.
         double flash = lightningBrightness(project);
         AmbientLayerKey key = new AmbientLayerKey(composite.key(), Double.doubleToLongBits(flash),
@@ -1997,9 +2052,7 @@ public class CanvasMapRenderer {
         LayerCache cache = playerMode ? playerBrightCoreCache : dmBrightCoreCache;
         cache.bind(gc.getCanvas());
         if (project == null) {
-            if (playerMode) {
-                gc.getCanvas().setVisible(false);
-            }
+            gc.getCanvas().setVisible(false);
             if (!cache.matches(null, false)) {
                 gc.clearRect(0, 0, width, height);
                 cache.update(null, false);
@@ -2008,9 +2061,7 @@ public class CanvasMapRenderer {
         }
         double brightCore = clampBrightCore(project.getLighting().getBrightCore());
         if (brightCore <= 0) {
-            if (playerMode) {
-                gc.getCanvas().setVisible(false);
-            }
+            gc.getCanvas().setVisible(false);
             if (!cache.matches(null, false)) {
                 gc.clearRect(0, 0, width, height);
                 cache.update(null, false);
@@ -2021,9 +2072,7 @@ public class CanvasMapRenderer {
         double ambientBrightness = project.getLighting().ambientBrightnessFor(preset.name());
         double darkness = preset.darkness(ambientBrightness) * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
         if (darkness < 0.01 && !lightingEngine.getIndoorLighting().hasIndoorDarkness(preset)) {
-            if (playerMode) {
-                gc.getCanvas().setVisible(false);
-            }
+            gc.getCanvas().setVisible(false);
             if (!cache.matches(null, false)) {
                 gc.clearRect(0, 0, width, height);
                 cache.update(null, false);
@@ -2053,9 +2102,7 @@ public class CanvasMapRenderer {
                 Double.doubleToLongBits(darkness),
                 lightingEngine.getIndoorLighting().version(), playerMode, preset, List.copyOf(lightKeys));
         if (cache.matches(key, true)) {
-            if (playerMode) {
-                gc.getCanvas().setVisible(cache.hasContent);
-            }
+            gc.getCanvas().setVisible(cache.hasContent);
             return;
         }
         gc.clearRect(0, 0, width, height);
@@ -2089,9 +2136,7 @@ public class CanvasMapRenderer {
             gc.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
             drawn = true;
         }
-        if (playerMode) {
-            gc.getCanvas().setVisible(drawn);
-        }
+        gc.getCanvas().setVisible(drawn);
         cache.hasContent = drawn;
         cache.update(key, true);
     }

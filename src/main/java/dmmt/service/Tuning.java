@@ -327,7 +327,7 @@ public final class Tuning {
     public static final Setting<Integer> DOOR_DEBOUNCE_MS = integer(INPUT, "input.doorDebounceMs", 60, 0, 2000, false,
             "Repeated clicks on the same door within this many milliseconds are ignored (mouse switch bounce).");
     public static final Setting<Integer> RECENT_INPUT_MS = integer(INPUT, "input.recentInputMs", 1000, 0, 60000, false,
-            "Milliseconds after the last input during which the target frame rate is kept before dropping to idle.");
+            "Milliseconds after interaction during which the target frame rate is kept before dropping to animation or idle. Ordinary mouse hovering does not restart this interval.");
 
     // ---- Ping and laser ----
 

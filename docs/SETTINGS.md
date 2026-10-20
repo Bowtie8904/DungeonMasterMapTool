@@ -533,8 +533,10 @@ fog fully opaque. `1` shows the DM exactly what the players see.
 ### `render.targetFps`
 **Default:** `60` · **Range:** 10 to `render.maxFps` (field), file values 1 to `render.maxFps` · **Applies:** managed by the app
 
-Frame rate while you interact with the map (mouse, keyboard, laser pointer, panning) and while fog is fading. Applies to
-the DM and the player view. Set with "Target FPS" in the Performance section of the sidebar.
+Frame rate while you interact with the map (dragging, painting, keyboard, laser pointer, panning or moving tool
+previews) and while fog is fading. Ordinary mouse hover/enter/exit does not raise the frame rate; Select-mode
+door/window highlights refresh independently. Applies to the DM and the player view. Set with "Target FPS" in the
+Performance section of the sidebar.
 
 *Keywords:* fps, frame rate, smoothness, refresh rate, framerate, interaction
 
@@ -907,8 +909,9 @@ send double clicks and would immediately close a door again. `0` disables the pr
 ### `input.recentInputMs`
 **Default:** `1000` · **Range:** 0 to 60000 · **Applies:** live
 
-After the last mouse or keyboard input the application keeps rendering at `render.targetFps` for this many
-milliseconds before dropping to `render.animationFps` or `render.idleFps`.
+After the last interaction (such as dragging, painting, scrolling, keyboard input or moving a map-tool preview)
+the application keeps rendering at `render.targetFps` for this many milliseconds before dropping to
+`render.animationFps` or `render.idleFps`. Ordinary mouse hovering does not restart this interval.
 
 *Keywords:* idle delay, frame rate drop, input timeout, power saving
 
