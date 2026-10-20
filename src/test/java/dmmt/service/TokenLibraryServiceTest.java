@@ -28,7 +28,7 @@ class TokenLibraryServiceTest
         try
         {
             javax.imageio.ImageIO.write(image, "png", out);
-            return java.util.Base64.getEncoder().encodeToString(out.toByteArray());
+            return TokenAssets.store(out.toByteArray());
         }
         catch (java.io.IOException ex)
         {
@@ -123,7 +123,7 @@ class TokenLibraryServiceTest
     }
 
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
     void exportRestoresLatestLinkedArtworkOrLastSavedArtworkAfterDeletion(boolean delete) throws Exception
     {
         TokenLibraryService tokens = TokenLibraryService.configured();
@@ -195,7 +195,8 @@ class TokenLibraryServiceTest
 
         DmProject legacy = map(definition());
         Path file = temp.resolve("legacy.dmmap");
-        JsonMappers.create().writeValue(file.toFile(), legacy);
+        DmProject embedded = projectsWithEmbeddedArtwork(legacy);
+        JsonMappers.create().writeValue(file.toFile(), embedded);
         ProjectService projects = new ProjectService();
         DmProject loaded = projects.load(file);
         String fingerprint = projects.fingerprint(loaded);
@@ -207,6 +208,45 @@ class TokenLibraryServiceTest
         Files.delete(temp.resolve(JsonMappers.create().readTree(file.toFile())
                                              .path("tokenDefinitions").path("character").path("image").asText()));
         assertThrows(java.io.IOException.class, () -> projects.load(file), "Missing artwork is reported, not silently replaced");
+    }
+
+    private DmProject projectsWithEmbeddedArtwork(DmProject project) throws Exception
+    {
+        DmProject embedded = new ProjectService().copy(project);
+        for (var token : embedded.getTokenDefinitions().values())
+        {
+            token.setSourceImage(java.util.Base64.getEncoder().encodeToString(
+                    Files.readAllBytes(Path.of(java.net.URI.create(token.getSourceImage())))));
+            token.setImage(java.util.Base64.getEncoder().encodeToString(
+                    Files.readAllBytes(Path.of(java.net.URI.create(token.getImage())))));
+        }
+        return embedded;
+    }
+
+    @Test
+    void runtimeArtworkIsFileBackedAndSurvivesLibraryDeletionAndMapRelocation() throws Exception
+    {
+        TokenLibraryService library = new TokenLibraryService(temp.resolve("library"));
+        var token = definition();
+        library.put(token, "");
+        var runtime = library.load().getEntries().getFirst().getToken();
+        assertTrue(runtime.getSourceImage().startsWith("file:"));
+        assertTrue(runtime.getSourceImage().length() < 256);
+        DmProject active = map(runtime);
+        DmProject frozen = new ProjectService().copy(active);
+        library.delete(token.getId());
+        assertTrue(Files.isRegularFile(Path.of(java.net.URI.create(runtime.getSourceImage()))));
+        assertEquals(active.getTokenDefinitions(), frozen.getTokenDefinitions());
+        ProjectService projects = new ProjectService();
+        Path first = temp.resolve("first").resolve("map.dmmap");
+        projects.save(first, active);
+        DmProject opened = projects.load(first);
+        MapLibraryService.deleteRecursive(first.getParent());
+        Path second = temp.resolve("second").resolve("map.dmmap");
+        projects.save(second, opened);
+        assertEquals(frozen.getTokenDefinitions(), projects.load(second).getTokenDefinitions());
+        assertTrue(JsonMappers.create().writeValueAsBytes(opened.getTokenDefinitions()).length < 1024,
+                   "Snapshot serialization contains compact artwork references, not the image bytes");
     }
 
     @Test

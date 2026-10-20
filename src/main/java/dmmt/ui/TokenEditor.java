@@ -175,7 +175,7 @@ public final class TokenEditor
                     TokenArt.drawCrop(crop.getGraphicsContext2D(), source, token, 256);
                     SnapshotParameters parameters = new SnapshotParameters();
                     parameters.setFill(Color.TRANSPARENT);
-                    token.setImage(TokenArt.encode(crop.snapshot(parameters, null)));
+                    token.setImage(TokenArt.storeImage(crop.snapshot(parameters, null)));
                 }
             }
             catch (IOException | IllegalArgumentException ex)
@@ -193,7 +193,7 @@ public final class TokenEditor
     {
         try
         {
-            String data = TokenArt.encode(image);
+            String data = TokenArt.storeImage(image);
             source = image;
             token.setSourceImage(data);
             token.setImage(null);

@@ -41,11 +41,14 @@ class PlayerLayerRetentionTest {
             project.getViews().getPlayerCamera().setY(48);
             project.getOverlays().add(DmProject.OverlayShape.builder().id("flat").type("circle")
                     .x(64).y(48).radius(20).build());
+            project.getTokenDefinitions().put("hero", DmProject.TokenDefinition.builder().id("hero").name("Hero").build());
+            project.getTokens().add(DmProject.TokenInstance.builder().id("instance").definitionId("hero")
+                    .x(64).y(48).playerVisible(true).build());
             set(app, "project", project);
             ((LightingEngine) get(app, "lightingEngine")).update(project);
             Stage stage = new Stage();
             StackPane root = new StackPane();
-            for (String name : List.of("playerBaseCanvas", "playerBrightCoreCanvas", "playerAmbientCanvas",
+            for (String name : List.of("playerBaseCanvas", "playerTokenCanvas", "playerBrightCoreCanvas", "playerAmbientCanvas",
                     "playerCanvas", "playerLightningCanvas", "playerWeatherCanvas", "playerForegroundCanvas",
                     "playerFogMaskCanvas", "playerFogCanvas")) {
                 Canvas canvas = new Canvas(128, 96);
@@ -66,6 +69,7 @@ class PlayerLayerRetentionTest {
                 Canvas pointers = (Canvas) get(app, "playerFogCanvas");
                 render(app);
                 assertTrue(effects.isVisible());
+                assertTrue(((Canvas)get(app, "playerTokenCanvas")).isVisible());
                 assertFalse(pointers.isVisible());
                 project.getActivePings().add(DmProject.PingEvent.builder().x(64).y(48)
                         .createdAtMillis(System.currentTimeMillis()).durationMillis(10000).build());
@@ -82,14 +86,18 @@ class PlayerLayerRetentionTest {
                 invoke(app, "addLaserPoint", new Class<?>[]{double.class, double.class}, 64.0, 48.0);
                 render(app);
                 assertTrue(pointers.isVisible());
-                set(app, "frozenPlayerProject", project);
-                ((LightingEngine) get(app, "playerLightingEngine")).update(project);
+                DmProject frozen = new dmmt.service.ProjectService().copy(project);
+                frozen.getTokens().getFirst().setPlayerVisible(false);
+                set(app, "frozenPlayerProject", frozen);
+                ((LightingEngine) get(app, "playerLightingEngine")).update(frozen);
                 render(app);
                 assertFalse(pointers.isVisible(), "Frozen output does not show the live laser");
+                assertFalse(((Canvas) get(app, "playerTokenCanvas")).isVisible(), "Frozen token visibility is independent");
                 assertTrue(effects.isVisible(), "Switching renderer repopulates effects");
                 set(app, "frozenPlayerProject", null);
                 render(app);
                 assertTrue(pointers.isVisible());
+                assertTrue(((Canvas) get(app, "playerTokenCanvas")).isVisible(), "Unfreezing restores live token artwork");
                 @SuppressWarnings("unchecked")
                 List<CanvasMapRenderer.LaserPoint> trail = (List<CanvasMapRenderer.LaserPoint>) get(app, "laserTrail");
                 trail.set(0, new CanvasMapRenderer.LaserPoint(64, 48, 0));
@@ -105,11 +113,13 @@ class PlayerLayerRetentionTest {
                 ((ToggleButton) get(handout, "showToggle")).fire();
                 render(app);
                 assertFalse(((Canvas) get(app, "playerBaseCanvas")).isVisible());
+                assertFalse(((Canvas) get(app, "playerTokenCanvas")).isVisible());
                 assertFalse(pointers.isVisible());
                 assertTrue(effects.isVisible(), "The handout uses the effects canvas");
                 ((ToggleButton) get(handout, "showToggle")).fire();
                 render(app);
                 assertTrue(((Canvas) get(app, "playerBaseCanvas")).isVisible());
+                assertTrue(((Canvas) get(app, "playerTokenCanvas")).isVisible());
                 assertTrue(effects.isVisible());
                 assertFalse(pointers.isVisible());
                 assertFalse(((Canvas) get(app, "playerWeatherCanvas")).isVisible());

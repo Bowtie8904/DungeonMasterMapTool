@@ -185,18 +185,16 @@ class TokenSupportTest
             var renderer = (CanvasMapRenderer)get(f.app, "renderer");
             Canvas canvas = new Canvas(400, 300);
             Canvas base = new Canvas(400, 300);
-            var state = new CanvasMapRenderer.BaseLayerState();
+            var state = new CanvasMapRenderer.TokenLayerState();
             var camera = f.project.getViews().getDmCamera();
             renderer.renderForegroundLayer(canvas.getGraphicsContext2D(), f.project, 400, 300, camera, true);
             assertFalse(canvas.isVisible());
-            renderer.renderBase(base.getGraphicsContext2D(), state, f.project, null, 400, 300, camera,
-                                CanvasMapRenderer.GridMode.HIDDEN, true);
+            renderer.renderTokenLayer(base.getGraphicsContext2D(), state, f.project, 400, 300, camera, true);
             Color background = pixel(base, 150, 100);
             token.setPlayerVisible(true);
             renderer.renderForegroundLayer(canvas.getGraphicsContext2D(), f.project, 400, 300, camera, true);
             assertFalse(canvas.isVisible(), "Token artwork belongs below lighting, not on the foreground canvas");
-            renderer.renderBase(base.getGraphicsContext2D(), state, f.project, null, 400, 300, camera,
-                                CanvasMapRenderer.GridMode.HIDDEN, true);
+            renderer.renderTokenLayer(base.getGraphicsContext2D(), state, f.project, 400, 300, camera, true);
             assertNotEquals(background, pixel(base, 150, 100));
             assertEquals(0, pixel(canvas, 150, 161).getOpacity(), "DM name tag never reaches players");
             f.project.getFog().setEnabled(false);
@@ -209,11 +207,76 @@ class TokenSupportTest
             assertFalse(PlayerViewTransition.contentChanged(before, null, camera, f.project, null, camera));
             Color old = pixel(base, 150, 100);
             f.project.getTokenDefinitions().get("hero").setColor("#EE2211");
-            renderer.renderBase(base.getGraphicsContext2D(), state, f.project, null, 400, 300, camera,
-                                CanvasMapRenderer.GridMode.HIDDEN, true);
+            renderer.renderTokenLayer(base.getGraphicsContext2D(), state, f.project, 400, 300, camera, true);
             assertNotEquals(old, pixel(base, 150, 100));
             assertTrue(PlayerViewTransition.contentChanged(before, null, camera, f.project, null, camera));
             assertEquals("#3377CC", before.getTokenDefinitions().get("hero").getColor(), "freeze is a deep copy");
+        });
+    }
+
+    @Test
+    void movingTokensRedrawsOnlyTheirLayerAndDmMetadataDoesNotInvalidateArtwork() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 150.0, 100.0);
+            var token = f.project.getTokens().getFirst();
+            var renderer = (CanvasMapRenderer)get(f.app, "renderer");
+            var camera = f.project.getViews().getDmCamera();
+            Canvas base = new Canvas(400, 300), artwork = new Canvas(400, 300);
+            var baseState = new CanvasMapRenderer.BaseLayerState();
+            var tokenState = new CanvasMapRenderer.TokenLayerState();
+            renderer.renderBase(base.getGraphicsContext2D(), baseState, f.project, null, 400, 300, camera);
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 400, 300, camera, false);
+            long draws = (long)get(tokenState, "redrawCount");
+            base.getGraphicsContext2D().setFill(Color.MAGENTA);
+            base.getGraphicsContext2D().fillRect(0, 0, 10, 10);
+            token.setX(250);
+            renderer.renderBase(base.getGraphicsContext2D(), baseState, f.project, null, 400, 300, camera);
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 400, 300, camera, false);
+            assertEquals(Color.MAGENTA, pixel(base, 5, 5), "Moving tokens does not redraw the map background");
+            assertEquals(draws + 1, get(tokenState, "redrawCount"));
+            assertEquals(0, pixel(artwork, 150, 100).getOpacity());
+            assertTrue(pixel(artwork, 250, 100).getOpacity() > 0);
+            token.setNameVisible(true);
+            f.project.getTokenDefinitions().get("hero").setName("New name");
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 400, 300, camera, false);
+            assertEquals(draws + 1, get(tokenState, "redrawCount"));
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 400, 300, camera, true);
+            assertFalse(artwork.isVisible(), "Changing DM/player mode cannot expose a cached hidden token");
+            token.setPlayerVisible(true);
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 400, 300, camera, true);
+            assertTrue(artwork.isVisible());
+            artwork.setWidth(450);
+            renderer.renderTokenLayer(artwork.getGraphicsContext2D(), tokenState, f.project, 450, 300, camera, true);
+            assertTrue(pixel(artwork, 275, 100).getOpacity() > 0, "Resized token canvas is repainted");
+        });
+    }
+
+    @Test
+    void decodedArtworkCacheStaysWithinItsPixelBudgetAndOriginalsAreNotCached() throws Exception
+    {
+        onFx(() -> {
+            var cacheField = TokenArt.class.getDeclaredField("IMAGES");
+            cacheField.setAccessible(true);
+            var cache = (Map<?, ?>)cacheField.get(null);
+            cache.clear();
+            var bytesField = TokenArt.class.getDeclaredField("imageBytes");
+            bytesField.setAccessible(true);
+            bytesField.setLong(null, 0);
+            Canvas canvas = new Canvas(40, 40);
+            for (int i = 0; i < 140; i++)
+            {
+                WritableImage image = new WritableImage(256, 256);
+                image.getPixelWriter().setArgb(0, 0, 0xFF000000 | i);
+                var token = definition();
+                token.setImage(TokenArt.storeImage(image));
+                token.setSourceImage("unread original");
+                TokenArt.draw(canvas.getGraphicsContext2D(), token, 20, 20, 36);
+                assertTrue(bytesField.getLong(null) <= 32L * 1024 * 1024);
+                assertFalse(cache.containsKey(token.getSourceImage()));
+            }
+            assertEquals(128, cache.size());
         });
     }
 
@@ -243,8 +306,8 @@ class TokenSupportTest
             Canvas ambient = new Canvas(400, 300);
             ambient.setBlendMode(javafx.scene.effect.BlendMode.MULTIPLY);
             Pane composite = new Pane(base, ambient);
-            renderer.renderBase(base.getGraphicsContext2D(), new CanvasMapRenderer.BaseLayerState(),
-                                f.project, null, 400, 300, camera, CanvasMapRenderer.GridMode.HIDDEN, true);
+            renderer.renderTokenLayer(base.getGraphicsContext2D(), new CanvasMapRenderer.TokenLayerState(),
+                                      f.project, 400, 300, camera, true);
             double unshaded = pixel(base, 150, 100).getBrightness();
             f.project.getLighting().setTimeOfDayPreset("NIGHT");
             renderer.renderAmbientLight(ambient.getGraphicsContext2D(), f.project, 400, 300, camera, true);
@@ -270,7 +333,7 @@ class TokenSupportTest
                     source.getPixelWriter().setColor(x, y, x < 100 ? Color.RED : Color.BLUE);
                 }
             var token = definition();
-            token.setSourceImage(TokenArt.encode(source));
+            token.setSourceImage(TokenArt.storeImage(source));
             token.setZoom(2);
             token.setCenterX(.8);
             token.setCenterY(.9);
@@ -279,7 +342,7 @@ class TokenSupportTest
             Canvas crop = new Canvas(100, 100);
             TokenArt.drawCrop(crop.getGraphicsContext2D(), source, token, 100);
             assertEquals(0, pixel(crop, 50, 99).getOpacity(), "Panning past the source edge leaves transparent space");
-            token.setImage(TokenArt.encode(crop.snapshot(transparent(), null)));
+            token.setImage(TokenArt.storeImage(crop.snapshot(transparent(), null)));
             Canvas round = new Canvas(100, 100);
             TokenArt.draw(round.getGraphicsContext2D(), token, 50, 50, 96);
             assertEquals(Color.BLUE, pixel(round, 50, 50));

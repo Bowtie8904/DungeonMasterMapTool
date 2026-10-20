@@ -203,6 +203,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private long imageAddGeneration;
 
     private Canvas dmBaseCanvas;
+    private Canvas dmTokenCanvas = new Canvas(1280, 800);
+    private final CanvasMapRenderer.TokenLayerState dmTokenState = new CanvasMapRenderer.TokenLayerState();
+    private Canvas playerTokenCanvas;
+    private CanvasMapRenderer.TokenLayerState playerTokenState = new CanvasMapRenderer.TokenLayerState();
     private final CanvasMapRenderer.BaseLayerState dmBaseState = new CanvasMapRenderer.BaseLayerState();
     private Canvas playerBaseCanvas;
     private CanvasMapRenderer.BaseLayerState playerBaseState = new CanvasMapRenderer.BaseLayerState();
@@ -509,10 +513,10 @@ public class DungeonMasterMapToolApplication extends Application {
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmBaseCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas,
+        StackPane center = new StackPane(dmBaseCanvas, dmTokenCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas,
                 dmLightningCanvas, dmWeatherCanvas, dmForegroundCanvas,
                 dmFogMaskCanvas, dmFogCanvas, textEditor.node());
-        for (Canvas layer : List.of(dmWeatherCanvas, dmLightningCanvas, dmForegroundCanvas)) {
+        for (Canvas layer : List.of(dmTokenCanvas, dmWeatherCanvas, dmLightningCanvas, dmForegroundCanvas)) {
             layer.setMouseTransparent(true);
             layer.widthProperty().bind(center.widthProperty());
             layer.heightProperty().bind(center.heightProperty());
@@ -3551,6 +3555,8 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         playerBaseCanvas = new Canvas(1280, 720);
+        playerTokenCanvas = new Canvas(1280, 720);
+        playerTokenState = new CanvasMapRenderer.TokenLayerState();
         lastPlayerLayerRenderer = null;
         playerBaseCanvas.setMouseTransparent(true);
         playerBaseState = new CanvasMapRenderer.BaseLayerState();
@@ -3568,10 +3574,10 @@ public class DungeonMasterMapToolApplication extends Application {
         playerFogMaskCanvas.setMouseTransparent(true);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerBaseCanvas, playerBrightCoreCanvas, playerAmbientCanvas,
+        StackPane root = new StackPane(playerBaseCanvas, playerTokenCanvas, playerBrightCoreCanvas, playerAmbientCanvas,
                 playerCanvas, playerLightningCanvas, playerWeatherCanvas, playerForegroundCanvas,
                 playerFogMaskCanvas, playerFogCanvas);
-        for (Canvas layer : List.of(playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
+        for (Canvas layer : List.of(playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
             layer.setMouseTransparent(true);
             layer.widthProperty().bind(root.widthProperty());
             layer.heightProperty().bind(root.heightProperty());
@@ -3605,6 +3611,8 @@ public class DungeonMasterMapToolApplication extends Application {
             playerLightningCanvas = null;
             playerForegroundCanvas = null;
             playerBaseCanvas = null;
+            playerTokenCanvas = null;
+            playerTokenState = new CanvasMapRenderer.TokenLayerState();
             playerBrightCoreCanvas = null;
             playerAmbientCanvas = null;
             playerFogMaskCanvas = null;
@@ -3654,6 +3662,8 @@ public class DungeonMasterMapToolApplication extends Application {
             playerLightningCanvas = null;
             playerForegroundCanvas = null;
             playerBaseCanvas = null;
+            playerTokenCanvas = null;
+            playerTokenState = new CanvasMapRenderer.TokenLayerState();
             playerBrightCoreCanvas = null;
             playerAmbientCanvas = null;
             playerFogMaskCanvas = null;
@@ -3695,6 +3705,8 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
+        renderer.renderTokenLayer(dmTokenCanvas.getGraphicsContext2D(), dmTokenState, project,
+                dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
         long section = FrameProfiler.start();
         renderer.renderBrightCore(dmBrightCoreCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
                 dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
@@ -3756,7 +3768,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerTransition.cancel();
             renderer.invalidatePlayerLayerCaches();
             playerRenderer.invalidatePlayerLayerCaches();
-            for (Canvas layer : List.of(playerBaseCanvas, playerWeatherCanvas, playerLightningCanvas,
+            for (Canvas layer : List.of(playerBaseCanvas, playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas,
                     playerForegroundCanvas, playerFogMaskCanvas, playerFogCanvas, playerBrightCoreCanvas, playerAmbientCanvas)) {
                 layer.setVisible(false);
             }
@@ -3779,7 +3791,9 @@ public class DungeonMasterMapToolApplication extends Application {
         playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
-                        ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN, true);
+                        ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
+        playerView.renderTokenLayer(playerTokenCanvas.getGraphicsContext2D(), playerTokenState, shown,
+                playerCanvas.getWidth(), playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
         long section = FrameProfiler.start();
         playerView.renderBrightCore(playerBrightCoreCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
                 playerCanvas.getHeight(), getEffectivePlayerCamera(), true);

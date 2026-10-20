@@ -1351,6 +1351,7 @@ having to know the control's units. An explicit amount overrides it.
 - Token browser controls must be hideable through Settings and reachable through the local control API. Document the workflow in README and any new settings in `docs/SETTINGS.md`.
 - Editor Ctrl+V pastes a clipboard image without stealing ordinary text paste. Crop centers may reach the source image edges, exposing transparent space outside the source. Hidden instances use the standard crossed-out-eye badge. Token artwork is shaded by lighting; DM badges and labels remain legible above lighting.
 - Token originals and crops are PNG files referenced by relative paths, in the library's `images` folder and each map's `assets\tokens` folder, rather than Base64 in persisted JSON. Existing embedded images remain readable and migrate on save. Content-addressed assets preserve frozen snapshots and export includes the latest linked assets without changing the source map.
+- Runtime definitions reference immutable file-backed artwork rather than retaining Base64 originals. Originals are decoded only in the editor; rendered crops load lazily into a byte-budgeted cache. Session-owned artwork snapshots survive library cleanup and map relocation and are removed at shutdown. Token artwork has independent retained DM/player canvases below lighting, so token movement does not invalidate the map background. Preserve hidden/player/freeze behavior, legacy saves, shared library updates and export portability.
 
 ## 8) Open Decisions (Track Here)
 

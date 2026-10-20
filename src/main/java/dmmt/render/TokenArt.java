@@ -17,14 +17,9 @@ import java.util.Map;
 
 public final class TokenArt
 {
-    private static final Map<String, Image> IMAGES = new LinkedHashMap<>(16, 0.75f, true)
-    {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Image> entry)
-        {
-            return size() > 128;
-        }
-    };
+    private static final long IMAGE_BUDGET = 32L * 1024 * 1024;
+    private static final Map<String, Image> IMAGES = new LinkedHashMap<>(16, 0.75f, true);
+    private static long imageBytes;
 
     private TokenArt()
     {
@@ -32,7 +27,8 @@ public final class TokenArt
 
     public static Image decode(String data)
     {
-        Image image = new Image(new ByteArrayInputStream(Base64.getDecoder().decode(data)));
+        Image image = data.startsWith("file:") ? new Image(data)
+                                               : new Image(new ByteArrayInputStream(Base64.getDecoder().decode(data)));
         if (image.isError() || image.getWidth() <= 0 || image.getHeight() <= 0)
         {
             throw new IllegalArgumentException("This image format cannot be read.", image.getException());
@@ -40,7 +36,7 @@ public final class TokenArt
         return image;
     }
 
-    public static String encode(Image image) throws IOException
+    public static String storeImage(Image image) throws IOException
     {
         int width = (int)image.getWidth(), height = (int)image.getHeight();
         if (width <= 0 || height <= 0 || image.getPixelReader() == null)
@@ -52,7 +48,31 @@ public final class TokenArt
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         if (!ImageIO.write(png, "png", out))
             throw new IOException("PNG encoding is unavailable.");
-        return Base64.getEncoder().encodeToString(out.toByteArray());
+        return dmmt.service.TokenAssets.store(out.toByteArray());
+    }
+
+    private static Image croppedImage(String reference)
+    {
+        Image image = IMAGES.get(reference);
+        if (image != null)
+            return image;
+        image = reference.startsWith("file:") ? new Image(reference, 256, 256, true, true) : decode(reference);
+        if (image.isError() || image.getWidth() <= 0 || image.getHeight() <= 0)
+            throw new IllegalArgumentException("Token artwork cannot be read.", image.getException());
+        long bytes = (long)image.getWidth() * (long)image.getHeight() * 4;
+        if (bytes <= IMAGE_BUDGET)
+        {
+            var entries = IMAGES.entrySet().iterator();
+            while (imageBytes + bytes > IMAGE_BUDGET && entries.hasNext())
+            {
+                Image removed = entries.next().getValue();
+                imageBytes -= (long)removed.getWidth() * (long)removed.getHeight() * 4;
+                entries.remove();
+            }
+            IMAGES.put(reference, image);
+            imageBytes += bytes;
+        }
+        return image;
     }
 
     public static double cropSide(Image image, double zoom)
@@ -91,7 +111,7 @@ public final class TokenArt
         gc.fillOval(x - radius, y - radius, diameter, diameter);
         if (token.getImage() != null)
         {
-            Image image = IMAGES.computeIfAbsent(token.getImage(), TokenArt::decode);
+            Image image = croppedImage(token.getImage());
             gc.drawImage(image, x - radius, y - radius, diameter, diameter);
         }
         else

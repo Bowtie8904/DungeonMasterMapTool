@@ -318,23 +318,8 @@ public class CanvasMapRenderer {
             DmProject.CameraState camera,
             GridMode gridMode
     ) {
-        renderBase(gc, state, project, projectFile, width, height, camera, gridMode, false);
-    }
-
-    public void renderBase(GraphicsContext gc, BaseLayerState state, DmProject project, Path projectFile,
-                           double width, double height, DmProject.CameraState camera, GridMode gridMode,
-                           boolean playerMode) {
         long imageVersion = imageStore.changeVersion();
         long signature = baseSignature(project, projectFile, width, height, camera, gridMode);
-        signature = 31 * signature + Boolean.hashCode(playerMode);
-        if (project != null) {
-            for (var token : project.getTokens()) {
-                if (!playerMode || token.isPlayerVisible()) {
-                    signature = 31 * signature + TokenState.of(token, project).hashCode();
-                    if (!playerMode) signature = 31 * signature + Boolean.hashCode(token.isPlayerVisible());
-                }
-            }
-        }
         if (state.valid && state.signature == signature && state.imageVersion == imageVersion) {
             return;
         }
@@ -353,7 +338,6 @@ public class CanvasMapRenderer {
             if (gridMode == GridMode.OVERLAY) {
                 drawGrid(gc, project, width, height, camera);
             }
-            drawTokens(gc, project, width, height, camera, playerMode, false);
         }
         FrameProfiler.lap("base redraw", profileStart);
         state.signature = signature;
@@ -542,12 +526,38 @@ public class CanvasMapRenderer {
         }
     }
 
-    private record TokenState(String id, double x, double y, double size, String image, String color) {
+    private record TokenState(String id, double x, double y, double size, String image, String color, boolean visible) {
         private static TokenState of(DmProject.TokenInstance token, DmProject project) {
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
             return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(),
-                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor());
+                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor(),
+                    token.isPlayerVisible());
         }
+    }
+
+    public static final class TokenLayerState {
+        private TokenLayerKey key;
+        private Canvas canvas;
+        private long redrawCount;
+    }
+
+    private record TokenLayerKey(double width, double height, double x, double y, double zoom,
+                                 double pixelsPerCell, boolean playerMode, List<TokenState> tokens) {
+    }
+
+    public void renderTokenLayer(GraphicsContext gc, TokenLayerState state, DmProject project,
+                                 double width, double height, DmProject.CameraState camera, boolean playerMode) {
+        List<TokenState> tokens = project == null ? List.of() : project.getTokens().stream()
+                .filter(token -> !playerMode || token.isPlayerVisible()).map(token -> TokenState.of(token, project)).toList();
+        TokenLayerKey key = new TokenLayerKey(width, height, camera.getX(), camera.getY(), camera.getZoom(),
+                project == null ? 0 : project.getMap().getGrid().getPixelsPerCell(), playerMode, tokens);
+        gc.getCanvas().setVisible(!tokens.isEmpty());
+        if (state.canvas == gc.getCanvas() && key.equals(state.key)) return;
+        gc.clearRect(0, 0, width, height);
+        if (project != null && !tokens.isEmpty()) drawTokens(gc, project, width, height, camera, playerMode, false);
+        state.canvas = gc.getCanvas();
+        state.key = key;
+        state.redrawCount++;
     }
 
     private record PlayerTextKey(DmProject project, LightViewKey view, int turns, List<TextState> boxes) {

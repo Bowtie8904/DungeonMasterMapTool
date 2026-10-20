@@ -76,7 +76,7 @@ public class DmProject {
         private String color = "#5599CC";
         @Builder.Default
         private double sizeTiles = 1;
-        /** Runtime PNG data; persistence stores package-relative asset references. */
+        /** Immutable runtime artwork references; persistence stores package-relative PNG paths. */
         private String sourceImage;
         private String image;
         @Builder.Default
