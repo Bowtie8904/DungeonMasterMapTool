@@ -590,7 +590,7 @@ public class MapLibraryService {
         Files.move(source, target);
     }
 
-    private static void copyRecursive(Path source, Path target) throws IOException {
+    static void copyRecursive(Path source, Path target) throws IOException {
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {

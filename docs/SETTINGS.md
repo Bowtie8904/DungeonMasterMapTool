@@ -182,7 +182,7 @@ How many maps the **Recent maps** list below the map library keeps. Older entrie
 *Keywords:* recent maps, history, last opened, recently used
 
 ### `ui.sections.hidden`
-**Default:** empty · **Values:** comma separated tab ids: `tools`, `fog`, `lighting`, `weather`, `effects`, `text`, `building`, `player`, `performance` · **Applies:** live (also changed from the settings window)
+**Default:** empty · **Values:** comma separated tab ids: `tools`, `tokens`, `fog`, `lighting`, `weather`, `effects`, `text`, `building`, `player`, `performance` · **Applies:** live (also changed from the settings window)
 
 Tabs of the DM controls overlay that are **completely hidden**. A DM who never uses effects or never changes the frame rate can remove those tabs to keep the overlay short. Hidden tabs keep all their settings and data; only their controls disappear from the overlay. Empty = every tab is shown. Easiest to change in **Settings** (cog button in the DM controls header or in the status bar) under *DM controls tabs*.
 
@@ -200,6 +200,7 @@ Each entry below combines the section prefix with a control suffix (for example,
 | Section prefix | Control suffixes |
 |---|---|
 | `tools` | `select`, `ping`, `laser`, `undo`, `redo` |
+| `tokens` | `browser`, `create`, `import`, `paste`, `folder`, `refresh` |
 | `fog` | `enabled`, `revealBrush`, `hideBrush`, `revealRect`, `hideRect`, `revealAll`, `hideAll`, `revealRoom`, `brushSize`, `sharpness`, `fade`, `softness` |
 | `lighting` | `torch`, `candle`, `campfire`, `magic`, `remove`, `flicker`, `revealPersistent`, `revealWhileLit`, `revealNone`, `day`, `dawn`, `dusk`, `night`, `on`, `off`, `ambient`, `tint`, `brightCore`, `hint` |
 | `weather` | `type`, `intensity`, `lightningInterval`, `indoors` |
@@ -208,6 +209,8 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `building` | `drawWall`, `drawDoor`, `drawWindow`, `roomLabel`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
 | `player` | `window`, `freeze`, `scaleTest`, `handout`, `grid`, `gridOpacity`, `screen`, `diagonal`, `tileSize`, `zoom` |
 | `performance` | `target`, `animation`, `idle` |
+
+The Tokens choices apply to the **left** library sidebar. Hide `tokens` in `ui.sections.hidden` or `tokens.browser` in `ui.controls.hidden` to hide its tab and return to Maps. Individual creation/import/folder/refresh buttons can be hidden separately. Their local API endpoints remain available. Token artwork and folders live in `dmmap-tokens` beside the settings file; token defaults belong to library entries and placed sizes/visibility belong to maps, not this settings file.
 
 The Map building choices include **Draw door**, **Draw window** and **Room label**. Hiding their buttons does not disable their local API controls (`building.drawDoor`, `building.drawWindow`, `building.roomLabel`) or remove existing doors, windows or labels.
 

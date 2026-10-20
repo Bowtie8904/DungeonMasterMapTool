@@ -68,6 +68,12 @@ public final class HistoryFeedback {
                     box.getBorderColor(), box.isAutoSize(), box.isPlayerVisible(),
                     box.getRuns().stream().map(run -> Arrays.asList(run.getText(), run.getFontSize(), run.getColor())).toList());
         }
+        for (var token : project.getTokens()) {
+            double diameter = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell();
+            put(snapshot, "token:" + token.getId(), true,
+                    bounds(token.getX() - diameter / 2, token.getY() - diameter / 2, diameter, diameter),
+                    token.getX(), token.getY(), token.getSizeTiles(), token.isPlayerVisible(), token.isNameVisible());
+        }
         for (var portal : project.getInteractables()) {
             put(snapshot, "portal:" + portal.getId(), wallsVisible,
                     new Target(Kind.SEGMENT, portal.getX1(), portal.getY1(), portal.getX2(), portal.getY2()),

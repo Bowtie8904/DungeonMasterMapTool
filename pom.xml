@@ -20,10 +20,16 @@
         <jts.version>1.20.0</jts.version>
         <ikonli.version>12.4.0</ikonli.version>
         <richtextfx.version>0.11.7</richtextfx.version>
+        <twelvemonkeys.version>3.12.0</twelvemonkeys.version>
         <jlayer.version>1.0.1.4</jlayer.version>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>${twelvemonkeys.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>

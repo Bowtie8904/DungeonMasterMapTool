@@ -201,6 +201,24 @@
 }
 
 /* Segmented control (time of day) */
+.library-tabs {
+    -fx-background-color: -dm-bg;
+    -fx-padding: 8 10 0 10;
+    -fx-spacing: 4;
+}
+
+.library-tabs .toggle-button {
+    -fx-background-color: #282d35;
+    -fx-text-fill: -dm-muted;
+    -fx-background-radius: 6 6 0 0;
+    -fx-padding: 7 24;
+}
+
+.library-tabs .toggle-button:selected {
+    -fx-background-color: -dm-surface;
+    -fx-text-fill: -dm-accent;
+}
+
 .segmented {
     -fx-background-color: -dm-bg;
     -fx-background-radius: 8;

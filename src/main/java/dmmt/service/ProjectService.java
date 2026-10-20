@@ -47,6 +47,9 @@ public class ProjectService
         JsonNode json = objectMapper.readTree(projectFile.toFile());
         DmProject project = objectMapper.treeToValue(json, DmProject.class);
         project.setId(json.path("id").isTextual() ? json.path("id").asText() : null);
+        for (var token : project.getTokenDefinitions().values())
+            TokenAssets.read(token, projectFile.toAbsolutePath().getParent());
+        TokenLibraryService.configured().resolve(project);
         fogService.ensureMask(project);
         return project;
     }
@@ -99,7 +102,11 @@ public class ProjectService
                 Files.createDirectories(projectFile.getParent());
             }
             normalizeAssetPaths(projectFile, project);
-            objectMapper.writeValue(projectFile.toFile(), project);
+            TokenLibraryService.configured().resolve(project);
+            DmProject stored = objectMapper.convertValue(project, DmProject.class);
+            for (var token : stored.getTokenDefinitions().values())
+                TokenAssets.write(token, projectFile.toAbsolutePath().getParent(), "assets\\tokens");
+            objectMapper.writeValue(projectFile.toFile(), stored);
         }
         try
         {

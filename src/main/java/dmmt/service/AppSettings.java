@@ -40,6 +40,7 @@ public final class AppSettings {
 
     public static final List<SidebarSection> SIDEBAR_SECTIONS = List.of(
             new SidebarSection("tools", "Tools", "Select tool, fog brushes, rectangles and room fill."),
+            new SidebarSection("tokens", "Tokens", "Token library tab and creation controls in the left sidebar."),
             new SidebarSection("fog", "Fog of war", "Fog sharpness, softness and fade animation."),
             new SidebarSection("lighting", "Lighting", "Light tools, time of day, ambient brightness and light tint."),
             new SidebarSection("weather", "Weather", "Rain, snow, mist, dust, embers and thunderstorms."),
@@ -56,6 +57,8 @@ public final class AppSettings {
 
     private static List<SidebarControl> sidebarControls() {
         List<SidebarControl> controls = new ArrayList<>();
+        addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
+                "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");
         addControls(controls, "fog", "enabled|Fog on/off", "revealBrush|Reveal brush", "hideBrush|Hide brush",
                 "revealRect|Reveal rectangle", "hideRect|Hide rectangle", "revealAll|Reveal all", "hideAll|Hide all",

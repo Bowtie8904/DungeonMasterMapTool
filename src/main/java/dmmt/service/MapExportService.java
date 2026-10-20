@@ -43,7 +43,8 @@ public class MapExportService {
                 String top = uniqueName(usedNames, map.name());
                 Path source;
                 if (Files.isDirectory(map.path())) {
-                    source = map.path();
+                    source = temp.resolve(top);
+                    MapLibraryService.copyRecursive(map.path(), source);
                 } else {
                     source = temp.resolve(top);
                     Files.createDirectories(source);
@@ -69,6 +70,12 @@ public class MapExportService {
     }
 
     private static void addDirectory(ZipOutputStream zip, Path source, String top) throws IOException {
+        try (var walk = Files.walk(source)) {
+            for (Path file : walk.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(MapLibraryService.EXTENSION)).toList()) {
+                Files.write(file, TokenLibraryService.configured().embedLatest(file));
+            }
+        }
         List<Path> files;
         try (var walk = Files.walk(source)) {
             files = walk.filter(Files::isRegularFile).toList();

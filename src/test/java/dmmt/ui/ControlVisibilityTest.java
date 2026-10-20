@@ -94,6 +94,7 @@ class ControlVisibilityTest {
                 create.invoke(app, new Stage());
                 ControlVisibility visibility = (ControlVisibility) field(app, "dmControlVisibility");
                 Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream()
+                        .filter(control -> !control.sectionId().equals("tokens"))
                         .map(AppSettings.SidebarControl::id).collect(Collectors.toSet());
                 assertEquals(expected, visibility.registeredIds());
                 AppSettings settings = (AppSettings) field(app, "preferences");

@@ -53,6 +53,12 @@ public class MapRotationService {
             light.setY(p.y);
         }
 
+        for (DmProject.TokenInstance token : project.getTokens()) {
+            Point p = rotatePoint(token.getX(), token.getY(), cx, cy, clockwise);
+            token.setX(p.x);
+            token.setY(p.y);
+        }
+
         for (DmProject.OverlayShape overlay : project.getOverlays()) {
             rotateOverlay(overlay, cx, cy, clockwise);
         }

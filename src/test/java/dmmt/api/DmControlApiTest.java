@@ -282,7 +282,8 @@ class DmControlApiTest {
                 Field registry = app.getClass().getDeclaredField("dmControlVisibility");
                 registry.setAccessible(true);
                 DmControlApi api = new DmControlApi((ControlVisibility) registry.get(app));
-                Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream().map(AppSettings.SidebarControl::id)
+                Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream()
+                        .filter(control -> !control.sectionId().equals("tokens")).map(AppSettings.SidebarControl::id)
                         .filter(id -> !id.equals("lighting.hint")).collect(Collectors.toSet());
                 assertEquals(expected, api.describe().stream().map(d -> (String) d.get("id")).collect(Collectors.toSet()));
                 assertError(404, () -> api.execute("lighting.hint", Map.of()));

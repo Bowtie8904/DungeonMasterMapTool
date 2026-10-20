@@ -237,6 +237,19 @@ public class DungeonMasterMapToolApplication extends Application {
     private Stage primaryStage;
     private MapLibraryService mapLibrary;
     private MapBrowser mapBrowser;
+    private dmmt.ui.TokenBrowser tokenBrowser;
+    private VBox librarySidebar;
+    private ToggleButton tokenBrowserToggle;
+    private ToggleButton mapBrowserToggle;
+    private final dmmt.service.TokenLibraryService tokenLibrary = dmmt.service.TokenLibraryService.configured();
+    private String selectedTokenId;
+    private DmProject.TokenInstance tokenDragBefore;
+    private boolean draggingToken;
+    private boolean resizingToken;
+    private double tokenPressX;
+    private double tokenPressY;
+    private double groupPressX;
+    private double groupPressY;
     private ToggleButton pingToggle;
     private ToggleButton laserToggle;
     private ToggleButton wallLayerToggle;
@@ -540,9 +553,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmFogCanvas.heightProperty().bind(center.heightProperty());
         root.setCenter(center);
 
-        mapBrowser = new MapBrowser(mapLibrary, createBrowserHost(), new RecentMaps(preferences));
-        mapBrowser.addAction(createAutoSaveMenu());
-        root.setLeft(mapBrowser);
+        root.setLeft(createLibrarySidebar());
 
         statusLabel = new Label("Ready");
         statusLabel.setMinWidth(0);
@@ -551,10 +562,10 @@ public class DungeonMasterMapToolApplication extends Application {
         statusLabel.getStyleClass().add("status-message");
         statusTooltip = Icons.tooltip("Current application activity");
         statusLabel.setTooltip(statusTooltip);
-        ToggleButton sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map library");
+        ToggleButton sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map and token libraries");
         sidebarToggle.setSelected(preferences.getBoolean(PREF_SIDEBAR_VISIBLE, true));
         sidebarToggle.selectedProperty().addListener((obs, was, visible) -> {
-            root.setLeft(visible ? mapBrowser : null);
+            root.setLeft(visible ? librarySidebar : null);
             preferences.putBoolean(PREF_SIDEBAR_VISIBLE, visible);
         });
         if (!sidebarToggle.isSelected()) {
@@ -726,6 +737,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 pruneGroup();
                 if (!groupKeys.isEmpty()) {
                     deleteGroup();
+                } else if (findToken(selectedTokenId) != null) {
+                    removeToken(selectedTokenId);
                 } else if (findTextBox(selectedTextId) != null) {
                     deleteSelectedText();
                 } else if (findOverlay(selectedOverlayId) != null) {
@@ -1816,6 +1829,12 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.apply(preferences.hiddenControls());
         updateSelectionControls();
         java.util.Set<String> hidden = preferences.hiddenSections();
+        if (tokenBrowserToggle != null) {
+            boolean visible = !hidden.contains("tokens") && !preferences.hiddenControls().contains("tokens.browser");
+            tokenBrowserToggle.setVisible(visible);
+            tokenBrowserToggle.setManaged(visible);
+            if (!visible) mapBrowserToggle.setSelected(true);
+        }
         dmSections.forEach((id, section) -> {
             boolean show = !hidden.contains(id);
             section.setVisible(show);
@@ -2455,12 +2474,12 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         Cursor cursor;
-        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingPlayerViewport
+        if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingToken || draggingPlayerViewport
                 || draggingGroup) {
             cursor = Cursor.CLOSED_HAND;
         } else if (resizingTextHandle >= 0) {
             cursor = textResizeCursor(resizingTextHandle);
-        } else if (resizingLayer || resizingOverlay) {
+        } else if (resizingLayer || resizingOverlay || resizingToken) {
             cursor = Cursor.SE_RESIZE;
         } else if (pingArmed || laserToolActive || activeTool != EditorTool.SELECT) {
             cursor = toolCursor();
@@ -2480,6 +2499,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (isOnPlayerViewportTitleBar(worldX, worldY)) {
             return Cursor.MOVE;
         }
+        if (onTokenHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return Cursor.SE_RESIZE;
+        if (pickToken(worldX, worldY) != null) return Cursor.OPEN_HAND;
         if (renderer.isWallLayerVisible() && pickInteractableBadge(worldX, worldY) != null) {
             return Cursor.HAND;
         }
@@ -2514,6 +2535,37 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     // ---- Map library integration ----
+
+    private VBox createLibrarySidebar() {
+        mapBrowser = new MapBrowser(mapLibrary, createBrowserHost(), new RecentMaps(preferences));
+        mapBrowser.addAction(createAutoSaveMenu());
+        tokenBrowser = new dmmt.ui.TokenBrowser(tokenLibrary, this::tokenDefinitionChanged);
+        mapBrowserToggle = new ToggleButton("Maps");
+        mapBrowserToggle.setGraphic(Icons.icon(MaterialDesignM.MAP_OUTLINE));
+        tokenBrowserToggle = new ToggleButton("Tokens");
+        tokenBrowserToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignA.ACCOUNT_CIRCLE_OUTLINE));
+        ToggleGroup libraryTabs = new ToggleGroup();
+        mapBrowserToggle.setToggleGroup(libraryTabs);
+        tokenBrowserToggle.setToggleGroup(libraryTabs);
+        mapBrowserToggle.setSelected(true);
+        HBox tabs = new HBox(mapBrowserToggle, tokenBrowserToggle);
+        tabs.getStyleClass().add("library-tabs");
+        librarySidebar = new VBox(tabs, mapBrowser);
+        librarySidebar.setPrefWidth(270);
+        VBox.setVgrow(mapBrowser, Priority.ALWAYS);
+        VBox.setVgrow(tokenBrowser, Priority.ALWAYS);
+        libraryTabs.selectedToggleProperty().addListener((obs, was, selected) -> {
+            if (selected == null) {
+                libraryTabs.selectToggle(mapBrowserToggle);
+                return;
+            }
+            librarySidebar.getChildren().set(1, selected == tokenBrowserToggle ? tokenBrowser : mapBrowser);
+        });
+        dmControlVisibility.register("tokens.browser", tokenBrowserToggle);
+        tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
+        applySectionVisibility();
+        return librarySidebar;
+    }
 
     private MapBrowser.Host createBrowserHost() {
         return new MapBrowser.Host() {
@@ -2700,7 +2752,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 canvasMouseDown = event.isPrimaryButtonDown() || event.isSecondaryButtonDown() || event.isMiddleButtonDown());
         dmCanvas.setOnDragOver(event -> {
             Dragboard board = event.getDragboard();
-            if (board.hasFiles() && board.getFiles().stream().anyMatch(this::isImageFile)) {
+            if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)
+                    || board.hasFiles() && board.getFiles().stream().anyMatch(this::isImageFile)) {
                 event.acceptTransferModes(TransferMode.COPY);
             }
             event.consume();
@@ -2709,7 +2762,17 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.setOnDragDropped(event -> {
             Dragboard board = event.getDragboard();
             boolean success = false;
-            if (board.hasFiles()) {
+            if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)) {
+                DmProject.TokenDefinition definition = tokenBrowser.find((String) board.getContent(dmmt.ui.TokenBrowser.TOKEN));
+                if (definition != null) {
+                    var world = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(),
+                            dmCanvas.getHeight(), project.getViews().getDmCamera());
+                    addToken(definition, world.x(), world.y());
+                    success = true;
+                } else {
+                    status("The token no longer exists in the library.");
+                }
+            } else if (board.hasFiles()) {
                 for (File file : board.getFiles()) {
                     if (isImageFile(file)) {
                         addImageLayerFromFile(file.toPath());
@@ -2868,6 +2931,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 rightClickCancelCandidate = pingArmed || laserToolActive || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
+                DmProject.TokenInstance token = rightClickCancelCandidate ? null : pickToken(world.x(), world.y());
+                if (token != null) {
+                    clearGroup();
+                    clearSingleSelection();
+                    selectedTokenId = token.getId();
+                    showTokenContextMenu(token, event.getScreenX(), event.getScreenY());
+                    return;
+                }
                 DmProject.Interactable portal = rightClickCancelCandidate ? null : pickInteractableForClick(world.x(), world.y());
                 if (portal != null) {
                     showInteractableContextMenu(portal, event.getScreenX(), event.getScreenY());
@@ -2875,6 +2946,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 DmProject.LightSource light = rightClickCancelCandidate ? null : pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
                 if (light != null) {
+                    selectedTokenId = null;
                     selectedLight = light;
                     selectedLayer = null;
                     showLightContextMenu(light, event.getScreenX(), event.getScreenY());
@@ -2882,6 +2954,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 DmProject.TextBox textBox = rightClickCancelCandidate ? null : pickTextBox(world.x(), world.y());
                 if (textBox != null) {
+                    selectedTokenId = null;
                     selectedTextId = textBox.getId();
                     selectedOverlayId = null;
                     selectedLayer = null;
@@ -2892,6 +2965,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
                 DmProject.OverlayShape shape = rightClickCancelCandidate ? null : pickOverlay(world.x(), world.y(), camera.getZoom());
                 if (shape != null) {
+                    selectedTokenId = null;
                     selectedOverlayId = shape.getId();
                     selectedLayer = null;
                     selectedLight = null;
@@ -3034,6 +3108,21 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
+            DmProject.TokenInstance tokenHandle = findToken(selectedTokenId);
+            boolean handle = onTokenHandle(tokenHandle, world.x(), world.y(), camera.getZoom());
+            DmProject.TokenInstance token = handle ? tokenHandle : pickToken(world.x(), world.y());
+            if (token != null) {
+                clearSingleSelection();
+                selectedTokenId = token.getId();
+                tokenDragBefore = cloneToken(token);
+                tokenPressX = world.x();
+                tokenPressY = world.y();
+                draggingToken = !handle;
+                resizingToken = handle;
+                return;
+            }
+            selectedTokenId = null;
+
             selectedLight = pickNearestLight(world.x(), world.y(), Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, camera.getZoom()));
             if (selectedLight != null) {
                 draggingLight = true;
@@ -3146,9 +3235,31 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             if (draggingGroup) {
-                moveGroupBy(world.x() - groupLastX, world.y() - groupLastY);
-                groupLastX = world.x();
-                groupLastY = world.y();
+                if (groupKeys.stream().anyMatch(k -> k.startsWith("token:"))) {
+                    double[] anchor = groupStartPositions.entrySet().stream()
+                            .filter(entry -> entry.getKey().startsWith("token:")).findFirst().orElseThrow().getValue();
+                    double dx = snapToken(anchor[0] + world.x() - groupPressX, event.isShiftDown()) - anchor[0];
+                    double dy = snapToken(anchor[1] + world.y() - groupPressY, event.isShiftDown()) - anchor[1];
+                    groupStartPositions.forEach((key, position) -> moveGroupItemTo(key, position[0] + dx, position[1] + dy));
+                } else {
+                    moveGroupBy(world.x() - groupLastX, world.y() - groupLastY);
+                    groupLastX = world.x();
+                    groupLastY = world.y();
+                }
+                return;
+            }
+
+            if (draggingToken || resizingToken) {
+                DmProject.TokenInstance moving = findToken(selectedTokenId);
+                if (moving != null && tokenDragBefore != null) {
+                    if (draggingToken) {
+                        moving.setX(snapToken(tokenDragBefore.getX() + world.x() - tokenPressX, event.isShiftDown()));
+                        moving.setY(snapToken(tokenDragBefore.getY() + world.y() - tokenPressY, event.isShiftDown()));
+                    } else {
+                        double radius = Math.max(Math.abs(world.x() - moving.getX()), Math.abs(world.y() - moving.getY()));
+                        moving.setSizeTiles(Math.max(.5, Math.round(radius * 4 / project.getMap().getGrid().getPixelsPerCell()) / 2.0));
+                    }
+                }
                 return;
             }
 
@@ -3331,6 +3442,11 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (draftText != null) {
                 finishTextDraft();
+                return;
+            }
+
+            if (draggingToken || resizingToken) {
+                finishTokenDrag();
                 return;
             }
 
@@ -3622,6 +3738,7 @@ public class DungeonMasterMapToolApplication extends Application {
         updateSelectionControls();
         drawOverlaySelection(fogGc);
         drawTextSelection(fogGc);
+        drawTokenSelection(fogGc);
         drawGroupSelection(fogGc);
         drawToolPreview(fogGc);
         historyFeedback.draw(fogGc, dmCanvas.getWidth(), dmCanvas.getHeight(),
@@ -3662,7 +3779,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerView.renderBase(playerBaseCanvas.getGraphicsContext2D(), playerBaseState, shown,
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
-                        ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
+                        ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN, true);
         long section = FrameProfiler.start();
         playerView.renderBrightCore(playerBrightCoreCanvas.getGraphicsContext2D(), shown, playerCanvas.getWidth(),
                 playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
@@ -3759,6 +3876,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 || !candidate.getLighting().getLights().isEmpty()
                 || !candidate.getOverlays().isEmpty()
                 || !candidate.getTextBoxes().isEmpty()
+                || !candidate.getTokens().isEmpty()
                 || (candidate.getMap().getImagePath() != null && !candidate.getMap().getImagePath().isBlank());
     }
 
@@ -4187,7 +4305,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean interactionInProgress() {
-        return draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
+        return draggingToken || resizingToken || draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
                 || draggingText || resizingTextHandle >= 0 || draftText != null
                 || draggingPlayerViewport || panningDmCamera
                 || (draftWall != null && (activeTool != EditorTool.WALL_DRAW || canvasMouseDown))
@@ -5006,6 +5124,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void setActiveTool(EditorTool tool) {
+        finishTokenDrag();
+        selectedTokenId = null;
         finishPlayerViewportDrag();
         hideBrushSizeLabel();
         commitTextEdit();
@@ -5385,6 +5505,10 @@ public class DungeonMasterMapToolApplication extends Application {
             capturePlayerTransition();
         }
         project = next;
+        selectedTokenId = null;
+        tokenDragBefore = null;
+        draggingToken = false;
+        resizingToken = false;
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
         multiLevelFile = level == null ? null : level.manifestFile();
@@ -7597,6 +7721,9 @@ public class DungeonMasterMapToolApplication extends Application {
         pruneGroup();
         java.util.List<String> keys = new java.util.ArrayList<>(groupKeys);
         if (keys.isEmpty()) {
+            if (findToken(selectedTokenId) != null) {
+                keys.add(groupKey("token", selectedTokenId));
+            }
             if (selectedLight != null && findLightById(selectedLight.getId()) != null) {
                 keys.add(groupKey("light", selectedLight.getId()));
             }
@@ -7614,7 +7741,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean copySelection() {
         java.util.List<String> keys = copyableKeys();
         if (keys.isEmpty()) {
-            status("Select lights, effects or text boxes first, then copy them with Ctrl+C.");
+            status("Select tokens, lights, effects or text boxes first, then copy them with Ctrl+C.");
             return false;
         }
         CopiedItems content = new CopiedItems();
@@ -7624,7 +7751,12 @@ public class DungeonMasterMapToolApplication extends Application {
         double maxY = -Double.MAX_VALUE;
         for (String key : keys) {
             String id = keyId(key);
-            if (key.startsWith("light:")) {
+            if (key.startsWith("token:")) {
+                DmProject.TokenInstance token = findToken(id);
+                content.tokens.add(cloneToken(token));
+                content.definitions.put(token.getDefinitionId(),
+                        dmmt.service.TokenLibraryService.copy(project.getTokenDefinitions().get(token.getDefinitionId())));
+            } else if (key.startsWith("light:")) {
                 content.lights.add(cloneLight(findLightById(id)));
             } else if (key.startsWith("text:")) {
                 content.texts.add(cloneText(findTextBox(id)));
@@ -7659,8 +7791,10 @@ public class DungeonMasterMapToolApplication extends Application {
             setTextLayerVisible(true);
         }
         DmProject.CameraState camera = project.getViews().getDmCamera();
-        double dx = (hoverInsideCanvas ? hoverWorldX : camera.getX()) - content.centerX;
-        double dy = (hoverInsideCanvas ? hoverWorldY : camera.getY()) - content.centerY;
+        double targetDx = (hoverInsideCanvas ? hoverWorldX : camera.getX()) - content.centerX;
+        double targetDy = (hoverInsideCanvas ? hoverWorldY : camera.getY()) - content.centerY;
+        double dx = content.tokens.isEmpty() ? targetDx : snapToken(targetDx, false);
+        double dy = content.tokens.isEmpty() ? targetDy : snapToken(targetDy, false);
 
         java.util.List<DmProject.LightSource> lights = new java.util.ArrayList<>();
         for (DmProject.LightSource source : content.lights) {
@@ -7687,7 +7821,19 @@ public class DungeonMasterMapToolApplication extends Application {
             texts.add(copy);
         }
 
+        java.util.List<DmProject.TokenInstance> tokens = new java.util.ArrayList<>();
+        for (DmProject.TokenInstance source : content.tokens) {
+            var copy = cloneToken(source);
+            copy.setId(UUID.randomUUID().toString());
+            copy.setX(copy.getX() + dx);
+            copy.setY(copy.getY() + dy);
+            tokens.add(copy);
+        }
+
         Runnable redo = () -> {
+            content.definitions.forEach((id, definition) -> project.getTokenDefinitions().putIfAbsent(id,
+                    dmmt.service.TokenLibraryService.copy(definition)));
+            tokens.forEach(token -> applyTokenState(token.getId(), token));
             for (DmProject.LightSource light : lights) {
                 if (findLightById(light.getId()) == null) {
                     project.getLighting().getLights().add(cloneLight(light));
@@ -7697,6 +7843,7 @@ public class DungeonMasterMapToolApplication extends Application {
             texts.forEach(box -> applyTextState(box.getId(), box));
         };
         Runnable undo = () -> {
+            tokens.forEach(token -> applyTokenState(token.getId(), null));
             lights.forEach(light -> project.getLighting().getLights()
                     .removeIf(l -> light.getId().equals(l.getId())));
             overlays.forEach(shape -> applyOverlayState(shape.getId(), null));
@@ -7708,11 +7855,14 @@ public class DungeonMasterMapToolApplication extends Application {
         clearGroup();
         clearSingleSelection();
         java.util.List<String> pasted = new java.util.ArrayList<>();
+        tokens.forEach(t -> pasted.add(groupKey("token", t.getId())));
         lights.forEach(l -> pasted.add(groupKey("light", l.getId())));
         overlays.forEach(o -> pasted.add(groupKey("overlay", o.getId())));
         texts.forEach(t -> pasted.add(groupKey("text", t.getId())));
         if (pasted.size() == 1) {
-            if (!lights.isEmpty()) {
+            if (!tokens.isEmpty()) {
+                selectedTokenId = tokens.get(0).getId();
+            } else if (!lights.isEmpty()) {
                 selectedLight = findLightById(lights.get(0).getId());
             } else if (!overlays.isEmpty()) {
                 selectedOverlayId = overlays.get(0).getId();
@@ -7728,6 +7878,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Copied items in the coordinates of the map they came from; survives map switches. */
     private static final class CopiedItems {
+        private final java.util.List<DmProject.TokenInstance> tokens = new java.util.ArrayList<>();
+        private final Map<String, DmProject.TokenDefinition> definitions = new java.util.LinkedHashMap<>();
         private final java.util.List<DmProject.LightSource> lights = new java.util.ArrayList<>();
         private final java.util.List<DmProject.OverlayShape> overlays = new java.util.ArrayList<>();
         private final java.util.List<DmProject.TextBox> texts = new java.util.ArrayList<>();
@@ -7735,7 +7887,7 @@ public class DungeonMasterMapToolApplication extends Application {
         private double centerY;
 
         private boolean isEmpty() {
-            return lights.isEmpty() && overlays.isEmpty() && texts.isEmpty();
+            return tokens.isEmpty() && lights.isEmpty() && overlays.isEmpty() && texts.isEmpty();
         }
     }
 
@@ -7890,6 +8042,150 @@ public class DungeonMasterMapToolApplication extends Application {
                 (int) Math.round(color.getOpacity() * 255));
     }
 
+    private void tokenDefinitionChanged(DmProject.TokenDefinition definition) {
+        if (project.getTokenDefinitions().containsKey(definition.getId())) {
+            project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
+            historyVersion++;
+        }
+        if (CopiedItems != null && CopiedItems.definitions.containsKey(definition.getId())) {
+            CopiedItems.definitions.put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
+        }
+        renderDm();
+        renderPlayer();
+    }
+
+    private DmProject.TokenInstance findToken(String id) {
+        return id == null ? null : project.getTokens().stream().filter(t -> id.equals(t.getId())).findFirst().orElse(null);
+    }
+
+    private static DmProject.TokenInstance cloneToken(DmProject.TokenInstance token) {
+        return DmProject.TokenInstance.builder().id(token.getId()).definitionId(token.getDefinitionId())
+                .x(token.getX()).y(token.getY()).sizeTiles(token.getSizeTiles())
+                .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible()).build();
+    }
+
+    private void applyTokenState(String id, DmProject.TokenInstance state) {
+        int index = -1;
+        for (int i = 0; i < project.getTokens().size(); i++) {
+            if (id.equals(project.getTokens().get(i).getId())) { index = i; break; }
+        }
+        if (state == null) {
+            if (index >= 0) project.getTokens().remove(index);
+            if (id.equals(selectedTokenId)) selectedTokenId = null;
+        } else if (index >= 0) {
+            project.getTokens().set(index, cloneToken(state));
+        } else {
+            project.getTokens().add(cloneToken(state));
+        }
+    }
+
+    private double snapToken(double value, boolean free) {
+        double step = project.getMap().getGrid().getPixelsPerCell() / 2;
+        return free ? value : Math.round(value / step) * step;
+    }
+
+    private void addToken(DmProject.TokenDefinition definition, double x, double y) {
+        setActiveTool(EditorTool.SELECT);
+        clearSingleSelection();
+        project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
+        DmProject.TokenInstance token = DmProject.TokenInstance.builder().id(UUID.randomUUID().toString())
+                .definitionId(definition.getId()).x(snapToken(x, false)).y(snapToken(y, false))
+                .sizeTiles(definition.getSizeTiles()).build();
+        executeWithHistory("Place token", () -> applyTokenState(token.getId(), token),
+                () -> applyTokenState(token.getId(), null));
+        selectedTokenId = token.getId();
+        dmCanvas.requestFocus();
+        status("Placed " + definition.getName() + " (hidden from players). Drag to move; Shift moves freely.");
+    }
+
+    private void removeToken(String id) {
+        DmProject.TokenInstance token = findToken(id);
+        if (token == null) return;
+        DmProject.TokenInstance before = cloneToken(token);
+        executeWithHistory("Remove token", () -> applyTokenState(id, null), () -> applyTokenState(id, before));
+    }
+
+    private void changeToken(String id, String label, Consumer<DmProject.TokenInstance> change) {
+        DmProject.TokenInstance token = findToken(id);
+        if (token == null) return;
+        DmProject.TokenInstance before = cloneToken(token), after = cloneToken(token);
+        change.accept(after);
+        if (!before.equals(after)) {
+            executeWithHistory(label, () -> applyTokenState(id, after), () -> applyTokenState(id, before));
+        }
+    }
+
+    private DmProject.TokenInstance pickToken(double x, double y) {
+        for (int i = project.getTokens().size() - 1; i >= 0; i--) {
+            DmProject.TokenInstance token = project.getTokens().get(i);
+            double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
+            if (distance(x, y, token.getX(), token.getY()) <= r) return token;
+        }
+        return null;
+    }
+
+    private boolean onTokenHandle(DmProject.TokenInstance token, double x, double y, double zoom) {
+        if (token == null) return false;
+        double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
+        return distance(x, y, token.getX() + r, token.getY() + r) <= 10 / Math.max(.01, zoom);
+    }
+
+    private void finishTokenDrag() {
+        if (tokenDragBefore != null) {
+            DmProject.TokenInstance current = findToken(tokenDragBefore.getId());
+            if (current != null && !current.equals(tokenDragBefore)) {
+                var before = tokenDragBefore;
+                var after = cloneToken(current);
+                recordHistory(resizingToken ? "Resize token" : "Move token",
+                        () -> applyTokenState(after.getId(), after), () -> applyTokenState(before.getId(), before));
+            }
+        }
+        tokenDragBefore = null;
+        draggingToken = false;
+        resizingToken = false;
+    }
+
+    private void showTokenContextMenu(DmProject.TokenInstance token, double screenX, double screenY) {
+        String id = token.getId();
+        CheckMenuItem visible = new CheckMenuItem("Visible to players");
+        visible.setSelected(token.isPlayerVisible());
+        visible.setOnAction(e -> changeToken(id, "Change token visibility", t -> t.setPlayerVisible(visible.isSelected())));
+        CheckMenuItem name = new CheckMenuItem("Show name (DM only)");
+        name.setSelected(token.isNameVisible());
+        name.setOnAction(e -> changeToken(id, "Change token name tag", t -> t.setNameVisible(name.isSelected())));
+        MenuItem size = new MenuItem("Resize...");
+        size.setOnAction(e -> Dialogs.askText(primaryStage, "Token size", "Diameter in tiles (0.5-tile steps)",
+                MaterialDesignR.RESIZE, "Resize", Double.toString(token.getSizeTiles()), value -> {
+                    try {
+                        double number = Double.parseDouble(value);
+                        return Double.isFinite(number) && number >= .5 && number * 2 == Math.rint(number * 2)
+                                ? null : "Enter a positive multiple of 0.5 tiles.";
+                    } catch (NumberFormatException ex) { return "Enter a number."; }
+                }).ifPresent(value -> changeToken(id, "Resize token", t -> t.setSizeTiles(Double.parseDouble(value)))));
+        MenuItem remove = new MenuItem("Remove token from map");
+        remove.setOnAction(e -> removeToken(id));
+        hideLightMenu();
+        activeLightMenu = new ContextMenu(visible, name, size, new SeparatorMenuItem(), remove);
+        activeLightMenu.show(dmCanvas, screenX, screenY);
+    }
+
+    private void drawTokenSelection(GraphicsContext gc) {
+        DmProject.TokenInstance token = findToken(selectedTokenId);
+        if (token == null) return;
+        var camera = project.getViews().getDmCamera();
+        double x = renderer.worldToScreenX(token.getX(), dmCanvas.getWidth(), camera);
+        double y = renderer.worldToScreenY(token.getY(), dmCanvas.getHeight(), camera);
+        double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() * camera.getZoom() / 2;
+        gc.save();
+        gc.setStroke(Color.YELLOW);
+        gc.setLineWidth(1.5);
+        gc.setLineDashes(6, 4);
+        gc.strokeRect(x - r, y - r, r * 2, r * 2);
+        gc.setFill(Color.YELLOW);
+        gc.fillRect(x + r - 4, y + r - 4, 8, 8);
+        gc.restore();
+    }
+
     // ---- Multi-selection (rectangle / Ctrl+click) ----
 
     private static String groupKey(String kind, String id) {
@@ -7907,6 +8203,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void clearSingleSelection() {
         finishNudge();
+        selectedTokenId = null;
         selectedLight = null;
         selectedTextId = null;
         selectedOverlayId = null;
@@ -7919,6 +8216,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void seedGroupFromSingleSelection() {
+        if (findToken(selectedTokenId) != null) groupKeys.add(groupKey("token", selectedTokenId));
         if (selectedLight != null && findLightById(selectedLight.getId()) != null) {
             groupKeys.add(groupKey("light", selectedLight.getId()));
         }
@@ -7935,6 +8233,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Topmost selectable item under the point, in the same priority order as single selection. */
     private String pickGroupKey(double worldX, double worldY, double zoom) {
+        DmProject.TokenInstance token = pickToken(worldX, worldY);
+        if (token != null) return groupKey("token", token.getId());
         DmProject.LightSource light = pickNearestLight(worldX, worldY, Tuning.LIGHT_PICK_RADIUS.get() / Math.max(0.01, zoom));
         if (light != null) {
             return groupKey("light", light.getId());
@@ -7952,6 +8252,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean onSingleSelectionHandle(double worldX, double worldY, double zoom) {
+        if (onTokenHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return true;
         DmProject.TextBox text = project.isTextLayerVisible() ? findTextBox(selectedTextId) : null;
         if (text != null && pickTextHandle(text, worldX, worldY, zoom) >= 0) {
             return true;
@@ -7987,6 +8288,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 draggingGroup = true;
                 groupLastX = worldX;
                 groupLastY = worldY;
+                groupPressX = worldX;
+                groupPressY = worldY;
                 groupStartPositions = captureGroupPositions();
                 groupFogBefore = groupKeys.stream().anyMatch(k -> k.startsWith("light:")) ? snapshotFog() : null;
                 return true;
@@ -8011,6 +8314,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private double[] groupPosition(String key) {
         String id = keyId(key);
+        if (key.startsWith("token:")) {
+            DmProject.TokenInstance token = findToken(id);
+            return token == null ? null : new double[]{token.getX(), token.getY()};
+        }
         if (key.startsWith("light:")) {
             DmProject.LightSource light = findLightById(id);
             return light == null ? null : new double[]{light.getX(), light.getY()};
@@ -8056,7 +8363,10 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void moveGroupItemTo(String key, double x, double y) {
         String id = keyId(key);
-        if (key.startsWith("light:")) {
+        if (key.startsWith("token:")) {
+            DmProject.TokenInstance token = findToken(id);
+            if (token != null) { token.setX(x); token.setY(y); }
+        } else if (key.startsWith("light:")) {
             DmProject.LightSource light = findLightById(id);
             if (light != null) {
                 light.setX(x);
@@ -8133,6 +8443,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private java.util.Set<String> selectedMovementKeys() {
         java.util.Set<String> keys = new java.util.LinkedHashSet<>(groupKeys);
         if (keys.isEmpty()) {
+            if (selectedTokenId != null) keys.add(groupKey("token", selectedTokenId));
             if (selectedLight != null) {
                 keys.add(groupKey("light", selectedLight.getId()));
             }
@@ -8209,7 +8520,9 @@ public class DungeonMasterMapToolApplication extends Application {
         Map<String, Object> backups = new java.util.LinkedHashMap<>();
         for (String key : keys) {
             String id = keyId(key);
-            if (key.startsWith("light:")) {
+            if (key.startsWith("token:")) {
+                backups.put(key, cloneToken(findToken(id)));
+            } else if (key.startsWith("light:")) {
                 backups.put(key, cloneLight(findLightById(id)));
             } else if (key.startsWith("text:")) {
                 backups.put(key, cloneText(findTextBox(id)));
@@ -8222,7 +8535,9 @@ public class DungeonMasterMapToolApplication extends Application {
         Runnable redo = () -> {
             for (String key : keys) {
                 String id = keyId(key);
-                if (key.startsWith("light:")) {
+                if (key.startsWith("token:")) {
+                    applyTokenState(id, null);
+                } else if (key.startsWith("light:")) {
                     project.getLighting().getLights().removeIf(l -> id.equals(l.getId()));
                 } else if (key.startsWith("text:")) {
                     applyTextState(id, null);
@@ -8239,7 +8554,9 @@ public class DungeonMasterMapToolApplication extends Application {
             for (Map.Entry<String, Object> entry : backups.entrySet()) {
                 String key = entry.getKey();
                 String id = keyId(key);
-                if (key.startsWith("light:")) {
+                if (key.startsWith("token:")) {
+                    applyTokenState(id, (DmProject.TokenInstance) entry.getValue());
+                } else if (key.startsWith("light:")) {
                     if (findLightById(id) == null) {
                         project.getLighting().getLights().add(cloneLight((DmProject.LightSource) entry.getValue()));
                     }
@@ -8262,6 +8579,12 @@ public class DungeonMasterMapToolApplication extends Application {
     /** World bounds {minX, minY, maxX, maxY} of a group member, or null when it no longer exists / is not selectable. */
     private double[] groupBounds(String key) {
         String id = keyId(key);
+        if (key.startsWith("token:")) {
+            DmProject.TokenInstance token = findToken(id);
+            if (token == null) return null;
+            double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
+            return new double[]{token.getX() - r, token.getY() - r, token.getX() + r, token.getY() + r};
+        }
         if (key.startsWith("light:")) {
             DmProject.LightSource light = findLightById(id);
             return light == null ? null : new double[]{light.getX(), light.getY(), light.getX(), light.getY()};
@@ -8303,6 +8626,7 @@ public class DungeonMasterMapToolApplication extends Application {
         double minY = Math.min(marqueeStartY, marqueeCurrentY);
         double maxY = Math.max(marqueeStartY, marqueeCurrentY);
         java.util.List<String> candidates = new java.util.ArrayList<>();
+        project.getTokens().forEach(t -> candidates.add(groupKey("token", t.getId())));
         project.getLighting().getLights().forEach(l -> candidates.add(groupKey("light", l.getId())));
         project.getTextBoxes().forEach(t -> candidates.add(groupKey("text", t.getId())));
         project.getOverlays().forEach(o -> candidates.add(groupKey("overlay", o.getId())));

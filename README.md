@@ -21,6 +21,7 @@ A desktop application for tabletop game masters who run in-person sessions with 
 - [User documentation](#user-documentation)
   1. [Window layout](#1-window-layout)
   2. [Map library (left sidebar)](#2-map-library-left-sidebar)
+     - [Character tokens](#character-tokens)
   3. [Creating and importing maps](#3-creating-and-importing-maps)
      - [Multilevel maps](#multilevel-maps-buildings-with-several-floors)
   4. [Navigating the map](#4-navigating-the-map)
@@ -139,6 +140,24 @@ Maps are saved in a versioned JSON format (`.dmmap`) that is identical for impor
 - **Bottom:** a status bar whose activity message reports saves, imports, loading and errors; a persistent **Player view: Off / Live / Frozen** indicator is separated from the current song by extra spacing and a divider. **Frozen** is bold blue text; if the player window is closed while frozen, it reads **Frozen (window off)**. Use the chart button to toggle optional rendering diagnostics; the panel stays open until toggled off.
 
 ### 2. Map library (left sidebar)
+
+The **Maps** and **Tokens** tabs share the left sidebar; only one is open at a time. The sidebar button collapses both.
+
+#### Character tokens
+
+In **Tokens**, create a named, colored token, import an image file (PNG, JPEG, GIF, BMP, WebP or TIFF), or paste an image from the clipboard (toolbar or Ctrl+V in the token browser or editor). Ordinary text paste still works in text fields. The circular editor supports dragging to pan and a slider/mouse wheel to zoom, both on creation and later edits. You can pan to the source image's edges, leaving transparent space outside the image. Without an image, a colored character silhouette is used. Default diameter is **1 tile**, adjustable in **0.5-tile steps**.
+
+Organize tokens in nested folders, drag tokens/folders to reorganize them, and search by token or folder name. Right-click a token to edit its image/crop, color or default size, rename, duplicate or delete it. Double-click also opens the editor.
+
+Drag a token onto the DM map to place it **hidden from players**. Drag to move with **half-grid snapping**, or hold **Shift** to move freely. Resize with the bottom-right selection handle or the right-click **Resize** action. The map context menu toggles player visibility and an optional **DM-only name tag** (off by default), or removes the instance. Tokens support Ctrl-click, marquee selection, group movement, arrow nudging, Delete/Backspace, copy/paste and undo/redo like other map elements. Names are never shown to players.
+
+Token artwork is affected by map lighting and fog. Hidden tokens use the same crossed-out-eye badge as hidden text boxes; DM name tags and badges remain above lighting.
+
+Maps store their own instances and PNG artwork in `assets\tokens`, referenced by relative paths in the project file. Library image, name and color edits update linked maps without changing placed sizes, positions or visibility. Deleting a library token permanently removes its library metadata and any PNGs no longer used by another library token; placed tokens remain intact using the map's own copy. Unopened maps retain their last-saved appearance, not necessarily the last library edit. Library changes also clean up obsolete artwork; shared PNGs are kept until no remaining library token uses them. Exported `.dmmpack` files include current linked artwork while the token remains in the library, or the map's saved artwork after deletion; importing on another computer restores them without adding them to its token browser. The token library is stored in `dmmap-tokens` beside the settings file, with PNG originals/crops in `images` and metadata in `tokens.json`; keep the whole folder when backing up the reusable library. Existing Base64 images remain readable and are converted to file references on the next save.
+
+**Settings > DM controls tabs > Tokens** hides the token tab or its individual actions without removing data. The local API exposes `tokens.browser`, `tokens.create`, `tokens.import`, `tokens.paste`, `tokens.folder` and `tokens.refresh` through normal control discovery; creation/import actions open the same editor on the DM computer.
+
+#### Map browser
 
 ![Map browser](docs/images/map-browser.png)
 

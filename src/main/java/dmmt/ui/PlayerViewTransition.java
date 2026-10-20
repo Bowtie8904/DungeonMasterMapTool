@@ -85,7 +85,16 @@ public final class PlayerViewTransition {
                 || (before.isTextLayerVisible()
                     && !Objects.equals(before.getTextBoxes().stream().filter(DmProject.TextBox::isPlayerVisible).toList(),
                                        after.getTextBoxes().stream().filter(DmProject.TextBox::isPlayerVisible).toList()))
+                || !Objects.equals(visibleTokens(before), visibleTokens(after))
                 || !Objects.equals(before.getWeather(), after.getWeather());
+    }
+
+    private static java.util.List<?> visibleTokens(DmProject project) {
+        return project.getTokens().stream().filter(DmProject.TokenInstance::isPlayerVisible).map(token -> {
+            var definition = project.getTokenDefinitions().get(token.getDefinitionId());
+            return java.util.Arrays.asList(token.getX(), token.getY(), token.getSizeTiles(),
+                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor());
+        }).toList();
     }
 
     private static Path normalize(Path file) {

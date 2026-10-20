@@ -60,6 +60,50 @@ public class DmProject {
     private List<TextBox> textBoxes = new ArrayList<>();
 
     @Builder.Default
+    private Map<String, TokenDefinition> tokenDefinitions = new TreeMap<>();
+
+    @Builder.Default
+    private List<TokenInstance> tokens = new ArrayList<>();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TokenDefinition {
+        private String id;
+        private String name;
+        @Builder.Default
+        private String color = "#5599CC";
+        @Builder.Default
+        private double sizeTiles = 1;
+        /** Runtime PNG data; persistence stores package-relative asset references. */
+        private String sourceImage;
+        private String image;
+        @Builder.Default
+        private double zoom = 1;
+        @Builder.Default
+        private double centerX = 0.5;
+        @Builder.Default
+        private double centerY = 0.5;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TokenInstance {
+        private String id;
+        private String definitionId;
+        /** Center in world coordinates; diameter in grid tiles. */
+        private double x;
+        private double y;
+        @Builder.Default
+        private double sizeTiles = 1;
+        private boolean playerVisible;
+        private boolean nameVisible;
+    }
+
+    @Builder.Default
     private boolean textLayerVisible = true;
 
     @Builder.Default

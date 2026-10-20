@@ -51,6 +51,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Handout window: paste a clipboard image, toggle showing it on the player screen, rotate in 90-degree steps (3.18)
 - [x] Laser pointer on middle mouse button hold (3.19)
 - [x] Map browser thumbnails + search bar for maps and folders (3.20)
+- [x] Character token library, circular image editor, map instances and portable token export (3.38)
 - [x] Map tags, click-to-use suggestions, import tag inheritance and word-based name/tag search (3.34)
 - [ ] Audio: ambient music categories, sound effect loops, clip cutting from long files and a mini player (3.35)
 - [x] Auto-save for maps that already exist on disk (3.21)
@@ -1338,6 +1339,19 @@ having to know the control's units. An explicit amount overrides it.
 - Shared resource-aware scheduling bounds concurrent copying, image preparation and audio analysis independently. Live `work.mode` choices are `session` (default; conservative CPU concurrency) and `preparation` (more background throughput); memory-intensive image preparation stays single-worker. Visible/current work takes precedence over speculative prefetch. Existing rendering/playback clocks, fog geometry, calibrated scale and project persistence stay unchanged.
 - Document the workflows in README and all new settings in `docs/SETTINGS.md` and the bundled defaults. Test header reads, thumbnail invalidation, move-stable cache identities, adjacent-only prefetch, one-pass loudness parity, pending playback exclusion, metadata preservation, cancellation/retry and scheduler bounds.
 
+## 3.38 Character Tokens (implemented)
+
+- The left sidebar has mutually exclusive Maps and Tokens tabs; collapsing the sidebar hides both as before. The token browser uses the map library's dark tree styling, thumbnails and names, nested folders, name/folder search and drag-and-drop organization.
+- Create named tokens from image files or clipboard images, or from a color and a default character silhouette. A circular crop editor supports zoom and pan on import and later edits, replacement and removal of the image. Token colors draw a circular border and tint image-free tokens. Default diameter is 1 grid tile, in 0.5-tile increments.
+- Browser context menus support editing, renaming, duplication and deletion; folders support creation, rename, move and deletion. Deleting a library token never removes placed instances.
+- Drag a library token onto the active DM map to create an independent instance, hidden from players by default. Instances can move, resize, toggle player visibility, toggle an optional DM-only name tag (off by default), and be removed through a context menu or Delete/Backspace.
+- Movement snaps to half-grid positions; Shift permits free movement. Tokens participate in normal selection, Ctrl multi-selection, marquee selection, group dragging, arrow nudging, copy/paste, undo/redo, whole-map rotation and player freeze behavior.
+- Library image/crop, name and color edits propagate to every map using that token; placed positions, sizes, visibility and name-tag flags remain independent. Maps retain self-contained token definitions so deleting the library entry or exporting/importing elsewhere preserves the full state. Imported map tokens need not enter the token browser.
+- Reusable definitions and nested logical folders live in `dmmap-tokens/tokens.json` beside the settings file. Deleting tokens or folders permanently removes their library metadata and PNG assets not shared by remaining entries, including obsolete artwork. Maps retain their own last-saved copies; deletion does not first update unopened maps. While a token remains in the library, opening, saving or exporting a map resolves its latest definition. Common raster imports include PNG, JPEG, GIF, BMP, WebP and TIFF; unreadable formats report an explicit error.
+- Token browser controls must be hideable through Settings and reachable through the local control API. Document the workflow in README and any new settings in `docs/SETTINGS.md`.
+- Editor Ctrl+V pastes a clipboard image without stealing ordinary text paste. Crop centers may reach the source image edges, exposing transparent space outside the source. Hidden instances use the standard crossed-out-eye badge. Token artwork is shaded by lighting; DM badges and labels remain legible above lighting.
+- Token originals and crops are PNG files referenced by relative paths, in the library's `images` folder and each map's `assets\tokens` folder, rather than Base64 in persisted JSON. Existing embedded images remain readable and migrate on save. Content-addressed assets preserve frozen snapshots and export includes the latest linked assets without changing the source map.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -1346,6 +1360,9 @@ having to know the control's units. An explicit amount overrides it.
 
 ## 9) Change Log
 
+- **Character tokens (3.38):** mutually exclusive Maps/Tokens sidebar tabs, searchable folder-based token library,
+  clipboard/file imports with circular pan/zoom editing, independent hidden-by-default map instances,
+  half-grid/Shift-free movement, group editing, DM name tags and self-contained map export.
 - **Import/loading responsiveness (3.37):** header-only map dimensions, input-signature thumbnail reuse,
   move-stable image pyramids and adjacent-floor prefetch; one-pass loudness with shared waveform/timbre
   analysis, persisted pending audio and a window-independent preparation queue; bounded priority resource

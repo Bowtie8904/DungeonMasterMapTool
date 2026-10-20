@@ -318,8 +318,23 @@ public class CanvasMapRenderer {
             DmProject.CameraState camera,
             GridMode gridMode
     ) {
+        renderBase(gc, state, project, projectFile, width, height, camera, gridMode, false);
+    }
+
+    public void renderBase(GraphicsContext gc, BaseLayerState state, DmProject project, Path projectFile,
+                           double width, double height, DmProject.CameraState camera, GridMode gridMode,
+                           boolean playerMode) {
         long imageVersion = imageStore.changeVersion();
         long signature = baseSignature(project, projectFile, width, height, camera, gridMode);
+        signature = 31 * signature + Boolean.hashCode(playerMode);
+        if (project != null) {
+            for (var token : project.getTokens()) {
+                if (!playerMode || token.isPlayerVisible()) {
+                    signature = 31 * signature + TokenState.of(token, project).hashCode();
+                    if (!playerMode) signature = 31 * signature + Boolean.hashCode(token.isPlayerVisible());
+                }
+            }
+        }
         if (state.valid && state.signature == signature && state.imageVersion == imageVersion) {
             return;
         }
@@ -338,6 +353,7 @@ public class CanvasMapRenderer {
             if (gridMode == GridMode.OVERLAY) {
                 drawGrid(gc, project, width, height, camera);
             }
+            drawTokens(gc, project, width, height, camera, playerMode, false);
         }
         FrameProfiler.lap("base redraw", profileStart);
         state.signature = signature;
@@ -491,16 +507,17 @@ public class CanvasMapRenderer {
                     ? project.getTextBoxes().stream().filter(DmProject.TextBox::isPlayerVisible)
                     .filter(box -> textTouchesScreen(box, textQuarterTurns, width, height, camera))
                     .map(TextState::of).toList() : List.of();
+            boolean active = !boxes.isEmpty();
             PlayerTextKey key = new PlayerTextKey(project, viewKey(width, height, camera), textQuarterTurns, boxes);
             playerTextCache.bind(gc.getCanvas());
-            gc.getCanvas().setVisible(!boxes.isEmpty());
+            gc.getCanvas().setVisible(active);
             FrameProfiler.lap("player text", section);
-            if (playerTextCache.matches(key, !boxes.isEmpty())) {
+            if (playerTextCache.matches(key, active)) {
                 return;
             }
             gc.clearRect(0, 0, width, height);
             drawForeground(gc, project, width, height, camera, true);
-            playerTextCache.update(key, !boxes.isEmpty());
+            playerTextCache.update(key, active);
             return;
         }
         if (playerMode) {
@@ -525,6 +542,14 @@ public class CanvasMapRenderer {
         }
     }
 
+    private record TokenState(String id, double x, double y, double size, String image, String color) {
+        private static TokenState of(DmProject.TokenInstance token, DmProject project) {
+            var definition = project.getTokenDefinitions().get(token.getDefinitionId());
+            return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(),
+                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor());
+        }
+    }
+
     private record PlayerTextKey(DmProject project, LightViewKey view, int turns, List<TextState> boxes) {
     }
 
@@ -535,12 +560,49 @@ public class CanvasMapRenderer {
         if (project.isTextLayerVisible()) {
             drawTextBoxes(gc, project, width, height, camera, playerMode);
         }
+        if (!playerMode) drawTokens(gc, project, width, height, camera, false, true);
         t = FrameProfiler.lap(who + "text", t);
         if (!playerMode && wallLayerVisible) {
             drawWalls(gc, project.getWalls(), width, height, camera);
             drawInteractables(gc, project.getInteractables(), width, height, camera);
         }
         FrameProfiler.lap(who + "walls", t);
+    }
+
+    private void drawTokens(GraphicsContext gc, DmProject project, double width, double height,
+                            DmProject.CameraState camera, boolean playerMode, boolean decorations) {
+        for (DmProject.TokenInstance token : project.getTokens()) {
+            if (playerMode && !token.isPlayerVisible()) continue;
+            DmProject.TokenDefinition definition = project.getTokenDefinitions().get(token.getDefinitionId());
+            if (definition == null) continue;
+            double x = worldToScreenX(token.getX(), width, camera);
+            double y = worldToScreenY(token.getY(), height, camera);
+            double diameter = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() * camera.getZoom();
+            double radius = diameter / 2;
+            if (x + radius < 0 || y + radius < 0 || x - radius > width || y - radius > height) continue;
+            if (!decorations) {
+                gc.save();
+                if (!playerMode && !token.isPlayerVisible()) gc.setGlobalAlpha(.55);
+                TokenArt.draw(gc, definition, x, y, diameter);
+                gc.restore();
+            }
+            if (decorations) {
+                gc.save();
+                if (!token.isPlayerVisible()) {
+                    drawHiddenBadge(gc, x, y);
+                }
+                if (token.isNameVisible()) {
+                    gc.setFont(javafx.scene.text.Font.font(12));
+                    gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
+                    gc.setFill(Color.color(0, 0, 0, .85));
+                    double labelWidth = Math.max(40, definition.getName().length() * 7 + 12);
+                    gc.fillRoundRect(x - labelWidth / 2, y + radius + 3, labelWidth, 20, 5, 5);
+                    gc.setFill(Color.WHITE);
+                    gc.fillText(definition.getName(), x, y + radius + 17);
+                }
+                gc.restore();
+            }
+        }
     }
 
     /**
@@ -1035,12 +1097,16 @@ public class CanvasMapRenderer {
             if (cx < -r || cy < -r || cx > width + r || cy > height + r) {
                 continue;
             }
-            gc.setFill(Color.color(0.1, 0.1, 0.12, 0.8));
-            gc.fillOval(cx - r, cy - r, r * 2, r * 2);
-            Image glyph = Icons.image(MaterialDesignE.EYE_OFF_OUTLINE, 14, Color.web("#dddddd"));
-            if (glyph != null) {
-                gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
-            }
+            drawHiddenBadge(gc, cx, cy);
+        }
+    }
+
+    private void drawHiddenBadge(GraphicsContext gc, double cx, double cy) {
+        gc.setFill(Color.color(0.1, 0.1, 0.12, 0.8));
+        gc.fillOval(cx - 11, cy - 11, 22, 22);
+        Image glyph = Icons.image(MaterialDesignE.EYE_OFF_OUTLINE, 14, Color.web("#dddddd"));
+        if (glyph != null) {
+            gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
         }
     }
 
