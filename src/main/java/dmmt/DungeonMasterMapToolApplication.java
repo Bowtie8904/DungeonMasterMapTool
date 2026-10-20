@@ -42,6 +42,7 @@ import dmmt.ui.MapLocationDialog;
 import dmmt.ui.MapTagsDialog;
 import dmmt.ui.PlayerViewTransition;
 import dmmt.ui.SettingsWindow;
+import dmmt.ui.WindowsPlayerWindow;
 import dmmt.render.TextBoxGeometry;
 import dmmt.ui.TextBoxEditor;
 import javafx.animation.AnimationTimer;
@@ -3599,7 +3600,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
         playerStage = new Stage(StageStyle.UNDECORATED);
         playerStage.setTitle("Player View");
-        playerStage.getIcons().setAll(appIcons());
+        playerStage.getIcons().setAll(Icons.playerWindowIcons());
         playerStage.setScene(scene);
         playerStage.setOnHidden(event -> {
             finishPlayerViewportDrag();
@@ -3628,9 +3629,11 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setWidth(bounds.getWidth());
         playerStage.setHeight(bounds.getHeight());
         playerStage.show();
+        boolean windowsIntegrationReady = WindowsPlayerWindow.configure(playerStage);
         syncPlayerWindowToggle();
         updatePlayerOutputStatus();
-        status("Player window opened.");
+        status(windowsIntegrationReady ? "Player window opened."
+                : "Player window opened, but Windows taskbar/Peek integration failed; see error output.");
     }
 
     private void openHandoutWindow(Stage owner) {

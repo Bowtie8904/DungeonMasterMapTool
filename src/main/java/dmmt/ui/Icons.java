@@ -12,6 +12,8 @@ import javafx.scene.Cursor;
 import javafx.scene.ImageCursor;
 import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Control;
 import javafx.scene.control.ToggleButton;
@@ -31,6 +33,7 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,10 +45,46 @@ public final class Icons {
 
     private static final Map<String, Cursor> CURSOR_CACHE = new HashMap<>();
     private static final Map<String, Image> IMAGE_CACHE = new HashMap<>();
+    private static List<Image> playerWindowIcons;
     private static final double TOOLTIP_CURSOR_GAP = 4;
     private static final Object CONTROL_TOOLTIP = new Object();
 
     private Icons() {
+    }
+
+    public static List<Image> playerWindowIcons() {
+        if (playerWindowIcons == null) {
+            playerWindowIcons = java.util.stream.IntStream.of(16, 24, 32, 48, 64, 128, 256)
+                    .mapToObj(Icons::playerWindowIcon)
+                    .toList();
+        }
+        return playerWindowIcons;
+    }
+
+    private static Image playerWindowIcon(int size) {
+        Canvas canvas = new Canvas(size, size);
+        GraphicsContext graphics = canvas.getGraphicsContext2D();
+        graphics.scale(size / 32.0, size / 32.0);
+        graphics.setFill(Color.web("#22D3EE"));
+        graphics.fillRoundRect(2, 4, 28, 21, 4, 4);
+        graphics.fillRect(14, 24, 4, 4);
+        graphics.fillRoundRect(8, 28, 16, 2, 2, 2);
+        graphics.setFill(Color.web("#082F49"));
+        graphics.fillRoundRect(4, 6, 24, 17, 2, 2);
+        graphics.setFill(Color.web("#ECFEFF"));
+        graphics.beginPath();
+        graphics.moveTo(6, 14.5);
+        graphics.bezierCurveTo(11, 7, 21, 7, 26, 14.5);
+        graphics.bezierCurveTo(21, 22, 11, 22, 6, 14.5);
+        graphics.closePath();
+        graphics.fill();
+        graphics.setFill(Color.web("#22D3EE"));
+        graphics.fillOval(11, 9.5, 10, 10);
+        graphics.setFill(Color.web("#082F49"));
+        graphics.fillOval(13.5, 12, 5, 5);
+        SnapshotParameters parameters = new SnapshotParameters();
+        parameters.setFill(Color.TRANSPARENT);
+        return canvas.snapshot(parameters, null);
     }
 
     public static FontIcon icon(Ikon ikon) {
