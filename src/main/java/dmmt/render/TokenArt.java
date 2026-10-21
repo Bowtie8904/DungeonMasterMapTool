@@ -1,6 +1,7 @@
 package dmmt.render;
 
 import dmmt.model.DmProject.TokenDefinition;
+import dmmt.model.DmProject.TokenShape;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -104,11 +105,17 @@ public final class TokenArt
         Color color = Color.web(token.getColor());
         gc.save();
         gc.beginPath();
-        gc.arc(x, y, radius, radius, 0, 360);
+        if (token.getShape() == TokenShape.SQUARE)
+            gc.rect(x - radius, y - radius, diameter, diameter);
+        else
+            gc.arc(x, y, radius, radius, 0, 360);
         gc.closePath();
         gc.clip();
-        gc.setFill(color.darker().darker());
-        gc.fillOval(x - radius, y - radius, diameter, diameter);
+        if (token.isBorder())
+        {
+            gc.setFill(color.darker().darker());
+            gc.fillRect(x - radius, y - radius, diameter, diameter);
+        }
         if (token.getImage() != null)
         {
             Image image = croppedImage(token.getImage());
@@ -121,11 +128,16 @@ public final class TokenArt
             gc.fillOval(x - diameter * .31, y + diameter * .03, diameter * .62, diameter * .55);
         }
         gc.restore();
+        if (!token.isBorder())
+            return;
         gc.save();
         gc.setLineDashes();
         gc.setStroke(color);
         gc.setLineWidth(Math.max(2, diameter * .055));
-        gc.strokeOval(x - radius + 1, y - radius + 1, diameter - 2, diameter - 2);
+        if (token.getShape() == TokenShape.SQUARE)
+            gc.strokeRect(x - radius + 1, y - radius + 1, diameter - 2, diameter - 2);
+        else
+            gc.strokeOval(x - radius + 1, y - radius + 1, diameter - 2, diameter - 2);
         gc.restore();
     }
 }

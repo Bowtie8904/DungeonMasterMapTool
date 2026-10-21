@@ -69,10 +69,11 @@ public final class HistoryFeedback {
                     box.getRuns().stream().map(run -> Arrays.asList(run.getText(), run.getFontSize(), run.getColor())).toList());
         }
         for (var token : project.getTokens()) {
-            double diameter = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell();
+            double diameter = TokenGeometry.halfExtent(project, token) * 2;
             put(snapshot, "token:" + token.getId(), true,
                     bounds(token.getX() - diameter / 2, token.getY() - diameter / 2, diameter, diameter),
-                    token.getX(), token.getY(), token.getSizeTiles(), token.isPlayerVisible(), token.isNameVisible());
+                    token.getX(), token.getY(), token.getSizeTiles(), token.getRotationDeg(),
+                    token.isPlayerVisible(), token.isNameVisible());
         }
         for (var portal : project.getInteractables()) {
             put(snapshot, "portal:" + portal.getId(), wallsVisible,

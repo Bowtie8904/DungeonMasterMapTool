@@ -251,6 +251,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.TokenInstance tokenDragBefore;
     private boolean draggingToken;
     private boolean resizingToken;
+    private boolean rotatingToken;
     private double tokenPressX;
     private double tokenPressY;
     private double groupPressX;
@@ -2502,6 +2503,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (panningDmCamera || draggingLight || draggingLayer || draggingOverlay || draggingText || draggingToken || draggingPlayerViewport
                 || draggingGroup) {
             cursor = Cursor.CLOSED_HAND;
+        } else if (rotatingToken) {
+            cursor = Cursor.CLOSED_HAND;
         } else if (resizingTextHandle >= 0) {
             cursor = textResizeCursor(resizingTextHandle);
         } else if (resizingLayer || resizingOverlay || resizingToken) {
@@ -2524,6 +2527,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (isOnPlayerViewportTitleBar(worldX, worldY)) {
             return Cursor.MOVE;
         }
+        if (onTokenRotationHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return Cursor.HAND;
         if (onTokenHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return Cursor.SE_RESIZE;
         if (pickToken(worldX, worldY) != null) return Cursor.OPEN_HAND;
         if (renderer.isWallLayerVisible() && pickInteractableBadge(worldX, worldY) != null) {
@@ -2895,6 +2899,21 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             DmProject.CameraState camera = project.getViews().getDmCamera();
+            DmProject.TokenInstance selectedToken = findToken(selectedTokenId);
+            CanvasMapRenderer.WorldPoint wheelPoint = renderer.screenToWorld(
+                    event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
+            if (!event.isShiftDown() && activeTool == EditorTool.SELECT && groupKeys.isEmpty()
+                    && !pingArmed && !laserActive && !laserToolActive && selectedToken != null
+                    && dmmt.render.TokenGeometry.contains(project, selectedToken, wheelPoint.x(), wheelPoint.y())) {
+                event.consume();
+                if (event.getDeltaY() != 0 && !interactionInProgress() && !draggingGroup && !marqueeActive) {
+                    changeToken(selectedToken.getId(), "Rotate token",
+                            token -> token.setRotationDeg(dmmt.render.TokenGeometry.normalizeDegrees(
+                                    token.getRotationDeg() + event.getDeltaY() / 4.0)));
+                    renderDm();
+                }
+                return;
+            }
             double wheel = Tuning.DM_ZOOM_WHEEL_FACTOR.get();
             double factor = event.getDeltaY() > 0 ? wheel : 1 / wheel;
             double newZoom = clamp(camera.getZoom() * factor, Math.min(Tuning.DM_ZOOM_MIN.get(), Tuning.DM_ZOOM_MAX.get()),
@@ -3140,15 +3159,17 @@ public class DungeonMasterMapToolApplication extends Application {
 
             DmProject.TokenInstance tokenHandle = findToken(selectedTokenId);
             boolean handle = onTokenHandle(tokenHandle, world.x(), world.y(), camera.getZoom());
-            DmProject.TokenInstance token = handle ? tokenHandle : pickToken(world.x(), world.y());
+            boolean rotationHandle = onTokenRotationHandle(tokenHandle, world.x(), world.y(), camera.getZoom());
+            DmProject.TokenInstance token = handle || rotationHandle ? tokenHandle : pickToken(world.x(), world.y());
             if (token != null) {
                 clearSingleSelection();
                 selectedTokenId = token.getId();
                 tokenDragBefore = cloneToken(token);
                 tokenPressX = world.x();
                 tokenPressY = world.y();
-                draggingToken = !handle;
+                draggingToken = !handle && !rotationHandle;
                 resizingToken = handle;
+                rotatingToken = rotationHandle;
                 return;
             }
             selectedTokenId = null;
@@ -3279,14 +3300,22 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (draggingToken || resizingToken) {
+            if (draggingToken || resizingToken || rotatingToken) {
                 DmProject.TokenInstance moving = findToken(selectedTokenId);
                 if (moving != null && tokenDragBefore != null) {
                     if (draggingToken) {
                         moving.setX(snapToken(tokenDragBefore.getX() + world.x() - tokenPressX, event.isShiftDown()));
                         moving.setY(snapToken(tokenDragBefore.getY() + world.y() - tokenPressY, event.isShiftDown()));
+                    } else if (rotatingToken) {
+                        double angle = Math.atan2(world.y() - moving.getY(), world.x() - moving.getX());
+                        double start = Math.atan2(tokenPressY - moving.getY(), tokenPressX - moving.getX());
+                        if (distance(world.x(), world.y(), moving.getX(), moving.getY()) > 0.001) {
+                            moving.setRotationDeg(dmmt.render.TokenGeometry.normalizeDegrees(
+                                    tokenDragBefore.getRotationDeg() + Math.toDegrees(angle - start)));
+                        }
                     } else {
-                        double radius = Math.max(Math.abs(world.x() - moving.getX()), Math.abs(world.y() - moving.getY()));
+                        var local = dmmt.render.TokenGeometry.toLocal(moving, world.x(), world.y());
+                        double radius = Math.max(Math.abs(local.getX()), Math.abs(local.getY()));
                         moving.setSizeTiles(Math.max(.5, Math.round(radius * 4 / project.getMap().getGrid().getPixelsPerCell()) / 2.0));
                     }
                 }
@@ -3475,7 +3504,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
 
-            if (draggingToken || resizingToken) {
+            if (draggingToken || resizingToken || rotatingToken) {
                 finishTokenDrag();
                 return;
             }
@@ -3792,7 +3821,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         project.getOverlays(), project.getTokens()),
                 Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
                 Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
-        boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || draftOverlay != null || draftWall != null
+        boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || rotatingToken || draftOverlay != null || draftWall != null
                 || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty()
                 || !project.getActivePings().isEmpty() || historyFeedback.active(System.nanoTime());
         if (!dynamic && key.equals(dmOverlayKey)) {
@@ -4379,7 +4408,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean interactionInProgress() {
-        return draggingToken || resizingToken || draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
+        return draggingToken || resizingToken || rotatingToken || draggingLayer || resizingLayer || draggingLight || fogDragging || draggingOverlay || resizingOverlay
                 || draggingText || resizingTextHandle >= 0 || draftText != null
                 || draggingPlayerViewport || panningDmCamera
                 || (draftWall != null && (activeTool != EditorTool.WALL_DRAW || canvasMouseDown))
@@ -5596,6 +5625,7 @@ public class DungeonMasterMapToolApplication extends Application {
         tokenDragBefore = null;
         draggingToken = false;
         resizingToken = false;
+        rotatingToken = false;
         project.getViews().setPlayerFrozen(false);
         projectFile = file;
         multiLevelFile = level == null ? null : level.manifestFile();
@@ -8148,6 +8178,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private static DmProject.TokenInstance cloneToken(DmProject.TokenInstance token) {
         return DmProject.TokenInstance.builder().id(token.getId()).definitionId(token.getDefinitionId())
                 .x(token.getX()).y(token.getY()).sizeTiles(token.getSizeTiles())
+                .rotationDeg(token.getRotationDeg())
                 .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible()).build();
     }
 
@@ -8205,8 +8236,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.TokenInstance pickToken(double x, double y) {
         for (int i = project.getTokens().size() - 1; i >= 0; i--) {
             DmProject.TokenInstance token = project.getTokens().get(i);
-            double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
-            if (distance(x, y, token.getX(), token.getY()) <= r) return token;
+            if (dmmt.render.TokenGeometry.contains(project, token, x, y)) return token;
         }
         return null;
     }
@@ -8214,7 +8244,15 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean onTokenHandle(DmProject.TokenInstance token, double x, double y, double zoom) {
         if (token == null) return false;
         double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
-        return distance(x, y, token.getX() + r, token.getY() + r) <= 10 / Math.max(.01, zoom);
+        var point = dmmt.render.TokenGeometry.toWorld(token, r, r);
+        return distance(x, y, point.getX(), point.getY()) <= 10 / Math.max(.01, zoom);
+    }
+
+    private boolean onTokenRotationHandle(DmProject.TokenInstance token, double x, double y, double zoom) {
+        if (token == null) return false;
+        double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
+        var point = dmmt.render.TokenGeometry.toWorld(token, 0, -r - 24 / Math.max(.01, zoom));
+        return distance(x, y, point.getX(), point.getY()) <= 10 / Math.max(.01, zoom);
     }
 
     private void finishTokenDrag() {
@@ -8223,13 +8261,14 @@ public class DungeonMasterMapToolApplication extends Application {
             if (current != null && !current.equals(tokenDragBefore)) {
                 var before = tokenDragBefore;
                 var after = cloneToken(current);
-                recordHistory(resizingToken ? "Resize token" : "Move token",
+                recordHistory(rotatingToken ? "Rotate token" : resizingToken ? "Resize token" : "Move token",
                         () -> applyTokenState(after.getId(), after), () -> applyTokenState(before.getId(), before));
             }
         }
         tokenDragBefore = null;
         draggingToken = false;
         resizingToken = false;
+        rotatingToken = false;
     }
 
     private void showTokenContextMenu(DmProject.TokenInstance token, double screenX, double screenY) {
@@ -8241,7 +8280,7 @@ public class DungeonMasterMapToolApplication extends Application {
         name.setSelected(token.isNameVisible());
         name.setOnAction(e -> changeToken(id, "Change token name tag", t -> t.setNameVisible(name.isSelected())));
         MenuItem size = new MenuItem("Resize...");
-        size.setOnAction(e -> Dialogs.askText(primaryStage, "Token size", "Diameter in tiles (0.5-tile steps)",
+        size.setOnAction(e -> Dialogs.askText(primaryStage, "Token size", "Diameter / side length in tiles (0.5-tile steps)",
                 MaterialDesignR.RESIZE, "Resize", Double.toString(token.getSizeTiles()), value -> {
                     try {
                         double number = Double.parseDouble(value);
@@ -8264,12 +8303,24 @@ public class DungeonMasterMapToolApplication extends Application {
         double y = renderer.worldToScreenY(token.getY(), dmCanvas.getHeight(), camera);
         double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() * camera.getZoom() / 2;
         gc.save();
+        gc.translate(x, y);
+        gc.rotate(token.getRotationDeg());
         gc.setStroke(Color.YELLOW);
         gc.setLineWidth(1.5);
         gc.setLineDashes(6, 4);
-        gc.strokeRect(x - r, y - r, r * 2, r * 2);
+        gc.strokeRect(-r, -r, r * 2, r * 2);
         gc.setFill(Color.YELLOW);
-        gc.fillRect(x + r - 4, y + r - 4, 8, 8);
+        gc.fillRect(r - 4, r - 4, 8, 8);
+        gc.setLineDashes();
+        gc.strokeLine(0, -r, 0, -r - 16);
+        gc.setFill(Color.web("#222222"));
+        gc.fillOval(-9, -r - 33, 18, 18);
+        gc.strokeOval(-9, -r - 33, 18, 18);
+        gc.setFill(Color.YELLOW);
+        gc.setFont(javafx.scene.text.Font.font("System", 15));
+        gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
+        gc.setTextBaseline(javafx.geometry.VPos.CENTER);
+        gc.fillText("\u21bb", 0, -r - 24);
         gc.restore();
     }
 
@@ -8339,7 +8390,8 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private boolean onSingleSelectionHandle(double worldX, double worldY, double zoom) {
-        if (onTokenHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return true;
+        if (onTokenHandle(findToken(selectedTokenId), worldX, worldY, zoom)
+                || onTokenRotationHandle(findToken(selectedTokenId), worldX, worldY, zoom)) return true;
         DmProject.TextBox text = project.isTextLayerVisible() ? findTextBox(selectedTextId) : null;
         if (text != null && pickTextHandle(text, worldX, worldY, zoom) >= 0) {
             return true;
@@ -8669,7 +8721,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (key.startsWith("token:")) {
             DmProject.TokenInstance token = findToken(id);
             if (token == null) return null;
-            double r = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() / 2;
+            double r = dmmt.render.TokenGeometry.halfExtent(project, token);
             return new double[]{token.getX() - r, token.getY() - r, token.getX() + r, token.getY() + r};
         }
         if (key.startsWith("light:")) {

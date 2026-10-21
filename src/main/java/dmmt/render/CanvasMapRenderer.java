@@ -541,6 +541,7 @@ public class CanvasMapRenderer {
                 .filter(token -> !token.isPlayerVisible() || token.isNameVisible())
                 .filter(token -> project.getTokenDefinitions().get(token.getDefinitionId()) != null)
                 .map(token -> new TokenDecorationState(token.getX(), token.getY(), token.getSizeTiles(),
+                        token.getRotationDeg(), project.getTokenDefinitions().get(token.getDefinitionId()).getShape(),
                         token.isPlayerVisible(), token.isNameVisible(),
                         project.getTokenDefinitions().get(token.getDefinitionId()).getName())).toList();
         List<SegmentState> walls = project != null && wallLayerVisible ? project.getWalls().stream()
@@ -567,7 +568,7 @@ public class CanvasMapRenderer {
     private record DmTextState(TextState text, boolean playerVisible, boolean roomLabel) {
     }
 
-    private record TokenDecorationState(double x, double y, double size, boolean playerVisible,
+    private record TokenDecorationState(double x, double y, double size, double rotation, DmProject.TokenShape shape, boolean playerVisible,
                                         boolean nameVisible, String name) {
     }
 
@@ -591,11 +592,13 @@ public class CanvasMapRenderer {
         }
     }
 
-    private record TokenState(String id, double x, double y, double size, String image, String color, boolean visible) {
+    private record TokenState(String id, double x, double y, double size, double rotation, String image, String color,
+                              DmProject.TokenShape shape, boolean border, boolean visible) {
         private static TokenState of(DmProject.TokenInstance token, DmProject project) {
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
-            return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(),
+            return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(), token.getRotationDeg(),
                     definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor(),
+                    definition == null ? null : definition.getShape(), definition != null && definition.isBorder(),
                     token.isPlayerVisible());
         }
     }
@@ -653,12 +656,14 @@ public class CanvasMapRenderer {
             double x = worldToScreenX(token.getX(), width, camera);
             double y = worldToScreenY(token.getY(), height, camera);
             double diameter = token.getSizeTiles() * project.getMap().getGrid().getPixelsPerCell() * camera.getZoom();
-            double radius = diameter / 2;
+            double radius = TokenGeometry.halfExtent(project, token) * camera.getZoom();
             if (x + radius < 0 || y + radius < 0 || x - radius > width || y - radius > height) continue;
             if (!decorations) {
                 gc.save();
                 if (!playerMode && !token.isPlayerVisible()) gc.setGlobalAlpha(.55);
-                TokenArt.draw(gc, definition, x, y, diameter);
+                gc.translate(x, y);
+                gc.rotate(token.getRotationDeg());
+                TokenArt.draw(gc, definition, 0, 0, diameter);
                 gc.restore();
             }
             if (decorations) {

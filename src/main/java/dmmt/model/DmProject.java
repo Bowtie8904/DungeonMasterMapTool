@@ -23,6 +23,8 @@ import java.util.TreeMap;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DmProject {
+    public enum TokenShape { CIRCLE, SQUARE }
+
     @Builder.Default
     private String id = java.util.UUID.randomUUID().toString();
 
@@ -76,6 +78,10 @@ public class DmProject {
         private String color = "#5599CC";
         @Builder.Default
         private double sizeTiles = 1;
+        @Builder.Default
+        private TokenShape shape = TokenShape.CIRCLE;
+        @Builder.Default
+        private boolean border = true;
         /** Immutable runtime artwork references; persistence stores package-relative PNG paths. */
         private String sourceImage;
         private String image;
@@ -99,6 +105,7 @@ public class DmProject {
         private double y;
         @Builder.Default
         private double sizeTiles = 1;
+        private double rotationDeg;
         private boolean playerVisible;
         private boolean nameVisible;
     }

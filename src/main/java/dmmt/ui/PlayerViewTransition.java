@@ -92,8 +92,9 @@ public final class PlayerViewTransition {
     private static java.util.List<?> visibleTokens(DmProject project) {
         return project.getTokens().stream().filter(DmProject.TokenInstance::isPlayerVisible).map(token -> {
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
-            return java.util.Arrays.asList(token.getX(), token.getY(), token.getSizeTiles(),
-                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor());
+            return java.util.Arrays.asList(token.getX(), token.getY(), token.getSizeTiles(), token.getRotationDeg(),
+                    definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor(),
+                    definition == null ? null : definition.getShape(), definition != null && definition.isBorder());
         }).toList();
     }
 

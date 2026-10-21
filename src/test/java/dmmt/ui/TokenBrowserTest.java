@@ -102,6 +102,50 @@ class TokenBrowserTest
     }
 
     @Test
+    void editorShapeAndBorderChangeTheCropPreviewAndSurviveReopening() throws Exception
+    {
+        onFx(() -> {
+            WritableImage source = new WritableImage(100, 100);
+            for (int y = 0; y < 100; y++)
+                for (int x = 0; x < 100; x++)
+                    source.getPixelWriter().setColor(x, y, x < 50 ? Color.RED : Color.TRANSPARENT);
+            var original = TokenDefinition.builder().id("shape").name("Shape").build();
+            Dialog<TokenDefinition> dialog = TokenEditor.create(null, original, source);
+            var pane = dialog.getDialogPane();
+            CheckBox border = (CheckBox)pane.lookup("#token-border");
+            @SuppressWarnings("unchecked")
+            ComboBox<dmmt.model.DmProject.TokenShape> shape =
+                    (ComboBox<dmmt.model.DmProject.TokenShape>)pane.lookup("#token-shape");
+            var canvas = (javafx.scene.canvas.Canvas)pane.lookup("#token-preview");
+            var transparent = new javafx.scene.SnapshotParameters();
+            transparent.setFill(Color.TRANSPARENT);
+            assertTrue(border.isSelected());
+            assertEquals(dmmt.model.DmProject.TokenShape.CIRCLE, shape.getValue());
+            assertEquals(0, canvas.snapshot(transparent, null).getPixelReader().getColor(15, 15).getOpacity());
+            shape.setValue(dmmt.model.DmProject.TokenShape.SQUARE);
+            assertEquals(Color.RED, canvas.snapshot(transparent, null).getPixelReader().getColor(15, 15));
+            assertTrue(canvas.snapshot(transparent, null).getPixelReader().getColor(230, 140).getOpacity() > 0);
+            border.setSelected(false);
+            assertEquals(0, canvas.snapshot(transparent, null).getPixelReader().getColor(230, 140).getOpacity(),
+                    "Border off also removes the added background");
+            assertEquals(0, canvas.snapshot(transparent, null).getPixelReader().getColor(277, 140).getOpacity(),
+                    "No outline remains");
+            ButtonType save = pane.getButtonTypes().stream().filter(b -> b != ButtonType.CANCEL).findFirst().orElseThrow();
+            ((Button)pane.lookupButton(save)).fire();
+            var result = dialog.getResultConverter().call(save);
+            assertFalse(result.isBorder());
+            assertEquals(dmmt.model.DmProject.TokenShape.SQUARE, result.getShape());
+            assertEquals(0, TokenArt.decode(result.getImage()).getPixelReader().getColor(200, 128).getOpacity(),
+                    "Saved artwork never bakes in a background");
+            var reopened = TokenEditor.create(null, result, null);
+            assertFalse(((CheckBox)reopened.getDialogPane().lookup("#token-border")).isSelected());
+            assertEquals(result.getShape(), ((ComboBox<?>)reopened.getDialogPane().lookup("#token-shape")).getValue());
+            assertTrue(original.isBorder());
+            assertEquals(dmmt.model.DmProject.TokenShape.CIRCLE, original.getShape(), "Editing is staged until save");
+        });
+    }
+
+    @Test
     void editorCtrlVPastesAnImageAndLeavesOrdinaryTextPasteAlone() throws Exception
     {
         onFx(() -> {

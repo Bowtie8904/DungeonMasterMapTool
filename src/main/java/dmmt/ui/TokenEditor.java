@@ -1,6 +1,7 @@
 package dmmt.ui;
 
 import dmmt.model.DmProject.TokenDefinition;
+import dmmt.model.DmProject.TokenShape;
 import dmmt.render.TokenArt;
 import dmmt.service.TokenLibraryService;
 import javafx.event.ActionEvent;
@@ -92,6 +93,29 @@ public final class TokenEditor
         Spinner<Double> size = new Spinner<>(0.5, Double.MAX_VALUE, token.getSizeTiles(), 0.5);
         size.setId("token-size");
         size.setPrefWidth(110);
+        CheckBox border = new CheckBox("Border");
+        border.setId("token-border");
+        border.setSelected(token.isBorder());
+        border.selectedProperty().addListener((obs, was, value) -> {
+            token.setBorder(value);
+            redraw();
+        });
+        ComboBox<TokenShape> shape = new ComboBox<>();
+        shape.setId("token-shape");
+        shape.getItems().setAll(TokenShape.values());
+        shape.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(TokenShape value) {
+                return value == TokenShape.SQUARE ? "Square" : "Circle";
+            }
+            @Override public TokenShape fromString(String value) {
+                return TokenShape.valueOf(value.toUpperCase(Locale.ROOT));
+            }
+        });
+        shape.setValue(token.getShape());
+        shape.valueProperty().addListener((obs, was, value) -> {
+            token.setShape(value);
+            redraw();
+        });
         color.setOnAction(e -> {
             Color value = color.getValue();
             token.setColor(String.format(Locale.ROOT, "#%02X%02X%02X", Math.round(value.getRed() * 255),
@@ -149,7 +173,9 @@ public final class TokenEditor
         error.setWrapText(true);
         VBox content = new VBox(10, new Label("Name"), name,
                                 new HBox(8, new Label("Color"), color, new Label("Tiles"), size),
+                                new HBox(8, new Label("Shape"), shape, border),
                                 preview, zoom, new HBox(8, file, paste, remove), hint, error);
+        preview.setId("token-preview");
         dialog.getDialogPane().setContent(content);
         preview.setFocusTraversable(true);
         dialog.getDialogPane().addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
@@ -222,14 +248,27 @@ public final class TokenEditor
         TokenArt.constrain(token, source);
         gc.save();
         gc.beginPath();
-        gc.arc(140, 140, 137, 137, 0, 360);
+        if (token.getShape() == TokenShape.SQUARE)
+            gc.rect(3, 3, 274, 274);
+        else
+            gc.arc(140, 140, 137, 137, 0, 360);
         gc.closePath();
         gc.clip();
+        if (token.isBorder())
+        {
+            gc.setFill(Color.web(token.getColor()).darker().darker());
+            gc.fillRect(0, 0, 280, 280);
+        }
         TokenArt.drawCrop(gc, source, token, 280);
         gc.restore();
+        if (!token.isBorder())
+            return;
         gc.setStroke(Color.web(token.getColor()));
         gc.setLineWidth(6);
-        gc.strokeOval(3, 3, 274, 274);
+        if (token.getShape() == TokenShape.SQUARE)
+            gc.strokeRect(3, 3, 274, 274);
+        else
+            gc.strokeOval(3, 3, 274, 274);
     }
 
     @FunctionalInterface

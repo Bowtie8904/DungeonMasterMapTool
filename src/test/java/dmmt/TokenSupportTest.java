@@ -16,6 +16,7 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.PickResult;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
@@ -148,6 +149,168 @@ class TokenSupportTest
             invoke(f.app, "renderDmPointerOverlay");
             assertEquals(0, pixel(overlay, 200, 150).getOpacity(), "Moving does not show a size label");
             f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, 200, 150, false, false));
+        });
+    }
+
+    @Test
+    void rotationHandleAndWheelAreSmoothUndoableAndDoNotMoveOrZoomTheToken() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 150.0, 100.0);
+            String id = f.project.getTokens().getFirst().getId();
+            f.canvas.getOnMousePressed().handle(mouse(f.canvas, MouseEvent.MOUSE_PRESSED, 150, 26, false, false));
+            assertTrue((boolean)get(f.app, "rotatingToken"), "Handle must not start a marquee or move");
+            double angle = Math.toRadians(33.25);
+            double x = 150 + 74 * Math.sin(angle), y = 100 - 74 * Math.cos(angle);
+            f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, x, y, false, false));
+            assertEquals(33.25, token(f, id).getRotationDeg(), 1e-9);
+            assertEquals(150, token(f, id).getX());
+            assertEquals(100, token(f, id).getY());
+            assertEquals(1, token(f, id).getSizeTiles());
+            f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, x, y, false, false));
+            assertFalse((boolean)get(f.app, "rotatingToken"));
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(0, token(f, id).getRotationDeg());
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(33.25, token(f, id).getRotationDeg(), 1e-9);
+            var dmBefore = new ProjectService().copy(f.project).getViews().getDmCamera();
+            var playerBefore = new ProjectService().copy(f.project).getViews().getPlayerCamera();
+            ScrollEvent wheel = wheel(f.canvas, 150, 100, .8, false, false);
+            f.canvas.getOnScroll().handle(wheel);
+            assertTrue(wheel.isConsumed());
+            assertEquals(33.45, token(f, id).getRotationDeg(), 1e-9, "High-resolution wheel deltas are not angle-snapped");
+            assertEquals(dmBefore, f.project.getViews().getDmCamera());
+            assertEquals(playerBefore, f.project.getViews().getPlayerCamera());
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(33.25, token(f, id).getRotationDeg(), 1e-9);
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(33.45, token(f, id).getRotationDeg(), 1e-9);
+            f.canvas.getOnScroll().handle(wheel(f.canvas, 350, 250, 40, false, false));
+            assertNotEquals(dmBefore.getZoom(), f.project.getViews().getDmCamera().getZoom(), "Wheel elsewhere still zooms");
+            invoke(f.app, "copySelection");
+            invoke(f.app, "pasteSelection");
+            assertEquals(33.45, f.project.getTokens().getLast().getRotationDeg(), 1e-9);
+        });
+    }
+
+    @Test
+    void wheelRotationPreservesModifierShortcutsAndDoesNotInterruptOtherInteractions() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 150.0, 100.0);
+            var token = f.project.getTokens().getFirst();
+            var camera = f.project.getViews().getDmCamera();
+            double zoom = camera.getZoom();
+            for (String state : new String[]{"draggingToken", "resizingToken", "rotatingToken", "draggingGroup", "marqueeActive"})
+            {
+                set(f.app, state, true);
+                f.canvas.getOnScroll().handle(wheel(f.canvas, 150, 100, 40, false, false));
+                assertEquals(0, token.getRotationDeg(), state + " must block wheel rotation");
+                set(f.app, state, false);
+            }
+            f.canvas.getOnScroll().handle(wheel(f.canvas, 150, 100, 40, true, false));
+            f.canvas.getOnScroll().handle(wheel(f.canvas, 150, 100, 40, false, true));
+            assertEquals(0, token.getRotationDeg());
+            assertEquals(zoom, camera.getZoom());
+            for (String state : new String[]{"pingArmed", "laserActive", "laserToolActive"})
+            {
+                set(f.app, state, true);
+                f.canvas.getOnScroll().handle(wheel(f.canvas, 150, 100, 40, false, false));
+                assertEquals(0, token.getRotationDeg(), state + " must not rotate a token");
+                set(f.app, state, false);
+            }
+        });
+    }
+
+    @Test
+    void rotatedSquareIsNotCulledWhileACornerIsStillOnScreen() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            var definition = definition();
+            definition.setShape(DmProject.TokenShape.SQUARE);
+            invoke(f.app, "addToken", definition, 150.0, 100.0);
+            var token = f.project.getTokens().getFirst();
+            token.setPlayerVisible(true);
+            token.setX(-60);
+            token.setRotationDeg(45);
+            Canvas canvas = new Canvas(400, 300);
+            var renderer = (CanvasMapRenderer)get(f.app, "renderer");
+            renderer.renderTokenLayer(canvas.getGraphicsContext2D(), new CanvasMapRenderer.TokenLayerState(),
+                    f.project, 400, 300, f.project.getViews().getDmCamera(), true);
+            assertTrue(pixel(canvas, 3, 100).getOpacity() > 0, "Rotated corner remains visible beyond the unrotated bounds");
+        });
+    }
+
+    @Test
+    void rotatedSquareHitTestingResizeAndGroupBoundsUseItsLocalAxes() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            var definition = definition();
+            definition.setShape(DmProject.TokenShape.SQUARE);
+            invoke(f.app, "addToken", definition, 150.0, 100.0);
+            var token = f.project.getTokens().getFirst();
+            assertSame(token, invoke(f.app, "pickToken", 195.0, 145.0), "Square corners are selectable");
+            token.setRotationDeg(45);
+            assertNull(invoke(f.app, "pickToken", 195.0, 145.0), "Rotated-away corners are not selectable");
+            assertSame(token, invoke(f.app, "pickToken", 215.0, 100.0), "Rotated square extends beyond its unrotated bounds");
+            double[] bounds = (double[])invoke(f.app, "groupBounds", "token:" + token.getId());
+            assertEquals(150 + 50 * Math.sqrt(2), bounds[2], 1e-9);
+            var handle = dmmt.render.TokenGeometry.toWorld(token, 50, 50);
+            var target = dmmt.render.TokenGeometry.toWorld(token, 100, 100);
+            f.drag(handle.getX(), handle.getY(), target.getX(), target.getY(), false);
+            assertEquals(2, token.getSizeTiles());
+            assertEquals(45, token.getRotationDeg());
+        });
+    }
+
+    @Test
+    void artworkShapeBorderAndRotationInvalidateBothViewsAndPreserveTransparency() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            var definition = definition();
+            Canvas source = new Canvas(100, 100);
+            source.getGraphicsContext2D().setFill(Color.RED);
+            source.getGraphicsContext2D().fillRect(0, 0, 50, 100);
+            definition.setImage(TokenArt.storeImage(source.snapshot(transparent(), null)));
+            definition.setBorder(false);
+            definition.setShape(DmProject.TokenShape.SQUARE);
+            invoke(f.app, "addToken", definition, 150.0, 100.0);
+            var token = f.project.getTokens().getFirst();
+            token.setPlayerVisible(true);
+            var renderer = (CanvasMapRenderer)get(f.app, "renderer");
+            var camera = f.project.getViews().getDmCamera();
+            for (boolean player : new boolean[]{false, true})
+            {
+                Canvas canvas = new Canvas(400, 300);
+                var state = new CanvasMapRenderer.TokenLayerState();
+                renderer.renderTokenLayer(canvas.getGraphicsContext2D(), state, f.project, 400, 300, camera, player);
+                assertEquals(Color.RED, pixel(canvas, 110, 60), "Square artwork includes corners");
+                assertEquals(0, pixel(canvas, 180, 100).getOpacity(), "Borderless images have no added background");
+                var frozen = new ProjectService().copy(f.project);
+                token.setRotationDeg(90);
+                assertTrue(PlayerViewTransition.contentChanged(frozen, null, camera, f.project, null, camera));
+                renderer.renderTokenLayer(canvas.getGraphicsContext2D(), state, f.project, 400, 300, camera, player);
+                assertEquals(Color.RED, pixel(canvas, 180, 70));
+                assertEquals(0, pixel(canvas, 120, 130).getOpacity());
+                token.setRotationDeg(0);
+                var placedDefinition = f.project.getTokenDefinitions().get(definition.getId());
+                placedDefinition.setShape(DmProject.TokenShape.CIRCLE);
+                assertTrue(PlayerViewTransition.contentChanged(frozen, null, camera, f.project, null, camera));
+                renderer.renderTokenLayer(canvas.getGraphicsContext2D(), state, f.project, 400, 300, camera, player);
+                assertEquals(0, pixel(canvas, 110, 60).getOpacity(), "Circle clips artwork corners");
+                frozen = new ProjectService().copy(f.project);
+                placedDefinition.setBorder(true);
+                assertTrue(PlayerViewTransition.contentChanged(frozen, null, camera, f.project, null, camera));
+                renderer.renderTokenLayer(canvas.getGraphicsContext2D(), state, f.project, 400, 300, camera, player);
+                assertTrue(pixel(canvas, 180, 100).getOpacity() > 0, "Border on restores the background");
+                placedDefinition.setBorder(false);
+                placedDefinition.setShape(DmProject.TokenShape.SQUARE);
+            }
         });
     }
 
@@ -446,6 +609,13 @@ class TokenSupportTest
     {
         return new MouseEvent(type, x, y, x, y, MouseButton.PRIMARY, 1, shift, ctrl, false, false,
                               true, false, false, false, false, true, new PickResult(canvas, x, y));
+    }
+
+    private static ScrollEvent wheel(Canvas canvas, double x, double y, double delta, boolean ctrl, boolean alt)
+    {
+        return new ScrollEvent(ScrollEvent.SCROLL, x, y, x, y, false, ctrl, alt, false,
+                false, false, 0, delta, 0, delta, ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+                ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, new PickResult(canvas, x, y));
     }
 
     private static SnapshotParameters transparent()

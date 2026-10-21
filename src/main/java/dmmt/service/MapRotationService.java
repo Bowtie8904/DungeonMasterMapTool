@@ -57,6 +57,7 @@ public class MapRotationService {
             Point p = rotatePoint(token.getX(), token.getY(), cx, cy, clockwise);
             token.setX(p.x);
             token.setY(p.y);
+            token.setRotationDeg(normalizeDegrees(token.getRotationDeg() + (clockwise ? 90 : -90)));
         }
 
         for (DmProject.OverlayShape overlay : project.getOverlays()) {

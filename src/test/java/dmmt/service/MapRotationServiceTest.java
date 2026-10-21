@@ -7,6 +7,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MapRotationServiceTest {
     @Test
+    void rotatesTokenPositionAndArtworkAndRoundTrips() {
+        var project = new DmProject();
+        project.getImageLayers().add(DmProject.ImageLayer.builder().x(0).y(0).width(100).height(50).build());
+        var token = DmProject.TokenInstance.builder().x(20).y(10).rotationDeg(302.5).build();
+        project.getTokens().add(token);
+        var service = new MapRotationService();
+        service.rotateClockwise(project);
+        assertEquals(65, token.getX(), 1e-9);
+        assertEquals(-5, token.getY(), 1e-9);
+        assertEquals(32.5, token.getRotationDeg(), 1e-9);
+        service.rotateCounterClockwise(project);
+        assertEquals(20, token.getX(), 1e-9);
+        assertEquals(10, token.getY(), 1e-9);
+        assertEquals(302.5, token.getRotationDeg(), 1e-9);
+    }
+
+    @Test
     void rotatesProjectInQuarterTurns() {
         DmProject project = DmProject.builder().build();
         project.getImageLayers().add(DmProject.ImageLayer.builder()

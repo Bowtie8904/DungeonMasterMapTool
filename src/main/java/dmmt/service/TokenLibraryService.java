@@ -232,6 +232,7 @@ public final class TokenLibraryService
     public static TokenDefinition copy(TokenDefinition token)
     {
         return TokenDefinition.builder().id(token.getId()).name(token.getName()).color(token.getColor())
+                              .shape(token.getShape()).border(token.isBorder())
                               .sizeTiles(token.getSizeTiles()).sourceImage(token.getSourceImage()).image(token.getImage())
                               .zoom(token.getZoom()).centerX(token.getCenterX()).centerY(token.getCenterY()).build();
     }
@@ -262,6 +263,8 @@ public final class TokenLibraryService
         {
             throw new IOException("Token color must be #RRGGBB.");
         }
+        if (token.getShape() == null)
+            throw new IOException("Choose a token shape.");
     }
 
     private static String validName(String name) throws IOException

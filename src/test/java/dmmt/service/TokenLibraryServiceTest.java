@@ -17,6 +17,7 @@ class TokenLibraryServiceTest
     private DmProject.TokenDefinition definition()
     {
         return DmProject.TokenDefinition.builder().id("character").name("Ranger").color("#55AA33")
+                                        .shape(DmProject.TokenShape.SQUARE).border(false)
                                         .sizeTiles(1.5).sourceImage(imageData(0xFF112233)).image(imageData(0xFF445566)).zoom(2).centerX(.4).centerY(.6).build();
     }
 
@@ -41,8 +42,42 @@ class TokenLibraryServiceTest
         DmProject map = new DmProject();
         map.getTokenDefinitions().put(token.getId(), TokenLibraryService.copy(token));
         map.getTokens().add(DmProject.TokenInstance.builder().id("instance").definitionId(token.getId())
-                                                   .x(250).y(350).sizeTiles(2).playerVisible(true).nameVisible(true).build());
+                                                   .x(250).y(350).sizeTiles(2).rotationDeg(17.5)
+                                                   .playerVisible(true).nameVisible(true).build());
         return map;
+    }
+
+    @Test
+    void shapeBorderAndInstanceRotationPersistCopyAndDefaultForLegacyTokens() throws Exception
+    {
+        var token = definition();
+        token.setShape(DmProject.TokenShape.SQUARE);
+        token.setBorder(false);
+        assertEquals(token.getShape(), TokenLibraryService.duplicate(token).getShape());
+        assertFalse(TokenLibraryService.duplicate(token).isBorder());
+        var library = new TokenLibraryService(temp.resolve("library"));
+        library.put(token, "");
+        assertEquals(token, library.load().getEntries().getFirst().getToken());
+        var map = map(token);
+        map.getTokens().getFirst().setRotationDeg(32.75);
+        var projects = new ProjectService();
+        var frozen = projects.copy(map);
+        Path file = temp.resolve("shape.dmmap");
+        projects.save(file, map);
+        var loaded = projects.load(file);
+        assertEquals(map.getTokenDefinitions(), loaded.getTokenDefinitions());
+        assertEquals(map.getTokens(), loaded.getTokens());
+        token.setBorder(true);
+        token.setShape(DmProject.TokenShape.CIRCLE);
+        library.put(token, "");
+        library.resolve(loaded);
+        assertTrue(loaded.getTokenDefinitions().get(token.getId()).isBorder());
+        assertEquals(32.75, loaded.getTokens().getFirst().getRotationDeg(), "Library edits preserve instance rotation");
+        assertFalse(frozen.getTokenDefinitions().get(token.getId()).isBorder());
+        var legacy = JsonMappers.create().readValue("{\"id\":\"old\",\"name\":\"Old\"}", DmProject.TokenDefinition.class);
+        assertTrue(legacy.isBorder());
+        assertEquals(DmProject.TokenShape.CIRCLE, legacy.getShape());
+        assertEquals(0, JsonMappers.create().readValue("{}", DmProject.TokenInstance.class).getRotationDeg());
     }
 
     @Test
