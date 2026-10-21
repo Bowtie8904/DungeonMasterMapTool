@@ -3792,7 +3792,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         project.getOverlays(), project.getTokens()),
                 Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
                 Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
-        boolean dynamic = activeTool != EditorTool.SELECT || draftOverlay != null || draftWall != null
+        boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || draftOverlay != null || draftWall != null
                 || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty()
                 || !project.getActivePings().isEmpty() || historyFeedback.active(System.nanoTime());
         if (!dynamic && key.equals(dmOverlayKey)) {
@@ -5458,6 +5458,10 @@ public class DungeonMasterMapToolApplication extends Application {
             cy = renderer.worldToScreenY(shape.getY() + shape.getHeight() / 2.0, h, cam);
             text = formatTiles(shape.getWidth() / cell) + " x " + formatTiles(shape.getHeight() / cell);
         }
+        drawSizeLabel(gc, text, cx, cy);
+    }
+
+    private void drawSizeLabel(GraphicsContext gc, String text, double cx, double cy) {
         javafx.scene.text.Text measure = new javafx.scene.text.Text(text);
         measure.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 16));
         double tw = measure.getLayoutBounds().getWidth();
@@ -5479,6 +5483,15 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void drawToolPreview(GraphicsContext gc) {
+        if (resizingToken) {
+            DmProject.TokenInstance token = findToken(selectedTokenId);
+            if (token != null) {
+                DmProject.CameraState camera = project.getViews().getDmCamera();
+                drawSizeLabel(gc, formatTiles(token.getSizeTiles()) + " tiles",
+                        renderer.worldToScreenX(token.getX(), dmFogCanvas.getWidth(), camera),
+                        renderer.worldToScreenY(token.getY(), dmFogCanvas.getHeight(), camera));
+            }
+        }
         if (activeTool == EditorTool.ROOM_LABEL) {
             drawRoomPreview(gc);
             return;

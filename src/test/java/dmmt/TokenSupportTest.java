@@ -110,6 +110,48 @@ class TokenSupportTest
     }
 
     @Test
+    void resizingShowsLiveDiameterInTilesAndClearsTheRetainedLabelOnRelease() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 150.0, 100.0);
+            Canvas overlay = (Canvas)get(f.app, "dmFogCanvas");
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(0, pixel(overlay, 150, 100).getOpacity());
+            f.canvas.getOnMousePressed().handle(mouse(f.canvas, MouseEvent.MOUSE_PRESSED, 200, 150, false, false));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertTrue(pixel(overlay, 150, 100).getOpacity() > 0, "Label appears before the size changes");
+
+            for (double size : new double[]{.5, 1, 2.5})
+            {
+                double x = 150 + size * 50, y = 100 + size * 50;
+                f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, x, y, false, false));
+                assertEquals(size, f.project.getTokens().getFirst().getSizeTiles());
+                Canvas actual = new Canvas(400, 300), expected = new Canvas(400, 300);
+                invoke(f.app, "drawToolPreview", actual.getGraphicsContext2D());
+                String text = size == 1 ? "1 tiles" : size + " tiles";
+                invoke(f.app, "drawSizeLabel", expected.getGraphicsContext2D(), text, 150.0, 100.0);
+                int[] actualPixels = new int[400 * 300], expectedPixels = new int[400 * 300];
+                actual.snapshot(transparent(), null).getPixelReader().getPixels(0, 0, 400, 300,
+                        javafx.scene.image.PixelFormat.getIntArgbInstance(), actualPixels, 0, 400);
+                expected.snapshot(transparent(), null).getPixelReader().getPixels(0, 0, 400, 300,
+                        javafx.scene.image.PixelFormat.getIntArgbInstance(), expectedPixels, 0, 400);
+                assertArrayEquals(expectedPixels, actualPixels, "Label must show diameter, not radius");
+                invoke(f.app, "renderDmPointerOverlay");
+            }
+
+            f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, 275, 225, false, false));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(0, pixel(overlay, 150, 100).getOpacity(), "Release clears the cached label");
+            f.canvas.getOnMousePressed().handle(mouse(f.canvas, MouseEvent.MOUSE_PRESSED, 150, 100, false, false));
+            f.canvas.getOnMouseDragged().handle(mouse(f.canvas, MouseEvent.MOUSE_DRAGGED, 200, 150, false, false));
+            invoke(f.app, "renderDmPointerOverlay");
+            assertEquals(0, pixel(overlay, 200, 150).getOpacity(), "Moving does not show a size label");
+            f.canvas.getOnMouseReleased().handle(mouse(f.canvas, MouseEvent.MOUSE_RELEASED, 200, 150, false, false));
+        });
+    }
+
+    @Test
     void ctrlSelectionGroupMovementMarqueeCopyPasteAndDeletionIncludeTokens() throws Exception
     {
         onFx(() -> {

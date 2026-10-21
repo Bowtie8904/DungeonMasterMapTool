@@ -189,7 +189,7 @@ In **Tokens**, create a named, colored token, import an image file (PNG, JPEG, G
 
 Organize tokens in nested folders, drag tokens/folders to reorganize them, and search by token or folder name. Right-click a token to edit its image/crop, color or default size, rename, duplicate or delete it. Double-click also opens the editor.
 
-Drag a token onto the DM map to place it **hidden from players**. Drag to move with **half-grid snapping**, or hold **Shift** to move freely. Resize with the bottom-right selection handle or the right-click **Resize** action. The map context menu toggles player visibility and an optional **DM-only name tag** (off by default), or removes the instance. Tokens support Ctrl-click, marquee selection, group movement, arrow nudging, Delete/Backspace, copy/paste and undo/redo like other map elements. Names are never shown to players.
+Drag a token onto the DM map to place it **hidden from players**. Drag to move with **half-grid snapping**, or hold **Shift** to move freely. Resize with the bottom-right selection handle or the right-click **Resize** action. While dragging the resize handle, a small DM-only label at the token's center shows its current **diameter in tiles**, not its radius (for example, **2.5 tiles**). The label disappears when resizing ends. The map context menu toggles player visibility and an optional **DM-only name tag** (off by default), or removes the instance. Tokens support Ctrl-click, marquee selection, group movement, arrow nudging, Delete/Backspace, copy/paste and undo/redo like other map elements. Names are never shown to players.
 
 Token artwork is affected by map lighting and fog. Hidden tokens use the same crossed-out-eye badge as hidden text boxes; DM name tags and badges remain above lighting.
 
