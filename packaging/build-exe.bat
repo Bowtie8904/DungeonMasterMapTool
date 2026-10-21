@@ -27,12 +27,15 @@ mkdir jpackage-input
 for %%F in (target\DungeonMasterMapTool-*-all.jar) do copy /y "%%F" jpackage-input\DungeonMasterMapTool.jar >nul
 
 echo [3/3] Creating the app image with jpackage...
-jpackage --type app-image --name DungeonMasterMapTool --input jpackage-input --main-jar DungeonMasterMapTool.jar --main-class dmmt.DungeonMasterMapToolLauncher --icon packaging\icon.ico --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver --dest dist %JP_EXTRA%
+jpackage --type app-image --name DungeonMasterMapTool --input jpackage-input --main-jar DungeonMasterMapTool.jar --main-class dmmt.DungeonMasterMapToolLauncher --icon packaging\icon.ico --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED -Dprism.maxvram=1g" --add-launcher DungeonMasterMapTool-Compatibility=packaging\compatibility-launcher.properties --dest dist %JP_EXTRA%
+if errorlevel 1 goto :failed
+copy /y README.md dist\DungeonMasterMapTool\README.md >nul
 if errorlevel 1 goto :failed
 rmdir /s /q jpackage-input
 
 echo.
 echo Done: %CD%\dist\DungeonMasterMapTool\DungeonMasterMapTool.exe
+echo Graphics compatibility: %CD%\dist\DungeonMasterMapTool\DungeonMasterMapTool-Compatibility.exe
 pause
 exit /b 0
 

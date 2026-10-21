@@ -9,8 +9,15 @@ public final class DungeonMasterMapToolLauncher {
     }
 
     public static void main(String[] args) {
+        configureTextureMemory();
         configureDisplayLocale();
         Application.launch(DungeonMasterMapToolApplication.class, args);
+    }
+
+    static void configureTextureMemory() {
+        if (System.getProperty("prism.maxvram") == null) {
+            System.setProperty("prism.maxvram", "1g");
+        }
     }
 
     static void configureDisplayLocale() {

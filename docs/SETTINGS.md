@@ -5,6 +5,22 @@ exact key (for example `fog.revealSeconds`) or with a word describing what you w
 *zoom*, *tooltip*, *torch*, *cache*, *click*, *frame rate*). Every entry ends with a **Keywords** line that lists
 common synonyms to make searching easier.
 
+## Graphics compatibility at startup
+
+The application defaults `prism.maxvram` to `1g` before starting JavaFX, preserving any explicit
+JVM override. Windows exports include `java-options=-Dprism.maxvram=1g` in their launcher
+configurations. This is a 1 GiB on-demand texture-pool ceiling, not a reservation or Java heap
+limit; normal rendering remains GPU-accelerated. It is not an INI setting or a live UI control.
+Older exports can use the same line under `[JavaOptions]` in `app\DungeonMasterMapTool.cfg`.
+
+Software rendering is a **launcher option**, not an entry in `dmmt-settings.ini`, because JavaFX
+chooses its graphics pipeline before application settings can be changed in the UI.
+On Windows, close the application and start `DungeonMasterMapTool-Compatibility.exe` to bypass
+Direct3D (`-Dprism.order=sw`). Start the normal EXE again to restore hardware acceleration;
+neither launcher changes the settings file. Compatibility rendering may be slower.
+See the [README troubleshooting instructions](../README.md#windows-graphics-compatibility-black-player-screen--direct3d-errors)
+for configuring an older packaged EXE without a command line.
+
 ## Local control API
 
 ### `api.enabled`

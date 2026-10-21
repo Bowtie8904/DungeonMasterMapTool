@@ -36,7 +36,8 @@ jobs:
             --main-class dmmt.DungeonMasterMapToolLauncher `
             --icon packaging/icon.ico `
             --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver `
-            --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED" `
+            --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED -Dprism.maxvram=1g" `
+            --add-launcher DungeonMasterMapTool-Compatibility=packaging/compatibility-launcher.properties `
             --dest dist
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
           Copy-Item README.md dist/DungeonMasterMapTool/
