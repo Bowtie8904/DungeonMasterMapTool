@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -27,7 +29,7 @@ public final class RemoteDiscovery {
     private static final String QUERY = "DMMT-DISCOVER-2\n";
     private static final String REPLY = "DMMT-HOST-2\n";
     private static final int MAX_PACKET = 1024;
-    private static final System.Logger LOG = System.getLogger(RemoteDiscovery.class.getName());
+    private static final Log LOG = Log.of(RemoteDiscovery.class);
 
     private RemoteDiscovery() { }
 
@@ -120,7 +122,7 @@ public final class RemoteDiscovery {
             } catch (IOException failure) {
                 if (!socket.isClosed()) {
                     error = "LAN discovery stopped; enter host connection details manually.";
-                    LOG.log(System.Logger.Level.WARNING, "LAN discovery stopped; manual connection remains available.", failure);
+                    LOG.warn("LAN discovery stopped; manual connection remains available.", failure);
                 }
             } finally {
                 socket.close();
@@ -181,7 +183,7 @@ public final class RemoteDiscovery {
                         sent++;
                     } catch (IOException failure) {
                         sendFailure = failure;
-                        LOG.log(System.Logger.Level.DEBUG, "Could not search one LAN interface.", failure);
+                        LOG.debug("Could not search one LAN interface.", failure);
                     }
                 }
                 if (sent == 0) throw new IOException("LAN search could not send; enter host details manually.", sendFailure);

@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import java.io.IOException;
@@ -21,7 +23,7 @@ public final class RemoteTlsChannel implements AutoCloseable {
         }
     }
 
-    private static final System.Logger LOG = System.getLogger(RemoteTlsChannel.class.getName());
+    private static final Log LOG = Log.of(RemoteTlsChannel.class);
     private static final ScheduledThreadPoolExecutor DEADLINES = deadlines();
     private final SSLSocket socket;
     private final Socket transport;
@@ -137,7 +139,7 @@ public final class RemoteTlsChannel implements AutoCloseable {
             try {
                 close();
             } catch (IOException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not close an expired remote channel.", failure);
+                LOG.warn("Could not close an expired remote channel.", failure);
             }
         }, timeoutMillis, TimeUnit.MILLISECONDS);
         try {

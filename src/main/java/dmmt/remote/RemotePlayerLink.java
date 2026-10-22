@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -71,6 +73,7 @@ public final class RemotePlayerLink implements AutoCloseable
     }
 
     private final Thread owner = Thread.currentThread();
+    private static final Log LOG = Log.of(RemotePlayerLink.class);
     private final Connection connection;
     private final Consumer<RemotePlayerSession.State> display;
     private final Consumer<RemotePlayerSession.Pointer> pointers;
@@ -125,6 +128,7 @@ public final class RemotePlayerLink implements AutoCloseable
             if (!pending.sessionId().equals(state.sessionId()))
             {
                 uncertain = true;
+                LOG.warn("The host output session changed; synchronization is required");
                 notices.accept("The host output session changed; disconnect and synchronize again.");
                 return;
             }
@@ -142,6 +146,7 @@ public final class RemotePlayerLink implements AutoCloseable
         }
         pending = new RemotePlayerSession.Request(state.sessionId(), UUID.randomUUID(), state.nextSequence(),
                                                   state.revision(), action, enabled, screenIndex);
+        LOG.info("Requesting host player output {} (enabled={}, screen {})", action, enabled, screenIndex);
         notices.accept("Updating player output on the host...");
         send();
         return true;
@@ -162,6 +167,7 @@ public final class RemotePlayerLink implements AutoCloseable
         }
         catch (IllegalStateException busy)
         {
+            LOG.debug("Ping not sent", busy);
             notices.accept(busy.getMessage());
             return false;
         }
@@ -177,6 +183,7 @@ public final class RemotePlayerLink implements AutoCloseable
             sending = false;
             if (failure != null)
             {
+                LOG.warn("Player-output outcome unconfirmed", failure);
                 notices.accept("Player-output outcome unconfirmed; reconnect to recover its exact receipt.");
                 return;
             }
@@ -193,6 +200,7 @@ public final class RemotePlayerLink implements AutoCloseable
                     || receipt.sequence() != request.sequence())
             {
                 uncertain = true;
+                LOG.warn("The host output acknowledgement was inconsistent");
                 notices.accept("The host output acknowledgement was inconsistent; synchronize again.");
             }
             else if (receipt.status() == RemotePlayerSession.Status.RESYNC_REQUIRED)

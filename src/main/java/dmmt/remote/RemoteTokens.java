@@ -25,6 +25,7 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
 {
     public static final String DOMAIN = "tokens";
     private static final ObjectMapper MAPPER = JsonMappers.create();
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteTokens.class);
     private static final int MAX_ENTRIES = 10_000;
     private static final int MAX_FOLDERS = 2_000;
 
@@ -191,6 +192,7 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
         }
         catch (Exception error)
         {
+            LOG.warn("Token library query '{}' rejected", RemoteSessionServer.safe(action), error);
             return CompletableFuture.failedFuture(error);
         }
     }
@@ -225,6 +227,8 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
                                 case MOVE_FOLDER -> service.moveFolder(request.folder, request.parent, request.name);
                                 case DELETE_FOLDER -> service.deleteFolder(request.folder);
                             }
+                            LOG.info("Remote token library change applied: {} (revision {})",
+                                    request.operation, service.revision());
                             return new Committed(prepared, service.revision());
                         }
                     })
@@ -261,6 +265,7 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
         }
         catch (Exception error)
         {
+            LOG.warn("Token library command '{}' rejected", RemoteSessionServer.safe(action), error);
             return CompletableFuture.failedFuture(error);
         }
     }
@@ -391,6 +396,7 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
     {
         requireOwner();
         closed = true;
+        LOG.debug("Token library endpoint closed");
     }
 
     /** Uploads only after the local dialog has completed; no client library is read or written. */
@@ -534,7 +540,10 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
     private static <T> T completed(T value, Throwable error)
     {
         if (error != null)
+        {
+            LOG.warn("Token library operation failed", error);
             throw new CompletionException(error);
+        }
         return value;
     }
 

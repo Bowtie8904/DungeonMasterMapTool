@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.Tuning;
 import lombok.Getter;
 import dmmt.ui.HandoutLayout.Rect;
@@ -57,6 +58,7 @@ import java.util.function.BooleanSupplier;
  * also kept in the persistent recent handouts list on the right.
  */
 public final class HandoutWindow {
+    private static final Log LOG = Log.of(HandoutWindow.class);
 
     private static final List<String> IMAGE_EXTENSIONS = List.of(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp");
     private static final Color SELECTION_COLOR = Color.web("#4da3ff");
@@ -269,6 +271,7 @@ public final class HandoutWindow {
         stage.setScene(scene);
         stage.initOwner(owner);
         stage.setOnHidden(event -> {
+            LOG.info("Handout window closed");
             selection.clear();
             if (!remoteReadOnly) {
                 showOnly = null;
@@ -287,6 +290,7 @@ public final class HandoutWindow {
             stage.requestFocus();
         } else {
             trimRecents();
+            LOG.info("Opening handout window");
             stage.show();
         }
     }
@@ -387,6 +391,7 @@ public final class HandoutWindow {
         }
         Image image = new Image(recents.file(id).toUri().toString(), false);
         if (image.isError() || image.getWidth() <= 0) {
+            LOG.warn("Recent handout image {} could not be loaded", id);
             hint.setText("The recent handout image could not be loaded.");
             removeRecent(id);
             return;
@@ -421,6 +426,7 @@ public final class HandoutWindow {
             try {
                 task.run();
             } catch (IOException | RuntimeException e) {
+                LOG.warn("Could not update the recent handouts", e);
                 error = "Could not update the recent handouts: " + e.getMessage();
             }
             String message = error;
@@ -488,6 +494,7 @@ public final class HandoutWindow {
 
     private void setShown(boolean value) {
         shown = value && !images.isEmpty() && playerWindowOpen.getAsBoolean();
+        LOG.info(shown ? "Handout shown to players ({} images)" : "Handout hidden from players", images.size());
         showOnly = null;
         refreshState();
         onChange.run();
@@ -543,6 +550,7 @@ public final class HandoutWindow {
         subset.addAll(selection);
         showOnly = subset.size() == images.size() ? null : subset;
         shown = true;
+        LOG.info("Handout shown to players ({} of {} images)", subset.size(), images.size());
         refreshState();
         onChange.run();
     }
@@ -551,6 +559,7 @@ public final class HandoutWindow {
         if (selection.isEmpty()) {
             return;
         }
+        LOG.info("Removing {} handout images", selection.size());
         images.removeAll(selection);
         if (showOnly != null) {
             showOnly.removeAll(selection);
@@ -567,6 +576,7 @@ public final class HandoutWindow {
         if (images.isEmpty()) {
             return;
         }
+        LOG.info("Clearing {} handout images", images.size());
         images.clear();
         selection.clear();
         showOnly = null;
@@ -611,6 +621,7 @@ public final class HandoutWindow {
             hint.setText("The clipboard does not contain an image. Copy an image (or an image file) and try again.");
             return;
         }
+        LOG.info("Pasted {} handout images", pasted.size());
         images.addAll(pasted);
         storeRecents(pasted);
         selection.clear();

@@ -159,9 +159,11 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import dmmt.log.Log;
 import dmmt.service.AppSettings;
 
 public class DungeonMasterMapToolApplication extends Application {
+    private static final Log LOG = Log.of(DungeonMasterMapToolApplication.class);
     private static final String PREF_LAST_IMPORT_DIRECTORY = "import.lastDirectory";
     private static final String PREF_PLAYER_SCREEN_INDEX = "player.screenIndex";
     private static final String PREF_SCREEN_DIAGONAL_PREFIX = "player.screenDiagonalInches.";
@@ -847,6 +849,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             stopping = true;
+            LOG.info("Closing application window; saving pending changes and stopping services.");
             saveOnExit();
             if (diagnosticsPopup != null) {
                 diagnosticsPopup.hide();
@@ -860,14 +863,14 @@ public class DungeonMasterMapToolApplication extends Application {
             closePlayerWindow();
             stopRemoteSessions().whenComplete((unused, failure) -> Platform.runLater(() -> {
                 if (failure != null) {
-                    System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
-                            "Remote session cleanup failed while closing the application.", failure);
+                    LOG.warn("Remote session cleanup failed while closing the application.", failure);
                 }
                 Platform.exit();
             }));
         });
         updateWindowTitle();
         stage.show();
+        LOG.info("Main window shown; map library at {}", libraryRoot);
         applyLocalApiSettings();
 
         stage.focusedProperty().addListener((obs, was, focused) -> {
@@ -1506,6 +1509,7 @@ public class DungeonMasterMapToolApplication extends Application {
         screenInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (!syncingControls && newValue != null) {
                 preferences.putDouble(PREF_SCREEN_DIAGONAL_PREFIX + selectedScreenIndex(), newValue);
+                LOG.info("Player screen diagonal set to {} in", newValue);
             }
         });
         tileInchesSpinner = createDoubleSpinner(Math.min(Tuning.PLAYER_TILE_INCHES_MIN.get(), Tuning.PLAYER_TILE_INCHES_MAX.get()),
@@ -1515,6 +1519,7 @@ public class DungeonMasterMapToolApplication extends Application {
         tileInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
             if (!syncingControls && newValue != null) {
                 preferences.putDouble(PREF_TILE_INCHES, newValue);
+                LOG.info("Player tile size set to {} in", newValue);
             }
         });
         HBox diagonalRow = calibrationRow("Screen diagonal (in)", screenInchesSpinner);
@@ -1539,7 +1544,11 @@ public class DungeonMasterMapToolApplication extends Application {
             playerZoomValue.setText(formatPlayerZoom(newValue.doubleValue()));
             if (!syncingControls) {
                 project.getViews().setPlayerZoomStep(newValue.doubleValue());
+                if (!playerZoomSlider.isValueChanging()) LOG.info("Player view zoom step set to {}", formatPlayerZoom(newValue.doubleValue()));
             }
+        });
+        playerZoomSlider.valueChangingProperty().addListener((obs, was, changing) -> {
+            if (!changing && !syncingControls) LOG.info("Player view zoom step set to {}", formatPlayerZoom(playerZoomSlider.getValue()));
         });
         playerZoomSlider.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
@@ -1555,6 +1564,7 @@ public class DungeonMasterMapToolApplication extends Application {
         weatherIndoorsToggle.setOnAction(e -> {
             WeatherType type = WeatherType.from(currentWeather().getType());
             if (type != WeatherType.NONE) {
+                LOG.info("Weather indoors for {} set to {}", type.label(), weatherIndoorsToggle.isSelected());
                 preferences.applyEdit(Tuning.weather(type.key()).indoors().key(),
                         String.valueOf(weatherIndoorsToggle.isSelected()));
             }
@@ -1708,13 +1718,14 @@ public class DungeonMasterMapToolApplication extends Application {
             status("Local control API listening at " + server.baseUrl());
         } catch (IOException ex) {
             server.close();
-            status("Could not start local control API: " + ex.getMessage()
-                    + (localApiServer == null ? "" : ". Still listening at " + localApiServer.baseUrl()));
+            statusFailure("Could not start local control API: " + ex.getMessage()
+                    + (localApiServer == null ? "" : ". Still listening at " + localApiServer.baseUrl()), ex);
         }
     }
 
     @Override
     public void stop() {
+        LOG.info("Application stopping.");
         stopping = true;
         if (sessionPanel != null) {
             sessionPanel.dispose();
@@ -1736,6 +1747,7 @@ public class DungeonMasterMapToolApplication extends Application {
             localApiServer = null;
         }
         WorkScheduler.shutdownShared();
+        LOG.info("Application stopped.");
     }
 
     private Object handleLocalApi(String path, Map<String, String> query) {
@@ -1925,7 +1937,9 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void openSettings() {
+        LOG.info("Opening the settings window");
         SettingsWindow.show(primaryStage, preferences, () -> {
+            LOG.info("Settings applied from the settings window");
             applySectionVisibility();
             applyPlayerGridSetting();
             syncWeatherIndoorsToggle();
@@ -3771,9 +3785,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         refreshPlayerScreenSelector();
         if (playerStage != null) {
+            LOG.debug("Player window already open; bringing it to the front.");
             playerStage.toFront();
             return;
         }
+        LOG.info("Opening player window.");
         playerBaseCanvas = new Canvas(1280, 720);
         playerTokenCanvas = new Canvas(1280, 720);
         playerTokenState = new CanvasMapRenderer.TokenLayerState();
@@ -3863,6 +3879,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         ensureHandoutWindow(owner);
+        LOG.info("Opening the handout window");
         if (remoteHandoutLink != null) remoteHandoutLink.retryDownload();
         handoutWindow.show();
     }
@@ -3908,6 +3925,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         finishPlayerViewportDrag();
         if (playerStage != null) {
+            LOG.info("Closing player window.");
             playerStage.close();
             playerStage = null;
             playerCanvas = null;
@@ -4501,7 +4519,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             maps = BatchImportService.findMaps(folder.toPath());
         } catch (IOException ex) {
-            status("Could not read the folder: " + ex.getMessage());
+            statusFailure("Could not read the folder: " + ex.getMessage(), ex);
             return;
         }
         if (maps.isEmpty()) {
@@ -4663,7 +4681,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             snapshot = projectService.copy(project);
         } catch (IOException failure) {
-            status("Save failed: " + failure.getMessage());
+            statusFailure("Save failed: " + failure.getMessage(), failure);
             return java.util.concurrent.CompletableFuture.failedFuture(failure);
         }
         var library = mapLibrary;
@@ -4730,7 +4748,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             snapshot = projectService.copy(project);
         } catch (IOException ex) {
-            status("Save failed: " + ex.getMessage());
+            statusFailure("Save failed: " + ex.getMessage(), ex);
             return;
         }
         runInBackground("Saving...", "Save failed: ", () -> {
@@ -4893,7 +4911,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             snapshot = projectService.copy(project);
         } catch (IOException ex) {
-            status("Auto-save failed: " + ex.getMessage());
+            statusFailure("Auto-save failed: " + ex.getMessage(), ex);
             return;
         }
         runInBackground("Auto-saving...", "Auto-save failed: ", () -> {
@@ -4920,7 +4938,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             saveTo(currentSaveTarget(), projectService.copy(project));
         } catch (IOException | RuntimeException ex) {
-            status("Auto-save failed: " + ex.getMessage());
+            statusFailure("Auto-save failed: " + ex.getMessage(), ex);
         }
     }
 
@@ -4983,7 +5001,7 @@ public class DungeonMasterMapToolApplication extends Application {
             try {
                 snapshot = projectService.copy(project);
             } catch (IOException ex) {
-                status("Could not save the open map: " + ex.getMessage());
+                statusFailure("Could not save the open map: " + ex.getMessage(), ex);
                 return;
             }
         }
@@ -5141,7 +5159,7 @@ public class DungeonMasterMapToolApplication extends Application {
             } catch (IOException | RuntimeException ex) {
                 Platform.runLater(() -> {
                     ioBusy = false;
-                    status(failurePrefix + ex.getMessage());
+                    statusFailure(failurePrefix + ex.getMessage(), ex);
                     if (onFailure != null) {
                         onFailure.accept(ex);
                     }
@@ -5150,7 +5168,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 IOException failure = new IOException("Not enough memory to prepare the map.", ex);
                 Platform.runLater(() -> {
                     ioBusy = false;
-                    status(failurePrefix + failure.getMessage());
+                    statusFailure(failurePrefix + failure.getMessage(), failure);
                     if (onFailure != null) {
                         onFailure.accept(failure);
                     }
@@ -5201,7 +5219,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     Platform.runLater(() -> {
                         if (generation == imageAddGeneration) {
                             imageAddTask = null;
-                            status("Could not add image: " + ex.getMessage());
+                            statusFailure("Could not add image: " + ex.getMessage(), ex);
                             startNextImageAdd();
                         }
                     });
@@ -5209,7 +5227,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return null;
             });
         } catch (java.util.concurrent.RejectedExecutionException ex) {
-            status("Could not queue image: " + ex.getMessage());
+            statusFailure("Could not queue image: " + ex.getMessage(), ex);
             pendingImageAdds.clear();
         }
     }
@@ -6073,6 +6091,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void switchProject(DmProject next, Path file, LevelContext level) {
+        LOG.info("Activating map {}{}", file, level == null ? "" : " (level " + level.levelId() + " of " + level.manifestFile() + ")");
         if (remoteMapsHost != null) remoteMapsHost.invalidate();
         prefetchGeneration++;
         cancelImageAdds();
@@ -6172,7 +6191,7 @@ public class DungeonMasterMapToolApplication extends Application {
             return ImagePyramidStore.shared().prepareProject(floor, file, dm, player, true, cancelled);
         }, (file, failure) -> Platform.runLater(() -> {
             if (generation == prefetchGeneration && project == expectedProject) {
-                status("Could not prepare adjacent level " + MapBrowser.displayName(file) + ": " + failure.getMessage());
+                statusFailure("Could not prepare adjacent level " + MapBrowser.displayName(file) + ": " + failure.getMessage(), failure);
             }
         }));
         adjacentPrefetch.update(AdjacentLevelPrefetch.adjacentFiles(multiLevelFile, multiLevelManifest, currentLevelId));
@@ -6814,7 +6833,7 @@ public class DungeonMasterMapToolApplication extends Application {
         try {
             snapshot = current == null ? null : projectService.copy(project);
         } catch (IOException ex) {
-            status("Could not switch map: " + ex.getMessage());
+            statusFailure("Could not switch map: " + ex.getMessage(), ex);
             return java.util.concurrent.CompletableFuture.failedFuture(ex);
         }
         if (ioBusy) {
@@ -6873,7 +6892,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 completion.complete(null);
             } catch (RuntimeException failure) {
                 completion.completeExceptionally(failure);
-                status("Could not display the map: " + failure.getMessage());
+                statusFailure("Could not display the map: " + failure.getMessage(), failure);
             } finally {
                 setMapLoading(false, null);
             }
@@ -7318,7 +7337,7 @@ public class DungeonMasterMapToolApplication extends Application {
             try {
                 snapshot = projectService.copy(project);
             } catch (IOException ex) {
-                status("Could not save the open map: " + ex.getMessage());
+                statusFailure("Could not save the open map: " + ex.getMessage(), ex);
                 return;
             }
         }
@@ -8760,6 +8779,11 @@ public class DungeonMasterMapToolApplication extends Application {
         return free ? value : Math.round(value / step) * step;
     }
 
+    private String tokenName(DmProject.TokenInstance token) {
+        DmProject.TokenDefinition definition = project.getTokenDefinitions().get(token.getDefinitionId());
+        return definition == null || definition.getName() == null ? token.getDefinitionId() : definition.getName();
+    }
+
     private void addToken(DmProject.TokenDefinition definition, double x, double y) {
         setActiveTool(EditorTool.SELECT);
         clearSingleSelection();
@@ -8777,6 +8801,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void removeToken(String id) {
         DmProject.TokenInstance token = findToken(id);
         if (token == null) return;
+        LOG.info("Removing token '{}'", tokenName(token));
         DmProject.TokenInstance before = cloneToken(token);
         executeWithHistory("Remove token", () -> applyTokenState(id, null), () -> applyTokenState(id, before));
     }
@@ -8787,6 +8812,7 @@ public class DungeonMasterMapToolApplication extends Application {
         DmProject.TokenInstance before = cloneToken(token), after = cloneToken(token);
         change.accept(after);
         if (!before.equals(after)) {
+            LOG.info("Token '{}': {}", tokenName(token), label);
             executeWithHistory(label, () -> applyTokenState(id, after), () -> applyTokenState(id, before));
         }
     }
@@ -8819,6 +8845,8 @@ public class DungeonMasterMapToolApplication extends Application {
             if (current != null && !current.equals(tokenDragBefore)) {
                 var before = tokenDragBefore;
                 var after = cloneToken(current);
+                LOG.info("Token '{}': {}", tokenName(current),
+                        rotatingToken ? "rotated" : resizingToken ? "resized" : "moved");
                 recordHistory(rotatingToken ? "Rotate token" : resizingToken ? "Resize token" : "Move token",
                         () -> applyTokenState(after.getId(), after), () -> applyTokenState(before.getId(), before));
             }
@@ -9829,6 +9857,16 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void status(String text) {
+        LOG.info("{}", text);
+        showStatus(text);
+    }
+
+    private void statusFailure(String text, Throwable failure) {
+        LOG.warn("{}", text, failure);
+        showStatus(text);
+    }
+
+    private void showStatus(String text) {
         if (statusLabel != null) {
             statusLabel.setText(text);
             if (statusTooltip != null) {
@@ -9884,6 +9922,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     project, projectFile, project.getViews().getPlayerCamera())) {
                 capturePlayerTransition();
             }
+            LOG.info("Unfreezing player view.");
             frozenPlayerProject = null;
             frozenPlayerProjectFile = null;
             frozenPlayerCamera = null;
@@ -9894,6 +9933,7 @@ public class DungeonMasterMapToolApplication extends Application {
             updatePlayerOutputStatus();
             return;
         }
+        LOG.info("Freezing player view.");
         try {
             frozenPlayerProject = projectService.copy(project);
             frozenPlayerProjectFile = projectFile;
@@ -9908,7 +9948,7 @@ public class DungeonMasterMapToolApplication extends Application {
             project.getViews().setPlayerFrozen(false);
             requestRemoteWorkspaceCommit();
             updatePlayerOutputStatus();
-            status("Could not freeze player view: " + ex.getMessage());
+            statusFailure("Could not freeze player view: " + ex.getMessage(), ex);
             syncControlsFromProject();
         }
     }
@@ -9995,6 +10035,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 @Override public void close() { endRemoteWorkspace(); }
             }, Platform::runLater, remoteSessionWorker());
         }
+        LOG.info("Remote host: starting hosting session");
         return remoteHostingController.start(configuration);
     }
 
@@ -10003,6 +10044,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (pairingCode == null) new dmmt.remote.RemoteProtocol.ControlRequest(configuration.clientName());
         else new dmmt.remote.RemoteProtocol.Pair(pairingCode, configuration.clientName());
         remoteSessionStorage = configuration.storage();
+        LOG.info("Remote connect requested as '{}' ({})", configuration.clientName(),
+                pairingCode == null ? "control request" : "pairing code");
         if (stopping || remoteWorkspaceReplica != null || remoteWorkspaceHost != null
                 || remoteHostingController != null && remoteHostingController.active()
                 || remoteConnectionController != null && remoteConnectionController.active()
@@ -10100,6 +10143,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private java.util.concurrent.CompletableFuture<Void> disconnectRemoteSession() {
+        if (remoteConnectionController != null && remoteConnectionController.active()) LOG.info("Remote: disconnecting from the host");
         return remoteConnectionController != null && remoteConnectionController.active()
                 ? remoteConnectionController.disconnect()
                 : closeInternalReplica();
@@ -10111,6 +10155,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private java.util.concurrent.CompletableFuture<Void> stopRemoteSessions() {
+        if (remoteHostingController != null && remoteHostingController.active()) LOG.info("Remote host: stopping hosting session");
         var host = remoteHostingController == null ? java.util.concurrent.CompletableFuture.<Void>completedFuture(null)
                 : remoteHostingController.stop();
         var client = disconnectRemoteSession();
@@ -10165,6 +10210,7 @@ public class DungeonMasterMapToolApplication extends Application {
             var dialog = new dmmt.ui.RemoteApprovalDialog(primaryStage, client.name(), client.address(),
                     current == null ? null : current.name(), decision -> {
                 remoteApprovalDialog = null;
+                LOG.info("Remote access request from '{}' ({}): {}", client.name(), client.address(), decision);
                 if (remoteHostingController == null || !remoteHostingController.active()) return;
                 try {
                     switch (decision) {
@@ -11176,7 +11222,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     completion.complete(outcome.reply());
                 } catch (RuntimeException failure) {
                     completion.completeExceptionally(failure);
-                    status("Could not display the remote library result: " + failure.getMessage());
+                    statusFailure("Could not display the remote library result: " + failure.getMessage(), failure);
                 }
             }, completion::completeExceptionally);
         } catch (IOException | RuntimeException failure) {
@@ -11540,6 +11586,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void pushHistory(HistoryAction action) {
+        LOG.info("Edit: {}", action.label);
         if (remoteWorkspaceReplica != null) {
             requestReplicaCommit(action.label);
             return;

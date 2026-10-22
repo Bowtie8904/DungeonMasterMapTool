@@ -1,5 +1,7 @@
 package dmmt.service;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.EnumMap;
@@ -27,6 +29,7 @@ public final class WorkScheduler implements AutoCloseable {
         T run() throws IOException;
     }
 
+    private static final Log LOG = Log.of(WorkScheduler.class);
     private static volatile WorkScheduler shared;
     private static final ThreadLocal<Kind> CURRENT_LANE = new ThreadLocal<>();
     private final Map<Kind, Lane> lanes = new EnumMap<>(Kind.class);
@@ -49,6 +52,7 @@ public final class WorkScheduler implements AutoCloseable {
 
     public static synchronized void shutdownShared() {
         if (shared != null) {
+            LOG.info("Shutting down shared work scheduler");
             shared.close();
             shared = null;
         }
@@ -60,6 +64,7 @@ public final class WorkScheduler implements AutoCloseable {
             lanes.put(kind, new Lane(kind, kind == Kind.COPY ? 2 : 1));
         }
         refreshPolicy();
+        LOG.info("Work scheduler started (lanes: {})", java.util.Arrays.toString(Kind.values()));
     }
 
     public synchronized void refreshPolicy() {
@@ -101,6 +106,7 @@ public final class WorkScheduler implements AutoCloseable {
             try {
                 lane.execute(task);
             } catch (RejectedExecutionException ex) {
+                LOG.warn("Could not re-queue prioritized {} work", lane.kind, ex);
                 task.cancel(false);
                 throw ex;
             }
@@ -117,6 +123,7 @@ public final class WorkScheduler implements AutoCloseable {
         try {
             future = submit(kind, true, work::run);
         } catch (RejectedExecutionException ex) {
+            LOG.warn("Background {} queue is full or shutting down", kind, ex);
             throw new IOException("Background " + kind.name().toLowerCase(java.util.Locale.ROOT)
                     + " queue is full or shutting down.", ex);
         }
@@ -130,6 +137,7 @@ public final class WorkScheduler implements AutoCloseable {
             throw interrupted;
         } catch (ExecutionException ex) {
             Throwable cause = ex.getCause();
+            LOG.debug("Background {} work failed", kind, cause);
             if (cause instanceof IOException io) {
                 throw io;
             }
@@ -156,6 +164,8 @@ public final class WorkScheduler implements AutoCloseable {
     }
 
     private final class Lane extends ThreadPoolExecutor {
+        private final Kind kind;
+
         Lane(Kind kind, int workers) {
             super(workers, workers, 0, TimeUnit.SECONDS, new WorkQueue(), runnable -> {
                 Thread thread = new Thread(() -> {
@@ -170,6 +180,7 @@ public final class WorkScheduler implements AutoCloseable {
                 thread.setPriority(Thread.NORM_PRIORITY - 1);
                 return thread;
             });
+            this.kind = kind;
         }
 
         @Override

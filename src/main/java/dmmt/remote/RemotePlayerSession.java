@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.util.ArrayDeque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +16,7 @@ import java.util.function.Supplier;
  */
 public final class RemotePlayerSession
 {
+    private static final Log LOG = Log.of(RemotePlayerSession.class);
     public static final int MAX_PINGS = 16;
     public static final int MAX_PING_MILLIS = 60_000;
     private static final int RECEIPTS = 256;
@@ -291,12 +294,12 @@ public final class RemotePlayerSession
             try
             {
                 apply.accept(request);
+                LOG.info("Remote player output action {} applied", request.action());
                 result = receipt(request, Status.ACCEPTED, "Player output updated on the host.");
             }
             catch (RuntimeException failure)
             {
-                System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR,
-                                                           "Player-output command " + request.commandId() + " failed.", failure);
+                LOG.error("Player-output command {} failed.", request.commandId(), failure);
                 result = receipt(request, Status.FAILED, "Player output failed; inspect the host status and application logs.");
             }
             // Advance even for a no-op or failed attempt; never execute an uncertain side effect twice.

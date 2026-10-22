@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
@@ -12,6 +13,7 @@ import java.util.function.Consumer;
 
 /** Modal host-side prompt for an incoming remote control request. */
 public final class RemoteApprovalDialog {
+    private static final Log LOG = Log.of(RemoteApprovalDialog.class);
     public enum Decision { ALLOW_ONCE, ALWAYS_ALLOW, BLOCK, DENY }
 
     private final Dialog<ButtonType> dialog = new Dialog<>();
@@ -40,10 +42,13 @@ public final class RemoteApprovalDialog {
         ButtonType block = new ButtonType("Block", ButtonBar.ButtonData.OTHER);
         ButtonType deny = new ButtonType("Deny", ButtonBar.ButtonData.CANCEL_CLOSE);
         dialog.getDialogPane().getButtonTypes().addAll(once, always, block, deny);
+        LOG.info("Remote control request prompt shown for {}", address);
         dialog.setOnHidden(event -> {
             ButtonType result = dialog.getResult();
-            decided.accept(result == once ? Decision.ALLOW_ONCE : result == always ? Decision.ALWAYS_ALLOW
-                    : result == block ? Decision.BLOCK : Decision.DENY);
+            Decision decision = result == once ? Decision.ALLOW_ONCE : result == always ? Decision.ALWAYS_ALLOW
+                    : result == block ? Decision.BLOCK : Decision.DENY;
+            LOG.info("Remote control request from {} decided: {}", address, decision);
+            decided.accept(decision);
         });
     }
 

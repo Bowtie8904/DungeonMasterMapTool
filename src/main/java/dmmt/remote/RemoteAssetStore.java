@@ -23,6 +23,7 @@ import java.util.UUID;
  */
 public final class RemoteAssetStore
 {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteAssetStore.class);
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final String HASH_PATTERN = "[0-9a-f]{64}";
     private static final String EXTENSION_PATTERN = "[a-z0-9]{1,12}";
@@ -52,6 +53,8 @@ public final class RemoteAssetStore
         ensureManagedDirectory(staging);
         cleanInterruptedStaging();
         storedBytes = scanStoredBytes();
+        LOG.info("Remote asset store opened at {} ({} bytes stored; limits: asset {}, store {}, staging {})",
+                this.root, storedBytes, maxAssetBytes, maxStoredBytes, maxStagingBytes);
     }
 
     public long maxAssetBytes()
@@ -78,19 +81,30 @@ public final class RemoteAssetStore
         Objects.requireNonNull(input, "input");
         requireHash(expectedSha256);
         if (expectedSize < 0 || expectedSize > maxAssetBytes)
+        {
+            LOG.warn("Rejected asset {}...: {} bytes exceeds the per-file limit of {}",
+                     expectedSha256.substring(0, 12), expectedSize, maxAssetBytes);
             throw new IOException("Asset exceeds the per-file transfer limit.");
+        }
         synchronized (this)
         {
             Path existing = objectPath(expectedSha256, false);
             if (Files.exists(existing, LinkOption.NOFOLLOW_LINKS))
             {
                 verifyFile(existing, expectedSha256, expectedSize);
+                LOG.debug("Asset {}... already stored ({} bytes)", expectedSha256.substring(0, 12), expectedSize);
                 return new AssetDescriptor(expectedSha256, expectedSize);
             }
             if (storedBytes + reservedStoredBytes > maxStoredBytes - expectedSize)
+            {
+                LOG.warn("Remote asset storage quota exceeded ({} bytes stored, {} limit)", storedBytes, maxStoredBytes);
                 throw new IOException("Remote asset storage quota exceeded.");
+            }
             if (reservedStagingBytes > maxStagingBytes - expectedSize)
+            {
+                LOG.warn("Remote asset staging quota exceeded (limit {})", maxStagingBytes);
                 throw new IOException("Remote asset staging quota exceeded.");
+            }
             reservedStoredBytes += expectedSize;
             reservedStagingBytes += expectedSize;
         }
@@ -116,10 +130,17 @@ public final class RemoteAssetStore
                 }
             }
             if (actualSize != expectedSize)
+            {
+                LOG.warn("Asset {}... size {} does not match its manifest ({})",
+                         expectedSha256.substring(0, 12), actualSize, expectedSize);
                 throw new IOException("Asset stream size does not match its manifest.");
+            }
             String actualHash = HexFormat.of().formatHex(digest.digest());
             if (!actualHash.equals(expectedSha256))
+            {
+                LOG.warn("Asset content does not match its SHA-256 identifier {}...", expectedSha256.substring(0, 12));
                 throw new IOException("Asset content does not match its SHA-256 identifier.");
+            }
 
             synchronized (this)
             {
@@ -139,6 +160,8 @@ public final class RemoteAssetStore
                         throw new IOException("The asset store does not support atomic publication.", ex);
                     }
                     storedBytes += expectedSize;
+                    LOG.info("Stored asset {}... ({} bytes; {} bytes total)",
+                             expectedSha256.substring(0, 12), expectedSize, storedBytes);
                 }
             }
             return new AssetDescriptor(expectedSha256, expectedSize);
@@ -181,6 +204,7 @@ public final class RemoteAssetStore
         }
         catch (IOException failure)
         {
+            LOG.warn("Could not publish required asset '{}'", normalized.getFileName(), failure);
             throw new IOException("Could not publish required asset '" + normalized + "': " + failure.getMessage(),
                                   failure);
         }
@@ -233,7 +257,11 @@ public final class RemoteAssetStore
             }
         }
         if (count != descriptor.size() || !HexFormat.of().formatHex(digest.digest()).equals(sha256))
+        {
+            LOG.error("Stored asset {}... failed integrity verification", sha256.substring(0, 12));
             throw new IOException("Stored asset failed integrity verification.");
+        }
+        LOG.debug("Served asset {}... ({} bytes)", sha256.substring(0, 12), count);
     }
 
     /**
@@ -263,13 +291,17 @@ public final class RemoteAssetStore
                 if (Files.size(target) == descriptor.size() && hash(input, maxAssetBytes).equals(sha256))
                     return target;
             }
+            LOG.warn("Cached asset {} failed integrity verification", target.getFileName());
             throw new IOException("Cached asset failed integrity verification.");
         }
 
         cleanCacheStagingFiles(cacheRoot);
         long cacheBytes = scanCacheBytes(cacheRoot);
         if (cacheBytes > maxStoredBytes - descriptor.size())
+        {
+            LOG.warn("Remote asset cache quota exceeded ({} bytes cached, limit {})", cacheBytes, maxStoredBytes);
             throw new IOException("Remote asset cache quota exceeded.");
+        }
         Path temporary = Files.createTempFile(cacheRoot, ".remote-asset-", ".part");
         try
         {

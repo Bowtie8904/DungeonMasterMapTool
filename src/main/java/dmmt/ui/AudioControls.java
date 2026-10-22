@@ -37,6 +37,7 @@ import java.util.function.Supplier;
  * feature can be left out entirely when {@code audio.enabled} is false.
  */
 public final class AudioControls {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioControls.class);
     private final AppSettings settings;
     private final Supplier<Window> owner;
     private final AudioLibraryService library;
@@ -266,6 +267,8 @@ public final class AudioControls {
                     Button play = new Button();
                     play.setOnAction(event -> {
                         AudioTrack current = library.track(id).orElseThrow();
+                        LOG.info("Music track button clicked: {} (category '{}')", library.trackLabel(id),
+                                library.category(current.getCategoryId()).map(AudioCategory::getName).orElse("?"));
                         if (!engine.isRemote()) settings.put("audio.lastCategory", current.getCategoryId());
                         engine.playTrack(id);
                     });
@@ -301,6 +304,8 @@ public final class AudioControls {
             ToggleButton button = new ToggleButton(category.getName());
             button.setSelected(engine.isCategoryActive(id));
             button.setOnAction(event -> {
+                LOG.info("Music category '{}' toggled via API/hidden control ({})", category.getName(),
+                        engine.isCategoryActive(id) ? "stopping" : "starting");
                 if (engine.isCategoryActive(id)) {
                     engine.stopMusic();
                 } else {
@@ -325,7 +330,10 @@ public final class AudioControls {
         if (!effect.isLooping()) {
             Button button = hiddenEffectButtons.computeIfAbsent(effect.getId(), id -> {
                 Button trigger = new Button();
-                trigger.setOnAction(event -> engine.setEffectActive(id, true));
+                trigger.setOnAction(event -> {
+                    LOG.info("Sound effect '{}' triggered via API/hidden control", effect.getName());
+                    engine.setEffectActive(id, true);
+                });
                 return trigger;
             });
             button.setText(effect.getName());
@@ -335,7 +343,11 @@ public final class AudioControls {
         return hiddenToggles.computeIfAbsent(effect.getId(), id -> {
             ToggleButton button = new ToggleButton(effect.getName());
             button.setSelected(engine.isEffectActive(id));
-            button.setOnAction(event -> engine.setEffectActive(id, button.isSelected()));
+            button.setOnAction(event -> {
+                LOG.info("Sound effect '{}' {} via API/hidden control", effect.getName(),
+                        button.isSelected() ? "started" : "stopped");
+                engine.setEffectActive(id, button.isSelected());
+            });
             return button;
         });
     }
@@ -419,6 +431,7 @@ public final class AudioControls {
     // ---- Actions ----
 
     private void openLibrary() {
+        LOG.info("Opening the audio library window");
         AudioLibraryWindow.show(owner.get(), library, engine, settings, this::refreshLibraryChoices);
     }
 

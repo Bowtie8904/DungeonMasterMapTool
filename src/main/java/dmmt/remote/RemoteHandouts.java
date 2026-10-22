@@ -1,6 +1,7 @@
 package dmmt.remote;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import dmmt.log.Log;
 import dmmt.ui.HandoutWindow;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -24,6 +25,7 @@ import java.util.UUID;
  */
 public final class RemoteHandouts
 {
+    private static final Log LOG = Log.of(RemoteHandouts.class);
     public static final int MAX_IMAGES = 64;
     public static final long MAX_IMAGE_PIXELS = 16_777_216;
     public static final long MAX_BOARD_PIXELS = 33_554_432;
@@ -240,6 +242,7 @@ public final class RemoteHandouts
             encoded.putAll(nextEncoded);
             decoded.clear();
             decoded.putAll(nextDecoded);
+            LOG.debug("Published handout board with {} image(s)", assets.size());
             return new Prepared(board, snapshot);
         }
 
@@ -298,6 +301,7 @@ public final class RemoteHandouts
             encoded.putAll(nextEncoded);
             decoded.clear();
             decoded.putAll(nextDecoded);
+            LOG.debug("Loaded handout board with {} image(s)", images.size());
             return new Prepared(board, new HandoutWindow.Snapshot(images, board.rotation(),
                                                                   board.mirrored(), board.shown(), board.showOnly()));
         }
@@ -400,6 +404,7 @@ public final class RemoteHandouts
         if (!Double.isFinite(width) || !Double.isFinite(height) || width < 1 || height < 1
                 || width > 16384 || height > 16384 || width * height > MAX_IMAGE_PIXELS)
         {
+            LOG.warn("Handout image rejected: {}x{} exceeds the pixel limit", width, height);
             throw new IOException("Handout exceeds the decoded image pixel limit.");
         }
         return (long)(width * height);

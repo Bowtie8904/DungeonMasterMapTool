@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import dmmt.log.Log;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * serializes its result as JSON. Routing and JavaFX dispatch are left to the handler.
  */
 public final class LocalApiServer implements AutoCloseable {
-    private static final System.Logger LOG = System.getLogger(LocalApiServer.class.getName());
+    private static final Log LOG = Log.of(LocalApiServer.class);
     private static final byte[] ANY_IPV4 = {0, 0, 0, 0};
     private static final int DEFAULT_THREADS = 4;
     private static final int DEFAULT_QUEUE = 16;
@@ -124,6 +125,7 @@ public final class LocalApiServer implements AutoCloseable {
         server = created;
         executor = pool;
         boundPort = created.getAddress().getPort();
+        LOG.info("Local API server listening on 0.0.0.0:{}", boundPort);
     }
 
     /** Stops listening and the worker pool. Safe to call repeatedly or without a successful start. */
@@ -131,6 +133,7 @@ public final class LocalApiServer implements AutoCloseable {
     public synchronized void close() {
         started = true;
         if (server != null) {
+            LOG.info("Local API server stopping (port {})", boundPort);
             server.stop(0);
             server = null;
         }
@@ -138,7 +141,7 @@ public final class LocalApiServer implements AutoCloseable {
             executor.shutdownNow();
             try {
                 if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
-                    LOG.log(System.Logger.Level.WARNING, "Local API workers did not stop within 2 seconds.");
+                    LOG.warn("Local API workers did not stop within 2 seconds.");
                 }
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
@@ -205,9 +208,13 @@ public final class LocalApiServer implements AutoCloseable {
             byte[] body;
             String contentType = JSON_TYPE;
             String cacheControl = NO_STORE;
+            long startNanos = System.nanoTime();
+            boolean quiet = false;
             try {
                 Request request = validate(exchange);
+                LOG.debug("Local API request: {}", describe(exchange));
                 Object result = handler.handle(request.path(), request.query());
+                quiet = result instanceof Binary || request.path().equals("/api/controls");
                 if (result instanceof Binary binary) {
                     body = binary.body();
                     contentType = binary.contentType();
@@ -219,11 +226,12 @@ public final class LocalApiServer implements AutoCloseable {
                 status = 200;
             } catch (ApiException ex) {
                 status = ex.status();
+                LOG.warn("Local API request rejected ({}): {} - {}", status, describe(exchange), ex.getMessage());
                 contentType = JSON_TYPE;
                 cacheControl = NO_STORE;
                 body = errorBody(status, ex.getMessage());
             } catch (Exception ex) {
-                LOG.log(System.Logger.Level.ERROR, "Local API request failed: " + describe(exchange), ex);
+                LOG.error("Local API request failed: {}", describe(exchange), ex);
                 status = 500;
                 contentType = JSON_TYPE;
                 cacheControl = NO_STORE;
@@ -231,10 +239,17 @@ public final class LocalApiServer implements AutoCloseable {
                         + (ex.getMessage() == null ? "" : " - " + ex.getMessage()));
             }
             respond(exchange, status, body, contentType, cacheControl);
+            long millis = (System.nanoTime() - startNanos) / 1_000_000;
+            String client = exchange.getRemoteAddress() == null ? "?" : exchange.getRemoteAddress().getAddress().getHostAddress();
+            if (quiet) {
+                LOG.debug("Local API {} -> {} ({} ms, client {})", describe(exchange), status, millis, client);
+            } else {
+                LOG.info("Local API {} -> {} ({} ms, client {})", describe(exchange), status, millis, client);
+            }
         } catch (IOException ex) {
-            LOG.log(System.Logger.Level.DEBUG, "Local API response could not be sent.", ex);
+            LOG.debug("Local API response could not be sent.", ex);
         } catch (RuntimeException ex) {
-            LOG.log(System.Logger.Level.ERROR, "Local API response failed.", ex);
+            LOG.error("Local API response failed.", ex);
         }
     }
 

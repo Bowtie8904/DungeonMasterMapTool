@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Objects;
@@ -10,7 +12,7 @@ import java.util.concurrent.CompletableFuture;
 
 /** Separate, bounded TLS bulk listener. No filenames or filesystem paths are accepted from a peer. */
 public final class RemoteAssetServer implements AutoCloseable {
-    private static final System.Logger LOG = System.getLogger(RemoteAssetServer.class.getName());
+    private static final Log LOG = Log.of(RemoteAssetServer.class);
     private final RemoteTlsListener listener;
     private final RemoteHostSession session;
     private final RemoteOwnerDispatch owner;
@@ -38,6 +40,7 @@ public final class RemoteAssetServer implements AutoCloseable {
             throw new IllegalStateException("This remote asset listener cannot be started.");
         }
         Thread.ofPlatform().daemon().name("dmmt-remote-assets").start(this::serve);
+        LOG.info("Remote asset listener started on port {}", listener.port());
     }
 
     public int port() {
@@ -59,7 +62,7 @@ public final class RemoteAssetServer implements AutoCloseable {
                 listener.close();
             } catch (IOException failure) {
                 lastError = "Could not close the remote asset listener.";
-                LOG.log(System.Logger.Level.WARNING, lastError, failure);
+                LOG.warn("{}", lastError, failure);
                 stopFailure = failure;
             }
             if (!started.get()) {
@@ -104,8 +107,7 @@ public final class RemoteAssetServer implements AutoCloseable {
                     } catch (IOException | RemoteSessionAccess.AccessException | IllegalArgumentException failure) {
                         if (!closed.get()) {
                             lastError = "A remote asset transfer failed or was cancelled; unpublished data was discarded.";
-                            LOG.log(System.Logger.Level.DEBUG, "Remote asset transfer failed: {0}",
-                                    failure.getClass().getSimpleName());
+                            LOG.warn("Remote asset transfer failed: {}", failure.getClass().getSimpleName());
                         }
                     } finally {
                         slots.release();
@@ -123,8 +125,7 @@ public final class RemoteAssetServer implements AutoCloseable {
                 }
                 if (!closed.get()) {
                     lastError = "The remote asset connection failed. Verify address, fingerprint and build.";
-                    LOG.log(System.Logger.Level.DEBUG, "Remote asset connection failed: {0}",
-                            failure.getClass().getSimpleName());
+                    LOG.debug("Remote asset connection failed: {}", failure.getClass().getSimpleName());
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -135,9 +136,14 @@ public final class RemoteAssetServer implements AutoCloseable {
 
     private void transfer(RemoteTlsChannel channel) throws IOException {
         var message = channel.receive();
+        long startedAt = System.nanoTime();
+        String direction = "";
+        long size = 0;
         try {
             RemoteAssetTransfer.requireType(message, RemoteWire.Type.TRANSFER_OPEN);
             var open = RemoteWire.payload(message, RemoteAssetTransfer.Open.class);
+            direction = String.valueOf(open.direction());
+            size = open.asset().size();
             Runnable authorize = owner.call(() -> session.authorizeTransfer(open.access().sessionId(),
                     open.access().credential()));
             if (open.asset().size() > store.maxAssetBytes()) {
@@ -168,6 +174,8 @@ public final class RemoteAssetServer implements AutoCloseable {
                 authorize.run();
                 channel.send(RemoteWire.reply(message, RemoteWire.Type.TRANSFER_RESULT, descriptor));
             }
+            LOG.info("Asset transfer {} finished: {} bytes in {} ms", direction, size,
+                    (System.nanoTime() - startedAt) / 1_000_000);
         } catch (IOException | RemoteSessionAccess.AccessException | IllegalArgumentException failure) {
             channel.send(RemoteWire.reply(message, RemoteWire.Type.ERROR,
                     new RemoteProtocol.Failure(RemoteProtocol.ErrorCode.INVALID_MESSAGE,

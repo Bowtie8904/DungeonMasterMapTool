@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -15,6 +17,7 @@ import java.util.function.Supplier;
 
 /** Owner-thread client workspace with worker-only asset IO and exact command recovery. */
 public final class RemoteWorkspaceReplica implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteWorkspaceReplica.class);
     public enum Phase { LOADING, READY, PENDING, PAUSED, ERROR, RESYNC_REQUIRED, CLOSED }
 
     public interface Connection extends AutoCloseable {
@@ -190,8 +193,7 @@ public final class RemoteWorkspaceReplica implements AutoCloseable {
         try {
             synchronize();
         } catch (RuntimeException failure) {
-            System.getLogger(RemoteWorkspaceReplica.class.getName()).log(System.Logger.Level.ERROR,
-                    "Remote workspace synchronization failed.", failure);
+            LOG.error("Remote workspace synchronization failed.", failure);
             fail("The host workspace could not be synchronized; editing paused.", failure);
         }
     }
@@ -546,14 +548,12 @@ public final class RemoteWorkspaceReplica implements AutoCloseable {
                 try {
                     action.run();
                 } catch (RuntimeException failure) {
-                    System.getLogger(RemoteWorkspaceReplica.class.getName()).log(System.Logger.Level.ERROR,
-                            "Remote workspace reconciliation failed.", failure);
+                    LOG.error("Remote workspace reconciliation failed.", failure);
                     fail("Remote workspace reconciliation failed; editing paused.", failure);
                 }
             });
         } catch (java.util.concurrent.RejectedExecutionException rejected) {
-            System.getLogger(RemoteWorkspaceReplica.class.getName()).log(System.Logger.Level.ERROR,
-                    "Could not deliver remote workspace completion to its owner.", rejected);
+            LOG.error("Could not deliver remote workspace completion to its owner.", rejected);
         }
     }
 
@@ -564,7 +564,7 @@ public final class RemoteWorkspaceReplica implements AutoCloseable {
     }
 
     private void fail(String message, Throwable cause) {
-        System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR, message, cause);
+        LOG.error(message, cause);
         fail(message);
         errorHandler.accept(RemoteFailure.capture(message, cause).exception());
     }

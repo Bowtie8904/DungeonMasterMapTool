@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject.TokenDefinition;
 import dmmt.render.TokenArt;
 import dmmt.remote.RemoteImages;
@@ -29,6 +30,7 @@ import javafx.application.Platform;
 
 public final class TokenBrowser extends VBox
 {
+    private static final Log LOG = Log.of(TokenBrowser.class);
     public static final DataFormat TOKEN = new DataFormat("application/x-dmmt-token");
     private static final DataFormat FOLDER = new DataFormat("application/x-dmmt-token-folder");
     private static final javafx.css.PseudoClass DROP_TARGET = javafx.css.PseudoClass.getPseudoClass("drop-target");
@@ -293,6 +295,7 @@ public final class TokenBrowser extends VBox
                 else
                 {
                     remoteStatus.setText(message(error));
+                    LOG.warn("Token operation rejected by host", error);
                     Dialogs.error(window(), "Token operation rejected", message(error));
                     queryRemote(true);
                 }
@@ -476,6 +479,7 @@ public final class TokenBrowser extends VBox
                 return;
             }
             service.put(token, folder);
+            LOG.info("Saved token '{}' in library folder '{}'", token.getName(), folder);
             changed.accept(token);
             refresh();
         });
@@ -496,6 +500,7 @@ public final class TokenBrowser extends VBox
                 return;
             }
             expanded.add(service.createFolder(parent, name));
+            LOG.info("Created token folder '{}' in '{}'", name, parent);
             refresh();
         }));
         });
@@ -524,6 +529,7 @@ public final class TokenBrowser extends VBox
                            return;
                        }
                        service.moveFolder(item.folder, parent(item.folder), name);
+                       LOG.info("Renamed token folder '{}' to '{}'", item.folder, name);
                        refresh();
                    }
                }));
@@ -544,6 +550,7 @@ public final class TokenBrowser extends VBox
                 requireContext(context);
                 if (context.connection != null)
                 {
+                    LOG.info("Deleting host token library {} '{}'", item.token == null ? "folder" : "token", item.name());
                     remoteChange(context, item.token == null ? RemoteTokens.Operation.DELETE_FOLDER : RemoteTokens.Operation.DELETE,
                             item.token == null ? null : item.token.getId(), item.token == null ? item.folder : null, null, null);
                     return;
@@ -552,6 +559,7 @@ public final class TokenBrowser extends VBox
                     service.deleteFolder(item.folder);
                 else
                     service.delete(item.token.getId());
+                LOG.info("Deleted token library {} '{}'", item.token == null ? "folder" : "token", item.name());
                 refresh();
             });
         }
@@ -660,6 +668,7 @@ public final class TokenBrowser extends VBox
                     }
                     catch (IOException | IllegalArgumentException ex)
                     {
+                        LOG.warn("Could not move token library item", ex);
                         Dialogs.error(window(), "Could not move token", ex.getMessage());
                     }
                 }
@@ -704,6 +713,7 @@ public final class TokenBrowser extends VBox
         }
         catch (IOException | IllegalArgumentException ex)
         {
+            LOG.warn("Token operation failed", ex);
             Dialogs.error(window(), "Token operation failed", ex.getMessage());
         }
     }

@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.service.AppSettings;
 
 import java.io.IOException;
@@ -49,7 +51,7 @@ public final class RemoteHostingController implements AutoCloseable {
         RemoteDiscovery.Responder open(Details details) throws IOException;
     }
 
-    private static final System.Logger LOG = System.getLogger(RemoteHostingController.class.getName());
+    private static final Log LOG = Log.of(RemoteHostingController.class);
     private final Thread owner = Thread.currentThread();
     private final AppSettings preferences;
     private final Workspace workspace;
@@ -154,6 +156,9 @@ public final class RemoteHostingController implements AutoCloseable {
                         current.control.port(), current.assets.port(), prepared.identity().fingerprint(), prepared.build());
                 phase = Phase.WAITING;
                 message = "Hosting - waiting for an approved remote client.";
+                LOG.info("Remote host started: control port {}, asset port {}, bind address {}, discovery {}",
+                        details.controlPort(), details.assetPort(), configuration.bindAddress(),
+                        prepared.discovery() != null ? "on" : "off");
                 current.ready.complete(details);
             } catch (RuntimeException invalid) {
                 startupFailed(current, invalid);
@@ -206,15 +211,18 @@ public final class RemoteHostingController implements AutoCloseable {
     }
 
     public RemoteSessionAccess.PairingCode regenerateCode() {
+        LOG.info("Remote pairing code regenerated");
         return running().session.regenerateCode();
     }
 
     public void approve(UUID requestId) {
         running().control.approve(requestId);
+        LOG.info("Remote connection request approved by the host");
     }
 
     public void reject(UUID requestId) {
         running().control.reject(requestId);
+        LOG.info("Remote connection request rejected by the host");
     }
 
     /** Approve and remember this client so its future control requests are granted without asking. */
@@ -253,6 +261,7 @@ public final class RemoteHostingController implements AutoCloseable {
 
     public void revoke() {
         running().control.revoke();
+        LOG.info("Remote client access revoked by the host");
     }
 
     public CompletableFuture<Void> stop() {
@@ -262,6 +271,7 @@ public final class RemoteHostingController implements AutoCloseable {
         if (current.cancelled.compareAndSet(false, true)) {
             phase = Phase.STOPPING;
             message = "Stopping hosting and revoking remote access.";
+            LOG.info("Remote host stopping; remote access revoked");
             current.ready.completeExceptionally(new CancellationException("Hosting was stopped."));
             if (current.prepared != null) dispose(current, null);
             // An unfinished preparation owns its listeners until its owner-thread completion disposes them.
@@ -296,7 +306,7 @@ public final class RemoteHostingController implements AutoCloseable {
                 discoveryMessage = "LAN discovery is available while hosting (UDP " + RemoteDiscovery.PORT + ").";
             } catch (IOException unavailable) {
                 discoveryMessage = "LAN discovery unavailable: " + unavailable.getMessage();
-                LOG.log(System.Logger.Level.INFO, discoveryMessage);
+                LOG.info("{}", discoveryMessage);
             }
             checkCancelled(current);
             return new Prepared(identity, build, store, control, assets, discovery, discoveryMessage, trust);
@@ -309,7 +319,7 @@ public final class RemoteHostingController implements AutoCloseable {
     }
 
     private void startupFailed(Attempt current, Throwable failure) {
-        LOG.log(System.Logger.Level.WARNING, "Remote host startup failed.", failure);
+        LOG.warn("Remote host startup failed.", failure);
         current.cancelled.set(true);
         current.ready.completeExceptionally(new IOException(
                 "Could not start hosting. Check the selected local interface, both ports and storage access.", failure));
@@ -334,7 +344,7 @@ public final class RemoteHostingController implements AutoCloseable {
             try {
                 workspace.close();
             } catch (RuntimeException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not dispose the host workspace bridge.", failure);
+                LOG.warn("Could not dispose the host workspace bridge.", failure);
                 cleanupFailure = failure;
             }
         }
@@ -342,7 +352,7 @@ public final class RemoteHostingController implements AutoCloseable {
             try {
                 current.prepared.close();
             } catch (IOException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not close prepared remote listeners.", failure);
+                LOG.warn("Could not close prepared remote listeners.", failure);
                 assetsStopped = CompletableFuture.failedFuture(failure);
             }
         }

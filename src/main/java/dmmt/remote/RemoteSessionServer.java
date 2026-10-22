@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.service.HostSettingsAuthority;
 
 import java.io.IOException;
@@ -17,7 +18,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * Workspace operations execute on the owner; settings persistence runs away from the application thread.
  */
 public final class RemoteSessionServer implements AutoCloseable {
-    private static final System.Logger LOG = System.getLogger(RemoteSessionServer.class.getName());
+    private static final Log LOG = Log.of(RemoteSessionServer.class);
+
+    /** Bounded single-line form of peer-supplied text for logging. */
+    static String safe(String value) {
+        if (value == null) return "";
+        String flat = value.replaceAll("\\p{Cntrl}", " ");
+        return flat.length() > 100 ? flat.substring(0, 100) + "..." : flat;
+    }
     private final RemoteTlsListener listener;
     private final RemoteHostSession session;
     private final RemoteOwnerDispatch owner;
@@ -76,6 +84,7 @@ public final class RemoteSessionServer implements AutoCloseable {
             throw new IllegalStateException("This remote listener cannot be started.");
         }
         Thread.ofPlatform().daemon().name("dmmt-remote-host").start(this::serve);
+        LOG.info("Remote control listener started on port {}", listener.port());
     }
 
     public int port() {
@@ -131,7 +140,7 @@ public final class RemoteSessionServer implements AutoCloseable {
                 listener.close();
             } catch (IOException failure) {
                 lastError = "Could not close the remote listener.";
-                LOG.log(System.Logger.Level.WARNING, lastError, failure);
+                LOG.warn("{}", lastError, failure);
             }
             closeActive();
             if (!started.get()) {
@@ -181,12 +190,16 @@ public final class RemoteSessionServer implements AutoCloseable {
                         Thread.currentThread().interrupt();
                         break;
                     }
+                } catch (RemoteTlsChannel.CompatibilityException incompatible) {
+                    if (!stopping.get()) {
+                        lastError = "A remote connection failed. Check the verified host details and remote compatibility versions.";
+                        LOG.warn("Rejected remote peer: {}", safe(incompatible.getMessage()));
+                    }
                 } catch (IOException failure) {
                     if (!stopping.get()) {
                         lastError = "A remote connection failed. Check the verified host details and remote compatibility versions.";
                         // Parser/TLS exceptions may include peer-controlled payloads; never log their messages.
-                        LOG.log(System.Logger.Level.DEBUG, "Remote connection failed: {0}",
-                                failure.getClass().getSimpleName());
+                        LOG.debug("Remote connection failed: {}", failure.getClass().getSimpleName());
                         try {
                             Thread.sleep(100);
                         } catch (InterruptedException interrupted) {
@@ -207,8 +220,7 @@ public final class RemoteSessionServer implements AutoCloseable {
         } catch (IOException failure) {
             if (!stopping.get()) {
                 lastError = "The remote connection ended; reconnect to recover any unconfirmed command.";
-                LOG.log(System.Logger.Level.DEBUG, "Remote peer disconnected: {0}",
-                        failure.getClass().getSimpleName());
+                LOG.debug("Remote peer disconnected: {}", failure.getClass().getSimpleName());
             }
         } finally {
             active.compareAndSet(channel, null);
@@ -247,6 +259,7 @@ public final class RemoteSessionServer implements AutoCloseable {
             });
             reply(channel, first, RemoteWire.Type.STATE, onOwner(() -> session.settingsState(connectionLease)));
             lastError = null;
+            LOG.info("Remote client connected from {}", safe(channel.peerAddress()));
             while (!stopping.get()) {
                 RemoteWire.Message message = RemoteMessageStream.receive(channel);
                 try {
@@ -404,13 +417,16 @@ public final class RemoteSessionServer implements AutoCloseable {
                     fail(channel, message, accessFailure(denied));
                     return;
                 } catch (IllegalArgumentException invalid) {
+                    LOG.warn("Malformed remote request {} from {}", message.type(), safe(channel.peerAddress()));
                     fail(channel, message, malformed());
                     return;
                 }
             }
         } catch (ProtocolFailure rejected) {
+            LOG.warn("Remote request rejected: {}", rejected.failure.code());
             fail(channel, rejected.request, rejected.failure);
         } catch (RemoteSessionAccess.AccessException denied) {
+            LOG.warn("Remote access denied: {}", denied.failure());
             if (connecting != null) {
                 fail(channel, connecting, accessFailure(denied));
             } else {
@@ -448,10 +464,14 @@ public final class RemoteSessionServer implements AutoCloseable {
                 return approval;
             });
             if (request == null) {
+                LOG.warn("Refused pairing request from blocked client {} ({})", safe(name), safe(channel.peerAddress()));
                 throw new ProtocolFailure(first, new RemoteProtocol.Failure(RemoteProtocol.ErrorCode.REJECTED,
                         "The host rejected or cancelled this pairing request."));
             }
+            LOG.info("Remote {} request from {} ({})", approvalOnly ? "control" : "pairing", safe(name),
+                    safe(channel.peerAddress()));
         } catch (RemoteSessionAccess.AccessException denied) {
+            LOG.warn("Remote pairing request denied: {}", denied.failure());
             throw new ProtocolFailure(first, accessFailure(denied));
         } catch (IllegalArgumentException invalid) {
             throw new ProtocolFailure(first, malformed());
@@ -502,8 +522,9 @@ public final class RemoteSessionServer implements AutoCloseable {
             try {
                 previous.close();
             } catch (IOException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not close the replaced remote connection.", failure);
+                LOG.warn("Could not close the replaced remote connection.", failure);
             }
+            LOG.info("Remote client replaced by an approved new connection");
         }
     }
 
@@ -535,6 +556,7 @@ public final class RemoteSessionServer implements AutoCloseable {
             pending = null;
         }
         session.disconnected(lease);
+        if (lease != null) LOG.info("Remote client disconnected from {}", safe(channel.peerAddress()));
         if (workspace != null && workspace.player() != null) workspace.player().resetPointers();
     }
 
@@ -550,7 +572,7 @@ public final class RemoteSessionServer implements AutoCloseable {
         try {
             listener.close();
         } catch (IOException failure) {
-            LOG.log(System.Logger.Level.WARNING, "Could not close the remote listener.", failure);
+            LOG.warn("Could not close the remote listener.", failure);
         }
         peerStopped.thenCompose(unused -> owner.submit(() -> {
             pending = null;
@@ -560,7 +582,7 @@ public final class RemoteSessionServer implements AutoCloseable {
                 stopped.complete(null);
             } else {
                 stopped.completeExceptionally(failure);
-                LOG.log(System.Logger.Level.ERROR, "Could not stop remote session ownership.", failure);
+                LOG.error("Could not stop remote session ownership.", failure);
             }
         });
     }
@@ -571,7 +593,7 @@ public final class RemoteSessionServer implements AutoCloseable {
             try {
                 waiting.close();
             } catch (IOException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not close the pending remote connection.", failure);
+                LOG.warn("Could not close the pending remote connection.", failure);
             }
         }
         RemoteTlsChannel channel = active.get();
@@ -579,7 +601,7 @@ public final class RemoteSessionServer implements AutoCloseable {
             try {
                 channel.close();
             } catch (IOException failure) {
-                LOG.log(System.Logger.Level.WARNING, "Could not close the remote connection.", failure);
+                LOG.warn("Could not close the remote connection.", failure);
             }
         }
     }

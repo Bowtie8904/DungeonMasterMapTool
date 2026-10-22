@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** A single background transfer, with byte progress and TCP-level cancellation. */
 public final class RemoteAssetClient implements AutoCloseable {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteAssetClient.class);
     private final RemoteAssetStore local;
     private final RemoteAssetTransfer.Open request;
     private final AtomicBoolean cancelled = new AtomicBoolean();
@@ -74,11 +75,14 @@ public final class RemoteAssetClient implements AutoCloseable {
     private void run(InetSocketAddress address, String fingerprint, String build, int timeout) {
         try {
             checkCancelled();
+            LOG.info("Asset {} started: {} bytes, sha256 {}... via {}", request.direction(),
+                    request.asset().size(), request.asset().sha256().substring(0, 12), address);
             if (request.direction() == RemoteAssetTransfer.Direction.DOWNLOAD && local.contains(request.asset().sha256())) {
                 if (!local.descriptor(request.asset().sha256()).equals(request.asset())) {
                     throw new IOException("The cached asset manifest does not match.");
                 }
                 checkCancelled();
+                LOG.debug("Asset {} satisfied from the local cache", request.direction());
                 result.complete(request.asset());
                 return;
             }
@@ -111,9 +115,17 @@ public final class RemoteAssetClient implements AutoCloseable {
                     }
                 }
                 checkCancelled();
+                LOG.info("Asset {} completed: {} bytes, sha256 {}...", request.direction(),
+                        request.asset().size(), request.asset().sha256().substring(0, 12));
                 result.complete(request.asset());
             }
         } catch (IOException | GeneralSecurityException | IllegalArgumentException failure) {
+            if (cancelled.get()) {
+                LOG.info("Asset {} cancelled", request.direction());
+            } else {
+                LOG.warn("Asset {} failed (sha256 {}...)", request.direction(),
+                        request.asset().sha256().substring(0, 12), failure);
+            }
             result.completeExceptionally(new IOException(cancelled.get() ? "Asset transfer cancelled."
                     : "Asset transfer failed; verify host access, content integrity and storage quotas.", failure));
         } finally {

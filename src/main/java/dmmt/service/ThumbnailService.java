@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import javax.imageio.ImageIO;
@@ -31,6 +32,7 @@ import java.util.stream.Stream;
  */
 public class ThumbnailService
 {
+    private static final Log LOG = Log.of(ThumbnailService.class);
     public static final String FILE_NAME = "thumbnail.png";
     public static final int SIZE = 256;
     static final String SIGNATURE_FILE = "thumbnail.inputs";
@@ -61,6 +63,7 @@ public class ThumbnailService
         }
         catch (IOException exception)
         {
+            LOG.debug("Could not list {} to detect a map package", dir, exception);
             return false;
         }
     }
@@ -86,15 +89,19 @@ public class ThumbnailService
         {
             return false;
         }
+        long startedAt = System.nanoTime();
         byte[] png = renderPng(project, mapFile);
         if (png == null)
         {
+            LOG.debug("No thumbnail can be drawn for {}", mapFile);
             Files.deleteIfExists(thumbnailFile(mapFile));
             Files.deleteIfExists(signatureFile);
             return false;
         }
         replace(thumbnailFile(mapFile), png);
         replace(signatureFile, signature.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        LOG.info("Generated thumbnail for {} ({} KB, {} ms)", mapFile, png.length / 1024,
+                (System.nanoTime() - startedAt) / 1_000_000);
         return true;
     }
 
@@ -330,6 +337,7 @@ public class ThumbnailService
         }
         catch (IOException | RuntimeException | OutOfMemoryError exception)
         {
+            LOG.warn("Could not read image {} for a thumbnail", file, exception);
             return null;
         }
     }

@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.util.stream.Stream;
 
 /** Imports several dd2vtt/uvtt maps and exported {@code .dmmpack} archives into a library folder, one after another. */
 public class BatchImportService {
+    private static final Log LOG = Log.of(BatchImportService.class);
 
     public record Failure(Path source, String reason) {
     }
@@ -68,11 +70,14 @@ public class BatchImportService {
         List<Path> imported = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
         int total = sources.size();
+        long startedAt = System.nanoTime();
+        LOG.info("Batch import of {} file(s) into {}", total, targetFolder);
         List<String> knownTags;
         try {
             // Read before anything is imported; matching tags are applied to every new ordinary map.
             knownTags = library.tags().importTags();
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Batch import aborted: could not read library tags", ex);
             String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             for (Path source : sources) {
                 failures.add(new Failure(source, reason));
@@ -90,6 +95,7 @@ public class BatchImportService {
             try {
                 imported.addAll(exporter.importPack(pack, resolveTargetFolder(targetFolder, sourceRoot, pack)));
             } catch (IOException | RuntimeException ex) {
+                LOG.warn("Batch import failed for pack {}", pack, ex);
                 failures.add(new Failure(pack, ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
             }
         }
@@ -108,6 +114,7 @@ public class BatchImportService {
             try {
                 groupFolder = resolveTargetFolder(targetFolder, sourceRoot, group.files().get(0));
             } catch (IOException ex) {
+                LOG.warn("Batch import could not create target folder for {}", group.files().get(0), ex);
                 String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                 for (Path file : group.files()) {
                     failures.add(new Failure(file, reason));
@@ -125,6 +132,7 @@ public class BatchImportService {
                         }
                     }));
                 } catch (IOException | RuntimeException ex) {
+                    LOG.warn("Batch import failed for multilevel group {}", group.name(), ex);
                     String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                     for (Path file : group.files()) {
                         failures.add(new Failure(file, reason));
@@ -141,10 +149,13 @@ public class BatchImportService {
             try {
                 imported.add(importOne(source, groupFolder, baseName, knownTags));
             } catch (IOException | RuntimeException ex) {
+                LOG.warn("Batch import failed for {}", source, ex);
                 String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
                 failures.add(new Failure(source, reason));
             }
         }
+        LOG.info("Batch import finished: {} imported, {} failed of {} ({} ms)", imported.size(), failures.size(), total,
+                (System.nanoTime() - startedAt) / 1_000_000);
         return new Result(imported, failures, total);
     }
 
@@ -188,7 +199,8 @@ public class BatchImportService {
         } catch (IOException | RuntimeException ex) {
             try {
                 MapLibraryService.deleteRecursive(projectDir);
-            } catch (IOException ignored) {
+            } catch (IOException cleanup) {
+                LOG.warn("Could not clean up partial import {}", projectDir, cleanup);
             }
             throw ex;
         }

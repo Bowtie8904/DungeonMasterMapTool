@@ -50,6 +50,8 @@ public final class RemoteDirectories {
 
     private RemoteDirectories() { }
 
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteDirectories.class);
+
     /** Run on the server connection worker, never on the application thread. */
     public static Listing list(Query query) {
         try {
@@ -91,15 +93,19 @@ public final class RemoteDirectories {
                     folder == null || folder.getParent() == null ? null : folder.getParent().toString(),
                     entries.subList(start, end), query.offset(), end < entries.size(), null);
         } catch (IOException | java.nio.file.DirectoryIteratorException | SecurityException failure) {
+            LOG.warn("Host directory listing failed for '{}'", RemoteSessionServer.safe(query.path()), failure);
             return failed(query, "The host could not read this directory. Check that it exists and is accessible.");
         } catch (java.nio.file.InvalidPathException invalid) {
+            LOG.warn("Invalid host directory path '{}'", RemoteSessionServer.safe(query.path()));
             return failed(query, "This is not a valid host directory path.");
         } catch (IllegalArgumentException unsupported) {
+            LOG.warn("Host directory '{}' has names that cannot be listed", RemoteSessionServer.safe(query.path()), unsupported);
             return failed(query, "This directory contains names that cannot be displayed safely. Enter a narrower host path.");
         }
     }
 
     private static Listing failed(Query query, String error) {
+        LOG.debug("Host directory listing rejected for '{}': {}", RemoteSessionServer.safe(query.path()), error);
         return new Listing(query.path(), null, List.of(), query.offset(), false, error);
     }
 

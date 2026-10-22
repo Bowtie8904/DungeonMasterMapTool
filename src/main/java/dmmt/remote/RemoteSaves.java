@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.IOException;
@@ -14,6 +16,7 @@ import java.util.function.Supplier;
 
 /** Host persistence commands are separate from project history and have exact, bounded retry receipts. */
 public final class RemoteSaves implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteSaves.class);
     public record Target(@JsonProperty(required = true) boolean saved, String label, String libraryFolder) {
         public Target {
             if (label == null || label.isBlank() || label.length() > 512
@@ -111,21 +114,22 @@ public final class RemoteSaves implements AutoCloseable {
         running = request;
         completion = new CompletableFuture<>();
         var pending = completion;
+        LOG.info("Remote host save requested ({})", request.name() == null ? "current destination" : "save as");
         try {
             save.apply(request).whenComplete((message, failure) -> dispatcher.execute(() -> {
                 requireOwner();
                 if (closed) return;
                 running = null;
                 var status = failure == null ? RemotePlayerSession.Status.ACCEPTED : RemotePlayerSession.Status.FAILED;
-                if (failure != null) System.getLogger(RemoteSaves.class.getName()).log(
-                        System.Logger.Level.WARNING, "Host save failed.", failure);
+                if (failure != null) LOG.warn("Host save failed.", failure);
+                else LOG.info("Remote host save completed");
                 String description = failure == null ? message
                         : failureMessage(failure);
                 pending.complete(remember(request, status, description).join());
                 completion = null;
             }));
         } catch (RuntimeException failure) {
-            System.getLogger(RemoteSaves.class.getName()).log(System.Logger.Level.WARNING, "Host save could not start.", failure);
+            LOG.warn("Host save could not start.", failure);
             running = null;
             pending.complete(remember(request, RemotePlayerSession.Status.FAILED, "Host save could not start; see host logs.").join());
             completion = null;

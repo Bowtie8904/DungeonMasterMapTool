@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.ui.HandoutWindow;
 import dmmt.ui.RecentHandouts;
 import javafx.scene.image.Image;
@@ -26,6 +27,8 @@ public final class RemoteHandoutLibrary
             super("Host recent handouts changed; synchronize before retrying.");
         }
     }
+
+    private static final Log LOG = Log.of(RemoteHandoutLibrary.class);
 
     private final Supplier<RecentHandouts> open;
     private final RemoteAssetStore store;
@@ -77,6 +80,7 @@ public final class RemoteHandoutLibrary
                         List.of(thumbnail), 0, false, false, null)).board().images().getFirst();
                 entry = new RemoteHandouts.Recent(id, original, descriptor);
                 published.put(id, entry);
+                LOG.debug("Published recent handout {} ({} bytes)", id, original.size());
             }
             entries.add(entry);
         }
@@ -88,7 +92,11 @@ public final class RemoteHandoutLibrary
                         HandoutWindow.Snapshot before, HandoutWindow.Snapshot after, int max) throws IOException
     {
         if (recents == null || recents.version() != expected.version() || max != expected.max())
+        {
+            LOG.warn("Recent handout operation {} conflicts with the host library", request.operation());
             throw new Conflict();
+        }
+        LOG.info("Remote recent handout operation {} (recent {})", request.operation(), request.recentId());
         if (request.operation() == RemoteHandouts.Operation.REMOVE_RECENT)
         {
             if (!recents.ids().contains(request.recentId()))

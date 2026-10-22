@@ -50,6 +50,7 @@ import java.util.Map;
  * <p>Category and effect toggles stay current for the API while closed; readouts only refresh while open.</p>
  */
 public final class AudioOverlay {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioOverlay.class);
     private static final double ITEM_SIZE = 44;
     private static final double ITEM_GAP = 10;
     private static final double CENTRE_SIZE = 230;
@@ -265,11 +266,17 @@ public final class AudioOverlay {
             if (!syncing) {
                 apply.accept(newValue.doubleValue());
             }
+            if (!syncing && !slider.isValueChanging()) {
+                LOG.info("{} volume set to {}", name, percent(newValue.doubleValue()));
+            }
             if (!syncing && !slider.isValueChanging() && !engine.isRemote()) {
                 settings.putDouble(key, round(newValue.doubleValue()));
             }
         });
         slider.valueChangingProperty().addListener((observable, was, changing) -> {
+            if (!changing && !syncing) {
+                LOG.info("{} volume set to {}", name, percent(slider.getValue()));
+            }
             if (!changing && !syncing && !engine.isRemote()) {
                 settings.putDouble(key, round(slider.getValue()));
             }
@@ -300,6 +307,7 @@ public final class AudioOverlay {
      */
     public void show() {
         open = true;
+        LOG.info("Audio overlay opened");
         layer.setVisible(true);
         layer.toFront();
         double seconds = Tuning.AUDIO_OVERLAY_FADE_SECONDS.get();
@@ -321,6 +329,7 @@ public final class AudioOverlay {
             return;
         }
         open = false;
+        LOG.info("Audio overlay closed");
         double seconds = Tuning.AUDIO_OVERLAY_FADE_SECONDS.get();
         if (seconds > 0) {
             FadeTransition fade = new FadeTransition(Duration.seconds(seconds), layer);
@@ -355,6 +364,8 @@ public final class AudioOverlay {
                 if (syncing) {
                     return;
                 }
+                LOG.info("Audio overlay: music category '{}' clicked ({})", category.getName(),
+                        engine.isCategoryActive(category.getId()) ? "stopping" : "starting");
                 if (engine.isCategoryActive(category.getId())) {
                     engine.stopMusic();
                 } else {
@@ -374,6 +385,7 @@ public final class AudioOverlay {
                 if (syncing) {
                     return;
                 }
+                LOG.info("Audio overlay: sound effect '{}' clicked", effect.getName());
                 engine.toggleEffect(effect.getId());
                 refreshState();
             });

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import dmmt.service.MapTreeFilter;
@@ -70,6 +71,7 @@ import java.util.function.Function;
  */
 public class MapBrowser extends VBox
 {
+    private static final Log LOG = Log.of(MapBrowser.class);
     private dmmt.remote.RemoteOperations.Connection remoteConnection;
     private dmmt.remote.RemoteMaps.Listing remoteListing;
     private final Map<Path, java.util.UUID> remoteIds = new HashMap<>();
@@ -84,7 +86,7 @@ public class MapBrowser extends VBox
     private Runnable remoteLevelsChanged = () -> { };
     private String remoteLevelsFingerprint = "";
     private Consumer<Throwable> remoteErrorHandler = failure ->
-            System.getLogger(MapBrowser.class.getName()).log(System.Logger.Level.WARNING, "Remote map browser failed", failure);
+            LOG.warn("Remote map browser failed", failure);
     private final Map<Path, Long> remotePreviewRetryAfter = new HashMap<>();
     private final Map<Path, Object> remotePreviewRequests = new HashMap<>();
     private final Map<String, String> remotePollingFailures = new HashMap<>();
@@ -281,6 +283,7 @@ public class MapBrowser extends VBox
             var command = new dmmt.remote.RemoteMaps.Command(guard.context(), guard.revision(), handles, target, name, options);
             long generation = catalogGeneration;
             remoteCommandPending = true;
+            LOG.info("Host map operation {} ({} maps)", action, selected.size());
             catalogStatus.setText("Waiting for host map operation...");
             var work = remoteConnection.command("maps", action, remoteMapper.valueToTree(command));
             work.whenComplete((value, failure) -> onRemoteUi(() -> {
@@ -304,6 +307,7 @@ public class MapBrowser extends VBox
         catch (RuntimeException failure)
         {
             remoteCommandPending = false;
+            LOG.warn("Host map operation {} unavailable", action, failure);
             reportRemoteFailure("Host map operation unavailable.", failure);
             return java.util.concurrent.CompletableFuture.failedFuture(failure);
         }
@@ -836,6 +840,7 @@ public class MapBrowser extends VBox
     {
         if (remoteConnection == null)
         {
+            LOG.info("Exporting {} maps", maps.size());
             host.exportMaps(maps);
             return;
         }
@@ -1291,6 +1296,7 @@ public class MapBrowser extends VBox
         }
         catch (RuntimeException ex)
         {
+            LOG.warn("Could not copy API URL for {}", mapFile, ex);
             Dialogs.error(window(), "Could not copy API URL", ex.getMessage());
         }
     }
@@ -2024,6 +2030,7 @@ public class MapBrowser extends VBox
             return;
         }
         Path[] created = new Path[1];
+        LOG.info("Creating map folder '{}' in {}", name.get(), parent);
         host.runLibraryOperation("Creating folder…", null, () -> {
             created[0] = library.createFolder(parent, name.get());
             return new MapLibraryService.Result(java.util.Map.of(), null);
@@ -2051,6 +2058,7 @@ public class MapBrowser extends VBox
             sendRemote("rename", java.util.List.of(entry), null, name.get(), null, guard);
             return;
         }
+        LOG.info("Renaming {} to '{}'", entry.path(), name.get());
         host.runLibraryOperation("Renaming…", entry.path(), () -> library.rename(entry, name.get()), result -> {
             Path renamed = entry.containingFolder().resolve(name.get().trim());
             if (entry.isFolder())
@@ -2071,6 +2079,7 @@ public class MapBrowser extends VBox
             return;
         java.util.List<Path> created = new java.util.ArrayList<>();
         java.util.List<String> failures = new java.util.ArrayList<>();
+        LOG.info("Duplicating {} maps", maps.size());
         host.runLibraryOperation("Copying " + maps.size() + " maps…", affectedOpenMap(maps), () -> {
             for (Entry map : maps)
             {
@@ -2080,6 +2089,7 @@ public class MapBrowser extends VBox
                 }
                 catch (IOException exception)
                 {
+                    LOG.warn("Could not duplicate map {}", map.path(), exception);
                     failures.add(map.name() + ": " + exception.getMessage());
                 }
             }
@@ -2123,6 +2133,7 @@ public class MapBrowser extends VBox
             return;
         }
         java.util.List<String> failures = new java.util.ArrayList<>();
+        LOG.info("Deleting {} maps", maps.size());
         host.runLibraryOperation("Deleting " + maps.size() + " maps…", affectedOpenMap(maps), () -> {
             for (Entry map : maps)
             {
@@ -2132,6 +2143,7 @@ public class MapBrowser extends VBox
                 }
                 catch (IOException exception)
                 {
+                    LOG.warn("Could not delete map {}", map.path(), exception);
                     failures.add(map.name() + ": " + exception.getMessage());
                 }
             }
@@ -2185,6 +2197,7 @@ public class MapBrowser extends VBox
             sendRemote("delete", java.util.List.of(entry), null, null, null, guard);
             return;
         }
+        LOG.info("Deleting {} {}", entry.isMap() ? "map" : "folder", entry.path());
         host.runLibraryOperation("Deleting…", entry.path(), () -> {
             library.delete(entry);
             return new MapLibraryService.Result(java.util.Map.of(), null);
@@ -2197,6 +2210,7 @@ public class MapBrowser extends VBox
             return;
         if (remoteActionUnavailable())
             return;
+        LOG.info("Moving {} to {}", entry.path(), targetFolder);
         host.runLibraryOperation("Moving…", entry.path(), () -> library.move(entry, targetFolder), result -> {
             Path destination = targetFolder.resolve(entry.path().getFileName());
             if (entry.isFolder())

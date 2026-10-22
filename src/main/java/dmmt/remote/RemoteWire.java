@@ -18,6 +18,7 @@ import java.util.UUID;
 
 /** Bounded control messages, not bulk asset transport. No polymorphic Java type names on the wire. */
 public final class RemoteWire {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteWire.class);
     public static final int MAX_MESSAGE_BYTES = 1_048_576;
     public static final int PROTOCOL_VERSION = 1;
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
@@ -93,6 +94,7 @@ public final class RemoteWire {
         DataInputStream stream = new DataInputStream(input);
         int length = stream.readInt();
         if (length < 1 || length > MAX_MESSAGE_BYTES) {
+            LOG.warn("Rejected remote message with invalid length {}", length);
             throw new IOException("Remote message length is outside the control-message limit.");
         }
         byte[] bytes = new byte[length];

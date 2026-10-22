@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.audio.AudioCategory;
 import dmmt.audio.AudioClipCutter;
 import dmmt.audio.AudioFormats;
@@ -67,6 +68,7 @@ import java.util.regex.Pattern;
  * and write that range into the library as a standalone clip. Peaks are analysed once in the background and cached.
  */
 public final class AudioCutWindow {
+    private static final Log LOG = Log.of(AudioCutWindow.class);
     private static final Color WAVE = Color.web("#8AB4F8");
     private static final Color WAVE_SELECTED = Color.web("#FFD166");
     private static final Color BACKGROUND = Color.web("#1B1D21");
@@ -180,7 +182,10 @@ public final class AudioCutWindow {
             }
         });
         stage.setScene(scene);
-        stage.setOnHidden(event -> dispose());
+        stage.setOnHidden(event -> {
+            LOG.info("Audio cut window closed");
+            dispose();
+        });
     }
 
     /** Opens the waveform window for a track; a second call focuses the window that is already open. */
@@ -193,6 +198,7 @@ public final class AudioCutWindow {
         }
         AudioCutWindow window = new AudioCutWindow(owner, library, track, onChanged);
         open = window.stage;
+        LOG.info("Opening audio cut window for {}", track.getName());
         window.stage.show();
         window.startAnalysis();
         window.startTicker();
@@ -443,13 +449,14 @@ public final class AudioCutWindow {
                 Files.createDirectories(cache.getParent());
                 result.writeCache(cache);
             } catch (IOException | RuntimeException e) {
-                // the cache is only an optimisation
+                LOG.debug("Could not write waveform cache {}", cache, e);
             }
             usePeaks(result);
         });
         analysis.setOnFailed(event -> {
             progress.progressProperty().unbind();
             progress.setProgress(0);
+            LOG.warn("Could not read the waveform of {}", track.getName(), analysis.getException());
             status.setText("The waveform could not be read: " + analysis.getException().getMessage());
         });
         dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.AUDIO).execute(analysis);
@@ -1374,8 +1381,10 @@ public final class AudioCutWindow {
             Path target = library.reserveClipFile(request.name(), AudioFormats.extensionOf(source));
             AudioClipCutter.Cut cut = AudioClipCutter.cut(source, request.startMs(), request.endMs(), target);
             library.addClip(target, request.name(), kind, categoryId, track, cut.startMs(), cut.endMs());
+            LOG.info("Cut clip '{}' ({}-{} ms) from {}", request.name(), cut.startMs(), cut.endMs(), track.getName());
             return null;
         } catch (IOException | RuntimeException e) {
+            LOG.warn("Could not cut clip '{}' from {}", request.name(), track.getName(), e);
             return e.getMessage() == null ? e.toString() : e.getMessage();
         }
     }

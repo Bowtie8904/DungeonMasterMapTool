@@ -1,6 +1,7 @@
 package dmmt.remote;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 
@@ -13,6 +14,7 @@ import java.util.function.Function;
 
 /** Apply only accepted domain targets; preserve unrelated object identities and the local DM camera. */
 public final class RemoteProjectChanges {
+    private static final Log LOG = Log.of(RemoteProjectChanges.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private RemoteProjectChanges() {
@@ -20,8 +22,10 @@ public final class RemoteProjectChanges {
 
     public static void apply(DmProject target, DmProject source, Set<String> targets) {
         if (!Objects.equals(target.getId(), source.getId())) {
+            LOG.warn("Rejected remote project change: it targets a different map");
             throw new IllegalArgumentException("A remote edit cannot replace the current map.");
         }
+        LOG.debug("Applying {} remote project target(s)", targets.size());
         for (String key : targets) {
             RemoteProjectDocument.validateTarget(key);
             String[] split = key.split(":", 2);
@@ -171,6 +175,7 @@ public final class RemoteProjectChanges {
         try {
             JSON.readerForUpdating(existing).readValue(JSON.writeValueAsBytes(replacement));
         } catch (IOException invalid) {
+            LOG.warn("Cannot apply a validated project target", invalid);
             throw new IllegalArgumentException("Cannot apply the validated project target.", invalid);
         }
     }

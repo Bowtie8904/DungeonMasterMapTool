@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject.TokenDefinition;
 import dmmt.model.DmProject.TokenShape;
 import dmmt.render.TokenArt;
@@ -28,6 +29,7 @@ import java.util.concurrent.CompletionException;
 
 public final class TokenEditor
 {
+    private static final Log LOG = Log.of(TokenEditor.class);
     private final TokenDefinition token;
     private final Canvas preview = new Canvas(280, 280);
     private final Slider zoom = new Slider(1, 10, 1);
@@ -349,6 +351,7 @@ public final class TokenEditor
         }
         catch (IOException | IllegalArgumentException ex)
         {
+            LOG.debug("Token image action failed", ex);
             error.setText(ex.getMessage());
         }
     }

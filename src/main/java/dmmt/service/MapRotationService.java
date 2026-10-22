@@ -1,8 +1,11 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 public class MapRotationService {
+    private static final Log LOG = Log.of(MapRotationService.class);
+
     public void rotateClockwise(DmProject project) {
         rotate(project, true);
     }
@@ -92,6 +95,7 @@ public class MapRotationService {
         int delta = clockwise ? 1 : -1;
         int turns = Math.floorMod(project.getMap().getRotationQuarterTurns() + delta, 4);
         project.getMap().setRotationQuarterTurns(turns);
+        LOG.info("Rotated map {} (now {} quarter turn(s))", clockwise ? "clockwise" : "counter-clockwise", turns);
     }
 
     private void rotateOverlay(DmProject.OverlayShape overlay, double cx, double cy, boolean clockwise) {

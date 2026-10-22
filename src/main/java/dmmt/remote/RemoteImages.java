@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 /** Bounded, first-frame image decoding for remote library imports and verified artwork. Worker only. */
 public final class RemoteImages
 {
+    private static final Log LOG = Log.of(RemoteImages.class);
     public static final long MAX_BYTES = 64L * 1024 * 1024;
 
     private RemoteImages() {}
@@ -49,9 +51,10 @@ public final class RemoteImages
                 for (int y = 0; y < bitmap.getHeight(); y++)
                 {
                     bitmap.getRGB(0, y, row.length, 1, row, 0, row.length);
-                    image.getPixelWriter().setPixels(0, y, row.length, 1,
+                        image.getPixelWriter().setPixels(0, y, row.length, 1,
                             PixelFormat.getIntArgbInstance(), row, 0, row.length);
                 }
+                LOG.debug("Decoded remote image {} ({}x{})", file.getFileName(), bitmap.getWidth(), bitmap.getHeight());
                 return image;
             }
             finally
@@ -90,10 +93,16 @@ public final class RemoteImages
     private static void inspect(javax.imageio.ImageReader reader, boolean requirePng) throws IOException
     {
         if (requirePng && !"png".equalsIgnoreCase(reader.getFormatName()))
+        {
+            LOG.warn("Rejected non-PNG token artwork (format {})", reader.getFormatName());
             throw new IOException("Token artwork must be PNG.");
+        }
         int width = reader.getWidth(0), height = reader.getHeight(0);
         if (width < 1 || height < 1 || width > 16384 || height > 16384
                 || (long)width * height > RemoteHandouts.MAX_IMAGE_PIXELS)
+        {
+            LOG.warn("Rejected image over the pixel limit ({}x{})", width, height);
             throw new IOException("Image exceeds the remote artwork pixel limit.");
+        }
     }
 }

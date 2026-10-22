@@ -1,6 +1,7 @@
 package dmmt.ui;
 
 import dmmt.api.ControlTooltips;
+import dmmt.log.Log;
 import dmmt.service.AppSettings;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
@@ -17,6 +18,7 @@ import java.util.Set;
 
 /** Keeps controls alive while removing hidden controls and their layout space. */
 public final class ControlVisibility {
+    private static final Log LOG = Log.of(ControlVisibility.class);
     private final Map<Node, String> controls = new IdentityHashMap<>();
     private final Set<Pane> containers = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Node> decorations = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
@@ -79,6 +81,7 @@ public final class ControlVisibility {
     }
 
     public void apply(Set<String> hidden) {
+        LOG.info("Applying DM control visibility ({} hidden)", hidden.size());
         controls.forEach((node, id) -> show(node, !hidden.contains(id)));
         for (Pane container : containers) {
             refresh(container);

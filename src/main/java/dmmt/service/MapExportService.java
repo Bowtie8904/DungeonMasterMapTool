@@ -1,5 +1,7 @@
 package dmmt.service;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -19,6 +21,7 @@ import java.util.zip.ZipOutputStream;
  * map package exactly as it lives in the library) and imports such archives into a library folder.
  */
 public class MapExportService {
+    private static final Log LOG = Log.of(MapExportService.class);
     public static final String EXTENSION = ".dmmpack";
 
     private final MapLibraryService library;
@@ -53,11 +56,13 @@ public class MapExportService {
                 addDirectory(zip, source, top);
             }
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Export of {} map(s) to {} failed", maps.size(), target, ex);
             Files.deleteIfExists(target);
             throw ex;
         } finally {
             MapLibraryService.deleteRecursive(temp);
         }
+        LOG.info("Exported {} map(s) to {}", maps.size(), target);
         return maps.size();
     }
 
@@ -136,6 +141,7 @@ public class MapExportService {
                 created.add(finishMap(destination.getKey(), destination.getValue()));
             }
         } catch (IOException | RuntimeException ex) {
+            LOG.warn("Import of pack {} failed", pack, ex);
             for (Path dir : destinations.values()) {
                 try {
                     if (Files.exists(dir)) {
@@ -147,6 +153,7 @@ public class MapExportService {
             }
             throw ex;
         }
+        LOG.info("Imported {} map(s) from pack {} into {}", created.size(), pack, folder);
         return created;
     }
 

@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -15,6 +17,7 @@ import java.util.concurrent.Executor;
 
 /** Explicit domain operations with one bounded exact-receipt mutation stream per host session. */
 public final class RemoteOperations implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteOperations.class);
     public interface Endpoint {
         CompletableFuture<JsonNode> query(String action, JsonNode payload);
         CompletableFuture<JsonNode> execute(String action, JsonNode payload);
@@ -141,10 +144,14 @@ public final class RemoteOperations implements AutoCloseable {
         running = command;
         pending = new CompletableFuture<>();
         var completion = pending;
+        LOG.info("Remote operation {}/{} started", RemoteSessionServer.safe(command.domain()),
+                RemoteSessionServer.safe(command.action()));
         try {
             endpoint.execute(command.action(), command.payload()).whenCompleteAsync((value, failure) -> {
                 requireOwner();
                 if (closed) return;
+                LOG.info("Remote operation {}/{} {}", RemoteSessionServer.safe(command.domain()),
+                        RemoteSessionServer.safe(command.action()), failure == null ? "succeeded" : "failed");
                 running = null;
                 pending = null;
                 completion.complete(remember(command, value, failure).join());
@@ -195,7 +202,7 @@ public final class RemoteOperations implements AutoCloseable {
     static String describe(Throwable failure) {
         while ((failure instanceof java.util.concurrent.CompletionException
                 || failure instanceof java.util.concurrent.ExecutionException) && failure.getCause() != null) failure = failure.getCause();
-        System.getLogger(RemoteOperations.class.getName()).log(System.Logger.Level.WARNING, "Host operation failed.", failure);
+        LOG.warn("Host operation failed.", failure);
         String detail = RemoteFailure.capture("", failure).message().strip();
         detail = detail.replaceAll("\\p{Cntrl}", " ");
         return detail.substring(0, Math.min(500, detail.length()));
@@ -227,8 +234,7 @@ public final class RemoteOperations implements AutoCloseable {
             if (endpoint instanceof AutoCloseable closeable) {
                 try { closeable.close(); }
                 catch (Exception failure) {
-                    System.getLogger(RemoteOperations.class.getName()).log(
-                            System.Logger.Level.WARNING, "Could not close a host operation domain.", failure);
+                    LOG.warn("Could not close a host operation domain.", failure);
                 }
             }
         }

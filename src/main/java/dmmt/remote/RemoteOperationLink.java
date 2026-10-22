@@ -1,6 +1,7 @@
 package dmmt.remote;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dmmt.log.Log;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import java.util.function.Function;
 
 /** Client owner-thread queue; only the exact uncertain in-flight mutation survives a connection loss. */
 public final class RemoteOperationLink implements RemoteOperations.Connection, AutoCloseable {
+    private static final Log LOG = Log.of(RemoteOperationLink.class);
     private record Queued(String domain, String action, JsonNode payload, CompletableFuture<JsonNode> result) { }
     private final Thread ownerThread = Thread.currentThread();
     private final BooleanSupplier connected;
@@ -59,6 +61,7 @@ public final class RemoteOperationLink implements RemoteOperations.Connection, A
 
     private IOException rejected(RemoteOperations.Reply reply) {
         IOException failure = reply.failure() == null ? new IOException(reply.error()) : reply.failure().exception();
+        LOG.warn("Host rejected an operation: {}", RemoteSessionServer.safe(failure.getMessage()));
         errorHandler.accept(failure);
         return failure;
     }
@@ -96,10 +99,14 @@ public final class RemoteOperationLink implements RemoteOperations.Connection, A
     @Override public CompletableFuture<JsonNode> command(String domain, String action, JsonNode payload) {
         requireOwner();
         if (!connected()) return CompletableFuture.failedFuture(new IOException("Host operations are disconnected; this edit was not queued."));
-        if (queue.size() >= 8) return CompletableFuture.failedFuture(new IOException("Too many pending host operations."));
+        if (queue.size() >= 8) {
+            LOG.warn("Host operation {}/{} dropped: too many pending operations", domain, action);
+            return CompletableFuture.failedFuture(new IOException("Too many pending host operations."));
+        }
         var result = new CompletableFuture<JsonNode>();
         new RemoteOperations.Query(null, domain, action, payload);
         queue.addLast(new Queued(domain, action, payload.deepCopy(), result));
+        LOG.debug("Queued host operation {}/{}", domain, action);
         tick();
         return result;
     }
@@ -139,11 +146,14 @@ public final class RemoteOperationLink implements RemoteOperations.Connection, A
             if (closed || command != exact) return;
             if (failure != null) {
                 nextAttempt = System.nanoTime() + 250_000_000L;
+                LOG.debug("Host operation {}/{} will be retried", exact.domain(), exact.action(), failure);
                 return; // The exact request remains pending until the transport reconnects.
             }
             if (!session.equals(reply.sessionId()) || !exact.id().equals(reply.commandId())
                     || exact.sequence() != reply.sequence() || reply.status() == RemoteOperations.Status.RESYNC_REQUIRED) {
                 uncertain = true;
+                LOG.error("Host operation {}/{} outcome is uncertain; inspect the host before repeating it",
+                          exact.domain(), exact.action());
                 active.result().completeExceptionally(new IOException(
                         "Host operation outcome is uncertain. Inspect A before returning to local mode or repeating it."));
                 while (!queue.isEmpty()) queue.removeFirst().result().completeExceptionally(new IOException("Host operation synchronization required."));

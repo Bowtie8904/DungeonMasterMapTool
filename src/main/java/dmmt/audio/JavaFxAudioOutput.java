@@ -14,28 +14,31 @@ import java.util.Set;
  * its own threads, so several simultaneous streams cost almost no JavaFX frame time (3.35.7).
  */
 public final class JavaFxAudioOutput implements AudioOutput {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(JavaFxAudioOutput.class);
     private final Set<MediaVoice> voices = Collections.newSetFromMap(new IdentityHashMap<>());
 
     @Override
     public synchronized Voice open(Path file, boolean loop) {
+        LOG.debug("Opening audio file {} (loop={})", file.getFileName(), loop);
         try {
             Media media = new Media(file.toUri().toString());
             MediaPlayer player = new MediaPlayer(media);
             player.setCycleCount(loop ? MediaPlayer.INDEFINITE : 1);
             player.setVolume(0);
             // A failed stream must not keep the engine waiting for a track that will never end.
-            player.setOnError(() -> System.err.println("Audio error for " + file.getFileName() + ": " + player.getError()));
+            player.setOnError(() -> LOG.error("Audio error for {}: {}", file.getFileName(), player.getError()));
             MediaVoice voice = new MediaVoice(player);
             voices.add(voice);
             return voice;
         } catch (RuntimeException e) {
-            System.err.println("Could not open audio file " + file + ": " + e.getMessage());
+            LOG.error("Could not open audio file {}", file, e);
             return null;
         }
     }
 
     @Override
     public synchronized void close() {
+        LOG.info("Closing audio output ({} open voices)", voices.size());
         for (MediaVoice voice : Set.copyOf(voices)) {
             voice.dispose();
         }

@@ -11,6 +11,7 @@ import java.util.function.LongConsumer;
 
 /** Hash-only bulk protocol. Each bounded chunk is independently framed; publication verifies the complete stream. */
 public final class RemoteAssetTransfer {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteAssetTransfer.class);
     public static final int CHUNK_BYTES = 64 * 1024;
     public enum Direction { UPLOAD, DOWNLOAD }
 
@@ -73,6 +74,7 @@ public final class RemoteAssetTransfer {
                     if (message.type() == RemoteWire.Type.TRANSFER_END) {
                         var end = RemoteWire.payload(message, End.class);
                         if (offset != expected || end.size() != expected) {
+                            LOG.warn("Asset transfer ended at offset {} (expected {})", offset, expected);
                             throw new IOException("Asset transfer ended at an unexpected offset.");
                         }
                         ended = true;
@@ -80,14 +82,18 @@ public final class RemoteAssetTransfer {
                         requireType(message, RemoteWire.Type.TRANSFER_CHUNK);
                         var part = RemoteWire.payload(message, Chunk.class);
                         if (part.offset() != offset) {
+                            LOG.warn("Asset chunk offset {} does not match expected {}", part.offset(), offset);
                             throw new IOException("Asset chunk offset does not match.");
                         }
                         try {
                             chunk = Base64.getDecoder().decode(part.data());
                         } catch (IllegalArgumentException malformed) {
+                            LOG.warn("Asset chunk at offset {} is not valid Base64", offset);
                             throw new IOException("Asset chunk is not valid Base64.", malformed);
                         }
                         if (chunk.length < 1 || chunk.length > CHUNK_BYTES || offset > expected - chunk.length) {
+                            LOG.warn("Asset chunk of {} bytes at offset {} exceeds the advertised {} bytes",
+                                    chunk.length, offset, expected);
                             throw new IOException("Asset chunk exceeds the advertised transfer.");
                         }
                         cursor = 0;
@@ -152,15 +158,18 @@ public final class RemoteAssetTransfer {
 
     static void requireId(RemoteWire.Message message, UUID id) throws IOException {
         if (!id.equals(message.id())) {
+            LOG.warn("Asset transfer reply id does not match its request");
             throw new IOException("Asset transfer identity does not match its request.");
         }
     }
 
     static void requireType(RemoteWire.Message message, RemoteWire.Type type) throws IOException {
         if (message.type() == RemoteWire.Type.ERROR) {
+            LOG.warn("The host rejected the asset transfer");
             throw new IOException("The host rejected the asset transfer; verify access and quota availability.");
         }
         if (message.type() != type) {
+            LOG.warn("Unexpected asset transfer message {} (expected {})", message.type(), type);
             throw new IOException("Unexpected asset transfer message.");
         }
     }

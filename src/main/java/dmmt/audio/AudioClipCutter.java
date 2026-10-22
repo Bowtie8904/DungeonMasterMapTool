@@ -18,6 +18,7 @@ import java.nio.file.StandardCopyOption;
  * into place, so an interrupted cut cannot leave a half-written clip in the library.
  */
 public final class AudioClipCutter {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioClipCutter.class);
     /** Copy buffer; large enough to keep the copy sequential without holding a whole song in memory. */
     private static final int BUFFER = 1 << 16;
 
@@ -50,6 +51,8 @@ public final class AudioClipCutter {
                     ? cutMp3(source, startMs, endMs, temp)
                     : cutWav(source, startMs, endMs, temp);
             Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            LOG.info("Cut audio clip {} ms-{} ms of {} to {}", cut.startMs(), cut.endMs(), source.getFileName(),
+                    target.getFileName());
             return cut;
         } finally {
             Files.deleteIfExists(temp);

@@ -37,6 +37,7 @@ import java.util.Set;
  * Index changes are synchronized; decoding and loudness analysis run outside the library lock.
  */
 public class AudioLibraryService {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioLibraryService.class);
     /** Version 5 persists pending preparation and retryable failures alongside peak-safe/limited sources. */
     public static final int SCHEMA_VERSION = 5;
     /** Highest manual absolute gain, independent of the file's measured peak-safe headroom. */
@@ -155,7 +156,7 @@ public class AudioLibraryService {
         try {
             deleteStalePlaybackFiles();
         } catch (IOException e) {
-            System.err.println("Could not clean up replaced audio playback copies: " + e.getMessage());
+            LOG.warn("Could not clean up replaced audio playback copies", e);
         }
     }
 
@@ -215,7 +216,7 @@ public class AudioLibraryService {
             try {
                 loaded = mapper.readValue(index.toFile(), AudioLibrary.class);
             } catch (IOException | RuntimeException e) {
-                System.err.println("Could not read the audio library " + index + ": " + e.getMessage());
+                LOG.error("Could not read the audio library {}", index, e);
             }
         }
         if (loaded == null) {
@@ -251,6 +252,8 @@ public class AudioLibraryService {
             }
             loaded.setSchemaVersion(SCHEMA_VERSION);
         }
+        LOG.info("Loaded audio library from {} ({} tracks, {} categories)", root, loaded.getTracks().size(),
+                loaded.getCategories().size());
         return loaded;
     }
 
@@ -395,6 +398,11 @@ public class AudioLibraryService {
         return library.getTracks().stream().filter(t -> t.getId().equals(id)).findFirst();
     }
 
+    /** Human-readable track description for logs: the display name plus the id. */
+    public synchronized String trackLabel(String id) {
+        return track(id).map(t -> "'" + t.getName() + "' [" + id + "]").orElse(String.valueOf(id));
+    }
+
     /** Music tracks of a category, ordered by name. */
     public synchronized List<AudioTrack> musicOf(String categoryId) {
         return library.getTracks().stream()
@@ -525,6 +533,7 @@ public class AudioLibraryService {
                     throw e;
                 }
             }
+            LOG.info("Imported audio file {} as track {} ({})", source.getFileName(), id, track.getKind());
             return track;
         } catch (IOException | RuntimeException e) {
             cleanupOnFailure(e, target);
@@ -778,6 +787,7 @@ public class AudioLibraryService {
             snapshot = TrackAnalysis.of(current);
             original = fileOf(current);
         }
+        LOG.info("Analyzing loudness of track {}", trackLabel(id));
         LoudnessAnalyzer.Measurement measurement = LoudnessAnalyzer.analyze(original);
         PreparedSources sources = prepareSources(id, original, measurement, snapshot.gainOverrideDb);
         boolean committed = false;
@@ -811,6 +821,7 @@ public class AudioLibraryService {
                     throw e;
                 }
                 committed = true;
+                LOG.info("Loudness analysis finished for track {} ({} LUFS)", trackLabel(id), measurement.loudnessLufs());
             }
         } catch (IOException | RuntimeException e) {
             if (!committed) {
@@ -901,6 +912,7 @@ public class AudioLibraryService {
             try {
                 Files.deleteIfExists(file);
             } catch (java.nio.file.FileSystemException e) {
+                LOG.debug("Stale playback copy {} is locked; keeping it indexed", name, e);
                 remaining.add(name);
             }
         }
@@ -1174,6 +1186,7 @@ public class AudioLibraryService {
             throw e;
         }
         Files.deleteIfExists(fileOf(track));
+        LOG.info("Deleted audio track {} ({})", id, track.getName());
         List<String> staleAfterDelete = new ArrayList<>(library.getStalePlaybackFiles());
         for (String preparedFile : preparedFiles) {
             try {

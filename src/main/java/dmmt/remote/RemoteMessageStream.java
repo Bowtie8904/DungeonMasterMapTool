@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Bounded, uncompressed workspace framing; even large fog/maps retain the ordinary per-frame cap. */
 final class RemoteMessageStream {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteMessageStream.class);
     static final int MAX_PAYLOAD_BYTES = 32 * 1024 * 1024;
     private static final Set<RemoteWire.Type> LARGE_TYPES = Set.of(
             RemoteWire.Type.WORKSPACE_STATE, RemoteWire.Type.WORKSPACE_EDIT, RemoteWire.Type.WORKSPACE_RESULT,
@@ -33,6 +34,7 @@ final class RemoteMessageStream {
             return;
         }
         var opening = RemoteWire.reply(message, RemoteWire.Type.PAYLOAD_BEGIN, new Begin(message.type(), bytes.length));
+        LOG.debug("Streaming large {} payload ({} bytes)", message.type(), bytes.length);
         channel.send(opening);
         try (var output = RemoteAssetTransfer.output(channel, message.id(), bytes.length, deadline(), ignored -> {})) {
             output.write(bytes);
@@ -50,10 +52,13 @@ final class RemoteMessageStream {
                     .readAllBytes();
             var decoded = RemoteWire.decode(bytes);
             if (decoded.type() != begin.type() || !decoded.id().equals(message.id())) {
+                LOG.warn("Rejected large workspace payload: announced {} but received {}", begin.type(), decoded.type());
                 throw new IOException("Large workspace payload identity does not match.");
             }
+            LOG.debug("Received large {} payload ({} bytes)", decoded.type(), begin.size());
             return decoded;
         } catch (IllegalArgumentException malformed) {
+            LOG.warn("Rejected malformed large workspace payload", malformed);
             throw new IOException("Invalid large workspace payload.", malformed);
         }
     }

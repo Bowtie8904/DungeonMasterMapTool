@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.MultiLevelManifest;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.Set;
  * never matched as duplicates and never match anything.
  */
 public class DuplicateCheckService {
+    private static final Log LOG = Log.of(DuplicateCheckService.class);
     private final MapLibraryService library;
     private final ProjectService projectService;
 
@@ -42,6 +44,7 @@ public class DuplicateCheckService {
                 duplicates.add(source);
             }
         }
+        LOG.info("Duplicate check: {} of {} file(s) already in the library", duplicates.size(), sources.size());
         return duplicates;
     }
 
@@ -64,6 +67,7 @@ public class DuplicateCheckService {
             try {
                 manifest = library.multiLevels().loadManifest(entry.mapFile());
             } catch (IOException | RuntimeException ex) {
+                LOG.warn("Duplicate check skipped unreadable multilevel map {}", entry.mapFile(), ex);
                 return;
             }
             for (MultiLevelManifest.Level level : manifest.getLevels()) {

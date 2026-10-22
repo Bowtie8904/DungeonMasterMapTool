@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.remote.RemoteFailure;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -19,6 +20,7 @@ import java.util.LinkedHashSet;
 
 /** Serial, deduplicated diagnostics; a failed heartbeat must not open a dialog on every pulse. */
 public final class RemoteErrorDialogs {
+    private static final Log LOG = Log.of(RemoteErrorDialogs.class);
     private static final String OVERFLOW_NOTICE =
             "\nAdditional remote errors were recorded in this PC's application log.";
     private final Window owner;
@@ -43,11 +45,11 @@ public final class RemoteErrorDialogs {
         }
         String key = failure.message() + "\n" + failure.stackTrace();
         if (seen.contains(key)) return;
+        LOG.warn("Remote control error: {}", failure.message());
         seen.add(key);
         if (seen.size() > 128) seen.remove(seen.iterator().next());
         if (pending.size() >= 16) {
-            System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR,
-                    failure.message() + "\n" + failure.stackTrace());
+            LOG.error("Remote error dropped (dialog queue full): {}\n{}", failure.message(), failure.stackTrace());
             if (active != null && active.getDialogPane().getContent() instanceof Label summary
                     && !summary.getText().endsWith(OVERFLOW_NOTICE)) {
                 summary.setText(summary.getText() + OVERFLOW_NOTICE);

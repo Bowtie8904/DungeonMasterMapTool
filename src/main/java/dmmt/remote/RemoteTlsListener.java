@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Explicitly started, single-connection listener; caller owns the background accept/read workers. */
 public final class RemoteTlsListener implements AutoCloseable {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteTlsListener.class);
     private final ServerSocket server;
     private final SSLContext context;
     private final String build;
@@ -44,7 +45,9 @@ public final class RemoteTlsListener implements AutoCloseable {
         try {
             server.setSoTimeout(timeoutMillis);
             server.bind(address, 1);
+            LOG.info("Remote TLS listener bound to {} (slots={})", server.getLocalSocketAddress(), connectionLimit);
         } catch (IOException | RuntimeException failure) {
+            LOG.error("Could not bind remote TLS listener to {}", address, failure);
             try {
                 server.close();
             } catch (IOException closing) {
@@ -72,10 +75,12 @@ public final class RemoteTlsListener implements AutoCloseable {
                 throw new IOException("Remote listener is closed.");
             }
             if (active.size() >= connectionLimit) {
+                LOG.warn("Rejecting accept: all {} transport slot(s) are in use", connectionLimit);
                 throw new IllegalStateException("A remote transport connection is already active.");
             }
             socket = server.accept();
             active.add(socket);
+            LOG.debug("Accepted TCP connection from {}", socket.getRemoteSocketAddress());
             if (closed.get()) {
                 throw new IOException("Remote listener stopped while accepting a connection.");
             }
@@ -87,6 +92,7 @@ public final class RemoteTlsListener implements AutoCloseable {
                     () -> active.remove(accepted));
         } catch (IOException | RuntimeException failure) {
             if (socket != null) {
+                LOG.warn("TLS accept/handshake failed for {}: {}", socket.getRemoteSocketAddress(), failure.toString());
                 RemoteTlsChannel.closeAfterFailure(socket, failure);
                 active.remove(socket);
             }
@@ -98,7 +104,9 @@ public final class RemoteTlsListener implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        closed.set(true);
+        if (!closed.getAndSet(true)) {
+            LOG.info("Remote TLS listener closing (port {})", server.getLocalPort());
+        }
         IOException failure = null;
         try {
             server.close();

@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.ui.HandoutWindow;
 
 import java.io.IOException;
@@ -31,6 +32,8 @@ public final class RemoteHandoutLink implements AutoCloseable
         CompletableFuture<RemoteAssetStore.AssetDescriptor> transfer(RemoteAssetTransfer.Direction direction,
                                                                      RemoteAssetStore.AssetDescriptor asset);
     }
+
+    private static final Log LOG = Log.of(RemoteHandoutLink.class);
 
     private final Thread owner = Thread.currentThread();
     private final Connection connection;
@@ -67,6 +70,7 @@ public final class RemoteHandoutLink implements AutoCloseable
             throw new IllegalArgumentException("A recent operation is required.");
         if (!canEdit())
         {
+            LOG.warn("Recent handout operation {} not sent: host state not synchronized", operation);
             errors.accept("Host recent handouts are not synchronized; this operation was not sent.");
             tick();
             return;
@@ -182,12 +186,15 @@ public final class RemoteHandoutLink implements AutoCloseable
             preparing = false;
             if (failure != null)
             {
+                LOG.warn("Handout upload to the host failed", failure);
                 errors.accept("Handout upload failed. Check image limits, connection and available host storage.");
                 displayed = null;
                 tick();
                 return;
             }
             // Preserve the revision seen when the edit began. A host edit during upload must win.
+            LOG.info("Handouts uploaded to the host: {} image(s), shown={}", prepared.board().images().size(),
+                     prepared.board().shown());
             pending = new RemoteHandouts.Request(base.sessionId(), UUID.randomUUID(), base.nextSequence(),
                                                  base.revision(), prepared.board());
             tick();
@@ -204,6 +211,7 @@ public final class RemoteHandoutLink implements AutoCloseable
             sending = false;
             if (failure != null)
             {
+                LOG.warn("Handout outcome unconfirmed", failure);
                 errors.accept("Handout outcome unconfirmed; reconnect to recover its exact receipt.");
                 return;
             }
@@ -213,6 +221,7 @@ public final class RemoteHandoutLink implements AutoCloseable
             if (receipt.status() == RemotePlayerSession.Status.RESYNC_REQUIRED)
             {
                 resync = true;
+                LOG.warn("Host requires handout resynchronization: {}", RemoteSessionServer.safe(receipt.message()));
                 status.accept(true, receipt.message());
                 errors.accept(receipt.message());
                 return;
@@ -220,7 +229,12 @@ public final class RemoteHandoutLink implements AutoCloseable
             pending = null;
             displayed = null;
             if (receipt.status() != RemotePlayerSession.Status.ACCEPTED)
+            {
+                LOG.warn("Host handout request {}: {}", receipt.status(), RemoteSessionServer.safe(receipt.message()));
                 errors.accept(receipt.message());
+            }
+            else
+                LOG.info("Host accepted the handout update");
             tick();
         }));
     }
@@ -258,6 +272,7 @@ public final class RemoteHandoutLink implements AutoCloseable
             if (failure != null)
             {
                 failedState = state;
+                LOG.warn("Host handouts could not be downloaded or decoded", failure);
                 errors.accept("Host handouts could not be downloaded or decoded. Reopen the board to retry.");
             }
             else if (connection.connected() && state.equals(connection.latest()))
@@ -273,6 +288,8 @@ public final class RemoteHandoutLink implements AutoCloseable
                 displayed = state;
                 displayedSnapshot = loaded.prepared().snapshot();
                 baseline = true;
+                LOG.info("Host handouts downloaded: {} image(s), shown={}", state.board().images().size(),
+                         state.board().shown());
             }
 
             tick();
@@ -315,6 +332,7 @@ public final class RemoteHandoutLink implements AutoCloseable
     {
         requireOwner();
         closed = true;
+        LOG.info("Remote handout board closed");
         thumbnails.clear();
         displayedSnapshot = null;
         status.accept(true, "Remote handout board closed.");

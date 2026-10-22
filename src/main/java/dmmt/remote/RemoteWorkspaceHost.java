@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -15,6 +17,7 @@ import java.util.function.Supplier;
 
 /** Application-owned bridge: committed snapshots in, targeted existing-history operations out. */
 public final class RemoteWorkspaceHost implements RemoteWorkspaceEndpoint, AutoCloseable {
+    private static final Log LOG = Log.of(RemoteWorkspaceHost.class);
     private static final int MAX_PENDING_COMMITS = 128;
 
     private record Publication(RemoteProjectDocument document, Path file, boolean contextSwitch) {
@@ -389,8 +392,7 @@ public final class RemoteWorkspaceHost implements RemoteWorkspaceEndpoint, AutoC
                 try {
                     action.run();
                 } catch (RuntimeException failure) {
-                    System.getLogger(RemoteWorkspaceHost.class.getName()).log(System.Logger.Level.ERROR,
-                            "Could not apply prepared remote artwork.", failure);
+                    LOG.error("Could not apply prepared remote artwork.", failure);
                     if (!closed) {
                         fail("Remote synchronization paused: prepared artwork could not be applied.", failure);
                     }
@@ -403,8 +405,7 @@ public final class RemoteWorkspaceHost implements RemoteWorkspaceEndpoint, AutoC
             if (completion != null) {
                 completion.completeExceptionally(rejected);
             }
-            System.getLogger(RemoteWorkspaceHost.class.getName()).log(System.Logger.Level.ERROR,
-                    "Could not deliver remote artwork preparation to its application owner.", rejected);
+            LOG.error("Could not deliver remote artwork preparation to its application owner.", rejected);
         }
     }
 
@@ -415,7 +416,7 @@ public final class RemoteWorkspaceHost implements RemoteWorkspaceEndpoint, AutoC
     private void fail(String message, Throwable cause) {
         error = message;
         failure = RemoteFailure.capture(message, cause);
-        System.getLogger(RemoteWorkspaceHost.class.getName()).log(System.Logger.Level.ERROR, message, cause);
+        LOG.error(message, cause);
         errors.accept(message);
     }
 

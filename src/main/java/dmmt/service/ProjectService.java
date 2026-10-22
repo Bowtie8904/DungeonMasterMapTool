@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.UUID;
 
 public class ProjectService
 {
+    private static final Log LOG = Log.of(ProjectService.class);
     private final ObjectMapper objectMapper = JsonMappers.create()
                                                          .enable(SerializationFeature.INDENT_OUTPUT)
                                                          .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -38,19 +40,33 @@ public class ProjectService
         }
         catch (IOException | RuntimeException ex)
         {
+            LOG.debug("Could not read original file name from {}", projectFile, ex);
             return Optional.empty();
         }
     }
 
     public DmProject load(Path projectFile) throws IOException
     {
-        JsonNode json = objectMapper.readTree(projectFile.toFile());
-        DmProject project = objectMapper.treeToValue(json, DmProject.class);
+        long startedAt = System.nanoTime();
+        JsonNode json;
+        DmProject project;
+        try
+        {
+            json = objectMapper.readTree(projectFile.toFile());
+            project = objectMapper.treeToValue(json, DmProject.class);
+        }
+        catch (IOException | RuntimeException ex)
+        {
+            LOG.error("Could not load project {}", projectFile, ex);
+            throw ex;
+        }
         project.setId(json.path("id").isTextual() ? json.path("id").asText() : null);
         for (var token : project.getTokenDefinitions().values())
             TokenAssets.read(token, projectFile.toAbsolutePath().getParent());
         TokenLibraryService.configured().resolve(project);
         fogService.ensureMask(project);
+        LOG.info("Loaded project {} ({} image layer(s), {} ms)", projectFile, project.getImageLayers().size(),
+                (System.nanoTime() - startedAt) / 1_000_000);
         return project;
     }
 
@@ -83,10 +99,20 @@ public class ProjectService
 
     public void save(Path projectFile, DmProject project) throws IOException
     {
-        WorkScheduler.shared().run(WorkScheduler.Kind.IMAGE, () -> {
-            savePrepared(projectFile, project);
-            return null;
-        });
+        long startedAt = System.nanoTime();
+        try
+        {
+            WorkScheduler.shared().run(WorkScheduler.Kind.IMAGE, () -> {
+                savePrepared(projectFile, project);
+                return null;
+            });
+        }
+        catch (IOException | RuntimeException ex)
+        {
+            LOG.error("Could not save project {}", projectFile, ex);
+            throw ex;
+        }
+        LOG.info("Saved project {} ({} ms)", projectFile, (System.nanoTime() - startedAt) / 1_000_000);
     }
 
     private void savePrepared(Path projectFile, DmProject project) throws IOException
@@ -112,9 +138,9 @@ public class ProjectService
         {
             thumbnailService.write(projectFile, project);
         }
-        catch (IOException | RuntimeException ignored)
+        catch (IOException | RuntimeException ex)
         {
-            // A missing thumbnail must never fail a save; it is regenerated lazily.
+            LOG.warn("Could not write thumbnail for {}; it will be regenerated lazily", projectFile, ex);
         }
     }
 
@@ -132,6 +158,7 @@ public class ProjectService
         if (!isValidId(id))
         {
             id = UUID.randomUUID().toString();
+            LOG.info("Assigning new id {} to legacy map {}", id, mapFile);
             object.put("id", id);
             Path staging = mapFile.resolveSibling(mapFile.getFileName() + ".identity");
             try

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.audio.AudioLibraryService;
 import dmmt.audio.AudioTrack;
 import javafx.concurrent.Task;
@@ -22,6 +23,7 @@ import java.util.Locale;
 
 /** Saved, absolute per-file gain; automatic analysis never changes the original audio. */
 final class AudioLoudnessDialog {
+    private static final Log LOG = Log.of(AudioLoudnessDialog.class);
     private final Dialog<ButtonType> dialog = new Dialog<>();
     private final AudioLibraryService library;
     private final AudioTrack track;
@@ -114,6 +116,7 @@ final class AudioLoudnessDialog {
     }
 
     void show() {
+        LOG.info("Loudness dialog opened for {}", track.getName());
         dialog.show();
     }
 
@@ -167,6 +170,7 @@ final class AudioLoudnessDialog {
             runRemote("gain", chosen);
             return;
         }
+        LOG.info("Loudness adjustment for {}: {}", track.getName(), chosen == null ? "automatic" : decibels(chosen));
         runOperation(() -> library.setGainOverride(track.getId(), chosen),
                 "Preparing loudness adjustment...", "Could not save the loudness adjustment");
     }
@@ -176,6 +180,7 @@ final class AudioLoudnessDialog {
             runRemote("analyze");
             return;
         }
+        LOG.info("Analyzing loudness of {}", track.getName());
         runOperation(() -> library.analyzeLoudness(track.getId()), "Analyzing file...", "Could not analyze the file");
     }
 
@@ -201,6 +206,7 @@ final class AudioLoudnessDialog {
         });
         task.setOnFailed(event -> {
             setBusy(false);
+            LOG.warn("{}", failure, task.getException());
             error.setText(failure + ": " + task.getException().getMessage());
         });
         task.setOnCancelled(event -> {
@@ -234,7 +240,10 @@ final class AudioLoudnessDialog {
         System.arraycopy(arguments, 0, input, 1, arguments.length);
         library.remoteBackend().commandAt(remoteRevision, action, input).whenComplete((result, failure) -> {
             setBusy(false);
-            if (failure != null) error.setText("Host audio job failed: " + failure.getMessage());
+            if (failure != null) {
+                LOG.warn("Host audio job {} failed", action, failure);
+                error.setText("Host audio job failed: " + failure.getMessage());
+            }
             else {
                 remoteRevision = library.remoteBackend().revision();
                 refresh();

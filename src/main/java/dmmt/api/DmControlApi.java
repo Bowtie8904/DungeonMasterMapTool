@@ -2,6 +2,7 @@ package dmmt.api;
 
 import dmmt.ui.ControlVisibility;
 import dmmt.ui.ControlKeyImages;
+import dmmt.log.Log;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.scene.Node;
@@ -21,6 +22,7 @@ import java.util.function.Supplier;
 
 /** Live adapters for existing DM controls. All methods are called on the JavaFX application thread. */
 public final class DmControlApi {
+    private static final Log LOG = Log.of(DmControlApi.class);
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private final Set<Node> menuTargets = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Node, ContextMenu> menus = new IdentityHashMap<>();
@@ -202,6 +204,7 @@ public final class DmControlApi {
         } else {
             throw error(422, "Unsupported command control: " + id);
         }
+        LOG.info("API control executed: {} ('{}') {}", id, label(entry), params.isEmpty() ? "(press)" : params);
         return describe(entry);
     }
 

@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MapLibraryService.Entry;
 import javafx.application.Platform;
@@ -31,6 +32,7 @@ import java.util.Optional;
  * maps, so maps always end up inside the library.
  */
 public final class MapLocationDialog {
+    private static final Log LOG = Log.of(MapLocationDialog.class);
 
     public record Selection(Path folder, String name) {
     }
@@ -110,8 +112,10 @@ public final class MapLocationDialog {
             }
             try {
                 Path created = library.createFolder(parent, folderName.get());
+                LOG.info("Created folder {}", created);
                 load(tree, library, created);
             } catch (IOException exception) {
+                LOG.warn("Could not create folder in {}", parent, exception);
                 error.setText(exception.getMessage());
             }
         });
@@ -202,6 +206,7 @@ public final class MapLocationDialog {
         try {
             root = library.scanFolders();
         } catch (IOException exception) {
+            LOG.warn("Could not scan library folders", exception);
             root = new Entry(MapLibraryService.Kind.FOLDER, "Library", library.getRoot(), null, java.util.List.of());
         }
         TreeItem<Entry> rootItem = build(root);

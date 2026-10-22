@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.ui.HandoutWindow;
 
 import java.io.IOException;
@@ -17,6 +18,8 @@ import java.util.function.IntSupplier;
  */
 public final class RemoteHandoutSession implements AutoCloseable
 {
+    private static final Log LOG = Log.of(RemoteHandoutSession.class);
+
     private record Stored(RemoteHandouts.Request request, RemotePlayerSession.Receipt receipt)
     {
     }
@@ -110,6 +113,7 @@ public final class RemoteHandoutSession implements AutoCloseable
                     }
                     else if (failure != null)
                     {
+                        LOG.warn("Handouts could not be prepared for remote control", failure);
                         error = "Handouts could not be prepared for remote control. Reduce image size and try again.";
                         errors.accept(error);
                     }
@@ -152,6 +156,7 @@ public final class RemoteHandoutSession implements AutoCloseable
                              "The host is preparing handouts; retry after synchronization.");
         if (request.expectedRevision() != revision || error != null)
         {
+            LOG.warn("Rejected remote handout operation {}: host handouts changed", request.operation());
             return remember(request, RemotePlayerSession.Status.CONFLICT, "Host handouts changed; the host board was kept.");
         }
         long generation = revision;
@@ -194,6 +199,7 @@ public final class RemoteHandoutSession implements AutoCloseable
                 else if (failure != null)
                 {
                     preparing = null;
+                    LOG.warn("Host could not decode the uploaded handout for operation {}", request.operation(), failure);
                     String message = "The host could not decode the uploaded handout. Check PNG format and image limits.";
                     errors.accept(message);
                     completion.complete(rememberResult(request, RemotePlayerSession.Status.FAILED, message));
@@ -217,6 +223,8 @@ public final class RemoteHandoutSession implements AutoCloseable
                             {
                                 changed();
                                 var cause = persistenceFailure.getCause();
+                                LOG.warn("Host recent handouts could not be persisted for operation {}", request.operation(),
+                                         persistenceFailure);
                                 String message = cause instanceof RemoteHandoutLibrary.Conflict
                                                  ? "Host recent handouts changed; the host state was kept."
                                                  : "Could not persist host recent handouts. The board was not applied; synchronize before retrying.";
@@ -243,6 +251,7 @@ public final class RemoteHandoutSession implements AutoCloseable
             catch (RuntimeException denied)
             {
                 preparing = null;
+                LOG.warn("Remote handout operation {} denied", request.operation(), denied);
                 completion.completeExceptionally(denied);
             }
         }));
@@ -266,6 +275,8 @@ public final class RemoteHandoutSession implements AutoCloseable
             applying = true;
             if (request.operation() != RemoteHandouts.Operation.REMOVE_RECENT)
                 apply.accept(prepared.snapshot());
+            LOG.info("Remote handout operation {} applied: {} image(s), shown={}", request.operation(),
+                     prepared.board().images().size(), prepared.board().shown());
             observed = capture.get();
             board = prepared.board();
             revision++;
@@ -273,6 +284,7 @@ public final class RemoteHandoutSession implements AutoCloseable
         }
         catch (RuntimeException failure)
         {
+            LOG.error("Remote handout operation {} could not finish", request.operation(), failure);
             errors.accept("The handout operation could not finish. Recent images may already have been saved.");
             completion.complete(rememberResult(request, RemotePlayerSession.Status.FAILED,
                                                "The handout operation could not finish. Recent images may already have been saved; synchronize before retrying."));
@@ -353,6 +365,7 @@ public final class RemoteHandoutSession implements AutoCloseable
     {
         requireOwner();
         closed = true;
+        LOG.info("Handout session closed");
         if (preparing != null)
             preparing.completeExceptionally(new IOException("Handout session closed."));
         receipts.clear();

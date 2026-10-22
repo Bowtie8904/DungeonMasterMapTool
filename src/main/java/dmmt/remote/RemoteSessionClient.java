@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.service.HostSettingsAuthority;
 
 import java.io.IOException;
@@ -16,6 +18,7 @@ import java.util.concurrent.TimeUnit;
  * The UI polls coalesced state and marshals completed command results to its own thread.
  */
 public final class RemoteSessionClient implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteSessionClient.class);
     private static final int QUEUE_CAPACITY = 32;
     private static final int POLL_MILLIS = 50;
     private final java.util.concurrent.Semaphore workAvailable = new java.util.concurrent.Semaphore(0);
@@ -432,7 +435,10 @@ public final class RemoteSessionClient implements AutoCloseable {
                 active = channel;
             }
             if (pair != null) {
+                LOG.info("Requesting control of remote host {}", address);
                 pair(channel, pair);
+            } else {
+                LOG.info("Reconnecting to remote host {}", address);
             }
             RemoteProtocol.Connect connect;
             synchronized (this) {
@@ -451,6 +457,7 @@ public final class RemoteSessionClient implements AutoCloseable {
                 approval = null;
                 phase = Phase.SETTINGS_READY;
             }
+            LOG.info("Connected to remote host {}", address);
             while (phase == Phase.SETTINGS_READY) {
                 workAvailable.tryAcquire(POLL_MILLIS, TimeUnit.MILLISECONDS);
                 workAvailable.drainPermits();
@@ -628,11 +635,13 @@ public final class RemoteSessionClient implements AutoCloseable {
             String message = failure instanceof PeerFailure peer ? peer.getMessage()
                     : failure instanceof RemoteTlsChannel.CompatibilityException ? failure.getMessage()
                     : "Remote connection lost or rejected. Verify the host fingerprint, address and remote compatibility versions.";
+            LOG.warn("Remote connection ended: {} ({})", RemoteSessionServer.safe(message), failure.getClass().getSimpleName());
             disconnected(inFlight, message);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             disconnected(inFlight, "Remote connection interrupted; any unconfirmed command needs receipt recovery.");
         } catch (IllegalArgumentException | NullPointerException invalid) {
+            LOG.warn("Host sent inconsistent session data ({})", invalid.getClass().getSimpleName());
             disconnected(inFlight, "The host sent inconsistent remote session data; synchronization is required.");
         } finally {
             if (saveInFlight != null) saveInFlight.result().completeExceptionally(
@@ -686,6 +695,7 @@ public final class RemoteSessionClient implements AutoCloseable {
                     }
                     credential = grant;
                 }
+                LOG.info("Remote host approved this connection");
                 return;
             }
             requireType(decision, RemoteWire.Type.APPROVAL);
@@ -813,8 +823,7 @@ public final class RemoteSessionClient implements AutoCloseable {
             try {
                 transfer.close();
             } catch (IOException failure) {
-                System.getLogger(RemoteSessionClient.class.getName()).log(
-                        System.Logger.Level.WARNING, "Could not cancel a remote asset transfer.", failure);
+                LOG.warn("Could not cancel a remote asset transfer.", failure);
             }
         }
     }
@@ -824,8 +833,7 @@ public final class RemoteSessionClient implements AutoCloseable {
             try {
                 active.close();
             } catch (IOException failure) {
-                System.getLogger(RemoteSessionClient.class.getName()).log(
-                        System.Logger.Level.WARNING, "Could not close the remote client transport.", failure);
+                LOG.warn("Could not close the remote client transport.", failure);
             }
         }
     }

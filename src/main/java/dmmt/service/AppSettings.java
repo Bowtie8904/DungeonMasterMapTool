@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import lombok.Getter;
 import dmmt.render.OverlayTextures;
 
@@ -27,6 +28,7 @@ import java.util.prefs.Preferences;
  * always lists every known setting, including the built-in defaults of all effect textures.
  */
 public final class AppSettings {
+    private static final Log LOG = Log.of(AppSettings.class);
     public static final String FILE_NAME = "dmmt-settings.ini";
     public static final String SYSTEM_PROPERTY = "dmmt.settings";
 
@@ -323,6 +325,7 @@ public final class AppSettings {
                 save();
             }
         } else {
+            LOG.info("Settings file {} not found; creating it with defaults", file);
             importLegacyPreferences();
             applyRuntimeSettings();
             save();
@@ -581,6 +584,7 @@ public final class AppSettings {
         try {
             saveChecked();
         } catch (IOException | RuntimeException failure) {
+            LOG.error("Could not save shared setting {}", key, failure);
             values.clear();
             values.putAll(before);
             throw failure;
@@ -820,7 +824,7 @@ public final class AppSettings {
                 externalChange = true;
             }
         } catch (IOException e) {
-            // keep the in-memory values
+            LOG.debug("Could not check settings file {} for external edits; keeping in-memory values", file, e);
         }
     }
 
@@ -842,8 +846,16 @@ public final class AppSettings {
             }
             lastKnownModified = Files.getLastModifiedTime(file).toMillis();
             settingsGeneration++;
+            if (before.isEmpty()) {
+                LOG.info("Loaded {} settings from {}", values.size(), file);
+            } else {
+                Set<String> changedKeys = new java.util.TreeSet<>(values.keySet());
+                changedKeys.addAll(before.keySet());
+                changedKeys.removeIf(k -> Objects.equals(before.get(k), values.get(k)));
+                LOG.info("Reloaded settings file {}; changed keys: {}", file, changedKeys);
+            }
         } catch (IOException | RuntimeException e) {
-            System.err.println("Could not read settings file " + file + ": " + e.getMessage());
+            LOG.error("Could not read settings file {}", file, e);
         }
         trackSharedChanges(before);
         applyRuntimeSettings();
@@ -859,12 +871,13 @@ public final class AppSettings {
         try {
             saveChecked();
         } catch (IOException | RuntimeException e) {
-            System.err.println("Could not write settings file " + file + ": " + e.getMessage());
+            LOG.error("Could not write settings file {}", file, e);
         }
     }
 
     private void saveChecked() throws IOException {
         lastKnownModified = writeChecked(values);
+        LOG.debug("Wrote settings file {}", file);
     }
 
     private long writeChecked(Map<String, String> candidate) throws IOException {
@@ -1185,7 +1198,7 @@ public final class AppSettings {
                     keywordTable.load(new java.io.InputStreamReader(in, StandardCharsets.UTF_8));
                 }
             } catch (IOException e) {
-                // search then only uses names and descriptions
+                LOG.warn("Could not load settings keyword table {}", KEYWORDS_RESOURCE, e);
             }
         }
         String exact = keywordTable.getProperty(key);
@@ -1354,7 +1367,7 @@ public final class AppSettings {
                 }
             }
         } catch (RuntimeException e) {
-            // no legacy preferences available
+            LOG.debug("No legacy preferences available", e);
         }
     }
 }

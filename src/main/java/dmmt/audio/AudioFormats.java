@@ -7,6 +7,7 @@ import java.util.Locale;
 
 /** Which audio files the library accepts (MP3 and WAV, 3.35.1) and how long they are. */
 public final class AudioFormats {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioFormats.class);
     public static final List<String> EXTENSIONS = List.of("mp3", "wav");
     /** Description and glob patterns for file choosers. */
     public static final String FILTER_DESCRIPTION = "Audio files (*.mp3, *.wav)";
@@ -51,6 +52,7 @@ public final class AudioFormats {
                 return WavFile.read(file).durationMs();
             }
         } catch (IOException | RuntimeException e) {
+            LOG.debug("Could not read audio duration of {}", file, e);
             return 0;
         }
         return 0;

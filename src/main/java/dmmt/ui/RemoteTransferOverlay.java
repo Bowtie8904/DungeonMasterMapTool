@@ -18,6 +18,7 @@ public final class RemoteTransferOverlay extends StackPane {
     private final Label title = new Label();
     private final Label detail = new Label();
     private final ProgressBar bar = new ProgressBar();
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteTransferOverlay.class);
 
     public RemoteTransferOverlay() {
         title.getStyleClass().add("dialog-title");
@@ -43,7 +44,10 @@ public final class RemoteTransferOverlay extends StackPane {
     /** As {@link #update(List)}; {@code labels} maps an asset hash to a display name (or null when unknown). */
     public void update(List<RemoteSessionClient.TransferProgress> transfers, Function<String, String> labels) {
         if (transfers == null || transfers.isEmpty()) {
-            if (isVisible()) setVisible(false);
+            if (isVisible()) {
+                setVisible(false);
+                LOG.info("Remote asset transfers finished");
+            }
             return;
         }
         long total = 0;
@@ -70,6 +74,9 @@ public final class RemoteTransferOverlay extends StackPane {
             bar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
         }
         detail.setText(names.size() > 1 ? String.join(", ", names) + (size.isEmpty() ? "" : "  -  " + size) : size);
+        if (!isVisible()) {
+            LOG.info("{} ({} transfer{})", title.getText(), transfers.size(), transfers.size() == 1 ? "" : "s");
+        }
         setVisible(true);
     }
 }

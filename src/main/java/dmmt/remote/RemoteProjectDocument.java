@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.log.Log;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -24,6 +25,7 @@ import java.util.Set;
  * are never part of a document. Fog is uncompressed bounded blocks, not peer-supplied zip streams.
  */
 public final class RemoteProjectDocument {
+    private static final Log LOG = Log.of(RemoteProjectDocument.class);
     public static final int MAX_TARGETS = 100_000;
     public static final int MAX_FOG_CELLS = 64 * 1024 * 1024;
     public static final int FOG_BLOCK_BITS = 4096;
@@ -217,6 +219,7 @@ public final class RemoteProjectDocument {
         } else if (parts.keySet().stream().anyMatch(key -> key.startsWith("fogBits:"))) {
             throw new IllegalArgumentException("Remote fog content has no geometry.");
         }
+        LOG.debug("Materialized remote project from {} target(s)", parts.size());
         return project;
     }
 

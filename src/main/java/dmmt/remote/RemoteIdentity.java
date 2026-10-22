@@ -21,6 +21,7 @@ import java.util.Date;
 
 /** One hosting session's identity. Creation belongs on a worker; no keys or passwords are persisted. */
 public final class RemoteIdentity {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteIdentity.class);
     private final SSLContext context;
     private final X509Certificate certificate;
     private final String fingerprint;
@@ -29,6 +30,7 @@ public final class RemoteIdentity {
         this.context = context;
         this.certificate = certificate;
         fingerprint = RemoteTls.fingerprint(certificate);
+        LOG.info("Created host identity (self-signed, 30 days); fingerprint {}...", fingerprint.substring(0, 8));
     }
 
     public static RemoteIdentity create() throws GeneralSecurityException {
@@ -47,6 +49,7 @@ public final class RemoteIdentity {
             var signed = builder.build(new JcaContentSignerBuilder("SHA256withECDSA").build(pair.getPrivate()));
             certificate = new JcaX509CertificateConverter().getCertificate(signed);
         } catch (OperatorCreationException failure) {
+            LOG.error("Could not create the remote hosting certificate", failure);
             throw new GeneralSecurityException("Could not create the remote hosting identity.", failure);
         }
         certificate.checkValidity();
@@ -61,6 +64,7 @@ public final class RemoteIdentity {
             keys.setKeyEntry("host", pair.getPrivate(), password, new java.security.cert.Certificate[]{certificate});
             return new RemoteIdentity(RemoteTls.hostContext(keys, password), certificate);
         } catch (java.io.IOException failure) {
+            LOG.error("Could not initialize the remote hosting identity", failure);
             throw new GeneralSecurityException("Could not initialize the remote hosting identity.", failure);
         } finally {
             Arrays.fill(password, '\0');

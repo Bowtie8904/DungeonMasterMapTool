@@ -5,6 +5,7 @@ import dmmt.model.FogMask;
 import lombok.Getter;
 
 public class FogService {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(FogService.class);
     public static final int DEFAULT_CELLS_PER_GRID = 10;
     private static final double MIN_CELL_SIZE = 2;
     private static final double MAX_CELL_SIZE = 50;
@@ -26,7 +27,11 @@ public class FogService {
     }
 
     public static void setCellsPerGrid(int value) {
+        int previous = cellsPerGrid;
         cellsPerGrid = Math.max(minCellsPerGrid(), Math.min(maxCellsPerGrid(), value));
+        if (previous != cellsPerGrid) {
+            LOG.info("Fog resolution changed from {} to {} cells per grid tile", previous, cellsPerGrid);
+        }
     }
 
     /** Creates the fog mask if needed and grows it to cover all map content. Migrates legacy rect reveals. */
@@ -44,9 +49,11 @@ public class FogService {
             int rows = (int) Math.ceil((bounds[3] - bounds[1]) / cellSize);
             mask = new FogMask(bounds[0], bounds[1], cellSize, cols, rows);
             fog.setMask(mask);
+            LOG.debug("Created fog mask {}x{} cells (cell size {})", cols, rows, cellSize);
         } else {
             double cellSize = cellSizeFor(project);
             if (Math.abs(mask.getCellSize() - cellSize) > cellSize * 0.001) {
+                LOG.debug("Resampling fog mask to cell size {}", cellSize);
                 mask.resample(cellSize);
             }
             mask.resizeToCover(bounds[0], bounds[1], bounds[2], bounds[3]);

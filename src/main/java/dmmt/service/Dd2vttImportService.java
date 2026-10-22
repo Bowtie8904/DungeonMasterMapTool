@@ -2,6 +2,7 @@ package dmmt.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import dmmt.render.ImagePyramidBuilder;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 public class Dd2vttImportService
 {
+    private static final Log LOG = Log.of(Dd2vttImportService.class);
     private final ObjectMapper mapper = JsonMappers.create();
 
     public DmProject importToProject(Path dd2vttFile, Path projectDirectory) throws IOException
@@ -27,7 +29,18 @@ public class Dd2vttImportService
 
     private DmProject prepareProject(Path dd2vttFile, Path projectDirectory) throws IOException
     {
-        JsonNode root = mapper.readTree(dd2vttFile.toFile());
+        long startedAt = System.nanoTime();
+        LOG.info("Importing dd2vtt map {}", dd2vttFile);
+        JsonNode root;
+        try
+        {
+            root = mapper.readTree(dd2vttFile.toFile());
+        }
+        catch (IOException ex)
+        {
+            LOG.error("Could not read dd2vtt file {}", dd2vttFile, ex);
+            throw ex;
+        }
         String baseName = stripExtension(dd2vttFile.getFileName().toString());
         Path importDir = projectDirectory.resolve("imports").resolve(baseName);
         Files.createDirectories(importDir);
@@ -59,6 +72,9 @@ public class Dd2vttImportService
         {
             RoomLabelService.addImportedRoomLabels(project);
         }
+        LOG.info("Imported dd2vtt map {}: {} walls, {} lights, {} portals, {} px/cell ({} ms)", dd2vttFile,
+                project.getWalls().size(), project.getLighting().getLights().size(),
+                project.getInteractables().size(), pixelsPerGrid, (System.nanoTime() - startedAt) / 1_000_000);
         return project;
     }
 
@@ -78,6 +94,7 @@ public class Dd2vttImportService
         JsonNode imageNode = root.path("image");
         if (imageNode.isMissingNode() || imageNode.isNull() || !imageNode.isTextual())
         {
+            LOG.warn("dd2vtt file {} has no usable image", sourceDd2vtt);
             return null;
         }
 

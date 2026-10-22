@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -21,6 +22,7 @@ import java.util.List;
  * Must be used on the JavaFX application thread.
  */
 public final class RemoteBusyDialog {
+    private static final Log LOG = Log.of(RemoteBusyDialog.class);
     private static final Duration SHOW_DELAY = Duration.millis(250);
 
     private final Window owner;
@@ -56,6 +58,7 @@ public final class RemoteBusyDialog {
     /** Starts a tracked operation; run the returned handle when it completes (success or failure). */
     public Runnable begin(String taskTitle, String taskMessage) {
         var task = new Task(taskTitle, taskMessage);
+        LOG.debug("Remote operation started: {}", taskTitle);
         tasks.add(task);
         if (stage == null || !stage.isShowing()) {
             delay.playFromStart();

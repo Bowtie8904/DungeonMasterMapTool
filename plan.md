@@ -1,4 +1,4 @@
-﻿# Dungeon Master Map Tool - Living Specification
+# Dungeon Master Map Tool - Living Specification
 
 ## 1) Chosen Technology Stack
 
@@ -1920,6 +1920,17 @@ history. Explicit Save exposes a persistence completion future for subsequent ma
 - Benchmark idle and busy maps, large uncached imports, cached reconnects and audio preparation while
   connected; report p50/p95 commit latency, host frame work, memory/queue bounds and transfer throughput.
 
+## 3.40 Application Logging (implemented)
+
+- All activity is logged through `dmmt.log.Log` (slf4j-style `{}` placeholders; a trailing `Throwable` is logged as the exception), a thin facade over `System.Logger` which the JDK routes to `java.util.logging`. No third-party logging dependency.
+- `dmmt.log.LogSetup` configures logging once, before JavaFX starts (launcher): console handler plus a rotating file (`dmmt-<n>.log`, 5 files of 2 MB) in a `logs` folder next to the settings file. One line per entry: `timestamp LEVEL [thread] Class - message`, followed by the stack trace when present. Uncaught exceptions on any thread are logged as errors.
+- JVM properties (not settings-file entries): `-Ddmmt.log.level=ERROR|WARN|INFO|DEBUG|TRACE` (default `INFO`, applies to application loggers only; libraries stay at `INFO`) and `-Ddmmt.log.dir=<folder>` to relocate the log folder.
+- Levels: INFO = lifecycle and user-visible operations (startup/shutdown, map open/save/auto-save/import/export, library changes, window opening, player freeze, audio playback, API/remote sessions; every DM status-bar message is also logged), DEBUG = internal detail, WARN = recoverable failures, ERROR = broken features. Failures always include the exception.
+- Never log per-frame, per-mouse-event or per-audio-buffer activity, nor secrets (remote tokens, pairing codes, TLS key material).
+- Music and sound effects are logged by name, never by id alone: `AudioLibraryService.trackLabel(id)` renders `'Name' [id]` and is used by the engine, preparation queue, remote audio commands and UI.
+- Local API: every non-polling request logs `METHOD path -> status (ms, client)` at INFO (key images and the control list at DEBUG), executed controls log id plus label, rejections log at WARN. Remote sessions log access decisions, TLS/compatibility rejections, firewall rule changes, asset and workspace transfers.
+- Every committed edit (`pushHistory`) logs `Edit: <label>`.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -1928,6 +1939,7 @@ history. Explicit Save exposes a persistence completion future for subsequent ma
 
 ## 9) Change Log
 
+- **Application logging (3.40):** consistent dmmt.log.Log logging with console + rotating file output in a `logs` folder, configurable level, replacing ad-hoc `System.err` prints.
 - **LAN remote workspace control (3.39):** opt-in Session menu, pinned TLS pairing/approval, one-client
   authority, locally rendered DM replica, shared settings/history, host-backed map/token/audio libraries
   and imports/exports, multilevel management, handouts and host-only player/audio output. Standalone

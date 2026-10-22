@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.remote.RemoteDirectories;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -21,6 +22,7 @@ import java.util.function.Function;
 
 /** Folder selection against the host; never interprets a host path using the client filesystem. */
 public final class RemoteDirectoryWindow {
+    private static final Log LOG = Log.of(RemoteDirectoryWindow.class);
     private final Stage stage = new Stage();
     private final TextField address = new TextField();
     private final ListView<RemoteDirectories.Entry> entries = new ListView<>();
@@ -75,6 +77,7 @@ public final class RemoteDirectoryWindow {
         next.setOnAction(event -> load(listing.path(), listing.offset() + RemoteDirectories.PAGE_SIZE));
         choose.setOnAction(event -> {
             if (listing != null && listing.error() == null && listing.path() != null && pending == null) {
+                LOG.info("Host folder chosen: {}", listing.path());
                 selected.accept(listing.path());
                 stage.close();
             }
@@ -100,6 +103,7 @@ public final class RemoteDirectoryWindow {
     public static void show(Window owner, Function<RemoteDirectories.Query,
             CompletableFuture<RemoteDirectories.Listing>> query, Consumer<String> selected) {
         var window = new RemoteDirectoryWindow(owner, query, selected);
+        LOG.info("Opening host folder chooser");
         window.stage.show();
         window.load(null, 0);
     }
@@ -123,6 +127,7 @@ public final class RemoteDirectoryWindow {
                 listing = result;
                 setBusy(false);
                 if (failure != null) {
+                    LOG.warn("Could not load host folders: {}", path, failure);
                     status.setText("Could not load host folders. Check the connection and try again.");
                 } else {
                     address.setText(result.path() == null ? "" : result.path());

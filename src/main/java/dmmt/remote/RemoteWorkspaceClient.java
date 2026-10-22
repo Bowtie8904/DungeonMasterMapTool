@@ -1,6 +1,7 @@
 package dmmt.remote;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dmmt.log.Log;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -18,6 +19,7 @@ public final class RemoteWorkspaceClient implements AutoCloseable {
     }
 
     private final Thread owner = Thread.currentThread();
+    private static final Log LOG = Log.of(RemoteWorkspaceClient.class);
     private final UUID sessionId;
     private final Consumer<RemoteProjectDocument> display;
     private final Consumer<Notice> notices;
@@ -62,6 +64,7 @@ public final class RemoteWorkspaceClient implements AutoCloseable {
             throw new IllegalStateException("Wait for the host to confirm the previous edit.");
         }
         inFlight = RemoteWorkspaceAuthority.diff(accepted, edited, label);
+        LOG.debug("Submitting workspace edit '{}' ({} change(s))", label, inFlight.changes().size());
         return inFlight;
     }
 
@@ -126,6 +129,11 @@ public final class RemoteWorkspaceClient implements AutoCloseable {
         nextSequence++;
         display.accept(accepted.document());
         notices.accept(new Notice(command, result.status(), result.message()));
+        if (result.status() == RemoteWorkspaceAuthority.Status.ACCEPTED) {
+            LOG.info("Host accepted the workspace edit");
+        } else {
+            LOG.warn("Host {} the workspace edit: {}", result.status(), RemoteSessionServer.safe(result.message()));
+        }
         return true;
     }
 
@@ -148,6 +156,7 @@ public final class RemoteWorkspaceClient implements AutoCloseable {
         }
         accepted = baseline;
         phase = Phase.CONNECTED;
+        LOG.info("Remote workspace resumed");
         display.accept(preview());
         return true;
     }
@@ -193,6 +202,7 @@ public final class RemoteWorkspaceClient implements AutoCloseable {
 
     private void requireResync(String message) {
         phase = Phase.RESYNC_REQUIRED;
+        LOG.warn("Remote workspace requires resynchronization: {}", RemoteSessionServer.safe(message));
         display.accept(accepted.document());
         reportUnconfirmed(message);
     }

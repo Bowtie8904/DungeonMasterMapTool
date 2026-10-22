@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -19,6 +21,7 @@ import java.util.Objects;
  * The file holds no codes, credentials or host secrets. Callers serialize all access on one thread.
  */
 public final class RemoteClientTrustStore {
+    private static final Log LOG = Log.of(RemoteClientTrustStore.class);
     private static final int MAX_BYTES = 64 * 1024;
     private static final int MAX_ENTRIES = 200;
 
@@ -72,11 +75,17 @@ public final class RemoteClientTrustStore {
         }
         entries.put(entry.key(), entry);
         saveOrRestore(previous);
+        LOG.info("Remote client {} ({}) remembered as {}", RemoteSessionServer.safe(entry.name()),
+                RemoteSessionServer.safe(entry.address()), decision);
     }
 
     public void forget(Entry entry) throws IOException {
         var previous = new LinkedHashMap<>(entries);
-        if (entries.remove(entry.key()) != null) saveOrRestore(previous);
+        if (entries.remove(entry.key()) != null) {
+            saveOrRestore(previous);
+            LOG.info("Remote client {} ({}) forgotten", RemoteSessionServer.safe(entry.name()),
+                    RemoteSessionServer.safe(entry.address()));
+        }
     }
 
     private void saveOrRestore(Map<String, Entry> previous) throws IOException {
@@ -107,6 +116,7 @@ public final class RemoteClientTrustStore {
                 var entry = new Entry(parts[1], parts[2], Decision.valueOf(parts[0]));
                 entries.put(entry.key(), entry);
             } catch (IllegalArgumentException skipped) {
+                LOG.debug("Skipped a malformed remote client list line");
                 // Ignore malformed lines rather than refusing to host.
             }
         }

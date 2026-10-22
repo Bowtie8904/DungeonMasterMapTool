@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -21,6 +22,7 @@ public final class RemoteWorkspaceArtwork implements RemoteWorkspaceAuthority.Pr
         }
     }
 
+    private static final Log LOG = Log.of(RemoteWorkspaceArtwork.class);
     private final Thread owner = Thread.currentThread();
     private final RemoteAssetStore store;
     private final Path cache;
@@ -66,7 +68,9 @@ public final class RemoteWorkspaceArtwork implements RemoteWorkspaceAuthority.Pr
                 references.put(key(file.toUri().toString(), projectFile), portable);
                 files.put(portable, file);
                 assets.put(portable, asset);
+                LOG.debug("Prepared workspace artwork {} ({} bytes)", portable, asset.size());
             } catch (IOException | IllegalArgumentException failure) {
+                LOG.warn("Could not prepare workspace artwork '{}'", reference, failure);
                 throw new IOException("Could not prepare workspace artwork '" + reference + "'"
                         + (projectFile == null ? "" : " for map '" + projectFile + "'")
                         + ": " + failure.getMessage(), failure);
@@ -184,6 +188,7 @@ public final class RemoteWorkspaceArtwork implements RemoteWorkspaceAuthority.Pr
             }
             return resolved;
         } catch (IllegalArgumentException invalid) {
+            LOG.warn("Unsupported workspace artwork reference '{}'", reference, invalid);
             throw new IOException("Unsupported runtime workspace artwork reference.", invalid);
         }
     }

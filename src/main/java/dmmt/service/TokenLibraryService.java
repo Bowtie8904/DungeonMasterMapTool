@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 import dmmt.model.DmProject.TokenDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +20,8 @@ import java.util.UUID;
  */
 public final class TokenLibraryService
 {
+    private static final Log LOG = Log.of(TokenLibraryService.class);
+
     @Data
     public static class Entry
     {
@@ -59,6 +62,7 @@ public final class TokenLibraryService
         Library library = Files.exists(file) ? mapper.readValue(file.toFile(), Library.class) : new Library();
         for (Entry entry : library.entries)
             TokenAssets.read(entry.token, file.getParent());
+        LOG.debug("Loaded token library {} ({} token(s), {} folder(s))", file, library.entries.size(), library.folders.size());
         return library;
     }
 
@@ -75,6 +79,7 @@ public final class TokenLibraryService
             mapper.writerWithDefaultPrettyPrinter().writeValue(staging.toFile(), stored);
             Files.move(staging, file, StandardCopyOption.REPLACE_EXISTING);
             revision++;
+            LOG.debug("Saved token library {} ({} token(s))", file, stored.entries.size());
             var referenced = new java.util.HashSet<Path>();
             for (Entry entry : stored.entries)
             {
@@ -92,7 +97,10 @@ public final class TokenLibraryService
                             .filter(path -> path.getFileName().toString().matches("[0-9a-f]{64}\\.png")).toList())
                     {
                         if (!referenced.contains(image.toAbsolutePath().normalize()))
+                        {
+                            LOG.debug("Removing unreferenced token image {}", image);
                             Files.delete(image);
+                        }
                     }
                 }
             }
@@ -118,6 +126,7 @@ public final class TokenLibraryService
         entry.setFolder(folder);
         entry.setDeleted(false);
         save(library);
+        LOG.info("Saved token \"{}\" ({}) to library folder \"{}\"", token.getName(), token.getId(), folder);
     }
 
     public synchronized void delete(String id) throws IOException
@@ -126,6 +135,7 @@ public final class TokenLibraryService
         Entry entry = find(library, id);
         library.entries.remove(entry);
         save(library);
+        LOG.info("Deleted token {} from the library", id);
     }
 
     public synchronized void move(String id, String folder) throws IOException
@@ -134,6 +144,7 @@ public final class TokenLibraryService
         requireFolder(library, folder);
         find(library, id).setFolder(folder);
         save(library);
+        LOG.info("Moved token {} to library folder \"{}\"", id, folder);
     }
 
     public synchronized String createFolder(String parent, String name) throws IOException
@@ -147,6 +158,7 @@ public final class TokenLibraryService
         }
         library.folders.add(folder);
         save(library);
+        LOG.info("Created token folder \"{}\"", folder);
         return folder;
     }
 
@@ -174,6 +186,7 @@ public final class TokenLibraryService
                 e.folder = target + e.folder.substring(folder.length());
         });
         save(library);
+        LOG.info("Moved token folder \"{}\" to \"{}\"", folder, target);
     }
 
     public synchronized void deleteFolder(String folder) throws IOException
@@ -185,6 +198,7 @@ public final class TokenLibraryService
         library.folders.removeIf(f -> within(f, folder));
         library.entries.removeIf(e -> within(e.folder, folder));
         save(library);
+        LOG.info("Deleted token folder \"{}\"", folder);
     }
 
     public void resolve(DmProject project) throws IOException

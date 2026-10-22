@@ -3,6 +3,7 @@ package dmmt.remote;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.log.Log;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,6 +23,7 @@ import java.util.regex.Pattern;
  */
 public final class RemoteProjectAssets
 {
+    private static final Log LOG = Log.of(RemoteProjectAssets.class);
     public static final String ASSET_REFERENCE_PREFIX = "asset:";
 
     private static final Pattern ASSET_REFERENCE =
@@ -77,6 +79,7 @@ public final class RemoteProjectAssets
         rewriteReferences(project, projectRoot, explicitlyPublishedReferences, descriptors, false, null);
         String packagedProjectJson = MAPPER.writeValueAsString(project);
         validatePortableProject(packagedProjectJson);
+        LOG.debug("Packaged project snapshot with {} asset(s)", descriptors.size());
         return new ProjectSnapshot(packagedProjectJson, List.copyOf(descriptors.values()));
     }
 
@@ -153,6 +156,7 @@ public final class RemoteProjectAssets
                     }
                     catch (IOException ex)
                     {
+                        LOG.warn("Could not materialize remote asset {}", assetReference.sha256(), ex);
                         throw new MaterializationFailure(ex);
                     }
                 });
@@ -257,6 +261,7 @@ public final class RemoteProjectAssets
         }
         catch (RuntimeException ex)
         {
+            LOG.warn("Invalid project asset reference '{}'", reference, ex);
             throw new IOException("Invalid project asset reference.", ex);
         }
         if (relative.isAbsolute())

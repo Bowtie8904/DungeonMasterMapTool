@@ -1,6 +1,7 @@
 package dmmt.remote;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.function.Supplier;
  * the map context epoch separately invalidates new commands opened on an earlier map.
  */
 public final class RemoteWorkspaceAuthority implements RemoteWorkspaceEndpoint, AutoCloseable {
+    private static final Log LOG = Log.of(RemoteWorkspaceAuthority.class);
     public static final int MAX_CHANGES = 16_384;
     private static final int MAX_RECEIPTS = 256;
     private static final int MAX_TOMBSTONES = 200_000;
@@ -266,6 +268,7 @@ public final class RemoteWorkspaceAuthority implements RemoteWorkspaceEndpoint, 
         changedAt.clear();
         protectedTargets.clear();
         document = Objects.requireNonNull(baseline, "baseline");
+        LOG.info("Workspace context switched");
         for (String target : document.targets()) {
             changedAt.put(target, revision);
         }
@@ -427,12 +430,20 @@ public final class RemoteWorkspaceAuthority implements RemoteWorkspaceEndpoint, 
                 status = Status.CONFLICT;
                 message = conflict.getMessage();
             } catch (IOException | IllegalArgumentException invalid) {
+                LOG.warn("Invalid remote project edit '{}' rejected", RemoteSessionServer.safe(request.label()), invalid);
                 status = Status.INVALID;
                 message = "Invalid remote project edit; nothing was applied.";
             }
         }
         lastSequence = request.sequence();
         cachedState = null;
+        if (status == Status.ACCEPTED) {
+            LOG.info("Remote {} '{}' applied ({} change(s))", request.operation(),
+                     RemoteSessionServer.safe(request.label()), request.changes().size());
+        } else {
+            LOG.warn("Remote {} '{}' {}: {}", request.operation(), RemoteSessionServer.safe(request.label()),
+                     status, message);
+        }
         Result result = result(request, status, message);
         receipts.put(request.sequence(), new Receipt(request, result));
         while (receipts.size() > MAX_RECEIPTS) {
@@ -475,6 +486,7 @@ public final class RemoteWorkspaceAuthority implements RemoteWorkspaceEndpoint, 
     public void close() {
         requireOwner();
         closed = true;
+        LOG.info("Workspace authority closed");
         receipts.clear();
         protectedTargets.clear();
         changedAt.clear();
@@ -492,6 +504,7 @@ public final class RemoteWorkspaceAuthority implements RemoteWorkspaceEndpoint, 
         changed.removeIf(target -> Objects.equals(document.value(target), next.value(target)));
         if (changedAt.size() + changed.size() > MAX_TOMBSTONES) {
             // Rotate the context rather than drop tombstones and accidentally accept an old command.
+            LOG.warn("Workspace change metadata exceeded its limit; rotating the context");
             contextId = UUID.randomUUID();
             changedAt.clear();
         }

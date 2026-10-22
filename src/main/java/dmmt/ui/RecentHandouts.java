@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.AppSettings;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
@@ -26,6 +27,7 @@ import java.util.concurrent.ExecutorService;
  * image is stored only once) and an index file listing the file names, most recent first.
  */
 public final class RecentHandouts {
+    private static final Log LOG = Log.of(RecentHandouts.class);
     public static final String DEFAULT_FOLDER = "dmmap-handouts";
     static final String INDEX_FILE = "recent.txt";
     private static final Pattern ID = Pattern.compile("[0-9a-f]{16,64}");
@@ -143,6 +145,7 @@ public final class RecentHandouts {
             version++;
         }
         Files.deleteIfExists(file(id));
+        LOG.info("Removed recent handout {}", id);
         save();
     }
 
@@ -176,6 +179,7 @@ public final class RecentHandouts {
                 }
             }
         } catch (IOException e) {
+            LOG.warn("Could not read recent handouts index {}", index, e);
             ids.clear();
         }
     }

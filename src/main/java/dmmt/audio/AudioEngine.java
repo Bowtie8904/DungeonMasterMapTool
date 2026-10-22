@@ -25,6 +25,8 @@ public class AudioEngine {
     /** Seconds before a music crossfade (or the end of a track) at which the upcoming song is preloaded. */
     static final double MUSIC_PRELOAD_LEAD_SECONDS = 10;
 
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioEngine.class);
+
     private final AudioLibraryService library;
     private final AudioOutput output;
     private final Random random;
@@ -127,8 +129,16 @@ public class AudioEngine {
             revision++;
             return false;
         }
+        LOG.info("Forwarding audio command {} {} to the host", action, describe(arguments));
         remote.command(action, arguments);
         return true;
+    }
+
+    /** Renders command arguments for logs, replacing track ids with track names. */
+    private String describe(Object[] arguments) {
+        return java.util.Arrays.stream(arguments)
+                .map(a -> a instanceof String id && library.track(id).isPresent() ? library.trackLabel(id) : String.valueOf(a))
+                .collect(java.util.stream.Collectors.joining(", ", "[", "]"));
     }
 
     public AudioEngine(AudioLibraryService library, AudioOutput output) {
@@ -324,7 +334,7 @@ public class AudioEngine {
             voice.replacement = output.open(source.file(), false);
             voice.replacementSource = source;
             if (voice.replacement == null) {
-                System.err.println("Could not apply the new playback source for " + voice.trackId);
+                LOG.warn("Could not apply the new playback source for {}", library.trackLabel(voice.trackId));
                 return;
             }
             voice.replacement.setVolume(0);
@@ -384,6 +394,7 @@ public class AudioEngine {
         if (this.shuffle != shuffle) {
             nextCycle = null;
         }
+        LOG.info("Music shuffle {}", shuffle ? "on" : "off");
         this.shuffle = shuffle;
     }
 
@@ -394,6 +405,7 @@ public class AudioEngine {
 
     public void setMusicLoop(boolean loop) {
         if (remoteCommand("musicLoop", loop)) return;
+        LOG.info("Music loop {}", loop ? "on" : "off");
         musicLoop = loop;
         fireChanged();
     }
@@ -529,6 +541,7 @@ public class AudioEngine {
             return;
         }
         musicPaused = !musicPaused;
+        LOG.info("{} music {}", musicPaused ? "Paused" : "Resumed", library.trackLabel(music.current.trackId));
         List<Voice> audible = new ArrayList<>();
         audible.add(music.current);
         if (music.outgoing != null) {
@@ -549,6 +562,7 @@ public class AudioEngine {
     public void next() {
         if (remoteCommand("next")) return;
         if (!playlist.isEmpty()) {
+            LOG.info("Skipping to the next music track");
             advance(1, Math.min(crossfadeSeconds, 1.5));
         }
     }
@@ -569,6 +583,7 @@ public class AudioEngine {
     /** Fades the music out and forgets the playlist position. */
     public void stopMusic() {
         if (remoteCommand("stopMusic")) return;
+        LOG.info("Stopping music {} (category {})", music == null ? "(none playing)" : library.trackLabel(music.current.trackId), categoryId);
         releaseMusic(Math.min(crossfadeSeconds, 2));
         playlistIndex = -1;
         musicPaused = false;
@@ -673,7 +688,7 @@ public class AudioEngine {
         AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
         AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
-            System.err.println("Could not play music track " + trackId);
+            LOG.error("Could not play music track {}", library.trackLabel(trackId));
             music = null;
             fireChanged();
             return;
@@ -681,6 +696,7 @@ public class AudioEngine {
         Voice voice = new Voice(handle, trackId, source, true, fadeSeconds > 0 ? 0 : 1);
         voice.fadeTo(1, fadeSeconds);
         music = new VoiceChain(voice);
+        LOG.info("Playing music track {} (category {}, fade {} s)", library.trackLabel(trackId), categoryId, fadeSeconds);
         handle.setVolume(voiceVolume(voice));
         voice.setOnEnd(() -> musicEnded(voice));
         if (!musicPaused) {
@@ -715,7 +731,7 @@ public class AudioEngine {
         music.prepared = openPrepared(trackId, true);
         if (music.prepared == null) {
             if (!trackId.equals(failedMusicPreload)) {
-                System.err.println("Could not preload music track " + trackId);
+                LOG.warn("Could not preload music track {}", library.trackLabel(trackId));
             }
             failedMusicPreload = trackId;
         } else {
@@ -752,7 +768,7 @@ public class AudioEngine {
         finishBlend(music);
         syncPreparedMusic(true);
         if (music.prepared == null) {
-            System.err.println("Could not continue the music after " + ended.trackId);
+            LOG.warn("Could not continue the music after {}", library.trackLabel(ended.trackId));
             releaseMusic(0);
             fireChanged();
             return;
@@ -902,6 +918,7 @@ public class AudioEngine {
         if (!active) {
             VoiceChain effect = effects.get(trackId);
             if (effect != null) {
+                LOG.info("Stopping sound effect {}", library.trackLabel(trackId));
                 removeEffect(effect);
                 stopEffect(effect, effectFadeSeconds);
             }
@@ -925,8 +942,10 @@ public class AudioEngine {
         AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track.get());
         AudioOutput.Voice handle = output.open(source.file(), false);
         if (handle == null) {
+            LOG.warn("Could not open sound effect {}", library.trackLabel(trackId));
             return;
         }
+        LOG.info("Starting sound effect {} (looping={})", library.trackLabel(trackId), track.get().isLooping());
         Voice voice = new Voice(handle, trackId, source, false, track.get().isLooping() ? 0 : 1);
         if (track.get().isLooping()) {
             voice.fadeTo(1, effectFadeSeconds);
@@ -1002,7 +1021,7 @@ public class AudioEngine {
             prepareEffect(effect);
         }
         if (effect.prepared == null) {
-            System.err.println("Could not repeat sound effect " + ended.trackId);
+            LOG.warn("Could not repeat sound effect {}", library.trackLabel(ended.trackId));
             removeEffect(effect);
             stopEffect(effect, 0);
             fireChanged();
@@ -1047,6 +1066,7 @@ public class AudioEngine {
         if (remoteCommand("stopEffectsForTrack", trackId)) return;
         for (VoiceChain effect : List.copyOf(effectInstances)) {
             if (effect.current.trackId.equals(trackId)) {
+                LOG.info("Stopping removed sound effect {}", library.trackLabel(trackId));
                 removeEffect(effect);
                 stopEffect(effect, 0);
             }
@@ -1086,6 +1106,7 @@ public class AudioEngine {
             return;
         }
         effectsPaused = paused;
+        LOG.info("{} all sound effects", paused ? "Paused" : "Resumed");
         if (!paused) {
             effectInstances.forEach(VoiceChain::resumeBlend);
         }
@@ -1104,6 +1125,7 @@ public class AudioEngine {
 
     public void stopAllEffects() {
         if (remoteCommand("stopAllEffects")) return;
+        LOG.info("Stopping all sound effects ({} running)", effectInstances.size());
         effectInstances.forEach(effect -> stopEffect(effect, effectFadeSeconds));
         effectInstances.clear();
         effects.clear();
@@ -1124,6 +1146,7 @@ public class AudioEngine {
             return;
         }
         this.panic = panic;
+        LOG.info("Audio panic {}", panic ? "on" : "off");
         applyVolumes();
         fireChanged();
     }
@@ -1250,6 +1273,7 @@ public class AudioEngine {
 
     /** Stops everything and releases the output. */
     public void shutdown() {
+        LOG.info("Shutting down audio engine");
         releaseMusic(0);
         stopVoice(fadingOut, 0);
         fadingOut = null;

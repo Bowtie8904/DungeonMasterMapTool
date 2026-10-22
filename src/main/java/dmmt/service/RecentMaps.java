@@ -1,5 +1,7 @@
 package dmmt.service;
 
+import dmmt.log.Log;
+
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -11,6 +13,7 @@ import java.util.Optional;
  * History of recently opened maps, most recent first, persisted in the settings file.
  */
 public final class RecentMaps {
+    private static final Log LOG = Log.of(RecentMaps.class);
     public static final String KEY = "ui.recentMaps";
     public static final String MAX_KEY = "ui.recentMaps.max";
     public static final int DEFAULT_MAX = 5;
@@ -35,6 +38,7 @@ public final class RecentMaps {
         if (!entries.isEmpty() && !entries.getFirst().equals(normalized)) {
             previousMap = entries.getFirst();
         }
+        LOG.info("Recording recent map {}", normalized);
         entries.remove(normalized);
         entries.add(0, normalized);
         trim();
@@ -45,6 +49,7 @@ public final class RecentMaps {
     public List<Path> existing() {
         boolean removed = entries.removeIf(path -> !Files.isRegularFile(path));
         if (removed) {
+            LOG.info("Dropped recent maps that no longer exist");
             save();
         }
         return List.copyOf(entries);
@@ -81,8 +86,8 @@ public final class RecentMaps {
                 if (!entries.contains(path)) {
                     entries.add(path);
                 }
-            } catch (InvalidPathException ignored) {
-                // a hand-edited entry that is not a path is skipped
+            } catch (InvalidPathException ex) {
+                LOG.warn("Skipping invalid recent-map entry \"{}\"", part, ex);
             }
         }
         trim();

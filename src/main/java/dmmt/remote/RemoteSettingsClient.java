@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.service.AppSettings;
 import dmmt.service.HostSettingsAuthority;
 
@@ -13,6 +14,7 @@ import java.util.function.Consumer;
  * dispatches responses back to {@link #receive}. No network IO or optimistic settings edits happen here.
  */
 public final class RemoteSettingsClient implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteSettingsClient.class);
     private static final int DEFAULT_CAPACITY = 32;
 
     public enum Phase { CONNECTED, PAUSED, RESYNC_REQUIRED, CLOSED }
@@ -49,6 +51,7 @@ public final class RemoteSettingsClient implements AutoCloseable {
         sessionId = baseline.sessionId();
         nextSequence = baseline.nextSequence();
         context = settings.useHostSettings(baseline.settings(), this::enqueue);
+        LOG.info("Using synchronized host settings (revision {})", baseline.settings().revision());
     }
 
     public Phase phase() {
@@ -111,6 +114,11 @@ public final class RemoteSettingsClient implements AutoCloseable {
             case RESYNC_REQUIRED -> throw new IllegalStateException("Resynchronization was handled above.");
         };
         notices.accept(new Notice(edit.commandId(), edit.key(), outcome, result.message()));
+        if (outcome == Outcome.ACCEPTED) {
+            LOG.info("Host accepted setting '{}'", edit.key());
+        } else {
+            LOG.warn("Host {} setting '{}': {}", outcome, edit.key(), RemoteSessionServer.safe(result.message()));
+        }
         return true;
     }
 
@@ -135,6 +143,7 @@ public final class RemoteSettingsClient implements AutoCloseable {
         }
         context.pause();
         phase = Phase.PAUSED;
+        LOG.info("Remote settings paused ({} pending)", pendingCount());
         cancelQueued("The connection was lost before this setting was sent.");
     }
 
@@ -156,6 +165,7 @@ public final class RemoteSettingsClient implements AutoCloseable {
         }
         context.resume(baseline.settings());
         phase = Phase.CONNECTED;
+        LOG.info("Remote settings resumed");
         return true;
     }
 
@@ -166,6 +176,7 @@ public final class RemoteSettingsClient implements AutoCloseable {
             return;
         }
         phase = Phase.CLOSED;
+        LOG.info("Remote settings closed");
         context.close();
         cancelQueued("Remote settings closed before this setting was sent.");
         reportUnknown("The remote settings session closed before the command outcome was confirmed.");
@@ -184,6 +195,7 @@ public final class RemoteSettingsClient implements AutoCloseable {
             context.pause();
         }
         phase = Phase.RESYNC_REQUIRED;
+        LOG.warn("Remote settings require resynchronization: {}", RemoteSessionServer.safe(message));
         cancelQueued("Resynchronization is required; this setting was not sent.");
         reportUnknown(message);
     }

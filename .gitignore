@@ -46,3 +46,6 @@ dmmt-settings.ini
 /dmmap-tokens/
 /remote-session/
 /.browser-validation/
+
+### Application logs ###
+logs/

@@ -12,6 +12,7 @@ import java.util.UUID;
 
 /** Import-time label creation, independent of JavaFX and the DM editor. */
 public final class RoomLabelService {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RoomLabelService.class);
     private RoomLabelService() {
     }
 
@@ -54,5 +55,6 @@ public final class RoomLabelService {
                     fontSize, 12, metrics);
             project.getTextBoxes().add(box);
         }
+        LOG.info("Added {} automatic room label(s) to the imported map", centers.size());
     }
 }

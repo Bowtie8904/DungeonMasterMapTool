@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -11,6 +13,7 @@ import java.util.concurrent.Executor;
 
 /** Pairing does not alter the local workspace. Only an approved, usable baseline may install a replica. */
 public final class RemoteConnectionController implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteConnectionController.class);
     public static final class LocalWorkspaceChangedException extends IllegalStateException {
         public LocalWorkspaceChangedException() {
             super("The local workspace changed while pairing. Resolve its current changes and connect again.");
@@ -164,7 +167,7 @@ public final class RemoteConnectionController implements AutoCloseable {
                 current.replica.tick();
                 phase = Phase.ERROR;
                 message = "Remote synchronization failed. Disconnect and synchronize again.";
-                System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR, message, failure);
+                LOG.error(message, failure);
             } else {
                 failSetup(current, failure);
             }
@@ -258,8 +261,7 @@ public final class RemoteConnectionController implements AutoCloseable {
         message = "Could not enter remote control. " + (failure instanceof LocalWorkspaceChangedException
                 ? failure.getMessage() : current.client != null && current.client.lastError() != null
                 ? current.client.lastError() : "Check verified connection details, compatible remote versions and storage access.");
-        System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
-                "Remote connection setup failed.", failure);
+        LOG.warn("Remote connection setup failed.", failure);
         current.ready.completeExceptionally(new IOException(message, failure));
         cancel(current);
     }
@@ -275,8 +277,7 @@ public final class RemoteConnectionController implements AutoCloseable {
                 workspace.close();
             } catch (RuntimeException failure) {
                 cleanupFailure = failure;
-                System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR,
-                        "Could not restore the standalone workspace.", failure);
+                LOG.error("Could not restore the standalone workspace.", failure);
             }
             current.replica = null;
         }

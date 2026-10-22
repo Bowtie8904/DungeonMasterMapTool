@@ -2,7 +2,6 @@ package dmmt.render;
 
 import dmmt.service.Tuning;
 import lombok.Getter;
-import lombok.Setter;
 
 /**
  * Temporary in-memory override that trades visual quality for speed. It never changes a project or a
@@ -10,11 +9,20 @@ import lombok.Setter;
  * when the mode is off. The reduced values come from the {@code performance.*} settings ({@link Tuning}).
  */
 public final class PerformanceMode {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(PerformanceMode.class);
+
     @Getter
-    @Setter
     private static volatile boolean enabled;
 
     private PerformanceMode() {
+    }
+
+    public static void setEnabled(boolean value) {
+        boolean changed = enabled != value;
+        enabled = value;
+        if (changed) {
+            LOG.info("Performance mode {}", value ? "enabled" : "disabled");
+        }
     }
 
     /** Light map divisor while active (normally {@code lighting.lightMapScale}). */

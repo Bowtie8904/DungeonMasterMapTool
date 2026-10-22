@@ -17,6 +17,7 @@ import java.util.UUID;
  * encrypted transport; client-supplied names/addresses are display claims, never identity proof.
  */
 public final class RemoteSessionAccess implements AutoCloseable {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteSessionAccess.class);
     private static final Duration CODE_LIFETIME = Duration.ofMinutes(5);
     private static final Duration APPROVAL_LIFETIME = Duration.ofMinutes(1);
     private static final Duration ATTEMPT_WINDOW = Duration.ofMinutes(1);
@@ -150,6 +151,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
         pending = null;
         phase = Phase.WAITING;
         newCode();
+        LOG.info("Pairing code regenerated");
         return code;
     }
 
@@ -196,6 +198,8 @@ public final class RemoteSessionAccess implements AutoCloseable {
 
     private ApprovalRequest createApproval(Client client, Instant now) {
         pending = new ApprovalRequest(UUID.randomUUID(), client, now.plus(APPROVAL_LIFETIME));
+        LOG.info("Access requested by '{}' ({}); awaiting host approval",
+                RemoteSessionServer.safe(client.name()), RemoteSessionServer.safe(client.address()));
         // An approved client keeps its live connection until the host actually allows the replacement.
         if (approved == null) phase = Phase.AWAITING_APPROVAL;
         return pending;
@@ -213,18 +217,21 @@ public final class RemoteSessionAccess implements AutoCloseable {
         credentialDigest = digest(credential);
         connectionLease = null; // Any previous client connection is superseded.
         phase = Phase.DISCONNECTED;
+        LOG.info("Access granted to '{}'; credential issued", RemoteSessionServer.safe(approved.name()));
         return new Grant(sessionId, credential);
     }
 
     /** Host UI only. Rejecting a request invalidates the code used by that request. */
     public synchronized void reject(UUID requestId) {
         requirePending(requestId);
+        LOG.info("Access request rejected by the host");
         dropPending();
     }
 
     /** Called only when the original protected pairing channel has been lost, before host approval. */
     public synchronized void cancelApproval(UUID requestId) {
         requirePending(requestId);
+        LOG.info("Pending access request cancelled (pairing channel lost)");
         dropPending();
     }
 
@@ -239,6 +246,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
         }
         connectionLease = UUID.randomUUID();
         phase = Phase.CONNECTED;
+        LOG.info("Approved client '{}' connected", RemoteSessionServer.safe(approved == null ? "" : approved.name()));
         return connectionLease;
     }
 
@@ -269,6 +277,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
         if (lease != null && lease.equals(connectionLease)) {
             connectionLease = null;
             phase = Phase.DISCONNECTED;
+            LOG.info("Approved client disconnected");
         }
     }
 
@@ -278,6 +287,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
         clearClient();
         phase = Phase.WAITING;
         newCode();
+        LOG.info("Client access revoked; credential invalidated and a new pairing code issued");
     }
 
     /** Host UI only; do not expose pending request IDs to unauthenticated discovery. */
@@ -288,6 +298,9 @@ public final class RemoteSessionAccess implements AutoCloseable {
 
     @Override
     public synchronized void close() {
+        if (phase != Phase.STOPPED) {
+            LOG.info("Session access stopped");
+        }
         clearClient();
         code = null;
         phase = Phase.STOPPED;
@@ -308,6 +321,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
     }
 
     private void dropPending() {
+        LOG.debug("Pending access request dropped");
         pending = null;
         if (approved == null) {
             phase = Phase.WAITING;
@@ -347,6 +361,7 @@ public final class RemoteSessionAccess implements AutoCloseable {
     }
 
     private static AccessException error(Failure failure, String message) {
+        LOG.warn("Access check failed: {}", failure);
         return new AccessException(failure, message);
     }
 }

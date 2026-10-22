@@ -1,4 +1,4 @@
-﻿# Dungeon Master Map Tool
+# Dungeon Master Map Tool
 
 [![Build](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml/badge.svg)](https://github.com/Bowtie8904/DungeonMasterMapTool/actions/workflows/build.yml)
 [![Latest release](https://img.shields.io/github/v/release/Bowtie8904/DungeonMasterMapTool?label=release)](https://github.com/Bowtie8904/DungeonMasterMapTool/releases/latest)
@@ -654,6 +654,14 @@ The control API exposes the appended Thunderstorm choice and `weather.lightningI
 (see [API](docs/API.md#weather)).
 
 Most values apply when the window regains focus after you saved the file; entries marked *Restart required* apply at the next start. Use `-Ddmmt.settings=<path>` to use a different file.
+#### Logging
+
+The application writes a log of what it is doing (startup, map open/save/auto-save/import/export, library changes, windows, player freeze, audio, local API and remote sessions, plus every status-bar message and all failures with their stack traces). Output goes to the console and to rotating files `dmmt-0.log` ... `dmmt-4.log` (2 MB each) in a `logs` folder next to `dmmt-settings.ini` - attach the newest file when reporting a problem. Logs never contain remote tokens or pairing codes.
+
+Two JVM options control it (they are not settings-file entries):
+
+- `-Ddmmt.log.level=DEBUG` - `ERROR`, `WARN`, `INFO` (default), `DEBUG` or `TRACE`.
+- `-Ddmmt.log.dir=<folder>` - write the log files somewhere else.
 ### External controls and local control API
 
 **API / Stream Deck control names:** edit

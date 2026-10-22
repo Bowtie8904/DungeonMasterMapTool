@@ -13,6 +13,7 @@ import java.util.concurrent.Executor;
  * are opened here; the eventual transport must dispatch calls to this owner and protect pairing traffic.
  */
 public final class RemoteHostSession implements AutoCloseable {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteHostSession.class);
     private final Thread owner = Thread.currentThread();
     private final AppSettings settings;
     private final RemoteSessionAccess access = new RemoteSessionAccess();
@@ -58,6 +59,7 @@ public final class RemoteHostSession implements AutoCloseable {
         }
         var grant = access.approve(requestId);
         authority = new HostSettingsAuthority(settings);
+        LOG.info("Host settings authority opened for the approved client");
         return grant;
     }
 
@@ -103,6 +105,7 @@ public final class RemoteHostSession implements AutoCloseable {
     public HostSettingsAuthority.Result editSettings(UUID lease, HostSettingsAuthority.Request request) {
         requireOwner();
         access.authorizeConnection(lease);
+        LOG.debug("Remote settings edit requested");
         return authority.execute(request);
     }
 
@@ -137,6 +140,7 @@ public final class RemoteHostSession implements AutoCloseable {
 
     private void closeAuthority() {
         if (authority != null) {
+            LOG.debug("Host settings authority closed");
             authority.close();
             authority = null;
         }

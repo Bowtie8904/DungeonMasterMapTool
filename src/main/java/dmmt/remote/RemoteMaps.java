@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import dmmt.service.JsonMappers;
 import dmmt.service.MapLibraryService;
@@ -21,6 +23,7 @@ import java.util.function.Supplier;
  */
 public final class RemoteMaps implements RemoteOperations.Endpoint, AutoCloseable
 {
+    private static final Log LOG = Log.of(RemoteMaps.class);
     public record Level(String id, String name)
     {
     }
@@ -439,15 +442,13 @@ public final class RemoteMaps implements RemoteOperations.Endpoint, AutoCloseabl
         if (entry.isMap()) {
             try { tags = library.tags().readTags(entry.mapFile()); }
             catch (IOException | IllegalArgumentException unreadable) {
-                System.getLogger(RemoteMaps.class.getName()).log(System.Logger.Level.WARNING,
-                        "Could not read host map tags for " + entry.mapFile(), unreadable);
+                LOG.warn("Could not read host map tags for {}", entry.mapFile(), unreadable);
             }
         }
         if (entry.isMultiLevel()) {
             try { levels = library.multiLevels().loadManifest(entry.mapFile()).getLevels().size(); }
             catch (IOException | IllegalArgumentException unreadable) {
-                System.getLogger(RemoteMaps.class.getName()).log(System.Logger.Level.WARNING,
-                        "Could not read host multilevel metadata for " + entry.mapFile(), unreadable);
+                LOG.warn("Could not read host multilevel metadata for {}", entry.mapFile(), unreadable);
             }
         }
         long stamp = Files.getLastModifiedTime(entry.isMap() ? entry.mapFile() : entry.path()).toMillis();

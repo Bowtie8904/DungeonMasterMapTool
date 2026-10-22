@@ -41,6 +41,7 @@ import java.util.stream.Stream;
  */
 public final class ImagePyramidStore
 {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(ImagePyramidStore.class);
     private static ImagePyramidStore shared;
 
     private final Path cacheRoot;
@@ -67,6 +68,7 @@ public final class ImagePyramidStore
     ImagePyramidStore(Path cacheRoot)
     {
         this.cacheRoot = cacheRoot;
+        LOG.info("Image cache initialised at {}", cacheRoot);
         for (int i = 0; i < 2; i++)
         {
             daemon(this::loadTilesForever, "dmmt-tile-loader-" + i, Thread.NORM_PRIORITY - 1).start();
@@ -141,7 +143,7 @@ public final class ImagePyramidStore
                 }));
             } catch (java.util.concurrent.RejectedExecutionException ex) {
                 preparing.remove(key);
-                System.err.println("Could not queue map image " + file + ": " + ex.getMessage());
+                LOG.warn("Could not queue map image {}", file, ex);
             }
         }
         return null;
@@ -174,6 +176,7 @@ public final class ImagePyramidStore
                 catch (IOException ignored)
                 {
                     // Another instance may have migrated it; rebuilding is safe.
+                    LOG.debug("Could not migrate legacy image cache {}", legacy, ignored);
                     meta = ImagePyramidBuilder.readMeta(dir);
                 }
             }
@@ -238,7 +241,7 @@ public final class ImagePyramidStore
             catch (java.util.concurrent.RejectedExecutionException ex)
             {
                 image.build = null;
-                System.err.println("Could not queue image pyramid " + file + ": " + ex.getMessage());
+                LOG.warn("Could not queue image pyramid {}", file, ex);
             }
         }
     }
@@ -252,8 +255,8 @@ public final class ImagePyramidStore
             image.meta = meta;
             image.buildNeeded = false;
             changes.incrementAndGet();
-            System.out.printf("Built image pyramid for %s (%dx%d) in %d ms%n",
-                              file.getFileName(), meta.width(), meta.height(), (System.nanoTime() - start) / 1_000_000);
+            LOG.info("Built image pyramid for {} ({}x{}) in {} ms",
+                     file.getFileName(), meta.width(), meta.height(), (System.nanoTime() - start) / 1_000_000);
         }
         catch (Throwable ex)
         {
@@ -261,7 +264,7 @@ public final class ImagePyramidStore
             {
                 // Includes OutOfMemoryError on very large images: the overview keeps working.
                 image.buildNeeded = false;
-                System.err.println("Could not build image pyramid for " + file + ": " + ex);
+                LOG.warn("Could not build image pyramid for {}", file, ex);
             }
             deleteQuietly(dir);
         }
@@ -300,6 +303,7 @@ public final class ImagePyramidStore
         }
         catch (IOException | NoSuchAlgorithmException ex)
         {
+            LOG.debug("Falling back to a path hash for the image cache key of {}", file, ex);
             return Integer.toHexString(file.toAbsolutePath().toString().hashCode());
         }
     }
@@ -348,6 +352,7 @@ public final class ImagePyramidStore
                     Path stamp = Files.exists(meta) ? meta : dir;
                     if (Files.getLastModifiedTime(stamp).toInstant().isBefore(cutoff))
                     {
+                        LOG.info("Pruning expired image cache {}", dir.getFileName());
                         deleteQuietly(dir);
                     }
                 }
@@ -452,7 +457,7 @@ public final class ImagePyramidStore
             if (done.image() == null)
             {
                 failed.add(done.key());
-                System.err.println("Could not prepare map image " + done.key() + ": " + done.failure());
+                LOG.warn("Could not prepare map image {}", done.key(), done.failure());
             }
             else
             {
@@ -758,6 +763,7 @@ public final class ImagePyramidStore
         }
         catch (RuntimeException ex)
         {
+            LOG.debug("Could not load tile {}/{}/{}", key.level(), key.tx(), key.ty(), ex);
             return null;
         }
     }

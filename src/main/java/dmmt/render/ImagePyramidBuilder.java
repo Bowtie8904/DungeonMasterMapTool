@@ -34,6 +34,7 @@ import java.util.Properties;
  */
 public final class ImagePyramidBuilder
 {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(ImagePyramidBuilder.class);
     static final int FORMAT_VERSION = 1;
     static final String META_FILE = "pyramid.properties";
 
@@ -202,6 +203,7 @@ public final class ImagePyramidBuilder
         }
         catch (IOException | RuntimeException ex)
         {
+            LOG.debug("Could not read image pyramid metadata in {}", dir, ex);
             return null;
         }
     }

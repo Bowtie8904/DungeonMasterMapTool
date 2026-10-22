@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 import dmmt.model.MultiLevelManifest;
 
@@ -30,6 +31,7 @@ import java.util.TreeSet;
  * fog, thumbnails and all other fields stay exactly as they are.
  */
 public class MapTagService {
+    private static final Log LOG = Log.of(MapTagService.class);
     private final ObjectMapper mapper = JsonMappers.create()
             .enable(SerializationFeature.INDENT_OUTPUT)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -169,6 +171,7 @@ public class MapTagService {
         try {
             return readTags(mapFile);
         } catch (IOException | RuntimeException ex) {
+            LOG.warn("Could not read the tags of {}", mapFile, ex);
             String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             throw new IOException("Could not read the tags of \"" + mapFile + "\": " + reason, ex);
         }
@@ -265,6 +268,8 @@ public class MapTagService {
                 mapper.writeValue(temp.toFile(), document);
             }
             replaceAll(prepared, originals);
+            LOG.info("Updated tags on {} map(s) ({} file(s) changed): added {}, removed {}", mapFiles.size(),
+                    prepared.size(), additions, removals);
         } finally {
             for (Path temp : prepared.values()) {
                 Files.deleteIfExists(temp);
@@ -281,6 +286,7 @@ public class MapTagService {
                 replaced.add(entry.getKey());
             }
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Replacing tagged maps failed; restoring {} already replaced file(s)", replaced.size(), ex);
             List<Path> notRestored = new ArrayList<>();
             for (Path file : replaced) {
                 Path restore = tempFile(file);
@@ -288,6 +294,7 @@ public class MapTagService {
                     Files.write(restore, originals.get(file));
                     Files.move(restore, file, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException | RuntimeException restoreFailure) {
+                    LOG.error("Could not restore {} after a failed tag update", file, restoreFailure);
                     ex.addSuppressed(restoreFailure);
                     notRestored.add(file);
                 } finally {

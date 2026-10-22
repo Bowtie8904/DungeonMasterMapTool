@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.AppSettings;
 import dmmt.service.AppSettings.SettingInfo;
 import dmmt.service.AppSettings.SidebarSection;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
  * be found with the search field; each change is written to the settings file and applied immediately.
  */
 public final class SettingsWindow {
+    private static final Log LOG = Log.of(SettingsWindow.class);
     private static final String TABS_CATEGORY = "DM controls tabs";
 
     private static Stage open;
@@ -99,9 +101,10 @@ public final class SettingsWindow {
             stage.getIcons().setAll(ownerStage.getIcons());
         }
         stage.setScene(window.createScene(stage));
-        stage.setOnHidden(e -> { open = null; active = null; });
+        stage.setOnHidden(e -> { open = null; active = null; LOG.info("Settings window closed"); });
         open = stage;
         active = window;
+        LOG.info("Opening settings window");
         stage.show();
         Platform.runLater(window.search::requestFocus);
     }
@@ -192,6 +195,7 @@ public final class SettingsWindow {
             box.setOnAction(e -> {
                 settings.setHiddenSections(tabBoxes.entrySet().stream().filter(t -> !t.getValue().isSelected())
                         .map(Map.Entry::getKey).collect(Collectors.toSet()));
+                LOG.info("DM controls tab '{}' {}", section.id(), box.isSelected() ? "shown" : "hidden");
                 onSectionsChanged.run();
             });
             tabBoxes.put(section.id(), box);
@@ -212,6 +216,7 @@ public final class SettingsWindow {
                 controlBox.setOnAction(e -> {
                     settings.setHiddenControls(controlBoxes.entrySet().stream().filter(c -> !c.getValue().isSelected())
                             .map(Map.Entry::getKey).collect(Collectors.toSet()));
+                    LOG.info("DM control '{}' {}", control.id(), controlBox.isSelected() ? "shown" : "hidden");
                     onSectionsChanged.run();
                 });
                 controlBoxes.put(control.id(), controlBox);
@@ -229,6 +234,12 @@ public final class SettingsWindow {
             rows.add(new Row(info.category(), info.group(), (info.category() + " " + info.group() + " " + info.key() + " "
                     + info.label() + " " + info.description() + " " + info.keywords()).toLowerCase(Locale.ROOT), settingRow(info)));
         }
+    }
+
+    private static String loggable(String key, String value) {
+        String lower = key.toLowerCase(Locale.ROOT);
+        return lower.contains("token") || lower.contains("secret") || lower.contains("password") || lower.contains("code")
+                ? "<hidden>" : value;
     }
 
     private static Label description(String text) {
@@ -271,6 +282,7 @@ public final class SettingsWindow {
         editor.onCommitted = value -> {
             boolean isDefault = sameValue(info, value, info.defaultValue());
             settings.applyEdit(info.key(), isDefault ? null : value);
+            LOG.info("Setting {} changed to {}", info.key(), loggable(info.key(), value));
             reset.setDisable(isDefault);
             if (info.key().startsWith("api.")) {
                 onSectionsChanged.run();
@@ -279,6 +291,7 @@ public final class SettingsWindow {
         reset.setOnAction(e -> {
             editor.set(info.defaultValue());
             settings.applyEdit(info.key(), null);
+            LOG.info("Setting {} reset to default", info.key());
             error.setVisible(false);
             error.setManaged(false);
             reset.setDisable(true);

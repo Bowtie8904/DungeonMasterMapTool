@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.ProjectService;
 import dmmt.service.ThumbnailService;
 import dmmt.service.WorkScheduler;
@@ -22,6 +23,7 @@ import java.util.concurrent.Future;
  */
 public final class LevelPreviewCache implements AutoCloseable
 {
+    private static final Log LOG = Log.of(LevelPreviewCache.class);
     private record Cached(Image image, long stamp)
     {
     }
@@ -66,9 +68,9 @@ public final class LevelPreviewCache implements AutoCloseable
                         image = new Image(new ByteArrayInputStream(png));
                     }
                 }
-                catch (IOException | RuntimeException | OutOfMemoryError ignored)
+                catch (IOException | RuntimeException | OutOfMemoryError failure)
                 {
-                    // no preview
+                    LOG.debug("No level preview for {}", key, failure);
                 }
                 Image loaded = image;
                 long loadedStamp = stamp(key);

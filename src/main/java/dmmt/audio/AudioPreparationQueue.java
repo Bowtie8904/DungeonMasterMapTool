@@ -11,6 +11,8 @@ import java.util.concurrent.Future;
 
 /** Library-owned staged queue; resource workers never wait for work in another resource lane. */
 public final class AudioPreparationQueue implements AutoCloseable {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(AudioPreparationQueue.class);
+
     public enum Stage { QUEUED, COPYING, ANALYZING, PLAYBACK, READY, FAILED, CANCELLED }
 
     public static final class Item {
@@ -89,7 +91,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                 item.error = failure.error();
                 items.add(item);
             } catch (RuntimeException e) {
-                System.err.println("Could not recover an audio copy failure: " + e.getMessage());
+                LOG.warn("Could not recover an audio copy failure", e);
             }
         }
         for (AudioTrack track : library.tracks()) {
@@ -120,6 +122,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
         if (closed) {
             throw new IllegalStateException("The audio preparation queue is stopped.");
         }
+        LOG.info("Queued {} audio import {}", kind, source.getFileName());
         Item item = new Item(source, kind, categoryId, folderCategory, null);
         items.add(item);
         try {
@@ -180,6 +183,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                     library.preparePending(item.trackId, value -> progress(item, value),
                             () -> stage(item, Stage.PLAYBACK));
                     stage(item, Stage.READY);
+                    LOG.info("Audio track {} prepared", library.trackLabel(item.trackId));
                 } catch (Exception e) {
                     failed(item, e);
                 } finally {
@@ -295,6 +299,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
             item.stage = Stage.CANCELLED;
         } else {
             item.error = failure.getMessage() == null ? failure.toString() : failure.getMessage();
+            LOG.warn("Audio preparation failed for {}", item.source, failure);
             persistFailure(item, AudioTrack.PreparationState.FAILED, item.error);
             item.stage = Stage.FAILED;
         }
@@ -312,7 +317,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
             }
         } catch (IOException e) {
             item.error = error + " (could not save state: " + e.getMessage() + ")";
-            System.err.println(item.error);
+            LOG.warn("Could not save audio preparation state for {}", item.source, e);
         }
     }
 
@@ -337,7 +342,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
             try {
                 listener.run();
             } catch (RuntimeException e) {
-                System.err.println("Audio preparation listener failed: " + e.getMessage());
+                LOG.warn("Audio preparation listener failed", e);
             }
         }
     }

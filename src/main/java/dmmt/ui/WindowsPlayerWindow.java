@@ -16,6 +16,7 @@ import com.sun.jna.platform.win32.WinNT.HRESULT;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 import com.sun.jna.win32.StdCallLibrary;
+import dmmt.log.Log;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class WindowsPlayerWindow {
+    private static final Log LOG = Log.of(WindowsPlayerWindow.class);
     static final String PLAYER_APP_ID = "DungeonMasterMapTool.PlayerView";
     static final int EXCLUDED_FROM_PEEK = 12;
     private static final int RPC_E_CHANGED_MODE = 0x80010106;
@@ -153,7 +155,7 @@ public final class WindowsPlayerWindow {
     }
 
     private static void report(String operation, Throwable error) {
-        System.err.println("Could not " + operation + ": " + error);
+        LOG.warn("Could not {}", operation, error);
     }
 
     @Structure.FieldOrder({"fmtid", "pid"})

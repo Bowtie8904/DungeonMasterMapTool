@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import com.sun.jna.Native;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.Shell32;
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Explicit, application-scoped permission for portable Windows builds, never a firewall bypass. */
 public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
+    private static final Log LOG = Log.of(WindowsRemoteFirewall.class);
     interface Commands {
         String query(String script) throws IOException;
         void elevated(String script) throws IOException;
@@ -71,9 +74,11 @@ public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
                 configuration.controlPort(), configuration.assetPort(), ruleName("UDP"), quote(executable.toString()));
         String result = commands.query(script + epilogue()).strip();
         if (!result.matches("DMMT\\|(Private|Public|DomainAuthenticated|Unknown)\\|(True|False)")) {
+            LOG.warn("Windows returned an unexpected firewall status: {}", RemoteSessionServer.safe(result));
             throw new IOException("Windows returned an unexpected network-access status. See application logs.");
         }
         String[] fields = result.split("\\|");
+        LOG.debug("Firewall check: profile={}, configured={}", fields[1], fields[2]);
         return new Status("True".equals(fields[2]), fields[1]);
     }
 
@@ -97,19 +102,35 @@ public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
                 }
                 """ .formatted(ruleName("TCP"), configuration.controlPort(), configuration.assetPort(),
                 ruleName("UDP"), quote(executable.toString()));
-        commands.elevated(script + epilogue());
+        LOG.info("Requesting firewall rules for ports {} and {} (private local subnet only) for {}",
+                configuration.controlPort(), configuration.assetPort(), executable);
+        try {
+            commands.elevated(script + epilogue());
+        } catch (IOException failure) {
+            LOG.warn("Adding firewall rules failed", failure);
+            throw failure;
+        }
         if (!check(configuration).configured()) {
+            LOG.warn("Firewall rules were added but are not active; a system policy may prevent them");
             throw new IOException("Windows did not activate DMMT's private-LAN rules. A system policy may prevent them.");
         }
+        LOG.info("Firewall rules added and verified");
     }
 
     @Override public void remove() throws IOException {
         requireSupported();
-        commands.elevated(preamble() + "Get-NetFirewallRule -Name " + quote(ruleName("TCP")) + ","
+        LOG.info("Requesting removal of DMMT firewall rules for {}", executable);
+        try {
+            commands.elevated(preamble() + "Get-NetFirewallRule -Name " + quote(ruleName("TCP")) + ","
                 + quote(ruleName("UDP")) + " -ErrorAction SilentlyContinue | Remove-NetFirewallRule\n"
                 + "if (@(Get-NetFirewallRule -Name " + quote(ruleName("TCP")) + "," + quote(ruleName("UDP"))
                 + " -ErrorAction SilentlyContinue).Count -ne 0) { throw 'DMMT rules could not be removed.' }\n"
                 + epilogue());
+        } catch (IOException failure) {
+            LOG.warn("Removing firewall rules failed", failure);
+            throw failure;
+        }
+        LOG.info("Firewall rules removed");
     }
 
     private void requireSupported() throws IOException {
@@ -161,12 +182,11 @@ public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
                 String output = stdout.get(5, TimeUnit.SECONDS);
                 String diagnostics = stderr.get(5, TimeUnit.SECONDS);
                 if (process.exitValue() != 0) {
-                    System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
-                            "Windows network check exited with " + process.exitValue() + ".\n" + output + "\n" + diagnostics);
+                    LOG.warn("Windows network check exited with {}.\n{}\n{}", process.exitValue(), output, diagnostics);
                     throw new IOException("Could not check Windows network access. See application logs.");
                 }
                 if (!diagnostics.isBlank()) {
-                    System.getLogger(getClass().getName()).log(System.Logger.Level.DEBUG, diagnostics);
+                    LOG.debug("{}", diagnostics);
                 }
                 return output;
             } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException failure) {
@@ -204,6 +224,7 @@ public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
             launch.nShow = 0;
             if (!Shell32.INSTANCE.ShellExecuteEx(launch)) {
                 int error = Native.getLastError();
+                LOG.warn("Windows elevation was not granted (error {})", error);
                 throw new IOException(error == 1223 ? "Windows administrator permission was cancelled. No access was granted."
                         : "Could not request Windows administrator permission (error " + error + ").");
             }
@@ -216,8 +237,11 @@ public final class WindowsRemoteFirewall implements RemoteNetworkAccess {
                 if (wait != 0 || !Kernel32.INSTANCE.GetExitCodeProcess(launch.hProcess, exit)) {
                     throw new IOException("Could not read the Windows permission result. Use Check access.");
                 }
-                if (exit.getValue() != 0) throw new IOException(
+                if (exit.getValue() != 0) {
+                    LOG.warn("Firewall helper exited with code {}", exit.getValue());
+                    throw new IOException(
                         "Windows could not update DMMT's firewall rules. Administrator permission or system policy may prevent changes.");
+                }
             } finally {
                 Kernel32.INSTANCE.CloseHandle(launch.hProcess);
             }

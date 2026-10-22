@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.service.MapLibraryService;
 
 import java.io.IOException;
@@ -17,6 +19,7 @@ import java.util.function.Supplier;
 
 /** Explicit, bounded host metadata browsing. Paths and map contents never leave the host. */
 public final class RemoteMapCatalog implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteMapCatalog.class);
     public enum Kind { FOLDER, MAP, MULTILEVEL }
 
     public record Node(UUID id, UUID parent, String name, Kind kind) {
@@ -115,7 +118,7 @@ public final class RemoteMapCatalog implements AutoCloseable {
             flatten(captured.library().scanRemote(), null, captured.current(), current, nodes);
             return new Listing(nodes, current[0], captured.label(), captured.context(), null);
         } catch (IOException | IllegalArgumentException failure) {
-            System.getLogger(RemoteMapCatalog.class.getName()).log(System.Logger.Level.WARNING, "Could not browse host map library.", failure);
+            LOG.warn("Could not browse host map library.", failure);
             return failed(captured, failure instanceof IOException ? safeMessage(failure)
                     : "The host library contains unsupported or oversized names. Check the host log.");
         }

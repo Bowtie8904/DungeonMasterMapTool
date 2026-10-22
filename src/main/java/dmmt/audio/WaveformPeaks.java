@@ -28,6 +28,7 @@ import javax.sound.sampled.UnsupportedAudioFileException;
  * once, which is why the result is cached on disk and why callers must do it on a background thread.
  */
 public final class WaveformPeaks {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(WaveformPeaks.class);
     private static final String MAGIC = "DMPK3";
     /** Level reported for digital silence, so dB values stay finite. */
     private static final double SILENCE_FLOOR_DB = -100;
@@ -1069,6 +1070,7 @@ public final class WaveformPeaks {
             }
             return new WaveformPeaks(minimums, maximums, levels, features, duration, frame);
         } catch (IOException | RuntimeException e) {
+            LOG.debug("Could not read waveform cache", e);
             return null;
         }
     }
@@ -1097,6 +1099,7 @@ public final class WaveformPeaks {
             }
             Files.move(temp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | RuntimeException e) {
+            LOG.debug("Could not write waveform cache {}", cacheFile, e);
             try {
                 Files.deleteIfExists(temp);
             } catch (IOException ignored) {

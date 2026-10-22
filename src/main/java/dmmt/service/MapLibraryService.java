@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import lombok.Getter;
 import dmmt.model.DmProject;
 
@@ -31,6 +32,7 @@ import java.util.stream.Stream;
  * Loose {@code .dmmap} files (older saves) are listed too and converted to packages when touched.
  */
 public class MapLibraryService {
+    private static final Log LOG = Log.of(MapLibraryService.class);
     public static final String EXTENSION = ".dmmap";
 
     private static final Pattern COPY_SUFFIX = Pattern.compile("^(.*) \\(Copy(?: \\d+)?\\)$");
@@ -439,7 +441,9 @@ public class MapLibraryService {
         if (nameTaken(parent, clean)) {
             throw new IOException("\"" + clean + "\" already exists in this folder.");
         }
-        return Files.createDirectories(target);
+        Path created = Files.createDirectories(target);
+        LOG.info("Created library folder {}", created);
+        return created;
     }
 
     public Result move(Entry entry, Path targetFolder) throws IOException {
@@ -453,6 +457,7 @@ public class MapLibraryService {
             throw new IOException("A folder cannot be moved into itself.");
         }
         if (entry.isMap() && !Files.isDirectory(entry.path())) {
+            LOG.info("Moving loose map {} to {}", entry.path(), target);
             return relocateLooseMap(entry, target, entry.name(), true);
         }
         if (nameTaken(target, entry.name())) {
@@ -461,6 +466,7 @@ public class MapLibraryService {
         Path destination = target.resolve(entry.path().getFileName());
         Map<Path, Path> moved = mapFilesUnder(entry, entry.path(), destination);
         Files.move(entry.path(), destination);
+        LOG.info("Moved {} to {}", entry.path(), destination);
         return Result.moved(moved);
     }
 
@@ -477,6 +483,7 @@ public class MapLibraryService {
             throw new IOException("\"" + clean + "\" already exists in this folder.");
         }
         if (entry.isMap() && !Files.isDirectory(entry.path())) {
+            LOG.info("Renaming loose map {} to \"{}\"", entry.path(), clean);
             return relocateLooseMap(entry, folder, clean, true);
         }
         Path destination = folder.resolve(clean);
@@ -490,6 +497,7 @@ public class MapLibraryService {
             renamed.put(entry.mapFile(), renamedFile);
             moved = renamed;
         }
+        LOG.info("Renamed {} to \"{}\"", entry.path(), clean);
         return Result.moved(moved);
     }
 
@@ -500,6 +508,7 @@ public class MapLibraryService {
         Path folder = entry.containingFolder();
         String copyName = uniqueCopyName(folder, entry.name());
         if (!Files.isDirectory(entry.path())) {
+            LOG.info("Copying loose map {} as \"{}\"", entry.path(), copyName);
             Result result = relocateLooseMap(entry, folder, copyName, false);
             return new Result(Map.of(), result.movedMaps().get(entry.mapFile()));
         }
@@ -510,13 +519,16 @@ public class MapLibraryService {
             Path renamedFile = destination.resolve(copyName + extensionOf(entry.mapFile()));
             Files.move(copiedFile, renamedFile);
             regenerateCopyIds(renamedFile);
+            LOG.info("Copied {} to {}", entry.path(), destination);
             return new Result(Map.of(), renamedFile);
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Could not copy {} to {}", entry.path(), destination, ex);
             try {
                 if (Files.exists(destination)) {
                     deleteRecursive(destination);
                 }
             } catch (IOException cleanup) {
+                LOG.warn("Could not clean up partial copy {}", destination, cleanup);
                 ex.addSuppressed(cleanup);
             }
             throw ex;
@@ -568,6 +580,7 @@ public class MapLibraryService {
 
     public void delete(Entry entry) throws IOException {
         requireNotRoot(entry);
+        LOG.info("Deleting {}", entry.path());
         if (Files.isDirectory(entry.path())) {
             deleteRecursive(entry.path());
         } else {

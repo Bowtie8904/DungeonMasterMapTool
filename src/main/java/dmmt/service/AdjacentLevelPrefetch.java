@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.log.Log;
 import dmmt.model.MultiLevelManifest;
 
 import java.io.IOException;
@@ -20,6 +21,8 @@ import java.util.function.Function;
  */
 public final class AdjacentLevelPrefetch<T> implements AutoCloseable
 {
+    private static final Log LOG = Log.of(AdjacentLevelPrefetch.class);
+
     @FunctionalInterface
     public interface Loader<T>
     {
@@ -96,6 +99,7 @@ public final class AdjacentLevelPrefetch<T> implements AutoCloseable
                 }
                 catch (IOException | RuntimeException ex)
                 {
+                    LOG.debug("Prefetch of adjacent level {} failed", file, ex);
                     synchronized (this)
                     {
                         if (!request.cancelled.get() && requests.get(file) == request && onFailure != null)
@@ -107,6 +111,7 @@ public final class AdjacentLevelPrefetch<T> implements AutoCloseable
                 }
                 });
             } catch (java.util.concurrent.RejectedExecutionException ex) {
+                LOG.warn("Prefetch of adjacent level {} rejected", file, ex);
                 requests.remove(file);
                 request.cancelled.set(true);
                 if (onFailure != null) {

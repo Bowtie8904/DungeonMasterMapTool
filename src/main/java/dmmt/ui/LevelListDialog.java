@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.service.MapLibraryService;
 import dmmt.service.MultiLevelService;
 import javafx.application.Platform;
@@ -54,6 +55,7 @@ import java.util.function.Function;
  * Nothing is changed on disk; the result is a level plan plus the levels that become separate maps.
  */
 public final class LevelListDialog {
+    private static final Log LOG = Log.of(LevelListDialog.class);
 
     private static final PseudoClass DROP_BEFORE = PseudoClass.getPseudoClass("drop-before");
     private static final PseudoClass DROP_AFTER = PseudoClass.getPseudoClass("drop-after");
@@ -362,6 +364,7 @@ public final class LevelListDialog {
                 list.getSelectionModel().select(0);
             }
         });
+        LOG.info("Opening level list dialog");
         return dialog.showAndWait();
     }
 
@@ -587,6 +590,7 @@ public final class LevelListDialog {
             try {
                 collect(library.scan(), excluded, all);
             } catch (IOException exception) {
+                LOG.warn("Could not read the map library", exception);
                 Dialogs.error(owner, "Could not read the map library", exception.getMessage());
                 return List.of();
             }

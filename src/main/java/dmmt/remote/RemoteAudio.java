@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -25,6 +27,7 @@ import java.util.function.Supplier;
 
 /** Explicitly enabled host audio operations. Audio bytes never form part of the replicated library. */
 public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseable {
+    private static final Log LOG = Log.of(RemoteAudio.class);
     private static final ObjectMapper JSON = JsonMappers.create();
     private static final int PAGE = 96;
     private final Supplier<AudioLibraryService> libraries;
@@ -209,6 +212,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
                 throw new IllegalStateException("Audio changed on A. Refreshed host state; review and retry.");
             JsonNode args = payload.path("arguments");
             if (!args.isArray() || args.size() > 8) throw new IllegalArgumentException("Invalid audio arguments.");
+            LOG.info("Executing remote audio command '{}'{}", action, commandTarget(library, action, args));
             AudioEngine engine = engines.get();
             if (SETTING_ACTIONS.contains(action) && settingsAuthority == null)
                 throw new IllegalStateException("Host audio settings are unavailable; nothing was changed.");
@@ -306,6 +310,15 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
         } catch (Exception failure) {
             return CompletableFuture.failedFuture(safeFailure(failure));
         }
+    }
+
+    private static final Set<String> TRACK_ACTIONS = Set.of("playTrack", "effectActive", "toggleEffect",
+            "stopEffectsForTrack", "reopenTrack", "trackHidden", "styleTrack", "renameTrack", "effectLooping",
+            "moveTrack", "changeKind", "deleteTrack", "waveform", "playbackFile");
+
+    private static String commandTarget(AudioLibraryService library, String action, JsonNode args) {
+        if (!TRACK_ACTIONS.contains(action) || !args.path(0).isTextual()) return "";
+        return " for track " + library.trackLabel(args.path(0).asText());
     }
 
     private JsonNode response(JsonNode result) {
@@ -445,8 +458,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
                         Files.deleteIfExists(source);
                         Files.deleteIfExists(folder);
                     } catch (IOException failure) {
-                        System.getLogger(RemoteAudio.class.getName()).log(System.Logger.Level.WARNING,
-                                "Could not remove copied remote audio staging.", failure);
+                        LOG.warn("Could not remove copied remote audio staging.", failure);
                     }
                 });
             };
@@ -572,7 +584,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
         // Codec and filesystem failures often contain absolute paths. Never return those to the remote workspace.
         if (failure instanceof IllegalArgumentException || failure instanceof IllegalStateException)
             return new IOException(failure.getMessage());
-        System.getLogger(RemoteAudio.class.getName()).log(System.Logger.Level.WARNING, "Host audio operation failed.", failure);
+        LOG.warn("Host audio operation failed.", failure);
         return new IOException("Host audio operation failed. Inspect A, then retry.");
     }
 
@@ -667,6 +679,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
                 applySetting(engine, key, authority.stateInMemory().settings().values().get(key));
             }
         } catch (RuntimeException ignored) {
+            LOG.warn("Could not restore the host audio engine value for {}.", key, ignored);
             // Leave A's engine untouched when its persisted value is unusable.
         }
         failSettings(writes, completion, done, new IOException(
@@ -837,7 +850,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
             connection.query("audio", "catalog", JSON.createObjectNode().put("offset", offset))
                     .whenComplete((value, failure) -> {
                         if (closed) return;
-                        if (failure != null) { catalogLoading = false; status.accept("Could not refresh host audio library."); return; }
+                        if (failure != null) { LOG.warn("Could not refresh the host audio catalog.", failure); catalogLoading = false; status.accept("Could not refresh host audio library."); return; }
                         try {
                             Catalog page = JSON.treeToValue(value, Catalog.class);
                             if (expected != -1 && expected != page.revision()) {
@@ -859,6 +872,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
                                 resolveJobs();
                             }
                         } catch (IOException | RuntimeException invalid) {
+                            LOG.warn("Invalid host audio catalog.", invalid);
                             catalogLoading = false;
                             status.accept("Invalid host audio catalog.");
                         }
@@ -886,6 +900,7 @@ public final class RemoteAudio implements RemoteOperations.Endpoint, AutoCloseab
                         running = false;
                         if (closed) { completion.completeExceptionally(new IOException("Remote audio disconnected.")); return; }
                         if (failure != null) {
+                            LOG.warn("Host audio command '{}' failed: {}", action, RemoteSessionServer.safe(failure.getMessage()));
                             status.accept("Host audio action failed: " + failure.getMessage());
                             completion.completeExceptionally(failure);
                             commands.clear();

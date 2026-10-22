@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.remote.RemoteConnectionController;
 import dmmt.remote.RemoteConnectionDetails;
 import dmmt.remote.RemoteHostingController;
@@ -35,6 +36,7 @@ import java.util.concurrent.Executor;
 
 /** Sidebar tab for hosting, connecting and monitoring a LAN remote-control session. */
 public final class RemoteSessionPanel extends VBox {
+    private static final Log LOG = Log.of(RemoteSessionPanel.class);
     public interface Actions {
         RemoteHostingController host();
         RemoteConnectionController client();
@@ -318,6 +320,7 @@ public final class RemoteSessionPanel extends VBox {
             confirmation.initOwner(owner());
             confirmation.setTitle("Remove DMMT network permission");
             if (confirmation.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) {
+                LOG.info("Removing DMMT private-LAN firewall permission");
                 networkTask(() -> { networkAccess.remove(); return null; },
                         ignored -> networkStatus.setText("DMMT's managed permission was removed. Other firewall rules were not changed."));
             }
@@ -330,18 +333,20 @@ public final class RemoteSessionPanel extends VBox {
             status.setText("Connection details copied. Share the pairing code separately.");
         }));
         paste.setOnAction(event -> act(() -> paste(Clipboard.getSystemClipboard().getString())));
-        stop.setOnAction(event -> act(() -> observeStop(actions.host().stop())));
+        stop.setOnAction(event -> act(() -> { LOG.info("Stopping remote hosting"); observeStop(actions.host().stop()); }));
         regenerate.setOnAction(event -> act(() -> actions.host().regenerateCode()));
-        approve.setOnAction(event -> act(() -> actions.host().approve(actions.host().status().access().pending().id())));
-        reject.setOnAction(event -> act(() -> actions.host().reject(actions.host().status().access().pending().id())));
-        approveAlways.setOnAction(event -> act(() ->
-                actions.host().approveAlways(actions.host().status().access().pending().id())));
-        block.setOnAction(event -> act(() -> actions.host().block(actions.host().status().access().pending().id())));
+        approve.setOnAction(event -> act(() -> { LOG.info("Remote client approved once"); actions.host().approve(actions.host().status().access().pending().id()); }));
+        reject.setOnAction(event -> act(() -> { LOG.info("Remote client denied"); actions.host().reject(actions.host().status().access().pending().id()); }));
+        approveAlways.setOnAction(event -> act(() -> {
+            LOG.info("Remote client always-allowed");
+            actions.host().approveAlways(actions.host().status().access().pending().id());
+        }));
+        block.setOnAction(event -> act(() -> { LOG.info("Remote client blocked"); actions.host().block(actions.host().status().access().pending().id()); }));
         forget.setOnAction(event -> act(() -> {
             var entry = remembered.getSelectionModel().getSelectedItem();
             if (entry != null) actions.host().forgetClient(entry);
         }));
-        revoke.setOnAction(event -> act(() -> actions.host().revoke()));
+        revoke.setOnAction(event -> act(() -> { LOG.info("Revoking remote client"); actions.host().revoke(); }));
         connect.setOnAction(event -> act(() -> {
             if (clientActive() || hostActive()) throw new IllegalStateException("Stop or disconnect the current session first.");
             boolean discovered = discoveredSelectionMatches();
@@ -352,13 +357,15 @@ public final class RemoteSessionPanel extends VBox {
                 throw new IllegalStateException("Verify the updated host identity and connection details before connecting.");
             }
             cancelDiscovery();
+            LOG.info("Requesting remote control of {}:{} as '{}' ({})", configuration.host(), configuration.controlPort(),
+                    configuration.clientName(), discovered ? "discovered host" : "manual details");
             actions.connect(configuration, discovered ? null : code.getText());
             remember(null, new RemoteSetupStore.Client(configuration.host(), configuration.sessionName(),
                     configuration.clientName(), configuration.controlPort(), configuration.assetPort()));
             code.clear();
         }));
-        reconnect.setOnAction(event -> act(() -> actions.client().reconnect()));
-        disconnect.setOnAction(event -> act(actions::disconnect));
+        reconnect.setOnAction(event -> act(() -> { LOG.info("Reconnecting remote session"); actions.client().reconnect(); }));
+        disconnect.setOnAction(event -> act(() -> { LOG.info("Disconnecting remote session"); actions.disconnect(); }));
         ticker = new Timeline(new KeyFrame(Duration.millis(200), event -> refresh()));
         ticker.setCycleCount(Timeline.INDEFINITE);
         sceneProperty().addListener((observable, before, scene) -> {
@@ -423,10 +430,13 @@ public final class RemoteSessionPanel extends VBox {
     }
 
     private void startHosting(RemoteHostingController.Configuration configuration) {
+        LOG.info("Starting remote hosting '{}' on {} (control {}, artwork {})", configuration.name(),
+                configuration.bindAddress().getHostAddress(), configuration.controlPort(), configuration.assetPort());
         var started = actions.start(configuration);
         remember(new RemoteSetupStore.Host(configuration.name(), configuration.bindAddress().getHostAddress(),
                 configuration.controlPort(), configuration.assetPort()), null);
         started.whenComplete((details, failure) -> Platform.runLater(() -> {
+            if (failure != null) LOG.warn("Remote hosting could not start", failure);
             if (failure != null) problem.setText("Hosting could not start. Check the local interface, ports and storage.");
             refresh();
         }));
@@ -473,6 +483,8 @@ public final class RemoteSessionPanel extends VBox {
                 : List.of(allow, ButtonType.CANCEL));
         var choice = confirmation.showAndWait().orElse(ButtonType.CANCEL);
         if (choice == allow) {
+            LOG.info("Requesting DMMT private-LAN firewall permission (ports {}, {})", configuration.controlPort(),
+                    configuration.assetPort());
             networkTask(() -> { networkAccess.allow(configuration); return null; }, ignored -> {
                 networkStatus.setText("DMMT private-LAN permission configured. It applies only on Private networks. "
                         + "Other firewalls or network isolation may still prevent connections.");
@@ -502,8 +514,7 @@ public final class RemoteSessionPanel extends VBox {
                 networkBusy.set(false);
                 if (failure != null) {
                     var cause = dmmt.remote.RemoteFailure.unwrap(failure);
-                    System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
-                            "Windows network-access request failed.", cause);
+                    LOG.warn("Windows network-access request failed.", cause);
                     networkStatus.setText(cause.getMessage() + " Hosting was not started by this request. "
                             + "Use Check access to retry; you can also host without changing rules.");
                     if (generation == networkGeneration && live()) act(failed);
@@ -574,6 +585,7 @@ public final class RemoteSessionPanel extends VBox {
         cancelDiscovery();
         var search = new RemoteDiscovery.Search();
         discoverySearch = search;
+        LOG.info("Searching the LAN for remote hosts");
         discoveredHosts.getItems().clear();
         discoveryStatus.setText("Searching the IPv4 LAN...");
         discover.setDisable(true);
@@ -592,8 +604,7 @@ public final class RemoteSessionPanel extends VBox {
                         : hosts.isEmpty() ? "No hosts found. Start hosting on A and use its Private LAN access > Check access. "
                             + "Both PCs must share a trusted LAN; VPNs, guest Wi-Fi and security software can block discovery."
                         : "Found " + hosts.size() + " unverified host(s); the first is selected. Pick another if needed, then Request control.");
-                if (failure != null) System.getLogger(RemoteSessionPanel.class.getName())
-                        .log(System.Logger.Level.WARNING, "LAN host search failed.", failure);
+                if (failure != null) LOG.warn("LAN host search failed.", failure);
                 refresh();
             }));
         } catch (java.util.concurrent.RejectedExecutionException unavailable) {
@@ -736,8 +747,7 @@ public final class RemoteSessionPanel extends VBox {
                 rememberedSetup = setupStore.load();
             } catch (java.io.IOException failure) {
                 setupError = "Saved setup could not be read. Enter connection details manually; nothing was connected.";
-                System.getLogger(RemoteSessionPanel.class.getName())
-                        .log(System.Logger.Level.WARNING, "Could not read local remote setup.", failure);
+                LOG.warn("Could not read local remote setup.", failure);
             }
             try {
                 List<InetAddress> addresses = new ArrayList<>();
@@ -807,8 +817,7 @@ public final class RemoteSessionPanel extends VBox {
                 }
             }, worker).handle((ignored, failure) -> {
                 if (failure != null) {
-                    System.getLogger(RemoteSessionPanel.class.getName())
-                            .log(System.Logger.Level.WARNING, "Could not remember remote setup.", failure);
+                    LOG.warn("Could not remember remote setup.", failure);
                     Platform.runLater(() -> savedSetupStatus.setText(
                             "The session action was submitted, but setup could not be remembered. See application logs."));
                 } else {
@@ -819,8 +828,7 @@ public final class RemoteSessionPanel extends VBox {
             });
         } catch (java.util.concurrent.RejectedExecutionException unavailable) {
             savedSetupStatus.setText("The session action was submitted, but the setup storage worker is unavailable.");
-            System.getLogger(RemoteSessionPanel.class.getName())
-                    .log(System.Logger.Level.WARNING, "Could not schedule remote setup persistence.", unavailable);
+            LOG.warn("Could not schedule remote setup persistence.", unavailable);
         }
     }
 
@@ -839,6 +847,7 @@ public final class RemoteSessionPanel extends VBox {
             problem.setText("");
             action.run();
         } catch (IllegalArgumentException | IllegalStateException | dmmt.remote.RemoteSessionAccess.AccessException failure) {
+            LOG.warn("Remote session action rejected: {}", failure.getMessage());
             problem.setText(failure.getMessage());
         }
         refresh();

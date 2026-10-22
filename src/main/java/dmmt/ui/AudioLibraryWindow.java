@@ -1,5 +1,6 @@
 package dmmt.ui;
 
+import dmmt.log.Log;
 import dmmt.audio.AudioCategory;
 import dmmt.audio.AudioEngine;
 import dmmt.audio.AudioFormats;
@@ -64,6 +65,7 @@ import java.util.Optional;
  * Only one window is open at a time.
  */
 public final class AudioLibraryWindow {
+    private static final Log LOG = Log.of(AudioLibraryWindow.class);
     private static final DataFormat TRACK_IDS = new DataFormat("application/x-dmmt-audio-tracks");
     private static Stage open;
 
@@ -127,6 +129,7 @@ public final class AudioLibraryWindow {
         stage.setOnHidden(event -> {
             queueRefresh.stop();
             open = null;
+            LOG.info("Audio library window closed");
         });
         queueRefresh.getKeyFrames().add(new javafx.animation.KeyFrame(javafx.util.Duration.seconds(0.5),
                 event -> refreshQueue()));
@@ -151,6 +154,7 @@ public final class AudioLibraryWindow {
         open = window.stage;
         window.refreshCategories();
         window.refreshQueue();
+        LOG.info("Opening audio library window");
         window.stage.show();
     }
 
@@ -734,8 +738,11 @@ public final class AudioLibraryWindow {
         long revision = editRevision();
         Dialogs.askText(stage, "Rename category", "New name", MaterialDesignR.RENAME_BOX, "Rename",
                         Entry.category().getName(), name -> name.isBlank() ? "Enter a name." : null)
-                .ifPresent(name -> runAt(revision, () -> library.renameCategory(Entry.category().getId(), name),
-                        "Could not rename the category"));
+                .ifPresent(name -> {
+                    LOG.info("Renaming audio category '{}' to '{}'", Entry.category().getName(), name);
+                    runAt(revision, () -> library.renameCategory(Entry.category().getId(), name),
+                            "Could not rename the category");
+                });
     }
 
     private void deleteCategory() {
@@ -751,6 +758,7 @@ public final class AudioLibraryWindow {
         long revision = editRevision();
         if (Dialogs.confirmDanger(stage, "Delete category", "Delete \"" + Entry.category().getName() + "\"?",
                 message, "Delete")) {
+            LOG.info("Deleting audio category '{}'", Entry.category().getName());
             runAt(revision, () -> library.deleteCategory(Entry.category().getId()), "Could not delete the category");
         }
     }
@@ -814,7 +822,10 @@ public final class AudioLibraryWindow {
             }
         };
         scan.setOnSucceeded(event -> importAll(scan.getValue()));
-        scan.setOnFailed(event -> Dialogs.error(stage, "Could not read the folder", scan.getException().getMessage()));
+        scan.setOnFailed(event -> {
+            LOG.warn("Could not scan audio folder {}", folder, scan.getException());
+            Dialogs.error(stage, "Could not read the folder", scan.getException().getMessage());
+        });
         dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.COPY).execute(scan);
     }
 
@@ -827,6 +838,7 @@ public final class AudioLibraryWindow {
             summary.setText("No supported audio files found (" + AudioFormats.FILTER_DESCRIPTION + ").");
             return;
         }
+        LOG.info("Importing {} audio files", files.size());
         AudioKind kind = currentKind();
         String categoryId = currentCategoryId();
         for (ImportEntry entry : files) {
@@ -960,7 +972,10 @@ public final class AudioLibraryWindow {
         long revision = editRevision();
         Dialogs.askText(stage, "Rename audio", "New name", MaterialDesignR.RENAME_BOX, "Rename", track.getName(),
                         name -> name.isBlank() ? "Enter a name." : null)
-                .ifPresent(name -> runAt(revision, () -> library.renameTrack(track.getId(), name), "Could not rename the track"));
+                .ifPresent(name -> {
+                    LOG.info("Renaming audio track '{}' to '{}'", track.getName(), name);
+                    runAt(revision, () -> library.renameTrack(track.getId(), name), "Could not rename the track");
+                });
     }
 
     private void deleteTracks() {
@@ -974,6 +989,7 @@ public final class AudioLibraryWindow {
                 "The audio files are deleted from the library folder. This cannot be undone.", "Delete")) {
             return;
         }
+        LOG.info("Deleting {} audio tracks", tracks.size());
         runAt(revision, () -> {
             for (AudioTrack track : tracks) {
                 engine.stopEffectsForTrack(track.getId());
@@ -1053,6 +1069,7 @@ public final class AudioLibraryWindow {
         if (!track.isReady()) {
             return;
         }
+        LOG.info("Opening loudness dialog for track {}", track.getName());
         new AudioLoudnessDialog(stage, library, track, () -> {
             engine.refreshTrackVolumes();
             trackTable.refresh();
@@ -1086,6 +1103,7 @@ public final class AudioLibraryWindow {
             action.run();
             refreshCategories();
         } catch (IOException | RuntimeException e) {
+            LOG.warn("{}", failureHeader, e);
             Dialogs.error(stage, failureHeader, e.getMessage() == null ? e.toString() : e.getMessage());
         }
     }

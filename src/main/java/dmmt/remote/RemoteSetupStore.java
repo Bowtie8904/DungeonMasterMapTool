@@ -14,6 +14,7 @@ import java.util.Set;
 
 /** Machine-local configuration only. Deliberately has no identity, permission or session fields. */
 public final class RemoteSetupStore {
+    private static final dmmt.log.Log LOG = dmmt.log.Log.of(RemoteSetupStore.class);
     private static final int MAX_BYTES = 8192;
     private static final Set<String> KEYS = Set.of("version", "host.name", "host.address", "host.control", "host.assets",
             "client.host", "client.session", "client.name", "client.control", "client.assets");
@@ -67,8 +68,10 @@ public final class RemoteSetupStore {
             Client client = hasSection(values, "client.") ? new Client(required(values, "client.host"),
                     required(values, "client.session"), required(values, "client.name"),
                     port(values, "client.control"), port(values, "client.assets")) : null;
+            LOG.info("Loaded saved remote setup from {} (host={}, client={})", file, host != null, client != null);
             return new Setup(host, client);
         } catch (IllegalArgumentException invalid) {
+            LOG.warn("Saved remote setup {} is invalid", file, invalid);
             throw new IOException("Saved remote setup is invalid.", invalid);
         }
     }
@@ -102,11 +105,13 @@ public final class RemoteSetupStore {
             try {
                 Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException unsupported) {
+                LOG.debug("Atomic move unsupported; falling back to a plain replace for {}", file);
                 Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
             }
         } finally {
             Files.deleteIfExists(temporary);
         }
+        LOG.info("Saved remote setup to {} (host={}, client={})", file, setup.host() != null, setup.client() != null);
     }
 
     private static boolean hasSection(Properties values, String prefix) {

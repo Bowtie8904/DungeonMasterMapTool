@@ -1,5 +1,7 @@
 package dmmt.service;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.util.ConcurrentModificationException;
 import java.util.LinkedHashMap;
@@ -12,7 +14,7 @@ import java.util.function.Consumer;
 
 /** Host-side settings commands and retry receipts, owned by the constructing application thread. */
 public final class HostSettingsAuthority implements AutoCloseable {
-    private static final System.Logger LOG = System.getLogger(HostSettingsAuthority.class.getName());
+    private static final Log LOG = Log.of(HostSettingsAuthority.class);
     private static final int DEFAULT_RECEIPTS = 256;
     private static final Executor PERSISTENCE = task -> Thread.ofVirtual().name("host-settings-save").start(task);
 
@@ -241,8 +243,7 @@ public final class HostSettingsAuthority implements AutoCloseable {
     }
 
     private static void logFailure(Request request, Exception failure) {
-        LOG.log(System.Logger.Level.WARNING, "Could not persist settings command "
-                + request.edit().commandId() + ": " + failure.getMessage());
+        LOG.warn("Could not persist settings command {}", request.edit().commandId(), failure);
     }
 
     private void finish(Pending operation, Status status, String message) {

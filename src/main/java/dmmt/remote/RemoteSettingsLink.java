@@ -1,5 +1,7 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
+
 import dmmt.service.AppSettings;
 import dmmt.service.HostSettingsAuthority;
 
@@ -10,6 +12,7 @@ import java.util.function.Consumer;
 
 /** Drives the effective host-settings context without blocking its application owner. */
 public final class RemoteSettingsLink implements AutoCloseable {
+    private static final Log LOG = Log.of(RemoteSettingsLink.class);
     public interface Connection {
         boolean connected();
         HostSettingsAuthority.State latest();
@@ -146,8 +149,7 @@ public final class RemoteSettingsLink implements AutoCloseable {
         failed = true;
         generation++;
         settings.pause();
-        System.getLogger(RemoteSettingsLink.class.getName()).log(System.Logger.Level.ERROR,
-                "Remote settings synchronization failed.", failure);
+        LOG.error("Remote settings synchronization failed.", failure);
         notices.accept("Host settings could not be synchronized; editing paused. Disconnect and synchronize again.");
     }
 

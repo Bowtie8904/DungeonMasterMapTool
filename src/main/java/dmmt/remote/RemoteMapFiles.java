@@ -1,5 +1,6 @@
 package dmmt.remote;
 
+import dmmt.log.Log;
 import dmmt.service.BatchImportService;
 import dmmt.service.Dd2vttImportService;
 import dmmt.service.MapExportService;
@@ -77,6 +78,7 @@ public final class RemoteMapFiles {
         }
     }
 
+    private static final Log LOG = Log.of(RemoteMapFiles.class);
     private final RemoteAssetStore store;
     private final Path cache;
     private final MapLibraryService library;
@@ -107,6 +109,7 @@ public final class RemoteMapFiles {
                 try (var output = Files.newOutputStream(target, java.nio.file.StandardOpenOption.CREATE_NEW)) {
                     store.transferTo(actual.sha256(), output);
                 }
+                LOG.info("Received uploaded map source '{}' ({} bytes)", RemoteSessionServer.safe(input.name()), actual.size());
                 if (MapExportService.isPackFile(target)) validatePack(target);
                 sources.add(target);
             }
@@ -122,6 +125,7 @@ public final class RemoteMapFiles {
                             ? new MultiLevelService.Empty() : new MultiLevelService.Dd2vtt(sources.get(level.source())), level.name()));
                 }
                 var result = library.multiLevels().create(destination, request.name(), items, null);
+                LOG.info("Imported multilevel map '{}' from {} uploaded file(s)", RemoteSessionServer.safe(request.name()), sources.size());
                 return new BatchImportService.Result(List.of(result.manifestFile()), List.of(), sources.size());
             }
             if (request.name() != null && sources.size() == 1 && !MapExportService.isPackFile(sources.getFirst())) {
@@ -131,13 +135,16 @@ public final class RemoteMapFiles {
                     var imported = new Dd2vttImportService().importToProject(sources.getFirst(), map.getParent());
                     new dmmt.service.MapTagService(library, projects).applyKnownTags(imported, sources.getFirst());
                     projects.save(map, imported);
+                    LOG.info("Imported map '{}' from an uploaded file", RemoteSessionServer.safe(request.name()));
                     return new BatchImportService.Result(List.of(map), List.of(), 1);
                 } catch (IOException | RuntimeException failure) {
                     try {
                         MapLibraryService.deleteRecursive(map.getParent());
                     } catch (IOException cleanup) {
+                        LOG.warn("Could not clean up failed map import at {}", map.getParent(), cleanup);
                         failure.addSuppressed(cleanup);
                     }
+                    LOG.warn("Remote map import '{}' failed", RemoteSessionServer.safe(request.name()), failure);
                     throw failure;
                 }
             }
@@ -154,7 +161,9 @@ public final class RemoteMapFiles {
         Path temporary = Files.createTempFile(cache, "map-export-", MapExportService.EXTENSION);
         try {
             new MapExportService(library).export(entries, temporary);
-            return store.publishRequiredAsset(temporary);
+            var asset = store.publishRequiredAsset(temporary);
+            LOG.info("Exported {} map(s) as a pack for remote download ({} bytes)", entries.size(), asset.size());
+            return asset;
         } finally {
             Files.deleteIfExists(temporary);
         }

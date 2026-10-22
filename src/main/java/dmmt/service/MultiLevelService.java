@@ -3,6 +3,7 @@ package dmmt.service;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import dmmt.log.Log;
 import dmmt.model.DmProject;
 import dmmt.model.MultiLevelManifest;
 
@@ -28,6 +29,7 @@ import java.util.UUID;
  * and are applied to a level whenever it is loaded.
  */
 public class MultiLevelService {
+    private static final Log LOG = Log.of(MultiLevelService.class);
     public static final String EXTENSION = ".dmlevels";
     public static final String LEVELS_DIR = "levels";
     public static final String LEVEL_FILE = "level" + MapLibraryService.EXTENSION;
@@ -184,8 +186,11 @@ public class MultiLevelService {
         MultiLevelManifest manifest = loadManifest(manifestFile);
         MultiLevelManifest.Level level = levelId == null ? manifest.startLevel() : manifest.findLevel(levelId);
         if (level == null) {
+            LOG.warn("Cannot load level {} of {}: {}", levelId, manifestFile,
+                    levelId == null ? "no levels" : "level no longer exists");
             throw new IOException(levelId == null ? "The multilevel map has no levels." : "The level no longer exists.");
         }
+        LOG.info("Loading level \"{}\" ({}) of {}", level.getName(), level.getId(), manifestFile);
         Path levelFile = levelFile(manifestFile, level);
         DmProject project = projectService.load(levelFile);
         if (manifest.getShared() != null) {
@@ -204,6 +209,7 @@ public class MultiLevelService {
             changed = true;
         }
         if (changed) {
+            LOG.info("Switched {} to level \"{}\"", manifestFile, loaded.level().getName());
             saveManifest(manifestFile, manifest);
             writePackageThumbnail(manifestFile, loaded.levelFile());
         }
@@ -214,9 +220,11 @@ public class MultiLevelService {
         MultiLevelManifest manifest = loadManifest(manifestFile);
         MultiLevelManifest.Level level = manifest.findLevel(levelId);
         if (level == null) {
+            LOG.warn("Cannot save level {} of {}: level no longer exists", levelId, manifestFile);
             throw new IOException("The level no longer exists.");
         }
         Path levelFile = levelFile(manifestFile, level);
+        LOG.info("Saving level \"{}\" of {}", level.getName(), manifestFile);
         projectService.save(levelFile, project);
         manifest.setCurrentLevelId(levelId);
         manifest.setShared(captureShared(project));
@@ -327,8 +335,8 @@ public class MultiLevelService {
             } else {
                 Files.deleteIfExists(target);
             }
-        } catch (IOException | RuntimeException ignored) {
-            // A missing thumbnail never fails a save; it is regenerated lazily.
+        } catch (IOException | RuntimeException ex) {
+            LOG.warn("Could not update the package thumbnail of {}; it will be regenerated lazily", manifestFile, ex);
         }
     }
 
@@ -346,17 +354,21 @@ public class MultiLevelService {
         }
         Path manifestFile = library.newMultiLevelFile(folder, name);
         Path dir = manifestFile.getParent();
+        LOG.info("Creating multilevel map {} with {} level(s)", manifestFile, plan.size());
         Files.createDirectories(dir);
         try {
             return apply(manifestFile, plan, List.of(), progress);
         } catch (MapsLeftBehindException ex) {
             // Maps that could not be moved back are still in the package: keep it so nothing is lost.
+            LOG.error("Creating multilevel map {} failed; maps were left behind in the package", manifestFile, ex);
             throw ex;
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Creating multilevel map {} failed", manifestFile, ex);
             // Everything was rolled back, so the half-built package can go.
             try {
                 MapLibraryService.deleteRecursive(dir);
-            } catch (IOException ignored) {
+            } catch (IOException cleanup) {
+                LOG.warn("Could not remove half-built multilevel package {}", dir, cleanup);
             }
             throw ex;
         }
@@ -365,6 +377,7 @@ public class MultiLevelService {
     /** Splits a multilevel map into ordinary maps next to it (one per level) and removes the multilevel map. */
     public ApplyResult dissolve(Path manifestFile, Progress progress) throws IOException {
         MultiLevelManifest manifest = loadManifest(manifestFile);
+        LOG.info("Dissolving multilevel map {} into {} map(s)", manifestFile, manifest.getLevels().size());
         List<Extraction> extractions = new ArrayList<>();
         for (MultiLevelManifest.Level level : manifest.getLevels()) {
             extractions.add(new Extraction(level.getId(), suggestedMapName(manifestFile, level)));
@@ -398,6 +411,8 @@ public class MultiLevelService {
         MultiLevelManifest manifest = Files.isRegularFile(manifestFile) ? loadManifest(manifestFile)
                 : MultiLevelManifest.builder().build();
         validatePlan(manifestFile, manifest, plan, extractions);
+        LOG.info("Applying level changes to {}: {} planned level(s), {} extraction(s), {} existing level(s)",
+                manifestFile, plan.size(), extractions.size(), manifest.getLevels().size());
         Map<Path, MultiLevelManifest> foreign = new LinkedHashMap<>();
         for (PlanItem item : plan) {
             if (item.source() instanceof ForeignLevel level) {
@@ -444,10 +459,12 @@ public class MultiLevelService {
                 }
             }
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Importing levels for {} failed; rolling back", manifestFile, ex);
             for (Path createdDir : createdDirs) {
                 try {
                     MapLibraryService.deleteRecursive(createdDir);
-                } catch (IOException ignored) {
+                } catch (IOException cleanup) {
+                    LOG.warn("Could not remove partially imported level folder {}", createdDir, cleanup);
                 }
             }
             throw ex;
@@ -540,6 +557,7 @@ public class MultiLevelService {
                 saveManifest(manifestFile, manifest);
             }
         } catch (IOException | RuntimeException ex) {
+            LOG.error("Applying level changes to {} failed; rolling back", manifestFile, ex);
             boolean allBack = true;
             for (Undo undo : undoMoves) {
                 allBack &= undo.run();
@@ -547,10 +565,12 @@ public class MultiLevelService {
             for (Path createdDir : createdDirs) {
                 try {
                     MapLibraryService.deleteRecursive(createdDir);
-                } catch (IOException ignored) {
+                } catch (IOException cleanup) {
+                    LOG.warn("Could not remove level folder {} during rollback", createdDir, cleanup);
                 }
             }
             if (!allBack) {
+                LOG.error("Some maps could not be moved back after a failed change to {}", manifestFile);
                 throw new MapsLeftBehindException(ex.getMessage() + " Some maps could not be moved back; they are in \""
                         + dir.resolve(LEVELS_DIR) + "\".", ex);
             }
@@ -562,8 +582,8 @@ public class MultiLevelService {
         for (Path loose : looseOriginals) {
             try {
                 Files.deleteIfExists(loose);
-            } catch (IOException ignored) {
-                // a leftover copy of a map that is now a level
+            } catch (IOException ex) {
+                LOG.warn("Could not delete leftover loose map {}", loose, ex);
             }
         }
         for (Path mapFile : extractedMaps.values()) {
@@ -572,8 +592,8 @@ public class MultiLevelService {
                 DmProject project = projectService.load(mapFile);
                 applyShared(sharedBefore, project);
                 projectService.save(mapFile, project);
-            } catch (IOException | RuntimeException ignored) {
-                // the map just keeps its own settings
+            } catch (IOException | RuntimeException ex) {
+                LOG.warn("Could not apply shared settings to extracted map {}; it keeps its own settings", mapFile, ex);
             }
         }
         for (Map.Entry<Path, MultiLevelManifest> source : foreign.entrySet()) {
@@ -584,32 +604,35 @@ public class MultiLevelService {
             if (levelDir.startsWith(dir.resolve(LEVELS_DIR)) && Files.isDirectory(levelDir)) {
                 try {
                     MapLibraryService.deleteRecursive(levelDir);
-                } catch (IOException ignored) {
-                    // no longer listed, so it is just unused disk space
+                } catch (IOException ex) {
+                    LOG.warn("Could not delete removed level folder {}", levelDir, ex);
                 }
             }
         }
         if (levels.isEmpty()) {
             try {
                 MapLibraryService.deleteRecursive(dir);
-            } catch (IOException ignored) {
-                // every level is gone or moved out already; a leftover file only wastes disk space
+            } catch (IOException ex) {
+                LOG.warn("Could not delete emptied multilevel package {}", dir, ex);
             }
+            LOG.info("Multilevel map {} has no levels left and was removed", manifestFile);
             return new ApplyResult(null, null, moved, removedIds);
         }
         if (levels.size() == 1) {
             Path collapsed = collapseQuietly(manifestFile, moved);
             if (collapsed != null) {
+                LOG.info("Multilevel map {} has one level left and became ordinary map {}", manifestFile, collapsed);
                 return new ApplyResult(null, collapsed, moved, removedIds);
             }
         }
         Path thumbnailLevel = levelFile(manifestFile, manifest.startLevel());
         try {
             projectService.loadOrCreateThumbnail(thumbnailLevel);
-        } catch (IOException | RuntimeException ignored) {
-            // the level just has no thumbnail
+        } catch (IOException | RuntimeException ex) {
+            LOG.warn("Could not create thumbnail for level {}", thumbnailLevel, ex);
         }
         writePackageThumbnail(manifestFile, thumbnailLevel);
+        LOG.info("Applied level changes to {}: now {} level(s), {} removed", manifestFile, levels.size(), removedIds.size());
         return new ApplyResult(manifestFile, null, moved, removedIds);
     }
 
@@ -637,8 +660,8 @@ public class MultiLevelService {
             } else {
                 writePackageThumbnail(sourceManifest, levelFile(sourceManifest, before.startLevel()));
             }
-        } catch (IOException | RuntimeException ignored) {
-            // the other multilevel map keeps its (now shorter) list of levels
+        } catch (IOException | RuntimeException ex) {
+            LOG.warn("Could not update multilevel map {} after levels were taken from it", sourceManifest, ex);
         }
     }
 
@@ -651,6 +674,7 @@ public class MultiLevelService {
             relocate(moved, levelFile, mapFile);
             return mapFile;
         } catch (IOException | RuntimeException ex) {
+            LOG.warn("Could not collapse single-level map {}", manifestFile, ex);
             return null;
         }
     }
@@ -687,8 +711,8 @@ public class MultiLevelService {
         }
         try {
             MapLibraryService.deleteRecursive(old);
-        } catch (IOException ignored) {
-            // leftover of the old package; the map itself is complete
+        } catch (IOException ex) {
+            LOG.warn("Could not delete leftover package {}", old, ex);
         }
         return dir.resolve(name + MapLibraryService.EXTENSION);
     }
@@ -727,8 +751,8 @@ public class MultiLevelService {
                     return new LevelRef(manifestFile.toAbsolutePath().normalize(), level.getId());
                 }
             }
-        } catch (IOException | RuntimeException ignored) {
-            // not readable: treat as no level
+        } catch (IOException | RuntimeException ex) {
+            LOG.debug("Could not locate level for {}", file, ex);
         }
         return null;
     }
@@ -885,6 +909,7 @@ public class MultiLevelService {
                 Files.move(toDir, fromDir);
                 return true;
             } catch (IOException | RuntimeException ex) {
+                LOG.error("Could not move {} back to {}", toDir, fromDir, ex);
                 return false;
             }
         };
@@ -907,8 +932,8 @@ public class MultiLevelService {
     private static boolean deleteQuietly(Path dir) {
         try {
             MapLibraryService.deleteRecursive(dir);
-        } catch (IOException ignored) {
-            // leftover copy only
+        } catch (IOException ex) {
+            LOG.warn("Could not delete leftover level copy {}", dir, ex);
         }
         return true;
     }

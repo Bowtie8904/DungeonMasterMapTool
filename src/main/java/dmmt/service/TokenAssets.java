@@ -2,6 +2,8 @@ package dmmt.service;
 
 import dmmt.model.DmProject.TokenDefinition;
 
+import dmmt.log.Log;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.util.HexFormat;
  */
 public final class TokenAssets
 {
+    private static final Log LOG = Log.of(TokenAssets.class);
     private static Path sessionDirectory;
 
     private TokenAssets()
@@ -191,8 +194,7 @@ public final class TokenAssets
                 }
                 catch (IOException ex)
                 {
-                    java.util.logging.Logger.getLogger(TokenAssets.class.getName())
-                                            .log(java.util.logging.Level.WARNING, "Could not remove session token artwork", ex);
+                    LOG.warn("Could not remove session token artwork", ex);
                 }
             }, "token-art-cleanup"));
         }
