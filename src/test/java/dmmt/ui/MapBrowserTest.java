@@ -437,6 +437,8 @@ class MapBrowserTest {
         Path download;
         Throwable catalogFailure;
         int previewRequests;
+        String commandAction;
+        com.fasterxml.jackson.databind.JsonNode commandPayload;
 
         BrowserConnection() {
             var root = java.util.UUID.randomUUID();
@@ -457,6 +459,9 @@ class MapBrowserTest {
             return preview.get();
         }
         public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+            assertEquals("maps", domain);
+            commandAction = action;
+            commandPayload = payload;
             return operation;
         }
         public CompletableFuture<dmmt.remote.RemoteAssetStore.AssetDescriptor> upload(Path file) { throw new AssertionError("Unexpected upload"); }
@@ -464,6 +469,88 @@ class MapBrowserTest {
             assertNotNull(download, "Unexpected download");
             return CompletableFuture.completedFuture(download);
         }
+    }
+
+    @Test
+    void libraryDragAllowsLocalAndRemoteControlButNotReadOnlyCatalogOrRoot() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            assertTrue(f.browser.canStartLibraryDrag(f.entry(0), MouseButton.PRIMARY));
+            f.browser.beginRemote(() -> CompletableFuture.completedFuture(remoteListing()));
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            assertFalse(f.browser.canStartLibraryDrag(f.entry(0), MouseButton.PRIMARY));
+            f.browser.endRemote();
+            f.browser.beginRemote(new BrowserConnection());
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            try {
+                assertTrue(f.browser.canStartLibraryDrag(f.entry(0), MouseButton.PRIMARY));
+                assertFalse(f.browser.canStartLibraryDrag(f.tree.getRoot().getValue(), MouseButton.PRIMARY));
+                assertFalse(f.browser.canStartLibraryDrag(null, MouseButton.PRIMARY));
+                assertFalse(f.browser.canStartLibraryDrag(f.entry(0), MouseButton.SECONDARY));
+            } finally {
+                f.browser.endRemote();
+            }
+        });
+    }
+
+    @Test
+    void remoteLibraryMovesMapsMultilevelMapsAndFoldersUsingHostHandlesOnly() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        var root = connection.listing.nodes().getFirst().id();
+        var folder = java.util.UUID.randomUUID();
+        var multi = java.util.UUID.randomUUID();
+        var destination = java.util.UUID.randomUUID();
+        var nodes = new ArrayList<>(connection.listing.nodes());
+        nodes.add(new dmmt.remote.RemoteMaps.Node(folder, root, "Source folder",
+                dmmt.remote.RemoteMapCatalog.Kind.FOLDER, List.of(), 0, 1));
+        nodes.add(new dmmt.remote.RemoteMaps.Node(multi, root, "Tower",
+                dmmt.remote.RemoteMapCatalog.Kind.MULTILEVEL, List.of(), 2, 1));
+        nodes.add(new dmmt.remote.RemoteMaps.Node(destination, root, "Destination",
+                dmmt.remote.RemoteMapCatalog.Kind.FOLDER, List.of(), 0, 1));
+        connection.listing = new dmmt.remote.RemoteMaps.Listing(connection.listing.context(), 7, nodes,
+                connection.listing.current(), connection.listing.currentLabel(), connection.listing.recent());
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.library.forbidLocalScan = true;
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            try {
+                var entries = f.tree.getRoot().getChildren().stream().map(TreeItem::getValue)
+                        .filter(entry -> !entry.name().equals("Destination")).toList();
+                assertEquals(3, entries.size());
+                for (var entry : entries)
+                    assertTrue(f.browser.canStartLibraryDrag(entry, MouseButton.PRIMARY));
+                var target = f.tree.getRoot().getChildren().stream().map(TreeItem::getValue)
+                        .filter(entry -> entry.name().equals("Destination")).findFirst().orElseThrow();
+                Method move = MapBrowser.class.getDeclaredMethod("moveAll", List.class, Path.class);
+                move.setAccessible(true);
+                move.invoke(f.browser, entries, target.path());
+                assertEquals("move", connection.commandAction);
+                var command = connection.mapper.treeToValue(connection.commandPayload, dmmt.remote.RemoteMaps.Command.class);
+                assertEquals(connection.listing.context(), command.context());
+                assertEquals(7, command.revision());
+                assertEquals(destination, command.destination());
+                assertEquals(java.util.Set.of(connection.listing.current(), folder, multi),
+                        new java.util.HashSet<>(command.entries()));
+                assertEquals(0, f.host.operations);
+                assertNull(f.host.opened);
+            } catch (ReflectiveOperationException | IOException failure) {
+                throw new AssertionError(failure);
+            } finally {
+                f.library.forbidLocalScan = false;
+                f.browser.endRemote();
+            }
+        });
     }
 
         @Test void remoteMenusDispatchOpaqueCommandsWithoutMutatingLocalLibrary() throws Exception {

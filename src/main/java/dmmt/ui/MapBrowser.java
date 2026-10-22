@@ -2389,6 +2389,12 @@ public class MapBrowser extends VBox
 
     // ---- Drag & drop ----
 
+    boolean canStartLibraryDrag(Entry entry, MouseButton button)
+    {
+        return (remoteCatalog == null || remoteConnection != null)
+                && entry != null && !isRoot(entry) && button == MouseButton.PRIMARY;
+    }
+
     private Path dropFolder(Entry target)
     {
         if (target == null)
@@ -2659,7 +2665,7 @@ public class MapBrowser extends VBox
 
             setOnDragDetected(event -> {
                 Entry entry = getItem();
-                if (remoteCatalog != null || entry == null || isRoot(entry) || event.getButton() != MouseButton.PRIMARY)
+                if (!canStartLibraryDrag(entry, event.getButton()))
                 {
                     return;
                 }

@@ -1515,6 +1515,10 @@ having to know the control's units. An explicit amount overrides it.
   current transfer/error status and Disconnect. A shows "Hosting - <client>" with revoke/stop access.
 - In remote mode, normal Save/Open/library actions target A. Import pickers and drag/drop read B's
   files; exports download to B. Destination-sensitive dialogs and status messages identify the host.
+- Library drag-and-drop on B supports moving maps, multilevel maps and folders (including multiple
+  selections) into host folders or the library root through the existing guarded host commands,
+  never B's filesystem. Catalog-only browsing remains read-only. This is a compatible UI fix;
+  the remote compatibility version remains unchanged.
 - Closing B ends its connection, not A's application. Explicit Disconnect restores B's prior standalone
   workspace and settings; it does not automatically resume local audio or reopen a local player window.
 - Stop hosting/revoke on A ends B's access without closing A's map, player window or audio.

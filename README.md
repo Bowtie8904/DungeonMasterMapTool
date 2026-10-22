@@ -18,6 +18,9 @@ selections. Completed edits, shared Undo/Redo, map/token libraries and settings 
 no video streaming and unfinished drawing previews stay local. Player windows and all audio output
 run only on A. A remains authoritative when edits overlap.
 
+Drag maps, multilevel maps or folders in B's map library onto a folder or the library root
+to move them on A. Multiple selected items move together; B's local library is not changed.
+
 Compatibility uses the code constant `RemoteCompatibility.VERSION` (currently `"3"`), not an
 application-content hash or release number. Increment this version when changes to remote messages,
 commands, snapshots, settings or asset transfers break compatibility; compatible fixes and unrelated
