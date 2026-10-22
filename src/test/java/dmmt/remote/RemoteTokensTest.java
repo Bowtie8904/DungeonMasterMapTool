@@ -55,7 +55,8 @@ class RemoteTokensTest
 
             var prepared = h.await(RemoteTokens.download(state, h.connection, h.worker, h.owner::add));
             var local = prepared.library().getEntries().getFirst().getToken();
-            assertTrue(RemoteTokens.localArtwork(local.getImage()).startsWith(directory.resolve("client-cache")));
+            assertTrue(RemoteTokens.localArtwork(local.getImage())
+                    .startsWith(directory.resolve("client-cache").toRealPath()));
             assertEquals(token.getShape(), local.getShape());
             assertFalse(local.isBorder());
             assertEquals(2, local.getZoom());

@@ -3990,12 +3990,17 @@ public class DungeonMasterMapToolApplication extends Application {
             var bounds = screen.getBounds();
             String label = "Screen " + (screens.indexOf(screen) + 1) + " (" + (int) bounds.getWidth()
                     + "x" + (int) bounds.getHeight() + " at " + (int) bounds.getMinX() + "," + (int) bounds.getMinY() + ")";
-            return new RemotePlayerSession.Monitor(label, bounds.getWidth(), bounds.getHeight(),
-                    screen.getOutputScaleX(), screen.getOutputScaleY(), screen.getDpi());
+            return new RemotePlayerSession.Monitor(label, Math.max(1, bounds.getWidth()), Math.max(1, bounds.getHeight()),
+                    validScale(screen.getOutputScaleX()), validScale(screen.getOutputScaleY()),
+                    screen.getDpi() > 0 && screen.getDpi() <= 10_000 ? screen.getDpi() : 96);
         }).toList();
         return new RemotePlayerSession.Output(playerStage != null, showScaleTestSquare,
                 playerCanvas == null ? 0 : playerCanvas.getWidth(), playerCanvas == null ? 0 : playerCanvas.getHeight(),
                 Math.clamp(selectedScreenIndex(), 0, monitors.size() - 1), monitors);
+    }
+
+    private static double validScale(double scale) {
+        return scale > 0 && scale <= 32 ? scale : 1;
     }
 
     private RemotePlayerSession.Point localLaserPoint() {
