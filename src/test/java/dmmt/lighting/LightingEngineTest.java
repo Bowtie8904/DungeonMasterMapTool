@@ -8,6 +8,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LightingEngineTest {
+    @Test
+    void replicaRenderingNeverCreatesResizesOrRevealsAnAuthoritativeFogMask() {
+        var project = projectWithWall();
+        project.getLighting().getLights().add(light(DmProject.RevealMode.PERSISTENT));
+        var engine = new LightingEngine();
+        engine.updateReplica(project);
+        org.junit.jupiter.api.Assertions.assertNull(project.getFog().getMask());
+        new dmmt.service.FogService().ensureMask(project);
+        var mask = project.getFog().getMask();
+        var bits = mask.copyBits();
+        long version = mask.getVersion();
+        project.getMap().getGrid().setPixelsPerCell(200);
+        project.getLighting().getLights().getFirst().setX(800);
+        engine.updateReplica(project);
+        org.junit.jupiter.api.Assertions.assertSame(mask, project.getFog().getMask());
+        org.junit.jupiter.api.Assertions.assertEquals(bits, mask.copyBits());
+        org.junit.jupiter.api.Assertions.assertEquals(version, mask.getVersion());
+        engine.update(project);
+        assertFalse(project.getFog().getMask().copyBits().isEmpty());
+    }
+
     private static int cellAt(FogMask mask, double x, double y) {
         int col = (int) Math.floor((x - mask.getOriginX()) / mask.getCellSize());
         int row = (int) Math.floor((y - mask.getOriginY()) / mask.getCellSize());
@@ -118,6 +139,39 @@ class LightingEngineTest {
         FogMask mask = project.getFog().getMask();
         assertTrue(mask.copyBits().isEmpty());
         assertTrue(engine.getLiveReveal().isEmpty());
+    }
+
+    @Test
+    void committedEditAndRestoredFogDoNotReapplyUnchangedPersistentLights() throws Exception {
+        var before = projectWithWall();
+        before.getLighting().getLights().add(light(DmProject.RevealMode.PERSISTENT));
+        new LightingEngine().update(before);
+        before.getFog().getMask().applyRect(0, 0, 1000, 1000, false);
+        var after = new dmmt.service.ProjectService().copy(before);
+        var engine = new LightingEngine();
+        engine.completeCommittedEdit(before, after);
+        assertTrue(after.getFog().getMask().copyBits().isEmpty());
+        engine.acceptCommittedState(after);
+        engine.update(after);
+        assertTrue(after.getFog().getMask().copyBits().isEmpty());
+    }
+
+    @Test
+    void committedRevealModeChangeAndFogReenableApplyPersistentReveal() throws Exception {
+        var before = projectWithWall();
+        before.getLighting().getLights().add(light(DmProject.RevealMode.WHILE_LIT));
+        new LightingEngine().update(before);
+        var after = new dmmt.service.ProjectService().copy(before);
+        after.getLighting().getLights().getFirst().setRevealMode(DmProject.RevealMode.PERSISTENT);
+        new LightingEngine().completeCommittedEdit(before, after);
+        assertFalse(after.getFog().getMask().copyBits().isEmpty());
+        before = new dmmt.service.ProjectService().copy(after);
+        before.getFog().setEnabled(false);
+        before.getFog().getMask().applyRect(0, 0, 1000, 1000, false);
+        after = new dmmt.service.ProjectService().copy(before);
+        after.getFog().setEnabled(true);
+        new LightingEngine().completeCommittedEdit(before, after);
+        assertFalse(after.getFog().getMask().copyBits().isEmpty());
     }
 
     @Test

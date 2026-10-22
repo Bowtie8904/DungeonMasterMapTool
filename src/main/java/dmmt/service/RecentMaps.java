@@ -50,6 +50,11 @@ public final class RecentMaps {
         return List.copyOf(entries);
     }
 
+    /** Memory-only projection; callers can intersect with a separately scanned library. */
+    public List<Path> snapshot() {
+        return List.copyOf(entries);
+    }
+
     /** The last other map; keeps a session fallback when the configured history holds only one map. */
     public Optional<Path> previous(Path currentMap) {
         Path current = currentMap == null ? null : normalize(currentMap);

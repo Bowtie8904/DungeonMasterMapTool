@@ -683,7 +683,7 @@ public final class Tuning {
 
     // ---- Audio ----
 
-    public static final Setting<Boolean> AUDIO_ENABLED = bool(AUDIO, "audio.enabled", true, true,
+    public static final Setting<Boolean> AUDIO_ENABLED = bool(AUDIO, "audio.enabled", true, false,
             "Enable the audio feature (ambient music and sound effects). When off, the status bar transport group, the audio overlay, their API endpoints and the whole audio engine stay unloaded.");
     public static final Setting<String> AUDIO_FOLDER = text(AUDIO, "audio.folder", "dmmap-audio", true,
             "Folder of the audio library (imported music and sound effects). Relative paths start next to the settings file.");

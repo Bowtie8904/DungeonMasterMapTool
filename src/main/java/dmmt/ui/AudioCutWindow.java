@@ -75,6 +75,10 @@ public final class AudioCutWindow {
 
     private static Stage open;
 
+    static void closeOpen() {
+        if (open != null) open.close();
+    }
+
     private final Stage stage;
     private final AudioLibraryService library;
     private final AudioTrack track;
@@ -134,6 +138,10 @@ public final class AudioCutWindow {
     private Button playButton;
     private final BooleanProperty cuttingBusy = new SimpleBooleanProperty();
     private int clipCounter = 1;
+    private boolean remoteFetching;
+    private RemoteBusyDialog busyDialog;
+    private AudioLibraryService.PlaybackSource remoteSource;
+    private boolean playWhenFetched;
 
     private AudioCutWindow(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged) {
         this(owner, library, track, onChanged, new JavaFxAudioOutput());
@@ -397,6 +405,18 @@ public final class AudioCutWindow {
     // ---- Waveform analysis ----
 
     private void startAnalysis() {
+        if (library.remoteBackend() != null) {
+            progress.setProgress(-1);
+            library.remoteBackend().waveform(track.getId(), Tuning.AUDIO_WAVEFORM_FRAME_MS.get())
+                    .whenComplete((result, failure) -> {
+                        if (!stage.isShowing()) return;
+                        if (failure != null) {
+                            progress.setProgress(0);
+                            status.setText("Could not read the host waveform: " + failure.getMessage());
+                        } else usePeaks(result);
+                    });
+            return;
+        }
         Path file = library.fileOf(track);
         Path cache = library.peaksFileOf(track);
         int frameMs = Tuning.AUDIO_WAVEFORM_FRAME_MS.get();
@@ -881,7 +901,11 @@ public final class AudioCutWindow {
             return;
         }
         if (voice == null) {
-            AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+            AudioLibraryService.PlaybackSource source = previewSource();
+            if (source == null) {
+                playWhenFetched = true;
+                return;
+            }
             voice = output.open(source.file(), false);
             if (voice == null) {
                 status.setText("This file cannot be played here.");
@@ -967,7 +991,10 @@ public final class AudioCutWindow {
             return;
         }
         if (preparedVoice == null) {
-            AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+            AudioLibraryService.PlaybackSource source = previewSource();
+            if (source == null) {
+                return;
+            }
             preparedVoice = output.open(source.file(), false);
             if (preparedVoice == null) {
                 status.setText("Could not preload the loop; preview will repeat without a crossfade.");
@@ -1006,6 +1033,12 @@ public final class AudioCutWindow {
     }
 
     private void updatePlayback() {
+        if (library.remoteBackend() != null && library.track(track.getId()).isEmpty()) {
+            setPlaying(false);
+            setCuttingBusy(true);
+            status.setText("This track was removed or audio was disabled on A. Close this editor.");
+            return;
+        }
         refreshPreviewSources();
         refreshPreviewVolumes();
         if (playing && voice != null) {
@@ -1066,18 +1099,22 @@ public final class AudioCutWindow {
     }
 
     private void refreshPreviewVolumes() {
+        AudioTrack current = library.track(track.getId()).orElse(track);
         if (voice != null) {
-            voice.setVolume(0.8 * track.playbackVolumeFactor(playbackSources.get(voice).bakedGainDb())
+            voice.setVolume(0.8 * current.playbackVolumeFactor(playbackSources.get(voice).bakedGainDb())
                     * (blend == null ? 1 : blend.incomingGain()));
         }
         if (outgoingVoice != null) {
-            outgoingVoice.setVolume(0.8 * track.playbackVolumeFactor(playbackSources.get(outgoingVoice).bakedGainDb())
+            outgoingVoice.setVolume(0.8 * current.playbackVolumeFactor(playbackSources.get(outgoingVoice).bakedGainDb())
                     * blend.outgoingGain());
         }
     }
 
     private void refreshPreviewSources() {
-        AudioLibraryService.PlaybackSource source = library.playbackSourceOf(track);
+        AudioLibraryService.PlaybackSource source = previewSource();
+        if (source == null) {
+            return;
+        }
         AudioOutput.Voice previous = voice;
         voice = replacePreviewVoice(voice, source, playing);
         preparedVoice = replacePreviewVoice(preparedVoice, source, false);
@@ -1232,6 +1269,21 @@ public final class AudioCutWindow {
         AudioKind kind = asEffect.isSelected() ? AudioKind.EFFECT : AudioKind.MUSIC;
         AudioCategory category = categoryBox.getSelectionModel().getSelectedItem();
         String categoryId = category == null ? track.getCategoryId() : category.getId();
+        if (library.remoteBackend() != null) {
+            setCuttingBusy(true);
+            progress.setProgress(-1);
+            status.setText("Creating clips on A...");
+            library.remoteBackend().command("cut", track.getId(), kind, categoryId,
+                    requests.stream().map(request -> new dmmt.remote.RemoteAudio.Clip(
+                            request.name(), request.startMs(), request.endMs())).toList())
+                    .whenComplete((result, failure) -> {
+                        finishCutting(failure == null ? requests.size() + " clips created on A."
+                                : "Host clip job failed: " + failure.getMessage());
+                        if (failure == null) clipCounter += requests.size();
+                        onChanged.run();
+                    });
+            return;
+        }
         int total = requests.size();
         Task<List<String>> task = new Task<>() {
             @Override
@@ -1330,6 +1382,9 @@ public final class AudioCutWindow {
 
     private void dispose() {
         playing = false;
+        if (busyDialog != null) {
+            busyDialog.close();
+        }
         if (timer != null) {
             timer.stop();
         }
@@ -1344,7 +1399,73 @@ public final class AudioCutWindow {
             voice = null;
         }
         cancelLoopBlend();
-        output.close();
+        if (output != null) output.close();
         open = null;
+    }
+
+    /**
+     * The file this editor plays. Locally that is the library's playback copy; when controlling another machine it
+     * is downloaded from A (the one exception to host-only audio), and fetched again when A's loudness gain changes.
+     */
+    private AudioLibraryService.PlaybackSource previewSource() {
+        if (!(library.remoteBackend() instanceof dmmt.remote.RemoteAudio.Client client)) {
+            return library.playbackSourceOf(track);
+        }
+        AudioTrack current = library.track(track.getId()).orElse(track);
+        if (remoteSource != null && remoteSource.bakedGainDb() == current.getPlaybackGainDb()) {
+            return remoteSource;
+        }
+        if (!remoteFetching) {
+            remoteFetching = true;
+            status.setText("Downloading audio from A...");
+            if (busyDialog == null) busyDialog = new RemoteBusyDialog(stage);
+            Runnable ended = busyDialog.begin("Downloading audio",
+                    "Fetching \"" + track.getName() + "\" from the host so it can be previewed here...");
+            var progress = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
+                    javafx.util.Duration.millis(200), event -> {
+                        long total = 0;
+                        long done = 0;
+                        for (var transfer : client.transferProgress()) {
+                            total += transfer.totalBytes();
+                            done += transfer.transferredBytes();
+                        }
+                        if (total > 0) {
+                            busyDialog.progress(done / (double) total, String.format(java.util.Locale.ROOT,
+                                    "%.1f / %.1f MB", done / 1_048_576.0, total / 1_048_576.0));
+                        } else {
+                            busyDialog.progress(-1, "Waiting for the host to prepare the file...");
+                        }
+                    }));
+            progress.setCycleCount(javafx.animation.Animation.INDEFINITE);
+            progress.play();
+            Runnable finished = () -> {
+                progress.stop();
+                ended.run();
+            };
+            client.playbackSource(track.getId()).whenComplete((source, failure) -> {
+                finished.run();
+                remoteFetching = false;
+                if (failure != null) {
+                    status.setText("Could not download the audio from A: " + failure.getMessage());
+                    playWhenFetched = false;
+                    return;
+                }
+                remoteSource = source;
+                status.setText("");
+                if (playWhenFetched && !playing && stage.isShowing()) {
+                    playWhenFetched = false;
+                    togglePlay();
+                }
+            });
+        }
+        return remoteSource;
+    }
+
+    private long previewStart() {
+        return loop.isSelected() ? loopStartMs() : hasSelection() ? selectionStartMs : 0;
+    }
+
+    private long previewEnd() {
+        return loop.isSelected() ? loopEndMs() : hasSelection() ? selectionEndMs : totalMs;
     }
 }

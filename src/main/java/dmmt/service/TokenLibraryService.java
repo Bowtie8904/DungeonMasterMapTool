@@ -36,6 +36,7 @@ public final class TokenLibraryService
 
     private final Path file;
     private final ObjectMapper mapper = JsonMappers.create();
+    private volatile long revision;
 
     public TokenLibraryService(Path root)
     {
@@ -45,6 +46,12 @@ public final class TokenLibraryService
     public static TokenLibraryService configured()
     {
         return new TokenLibraryService(AppSettings.resolveFile().toAbsolutePath().getParent().resolve("dmmap-tokens"));
+    }
+
+    /** Session-local mutation stamp, shared by the local and remote library surfaces. */
+    public long revision()
+    {
+        return revision;
     }
 
     public synchronized Library load() throws IOException
@@ -67,6 +74,7 @@ public final class TokenLibraryService
                 TokenAssets.write(entry.token, file.getParent(), "images");
             mapper.writerWithDefaultPrettyPrinter().writeValue(staging.toFile(), stored);
             Files.move(staging, file, StandardCopyOption.REPLACE_EXISTING);
+            revision++;
             var referenced = new java.util.HashSet<Path>();
             for (Entry entry : stored.entries)
             {

@@ -262,13 +262,15 @@ public final class AudioOverlay {
         Icons.tooltip(slider, name + " volume. Double-click to reset.");
         slider.valueProperty().addListener((observable, oldValue, newValue) -> {
             value.setText(percent(newValue.doubleValue()));
-            apply.accept(newValue.doubleValue());
-            if (!syncing && !slider.isValueChanging()) {
+            if (!syncing) {
+                apply.accept(newValue.doubleValue());
+            }
+            if (!syncing && !slider.isValueChanging() && !engine.isRemote()) {
                 settings.putDouble(key, round(newValue.doubleValue()));
             }
         });
         slider.valueChangingProperty().addListener((observable, was, changing) -> {
-            if (!changing && !syncing) {
+            if (!changing && !syncing && !engine.isRemote()) {
                 settings.putDouble(key, round(slider.getValue()));
             }
         });
@@ -356,7 +358,7 @@ public final class AudioOverlay {
                 if (engine.isCategoryActive(category.getId())) {
                     engine.stopMusic();
                 } else {
-                    settings.put("audio.lastCategory", category.getId());
+                    if (!engine.isRemote()) settings.put("audio.lastCategory", category.getId());
                     engine.playCategory(category.getId());
                 }
                 refreshState();

@@ -18,6 +18,13 @@ restrictions or Wi-Fi client isolation may still block connections.
 Cross-origin browser requests remain rejected and CORS is not enabled. Direct navigation to a copied URL in a
 phone browser works; requests made by a separate web page remain subject to the browser-origin restrictions.
 
+The authenticated LAN remote-workspace feature is separate from this HTTP API. Start it explicitly from
+the **Session** sidebar tab; `/api/controls/session/browser` only opens that tab and
+does not start hosting, approve a peer or disclose pairing credentials. Discovered hosts support explicit
+Request control followed by approval on A without copied details or codes. Host settings never start a local
+HTTP listener on B. Existing controls continue through their normal UI actions, including host-directed
+actions while B is connected. See [LAN remote control](../README.md#lan-remote-control) for pairing and recovery.
+
 ## External control setup
 
 Use an HTTP-request action/plugin on your control device, or a local script that sends an HTTP request.

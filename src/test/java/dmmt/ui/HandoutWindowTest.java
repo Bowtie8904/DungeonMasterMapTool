@@ -26,6 +26,72 @@ class HandoutWindowTest {
     }
 
     @Test
+    void remoteRecentPaneUsesSuppliedHostThumbnailsAndCommandsWithoutOpeningLocalStorage() throws Exception {
+        onFx(() -> {
+            var adds = new java.util.ArrayList<String>();
+            var removals = new java.util.ArrayList<String>();
+            var window = new HandoutWindow(null, List.of(), () -> true, () -> {}, () -> {});
+            try {
+                window.remoteRecents(adds::add, removals::add);
+                String id = "a".repeat(32);
+                var thumbnails = new java.util.LinkedHashMap<String, Image>();
+                thumbnails.put(id, new WritableImage(96, 80));
+                window.applyRemoteRecents(thumbnails, 100);
+                assertNull(get(window, "recents"));
+                assertTrue(((javafx.scene.layout.VBox) get(window, "recentPane")).isVisible());
+                assertEquals(List.of(id), ((javafx.scene.control.ListView<?>) get(window, "recentList")).getItems());
+                invoke(window, "addFromRecent", new Class<?>[]{String.class}, id);
+                invoke(window, "removeRecent", new Class<?>[]{String.class}, id);
+                assertEquals(List.of(id), adds);
+                assertEquals(List.of(id), removals);
+                assertTrue(window.getImages().isEmpty(), "Only an accepted host snapshot may alter the board.");
+                window.remoteStatus(true, "Paused");
+                invoke(window, "addFromRecent", new Class<?>[]{String.class}, id);
+                invoke(window, "removeRecent", new Class<?>[]{String.class}, id);
+                assertEquals(1, adds.size());
+                assertEquals(1, removals.size());
+                window.applyRemoteRecents(java.util.Map.of(), 0);
+                assertTrue(((javafx.scene.control.Label) get(window, "recentPlaceholder")).getText().contains("turned off"));
+            } finally { window.close(); }
+        });
+    }
+
+    @Test
+    void remoteSnapshotsPreserveLocalSelectionWithoutEchoAndPausedKeyboardCannotMutateBoard() throws Exception {
+        onFx(() -> {
+            var changes = new java.util.concurrent.atomic.AtomicInteger();
+            var closed = new java.util.concurrent.atomic.AtomicInteger();
+            var window = new HandoutWindow(null, List.of(), () -> true, changes::incrementAndGet, closed::incrementAndGet);
+            try {
+                Image first = new WritableImage(20, 30), second = new WritableImage(10, 10);
+                var snapshot = new HandoutWindow.Snapshot(List.of(first, second), 270, true, true, List.of(1));
+                window.applySnapshot(snapshot);
+                assertEquals(0, changes.get());
+                invoke(window, "click", new Class<?>[]{int.class, boolean.class}, 0, false);
+                window.applySnapshot(snapshot);
+                assertFalse(((Button) get(window, "deleteButton")).isDisabled());
+                assertEquals(List.of(second), window.getImages());
+                assertTrue(((ToggleButton) get(window, "mirrorToggle")).isSelected());
+                assertTrue(((ToggleButton) get(window, "showSelectedToggle")).isSelected());
+                window.remoteStatus(true, "Paused");
+                window.show();
+                var stage = (Stage) get(window, "stage");
+                javafx.event.Event.fireEvent(stage.getScene(), new javafx.scene.input.KeyEvent(
+                        javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.DELETE,
+                        false, false, false, false));
+                assertEquals(snapshot, window.snapshot());
+                window.close();
+                assertTrue(window.isShownToPlayers());
+                assertEquals(List.of(second), window.getImages());
+                assertEquals(0, changes.get());
+                assertEquals(1, closed.get());
+            } finally {
+                window.close();
+            }
+        });
+    }
+
+    @Test
     void applicationReusesImagesAfterClosingAndReopening() throws Exception {
         onFx(() -> {
             DungeonMasterMapToolApplication app = new DungeonMasterMapToolApplication();

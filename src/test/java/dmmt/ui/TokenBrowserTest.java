@@ -4,6 +4,9 @@ import dmmt.FxTestSupport;
 import dmmt.api.DmControlApi;
 import dmmt.model.DmProject.TokenDefinition;
 import dmmt.render.TokenArt;
+import dmmt.remote.RemoteOperations;
+import dmmt.remote.RemoteAssetStore;
+import dmmt.remote.RemoteTokens;
 import dmmt.service.TokenLibraryService;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -20,6 +23,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -67,6 +73,123 @@ class TokenBrowserTest
             visibility.apply(Set.of());
             assertTrue(browser.controls().values().stream().allMatch(javafx.scene.Node::isManaged));
         });
+    }
+
+    @Test
+    void remoteBrowserCreatesAgainstHostAndNeverReadsOrWritesTheClientLibraryWhileConnected() throws Exception
+    {
+        TokenLibraryService local = new TokenLibraryService(temp);
+        local.put(TokenDefinition.builder().id("local").name("Local only").build(), "");
+        byte[] originalFile = java.nio.file.Files.readAllBytes(temp.resolve("tokens.json"));
+        AtomicReference<TokenBrowser> browser = new AtomicReference<>();
+        AtomicReference<RemoteTokens.State> state = new AtomicReference<>(new RemoteTokens.State(0,
+                java.util.List.of("Host folder"), java.util.List.of(new RemoteTokens.Entry("Host folder",
+                new RemoteTokens.Definition("host", "Host only", "#123456", 1, dmmt.model.DmProject.TokenShape.SQUARE,
+                        false, 1, .5, .5, null, null)))));
+        AtomicInteger queries = new AtomicInteger();
+        AtomicInteger commands = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicBoolean connected = new java.util.concurrent.atomic.AtomicBoolean(true);
+        RemoteOperations.Connection connection = new RemoteOperations.Connection()
+        {
+            @Override public boolean connected() { return connected.get(); }
+            @Override public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(
+                    String domain, String action, com.fasterxml.jackson.databind.JsonNode payload)
+            {
+                assertTrue(Platform.isFxApplicationThread());
+                assertEquals("tokens", domain);
+                assertEquals("list", action);
+                queries.incrementAndGet();
+                return CompletableFuture.completedFuture(RemoteTokens.json(state.get()));
+            }
+            @Override public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(
+                    String domain, String action, com.fasterxml.jackson.databind.JsonNode payload)
+            {
+                assertTrue(Platform.isFxApplicationThread());
+                assertEquals("tokens", domain);
+                assertEquals("change", action);
+                commands.incrementAndGet();
+                try
+                {
+                    var request = dmmt.service.JsonMappers.create().treeToValue(payload, RemoteTokens.Request.class);
+                    assertEquals(RemoteTokens.Operation.PUT, request.operation());
+                    assertEquals(0, request.revision());
+                    assertEquals("Created on host", request.token().name());
+                    var entries = new java.util.ArrayList<>(state.get().entries());
+                    entries.add(new RemoteTokens.Entry(request.folder(), request.token()));
+                    state.set(new RemoteTokens.State(1, state.get().folders(), entries));
+                    return CompletableFuture.completedFuture(RemoteTokens.json(state.get()));
+                }
+                catch (java.io.IOException error)
+                {
+                    return CompletableFuture.failedFuture(error);
+                }
+            }
+            @Override public CompletableFuture<RemoteAssetStore.AssetDescriptor> upload(Path file)
+            {
+                return CompletableFuture.failedFuture(new AssertionError("Image-free tokens need no upload"));
+            }
+            @Override public CompletableFuture<Path> download(RemoteAssetStore.AssetDescriptor asset)
+            {
+                return CompletableFuture.failedFuture(new AssertionError("Image-free tokens need no download"));
+            }
+        };
+        onFx(() -> {
+            browser.set(new TokenBrowser(local, ignored -> fail("B must not optimistically update host map definitions")));
+            new Scene(browser.get());
+            browser.get().beginRemote(connection);
+        });
+        awaitFx(() -> browser.get().find("host") != null);
+        onFx(() -> {
+            assertNull(browser.get().find("local"));
+            var copied = browser.get().find("host");
+            copied.setName("Not a library mutation");
+            assertEquals("Host only", browser.get().find("host").getName());
+            assertFalse(browser.get().find("host").isBorder());
+        });
+        java.nio.file.Files.writeString(temp.resolve("tokens.json"), "invalid local library: remote mode must never load this");
+        onFx(() -> {
+            Platform.runLater(() -> {
+                var dialog = javafx.stage.Window.getWindows().stream()
+                        .filter(window -> window.getScene() != null && window.getScene().lookup("#token-name") != null)
+                        .findFirst().orElseThrow();
+                ((TextField)dialog.getScene().lookup("#token-name")).setText("Created on host");
+                DialogPane pane = (DialogPane)dialog.getScene().getRoot();
+                var save = pane.getButtonTypes().stream().filter(button -> button != ButtonType.CANCEL).findFirst().orElseThrow();
+                ((Button)pane.lookupButton(save)).fire();
+            });
+            ((Button)browser.get().controls().get("tokens.create")).fire();
+        });
+        awaitFx(() -> commands.get() == 1 && browser.get().find(state.get().entries().getLast().token().id()) != null);
+        assertEquals("invalid local library: remote mode must never load this",
+                java.nio.file.Files.readString(temp.resolve("tokens.json")));
+        connected.set(false);
+        onFx(() -> {
+            int before = queries.get();
+            browser.get().refresh();
+            browser.get().tickRemote();
+            assertEquals(before, queries.get(), "Disconnected clients must not poll or load local data");
+        });
+        java.nio.file.Files.write(temp.resolve("tokens.json"), originalFile);
+        onFx(() -> {
+            browser.get().endRemote();
+            assertNotNull(browser.get().find("local"));
+            assertNull(browser.get().find("host"));
+        });
+        assertEquals(1, commands.get());
+    }
+
+    private static void awaitFx(java.util.function.BooleanSupplier condition) throws Exception
+    {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        var done = new java.util.concurrent.atomic.AtomicBoolean();
+        while (System.nanoTime() < deadline)
+        {
+            onFx(() -> done.set(condition.getAsBoolean()));
+            if (done.get())
+                return;
+            Thread.sleep(20);
+        }
+        fail("The remote token browser did not finish synchronization.");
     }
 
     @Test

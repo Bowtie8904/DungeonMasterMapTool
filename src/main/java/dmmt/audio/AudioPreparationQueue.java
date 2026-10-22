@@ -47,6 +47,36 @@ public final class AudioPreparationQueue implements AutoCloseable {
     private final List<Item> items = new ArrayList<>();
     private final CopyOnWriteArrayList<Runnable> listeners = new CopyOnWriteArrayList<>();
     private volatile boolean closed;
+    private int running;
+    private AudioRemoteBackend remote;
+
+    public record RemoteItem(String name, String trackId, Stage stage, double progress, String error) {
+        public RemoteItem {
+            if (name == null || name.length() > 240 || name.contains("/") || name.contains("\\")
+                    || !Double.isFinite(progress) || progress < 0 || progress > 1 || stage == null) {
+                throw new IllegalArgumentException("Invalid remote preparation item.");
+            }
+        }
+    }
+
+    AudioPreparationQueue(AudioLibraryService library, AudioRemoteBackend remote) {
+        this.library = library;
+        this.remote = remote;
+    }
+
+    public synchronized void acceptRemote(List<RemoteItem> snapshot) {
+        if (remote == null) return;
+        items.clear();
+        for (RemoteItem value : snapshot) {
+            Item item = new Item(Path.of(value.name().isBlank() ? "Audio" : value.name()),
+                    AudioKind.MUSIC, null, null, value.trackId());
+            item.stage = value.stage();
+            item.progress = value.progress();
+            item.error = value.error();
+            items.add(item);
+        }
+        changed();
+    }
 
     AudioPreparationQueue(AudioLibraryService library) {
         this.library = library;
@@ -82,6 +112,11 @@ public final class AudioPreparationQueue implements AutoCloseable {
     public synchronized List<Item> items() { return List.copyOf(items); }
 
     public synchronized Item enqueue(Path source, AudioKind kind, String categoryId, String folderCategory) {
+        if (remote != null) {
+            if (closed) throw new IllegalStateException("The audio preparation queue is stopped.");
+            remote.upload(source, kind, categoryId, folderCategory);
+            return new Item(source, kind, categoryId, folderCategory, null);
+        }
         if (closed) {
             throw new IllegalStateException("The audio preparation queue is stopped.");
         }
@@ -95,6 +130,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                             return null;
                         }
                         item.executing = true;
+                        running++;
                         stage(item, Stage.COPYING);
                     }
                     String category = item.folderCategory == null || item.kind != AudioKind.MUSIC ? item.categoryId
@@ -117,7 +153,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                 } catch (Exception e) {
                     failed(item, e);
                 } finally {
-                    item.executing = false;
+                    finished(item);
                 }
                 return null;
             });
@@ -138,6 +174,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                             return null;
                         }
                         item.executing = true;
+                        running++;
                         stage(item, Stage.ANALYZING);
                     }
                     library.preparePending(item.trackId, value -> progress(item, value),
@@ -146,7 +183,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
                 } catch (Exception e) {
                     failed(item, e);
                 } finally {
-                    item.executing = false;
+                    finished(item);
                 }
                 return null;
             });
@@ -155,13 +192,40 @@ public final class AudioPreparationQueue implements AutoCloseable {
         }
     }
 
+    private synchronized void finished(Item item) {
+        if (item.executing) {
+            item.executing = false;
+            running--;
+            notifyAll();
+        }
+    }
+
+    /**
+     * Waits until no copy or preparation job is still running, so their source files are released. Jobs that had
+     * not started when the queue was closed return without opening any file.
+     */
+    public synchronized boolean awaitStopped(long timeout, java.util.concurrent.TimeUnit unit)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        while (running > 0) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                return false;
+            }
+            java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(this, remaining);
+        }
+        return true;
+    }
+
     public synchronized void prioritize(String trackId) {
+        if (remote != null) { remote.command("prioritize", trackId); return; }
         items.stream().filter(item -> trackId.equals(item.trackId) && item.stage == Stage.QUEUED)
                 .findFirst().ifPresent(item -> WorkScheduler.shared().prioritize(item.future));
         changed();
     }
 
     public synchronized void retry(String trackId) throws IOException {
+        if (remote != null) { remote.command("retry", trackId); return; }
         if (closed) {
             return;
         }
@@ -179,6 +243,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
     }
 
     public synchronized void retryFailed() throws IOException {
+        if (remote != null) { remote.command("retryFailed"); return; }
         for (Item item : List.copyOf(items)) {
             if (item.stage != Stage.FAILED && item.stage != Stage.CANCELLED) {
                 continue;
@@ -198,6 +263,7 @@ public final class AudioPreparationQueue implements AutoCloseable {
     }
 
     public synchronized void cancelRemaining() {
+        if (remote != null) { remote.command("cancelPreparation"); return; }
         for (Item item : items) {
             if (!terminal(item.stage)) {
                 cancel(item);

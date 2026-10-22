@@ -1,4 +1,4 @@
-# Dungeon Master Map Tool - Living Specification
+﻿# Dungeon Master Map Tool - Living Specification
 
 ## 1) Chosen Technology Stack
 
@@ -74,6 +74,7 @@ Desktop tool for tabletop dungeon masters that:
 - [x] Bright core highlight per light: additive hot-spot that brightens the map texture at the light's center instead of covering it (3.6)
 - [x] Ambient darkness/tint rendered via multiply blend on its own canvas layer instead of a flat colour-over overlay, so Dawn/Dusk/Night darkening preserves the map's own detail/contrast (3.7)
 - [x] Stream Deck plugin driving the DM view through the local control API, with key artwork and live highlighting (3.36)
+- [ ] LAN remote workspace control: same DM UI on a second PC, host-owned settings/state/assets, completed-edit synchronization and host-authoritative conflict handling (3.39)
 
 ## 4) Core Functional Requirements
 
@@ -1363,6 +1364,562 @@ having to know the control's units. An explicit amount overrides it.
 - Token originals and crops are PNG files referenced by relative paths, in the library's `images` folder and each map's `assets\tokens` folder, rather than Base64 in persisted JSON. Existing embedded images remain readable and migrate on save. Content-addressed assets preserve frozen snapshots and export includes the latest linked assets without changing the source map.
 - Runtime definitions reference immutable file-backed artwork rather than retaining Base64 originals. Originals are decoded only in the editor; rendered crops load lazily into a byte-budgeted cache. Session-owned artwork snapshots survive library cleanup and map relocation and are removed at shutdown. Token artwork has independent retained DM/player canvases below lighting, so token movement does not invalidate the map background. Preserve hidden/player/freeze behavior, legacy saves, shared library updates and export portability.
 
+## 3.39 LAN Remote Workspace Control
+
+### 3.39.1 Purpose and scope
+
+- Operate one workspace from two PCs on the same trusted LAN. PC A is the session laptop/host, with
+  the authoritative workspace, player monitor and speakers. PC B is a remote control client, typically
+  the stronger desktop used for map creation. This is not an external collaboration or multiplayer feature.
+- Both PCs use the same application distribution and JavaFX DM interface. B renders locally from
+  synchronized state; do not stream video, screenshots or the host desktop, or inject OS-level input.
+- Both A and B remain fully usable during a connection. A has authority when edits conflict.
+  The first version permits exactly one connected remote client; reject additional clients explicitly.
+- Full feature parity is required: map creation/import/editing, map and token libraries, multilevel maps,
+  fog, walls/doors/windows, lights, effects, text, tokens, handouts, settings, audio import/library/editing/
+  playback, save/export, undo/redo and player-view controls. A partial control panel is not completion.
+- Player windows and all live audio output (ambient, music, overlay, engine) exist only on A while connected. One exception: the audio editor/library preview on B plays locally. B requests a host `playbackFile` job, downloads A's playback file (with baked gain, re-fetched when the gain changes) and previews it through the normal local preview path. While downloading, the editor shows the modal `RemoteBusyDialog` ("Downloading audio", with an MB counter from the connection's transfer progress) so controls cannot be used. `RemoteCompatibility.VERSION` is 3 (host `preview`/`stopPreview` commands and `State.preview` removed).
+  B displays playback state and controls A's output; it does not open a local player window or play audio.
+- Asset transfer progress (uploads/downloads, direction plus MB counter) is shown by the temporary, mouse-transparent `RemoteTransferOverlay` at the bottom center of B's map view above the status bar, fed by the connection's transfer progress each frame and hidden when idle or disconnected. The Session tab no longer shows transfer progress.
+- Internet access, cloud services, multi-client collaboration, offline editing/merging, remote desktop,
+  local player previews/audio monitoring on B and automatic compute offloading are out of scope.
+
+### 3.39.2 State ownership and local interaction
+
+| State | Ownership and behavior |
+|---|---|
+| Projects, active map/level, libraries and assets | A owns and persists them; both UIs show accepted changes |
+| Settings and performance mode | A's effective values apply on both PCs; changes from either persist on A |
+| Player camera, monitor, calibration, freeze/staged state, handouts | Shared session state, executed against A's output |
+| Audio transport, categories/effects, volumes and preparation jobs | A owns execution and status; both UIs can control them |
+| Undo/redo | One host-owned history using existing operation eligibility |
+| DM camera, active tool and selection | Independent per PC; never force the other DM to follow |
+| Mouse, unfinished geometry, focus, open dialogs, clipboard | Local; clipboard content transfers only through an explicit action |
+| Native window placement, file-picker source directory, cache location, transport credentials | Machine-local client mechanics, not alternative workspace settings |
+
+- Both PCs display the same active map/level. A map switch invalidates gestures and dialogs tied to
+  the previous map; they must not accidentally commit into the new map.
+- Local selections reference stable object IDs. Accepted deletion or replacement clears invalid
+  selections and refreshes affected editors with an explicit notice if unsaved input is invalidated.
+- B does not run host autosave, automatic fog reveal, audio scheduling, library maintenance or other
+  authoritative background jobs. Local rendering must never mutate the synchronized project.
+- Host connection/revoke/stop controls and local Disconnect remain available regardless of shared
+  control visibility settings. B cannot host another session or connect onward while in client mode.
+
+### 3.39.3 Host setup and pairing
+
+- The **Session** tab in the left sidebar (next to Tokens; hideable via `session` in `ui.sections.hidden` / `session.browser` control, API control `session.browser`; forced visible while a session is active) holds the Host/Connect panel. There is no status-bar session indicator or main-menu entry.
+- Opening a remote map/import shows a modal progress dialog (indeterminate or byte progress); asset uploads from B to A show the same dialog. B's DM camera is centered by default and remembered per map, never sent to A.
+  Hosting/connecting do not depend on enabling the existing local DM control API.
+- Host setup offers a session name, LAN interface/address and port, with secure approval required.
+  Start hosting explicitly for each application session; remember configuration, never silently restart
+  hosting or reopen a connection at launch.
+- Remote control is strictly opt-in. Standalone use must not build synchronization snapshots, hash or
+  publish assets, scan recent libraries, poll remote state, create remote workers, discover/advertise
+  hosts or open listeners. Opening setup may enumerate interfaces only on explicit user request;
+  host preparation begins only with Start hosting (client preparation only with Connect).
+  Stop detaches all editor/frame hooks immediately, cancels queued remote preparation and lets already
+  running bounded work finish without further publication. Idle preparation threads expire; ordinary
+  local editing, rendering and library persistence retain their standalone behavior.
+- The primary connection flow is approval-only: A explicitly starts hosting, B explicitly discovers
+  and selects A, clicks Request control, and A approves that live connection. No copied text, code or
+  fingerprint checkbox is required for this flow, including subsequent hosting sessions.
+  Discovery includes the session certificate fingerprint as an unverified connection pin: TLS must
+  match that exact certificate for control and artwork channels, but discovery does not authenticate
+  host identity against a malicious LAN. Explain that names are unverified and this flow is for a
+  trusted LAN; A must approve only an expected request. Retain copied-details/code verification as
+  an optional manual, independently verified route. Never use a trust-all TLS context.
+  Approval-only requests share the bounded rate limit, expiring single pending request and original
+  protected-connection grant delivery. Neither discovery nor a request exposes workspace data.
+- Round 2: discovery auto-selects the first found host (no connection). Request approval offers **Allow once**, **Always allow** (whitelist, future requests auto-granted) and **Block** (blacklist, future requests rejected without prompt), plus **Deny**. Decisions are host-local in `clients.txt` (storage dir; max 200 entries) keyed by client name + peer IP, which is unauthenticated; entries are removable in the "Allowed and blocked clients" pane. Pair-with-code requests only honor blocks. Sidebar tab headers are equal-width and never clipped; the Session tab has generous spacing. No protocol change.
+- The hosting dialog shows listening state, reachable address/port, optional Copy connection details,
+  a short-lived pairing code with regenerate action, connected-client status and Stop hosting.
+  Copyable details must not contain a long-lived credential.
+- B can discover available LAN hosts or enter an address manually. Discovery advertises only minimal
+  connection metadata, not pairing codes, credentials, library contents or project data.
+  Use a bounded, explicitly triggered IPv4 LAN multicast search (UDP 7074, link-local TTL 1);
+  only an explicitly started host answers. Advertise session name, control/artwork ports, compatibility version and
+  unverified session certificate pin. Selecting a result clears manual verification and pairing input
+  and enables the approval-only request path. Search ends after a short deadline and is
+  cancelled when setup closes or a connection starts. Discovery failure never prevents manual
+  connection or stops an otherwise usable encrypted host. IPv6-only interfaces use manual details.
+- The optional manual route establishes host identity verification bound to pairing;
+  do not use permissive certificate trust or treat an unauthenticated discovery response as identity.
+  Codes expire, are rate-limited and become unusable after successful pairing.
+- After an approval-only request or manual code verification, A explicitly approves or rejects B. Show the claimed client name and address,
+  and explain that approval grants full workspace control, file transfer and settings modification.
+  No remote filesystem or workspace data is exposed before authentication and approval.
+- Remember the last address on B, not permanent access permission. Unexpected certificate/host-identity
+  changes require new pairing. Reconnection to the same still-running session may reuse its revocable
+  session credential; a host restart or Stop hosting invalidates that credential.
+  Remember explicitly submitted host/client names, host interface address and control/artwork ports
+  in a bounded machine-local `setup.properties` alongside remote session storage, not the shared INI.
+  Read it only when setup opens; serialize background writes with atomic replacement. Never persist
+  certificate fingerprints, pairing codes, verification flags, credentials or session state. Loading
+  previous configuration must not overwrite input edited while loading or initiate network work.
+  Missing saved interfaces remain unselected with an explicit notice rather than binding another NIC.
+- Portable Windows builds provide an in-app private-LAN permission flow when Start hosting is clicked.
+  Check the selected interface's network profile and DMMT-managed firewall rules off the UI thread.
+  If permission is missing, explain the scope and offer Allow private LAN access, Host without changes,
+  or Cancel. Only explicit consent may launch a Windows administrator/UAC request. Restrict rules to
+  the actual packaged DMMT executable, selected TCP control/artwork ports and UDP 7074, inbound,
+  Private profile and LocalSubnet. Never grant shared java.exe/javaw.exe permission, enable Public
+  access, disable the firewall, change the network profile, enable UPnP or forward router ports.
+  Rules persist across sessions and same-path upgrades; a changed path/ports needs permission again.
+  Provide Check access and Remove permission actions; cancellation/failure is visible, never claimed
+  as success. Missing managed rules do not prove traffic is blocked, and configured rules do not prove
+  end-to-end reachability. Other OS/development runs explain the limitation without changing rules.
+  Windows checks suppress PowerShell progress and keep stdout status separate from stderr diagnostics;
+  module-loading progress must not turn a successful permission check into an invalid-status error.
+- Do not change firewall rules, enable UPnP or forward ports automatically. Listener/binding failures,
+  blocked discovery and likely firewall/connectivity problems receive actionable messages; manual
+  address entry works independently of discovery. Do not claim to reliably detect a firewall block.
+- Remote hosting must not weaken the existing API's origin/host protections or grant authenticated
+  transfer access through its unauthenticated endpoints. Explain that the legacy API remains separately
+  configured and trusted-network-only; it is not the remote session authentication mechanism.
+
+### 3.39.4 Client transition and connection UX
+
+- Connection states are explicit: Standalone, Connecting, Awaiting approval, Synchronizing, Connected,
+  Reconnecting/Disconnected and Returning to local workspace. Hosting has separate waiting/connected/
+  stopped/error states. Never display Connected before the initial authoritative state is usable.
+- Verify protocol compatibility before replacing B's workspace. Both PCs must have the same explicit
+  remote compatibility version defined in code. Increment it whenever a remote-interface change
+  breaks compatibility (messages, commands, snapshots, settings or asset-transfer semantics).
+  Compatible fixes and unrelated application changes do not require a bump. Never hash application
+  files or require identical application builds; packaging and compiler differences do not matter.
+  Preserve a typed, locally constructed compatibility error in B's UI, including both compatibility versions and
+  protocol versions. Never expose arbitrary parser/transport exception messages or secret payloads.
+- Before entering remote mode, finish/cancel local gestures and jobs through normal UI flows, resolve
+  unsaved work using Save/Discard/Cancel, and close B's local player output and stop local playback.
+  Do not switch contexts while standalone background work could write into the wrong workspace.
+- Preserve B's standalone workspace identity, local settings and view context. An unsuccessful or
+  cancelled connection leaves its workspace usable and restores any temporary transition state;
+  do not discard local work or replace settings merely because pairing started.
+- Show meaningful loading stages: Connecting, Waiting for approval, Loading workspace, Downloading
+  assets. Large transfers show bytes/progress and cancellation. No authoritative edits until the
+  baseline settings, state and necessary active-map assets are ready.
+- Authenticated host operation/artwork failures must reach B as actionable error dialogs, with an
+  expandable read-only stack trace and Copy details action. Preserve original causes on A; bound
+  diagnostic payloads and never include pairing codes, credentials or raw protocol/parser payloads.
+  Deduplicate repeated polling failures so dialogs do not flood the UI. Distinguish failed workspace
+  publication from a temporary busy state and allow recovery after corrected artwork/context changes.
+  Keep unchanged library listings stable (selection, scroll and thumbnails); failed previews are
+  explicit and retryable, not cached as absent. While workspace edits are paused, safe local dialogs
+  and library browsing remain accessible; unsafe edits report why they are unavailable.
+  Shared artwork caches may contain validated namespaces (handouts and operations); account for their
+  contents recursively within the cache quota while rejecting symlinks, escapes and malformed files.
+  Remote compatibility version 2 carries bounded authenticated failure details in operation replies
+  and workspace-wait statuses; both PCs must update for this diagnostic contract.
+- Keep a persistent banner/status indicator: "Remote control - <session> on <host>", connection status,
+  current transfer/error status and Disconnect. A shows "Hosting - <client>" with revoke/stop access.
+- In remote mode, normal Save/Open/library actions target A. Import pickers and drag/drop read B's
+  files; exports download to B. Destination-sensitive dialogs and status messages identify the host.
+- Closing B ends its connection, not A's application. Explicit Disconnect restores B's prior standalone
+  workspace and settings; it does not automatically resume local audio or reopen a local player window.
+- Stop hosting/revoke on A ends B's access without closing A's map, player window or audio.
+  Closing A uses normal save/shutdown handling and tells B the host has gone away.
+
+### 3.39.5 Host-backed settings
+
+- Apply A's settings through a temporary effective settings context on B, before presenting the
+  remote workspace. Do not overwrite B's INI file, bundled defaults or standalone preferences.
+- Every ordinary application setting shown on B reads A's value. Changes from either UI, including
+  live host file reloads, propagate through the same validation/application path and persist on A only.
+  Failed changes retain the last accepted value and display the host's error on B.
+- This includes rendering/performance options, control visibility, fog/effect styles, work scheduling,
+  library/storage configuration, player calibration and audio options. Do not introduce independent
+  B-only performance overrides in the first version. B still needs hardware capable of its DM view.
+- Hardware/path settings address A's devices and filesystem. Display host monitor/device choices and
+  use a host-backed browser where a setting requires choosing a host directory; never pass B's drive
+  path as though it existed on A. Missing host devices are reported, not substituted with B's hardware.
+  Folder browsing is an authenticated, on-demand metadata-only request, never a background scan.
+  List host roots or an explicitly entered absolute host directory, with parent navigation and
+  128-directory pages. Bound one directory to 4096 children and 1 MiB of names/paths; larger listings
+  report an explicit limit and permit entering a narrower path. Do not read file contents or create
+  directories. Recheck the live lease after IO and before returning paths. Choosing a folder still
+  submits the existing settings edit and its revision/conflict checks, not a filesystem mutation.
+- Startup-only JVM/graphics launcher options remain machine-local prerequisites, not remotely applicable
+  live settings. Clearly distinguish them from the shared application settings.
+- Security/lifecycle restrictions remain local to the relevant role: B cannot approve itself, revoke
+  A's authority or change its connection into another host silently through shared settings.
+- On disconnect, atomically restore B's local settings context and remove host settings watchers.
+  Settings synchronization must not produce feedback loops or write host values into B's local file.
+- Document the settings ownership model and all actual new configuration keys/defaults in
+  `docs/SETTINGS.md` and bundled defaults when implemented. This spec does not introduce working keys.
+
+### 3.39.6 Edit commits, conflicts and shared history
+
+- Reuse shared application operations for local UI, remote UI and applicable legacy API actions.
+  Do not implement remote behavior by firing A's selected controls: B's selection/tool is independent.
+  Commands identify explicit targets and context, with stable IDs and relevant expected revisions.
+- Local drawing/dragging previews remain on the originating PC. Commit completed shapes, fog strokes,
+  object transforms and text edits at their normal gesture boundary, rather than transmitting every
+  mouse event. A's player view follows existing local behavior during A's own gestures.
+- B may show a pending preview after submission, visibly distinct from accepted content. A's commit
+  updates both DM views and player output subject to freeze. Rejection removes/reconciles the pending
+  preview and explains why; never show an unacknowledged edit as durably saved.
+- Continuous output controls (player-camera movement, sliders) use bounded/coalesced updates with
+  a final value and existing gesture/undo semantics. Pings/laser relay bounded transient events with
+  expiration; they are not persisted or replayed on reconnect. No remote construction previews required.
+- Serialize authoritative mutations on A's application thread; file IO/preparation happens off-thread.
+  Assign a session epoch, monotonic state revisions, command IDs and explicit acknowledgement/errors.
+  Broadcast accepted changes to both interfaces, including changes originating from A and its API.
+- Conflict checks operate on the affected objects/settings and map/level context. Unrelated additions
+  or edits do not fail simply because the global session revision advanced.
+- A's active local gesture protects the affected targets against conflicting remote commits. Reject
+  stale B edits after host changes/deletion/switching; refresh B from authoritative state and explain
+  that its edit was not applied. A's local final edit wins an overlapping race without restoring deleted
+  objects or overwriting unrelated accepted data. No retroactive rollback of unrelated B operations.
+- Library/settings/modal confirmations must also carry relevant revisions; a dialog opened earlier
+  must not silently overwrite newer host data when confirmed.
+- One shared undo/redo history, retaining the existing undoability rules. Either PC reverses the latest
+  undoable accepted operation, regardless of origin. Show the next action description and origin
+  (This PC/Host/Remote) in history UI/tooltips; do not create a separate B history.
+- Pending/rejected commands do not enter history. Redo invalidation, compound gestures, autosave and
+  persistent light/fog changes follow the existing host semantics.
+
+### 3.39.7 Assets, imports, exports and long-running jobs
+
+- Remaining library/audio/file workflows share a bounded authenticated domain-operation channel.
+  Each domain exposes an explicit allowlist of typed query/mutation actions, not reflection or
+  arbitrary paths. Queries do not mutate data; commands serialize on a host session sequence and
+  retain exact in-progress/completed receipts. B retains only its uncertain in-flight command across
+  reconnect, never silently queues offline edits. Domain revisions protect dialogs against A's
+  intervening edits. Asset uploads/downloads use the existing separate verified bulk transport.
+
+- A owns managed project/library storage; no shared network folder or matching drive layout is required.
+  Imports from B upload actual files, validate them and copy all dependencies into A's managed storage
+  before declaring success. Source removal on B must not break the imported result.
+- Cover raster/custom maps, DD2VTT/UVTT, map packs, multilevel packages, token files/images, clipboard
+  images, handouts and audio. Reuse existing format validation and managed-copy/export behavior.
+- Separate state/control traffic from bulk asset transfers using authenticated channels, preferably
+  a persistent bidirectional state connection and HTTP uploads/downloads. No local absolute asset paths
+  in protocol references; use stable asset IDs/content hashes and validated relative package references.
+- Transfer only missing assets to B; cache immutable content by hash and verify integrity. Fetch only
+  needed content, not A's entire library/audio collection. Local render caches remain machine-local.
+- Uploads use bounded staging space, validated names/types/size limits and atomic publication. Reject
+  traversal, archive escape and unauthorized path access; never expose arbitrary filesystem read/write.
+- Show upload, host import/preparation and publication as distinct stages. Reuse host background job
+  scheduling, progress, cancellation/retry and metadata-preservation semantics. Audio clip/waveform
+  tools can request host-produced data without enabling playback on B.
+- Once accepted as a host job, an import/preparation continues if B disconnects or closes its library
+  dialog. A can inspect/cancel it. Interrupted unpublished upload data is cleaned up; reconnect reports
+  accepted jobs rather than creating duplicates.
+- Export prepares a consistent host snapshot, including linked assets, then downloads atomically to
+  B's chosen destination. Never report success before the destination write finishes; failures are
+  explicit. Standalone A export behavior remains unchanged.
+- Explicit Save on B targets A's accepted map/level. Its independent ordered receipt stream retains
+  the exact in-progress/completed result across reconnect, rejects a stale map context or workspace
+  revision before starting, and never writes B's replica. Existing maps use A's normal SaveTarget
+  (including multilevel shared settings); new maps ask on B for a name and host-library destination,
+  validated by A's existing library rules. Snapshot/capture precedes worker IO; acknowledge only
+  after persistence and host reconciliation. Later host edits remain dirty, not overwritten. An
+  accepted save may finish after disconnect/revoke; recovery must not repeat it or select a new name.
+- The remote map browser uses an explicitly refreshed, bounded host catalog, never a scan of B's
+  library. Catalog identities are session-scoped opaque handles, not host filesystem paths. Retain
+  B's tree/selection/search/recent state for restoration. Host scanning runs off the application thread,
+  rejects oversized/deep libraries explicitly, and starts only after an authenticated request. Initial
+  browsing covers the folder/map tree and search; map commands, host thumbnails/tags/recents and
+  automatic catalog invalidation remain separate parity work until wired end-to-end.
+  Limit this catalog to 1024 items, 24 nested folders, 65536 inspected filesystem entries and 65536
+  name characters; reject malformed topology, oversized labels and inconsistent current-map handles.
+  B uses only synthetic handles in its existing tree, with no local thumbnail reads/recent-history
+  writes. Ignore late responses and queued standalone thumbnails when switching browser contexts.
+
+### 3.39.8 Resilience, performance and observability
+
+- A continues player rendering, audio and normal local operation when B is slow, disconnected or closed.
+  Network work must not synchronously block A's JavaFX thread, render loop or audio clocks.
+- On connection loss, B retains a clearly stale last view with "Disconnected - editing paused".
+  Disable authoritative editing, discard/cancel unfinished gestures explicitly and permit Disconnect.
+  Do not silently queue offline writes. Retry with bounded backoff and a visible reconnect/cancel action.
+- Resolve unknown command outcomes by command ID on the same session; do not replay blindly.
+  Retries apply each command at most once. If A restarted or retained acknowledgement history is
+  insufficient, force fresh synchronization and report uncertainty rather than guessing success.
+- Reconnect resumes from revisions only when continuity is provable; otherwise fetch a new baseline.
+  Join snapshot and subsequent updates without missing/reordering mutations or exposing mixed settings/
+  map versions. A's own interaction is not blocked for the duration of an asset download.
+- Bound transport queues, payload sizes, concurrent transfers, upload staging and client cache retention.
+  Coalesce stale continuous previews/status updates, never drop durable commits; resynchronize a client
+  that falls too far behind. Bulk transfers must not starve input acknowledgements or host playback.
+- Do not add a hidden renderer/canvas stack on A for B. B renders its DM view only, without player
+  canvases. Preserve native sharpness, existing frame-rate settings, calibration and freeze output.
+- Synchronize animation parameters/seeds/timing where appropriate, not per-frame particle/texture data.
+  A alone applies gameplay-affecting simulation results such as persistent fog revelation.
+- Expose connection/synchronization/transfer failures and log command IDs, revisions and stage timings
+  without credentials/pairing codes. Distinguish host commit latency from transfer/render time.
+- Provisional acceptance budgets, to measure on documented hardware over wired LAN: small committed
+  edits visible on the peer within 150 ms at p95, excluding bulk loading; synchronization adds at most
+  10% to A's p95 application-thread frame work in the same representative scene. Record baseline and
+  connected results, including concurrent uploads; do not achieve budgets by reducing output quality.
+  These are implementation targets, not claimed existing performance guarantees.
+
+### 3.39.9 Delivery and acceptance
+
+Handouts reuse the existing modeless board on both PCs, with local image selection and host-owned
+player presentation. Publish immutable PNG assets off-thread before accepting board changes; bound
+decoded pixels as well as transfer bytes. Board mutations carry a session, revision and exact receipt.
+Preparation rechecks authorization and host revisions before applying; host edits during an upload
+win. A paused client cannot alter the board, and leaving remote mode restores its original local
+handout window without hiding A's presentation. Recent-handout library synchronization is a separate
+parity requirement; never read or update B's standalone recent list as if it were A's.
+
+Player-output runtime state is separate from persisted map edits. Synchronize the host's actual
+window visibility, canvas dimensions, scale-test state and monitor choices without creating player
+canvases on the client. Window/test-square commands carry expected runtime revisions and bounded
+exact receipts. Player viewport hit-testing on the client uses the host canvas dimensions.
+Relay pings and laser positions through a bounded, context-scoped transient channel; expire them,
+discard unsent events on connection loss, and never retry/replay them as workspace edits.
+
+Workspace integration uses explicit domain targets, not host control firing or whole-project
+last-writer-wins replacement. Capture committed project changes as stable-ID entity changes,
+individual map/output properties and bounded fog blocks. Expected target revisions include
+deletion tombstones and changes away-and-back. Authoritative commits merge into the current map,
+never replace unrelated host edits or the independent DM camera. A map/level context epoch invalidates
+old commands even when switching away and back to the same file. Protect host gesture targets
+before accepting remote changes; compound commands validate completely before any live mutation.
+Remote undo/redo must enter the existing host history, with explicit origin/description metadata.
+Portable asset references must be resolved through the approved session's managed content store,
+not interpreted as arbitrary host/client filesystem paths.
+The application bridge must preserve its existing live project and history objects. Publish newly
+referenced host artwork on a worker before advancing the portable committed baseline; reject edits
+while that baseline is being prepared rather than applying against stale paths. Already-published
+artwork is rewritten in memory at ordinary commit boundaries. Uploaded artwork is verified and
+materialized off-thread before owner-thread conflict checks, with the original map epoch retained
+throughout preparation. Closing/switching invalidates late preparation callbacks. History callbacks
+apply only the original operation's targets and never restore an entire project over newer edits.
+The application-owned bridge now observes history/undo/redo, map switches, copied asset paths,
+token-definition updates and stable fog/player-camera boundaries. It is installed explicitly only
+for a host session, so ordinary standalone frames do not capture synchronization documents.
+Accepted remote edits enter the existing history with remote-origin metadata; player-freeze edits
+operate the real output. Active entity, fog, text, group/nudge and slider targets are protected;
+controls are refreshed after host gestures rather than resetting their in-progress commit baselines.
+Persistent-light reveals and fog geometry changes generated by the host are included in the same
+accepted document and targeted history inverse. Unchanged persistent lights are not reapplied after
+undo restores fog. Background artwork preparation rechecks the original live control lease before
+any application mutation. A typed preparing response pauses workspace edits without interrupting
+settings synchronization or treating an incomplete baseline as ready.
+Client workspace integration prepares and verifies active-map assets before displaying each accepted
+baseline. Coalesce superseded snapshots while downloading, never acknowledgements; defer ordinary
+host updates during a local gesture, then submit against the gesture's original accepted revisions.
+Disconnect invalidates late preparation callbacks and pauses edits without replaying them offline.
+Shared undo/redo requests use the same ordered workspace receipt stream as edits and carry the
+expected host history version, so a delayed Undo never reverses a newer, different operation.
+History descriptions/origins travel with workspace state; no independent client undo stack is used.
+The internal client editor lifecycle now retains the standalone project object, selection, history,
+multilevel identity and settings context while using a separate remote project. Completed editor
+operations and Undo/Redo submit to the host; routine accepted changes preserve the client's camera
+and live entity identities. An owner-thread settings pump refreshes effective controls and retains
+exact uncertain settings requests. Client lighting computes render-only visibility without creating,
+resizing or revealing an authoritative fog mask. Client autosave/local API/player-window creation
+are suppressed by role; entering stops local playback and closes player/handout output. Closing the
+replica closes its control connection/transfers and restores the local workspace without reopening
+output or restarting audio. A separate status/Disconnect control remains usable while edits are paused.
+This internal lifecycle is integrated with the modeless setup and unsaved-work prompts. Library/file
+commands, host path dialogs and the remote audio facade still need wiring before menu exposure.
+Host player-window visibility, scale-test state, actual canvas dimensions and monitor metadata now
+travel through a separate authenticated runtime channel. Client readiness also waits for matching
+output/map contexts. Runtime controls use expected revisions, ordered requests and bounded exact
+receipts, including failed attempts; old or altered receipts never repeat side effects. Host-local
+output mutations advance the revision even when changed away and back between network polls.
+The client uses host geometry for viewport hit-testing, dragging and edge scrolling, without creating
+player canvases. Calibration settings refresh the host controls through an in-memory owner-pulse
+notification. Both PCs' laser trails remain independent; bounded pings/laser positions expire, clear
+on context changes/loss/reconnect and never enter map history or the durable retry stream.
+Handout board snapshots and completed mutations now use their own authenticated runtime authority.
+The existing modeless UI applies accepted snapshots without echo, retains local selection, and
+routes pasted images, show/hide, selected-only presentation, rotation and mirroring to A. PNG
+encoding, hash publication, transfer verification and bounded image decoding happen off-thread;
+clipboard source files are dimension-checked before decoding and import only the first frame.
+Board limits are 64 images, 16,777,216 pixels per image and 33,554,432 pixels total, in addition to
+asset byte quotas. Failed preparations retain no unaccepted decoded-image cache entries.
+Host changes during uploads/preparation win through expected revisions, including changes away
+and back. Commands use exact bounded receipts and recheck the live lease after decoding. Connection
+loss freezes the client board; leaving remote mode restores its retained local handout window and
+does not hide A's presentation. Initial workspace readiness waits for the handout baseline as well.
+The remote board never opens B's persistent recent-handout store. Replicate A's recent list using
+opaque validated IDs, verified original PNG descriptors and bounded thumbnail assets. Download
+thumbnails, not all full-resolution images. Reusing/removing a recent entry uses the same revisioned,
+exact-receipt stream as board operations; uploads add their new images to A's persistent recent list.
+Serialize library disk work with local recent-list mutations and check its version before remote
+mutations. Acknowledge persistence failures explicitly, including operations whose board side effect
+already happened; do not repeat them after reconnect. The existing handout.recentMax setting governs
+both PCs. Local recent-list changes and settings-driven trimming invalidate stale remote commands.
+The host recent library is now integrated with the board authority and the same recent pane on B.
+Opaque IDs and verified original/96-by-144 thumbnail descriptors travel with the handout state.
+Only thumbnails are preloaded; adding a recent image prepares the board from its published original
+on A, and B obtains the full-resolution asset when it becomes a board image. New remote pastes persist
+in A's existing PNG/index store, and reuse/removal share its serial disk worker with local actions.
+Version changes, including away-and-back reorderings, invalidate stale requests; in-flight own
+persistence is distinguished from host mutations. Disk failures have durable failure receipts, and
+late host edits cannot overwrite the host board even if a recent image has already been saved.
+Local index/PNG operations continue to use the configured settings-file location, not another
+application's global/default settings path. Control polls carry a small state stamp and return an
+unchanged acknowledgement rather than retransmitting the entire board and up to 1000 recent entries.
+Session lifecycle coordination must prepare the certificate, asset store and both
+listeners off the application thread, then install the host workspace on its owner. Starting either
+listener is an all-or-nothing operation. Stop revokes access immediately, invalidates pending startup
+and client-transition callbacks, and completes only after control and bulk workers release their sockets.
+Client setup keeps the standalone workspace untouched through pairing and approval, installs the
+replica only after settings and workspace baselines arrive, and reports Connected only after required
+artwork is ready. Failed setup restores any installed context; ordinary connection loss retains a
+paused replica for exact-receipt recovery. Explicit reconnect and Disconnect remain distinct actions.
+The setup window is modeless so hosting does not block the editor. Its copied connection details
+contain only the session label, address, ports, compatibility version and certificate fingerprint, never the pairing
+code or reconnect credential. Pasted metadata is untrusted: the user must explicitly confirm that
+the fingerprint was obtained from the intended host, and editing the host identity clears that
+confirmation. This is the optional advanced/manual route; discovered hosts use Request control
+without copied details or codes, pinned to the unverified discovery certificate. Host approval shows
+the claimed client name/address and the full-control permission. A new request brings A's session
+window forward once, even if it was hidden, without approving automatically.
+Closing a pending client setup cancels that attempt; hiding an already connected or hosting window
+does not end the session. The Session menu exposes this window without starting a session.
+
+Implemented session connection coordination: in-process, session-only host certificate provisioning
+without external executables, explicit `RemoteCompatibility.VERSION` negotiation, and bounded host/client
+connection coordinators. Approval and grant delivery are bound to the original TLS connection;
+every settings request requires a live authenticated lease. Poll authoritative state without permitting
+unauthenticated reads, and recover exact in-flight command receipts on reconnect. Network IO and
+approval waits run on cancellable background workers; application-owned state is accessed only
+through its owner-thread dispatcher. The Session menu exposes this lifecycle explicitly.
+Session certificates are deliberately regenerated when hosting starts; discover/select/request again
+for a new host session (only manual connection requires new copied/verified details). No private key or access credential is
+written to disk, and hosting is never started implicitly.
+One approved client is active at a time. Incoming approval requests always show a modal approval
+dialog on the host (`RemoteApprovalDialog`; the Session tab card remains an alternative). A request
+arriving while a client is approved or connected is never rejected for that reason: the second
+bounded TLS transport slot holds the challenger without blocking the active client's control
+traffic, and if the host allows it the new connection replaces the old one, which is closed. Only
+one pending request exists at a time (others get Busy), and pairing-code requests are still Busy
+while a client is approved. TCP-level
+cancellation bounds TLS shutdown/deadlines even when the peer stops reading. Stop completes only
+after peer cleanup and host-owned access disposal; callers must not block the owner thread waiting
+for shutdown. The client coalesces incoming state, bounds command queues, and reports SETTINGS_READY
+only as an internal settings baseline, never as a synchronized/usable remote workspace.
+Idle polls carry the last accepted revision and sequence; unchanged responses contain no settings
+snapshot. Only changed settings/baselines are serialized and transferred, rather than sending the
+entire settings collection every heartbeat.
+
+Implemented settings foundation: reuse `AppSettings` typed access and runtime
+application, isolate host snapshots from the standalone INI, route edits as nonblocking host requests,
+apply only accepted revisioned snapshots, pause writes on connection loss and restore local settings
+on context closure. File-picker source directories remain client-local and session-only. The application session lifecycle now integrates this foundation with explicit hosting and connection.
+
+Implemented host authority foundation: a host settings authority validates requested values using existing setting
+metadata, persists before acknowledging, versions individual keys (including changes away and back),
+and returns explicit conflicts/errors. A session epoch and ordered client sequence bound a finite retry
+receipt cache: an expired receipt or missing sequence requires resynchronization, never blind replay.
+Local settings edits and external file reloads participate in the same revision tracking. Transport must
+marshal operations through the application thread and schedule persistence without network-thread races;
+the application lifecycle supplies the authenticated UI/network integration. The settings-file
+writer has a nonblocking remote path: owner-thread preparation, worker persistence and owner-thread
+reconciliation/commit. Local host edits during IO are preserved and checked before acknowledgement.
+Frequent state polling reads accepted memory without filesystem calls. Authoritative snapshots include default text for absent keys, so explicit defaults written
+by the INI renderer do not create phantom conflicts on reload.
+
+Implemented transport-independent pairing/access lifecycle: cryptographically random,
+short-lived pairing codes with bounded verification attempts, expiring approval requests, explicit
+host approval, one-client enforcement, revocable session-only reconnect credentials and stop/revoke
+cleanup. Client names are untrusted display claims. This component does not authenticate network
+transport: invoke it only through the exact-pinned encrypted connection; the approval-only discovery
+route supplies channel continuity, whereas the optional manual route independently verifies host identity.
+Only explicit Start hosting enables listeners. An application-thread host
+session coordinator binds this access lifecycle to the settings authority: snapshots and commands
+require a live connection lease; reconnect retains command receipts, while revoke/stop destroys them.
+
+Implemented application-thread client settings coordinator connects `AppSettings.HostContext`
+to the host request/receipt protocol. Bound pending edits and allow only one in-flight command; retain
+its exact identity for retry after connection loss, explicitly cancel unsent edits, apply accepted
+snapshots without echo, and surface conflicts/save failures/uncertain outcomes. Reconnect must verify
+the settings epoch and sequence continuity before allowing further edits. No network or workspace
+context switch is enabled by this component.
+
+Implemented encrypted transport boundary: TLS 1.3 with an exact SHA-256 host
+certificate pin supplied through discovery or optional host-copied/independently verified details.
+Discovery pins are never presented as independent identity proof. Perform protocol/compatibility-version negotiation
+before submitting an approval request, pairing code or credential.
+Use length-prefixed, strictly parsed JSON envelopes with bounded payloads/nesting and socket deadlines;
+close malformed/timed-out channels. An explicitly bound listener permits one transport connection
+by default; the session router uses two bounded slots to reject an additional peer explicitly.
+Stop closes the listener and all accepted sockets, including pending handshakes. The transport accepts
+a supplied host key store, with session-only key/certificate generation now provided by `RemoteIdentity`.
+
+Implemented editor-domain foundation: committed map properties, stable-ID entities and bounded raw
+fog blocks have target revisions, deletion tombstones, host gesture protection, map/level context
+epochs and exact retry receipts. Targeted application preserves unrelated edits, existing object
+identities and the independent DM camera, including targeted undo data. Client reconciliation preserves
+a pending completed gesture across unrelated host updates, rolls rejected edits back and retains
+uncertain requests for exact receipt recovery. Host application gesture/history hooks and portable
+artwork preparation are wired. Host/client application lifecycles and the internal setup window are
+also implemented. The Session menu now opens the opt-in host/connect window.
+Portable artwork checks reject ordinary filesystem references at the network boundary.
+
+Implemented managed bulk transport: session-authorized, separately pinned TLS connections stream
+64 KiB chunks into quota-bounded content-addressed storage, verify SHA-256 and length before atomic
+publication, report byte progress and support cancellation. A live control lease is required, and
+revocation invalidates existing transfer checks. Downloads expose only explicitly published hash
+objects, not a path endpoint; map/layer/token artwork references can be packaged as `asset:<sha256>`
+and independently materialized into verified local caches. Bulk traffic does not share the control
+socket. Large workspace payloads retain the 1 MiB frame cap through uncompressed chunks with a
+32 MiB aggregate limit and an overall transfer deadline; no peer-provided compressed fog is inflated.
+Control command queues wake immediately when work arrives rather than waiting for an idle poll.
+Map/token/audio imports and exports use this managed transport and exact domain-operation receipts.
+
+Implementation and verification checklist:
+
+| Surface | Implementation status |
+|---|---|
+| Strict opt-in and standalone overhead | Inactive frame/gesture boundaries do not capture state or initialize services; lazy preparation threads expire, and stopped sessions skip queued incoming/outgoing artwork work. Standalone, stop/restart and queued-cancellation regression coverage implemented |
+| TLS, remote-version compatibility, code/approval, one-client access, revoke/stop | Host/client application lifecycle, atomic two-listener startup, approval/revoke and joined socket/worker shutdown implemented |
+| Shared settings, conflicts, retry receipts, local INI isolation | Nonblocking host persistence and client settings pump integrated; host monitor choices/calibration, in-memory host refresh and authenticated map/audio folder browsing with revision-bound confirmation implemented |
+| Host/Connect dialogs, discovery/manual setup, banner, local-workspace restoration | Discovery-first Request control and approval on A need no copying/codes; advanced manual verified pairing retained. Modeless setup, explicit discovery, remembered non-secret setup, byte progress, prompts and local restoration integrated |
+| Committed tokens, effects, text, lights, walls/doors, fog and image layers | Host and client editor bridges integrated; verified asset preparation/upload precedes commits, unfinished gestures remain local |
+| Map/level switching, independent DM state, host gesture protection, shared history | Host history/context hooks, client Undo/Redo, library switches and remote level selector integrated; save/discard guards and workspace revision validation precede leaving the host map |
+| Map/token libraries, imports/exports, validated assets and job synchronization | Host-backed map tree/search/thumbnails/tags/recents, folders, context menus, multilevel management, uploads/downloads and token library/editor integrated through bounded exact-receipt operations |
+| Explicit Save, new-map destinations and multilevel persistence | Client Save/Ctrl+S waits for completed edits, uses A's save target or a B-side name/host-folder dialog, validates destinations against A's library, and acknowledges persisted snapshots with exact reconnect receipts; later edits stay dirty and B never writes its replica |
+| Host player output, freeze, calibration, host devices/paths, handouts, pings/laser | Real freeze/history, window/test-square controls, host monitor choices/calibration, host-sized viewport, expiring pointers, handout board/PNG transfers, persistent host recent-handout library and library-folder browsing integrated |
+| Audio library/import/editing/playback, host-only scheduling/output | Existing audio UI uses a remote backend for host-only output, uploads, `playbackFile` download for local editor preview on B,, waveform/cut/loudness jobs and cancellation; disabled local audio uses an inert client facade. Enabling/disabling audio applies live, including API registration; changing A's audio folder remains restart-pending |
+| Two-process acceptance and performance evidence | Independent JVM peers verify approved TLS pairing, completed edits, exact operation receipts, host persistence and byte-identical client INI preservation. A 24-edit loopback run measured 7 ms median / 9 ms p95 acknowledgement latency; this is not a physical-LAN or GPU/frame/memory benchmark |
+
+Map imports preflight A's original filenames using A's ask/always/never duplicate policy. Confirmations
+are one-use and context/revision-bound. Single-source imports retain B's chosen map name and host
+destination; folder imports never switch away from the active map. Save-before-import renews the
+confirmation after persistence and rejects newly unapproved duplicates explicitly. Partial imports
+report per-source failures on B. Renaming/moving the open map preserves A's live objects and shared
+history. Explicit Save exposes a persistence completion future for subsequent map actions.
+
+1. Extract shared operations/settings context incrementally; prove standalone UI, history, persistence,
+   player freeze and the existing local API remain unchanged.
+2. Deliver authenticated host/connect/disconnect and baseline synchronization with a vertical slice:
+   token move, completed shape, host setting change, player viewport/freeze and shared undo.
+3. Complete every map/editor/library action, asset transport, audio/handout workflow, host device/path
+   settings UI and reconnect/conflict behavior. Maintain a parity checklist by existing UI action,
+   recording implementation, ownership and verification; disabled substitutes do not count as parity.
+4. Document actual setup, host/client labels, file destinations, recovery, network/firewall guidance,
+   settings behavior and performance in README, `docs/SETTINGS.md` and API docs as applicable.
+   New DM sidebar tools, if any, must be hideable and accessible through the local API; connection
+   lifecycle controls stay in the main menu/status UI.
+
+- Automated checks cover protocol validation/versioning/authentication, code expiration/rate limiting/
+  revocation, unauthorized asset access, ordered snapshot/delta delivery, revisions, conflict scope,
+  command deduplication, shared history, settings isolation/restoration, path validation, atomic
+  transfers, cancellation/retry, reconnect outcomes and bounded queues.
+- Two-process acceptance: edit from both PCs with independent cameras/tools/selections; completed
+  shapes appear only after commit; simultaneous independent edits succeed; host-overlap conflicts
+  reject B clearly; map switches invalidate stale edits; undo/redo produces identical accepted state.
+- Settings acceptance: change settings from both UIs and reload A's INI; verify both effective contexts,
+  host-only persistence, A device/path choices, and byte-for-byte preservation of B's local settings file.
+- Workflow acceptance: create/import maps and tokens from B, edit/export them, import/cut/play music
+  on A, switch maps/levels, paste/show handouts, control calibrated/frozen player output and save/reload
+  on A. Remove original B sources and confirm the workspace remains self-contained.
+- Recovery acceptance: disconnect during a gesture, after command submission before acknowledgement,
+  during upload and during a host-owned job; reject a second client; restart A; stop/revoke hosting;
+  close B; restore B's standalone workspace. No duplicate entities/playback, silent loss, partial
+  published assets, accidental B autosaves or player/audio disruption on A.
+- Benchmark idle and busy maps, large uncached imports, cached reconnects and audio preparation while
+  connected; report p50/p95 commit latency, host frame work, memory/queue bounds and transfer throughput.
+
 ## 8) Open Decisions (Track Here)
 
 - ~~Exact tile-to-inch calibration UX.~~ Decided: manual screen-diagonal entry + test square (v1.1).
@@ -1371,6 +1928,10 @@ having to know the control's units. An explicit amount overrides it.
 
 ## 9) Change Log
 
+- **LAN remote workspace control (3.39):** opt-in Session menu, pinned TLS pairing/approval, one-client
+  authority, locally rendered DM replica, shared settings/history, host-backed map/token/audio libraries
+  and imports/exports, multilevel management, handouts and host-only player/audio output. Standalone
+  startup performs no remote synchronization, listener, discovery or artwork preparation work.
 - **Character tokens (3.38):** mutually exclusive Maps/Tokens sidebar tabs, searchable folder-based token library,
   clipboard/file imports with circular pan/zoom editing, independent hidden-by-default map instances,
   half-grid/Shift-free movement, group editing, DM name tags and self-contained map export.

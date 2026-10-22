@@ -9,6 +9,10 @@ public final class FakeAudioOutput implements AudioOutput {
     final List<FakeVoice> opened = new ArrayList<>();
     boolean readyOnOpen = true;
 
+    public int openedCount() {
+        return opened.size();
+    }
+
     @Override
     public Voice open(Path file, boolean loop) {
         FakeVoice voice = new FakeVoice(file, loop);

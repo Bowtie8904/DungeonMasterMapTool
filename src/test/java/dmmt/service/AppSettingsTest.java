@@ -22,6 +22,29 @@ class AppSettingsTest {
     }
 
     @Test
+    void ownerPulseConsumesAppliedChangesWithoutReadingAnExternalFile() throws IOException {
+        var settings = new AppSettings(dir.resolve("pulse.ini"));
+        settings.applyEdit("ui.gridOpacity", "0.3");
+        assertFalse(settings.consumeAppliedChange());
+        try (var authority = new HostSettingsAuthority(settings)) {
+            var before = authority.stateInMemory();
+            var result = authority.execute(new HostSettingsAuthority.Request(before.sessionId(), before.nextSequence(),
+                    new AppSettings.RemoteEdit(java.util.UUID.randomUUID(), before.settings().revision(),
+                            "ui.gridOpacity", before.settings().values().get("ui.gridOpacity"), "0.6")));
+            assertEquals(HostSettingsAuthority.Status.ACCEPTED, result.status());
+            assertTrue(settings.consumeAppliedChange());
+            assertFalse(settings.consumeAppliedChange());
+            long modified = Files.getLastModifiedTime(settings.getFile()).toMillis();
+            Files.writeString(settings.getFile(), "ui.gridOpacity = 0.8\n");
+            Files.setLastModifiedTime(settings.getFile(), java.nio.file.attribute.FileTime.fromMillis(modified + 2000));
+            assertFalse(settings.consumeAppliedChange());
+            assertEquals(0.6, settings.getDouble("ui.gridOpacity", 0));
+            assertTrue(settings.pollExternalChange());
+            assertEquals(0.8, settings.getDouble("ui.gridOpacity", 0));
+        }
+    }
+
+    @Test
     void indoorWeatherFlagsAreSearchableLiveAndPersisted() throws IOException {
         AppSettings settings = new AppSettings(dir.resolve("weather.ini"));
         assertTrue(Files.readString(settings.getFile()).contains("weather.rain.indoors = false"));

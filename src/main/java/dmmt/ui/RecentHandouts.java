@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Persistent list of recently pasted handout images: one PNG per image (named by a hash of its pixels, so the same
@@ -28,9 +29,26 @@ public final class RecentHandouts {
     public static final String DEFAULT_FOLDER = "dmmap-handouts";
     static final String INDEX_FILE = "recent.txt";
     private static final Pattern ID = Pattern.compile("[0-9a-f]{16,64}");
+    private static final class WorkerHolder {
+        private static final ExecutorService WORKER = new java.util.concurrent.ThreadPoolExecutor(0, 1, 1,
+                java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(), runnable -> {
+                    var thread = new Thread(runnable, "recent-handouts");
+                    thread.setDaemon(true);
+                    return thread;
+                });
+    }
+
+    public static ExecutorService worker() {
+        return WorkerHolder.WORKER;
+    }
 
     private final Path folder;
     private final List<String> ids = new ArrayList<>();
+    private long version;
+
+    public synchronized long version() {
+        return version;
+    }
 
     public RecentHandouts(Path folder) {
         this.folder = folder;
@@ -39,7 +57,11 @@ public final class RecentHandouts {
 
     /** The store next to the settings file, like the map and audio libraries. */
     public static RecentHandouts openDefault() {
-        return new RecentHandouts(AppSettings.resolveConfiguredFolder(AppSettings.resolveFile(), DEFAULT_FOLDER,
+        return open(AppSettings.resolveFile());
+    }
+
+    public static RecentHandouts open(Path settingsFile) {
+        return new RecentHandouts(AppSettings.resolveConfiguredFolder(settingsFile, DEFAULT_FOLDER,
                 DEFAULT_FOLDER));
     }
 
@@ -49,6 +71,7 @@ public final class RecentHandouts {
     }
 
     public Path file(String id) {
+        if (id == null || !ID.matcher(id).matches()) throw new IllegalArgumentException("Invalid recent handout ID.");
         return folder.resolve(id + ".png");
     }
 
@@ -93,6 +116,7 @@ public final class RecentHandouts {
         synchronized (this) {
             ids.remove(id);
             ids.addFirst(id);
+            version++;
         }
         trim(max);
         return id;
@@ -105,6 +129,7 @@ public final class RecentHandouts {
                 return;
             }
             ids.addFirst(id);
+            version++;
         }
         save();
     }
@@ -115,6 +140,7 @@ public final class RecentHandouts {
             if (!ids.remove(id)) {
                 return;
             }
+            version++;
         }
         Files.deleteIfExists(file(id));
         save();
@@ -127,6 +153,7 @@ public final class RecentHandouts {
             while (ids.size() > Math.max(0, max)) {
                 dropped.add(ids.removeLast());
             }
+            if (!dropped.isEmpty()) version++;
         }
         for (String id : dropped) {
             Files.deleteIfExists(file(id));

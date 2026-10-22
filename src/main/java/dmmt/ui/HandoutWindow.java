@@ -49,7 +49,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -63,11 +62,7 @@ public final class HandoutWindow {
     private static final Color SELECTION_COLOR = Color.web("#4da3ff");
     private static final Color SHOWN_COLOR = Color.web("#46c46b");
     private static final int RECENT_THUMBNAIL_WIDTH = 160;
-    private static final ExecutorService RECENT_WORKER = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "recent-handouts");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static final ExecutorService RECENT_WORKER = RecentHandouts.worker();
 
     // Remembered for the whole session and reused for the next handout.
     private static int lastRotation;
@@ -95,6 +90,83 @@ public final class HandoutWindow {
     @Getter
     private boolean mirrored;
     private boolean shown;
+    private final ToggleButton mirrorToggle;
+    private boolean remoteReadOnly;
+    private ContextMenu imageContextMenu;
+    private java.util.function.Consumer<List<File>> remoteFilePaste;
+    private java.util.function.Consumer<String> remoteRecentAdd;
+    private java.util.function.Consumer<String> remoteRecentRemove;
+    private VBox recentPane;
+    private Map<String, Image> remoteThumbnails = Map.of();
+
+    public RecentHandouts recentStore() {
+        return recents;
+    }
+
+    public void remoteRecents(java.util.function.Consumer<String> add, java.util.function.Consumer<String> remove) {
+        remoteRecentAdd = add;
+        remoteRecentRemove = remove;
+        recentPane.setVisible(true);
+        recentPane.setManaged(true);
+        stage.setWidth(Double.isNaN(stage.getWidth()) ? 720 : Math.max(stage.getWidth(), 720));
+    }
+
+    public void applyRemoteRecents(Map<String, Image> images, int max) {
+        remoteThumbnails = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(images));
+        recentList.getItems().setAll(images.keySet());
+        recentPlaceholder.setText(max == 0 ? "Recent handouts are turned off (setting handout.recentMax)."
+                : "Pasted images appear here.");
+        recentList.refresh();
+    }
+
+    public void refreshRecents() {
+        if (recents != null) refreshRecentList();
+    }
+
+    public void remoteFilePaste(java.util.function.Consumer<List<File>> paste) {
+        remoteFilePaste = paste;
+    }
+
+    public record Snapshot(List<Image> images, int rotation, boolean mirrored, boolean shown, List<Integer> showOnly) {
+        public Snapshot {
+            images = List.copyOf(images);
+            showOnly = showOnly == null ? null : List.copyOf(showOnly);
+        }
+    }
+
+    public Snapshot snapshot() {
+        List<Integer> subset = showOnly == null ? null : java.util.stream.IntStream.range(0, images.size())
+                .filter(i -> showOnly.contains(images.get(i))).boxed().toList();
+        return new Snapshot(images, rotation, mirrored, shown, subset);
+    }
+
+    /** Apply accepted session state without generating another user operation. Selection stays local. */
+    public void applySnapshot(Snapshot snapshot) {
+        images.clear();
+        images.addAll(snapshot.images());
+        selection.retainAll(images);
+        rotation = snapshot.rotation();
+        mirrored = snapshot.mirrored();
+        shown = snapshot.shown();
+        mirrorToggle.setSelected(mirrored);
+        showOnly = null;
+        if (snapshot.showOnly() != null) {
+            showOnly = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (int index : snapshot.showOnly()) showOnly.add(images.get(index));
+        }
+        refreshState();
+    }
+
+    public void remoteStatus(boolean readOnly, String message) {
+        remoteReadOnly = readOnly;
+        if (readOnly && imageContextMenu != null) imageContextMenu.hide();
+        stage.getScene().getRoot().setDisable(readOnly);
+        if (message != null) hint.setText(message);
+    }
+
+    public boolean isRemoteReadOnly() {
+        return remoteReadOnly;
+    }
 
     public HandoutWindow(Stage owner, java.util.List<Image> icons, BooleanSupplier playerWindowOpen,
                          Runnable onChange, Runnable onClosed) {
@@ -149,7 +221,7 @@ public final class HandoutWindow {
         });
         clearButton = Icons.button(MaterialDesignD.DELETE_SWEEP_OUTLINE, "Remove all images", this::clearAll);
 
-        ToggleButton mirrorToggle = Icons.toggle(MaterialDesignS.SWAP_VERTICAL,
+        mirrorToggle = Icons.toggle(MaterialDesignS.SWAP_VERTICAL,
                 "Mirror for opposite side: show two copies facing opposite sides of the table (player view only)");
         mirrorToggle.setOnAction(e -> {
             mirrored = mirrorToggle.isSelected();
@@ -168,7 +240,7 @@ public final class HandoutWindow {
 
         VBox main = new VBox(8, previewPane, hint, controls);
         HBox.setHgrow(main, Priority.ALWAYS);
-        VBox recentPane = createRecentPane();
+        recentPane = createRecentPane();
         HBox root = new HBox(10, main, recentPane);
         root.setPadding(new Insets(10));
         root.getStyleClass().add("handout-root");
@@ -176,6 +248,10 @@ public final class HandoutWindow {
         Scene scene = new Scene(root, recents == null ? 520 : 720, 460);
         scene.getStylesheets().add(Icons.STYLESHEET);
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (remoteReadOnly) {
+                event.consume();
+                return;
+            }
             if (event.isShortcutDown() && event.getCode() == KeyCode.V) {
                 paste();
                 event.consume();
@@ -194,8 +270,10 @@ public final class HandoutWindow {
         stage.initOwner(owner);
         stage.setOnHidden(event -> {
             selection.clear();
-            showOnly = null;
-            shown = false;
+            if (!remoteReadOnly) {
+                showOnly = null;
+                shown = false;
+            }
             refreshState();
             onClosed.run();
         });
@@ -263,7 +341,7 @@ public final class HandoutWindow {
                 setGraphic(null);
                 setContextMenu(null);
             } else {
-                view.setImage(thumbnails.computeIfAbsent(id, key ->
+                view.setImage(remoteRecentAdd != null ? remoteThumbnails.get(id) : thumbnails.computeIfAbsent(id, key ->
                         new Image(recents.file(key).toUri().toString(), RECENT_THUMBNAIL_WIDTH * 2,
                                 RECENT_THUMBNAIL_WIDTH * 3, true, true, true)));
                 setGraphic(view);
@@ -300,6 +378,10 @@ public final class HandoutWindow {
     }
 
     private void addFromRecent(String id) {
+        if (remoteRecentAdd != null) {
+            if (!remoteReadOnly && id != null) remoteRecentAdd.accept(id);
+            return;
+        }
         if (recents == null || id == null) {
             return;
         }
@@ -320,6 +402,10 @@ public final class HandoutWindow {
     }
 
     private void removeRecent(String id) {
+        if (remoteRecentRemove != null) {
+            if (!remoteReadOnly && id != null) remoteRecentRemove.accept(id);
+            return;
+        }
         if (recents == null || id == null) {
             return;
         }
@@ -391,8 +477,13 @@ public final class HandoutWindow {
         if (!playerWindowOpen.getAsBoolean()) {
             shown = false;
         }
+
         refreshState();
         onChange.run();
+    }
+
+    public void refreshPlayerAvailability() {
+        refreshState();
     }
 
     private void setShown(boolean value) {
@@ -438,8 +529,9 @@ public final class HandoutWindow {
         MenuItem delete = new MenuItem(count == 1 ? "Delete" : "Delete " + count + " images",
                 Icons.icon(MaterialDesignD.DELETE_OUTLINE));
         delete.setOnAction(e -> deleteSelected());
-        ContextMenu menu = new ContextMenu(showOnlyItem, delete);
-        menu.show(preview, screenX, screenY);
+        if (imageContextMenu != null) imageContextMenu.hide();
+        imageContextMenu = new ContextMenu(showOnlyItem, delete);
+        imageContextMenu.show(preview, screenX, screenY);
     }
 
     /** Shows exactly the selected images to the players, hiding the rest of the handout. */
@@ -491,6 +583,13 @@ public final class HandoutWindow {
 
     private void paste() {
         Clipboard clipboard = Clipboard.getSystemClipboard();
+        if (remoteFilePaste != null && clipboard.hasFiles()) {
+            var files = clipboard.getFiles().stream().filter(HandoutWindow::isImageFile).toList();
+            if (!files.isEmpty()) {
+                remoteFilePaste.accept(files);
+                return;
+            }
+        }
         List<Image> pasted = new ArrayList<>();
         if (clipboard.hasFiles()) {
             for (File file : clipboard.getFiles()) {

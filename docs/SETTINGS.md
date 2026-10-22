@@ -5,6 +5,136 @@ exact key (for example `fog.revealSeconds`) or with a word describing what you w
 *zoom*, *tooltip*, *torch*, *cache*, *click*, *frame rate*). Every entry ends with a **Keywords** line that lists
 common synonyms to make searching easier.
 
+## Remote-session settings ownership
+
+Open the **Session** tab in the left sidebar to explicitly host or connect; neither opening setup nor
+starting the application starts a remote listener or discovery. Connected clients use accepted host settings in memory, without overwriting the client's
+standalone `dmmt-settings.ini`. Client edits become requests; values change only after host acceptance.
+Disconnecting restores local settings, including local file edits made while the host context was active.
+Connection loss pauses host-directed settings edits until an authoritative baseline is restored.
+
+The host-side settings authority validates requests and acknowledges success only after saving on the host.
+Per-setting revisions detect conflicting host edits, including a setting changed away and back, while
+unrelated changes remain compatible. Ordered commands and a bounded receipt cache prevent retries from
+applying twice; expired receipts or a changed host session require resynchronization. Save failures
+retain the previous value and return an explicit error. Built-in default text is included in authoritative
+snapshots so reloading a file after restoring defaults does not create false conflicts.
+`library.folder` and `audio.folder` offer Browse host while connected. This is an authenticated,
+on-demand metadata-only browser for A's roots and directories, with parent navigation, absolute host
+path input and 128-folder pages. No file contents are exposed and no directories are created.
+Listings are bounded to 4096 child directories, 65,536 visited entries and 524,288 name/path characters
+per directory, and 131,072 characters per page; exceeding a limit reports an error and allows a
+narrower absolute host path. Directory IO runs off A's application thread and the live lease is
+checked both before and after reading. Missing/inaccessible folders are explicit listing errors.
+Choosing a folder submits the existing validated settings command using the revision captured when
+Browse opened; host changes, including away-and-back edits, retain conflict protection. B's INI stays
+untouched. Closing the browser cancels pending display; confirming after the settings connection
+pauses or changes fails explicitly rather than writing locally. Standalone Browse uses a native
+local folder picker. No INI keys are added.
+
+The source-picker directories `import.lastDirectory` and `audio.lastDirectory` remain client-local.
+Changes to those directories during a remote context are temporary and are neither sent to the host
+nor written to the client's standalone file. Host application settings (including render options and
+control visibility) have no separate client overrides. Startup JVM/launcher options remain machine-local.
+No new INI keys are introduced. Hosting must be explicitly started for every session.
+Packaged Windows hosting checks DMMT-managed private-LAN permission on **Start hosting**.
+**Allow private LAN access** requires explicit consent followed by Windows administrator approval.
+Rules cover only this executable, selected control/artwork TCP ports and UDP 7074, inbound from
+LocalSubnet on Private networks. They persist in Windows Firewall, not the INI or shared settings.
+Moving the executable or changing ports may require permission again. **Check access** checks the
+selected network profile and effective managed rules; it does not prove end-to-end reachability or
+detect every blocking policy. **Remove permission** removes only this app location's managed rules.
+PowerShell module-loading progress is suppressed and diagnostic output is kept separate from the
+status response; actual command failures still report an error.
+Cancellation/errors are shown, and **Host without changes** preserves existing firewall configuration.
+No network-profile changes, Public access, router forwarding or permissions for shared Java runtimes
+are performed. Other operating systems/development runs require their normal OS network permissions.
+The host-session coordinator requires host-approved access and an active connection lease
+before exposing settings snapshots or edits. Disconnect keeps retry receipts for reconnection;
+revoking access or stopping the session invalidates credentials, leases and command history.
+The default connection flow is explicit Discover LAN hosts, select, Request control and approval on A.
+No code, copied text or fingerprint confirmation is needed for discovered hosts. Discovery supplies an
+unverified session certificate pin; TLS 1.3 matches that exact certificate for control and asset
+connections. Names/pins are not independent identity proof: use only on a trusted LAN and approve
+expected requests. Advanced manual connection retains separately verified fingerprints and pairing
+codes. Both routes rate-limit requests, expire pending approval and withhold data until A approves.
+The transport checks application/protocol compatibility before requesting approval,
+and bounds control-message sizes and operation deadlines. The code constant `RemoteCompatibility.VERSION`
+defines compatibility independently of application builds or packaging; increment it for breaking
+remote-interface changes, not compatible fixes or unrelated changes. It is not a user setting.
+The connection error shows both compatibility versions and wire protocol versions. Both PCs must
+update/restart when upgrading from older releases that used content hashes. The internal connection coordinators
+generate an in-memory host identity for each hosting session, route pairing/approval and authenticated
+settings requests, reject a second client explicitly and retain exact command identities on reconnect.
+Authenticated host artwork/operation errors open a dialog on B with expandable, read-only stack
+traces and **Copy details**. Duplicate polling errors do not repeatedly open dialogs. This adds no
+INI keys; diagnostics are bounded, exclude raw parser payloads/authentication secrets, and never
+require enabling remote work during standalone use. Correct failed artwork on A and reopen the map
+to resume synchronization. Library browsing and local import pickers remain usable while workspace
+editing is paused; unsafe operations report that they cannot proceed.
+Approval/grant delivery is bound to the original protected connection. Private keys, pairing codes
+and reconnect credentials are not persisted or exposed through the legacy local API. Host certificates
+change when a new hosting session starts; rediscover and request approval again, or copy/verify fresh
+details if using the optional manual route.
+Discovery never supplies a trusted fingerprint by itself. The setup window remembers only explicitly
+submitted non-secret names, addresses and ports in `remote-session/setup.properties` next to the
+settings file, never credentials or pairing codes.
+The client coordinator bounds queued settings edits and permits one command in flight at a time.
+Host responses surface accepted, conflicting, invalid or failed-save outcomes; incoming host changes
+do not generate new requests. Connection loss cancels unsent edits explicitly and retains the exact
+in-flight command for receipt recovery. A changed session or inconsistent sequence requires fresh
+synchronization and reports any unconfirmed command as uncertain, rather than silently replaying it.
+Remote settings persistence now prepares and validates on the host application thread, performs disk
+IO on a worker and commits accepted runtime values back on the application thread. Concurrent host
+edits are reconciled before acknowledgement; polling reads the accepted in-memory state without disk IO.
+The internal client workspace lifecycle now drives settings synchronization on application pulses,
+refreshes effective control visibility/grid/weather settings, and restores standalone settings on exit.
+It pauses workspace edits if the settings connection is unavailable or continuity cannot be verified.
+Client mode never starts the local HTTP API using the host's API settings.
+Host player monitor choices now come from A's actual screen list, not B's connected monitors.
+Screen selection is revision-checked on A; diagonal/tile calibration continues to use the existing
+shared player settings. Accepted remote calibration changes refresh the host's controls on an
+owner-thread pulse without polling the INI on every frame. Existing `ping.durationMs` and
+`laser.trailMs` settings also govern remote pointers; received pings retain the configured lifetime
+(up to 60 seconds), and stale laser dots expire independently of the configured trail.
+No player/pointer-specific INI keys are added.
+The internal remote handout board adds no INI keys either. It shares A's board and presentation,
+including A's persistent recent list, while B's persistent recent-handout store remains untouched.
+The existing `handout.recentMax` governs A's list and B's recent pane, including zero to disable it.
+Remote pastes persist on A; reusing/removing recents is revision-checked and acknowledged after
+persistence. Disk failures and conflicts are explicit. List previews are PNG thumbnails bounded to
+96 by 144 pixels; full originals are downloaded only when needed by the board. Unchanged heartbeats
+do not retransmit the list. PNG preparation/transfer is off-thread, with at most 64 board images, 16,777,216
+decoded pixels per image and 33,554,432 decoded pixels across the board, in addition to asset-store
+byte quotas. Clipboard source files are checked before decoding; only their first frame is imported.
+Disconnect restores B's retained local handouts without changing A's displayed handouts.
+
+The internal Host/Connect setup window and lifecycle now handle manual address/interface selection,
+separate control/artwork ports, approval, explicit fingerprint confirmation, reconnect and cancellation.
+The Connect tab's Discover LAN hosts action performs a bounded 1.5-second IPv4 multicast search
+(239.255.77.84, UDP 7074, TTL 1), with at most 64 results and 256 received datagrams per search.
+Only explicit hosting enables the responder; stopping closes and joins it. Discovery contains only
+session name, ports, compatibility version and an unverified certificate pin, never pairing codes or credentials. Selecting a result
+clears identity verification and pairing input. Obtain those separately from A; discovery is not
+authentication. Closing setup or starting a connection cancels a search. Unsupported interfaces,
+IPv6-only LANs and blocked multicast use manual details; discovery failure does not stop hosting.
+No discovery INI keys, startup scans, automatic reconnection, firewall changes or router changes are added.
+Explicitly submitted host/client configuration is stored in machine-local `setup.properties` beside
+the remote asset/cache directories, separate from both the shared host settings and standalone INI.
+It stores session/client names, the host binding address, the last client destination and both ports.
+The bounded file is read only when setup opens and replaced by serialized background writes.
+Fingerprints, pairing codes, verification flags, credentials and connection state are never saved.
+No saved values start hosting, discovery or connection automatically. Loading does not overwrite
+already-edited input; an unavailable saved host interface requires explicit reselection. Corrupt files
+or write failures are reported while manual connection remains available. Closing setup clears
+pairing input and fingerprint confirmation. No new INI keys are added.
+They are not registered in the application menu while library/audio and host device/path integration
+remain incomplete. Setup's initial port values are 7072/7073, not new INI settings; neither listener
+starts automatically. Copied connection details exclude pairing codes and reconnect credentials.
+There is no implicit remote background mode: standalone use does not initialize remote coordinators,
+prepare snapshots/artwork or poll remote state. Preparation threads start only for explicitly requested
+work and expire when idle; stopped sessions do not continue queued artwork publication.
+
 ## Graphics compatibility at startup
 
 The application defaults `prism.maxvram` to `1g` before starting JavaFX, preserving any explicit
@@ -226,7 +356,7 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `player` | `window`, `freeze`, `scaleTest`, `handout`, `grid`, `gridOpacity`, `screen`, `diagonal`, `tileSize`, `zoom` |
 | `performance` | `target`, `animation`, `idle` |
 
-The Tokens choices apply to the **left** library sidebar. Hide `tokens` in `ui.sections.hidden` or `tokens.browser` in `ui.controls.hidden` to hide its tab and return to Maps. Individual creation/import/folder/refresh buttons can be hidden separately. Their local API endpoints remain available. Token artwork and folders live in `dmmap-tokens` beside the settings file; token defaults belong to library entries and placed sizes/visibility belong to maps, not this settings file.
+The Tokens choices apply to the **left** library sidebar. Hide `session` in `ui.sections.hidden` or `session.browser` in `ui.controls.hidden` to hide the Session tab (it is shown regardless while a remote session is active). Hide `tokens` in `ui.sections.hidden` or `tokens.browser` in `ui.controls.hidden` to hide its tab and return to Maps. Individual creation/import/folder/refresh buttons can be hidden separately. Their local API endpoints remain available. Token artwork and folders live in `dmmap-tokens` beside the settings file; token defaults belong to library entries and placed sizes/visibility belong to maps, not this settings file.
 
 The Map building choices include **Draw door**, **Draw window** and **Room label**. Hiding their buttons does not disable their local API controls (`building.drawDoor`, `building.drawWindow`, `building.roomLabel`) or remove existing doors, windows or labels.
 
@@ -1364,10 +1494,13 @@ Playback copies are prepared in the background; active playback keeps its positi
 Master and channel volume settings below continue to scale these adjusted levels. There are no global limiter settings.
 
 ### `audio.enabled`
-**Default:** `true` · **Values:** `true`/`false` · **Applies:** restart required
+**Default:** `true` · **Values:** `true`/`false` · **Applies:** immediately
 
 Turns the whole audio feature on or off. With `false` the transport group in the status bar and the audio overlay
 are gone, nothing is loaded and no audio thread runs, so the feature costs nothing on low-end machines.
+Changing this setting starts or stops A's audio controls and engine immediately, including its API
+endpoints. A connected B follows A's enabled state without starting local audio output. Changing
+`audio.folder` still takes effect after restarting A; remote controls report that pending restart.
 
 *Keywords:* music, ambient audio, sound, soundscape, audio off, disable music
 

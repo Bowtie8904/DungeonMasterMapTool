@@ -2,6 +2,9 @@ package dmmt.ui;
 
 import dmmt.model.DmProject.TokenDefinition;
 import dmmt.render.TokenArt;
+import dmmt.remote.RemoteImages;
+import dmmt.remote.RemoteOperations;
+import dmmt.remote.RemoteTokens;
 import dmmt.service.TokenLibraryService;
 import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
@@ -19,6 +22,10 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ForkJoinPool;
+import javafx.application.Platform;
 
 public final class TokenBrowser extends VBox
 {
@@ -41,6 +48,15 @@ public final class TokenBrowser extends VBox
     private TokenLibraryService.Library library = new TokenLibraryService.Library();
     private final Map<String, Node> controls = new LinkedHashMap<>();
     private final Set<String> expanded = new HashSet<>(Set.of(""));
+    private final Label remoteStatus = new Label();
+    private RemoteOperations.Connection remote;
+    private long remoteEpoch;
+    private long remoteRevision = -1;
+    private long nextRemotePoll;
+    private boolean remoteQuery;
+    private boolean remoteMutation;
+
+    private record EditContext(RemoteOperations.Connection connection, long epoch, long revision) {}
 
     public TokenBrowser(TokenLibraryService service, Consumer<TokenDefinition> changed)
     {
@@ -92,7 +108,11 @@ public final class TokenBrowser extends VBox
         Label hint = new Label("Drag tokens onto the map or into folders. Right-click to edit. Ctrl+V imports a clipboard image.");
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
-        getChildren().addAll(title, actions, search, tree, hint);
+        remoteStatus.getStyleClass().add("muted");
+        remoteStatus.setWrapText(true);
+        remoteStatus.setVisible(false);
+        remoteStatus.setManaged(false);
+        getChildren().addAll(title, actions, search, tree, hint, remoteStatus);
         refresh();
     }
 
@@ -104,15 +124,195 @@ public final class TokenBrowser extends VBox
     public TokenDefinition find(String id)
     {
         return library.getEntries().stream().filter(e -> !e.isDeleted() && e.getToken().getId().equals(id))
-                      .map(TokenLibraryService.Entry::getToken).findFirst().orElse(null);
+                      .map(e -> TokenLibraryService.copy(e.getToken())).findFirst().orElse(null);
+    }
+
+    public TokenDefinition resolveDefinition(String id)
+    {
+        if (remote != null && (!remote.connected() || remoteRevision < 0))
+            return null;
+        return find(id);
+    }
+
+    public void beginRemote(RemoteOperations.Connection connection)
+    {
+        remote = Objects.requireNonNull(connection);
+        remoteEpoch++;
+        remoteRevision = -1;
+        remoteQuery = false;
+        remoteMutation = false;
+        nextRemotePoll = 0;
+        library = new TokenLibraryService.Library();
+        rebuild();
+        remoteStatus.setManaged(true);
+        remoteStatus.setVisible(true);
+        remoteStatus.setText("Loading host token library...");
+        tickRemote();
+    }
+
+    public void endRemote()
+    {
+        remote = null;
+        remoteEpoch++;
+        remoteQuery = false;
+        remoteMutation = false;
+        remoteRevision = -1;
+        remoteStatus.setManaged(false);
+        remoteStatus.setVisible(false);
+        refresh();
+    }
+
+    /** Frame hook: no work in standalone mode and at most one query per second while connected. */
+    public void tickRemote()
+    {
+        if (remote == null || remoteQuery || remoteMutation || System.nanoTime() < nextRemotePoll)
+            return;
+        nextRemotePoll = System.nanoTime() + 1_000_000_000L;
+        if (!remote.connected())
+        {
+            remoteStatus.setText("Host disconnected. Token edits are unavailable until reconnection.");
+            return;
+        }
+        queryRemote(false);
     }
 
     public void refresh()
     {
+        if (remote != null)
+        {
+            queryRemote(true);
+            return;
+        }
         attempt(() -> {
             library = service.load();
             rebuild();
         });
+    }
+
+    private void queryRemote(boolean force)
+    {
+        if (remoteQuery || remoteMutation)
+            return;
+        RemoteOperations.Connection connection = remote;
+        long epoch = remoteEpoch;
+        if (!connection.connected())
+        {
+            remoteStatus.setText("Host disconnected. Reconnect to reload tokens.");
+            return;
+        }
+        remoteQuery = true;
+        connection.query(RemoteTokens.DOMAIN, "list", RemoteTokens.json(new RemoteTokens.Stamp(force ? -1 : remoteRevision)))
+                .thenCompose(value -> {
+                    if (remote != connection || remoteEpoch != epoch || value == null || value.isNull())
+                        return CompletableFuture.completedFuture(null);
+                    try
+                    {
+                        return RemoteTokens.download(RemoteTokens.state(value), connection,
+                                ForkJoinPool.commonPool(), Platform::runLater);
+                    }
+                    catch (IOException error)
+                    {
+                        return CompletableFuture.failedFuture(error);
+                    }
+                }).whenCompleteAsync((prepared, error) -> {
+                    if (remote != connection || remoteEpoch != epoch)
+                        return;
+                    remoteQuery = false;
+                    if (error != null)
+                        remoteStatus.setText(message(error));
+                    else if (prepared != null)
+                        accept(prepared);
+                    else
+                        remoteStatus.setText("Host token library");
+                }, Platform::runLater);
+    }
+
+    private void accept(RemoteTokens.Prepared prepared)
+    {
+        if (prepared.state().revision() < remoteRevision)
+            return;
+        prepared.acceptArtwork();
+        library = prepared.library();
+        remoteRevision = prepared.state().revision();
+        remoteStatus.setText("Host token library");
+        rebuild();
+    }
+
+    private EditContext editContext() throws IOException
+    {
+        if (remote != null && (!remote.connected() || remoteRevision < 0 || remoteMutation))
+            throw new IOException("The host token library is not ready. Reconnect or reload and retry.");
+        return new EditContext(remote, remoteEpoch, remoteRevision);
+    }
+
+    private void requireContext(EditContext context) throws IOException
+    {
+        if (context.connection != remote || context.epoch != remoteEpoch)
+            throw new IOException("The remote session changed while this dialog was open. Reopen it and retry.");
+        if (remote != null && !remote.connected())
+            throw new IOException("The host is disconnected.");
+    }
+
+    private void remoteChange(EditContext context, RemoteTokens.Request request,
+                              CompletableFuture<RemoteTokens.Definition> upload)
+    {
+        attempt(() -> {
+            requireContext(context);
+            if (remoteMutation)
+                throw new IOException("Another token edit is awaiting host acceptance.");
+            remoteMutation = true;
+            remoteStatus.setText("Waiting for host token library...");
+            upload.thenCompose(definition -> {
+                try
+                {
+                    requireContext(context);
+                    var completed = definition == null ? request : new RemoteTokens.Request(request.revision(),
+                            request.operation(), definition, request.id(), request.folder(), request.parent(), request.name());
+                    return context.connection.command(RemoteTokens.DOMAIN, "change", RemoteTokens.json(completed));
+                }
+                catch (IOException error)
+                {
+                    return CompletableFuture.failedFuture(error);
+                }
+            }).thenCompose(value -> {
+                try
+                {
+                    return RemoteTokens.download(RemoteTokens.state(value), context.connection,
+                            ForkJoinPool.commonPool(), Platform::runLater);
+                }
+                catch (IOException error)
+                {
+                    return CompletableFuture.failedFuture(error);
+                }
+            }).whenCompleteAsync((prepared, error) -> {
+                if (remote != context.connection || remoteEpoch != context.epoch)
+                    return;
+                remoteMutation = false;
+                if (error == null)
+                    accept(prepared);
+                else
+                {
+                    remoteStatus.setText(message(error));
+                    Dialogs.error(window(), "Token operation rejected", message(error));
+                    queryRemote(true);
+                }
+            }, Platform::runLater);
+        });
+    }
+
+    private void remoteChange(EditContext context, RemoteTokens.Operation operation, String id,
+                              String folder, String parent, String name)
+    {
+        remoteChange(context, new RemoteTokens.Request(context.revision, operation, null, id, folder, parent, name),
+                CompletableFuture.completedFuture(null));
+    }
+
+    private static String message(Throwable error)
+    {
+        while ((error instanceof CompletionException || error instanceof java.util.concurrent.ExecutionException)
+                && error.getCause() != null)
+            error = error.getCause();
+        return error.getMessage() == null ? "The token operation could not be completed." : error.getMessage();
     }
 
     private void rebuild()
@@ -187,6 +387,27 @@ public final class TokenBrowser extends VBox
     private void create(boolean fromFile, boolean fromClipboard)
     {
         attempt(() -> {
+            EditContext context = editContext();
+            String folder = selectedFolder();
+            if (context.connection != null)
+            {
+                var original = TokenDefinition.builder().id(UUID.randomUUID().toString()).name("New token").build();
+                if (fromFile)
+                {
+                    java.io.File file = TokenEditor.chooseImageFile(window());
+                    if (file != null)
+                        prepareEditor(original, file.toPath(), folder, context);
+                }
+                else
+                {
+                    var image = fromClipboard ? Clipboard.getSystemClipboard().getImage() : null;
+                    if (fromClipboard && image == null)
+                        throw new IOException("The clipboard does not contain an image.");
+                    TokenEditor.showRemote(window(), original, image, null)
+                            .ifPresent(result -> save(result, folder, context));
+                }
+                return;
+            }
             javafx.scene.image.Image image = fromFile ? TokenEditor.chooseImage(window())
                                                       : fromClipboard ? Clipboard.getSystemClipboard().getImage() : null;
             if (fromFile && image == null)
@@ -194,19 +415,66 @@ public final class TokenBrowser extends VBox
             if (fromClipboard && image == null)
                 throw new IOException("The clipboard does not contain an image.");
             TokenDefinition token = TokenDefinition.builder().id(UUID.randomUUID().toString()).name("New token").build();
-            String folder = selectedFolder();
-            TokenEditor.show(window(), token, image).ifPresent(result -> save(result, folder));
+            TokenEditor.show(window(), token, image).ifPresent(result -> save(result, folder, context));
         });
     }
 
     private void edit(TokenDefinition token)
     {
-        attempt(() -> TokenEditor.show(window(), token, null).ifPresent(result -> save(result, selectedFolder())));
+        attempt(() -> {
+            EditContext context = editContext();
+            String folder = selectedFolder();
+            if (context.connection != null)
+            {
+                prepareEditor(TokenLibraryService.copy(token), null, folder, context);
+                return;
+            }
+            TokenEditor.show(window(), token, null).ifPresent(result -> save(result, folder, context));
+        });
     }
 
     private void save(TokenDefinition token, String folder)
     {
         attempt(() -> {
+            save(token, folder, editContext());
+        });
+    }
+
+    private void prepareEditor(TokenDefinition original, java.nio.file.Path importFile, String folder, EditContext context)
+    {
+        CompletableFuture.supplyAsync(() -> {
+            try
+            {
+                java.nio.file.Path source = importFile != null ? importFile
+                        : original.getSourceImage() == null ? null : RemoteTokens.localArtwork(original.getSourceImage());
+                return source == null ? null : RemoteImages.read(source, importFile == null, 0);
+            }
+            catch (IOException error)
+            {
+                throw new CompletionException(error);
+            }
+        }, ForkJoinPool.commonPool()).whenCompleteAsync((image, error) -> attempt(() -> {
+            requireContext(context);
+            if (error != null)
+                throw new IOException(message(error), error);
+            TokenEditor.showRemote(window(), original, importFile == null ? null : image, importFile == null ? image : null)
+                    .ifPresent(result -> save(result, folder, context));
+        }), Platform::runLater);
+    }
+
+    private void save(TokenDefinition token, String folder, EditContext context)
+    {
+        attempt(() -> {
+            requireContext(context);
+            if (context.connection != null)
+            {
+                var placeholder = new RemoteTokens.Definition(token.getId(), token.getName(), token.getColor(),
+                        token.getSizeTiles(), token.getShape(), token.isBorder(), token.getZoom(),
+                        token.getCenterX(), token.getCenterY(), null, null);
+                remoteChange(context, new RemoteTokens.Request(context.revision, RemoteTokens.Operation.PUT,
+                        placeholder, null, folder, null, null), RemoteTokens.upload(token, context.connection));
+                return;
+            }
             service.put(token, folder);
             changed.accept(token);
             refresh();
@@ -215,42 +483,71 @@ public final class TokenBrowser extends VBox
 
     private void newFolder()
     {
+        attempt(() -> {
+        EditContext context = editContext();
+        String parent = selectedFolder();
         Dialogs.askText(window(), "New folder", "Token folder name", MaterialDesignF.FOLDER_PLUS_OUTLINE,
                         "Create", "", null).ifPresent(name -> attempt(() -> {
-            expanded.add(service.createFolder(selectedFolder(), name));
+            requireContext(context);
+            if (context.connection != null)
+            {
+                expanded.add(parent.isEmpty() ? name.trim() : parent + "/" + name.trim());
+                remoteChange(context, RemoteTokens.Operation.CREATE_FOLDER, null, null, parent, name.trim());
+                return;
+            }
+            expanded.add(service.createFolder(parent, name));
             refresh();
         }));
+        });
     }
 
     private void rename(Item item)
     {
         if (item.token == null && item.folder.isEmpty())
             return;
+        attempt(() -> {
+        EditContext context = editContext();
         Dialogs.askText(window(), "Rename", "New name", MaterialDesignR.RENAME_BOX, "Rename", item.name(), null)
                .ifPresent(name -> attempt(() -> {
+                   requireContext(context);
                    if (item.token != null)
                    {
                        TokenDefinition copy = TokenLibraryService.copy(item.token);
                        copy.setName(name);
-                       save(copy, item.folder);
+                       save(copy, item.folder, context);
                    }
                    else
                    {
+                       if (context.connection != null)
+                       {
+                           remoteChange(context, RemoteTokens.Operation.MOVE_FOLDER, null, item.folder, parent(item.folder), name.trim());
+                           return;
+                       }
                        service.moveFolder(item.folder, parent(item.folder), name);
                        refresh();
                    }
                }));
+        });
     }
 
     private void delete(Item item)
     {
         if (item.token == null && item.folder.isEmpty())
             return;
+        attempt(() -> {
+        EditContext context = editContext();
         if (Dialogs.confirmDanger(window(), "Delete token library item", "Delete " + item.name() + "?",
                                   "This removes the library entry" + (item.token == null ? " and all tokens in its subfolders" : "")
                                           + " and unused library image files. Placed tokens are kept; unopened maps retain their last-saved appearance.", "Delete"))
         {
             attempt(() -> {
+                requireContext(context);
+                if (context.connection != null)
+                {
+                    remoteChange(context, item.token == null ? RemoteTokens.Operation.DELETE_FOLDER : RemoteTokens.Operation.DELETE,
+                            item.token == null ? null : item.token.getId(), item.token == null ? item.folder : null, null, null);
+                    return;
+                }
                 if (item.token == null)
                     service.deleteFolder(item.folder);
                 else
@@ -258,6 +555,7 @@ public final class TokenBrowser extends VBox
                 refresh();
             });
         }
+        });
     }
 
     private ContextMenu menu(Item item)
@@ -336,21 +634,31 @@ public final class TokenBrowser extends VBox
                     String folder = getItem().folder;
                     try
                     {
+                        EditContext context = editContext();
                         Dragboard board = e.getDragboard();
                         if (board.hasContent(TOKEN))
-                            service.move((String)board.getContent(TOKEN), folder);
+                        {
+                            if (context.connection != null)
+                                remoteChange(context, RemoteTokens.Operation.MOVE, (String)board.getContent(TOKEN), folder, null, null);
+                            else
+                                service.move((String)board.getContent(TOKEN), folder);
+                        }
                         else if (board.hasContent(FOLDER))
                         {
                             String source = (String)board.getContent(FOLDER);
-                            service.moveFolder(source, folder, source.substring(source.lastIndexOf('/') + 1));
+                            if (context.connection != null)
+                                remoteChange(context, RemoteTokens.Operation.MOVE_FOLDER, null, source, folder, source.substring(source.lastIndexOf('/') + 1));
+                            else
+                                service.moveFolder(source, folder, source.substring(source.lastIndexOf('/') + 1));
                         }
                         else
                             throw new IOException("Unsupported token drop.");
                         expanded.add(folder);
-                        refresh();
+                        if (context.connection == null)
+                            refresh();
                         success = true;
                     }
-                    catch (IOException ex)
+                    catch (IOException | IllegalArgumentException ex)
                     {
                         Dialogs.error(window(), "Could not move token", ex.getMessage());
                     }

@@ -54,6 +54,73 @@ public class AudioLibraryService {
     private AudioLibrary library;
     private final Set<Path> clipsBeingIndexed = new HashSet<>();
     private AudioPreparationQueue preparationQueue;
+    private volatile AudioRemoteBackend remote;
+    private AudioLibrary localLibrary;
+    private long revision;
+
+    public AudioRemoteBackend remoteBackend() {
+        return remote;
+    }
+
+    public synchronized long revision() {
+        return revision;
+    }
+
+    public synchronized void beginRemote(AudioRemoteBackend backend) {
+        if (remote != null) {
+            throw new IllegalStateException("Audio is already remote.");
+        }
+        stopPreparation();
+        localLibrary = library;
+        library = AudioLibrary.builder().build();
+        remote = java.util.Objects.requireNonNull(backend);
+        preparationQueue = new AudioPreparationQueue(this, backend);
+    }
+
+    public synchronized void acceptRemote(List<AudioCategory> categories, List<AudioTrack> tracks,
+                                           List<AudioPreparationQueue.RemoteItem> tasks) {
+        if (remote == null) {
+            return;
+        }
+        // Keep open gain/cut editors attached to the accepted entry, never to an optimistic replacement.
+        List<AudioTrack> accepted = new ArrayList<>();
+        for (AudioTrack incoming : tracks) {
+            AudioTrack existing = track(incoming.getId()).orElse(null);
+            if (existing != null) {
+                try {
+                    mapper.readerForUpdating(existing).readValue(mapper.writeValueAsBytes(incoming));
+                    accepted.add(existing);
+                } catch (IOException ex) {
+                    throw new IllegalArgumentException("Invalid remote audio entry.", ex);
+                }
+            } else {
+                accepted.add(incoming);
+            }
+        }
+        library.setCategories(new ArrayList<>(categories));
+        library.setTracks(accepted);
+        preparationQueue.acceptRemote(tasks);
+    }
+
+    public synchronized void endRemote() {
+        if (remote == null) {
+            return;
+        }
+        preparationQueue.close();
+        remote = null;
+        library = localLibrary;
+        localLibrary = null;
+        preparationQueue = null;
+    }
+
+    private boolean remoteChange(String action, Object... arguments) {
+        AudioRemoteBackend backend = remote;
+        if (backend == null) {
+            return false;
+        }
+        backend.command(action, arguments);
+        return true;
+    }
 
     public synchronized AudioPreparationQueue preparationQueue() {
         if (preparationQueue == null) {
@@ -73,8 +140,18 @@ public class AudioLibraryService {
     }
 
     public AudioLibraryService(Path root) {
+        this(root, true);
+    }
+
+    /** An empty, IO-free starting point when this machine's audio was disabled before joining a host. */
+    public static AudioLibraryService remoteReplica(Path root) {
+        return new AudioLibraryService(root, false);
+    }
+
+    private AudioLibraryService(Path root, boolean initialize) {
         this.root = root.toAbsolutePath().normalize();
-        this.library = load();
+        this.library = initialize ? load() : AudioLibrary.builder().build();
+        if (!initialize) return;
         try {
             deleteStalePlaybackFiles();
         } catch (IOException e) {
@@ -96,6 +173,9 @@ public class AudioLibraryService {
 
     /** Full path of a track's audio file. */
     public Path fileOf(AudioTrack track) {
+        if (remote != null) {
+            throw new IllegalStateException("Remote audio files are only accessible on the host.");
+        }
         return filesFolder().resolve(track.getFile());
     }
 
@@ -176,6 +256,9 @@ public class AudioLibraryService {
 
     /** Writes the index to a temporary file and moves it into place, so a crash cannot truncate the library. */
     public synchronized void save() throws IOException {
+        if (remote != null) {
+            throw new IllegalStateException("A remote audio replica cannot persist a local index.");
+        }
         Files.createDirectories(root);
         Path index = root.resolve(INDEX_FILE);
         Path temp = index.resolveSibling(INDEX_FILE + ".tmp");
@@ -185,11 +268,16 @@ public class AudioLibraryService {
         } catch (IOException e) {
             Files.move(temp, index, StandardCopyOption.REPLACE_EXISTING);
         }
+        revision++;
     }
 
     /** Re-reads the index from disk, e.g. after the library folder setting changed. */
     public synchronized void reload() {
+        if (remote != null) {
+            return;
+        }
         library = load();
+        revision++;
     }
 
     // ---- Categories ----
@@ -207,6 +295,9 @@ public class AudioLibraryService {
 
     /** Creates a category with a unique name; returns the stored category. */
     public synchronized AudioCategory createCategory(String name, String color, String icon) throws IOException {
+        if (remoteChange("createCategory", name, color, icon)) {
+            return null;
+        }
         AudioCategory category = AudioCategory.builder()
                 .name(uniqueCategoryName(cleanName(name, "New category"), null))
                 .color(color == null || color.isBlank() ? AudioCategory.DEFAULT_COLOR : color)
@@ -242,6 +333,7 @@ public class AudioLibraryService {
 
     /** Renames a category; the built-in "Uncategorised" category cannot be renamed. */
     public synchronized void renameCategory(String id, String name) throws IOException {
+        if (remoteChange("renameCategory", id, name)) return;
         AudioCategory category = category(id).orElseThrow(() -> new IOException("Unknown category."));
         if (category.isUncategorised()) {
             throw new IOException("The " + AudioCategory.UNCATEGORISED_NAME + " category cannot be renamed.");
@@ -251,6 +343,7 @@ public class AudioLibraryService {
     }
 
     public synchronized void styleCategory(String id, String color, String icon) throws IOException {
+        if (remoteChange("styleCategory", id, color, icon)) return;
         AudioCategory category = category(id).orElseThrow(() -> new IOException("Unknown category."));
         if (color != null && !color.isBlank()) {
             category.setColor(color);
@@ -263,6 +356,7 @@ public class AudioLibraryService {
 
     /** Deletes a category; its tracks move to "Uncategorised" so no audio is ever lost. */
     public synchronized void deleteCategory(String id) throws IOException {
+        if (remoteChange("deleteCategory", id)) return;
         AudioCategory category = category(id).orElseThrow(() -> new IOException("Unknown category."));
         if (category.isUncategorised()) {
             throw new IOException("The " + AudioCategory.UNCATEGORISED_NAME + " category cannot be deleted.");
@@ -337,6 +431,7 @@ public class AudioLibraryService {
 
     /** Hides a category from the overlay, or shows it again; it keeps playing and keeps its API endpoint. */
     public synchronized void setCategoryHidden(String id, boolean hidden) throws IOException {
+        if (remoteChange("categoryHidden", id, hidden)) return;
         AudioCategory category = category(id).orElseThrow(() -> new IOException("Unknown category."));
         category.setHidden(hidden);
         save();
@@ -344,6 +439,7 @@ public class AudioLibraryService {
 
     /** Hides a sound effect from the overlay, or shows it again. */
     public synchronized void setTrackHidden(String id, boolean hidden) throws IOException {
+        if (remoteChange("trackHidden", id, hidden)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
         track.setHidden(hidden);
         save();
@@ -351,6 +447,7 @@ public class AudioLibraryService {
 
     /** Colour and/or icon of a sound effect's overlay button; {@code null} keeps the current value. */
     public synchronized void styleTrack(String id, String color, String icon) throws IOException {
+        if (remoteChange("styleTrack", id, color, icon)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown audio track."));
         if (color != null && !color.isBlank()) {
             track.setColor(color);
@@ -367,6 +464,10 @@ public class AudioLibraryService {
      * @param categoryId category of a music track; ignored for sound effects
      */
     public AudioTrack importFile(Path source, AudioKind kind, String categoryId) throws IOException {
+        if (remote != null) {
+            remote.upload(source, kind, categoryId, null);
+            return null;
+        }
         checkImportInterrupted();
         AudioTrack pending = copyPending(source, kind, categoryId, null);
         try {
@@ -658,6 +759,7 @@ public class AudioLibraryService {
 
     /** Re-measures a legacy entry or refreshes the analysis of an existing one. */
     public void analyzeLoudness(String id) throws IOException {
+        if (remoteChange("analyze", id)) return;
         checkImportInterrupted();
         WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () -> {
             analyzeLoudnessPrepared(id);
@@ -860,6 +962,7 @@ public class AudioLibraryService {
 
     /** Sets an absolute gain override; {@code null} restores the automatic recommendation. */
     public void setGainOverride(String id, Double gainDb) throws IOException {
+        if (remoteChange("gain", id, gainDb)) return;
         checkImportInterrupted();
         WorkScheduler.shared().run(WorkScheduler.Kind.AUDIO, () -> {
             setPreparedGainOverride(id, gainDb);
@@ -1001,12 +1104,14 @@ public class AudioLibraryService {
     }
 
     public synchronized void renameTrack(String id, String name) throws IOException {
+        if (remoteChange("renameTrack", id, name)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
         track.setName(cleanName(name, track.getName()));
         save();
     }
 
     public synchronized void setEffectLooping(String id, boolean looping) throws IOException {
+        if (remoteChange("effectLooping", id, looping)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
         if (track.isMusic()) {
             throw new IOException("Only sound effects have a looping preference.");
@@ -1023,6 +1128,7 @@ public class AudioLibraryService {
 
     /** Moves a music track into another category (ignored for sound effects). */
     public synchronized void moveTrack(String id, String categoryId) throws IOException {
+        if (remoteChange("moveTrack", id, categoryId)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
         if (track.isMusic()) {
             track.setCategoryId(resolveCategory(AudioKind.MUSIC, categoryId));
@@ -1032,6 +1138,7 @@ public class AudioLibraryService {
 
     /** Switches a track between music and sound effect. */
     public synchronized void changeKind(String id, AudioKind kind, String categoryId) throws IOException {
+        if (remoteChange("changeKind", id, kind, categoryId)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
         track.setKind(kind);
         track.setCategoryId(resolveCategory(kind, categoryId == null ? track.getCategoryId() : categoryId));
@@ -1040,6 +1147,7 @@ public class AudioLibraryService {
 
     /** Removes a track from the index and deletes its audio file, prepared playback and cached peaks. */
     public synchronized void deleteTrack(String id) throws IOException {
+        if (remoteChange("deleteTrack", id)) return;
         AudioTrack track = track(id).orElseThrow(() -> new IOException("Unknown track."));
         List<String> staleBefore = new ArrayList<>(library.getStalePlaybackFiles());
         List<String> preparedFiles = new ArrayList<>();

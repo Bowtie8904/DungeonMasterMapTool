@@ -38,12 +38,16 @@ final class AudioLoudnessDialog {
     private final Button analyze = new Button("Analyze file");
     private final ProgressIndicator progress = new ProgressIndicator();
     private Task<Void> analysis;
+    private javafx.animation.Timeline remoteRefresh;
+    private long remoteRevision;
+    private boolean busy;
 
     AudioLoudnessDialog(Window owner, AudioLibraryService library, AudioTrack track, Runnable onChanged,
                         Runnable preview) {
         this.library = library;
         this.track = track;
         this.onChanged = onChanged;
+        remoteRevision = library.remoteBackend() == null ? -1 : library.remoteBackend().revision();
         Dialogs.style(dialog, owner, "Loudness", track.getName(), MaterialDesignV.VOLUME_HIGH, false);
         dialog.initModality(Modality.NONE);
 
@@ -85,10 +89,27 @@ final class AudioLoudnessDialog {
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().setAll(ButtonType.CLOSE);
         dialog.setOnHidden(event -> {
+            if (remoteRefresh != null) remoteRefresh.stop();
             if (analysis != null) {
                 analysis.cancel();
             }
         });
+        if (library.remoteBackend() != null) {
+            remoteRefresh = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
+                    javafx.util.Duration.seconds(0.5), event -> {
+                if (busy || library.remoteBackend() == null) return;
+                if (library.track(track.getId()).isEmpty()) {
+                    setBusy(true);
+                    error.setText("This track was removed or audio was disabled on A. Close this editor.");
+                } else if (remoteRevision != library.remoteBackend().revision()) {
+                    remoteRevision = library.remoteBackend().revision();
+                    refresh();
+                    error.setText("Audio changed on A. Controls were refreshed from accepted host state.");
+                }
+            }));
+            remoteRefresh.setCycleCount(javafx.animation.Animation.INDEFINITE);
+            remoteRefresh.play();
+        }
         refresh();
     }
 
@@ -142,11 +163,19 @@ final class AudioLoudnessDialog {
     }
 
     private void saveOverride(Double chosen) {
+        if (library.remoteBackend() != null) {
+            runRemote("gain", chosen);
+            return;
+        }
         runOperation(() -> library.setGainOverride(track.getId(), chosen),
                 "Preparing loudness adjustment...", "Could not save the loudness adjustment");
     }
 
     private void analyze() {
+        if (library.remoteBackend() != null) {
+            runRemote("analyze");
+            return;
+        }
         runOperation(() -> library.analyzeLoudness(track.getId()), "Analyzing file...", "Could not analyze the file");
     }
 
@@ -183,6 +212,7 @@ final class AudioLoudnessDialog {
     }
 
     private void setBusy(boolean busy) {
+        this.busy = busy;
         analyze.setDisable(busy);
         apply.setDisable(busy);
         automatic.setDisable(busy);
@@ -193,6 +223,24 @@ final class AudioLoudnessDialog {
         if (!busy) {
             operationStatus.setText("");
         }
+    }
+
+    private void runRemote(String action, Object... arguments) {
+        setBusy(true);
+        error.setText("");
+        operationStatus.setText("Preparing audio on A...");
+        Object[] input = new Object[arguments.length + 1];
+        input[0] = track.getId();
+        System.arraycopy(arguments, 0, input, 1, arguments.length);
+        library.remoteBackend().commandAt(remoteRevision, action, input).whenComplete((result, failure) -> {
+            setBusy(false);
+            if (failure != null) error.setText("Host audio job failed: " + failure.getMessage());
+            else {
+                remoteRevision = library.remoteBackend().revision();
+                refresh();
+                onChanged.run();
+            }
+        });
     }
 
     private interface LoudnessAction {

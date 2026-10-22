@@ -63,6 +63,73 @@ public class AudioEngine {
     private final List<Voice> stopping = new ArrayList<>();
     /** Global fade factor of the panic mute, 1 = normal, 0 = silent. */
     private double panicGain = 1;
+    private AudioRemoteBackend remote;
+    private State remoteState;
+    private volatile long revision;
+
+    public long revision() {
+        return revision;
+    }
+
+    /** Playback state only; there are deliberately no media handles or filesystem locations in this DTO. */
+    public record State(String categoryId, String trackId, boolean musicPlaying, boolean musicPaused,
+                        double positionMs, double durationMs, List<String> activeEffects, List<String> runningEffects,
+                        boolean effectsPaused, boolean panic, boolean musicLoop, boolean shuffle,
+                        double masterVolume, double musicVolume, double effectsVolume) {
+        public State {
+            activeEffects = List.copyOf(activeEffects);
+            runningEffects = List.copyOf(runningEffects);
+        }
+    }
+
+    public State snapshot() {
+        if (remote != null) return remoteState;
+        return new State(categoryId, currentTrack().map(AudioTrack::getId).orElse(null), isMusicPlaying(),
+                musicPaused, positionMs(), durationMs(), activeEffects(), runningEffects(), effectsPaused,
+                panic, musicLoop, shuffle, masterVolume, musicVolume, effectsVolume);
+    }
+
+    public void beginRemote(AudioRemoteBackend backend) {
+        if (remote != null) throw new IllegalStateException("Audio is already remote.");
+        shutdown();
+        categoryId = null;
+        playlist.clear();
+        playlistIndex = -1;
+        musicPaused = false;
+        effectsPaused = false;
+        panic = false;
+        panicGain = 1;
+        remoteState = snapshot();
+        remote = java.util.Objects.requireNonNull(backend);
+        fireChanged();
+    }
+
+    public void acceptRemote(State state) {
+        if (remote != null) {
+            remoteState = java.util.Objects.requireNonNull(state);
+            fireChanged();
+        }
+    }
+
+    /** True while this engine mirrors host state; settings persistence then belongs to the host. */
+    public boolean isRemote() {
+        return remote != null;
+    }
+
+    public void endRemote() {
+        remote = null;
+        remoteState = null;
+        fireChanged();
+    }
+
+    private boolean remoteCommand(String action, Object... arguments) {
+        if (remote == null) {
+            revision++;
+            return false;
+        }
+        remote.command(action, arguments);
+        return true;
+    }
 
     public AudioEngine(AudioLibraryService library, AudioOutput output) {
         this(library, output, new Random());
@@ -175,6 +242,7 @@ public class AudioEngine {
     // ---- Settings ----
 
     public void setVolumes(double master, double music, double effects) {
+        if (remoteCommand("volumes", master, music, effects)) return;
         this.masterVolume = clamp01(master);
         this.musicVolume = clamp01(music);
         this.effectsVolume = clamp01(effects);
@@ -182,16 +250,19 @@ public class AudioEngine {
     }
 
     public void setMasterVolume(double value) {
+        if (remoteCommand("masterVolume", value)) return;
         masterVolume = clamp01(value);
         applyVolumes();
     }
 
     public void setMusicVolume(double value) {
+        if (remoteCommand("musicVolume", value)) return;
         musicVolume = clamp01(value);
         applyVolumes();
     }
 
     public void setEffectsVolume(double value) {
+        if (remoteCommand("effectsVolume", value)) return;
         effectsVolume = clamp01(value);
         applyVolumes();
     }
@@ -201,6 +272,7 @@ public class AudioEngine {
      * immediately because each voice is scaled relative to the gain baked into the copy it opened.
      */
     public void refreshTrackVolumes() {
+        if (remote != null) return;
         for (Voice voice : allVoices()) {
             requestReplacement(voice);
         }
@@ -212,6 +284,7 @@ public class AudioEngine {
      * Such voices stay correct but cannot exceed their old copy's baked gain until the track is reopened.
      */
     public boolean needsReopen(String trackId) {
+        if (remote != null) return false;
         Optional<AudioTrack> track = library.track(trackId).filter(AudioTrack::isReady);
         if (track.isEmpty()) {
             return false;
@@ -226,6 +299,7 @@ public class AudioEngine {
      * so a fresh analysis can apply its newly prepared boost headroom. Other tracks are not touched.
      */
     public void reopenTrack(String trackId) {
+        if (remoteCommand("reopenTrack", trackId)) return;
         if (!needsReopen(trackId)) {
             return;
         }
@@ -291,18 +365,22 @@ public class AudioEngine {
     }
 
     public double masterVolume() {
+        if (remote != null) return remoteState.masterVolume();
         return masterVolume;
     }
 
     public double musicVolume() {
+        if (remote != null) return remoteState.musicVolume();
         return musicVolume;
     }
 
     public double effectsVolume() {
+        if (remote != null) return remoteState.effectsVolume();
         return effectsVolume;
     }
 
     public void setShuffle(boolean shuffle) {
+        if (remoteCommand("shuffle", shuffle)) return;
         if (this.shuffle != shuffle) {
             nextCycle = null;
         }
@@ -310,32 +388,39 @@ public class AudioEngine {
     }
 
     public boolean isMusicLoop() {
+        if (remote != null) return remoteState.musicLoop();
         return musicLoop;
     }
 
     public void setMusicLoop(boolean loop) {
+        if (remoteCommand("musicLoop", loop)) return;
         musicLoop = loop;
         fireChanged();
     }
 
     /** Overlap of every automatic music transition: next song, single-song repeat and loop current song. */
     public void setMusicCrossfadeSeconds(double seconds) {
+        if (remote != null) return;
         this.crossfadeSeconds = Math.max(0, seconds);
     }
 
     public void setEffectFadeSeconds(double seconds) {
+        if (remote != null) return;
         this.effectFadeSeconds = Math.max(0, seconds);
     }
 
     public void setEffectLoopCrossfadeSeconds(double seconds) {
+        if (remote != null) return;
         this.effectLoopCrossfadeSeconds = Math.max(0, seconds);
     }
 
     public void setPanicFadeSeconds(double seconds) {
+        if (remote != null) return;
         this.panicFadeSeconds = Math.max(0, seconds);
     }
 
     public void setMaxEffects(int max) {
+        if (remote != null) return;
         this.maxEffects = Math.max(1, max);
     }
 
@@ -345,6 +430,7 @@ public class AudioEngine {
     }
 
     private void fireChanged() {
+        if (remote == null) revision++;
         listeners.forEach(Runnable::run);
     }
 
@@ -352,6 +438,7 @@ public class AudioEngine {
 
     /** Id of the playing category, or {@code null}. */
     public String categoryId() {
+        if (remote != null) return remoteState.categoryId();
         return categoryId;
     }
 
@@ -360,36 +447,48 @@ public class AudioEngine {
      * {@link #stopMusic()} as playlist history, so the overlay asks this instead (3.35.6).
      */
     public boolean isCategoryActive(String id) {
+        if (remote != null) return id != null && id.equals(remoteState.categoryId()) && remoteState.trackId() != null;
         return id != null && id.equals(categoryId) && music != null;
     }
 
     public Optional<AudioTrack> currentTrack() {
+        if (remote != null) return library.track(remoteState.trackId());
         return music == null ? Optional.empty() : library.track(music.current.trackId);
     }
 
+    public String currentTrackId() {
+        return remote != null ? remoteState.trackId() : music == null ? null : music.current.trackId;
+    }
+
     public boolean isMusicPlaying() {
+        if (remote != null) return remoteState.musicPlaying();
         return music != null && !musicPaused;
     }
 
     public boolean isMusicPaused() {
+        if (remote != null) return remoteState.musicPaused();
         return musicPaused;
     }
 
     public double positionMs() {
+        if (remote != null) return remoteState.positionMs();
         return music == null ? 0 : music.current.handle.positionMs();
     }
 
     public double durationMs() {
+        if (remote != null) return remoteState.durationMs();
         return music == null ? 0 : durationOf(music.current);
     }
 
     /** Starts (or restarts) a category; {@code null} stops the music. */
     public void playCategory(String categoryId) {
+        if (remoteCommand("playCategory", categoryId)) return;
         playCategory(categoryId, null);
     }
 
     /** Starts the track's category at this song, retaining the usual playlist order afterwards. */
     public void playTrack(String trackId) {
+        if (remoteCommand("playTrack", trackId)) return;
         AudioTrack track = library.track(trackId)
                 .filter(AudioTrack::isReady)
                 .filter(t -> t.getKind() == AudioKind.MUSIC)
@@ -425,6 +524,7 @@ public class AudioEngine {
 
     /** Pauses or resumes active music; stopped music stays stopped. */
     public void toggleMusic() {
+        if (remoteCommand("toggleMusic")) return;
         if (music == null) {
             return;
         }
@@ -447,12 +547,14 @@ public class AudioEngine {
     }
 
     public void next() {
+        if (remoteCommand("next")) return;
         if (!playlist.isEmpty()) {
             advance(1, Math.min(crossfadeSeconds, 1.5));
         }
     }
 
     public void previous() {
+        if (remoteCommand("previous")) return;
         if (playlist.isEmpty()) {
             return;
         }
@@ -466,6 +568,7 @@ public class AudioEngine {
 
     /** Fades the music out and forgets the playlist position. */
     public void stopMusic() {
+        if (remoteCommand("stopMusic")) return;
         releaseMusic(Math.min(crossfadeSeconds, 2));
         playlistIndex = -1;
         musicPaused = false;
@@ -765,28 +868,34 @@ public class AudioEngine {
 
     /** Ids of selected looping effects, in the order they were started. */
     public List<String> activeEffects() {
+        if (remote != null) return remoteState.activeEffects();
         return List.copyOf(effects.keySet());
     }
 
     /** Track ids of all running instances, including duplicate one-shots. */
     public List<String> runningEffects() {
+        if (remote != null) return remoteState.runningEffects();
         return effectInstances.stream().map(effect -> effect.current.trackId).toList();
     }
 
     public boolean hasRunningEffects() {
+        if (remote != null) return !remoteState.runningEffects().isEmpty();
         return !effectInstances.isEmpty();
     }
 
     public boolean isEffectActive(String trackId) {
+        if (remote != null) return remoteState.activeEffects().contains(trackId);
         return effects.containsKey(trackId);
     }
 
     public boolean areEffectsPaused() {
+        if (remote != null) return remoteState.effectsPaused();
         return effectsPaused;
     }
 
     /** Starts a looping selection with a fade or triggers an unfaded one-shot; stops looping selections. */
     public void setEffectActive(String trackId, boolean active) {
+        if (remoteCommand("effectActive", trackId, active)) return;
         if (trackId == null) {
             return;
         }
@@ -850,6 +959,7 @@ public class AudioEngine {
 
     /** Applies library playback preferences without restarting active effects, including paused ones. */
     public void refreshEffectLooping() {
+        if (remote != null) return;
         boolean changed = false;
         for (VoiceChain effect : effectInstances) {
             changed |= syncEffectLooping(effect);
@@ -928,11 +1038,13 @@ public class AudioEngine {
     }
 
     public void toggleEffect(String trackId) {
+        if (remoteCommand("toggleEffect", trackId)) return;
         setEffectActive(trackId, !isEffectActive(trackId));
     }
 
     /** Releases all instances of a removed library track, including unselected one-shots. */
     public void stopEffectsForTrack(String trackId) {
+        if (remoteCommand("stopEffectsForTrack", trackId)) return;
         for (VoiceChain effect : List.copyOf(effectInstances)) {
             if (effect.current.trackId.equals(trackId)) {
                 removeEffect(effect);
@@ -947,6 +1059,7 @@ public class AudioEngine {
      * (3.35.4). Channels that are not running at all are left alone.
      */
     public void toggleAll() {
+        if (remoteCommand("toggleAll")) return;
         boolean musicRunning = isMusicPlaying();
         boolean effectsRunning = hasRunningEffects() && !effectsPaused;
         if (musicRunning || effectsRunning) {
@@ -968,6 +1081,7 @@ public class AudioEngine {
 
     /** Pauses or resumes every running sound effect at once. */
     public void setEffectsPaused(boolean paused) {
+        if (remoteCommand("effectsPaused", paused)) return;
         if (effectsPaused == paused) {
             return;
         }
@@ -989,6 +1103,7 @@ public class AudioEngine {
     }
 
     public void stopAllEffects() {
+        if (remoteCommand("stopAllEffects")) return;
         effectInstances.forEach(effect -> stopEffect(effect, effectFadeSeconds));
         effectInstances.clear();
         effects.clear();
@@ -998,11 +1113,13 @@ public class AudioEngine {
     // ---- Panic / mute ----
 
     public boolean isPanic() {
+        if (remote != null) return remoteState.panic();
         return panic;
     }
 
     /** Fades everything down to silence (and back) without losing the playlist position. */
     public void setPanic(boolean panic) {
+        if (remoteCommand("panic", panic)) return;
         if (this.panic == panic) {
             return;
         }
@@ -1012,6 +1129,7 @@ public class AudioEngine {
     }
 
     public void togglePanic() {
+        if (remoteCommand("togglePanic")) return;
         setPanic(!panic);
     }
 
@@ -1022,6 +1140,7 @@ public class AudioEngine {
      * fading out after a manual switch. Otherwise the slower readout cadence is enough.
      */
     public boolean needsSmoothUpdates() {
+        if (remote != null) return false;
         boolean effectsRunning = hasRunningEffects() && !effectsPaused;
         boolean musicBlending = music != null && !musicPaused
                 && (music.prepared != null || music.outgoing != null || fadingOut != null);
@@ -1033,6 +1152,7 @@ public class AudioEngine {
      * second; {@code deltaSeconds} is the time since the previous call.
      */
     public void tick(double deltaSeconds) {
+        if (remote != null) return;
         allVoices().forEach(this::requestReplacement);
         double delta = Math.max(0, Math.min(1, deltaSeconds));
         stepPanic(delta);

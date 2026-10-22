@@ -4,6 +4,8 @@ import dmmt.model.DmProject.TokenDefinition;
 import dmmt.model.DmProject.TokenShape;
 import dmmt.render.TokenArt;
 import dmmt.service.TokenLibraryService;
+import dmmt.remote.RemoteImages;
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
@@ -21,6 +23,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 public final class TokenEditor
 {
@@ -30,11 +34,22 @@ public final class TokenEditor
     private final Label error = new Label();
     private Image source;
     private double lastX, lastY;
+    private final boolean remote;
+    private long imageRequest;
+    private boolean loadingImage;
 
     private TokenEditor(TokenDefinition original)
     {
+        this(original, false, null);
+    }
+
+    private TokenEditor(TokenDefinition original, boolean remote, Image preparedSource)
+    {
+        this.remote = remote;
         token = TokenLibraryService.copy(original);
-        if (token.getSourceImage() != null)
+        if (remote)
+            source = preparedSource;
+        else if (token.getSourceImage() != null)
             source = TokenArt.decode(token.getSourceImage());
         zoom.setValue(token.getZoom());
     }
@@ -42,6 +57,15 @@ public final class TokenEditor
     public static Optional<TokenDefinition> show(Window owner, TokenDefinition original, Image initialImage)
     {
         return create(owner, original, initialImage).showAndWait();
+    }
+
+    public static Optional<TokenDefinition> showRemote(Window owner, TokenDefinition original,
+                                                       Image initialImage, Image preparedSource)
+    {
+        TokenEditor editor = new TokenEditor(original, true, preparedSource);
+        if (initialImage != null)
+            editor.replace(initialImage);
+        return editor.dialog(owner).showAndWait();
     }
 
     static Dialog<TokenDefinition> create(Window owner, TokenDefinition original, Image initialImage)
@@ -54,15 +78,18 @@ public final class TokenEditor
 
     public static Image chooseImage(Window owner) throws IOException
     {
+        File file = chooseImageFile(owner);
+        return file == null ? null : readImage(file);
+    }
+
+    public static File chooseImageFile(Window owner)
+    {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Token image");
         chooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp", "*.tif", "*.tiff", "*.wbmp"),
                 new FileChooser.ExtensionFilter("All files", "*.*"));
-        File file = chooser.showOpenDialog(owner);
-        if (file == null)
-            return null;
-        return readImage(file);
+        return chooser.showOpenDialog(owner);
     }
 
     static Image readImage(File file) throws IOException
@@ -124,6 +151,31 @@ public final class TokenEditor
         });
         Button file = new Button("Choose image...");
         file.setOnAction(e -> attempt(() -> {
+            if (remote)
+            {
+                File selected = chooseImageFile(owner);
+                if (selected != null)
+                {
+                    long request = ++imageRequest;
+                    loadingImage = true;
+                    error.setText("Reading image...");
+                    CompletableFuture.supplyAsync(() -> {
+                        try { return RemoteImages.read(selected.toPath(), false, 0); }
+                        catch (IOException failure) { throw new CompletionException(failure); }
+                    }).whenCompleteAsync((image, failure) -> {
+                        if (request != imageRequest)
+                            return;
+                        loadingImage = false;
+                        if (!dialog.isShowing())
+                            return;
+                        if (failure != null)
+                            error.setText(failure.getCause() == null ? failure.getMessage() : failure.getCause().getMessage());
+                        else
+                            attempt(() -> replace(image));
+                    }, Platform::runLater);
+                }
+                return;
+            }
             Image image = chooseImage(owner);
             if (image != null)
                 replace(image);
@@ -137,6 +189,8 @@ public final class TokenEditor
         }));
         Button remove = new Button("No image");
         remove.setOnAction(e -> {
+            imageRequest++;
+            loadingImage = false;
             source = null;
             token.setSourceImage(null);
             token.setImage(null);
@@ -192,6 +246,8 @@ public final class TokenEditor
         dialog.getDialogPane().lookupButton(save).addEventFilter(ActionEvent.ACTION, e -> {
             try
             {
+                if (loadingImage)
+                    throw new IOException("Wait for the token image to finish loading.");
                 token.setName(name.getText());
                 token.setSizeTiles(size.getValue());
                 TokenLibraryService.validate(token);
@@ -219,6 +275,13 @@ public final class TokenEditor
     {
         try
         {
+            if (remote && (!Double.isFinite(image.getWidth()) || !Double.isFinite(image.getHeight())
+                    || image.getWidth() < 1 || image.getHeight() < 1
+                    || image.getWidth() > 16384 || image.getHeight() > 16384
+                    || image.getWidth() * image.getHeight() > dmmt.remote.RemoteHandouts.MAX_IMAGE_PIXELS))
+                throw new IOException("Image exceeds the remote artwork pixel limit.");
+            imageRequest++;
+            loadingImage = false;
             String data = TokenArt.storeImage(image);
             source = image;
             token.setSourceImage(data);

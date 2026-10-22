@@ -20,6 +20,8 @@ public final class TokenArt
 {
     private static final long IMAGE_BUDGET = 32L * 1024 * 1024;
     private static final Map<String, Image> IMAGES = new LinkedHashMap<>(16, 0.75f, true);
+    private static final java.util.Set<String> REMOTE_IMAGES = new java.util.HashSet<>();
+    private static final java.util.Set<String> REMOTE_HASHES = new java.util.HashSet<>();
     private static long imageBytes;
 
     private TokenArt()
@@ -57,9 +59,40 @@ public final class TokenArt
         Image image = IMAGES.get(reference);
         if (image != null)
             return image;
-        image = reference.startsWith("file:") ? new Image(reference, 256, 256, true, true) : decode(reference);
+        if (REMOTE_IMAGES.contains(reference) || !REMOTE_HASHES.isEmpty() && REMOTE_HASHES.contains(imageHash(reference)))
+        {
+            try
+            {
+                image = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try
+                    {
+                        return dmmt.remote.RemoteImages.read(dmmt.remote.RemoteTokens.localArtwork(reference), true, 256);
+                    }
+                    catch (IOException error)
+                    {
+                        throw new java.util.concurrent.CompletionException(error);
+                    }
+                }).join();
+            }
+            catch (java.util.concurrent.CompletionException error)
+            {
+                throw new IllegalArgumentException("Token artwork cannot be read.", error.getCause());
+            }
+        }
+        else
+            image = reference.startsWith("file:") ? new Image(reference, 256, 256, true, true) : decode(reference);
         if (image.isError() || image.getWidth() <= 0 || image.getHeight() <= 0)
             throw new IllegalArgumentException("Token artwork cannot be read.", image.getException());
+        cacheImage(reference, image);
+        return image;
+    }
+
+    /** Installs an already decoded remote crop on the FX owner, avoiding image IO during rendering. */
+    public static void cacheImage(String reference, Image image)
+    {
+        Image previous = IMAGES.remove(reference);
+        if (previous != null)
+            imageBytes -= (long)previous.getWidth() * (long)previous.getHeight() * 4;
         long bytes = (long)image.getWidth() * (long)image.getHeight() * 4;
         if (bytes <= IMAGE_BUDGET)
         {
@@ -73,7 +106,38 @@ public final class TokenArt
             IMAGES.put(reference, image);
             imageBytes += bytes;
         }
-        return image;
+    }
+
+    public static void registerRemoteImage(String reference)
+    {
+        if (reference != null)
+        {
+            REMOTE_IMAGES.add(reference);
+            String hash = imageHash(reference);
+            if (hash != null)
+                REMOTE_HASHES.add(hash);
+        }
+    }
+
+    public static void cacheRemoteImage(String reference, Image image)
+    {
+        registerRemoteImage(reference);
+        cacheImage(reference, image);
+    }
+
+    private static String imageHash(String reference)
+    {
+        if (!reference.startsWith("file:"))
+            return null;
+        try
+        {
+            String name = java.nio.file.Path.of(java.net.URI.create(reference)).getFileName().toString();
+            return name.matches("[0-9a-f]{64}\\.[a-z0-9]+") ? name.substring(0, 64) : null;
+        }
+        catch (IllegalArgumentException invalid)
+        {
+            return null;
+        }
     }
 
     public static double cropSide(Image image, double zoom)

@@ -10,10 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
 /**
@@ -41,6 +46,7 @@ public final class AppSettings {
     public static final List<SidebarSection> SIDEBAR_SECTIONS = List.of(
             new SidebarSection("tools", "Tools", "Select tool, fog brushes, rectangles and room fill."),
             new SidebarSection("tokens", "Tokens", "Token library tab and creation controls in the left sidebar."),
+            new SidebarSection("session", "Session", "LAN remote-control tab in the left sidebar (always shown while a session is active)."),
             new SidebarSection("fog", "Fog of war", "Fog sharpness, softness and fade animation."),
             new SidebarSection("lighting", "Lighting", "Light tools, time of day, ambient brightness and light tint."),
             new SidebarSection("weather", "Weather", "Rain, snow, mist, dust, embers and thunderstorms."),
@@ -57,6 +63,7 @@ public final class AppSettings {
 
     private static List<SidebarControl> sidebarControls() {
         List<SidebarControl> controls = new ArrayList<>();
+        addControls(controls, "session", "browser|Session tab");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
                 "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");
@@ -112,12 +119,199 @@ public final class AppSettings {
             "lightMenu.brightness");
 
     private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player", "performance"};
+    private static final Set<String> CLIENT_LOCAL_KEYS = Set.of("import.lastDirectory", "audio.lastDirectory");
+
+    private static final class SharedMetadata {
+        private static final Map<String, Entry> ENTRIES = entries();
+        private static final Map<String, SettingInfo> EDITABLE = editableSettings().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(SettingInfo::key, info -> info));
+        private static final Map<String, String> DEFAULTS = defaults();
+
+        private static Map<String, Entry> entries() {
+            Map<String, Entry> entries = new LinkedHashMap<>();
+            sections().forEach(section -> section.entries().forEach(entry -> entries.put(entry.key(), entry)));
+            return Map.copyOf(entries);
+        }
+
+        private static Map<String, String> defaults() {
+            Map<String, String> defaults = new LinkedHashMap<>();
+            ENTRIES.forEach((key, entry) -> {
+                if (entry.defaultValue() != null) {
+                    defaults.put(key, entry.defaultValue());
+                }
+            });
+            CLIENT_LOCAL_KEYS.forEach(defaults::remove);
+            return Map.copyOf(defaults);
+        }
+    }
+
+    /** Raw host values; absent keys use built-in defaults, never the client's standalone overrides. */
+    public record HostSnapshot(long revision, Map<String, String> values) {
+        public HostSnapshot {
+            if (revision < 0) {
+                throw new IllegalArgumentException("Settings revision must not be negative.");
+            }
+            values = Map.copyOf(values);
+        }
+    }
+
+    /**
+     * A request, not an applied edit. Null values restore defaults. Compare the target's raw expectedValue
+     * for conflicts; baseRevision alone must not reject an edit after unrelated host settings changed.
+     */
+    public record RemoteEdit(UUID commandId, long baseRevision, String key, String expectedValue, String value) {
+        public RemoteEdit {
+            Objects.requireNonNull(commandId, "commandId");
+            Objects.requireNonNull(key, "key");
+            if (baseRevision < 0) {
+                throw new IllegalArgumentException("Settings revision must not be negative.");
+            }
+        }
+    }
+
+    /** Host-only revision metadata; removed keys keep their last-change revision for conflict detection. */
+    public record SharedState(HostSnapshot snapshot, Map<String, Long> changedAt) {
+        public SharedState {
+            Objects.requireNonNull(snapshot, "snapshot");
+            changedAt = Map.copyOf(changedAt);
+        }
+    }
+
+    /**
+     * Temporary effective settings for a remote client. Invoke lifecycle/update methods on the application
+     * thread, just like ordinary settings edits. The sender must only enqueue work, never wait for network IO;
+     * it must throw if it cannot enqueue. Only accepted host snapshots change the effective settings.
+     */
+    public final class HostContext implements AutoCloseable {
+        private HostSnapshot snapshot;
+        private final Consumer<RemoteEdit> sender;
+        private final Map<String, String> clientValues = new LinkedHashMap<>();
+        private boolean connected = true;
+        private boolean closed;
+
+        private HostContext(HostSnapshot snapshot, Consumer<RemoteEdit> sender) {
+            this.snapshot = snapshot;
+            this.sender = sender;
+            CLIENT_LOCAL_KEYS.forEach(key -> {
+                if (values.containsKey(key)) {
+                    clientValues.put(key, values.get(key));
+                }
+            });
+        }
+
+        /** False for duplicate/older snapshots. Equal revisions with different values are a protocol error. */
+        public boolean accept(HostSnapshot next) {
+            Objects.requireNonNull(next, "next");
+            synchronized (AppSettings.this) {
+                requireActive();
+                if (!connected) {
+                    throw new IllegalStateException("Resume the settings connection before applying host updates.");
+                }
+                if (next.revision() < snapshot.revision()) {
+                    return false;
+                }
+                if (next.revision() == snapshot.revision()) {
+                    if (!next.equals(snapshot)) {
+                        throw new IllegalArgumentException("Different settings for the same host revision.");
+                    }
+                    return false;
+                }
+                snapshot = next;
+                applyRuntimeSettings();
+                externalChange = true;
+                return true;
+            }
+        }
+
+        /** Pausing retains the last accepted values but prevents remote edits until resynchronization. */
+        public void pause() {
+            synchronized (AppSettings.this) {
+                requireActive();
+                connected = false;
+            }
+        }
+
+        /** Resynchronization may refresh the same revision, but must not roll accepted host state backwards. */
+        public void resume(HostSnapshot baseline) {
+            Objects.requireNonNull(baseline, "baseline");
+            synchronized (AppSettings.this) {
+                requireActive();
+                if (connected) {
+                    throw new IllegalStateException("The settings connection is already active.");
+                }
+                if (baseline.revision() < snapshot.revision()
+                        || (baseline.revision() == snapshot.revision() && !baseline.equals(snapshot))) {
+                    throw new IllegalArgumentException("The settings baseline does not continue this host session.");
+                }
+                snapshot = baseline;
+                applyRuntimeSettings();
+                connected = true;
+                externalChange = true;
+            }
+        }
+
+        @Override
+        public void close() {
+            synchronized (AppSettings.this) {
+                if (closed) {
+                    return;
+                }
+                requireActive();
+                closed = true;
+                hostContext = null;
+                mergeExternalEdits();
+                applyRuntimeSettings();
+                externalChange = true;
+            }
+        }
+
+        private void requireActive() {
+            if (closed || hostContext != this) {
+                throw new IllegalStateException("This host settings context is no longer active.");
+            }
+        }
+
+        private void request(String key, String value) {
+            if (!connected) {
+                throw new IllegalStateException("Host settings are disconnected; editing is paused.");
+            }
+            sender.accept(new RemoteEdit(UUID.randomUUID(), snapshot.revision(), key, snapshot.values().get(key), value));
+        }
+    }
 
     @Getter
     private final Path file;
     private final Map<String, String> values = new LinkedHashMap<>();
     private long lastKnownModified;
     private boolean externalChange;
+    private HostContext hostContext;
+    private long sharedRevision;
+    private SharedState cachedSharedState;
+    private final Map<String, Long> sharedChangedAt = new LinkedHashMap<>();
+    private long settingsGeneration;
+    private final Map<String, Long> localChangedAt = new LinkedHashMap<>();
+    private PreparedSharedEdit pendingSharedEdit;
+
+    /** Owner-thread transaction state. File IO uses detached attempts, never this object's monitor. */
+    static final class PreparedSharedEdit {
+        final RemoteEdit edit;
+        final long generation;
+        final long modified;
+        boolean cancelled;
+        boolean conflict;
+
+        PreparedSharedEdit(RemoteEdit edit, long generation, long modified) {
+            this.edit = edit;
+            this.generation = generation;
+            this.modified = modified;
+        }
+    }
+
+    record SharedEditAttempt(long generation, Map<String, String> values) {
+        SharedEditAttempt {
+            values = Map.copyOf(values);
+        }
+    }
 
     public AppSettings(Path file) {
         this.file = file;
@@ -168,10 +362,305 @@ public final class AppSettings {
                 .resolve(folder).toAbsolutePath().normalize();
     }
 
+    /**
+     * Enters host-backed mode without changing the standalone settings or their file. A session coordinator
+     * must finish local work before entry and marshal accepted snapshots back to the application thread.
+     */
+    public synchronized HostContext useHostSettings(HostSnapshot snapshot, Consumer<RemoteEdit> sender) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(sender, "sender");
+        if (hostContext != null) {
+            throw new IllegalStateException("A host settings context is already active.");
+        }
+        if (pendingSharedEdit != null) {
+            throw new IllegalStateException("A host settings save is still pending.");
+        }
+        mergeExternalEdits();
+        hostContext = new HostContext(snapshot, sender);
+        applyRuntimeSettings();
+        externalChange = true;
+        return hostContext;
+    }
+
+    public synchronized boolean usesHostSettings() {
+        return hostContext != null;
+    }
+
+    /** Captures the dialog's host revision, so a later confirmation cannot overwrite a newer setting. */
+    public synchronized Consumer<String> prepareHostEdit(String key) {
+        if (hostContext == null) throw new IllegalStateException("No host settings context is active.");
+        var context = hostContext;
+        var snapshot = context.snapshot;
+        return value -> {
+            synchronized (AppSettings.this) {
+                context.requireActive();
+                if (!context.connected) throw new IllegalStateException("Host settings are disconnected; editing is paused.");
+                validateSharedEdit(key, value);
+                context.sender.accept(new RemoteEdit(UUID.randomUUID(), snapshot.revision(), key,
+                        snapshot.values().get(key), value));
+            }
+        };
+    }
+
+    /** Host values include default text for absent keys, avoiding false changes when the INI is reloaded. */
+    public synchronized Map<String, String> sharedValues() {
+        mergeExternalEdits();
+        if (hostContext == null) {
+            return sharedValuesOf(values);
+        }
+        Map<String, String> shared = new LinkedHashMap<>(hostContext.snapshot.values());
+        CLIENT_LOCAL_KEYS.forEach(shared::remove);
+        return Map.copyOf(shared);
+    }
+
+    private static Map<String, String> sharedValuesOf(Map<String, String> source) {
+        Map<String, String> shared = new LinkedHashMap<>(SharedMetadata.DEFAULTS);
+        shared.putAll(source);
+        CLIENT_LOCAL_KEYS.forEach(shared::remove);
+        return Map.copyOf(shared);
+    }
+
+    public synchronized SharedState sharedState() {
+        requireStandaloneSettings();
+        Map<String, String> shared = sharedValues();
+        return new SharedState(new HostSnapshot(sharedRevision, shared), sharedChangedAt);
+    }
+
+    /** Captures already-applied host state without stat/read calls (safe for frequent owner-thread polling). */
+    public synchronized SharedState sharedStateInMemory() {
+        requireStandaloneSettings();
+        if (cachedSharedState == null || cachedSharedState.snapshot().revision() != sharedRevision) {
+            cachedSharedState = new SharedState(new HostSnapshot(sharedRevision, sharedValuesOf(values)), sharedChangedAt);
+        }
+        return cachedSharedState;
+    }
+
+    synchronized PreparedSharedEdit prepareSharedEdit(RemoteEdit edit) {
+        requireStandaloneSettings();
+        if (pendingSharedEdit != null) {
+            throw new IllegalStateException("A host settings save is already pending.");
+        }
+        validateSharedEdit(edit.key(), edit.value());
+        checkSharedEdit(edit);
+        pendingSharedEdit = new PreparedSharedEdit(edit, settingsGeneration, lastKnownModified);
+        return pendingSharedEdit;
+    }
+
+    record SharedExternalState(Map<String, String> values, long modified) {
+    }
+
+    SharedExternalState readSharedExternalState(PreparedSharedEdit prepared) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            return null;
+        }
+        long modified = Files.getLastModifiedTime(file).toMillis();
+        if (modified == prepared.modified) {
+            return null;
+        }
+        Map<String, String> loaded = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            String trimmed = line.trim();
+            int eq = trimmed.indexOf('=');
+            if (!trimmed.startsWith("#") && !trimmed.startsWith(";") && eq > 0) {
+                loaded.put(trimmed.substring(0, eq).trim(), trimmed.substring(eq + 1).trim());
+            }
+        }
+        return new SharedExternalState(Map.copyOf(loaded), modified);
+    }
+
+    synchronized void mergeSharedExternalState(PreparedSharedEdit prepared, SharedExternalState external) {
+        requirePending(prepared);
+        if (external == null) {
+            return;
+        }
+        Map<String, String> before = new LinkedHashMap<>(values);
+        Map<String, String> merged = new LinkedHashMap<>(external.values());
+        localChangedAt.forEach((key, generation) -> {
+            if (generation > prepared.generation) {
+                store(merged, key, values.get(key));
+            }
+        });
+        values.clear();
+        values.putAll(merged);
+        settingsGeneration++;
+        lastKnownModified = external.modified();
+        trackSharedChanges(before);
+        applyRuntimeSettings();
+        externalChange = true;
+    }
+
+    private void checkSharedEdit(RemoteEdit edit) {
+        if (edit.baseRevision() > sharedRevision) {
+            throw new IllegalArgumentException("Settings revision is ahead of the host.");
+        }
+        if (sharedChangedAt.getOrDefault(edit.key(), 0L) > edit.baseRevision()
+                || !Objects.equals(sharedValuesOf(values).get(edit.key()), edit.expectedValue())) {
+            throw new ConcurrentModificationException("This setting changed on the host: " + edit.key());
+        }
+    }
+
+    synchronized SharedEditAttempt sharedEditAttempt(PreparedSharedEdit prepared) {
+        requirePending(prepared);
+        try {
+            checkSharedEdit(prepared.edit);
+        } catch (ConcurrentModificationException conflict) {
+            prepared.conflict = true;
+        }
+        Map<String, String> candidate = new LinkedHashMap<>(values);
+        if (!prepared.cancelled && !prepared.conflict) {
+            store(candidate, prepared.edit.key(),
+                    prepared.edit.value() == null ? null : prepared.edit.value().trim());
+        }
+        return new SharedEditAttempt(settingsGeneration, candidate);
+    }
+
+    /** Worker-only: no synchronized settings access, runtime changes, or owner-thread file locks. */
+    long persistSharedEdit(SharedEditAttempt attempt) throws IOException {
+        return writeChecked(attempt.values());
+    }
+
+    /** Returns false if a local edit raced IO; the worker must persist a newly prepared attempt. */
+    synchronized boolean commitSharedEdit(PreparedSharedEdit prepared, SharedEditAttempt attempt, long modified) {
+        requirePending(prepared);
+        // Even a superseded successful write must not be mistaken for an external editor update.
+        lastKnownModified = modified;
+        if (settingsGeneration != attempt.generation()
+                || (prepared.cancelled && !attempt.values().equals(values))) {
+            return false;
+        }
+        Map<String, String> before = new LinkedHashMap<>(values);
+        values.clear();
+        values.putAll(attempt.values());
+        pendingSharedEdit = null;
+        settingsGeneration++;
+        trackSharedChanges(before);
+        applyRuntimeSettings();
+        externalChange = true;
+        return true;
+    }
+
+    synchronized void cancelSharedEdit(PreparedSharedEdit prepared) {
+        requirePending(prepared);
+        prepared.cancelled = true;
+    }
+
+    synchronized void failSharedEdit(PreparedSharedEdit prepared) {
+        requirePending(prepared);
+        pendingSharedEdit = null;
+    }
+
+    private void requirePending(PreparedSharedEdit prepared) {
+        if (pendingSharedEdit != prepared) {
+            throw new IllegalStateException("The settings save is no longer active.");
+        }
+    }
+
+    /**
+     * Validates and conflict-checks a host request, reporting persistence failure to the caller rather
+     * than acknowledging a memory-only change. Call on the same serialized thread as other settings edits.
+     */
+    public synchronized void applySharedEdit(RemoteEdit edit) throws IOException {
+        Objects.requireNonNull(edit, "edit");
+        requireStandaloneSettings();
+        if (pendingSharedEdit != null) {
+            throw new IllegalStateException("A host settings save is already pending.");
+        }
+        String key = edit.key();
+        String value = edit.value();
+        validateSharedEdit(key, value);
+        mergeExternalEdits();
+        if (edit.baseRevision() > sharedRevision) {
+            throw new IllegalArgumentException("Settings revision is ahead of the host.");
+        }
+        if (sharedChangedAt.getOrDefault(key, 0L) > edit.baseRevision()
+                || !Objects.equals(sharedValuesOf(values).get(key), edit.expectedValue())) {
+            throw new ConcurrentModificationException("This setting changed on the host: " + key);
+        }
+        Map<String, String> before = new LinkedHashMap<>(values);
+        store(values, key, value == null ? null : value.trim());
+        try {
+            saveChecked();
+        } catch (IOException | RuntimeException failure) {
+            values.clear();
+            values.putAll(before);
+            throw failure;
+        }
+        trackSharedChanges(before);
+        applyRuntimeSettings();
+        externalChange = true;
+    }
+
+    public static void validateSharedEdit(String key, String value) {
+        Objects.requireNonNull(key, "key");
+        if (CLIENT_LOCAL_KEYS.contains(key)) {
+            throw new IllegalArgumentException("File-picker directories belong to the client: " + key);
+        }
+        Entry entry = SharedMetadata.ENTRIES.get(key);
+        boolean screenDiagonal = key.matches("player\\.screenDiagonalInches\\.(0|[1-9][0-9]{0,3})");
+        if (entry == null && !screenDiagonal) {
+            throw new IllegalArgumentException("Unknown shared setting: " + key);
+        }
+        if (value == null) {
+            return;
+        }
+        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0 || value.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Setting values must be a single line: " + key);
+        }
+        String raw = value.trim();
+        boolean valid;
+        SettingInfo info = SharedMetadata.EDITABLE.get(key);
+        if (info != null) {
+            valid = info.validator().test(raw)
+                    && (info.kind() != Tuning.Kind.INTEGER || isNumber(raw, true))
+                    && (info.kind() != Tuning.Kind.DECIMAL || isNumber(raw, false));
+            if (valid && info.kind() == Tuning.Kind.LIST
+                    && java.util.Arrays.stream(info.defaultValue().split(","))
+                    .allMatch(number -> isNumber(number, false))) {
+                valid = java.util.Arrays.stream(raw.split(",")).filter(number -> !number.isBlank())
+                        .allMatch(number -> isNumber(number, false));
+            }
+        } else if (key.equals(HIDDEN_CONTROLS_KEY)) {
+            valid = raw.isEmpty() || java.util.Arrays.stream(raw.split(",", -1))
+                    .allMatch(id -> SIDEBAR_CONTROLS.stream().anyMatch(control -> control.id().equals(id.trim())));
+        } else if (key.equals(HIDDEN_SECTIONS_KEY)) {
+            valid = raw.isEmpty() || java.util.Arrays.stream(raw.split(",", -1))
+                    .allMatch(id -> SIDEBAR_SECTIONS.stream().anyMatch(section -> section.id().equals(id.trim())));
+        } else if (screenDiagonal) {
+            valid = raw.indexOf(',') < 0 && isNumber(raw, false) && Double.parseDouble(raw) > 0;
+        } else if (entry.defaultValue() == null || entry.defaultValue().isEmpty()) {
+            valid = true;
+        } else {
+            Tuning.Kind kind = entry.defaultValue().matches("-?[0-9]+") ? Tuning.Kind.INTEGER
+                    : inferKind(entry.defaultValue());
+            valid = validForKind(kind, raw) && (kind != Tuning.Kind.DECIMAL || raw.indexOf(',') < 0);
+        }
+        if (!valid) {
+            throw new IllegalArgumentException("Invalid value for setting: " + key);
+        }
+    }
+
+    private void requireStandaloneSettings() {
+        if (hostContext != null) {
+            throw new IllegalStateException("A remote client cannot act as a settings host.");
+        }
+    }
+
+    private void trackSharedChanges(Map<String, String> before) {
+        Map<String, String> previous = sharedValuesOf(before);
+        Map<String, String> current = sharedValuesOf(values);
+        Set<String> changed = new HashSet<>(previous.keySet());
+        changed.addAll(current.keySet());
+        changed.removeIf(key -> Objects.equals(previous.get(key), current.get(key)));
+        if (!changed.isEmpty()) {
+            sharedRevision++;
+            changed.forEach(key -> sharedChangedAt.put(key, sharedRevision));
+        }
+    }
+
     // ---- typed access (mirrors java.util.prefs.Preferences) ----
 
     public synchronized String get(String key, String defaultValue) {
-        String value = values.get(key);
+        String value = effectiveValues(key).get(key);
         return value == null || (value.isBlank()
                 && Tuning.all().stream().noneMatch(s -> s.key().equals(key) && s.allowsEmpty())) ? defaultValue : value;
     }
@@ -205,13 +694,36 @@ public final class AppSettings {
     }
 
     public synchronized void put(String key, String value) {
-        mergeExternalEdits();
-        if (value == null) {
-            values.remove(key);
-        } else {
-            values.put(key, value.replace('\r', ' ').replace('\n', ' '));
+        Objects.requireNonNull(key, "key");
+        String normalized = value == null ? null : value.replace('\r', ' ').replace('\n', ' ');
+        if (hostContext != null) {
+            if (CLIENT_LOCAL_KEYS.contains(key)) {
+                store(hostContext.clientValues, key, normalized);
+            } else {
+                hostContext.request(key, normalized);
+            }
+            return;
         }
+        mergeExternalEdits();
+        Map<String, String> before = new LinkedHashMap<>(values);
+        store(values, key, normalized);
+        settingsGeneration++;
+        localChangedAt.put(key, settingsGeneration);
         save();
+        trackSharedChanges(before);
+    }
+
+    private Map<String, String> effectiveValues(String key) {
+        return hostContext == null ? values
+                : CLIENT_LOCAL_KEYS.contains(key) ? hostContext.clientValues : hostContext.snapshot.values();
+    }
+
+    private static void store(Map<String, String> target, String key, String value) {
+        if (value == null) {
+            target.remove(key);
+        } else {
+            target.put(key, value);
+        }
     }
 
     /** Ids of the DM controls tabs the user chose to hide. */
@@ -246,10 +758,12 @@ public final class AppSettings {
                 .map(SidebarControl::id).filter(ids::contains).toList()));
     }
 
-    /** Stores a value edited in the settings window (null restores the default) and applies it right away. */
+    /** Stores/applies a local edit, or requests a host edit without applying an unacknowledged value. */
     public synchronized void applyEdit(String key, String value) {
         put(key, value);
-        applyRuntimeSettings();
+        if (hostContext == null) {
+            applyRuntimeSettings();
+        }
     }
 
     public void putInt(String key, int value) {
@@ -281,9 +795,14 @@ public final class AppSettings {
         return get(key, null);
     }
 
-    /** True once if the file was edited by hand since the last check; the new values are already loaded. */
+    /** True once after an external file edit or host context update; effective runtime values are already applied. */
     public synchronized boolean pollExternalChange() {
         mergeExternalEdits();
+        return consumeAppliedChange();
+    }
+
+    /** Owner-pulse notification for changes already applied in memory; never probes the settings file. */
+    public synchronized boolean consumeAppliedChange() {
         boolean changed = externalChange;
         externalChange = false;
         return changed;
@@ -292,6 +811,9 @@ public final class AppSettings {
     // ---- file handling ----
 
     private void mergeExternalEdits() {
+        if (hostContext != null || pendingSharedEdit != null) {
+            return;
+        }
         try {
             if (Files.isRegularFile(file) && Files.getLastModifiedTime(file).toMillis() != lastKnownModified) {
                 reload();
@@ -303,6 +825,7 @@ public final class AppSettings {
     }
 
     private synchronized void reload() {
+        Map<String, String> before = new LinkedHashMap<>(values);
         try {
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
             values.clear();
@@ -318,29 +841,46 @@ public final class AppSettings {
                 values.put(trimmed.substring(0, eq).trim(), trimmed.substring(eq + 1).trim());
             }
             lastKnownModified = Files.getLastModifiedTime(file).toMillis();
+            settingsGeneration++;
         } catch (IOException | RuntimeException e) {
             System.err.println("Could not read settings file " + file + ": " + e.getMessage());
         }
+        trackSharedChanges(before);
         applyRuntimeSettings();
     }
 
     private synchronized void save() {
+        if (hostContext != null) {
+            throw new IllegalStateException("Cannot write standalone settings while using a host context.");
+        }
+        if (pendingSharedEdit != null) {
+            return;
+        }
         try {
-            Path parent = file.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
-            Files.writeString(temp, render(), StandardCharsets.UTF_8);
-            try {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-            }
-            lastKnownModified = Files.getLastModifiedTime(file).toMillis();
+            saveChecked();
         } catch (IOException | RuntimeException e) {
             System.err.println("Could not write settings file " + file + ": " + e.getMessage());
         }
+    }
+
+    private void saveChecked() throws IOException {
+        lastKnownModified = writeChecked(values);
+    }
+
+    private long writeChecked(Map<String, String> candidate) throws IOException {
+        Path parent = file.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        Files.writeString(temp, render(candidate), StandardCharsets.UTF_8);
+        long modified = Files.getLastModifiedTime(temp).toMillis();
+        try {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+        return modified;
     }
 
     private String render() {

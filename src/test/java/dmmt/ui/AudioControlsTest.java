@@ -261,6 +261,7 @@ class AudioControlsTest {
             release.countDown();
             blocker.get(5, TimeUnit.SECONDS);
             queue.close();
+            assertTrue(queue.awaitStopped(10, TimeUnit.SECONDS), "the retried job releases queued.wav");
         }
     }
 

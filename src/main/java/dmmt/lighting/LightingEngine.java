@@ -38,7 +38,39 @@ public class LightingEngine {
     @Getter
     private long lightRevealChanges;
 
+    /** Compute host-owned reveal effects without re-revealing unchanged persistent lights after a fog edit. */
+    public void completeCommittedEdit(DmProject before, DmProject after) {
+        reset();
+        currentProject = after;
+        FogMask mask = before.getFog().getMask();
+        lastMaskCellSize = mask == null ? Double.NaN : mask.getCellSize();
+        markPersistentRevealsApplied(before);
+        for (var light : before.getLighting().getLights()) {
+            if (light.getRevealMode() != DmProject.RevealMode.PERSISTENT || !before.getFog().isEnabled()) {
+                lastPersistentKey.remove(light.getId());
+            }
+        }
+        update(after);
+    }
+
+    public void acceptCommittedState(DmProject project) {
+        reset();
+        currentProject = project;
+        FogMask mask = project.getFog().getMask();
+        lastMaskCellSize = mask == null ? Double.NaN : mask.getCellSize();
+        markPersistentRevealsApplied(project);
+        update(project);
+    }
+
     public void update(DmProject project) {
+        update(project, true);
+    }
+
+    public void updateReplica(DmProject project) {
+        update(project, false);
+    }
+
+    private void update(DmProject project, boolean authoritative) {
         if (project == null) {
             return;
         }
@@ -46,7 +78,9 @@ public class LightingEngine {
             reset();
             currentProject = project;
         }
-        fogService.ensureMask(project);
+        if (authoritative) {
+            fogService.ensureMask(project);
+        }
         refreshGeometry(project);
         indoorLighting.update(project);
 
@@ -71,7 +105,7 @@ public class LightingEngine {
             }
             CachedVisibility vis = visibility(light);
             DmProject.RevealMode mode = light.getRevealMode() == null ? DmProject.RevealMode.WHILE_LIT : light.getRevealMode();
-            if (mode == DmProject.RevealMode.PERSISTENT && fogEnabled && mask != null) {
+            if (mode == DmProject.RevealMode.PERSISTENT && fogEnabled && mask != null && authoritative) {
                 if (!vis.key.equals(lastPersistentKey.get(light.getId()))) {
                     mask.applyPolygon(vis.polygon.xs(), vis.polygon.ys(), true);
                     lightRevealChanges++;

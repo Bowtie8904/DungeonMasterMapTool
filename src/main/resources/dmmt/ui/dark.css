@@ -203,15 +203,18 @@
 /* Segmented control (time of day) */
 .library-tabs {
     -fx-background-color: -dm-bg;
-    -fx-padding: 8 10 0 10;
-    -fx-spacing: 4;
+    -fx-padding: 8 8 0 8;
+    -fx-spacing: 3;
 }
 
 .library-tabs .toggle-button {
     -fx-background-color: #282d35;
     -fx-text-fill: -dm-muted;
     -fx-background-radius: 6 6 0 0;
-    -fx-padding: 7 24;
+    -fx-padding: 7 6;
+    -fx-graphic-text-gap: 4;
+    -fx-text-overrun: clip;
+    -fx-alignment: center;
 }
 
 .library-tabs .toggle-button:selected {
@@ -1061,4 +1064,112 @@
 
 .audio-status-group {
     -fx-padding: 0 4 0 4;
+}
+
+/* ---------- Remote session sidebar tab & progress dialog (3.39) ---------- */
+
+.session-panel {
+    -fx-spacing: 16;
+    -fx-padding: 14 14 18 14;
+}
+
+.session-card {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 8;
+    -fx-padding: 14;
+    -fx-spacing: 10;
+}
+
+.session-card.attention {
+    -fx-border-color: -dm-accent;
+    -fx-border-radius: 8;
+}
+
+.session-status-dot {
+    -fx-background-color: -dm-muted;
+    -fx-background-radius: 5;
+    -fx-min-width: 10;
+    -fx-min-height: 10;
+    -fx-max-width: 10;
+    -fx-max-height: 10;
+}
+
+.session-status-dot.live {
+    -fx-background-color: #5fd38d;
+}
+
+.session-status-dot.busy {
+    -fx-background-color: -dm-accent;
+}
+
+.session-status-dot.error {
+    -fx-background-color: -dm-danger;
+}
+
+.session-title {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.session-mode {
+    -fx-background-color: -dm-bg;
+    -fx-background-radius: 8;
+    -fx-padding: 2;
+    -fx-spacing: 2;
+}
+
+.session-mode .toggle-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -dm-muted;
+    -fx-background-radius: 6;
+    -fx-padding: 6 0;
+}
+
+.session-mode .toggle-button:selected {
+    -fx-background-color: -dm-surface-3;
+    -fx-text-fill: -dm-accent;
+}
+
+.session-panel .button.primary {
+    -fx-background-color: -dm-accent;
+    -fx-text-fill: #1b1405;
+    -fx-font-weight: bold;
+}
+
+.session-panel .titled-pane > .title {
+    -fx-background-color: transparent;
+    -fx-padding: 6 0;
+}
+
+.session-panel .titled-pane > .content {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 8 0 4 0;
+}
+
+.remote-busy {
+    -fx-background-color: -dm-surface;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 22;
+    -fx-spacing: 10;
+}
+
+.remote-busy .progress-bar {
+    -fx-pref-width: 360;
+}
+
+.remote-transfer {
+    -fx-background-color: -dm-surface;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 10 14 10 14;
+    -fx-opacity: 0.95;
+}
+
+.remote-transfer .progress-bar {
+    -fx-pref-width: 280;
 }

@@ -67,6 +67,10 @@ public final class AudioLibraryWindow {
     private static final DataFormat TRACK_IDS = new DataFormat("application/x-dmmt-audio-tracks");
     private static Stage open;
 
+    static void closeOpen() {
+        if (open != null) open.close();
+    }
+
     private final Stage stage;
     private final AudioLibraryService library;
     private final AudioEngine engine;
@@ -478,8 +482,9 @@ public final class AudioLibraryWindow {
         if (track == null) {
             return;
         }
+        long revision = editRevision();
         AudioIconPicker.show(stage, track, icon ->
-                run(() -> library.styleTrack(track.getId(), null, icon), "Could not change the icon"));
+                runAt(revision, () -> library.styleTrack(track.getId(), null, icon), "Could not change the icon"));
     }
 
     private void setEffectsLooping(boolean looping) {
@@ -497,9 +502,10 @@ public final class AudioLibraryWindow {
         if (track == null) {
             return;
         }
+        long revision = editRevision();
         AudioColorPicker.show(stage, "Colour of \"" + track.getName() + "\"", track.getColor(),
                 AudioIcons.effectByDescription(track.getIcon()),
-                color -> run(() -> library.styleTrack(track.getId(), color, null),
+                color -> runAt(revision, () -> library.styleTrack(track.getId(), color, null),
                         "Could not change the colour"));
     }
 
@@ -508,7 +514,7 @@ public final class AudioLibraryWindow {
         MenuItem play = new MenuItem("Play", Icons.icon(MaterialDesignP.PLAY));
         play.setOnAction(event -> {
             AudioTrack track = trackTable.getSelectionModel().getSelectedItem();
-            settings.put("audio.lastCategory", track.getCategoryId());
+            if (!engine.isRemote()) settings.put("audio.lastCategory", track.getCategoryId());
             engine.playTrack(track.getId());
         });
         Menu moveTo = new Menu("Move to");
@@ -679,7 +685,8 @@ public final class AudioLibraryWindow {
         updatePreparationColumn();
         long totalMs = tracks.stream().mapToLong(AudioTrack::getDurationMs).sum();
         summary.setText(tracks.size() + (tracks.size() == 1 ? " track, " : " tracks, ")
-                + AudioTrack.formatDuration(totalMs) + " total - library folder: " + library.root());
+                + AudioTrack.formatDuration(totalMs) + (library.remoteBackend() == null
+                ? " total - library folder: " + library.root() : " total - host audio library"));
     }
 
     private Entry selectedEntry() {
@@ -712,9 +719,10 @@ public final class AudioLibraryWindow {
     // ---- Actions ----
 
     private void createCategory() {
+        long revision = editRevision();
         Dialogs.askText(stage, "New category", "Name of the new music category", MaterialDesignM.MUSIC_BOX_OUTLINE,
                         "Create", "", name -> name.isBlank() ? "Enter a name." : null)
-                .ifPresent(name -> run(() -> library.createCategory(name, AudioCategory.DEFAULT_COLOR,
+                .ifPresent(name -> runAt(revision, () -> library.createCategory(name, AudioCategory.DEFAULT_COLOR,
                         AudioCategory.DEFAULT_ICON), "Could not create the category"));
     }
 
@@ -723,9 +731,10 @@ public final class AudioLibraryWindow {
         if (Entry == null || Entry.isEffects()) {
             return;
         }
+        long revision = editRevision();
         Dialogs.askText(stage, "Rename category", "New name", MaterialDesignR.RENAME_BOX, "Rename",
                         Entry.category().getName(), name -> name.isBlank() ? "Enter a name." : null)
-                .ifPresent(name -> run(() -> library.renameCategory(Entry.category().getId(), name),
+                .ifPresent(name -> runAt(revision, () -> library.renameCategory(Entry.category().getId(), name),
                         "Could not rename the category"));
     }
 
@@ -739,9 +748,10 @@ public final class AudioLibraryWindow {
                 ? "The category is empty."
                 : tracks + (tracks == 1 ? " track moves" : " tracks move") + " to " + AudioCategory.UNCATEGORISED_NAME
                 + ". No audio file is deleted.";
+        long revision = editRevision();
         if (Dialogs.confirmDanger(stage, "Delete category", "Delete \"" + Entry.category().getName() + "\"?",
                 message, "Delete")) {
-            run(() -> library.deleteCategory(Entry.category().getId()), "Could not delete the category");
+            runAt(revision, () -> library.deleteCategory(Entry.category().getId()), "Could not delete the category");
         }
     }
 
@@ -750,8 +760,9 @@ public final class AudioLibraryWindow {
         if (Entry == null || Entry.isEffects()) {
             return;
         }
+        long revision = editRevision();
         AudioIconPicker.show(stage, Entry.category(), icon ->
-                run(() -> library.styleCategory(Entry.category().getId(), null, icon), "Could not change the icon"));
+                runAt(revision, () -> library.styleCategory(Entry.category().getId(), null, icon), "Could not change the icon"));
     }
 
     private void chooseColor() {
@@ -760,9 +771,10 @@ public final class AudioLibraryWindow {
             return;
         }
         AudioCategory category = entry.category();
+        long revision = editRevision();
         AudioColorPicker.show(stage, "Colour of \"" + category.getName() + "\"", category.getColor(),
                 AudioIcons.byDescription(category.getIcon()),
-                color -> run(() -> library.styleCategory(category.getId(), color, null),
+                color -> runAt(revision, () -> library.styleCategory(category.getId(), color, null),
                         "Could not change the category colour"));
     }
 
@@ -886,8 +898,27 @@ public final class AudioLibraryWindow {
             row.getStyleClass().add("audio-import-file");
             activeImports.getChildren().add(row);
         }
-        activeImports.setVisible(!active.isEmpty());
-        activeImports.setManaged(!active.isEmpty());
+        if (library.remoteBackend() instanceof dmmt.remote.RemoteAudio.Client client && client.state() != null) {
+            for (var job : client.state().jobs()) {
+                if ("READY".equals(job.state())) continue;
+                Label name = new Label("Host " + job.action() + ": " + job.state());
+                name.setWrapText(true);
+                ProgressBar progress = new ProgressBar(job.progress());
+                progress.setMaxWidth(Double.MAX_VALUE);
+                boolean terminal = "FAILED".equals(job.state()) || "CANCELLED".equals(job.state());
+                Button action = new Button(terminal ? "Retry" : "Cancel");
+                action.setOnAction(event -> library.remoteBackend().command(
+                        terminal ? "retryJob" : "cancelJob", job.id()));
+                VBox row = new VBox(3, name, progress, action);
+                if (job.error() != null) row.getChildren().add(new Label(job.error()));
+                row.getStyleClass().add("audio-import-file");
+                activeImports.getChildren().add(row);
+            }
+        }
+        boolean hasRows = !activeImports.getChildren().isEmpty();
+        activeImports.setVisible(hasRows);
+        activeImports.setManaged(hasRows);
+        if (hasRows) showBusy(true);
         cancelImports.setDisable(active.isEmpty() && queued == 0);
         retryImports.setDisable(failed + cancelled == 0);
         importHint.setText(active.isEmpty() && queued == 0 && failed + cancelled == 0
@@ -895,7 +926,8 @@ public final class AudioLibraryWindow {
                 : "Percentages show the current step, not the whole import. Only ready tracks can play. "
                 + "Cancel stops unfinished work, not ready tracks. "
                 + "Imports continue when you close this window.");
-        String signature = tasks.stream().map(item -> item.trackId() + ":" + item.stage() + ":" + item.error())
+        String signature = library.categories().toString() + library.tracks().toString()
+                + tasks.stream().map(item -> item.trackId() + ":" + item.stage() + ":" + item.error())
                 .collect(java.util.stream.Collectors.joining("|"));
         if (!signature.equals(queueSignature)) {
             queueSignature = signature;
@@ -925,9 +957,10 @@ public final class AudioLibraryWindow {
         if (track == null) {
             return;
         }
+        long revision = editRevision();
         Dialogs.askText(stage, "Rename audio", "New name", MaterialDesignR.RENAME_BOX, "Rename", track.getName(),
                         name -> name.isBlank() ? "Enter a name." : null)
-                .ifPresent(name -> run(() -> library.renameTrack(track.getId(), name), "Could not rename the track"));
+                .ifPresent(name -> runAt(revision, () -> library.renameTrack(track.getId(), name), "Could not rename the track"));
     }
 
     private void deleteTracks() {
@@ -936,11 +969,12 @@ public final class AudioLibraryWindow {
             return;
         }
         String what = tracks.size() == 1 ? "\"" + tracks.get(0).getName() + "\"" : tracks.size() + " tracks";
+        long revision = editRevision();
         if (!Dialogs.confirmDanger(stage, "Delete audio", "Delete " + what + "?",
                 "The audio files are deleted from the library folder. This cannot be undone.", "Delete")) {
             return;
         }
-        run(() -> {
+        runAt(revision, () -> {
             for (AudioTrack track : tracks) {
                 engine.stopEffectsForTrack(track.getId());
                 library.deleteTrack(track.getId());
@@ -1058,5 +1092,14 @@ public final class AudioLibraryWindow {
 
     private interface LibraryAction {
         void run() throws IOException;
+    }
+
+    private long editRevision() {
+        return library.remoteBackend() == null ? -1 : library.remoteBackend().revision();
+    }
+
+    private void runAt(long revision, LibraryAction action, String header) {
+        if (library.remoteBackend() == null) run(action, header);
+        else library.remoteBackend().atRevision(revision, () -> run(action, header));
     }
 }

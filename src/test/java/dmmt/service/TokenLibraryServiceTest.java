@@ -14,6 +14,29 @@ class TokenLibraryServiceTest
 {
     @TempDir Path temp;
 
+    @Test
+    void mutationRevisionTracksTheCommonServiceWithoutMakingReadsIntoMutations() throws Exception
+    {
+        TokenLibraryService service = new TokenLibraryService(temp);
+        assertEquals(0, service.revision());
+        service.load();
+        assertEquals(0, service.revision());
+        service.createFolder("", "Party");
+        assertEquals(1, service.revision());
+        service.put(DmProject.TokenDefinition.builder().id("hero").name("Hero").build(), "Party");
+        assertEquals(2, service.revision());
+        service.move("hero", "");
+        assertEquals(3, service.revision());
+        service.delete("hero");
+        assertEquals(4, service.revision());
+        service.load();
+        assertEquals(4, service.revision());
+        assertThrows(java.io.IOException.class, () -> service.move("missing", ""));
+        assertEquals(4, service.revision());
+        service.deleteFolder("Party");
+        assertEquals(5, service.revision());
+    }
+
     private DmProject.TokenDefinition definition()
     {
         return DmProject.TokenDefinition.builder().id("character").name("Ranger").color("#55AA33")

@@ -51,6 +51,7 @@ public final class SettingsWindow {
     private static final String TABS_CATEGORY = "DM controls tabs";
 
     private static Stage open;
+    private static SettingsWindow active;
 
     private record Row(String category, String group, String searchText, Node node) {
     }
@@ -65,6 +66,9 @@ public final class SettingsWindow {
     private final StackPane holder = new StackPane();
     private final Map<String, Boolean> expandedGroups = new java.util.HashMap<>();
     private final Label summary = new Label();
+    private final List<Runnable> refreshers = new ArrayList<>();
+    private java.util.function.Function<dmmt.remote.RemoteDirectories.Query,
+            java.util.concurrent.CompletableFuture<dmmt.remote.RemoteDirectories.Listing>> hostDirectories;
 
     private SettingsWindow(AppSettings settings, Runnable onSectionsChanged) {
         this.settings = settings;
@@ -73,12 +77,19 @@ public final class SettingsWindow {
 
     /** Opens the settings window, or brings it to the front if it is already open. */
     public static void show(Window owner, AppSettings settings, Runnable onSectionsChanged) {
+        show(owner, settings, onSectionsChanged, null);
+    }
+
+    public static void show(Window owner, AppSettings settings, Runnable onSectionsChanged,
+                            java.util.function.Function<dmmt.remote.RemoteDirectories.Query,
+                                    java.util.concurrent.CompletableFuture<dmmt.remote.RemoteDirectories.Listing>> hostDirectories) {
         if (open != null) {
             open.toFront();
             open.requestFocus();
             return;
         }
         SettingsWindow window = new SettingsWindow(settings, onSectionsChanged);
+        window.hostDirectories = hostDirectories;
         Stage stage = new Stage();
         if (owner != null) {
             stage.initOwner(owner);
@@ -88,10 +99,15 @@ public final class SettingsWindow {
             stage.getIcons().setAll(ownerStage.getIcons());
         }
         stage.setScene(window.createScene(stage));
-        stage.setOnHidden(e -> open = null);
+        stage.setOnHidden(e -> { open = null; active = null; });
         open = stage;
+        active = window;
         stage.show();
         Platform.runLater(window.search::requestFocus);
+    }
+
+    public static void refresh(AppSettings settings) {
+        if (active != null && active.settings == settings) active.refreshers.forEach(Runnable::run);
     }
 
     private Scene createScene(Stage stage) {
@@ -130,6 +146,13 @@ public final class SettingsWindow {
         summary.getStyleClass().add("muted");
         Label hint = new Label("Changes are saved to dmmt-settings.ini and applied immediately, except entries marked "
                 + "\"restart required\". Hover a setting for details.");
+        String localHint = hint.getText();
+        Runnable refreshHint = () -> hint.setText(settings.usesHostSettings()
+                ? "Changes are submitted to host A and become effective after host acknowledgement. Folder browsing "
+                + "shows host directories, not this PC. Entries marked \"restart required\" retain their existing restart requirements."
+                : localHint);
+        refreshHint.run();
+        refreshers.add(refreshHint);
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
 
@@ -235,6 +258,15 @@ public final class SettingsWindow {
 
         String current = settings.get(info.key(), info.defaultValue());
         Editor editor = createEditor(info, current, error);
+        String[] accepted = {current};
+        refreshers.add(() -> {
+            String next = settings.get(info.key(), info.defaultValue());
+            if (!java.util.Objects.equals(next, accepted[0])) {
+                accepted[0] = next;
+                editor.set(next);
+                reset.setDisable(sameValue(info, next, info.defaultValue()));
+            }
+        });
         reset.setDisable(sameValue(info, current, info.defaultValue()));
         editor.onCommitted = value -> {
             boolean isDefault = sameValue(info, value, info.defaultValue());
@@ -262,6 +294,42 @@ public final class SettingsWindow {
         Icons.tooltip(editor.control, tip);
 
         HBox top = new HBox(10, names, editor.control, reset);
+        if (Set.of("library.folder", "audio.folder").contains(info.key())) {
+            Button browse = new Button(settings.usesHostSettings() ? "Browse host..." : "Browse...");
+            refreshers.add(() -> browse.setText(settings.usesHostSettings() ? "Browse host..." : "Browse..."));
+            browse.setId("browse-" + info.key());
+            browse.setOnAction(event -> {
+                if (settings.usesHostSettings()) {
+                    if (hostDirectories == null) {
+                        error.setText("Host folder browsing is unavailable while disconnected.");
+                        error.setVisible(true);
+                        error.setManaged(true);
+                        return;
+                    }
+                    var submit = settings.prepareHostEdit(info.key());
+                    RemoteDirectoryWindow.show(browse.getScene().getWindow(), hostDirectories, path -> {
+                        try {
+                            submit.accept(path);
+                        } catch (IllegalArgumentException | IllegalStateException unavailable) {
+                            error.setText("The host settings context changed or disconnected. Open Browse again.");
+                            error.setVisible(true);
+                            error.setManaged(true);
+                            return;
+                        }
+                        editor.set(settings.get(info.key(), info.defaultValue()));
+                    });
+                } else {
+                    var chooser = new javafx.stage.DirectoryChooser();
+                    chooser.setTitle("Choose " + info.key());
+                    var folder = chooser.showDialog(browse.getScene().getWindow());
+                    if (folder != null) {
+                        editor.set(folder.getAbsolutePath());
+                        editor.commit(folder.getAbsolutePath());
+                    }
+                }
+            });
+            top.getChildren().add(browse);
+        }
         top.setAlignment(Pos.CENTER_LEFT);
         VBox row = new VBox(3, top, description(info.description()), error);
         row.getStyleClass().add("settings-row");

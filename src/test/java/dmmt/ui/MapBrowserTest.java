@@ -71,6 +71,536 @@ class MapBrowserTest {
     }
 
     @Test
+    void remoteCatalogReusesTreeSearchWithoutScanningLocalDiskAndRestoresLocalBrowser() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var pending = new CompletableFuture<dmmt.remote.RemoteMapCatalog.Listing>();
+        var listing = remoteListing();
+        var before = new java.util.concurrent.atomic.AtomicReference<String>();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.select(0, 1);
+            TextField search = (TextField) f.browser.lookup(".search-field");
+            search.setText("Ordinary");
+            f.select(0);
+            before.set(readSettings(dir.resolve("settings.ini")));
+            f.library.forbidLocalScan = true;
+            f.browser.beginRemote(() -> pending);
+            f.browser.remoteContext(listing.context());
+            f.browser.refresh();
+            assertNull(f.tree.getRoot());
+            pending.complete(listing);
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            assertEquals(List.of("Host folder", "Host meadow"), f.tree.getRoot().getChildren().stream()
+                    .map(item -> item.getValue().name()).toList());
+            assertFalse(f.tree.getRoot().getValue().path().startsWith(f.library.getRoot()));
+            TextField search = (TextField) f.browser.lookup(".search-field");
+            search.setText("tower");
+            assertEquals("Host tower", f.tree.getRoot().getChildren().getFirst().getChildren().getFirst().getValue().name());
+            f.tree.getSelectionModel().select(f.tree.getRoot().getChildren().getFirst().getChildren().getFirst());
+            f.tree.fireEvent(key(KeyCode.ENTER));
+            f.tree.fireEvent(key(KeyCode.F2));
+            f.tree.fireEvent(key(KeyCode.DELETE));
+            assertNull(f.host.opened);
+            assertEquals(0, f.host.operations);
+            f.browser.invalidateThumbnails();
+            f.browser.updateCurrentMap();
+            assertEquals(before.get(), readSettings(dir.resolve("settings.ini")));
+            assertTrue(f.browser.lookup("#map-catalog-status") instanceof Label);
+            f.library.forbidLocalScan = false;
+            f.browser.endRemote();
+            assertEquals("Ordinary", ((TextField) f.browser.lookup(".search-field")).getText());
+            assertEquals("Ordinary", f.tree.getSelectionModel().getSelectedItem().getValue().name());
+            assertEquals("Library", f.tree.getRoot().getValue().name());
+        });
+    }
+
+    @Test
+    void failedHostCatalogCanRetryAndLateCompletionCannotReplaceRestoredTree() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var late = new CompletableFuture<dmmt.remote.RemoteMapCatalog.Listing>() {
+            @Override public boolean cancel(boolean mayInterruptIfRunning) { return false; }
+        };
+        var queries = new java.util.concurrent.atomic.AtomicInteger();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.beginRemote(() -> queries.incrementAndGet() == 1
+                    ? CompletableFuture.failedFuture(new IOException("Disconnected")) : late);
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            assertTrue(((Label) f.browser.lookup("#map-catalog-status")).getText().contains("Could not read"));
+            f.browser.refresh();
+            assertEquals(2, queries.get());
+            f.browser.endRemote();
+            late.complete(remoteListing());
+        });
+        onFx(() -> {
+            assertEquals("Ordinary", fixture.get().tree.getRoot().getChildren().getFirst().getValue().name());
+            assertEquals("", ((Label) fixture.get().browser.lookup("#map-catalog-status")).getText());
+        });
+    }
+
+    private static String readSettings(Path file) {
+        try {
+            return java.nio.file.Files.exists(file) ? java.nio.file.Files.readString(file) : "";
+        } catch (IOException failure) {
+            throw new AssertionError(failure);
+        }
+    }
+
+    @Test
+    void unchangedRemoteListingPreservesTreeMultiSelectionScrollAndStatus() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var first = remoteListing();
+        var nodes = new ArrayList<>(first.nodes());
+        for (int i = 0; i < 100; i++)
+            nodes.add(new dmmt.remote.RemoteMapCatalog.Node(java.util.UUID.randomUUID(), nodes.getFirst().id(),
+                    "Extra map " + i, dmmt.remote.RemoteMapCatalog.Kind.MAP));
+        var listing = new dmmt.remote.RemoteMapCatalog.Listing(nodes, first.current(), first.currentLabel(), first.context(), null);
+        var next = new CompletableFuture<dmmt.remote.RemoteMapCatalog.Listing>();
+        var requests = new java.util.concurrent.atomic.AtomicInteger();
+        var stage = new java.util.concurrent.atomic.AtomicReference<Stage>();
+        var root = new java.util.concurrent.atomic.AtomicReference<TreeItem<Entry>>();
+        var selected = new ArrayList<TreeItem<Entry>>();
+        var scrollbar = new java.util.concurrent.atomic.AtomicReference<ScrollBar>();
+        var scrollValue = new java.util.concurrent.atomic.AtomicReference<Double>();
+        var statuses = new ArrayList<String>();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.beginRemote(() -> requests.incrementAndGet() == 1
+                    ? CompletableFuture.completedFuture(listing) : next);
+        });
+        onFx(() -> {
+            var f = fixture.get();
+            Stage window = new Stage();
+            stage.set(window);
+            window.setScene(new Scene(f.browser, 360, 560));
+            window.show();
+            f.browser.applyCss();
+            f.browser.layout();
+            root.set(f.tree.getRoot());
+            root.get().getChildren().getFirst().setExpanded(true);
+            f.select(4, 5);
+            selected.addAll(f.tree.getSelectionModel().getSelectedItems());
+            f.tree.scrollTo(60);
+            f.browser.layout();
+            ScrollBar bar = f.tree.lookupAll(".scroll-bar").stream().filter(ScrollBar.class::isInstance)
+                    .map(ScrollBar.class::cast).filter(b -> b.getOrientation() == Orientation.VERTICAL).findFirst().orElseThrow();
+            scrollbar.set(bar);
+            bar.setValue(bar.getMax() * .6);
+            scrollValue.set(bar.getValue());
+            ((Label) f.browser.lookup("#map-catalog-status")).textProperty()
+                    .addListener((obs, before, after) -> statuses.add(after));
+            f.browser.refresh();
+            assertTrue(statuses.isEmpty(), "A background/unchanged refresh must not flash Loading.");
+            next.complete(listing);
+        });
+        onFx(() -> {
+            try {
+                var f = fixture.get();
+                f.browser.layout();
+                assertSame(root.get(), f.tree.getRoot());
+                assertEquals(selected, f.tree.getSelectionModel().getSelectedItems());
+                assertTrue(root.get().getChildren().getFirst().isExpanded());
+                assertEquals(scrollValue.get(), scrollbar.get().getValue(), .0001);
+                assertTrue(statuses.isEmpty());
+            } finally {
+                stage.get().close();
+                fixture.get().browser.endRemote();
+            }
+        });
+    }
+
+    @Test
+    void failedRemotePreviewIsReportedWithOriginalCauseThrottledAndRetryable() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        var failure = new IOException("Preview transfer failed");
+        var failures = new ArrayList<Throwable>();
+        connection.preview = () -> CompletableFuture.failedFuture(new java.util.concurrent.CompletionException(failure));
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteErrorHandler(failures::add);
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> requestRemoteThumbnail(fixture.get()));
+        onFx(() -> {
+            assertEquals(List.of(failure), failures);
+            for (int i = 0; i < 20; i++) requestRemoteThumbnail(fixture.get());
+            assertEquals(1, connection.previewRequests);
+            assertFalse(browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+            connection.preview = () -> CompletableFuture.completedFuture(com.fasterxml.jackson.databind.node.NullNode.getInstance());
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            requestRemoteThumbnail(fixture.get());
+            assertEquals(2, connection.previewRequests);
+        });
+        awaitFx(() -> browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+        onFx(() -> {
+            requestRemoteThumbnail(fixture.get());
+            assertEquals(2, connection.previewRequests, "A successful absent preview may be cached.");
+            assertEquals(List.of(failure), failures);
+            fixture.get().browser.endRemote();
+        });
+    }
+
+    @Test
+    void failedRemoteCatalogPollingIsDeduplicatedAndExplicitRefreshRetries() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        var failure = new IOException("Host library unavailable");
+        var failures = new ArrayList<Throwable>();
+        connection.catalogFailure = failure;
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteErrorHandler(failures::add);
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> {
+            assertEquals(List.of(failure), failures);
+            fixture.get().browser.tickRemote();
+        });
+        onFx(() -> {
+            assertEquals(List.of(failure), failures, "Repeated background polling failures must not flood the error handler.");
+            assertTrue(((Label) fixture.get().browser.lookup("#map-catalog-status")).getText().contains("Could not read"));
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            assertEquals(List.of(failure, failure), failures);
+            connection.catalogFailure = null;
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            assertNotNull(fixture.get().tree.getRoot());
+            fixture.get().browser.endRemote();
+        });
+    }
+
+    @Test
+    void changedRemoteMetadataInvalidatesPreviewAndRejectsStaleCompletion() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        var stale = new CompletableFuture<com.fasterxml.jackson.databind.JsonNode>();
+        var current = new CompletableFuture<com.fasterxml.jackson.databind.JsonNode>();
+        var failures = new ArrayList<Throwable>();
+        connection.preview = () -> connection.previewRequests == 1 ? stale : current;
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteErrorHandler(failures::add);
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> {
+            requestRemoteThumbnail(fixture.get());
+            var old = connection.listing;
+            var map = old.nodes().get(1);
+            connection.listing = new dmmt.remote.RemoteMaps.Listing(old.context(), old.revision() + 1,
+                    List.of(old.nodes().getFirst(), new dmmt.remote.RemoteMaps.Node(map.id(), map.parent(), "Changed map",
+                            map.kind(), List.of("New tag"), 0, map.stamp() + 1)), old.current(), "Changed map", old.recent());
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            assertEquals("Changed map", fixture.get().entry(0).name());
+            requestRemoteThumbnail(fixture.get());
+            assertEquals(2, connection.previewRequests);
+            stale.completeExceptionally(new IOException("Obsolete preview"));
+        });
+        onFx(() -> {
+            assertTrue(failures.isEmpty(), "Obsolete preview failures must not reach the active browser.");
+            assertFalse(browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+            requestRemoteThumbnail(fixture.get());
+            assertEquals(2, connection.previewRequests, "A stale callback must not clear the replacement's loading guard.");
+            current.complete(com.fasterxml.jackson.databind.node.NullNode.getInstance());
+        });
+        awaitFx(() -> browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+        onFx(() -> fixture.get().browser.endRemote());
+    }
+
+    @Test
+    void asynchronousRemoteOperationFailureUsesErrorHookWithoutLosingCause() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        var failure = new IOException("Host operation rejected");
+        var failures = new ArrayList<Throwable>();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteErrorHandler(error -> {
+                assertTrue(Platform.isFxApplicationThread());
+                failures.add(error);
+            });
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> fixture.get().browser.remoteWorkflow("open", List.of(fixture.get().entry(0)), null, null, null));
+        connection.operation.completeExceptionally(new java.util.concurrent.CompletionException(failure));
+        onFx(() -> {
+            assertEquals(List.of(failure), failures);
+            assertTrue(((Label) fixture.get().browser.lookup("#map-catalog-status")).getText().contains("operation failed"));
+            fixture.get().browser.endRemote();
+        });
+    }
+
+    @Test
+    void remotePreviewLoadsImageAndRevisionOnlyRefreshKeepsCacheButChangedStampInvalidatesIt() throws Exception {
+        Path png = dir.resolve("preview.png");
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 3, java.awt.image.BufferedImage.TYPE_INT_ARGB),
+                "png", png.toFile());
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var connection = new BrowserConnection();
+        connection.download = png;
+        var descriptor = new dmmt.remote.RemoteAssetStore.AssetDescriptor("0".repeat(64), java.nio.file.Files.size(png));
+        connection.preview = () -> CompletableFuture.completedFuture(connection.mapper.valueToTree(descriptor));
+        var root = new java.util.concurrent.atomic.AtomicReference<TreeItem<Entry>>();
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteErrorHandler(failure -> fail("Unexpected preview failure", failure));
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> requestRemoteThumbnail(fixture.get()));
+        awaitFx(() -> browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+        onFx(() -> {
+            assertEquals(2, requestRemoteThumbnail(fixture.get()).getWidth());
+            root.set(fixture.get().tree.getRoot());
+            var old = connection.listing;
+            connection.listing = new dmmt.remote.RemoteMaps.Listing(old.context(), old.revision() + 1, old.nodes(),
+                    old.current(), old.currentLabel(), old.recent());
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            assertSame(root.get(), fixture.get().tree.getRoot());
+            assertNotNull(requestRemoteThumbnail(fixture.get()));
+            assertEquals(1, connection.previewRequests);
+            var old = connection.listing;
+            var map = old.nodes().get(1);
+            connection.listing = new dmmt.remote.RemoteMaps.Listing(old.context(), old.revision() + 1,
+                    List.of(old.nodes().getFirst(), new dmmt.remote.RemoteMaps.Node(map.id(), map.parent(), map.name(),
+                            map.kind(), map.tags(), map.levels(), map.stamp() + 1)),
+                    old.current(), old.currentLabel(), old.recent());
+            fixture.get().browser.refresh();
+        });
+        onFx(() -> {
+            assertNull(requestRemoteThumbnail(fixture.get()));
+            assertEquals(2, connection.previewRequests);
+        });
+        awaitFx(() -> browserMap(fixture.get().browser, "thumbnails").containsKey(fixture.get().entry(0).mapFile()));
+        onFx(() -> {
+            assertEquals(3, requestRemoteThumbnail(fixture.get()).getHeight());
+            fixture.get().browser.endRemote();
+        });
+    }
+
+    private static Map<?, ?> browserMap(MapBrowser browser, String name) {
+        try {
+            Field field = MapBrowser.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return (Map<?, ?>) field.get(browser);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError(failure);
+        }
+    }
+
+    private static javafx.scene.image.Image requestRemoteThumbnail(Fixture fixture) {
+        try {
+            Method method = MapBrowser.class.getDeclaredMethod("remoteThumbnail", Path.class);
+            method.setAccessible(true);
+            return (javafx.scene.image.Image) method.invoke(fixture.browser, fixture.entry(0).mapFile());
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError(failure);
+        }
+    }
+
+    private static void awaitFx(java.util.function.BooleanSupplier condition) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        do {
+            onFx(() -> ready.set(condition.getAsBoolean()));
+            if (ready.get()) return;
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        fail("Remote thumbnail did not finish.");
+    }
+
+    private static final class BrowserConnection implements dmmt.remote.RemoteOperations.Connection {
+        final com.fasterxml.jackson.databind.ObjectMapper mapper = dmmt.service.JsonMappers.create();
+        dmmt.remote.RemoteMaps.Listing listing;
+        java.util.function.Supplier<CompletableFuture<com.fasterxml.jackson.databind.JsonNode>> preview;
+        final CompletableFuture<com.fasterxml.jackson.databind.JsonNode> operation = new CompletableFuture<>();
+        Path download;
+        Throwable catalogFailure;
+        int previewRequests;
+
+        BrowserConnection() {
+            var root = java.util.UUID.randomUUID();
+            var map = java.util.UUID.randomUUID();
+            listing = new dmmt.remote.RemoteMaps.Listing(java.util.UUID.randomUUID(), 1, List.of(
+                    new dmmt.remote.RemoteMaps.Node(root, null, "Host library", dmmt.remote.RemoteMapCatalog.Kind.FOLDER, List.of(), 0, 1),
+                    new dmmt.remote.RemoteMaps.Node(map, root, "Host map", dmmt.remote.RemoteMapCatalog.Kind.MAP, List.of(), 0, 1)),
+                    map, "Host map", List.of(map));
+            preview = () -> CompletableFuture.completedFuture(com.fasterxml.jackson.databind.node.NullNode.getInstance());
+        }
+
+        public boolean connected() { return true; }
+        public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+            if (action.equals("list")) return catalogFailure == null ? CompletableFuture.completedFuture(mapper.valueToTree(listing))
+                    : CompletableFuture.failedFuture(catalogFailure);
+            assertEquals("preview", action);
+            previewRequests++;
+            return preview.get();
+        }
+        public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+            return operation;
+        }
+        public CompletableFuture<dmmt.remote.RemoteAssetStore.AssetDescriptor> upload(Path file) { throw new AssertionError("Unexpected upload"); }
+        public CompletableFuture<Path> download(dmmt.remote.RemoteAssetStore.AssetDescriptor descriptor) {
+            assertNotNull(download, "Unexpected download");
+            return CompletableFuture.completedFuture(download);
+        }
+    }
+
+        @Test void remoteMenusDispatchOpaqueCommandsWithoutMutatingLocalLibrary() throws Exception {
+            var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+            var commands = new ArrayList<String>();
+            var payloads = new ArrayList<com.fasterxml.jackson.databind.JsonNode>();
+            var mapper = dmmt.service.JsonMappers.create();
+            var root = java.util.UUID.randomUUID();
+            var map = java.util.UUID.randomUUID();
+            var context = java.util.UUID.randomUUID();
+            var listing = new dmmt.remote.RemoteMaps.Listing(context, 4, List.of(
+                    new dmmt.remote.RemoteMaps.Node(root, null, "Host library", dmmt.remote.RemoteMapCatalog.Kind.FOLDER, List.of(), 0, 1),
+                    new dmmt.remote.RemoteMaps.Node(map, root, "Host meadow", dmmt.remote.RemoteMapCatalog.Kind.MAP, List.of("Forest"), 0, 1)),
+                    map, "Host meadow", List.of(map));
+            dmmt.remote.RemoteOperations.Connection connection = new dmmt.remote.RemoteOperations.Connection() {
+                public boolean connected() { return true; }
+                public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                    return CompletableFuture.completedFuture(action.equals("list") ? mapper.valueToTree(listing)
+                            : com.fasterxml.jackson.databind.node.NullNode.getInstance());
+                }
+                public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                    assertEquals("maps", domain);
+                    commands.add(action);
+                    payloads.add(payload);
+                    return CompletableFuture.completedFuture(com.fasterxml.jackson.databind.node.NullNode.getInstance());
+                }
+                public CompletableFuture<dmmt.remote.RemoteAssetStore.AssetDescriptor> upload(Path path) { throw new AssertionError("Unexpected upload"); }
+                public CompletableFuture<Path> download(dmmt.remote.RemoteAssetStore.AssetDescriptor asset) { throw new AssertionError("Unexpected download"); }
+            };
+            onFx(() -> {
+                var f = new Fixture();
+                fixture.set(f);
+                f.library.forbidLocalScan = true;
+                f.browser.beginRemote(connection);
+            });
+            onFx(() -> {
+                var f = fixture.get();
+                var entry = f.tree.getRoot().getChildren().getFirst().getValue();
+                f.tree.getSelectionModel().select(f.tree.getRoot().getChildren().getFirst());
+                var menu = f.browser.buildMenu(entry);
+                assertTrue(menu.getItems().stream().anyMatch(item -> "Manage tags…".equals(item.getText())));
+                menuItem(menu, "Open").fire();
+                menuItem(menu, "Duplicate").fire();
+                assertEquals(List.of("open", "copy"), commands);
+                assertEquals(map.toString(), payloads.getFirst().path("entries").get(0).asText());
+                assertEquals(context.toString(), payloads.getFirst().path("context").asText());
+                assertEquals(4, payloads.getFirst().path("revision").asInt());
+                assertNull(f.host.opened);
+                assertEquals(0, f.host.operations);
+                assertTrue(f.library.copied.isEmpty());
+                f.library.forbidLocalScan = false;
+                f.browser.endRemote();
+            });
+        }
+
+        @Test void initialMultilevelImportPlanPreservesEditedOrderNamesAndEmptyLevels() {
+            Path first = dir.resolve("first.dd2vtt"), second = dir.resolve("second.uvtt");
+            var result = new LevelListDialog.Result(List.of(
+                    new MultiLevelService.PlanItem(new MultiLevelService.Dd2vtt(second), "Basement"),
+                    new MultiLevelService.PlanItem(new MultiLevelService.Empty(), "Landing"),
+                    new MultiLevelService.PlanItem(new MultiLevelService.Dd2vtt(first), "Roof")), List.of());
+            var options = dmmt.service.JsonMappers.create().createObjectNode();
+            assertEquals(List.of(second, first), MapBrowser.prepareRemoteLevelImport(result, options));
+            assertEquals(0, options.path("plan").get(0).path("source").asInt());
+            assertEquals(-1, options.path("plan").get(1).path("source").asInt());
+            assertEquals("Roof", options.path("plan").get(2).path("name").asText());
+            assertEquals(List.of("Basement", "Roof"),
+                    dmmt.service.JsonMappers.create().convertValue(options.path("levelNames"),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { }));
+        }
+
+    private static dmmt.remote.RemoteMapCatalog.Listing remoteListing() {
+        var root = java.util.UUID.randomUUID();
+        var folder = java.util.UUID.randomUUID();
+        var tower = java.util.UUID.randomUUID();
+        return new dmmt.remote.RemoteMapCatalog.Listing(List.of(
+                new dmmt.remote.RemoteMapCatalog.Node(root, null, "Host library", dmmt.remote.RemoteMapCatalog.Kind.FOLDER),
+                new dmmt.remote.RemoteMapCatalog.Node(folder, root, "Host folder", dmmt.remote.RemoteMapCatalog.Kind.FOLDER),
+                new dmmt.remote.RemoteMapCatalog.Node(tower, folder, "Host tower", dmmt.remote.RemoteMapCatalog.Kind.MULTILEVEL),
+                new dmmt.remote.RemoteMapCatalog.Node(java.util.UUID.randomUUID(), root, "Host meadow", dmmt.remote.RemoteMapCatalog.Kind.MAP)),
+                tower, "Host tower", java.util.UUID.randomUUID(), null);
+    }
+
+    @Test void remoteLevelMetadataNotifiesSelectorAndOpenLevelUsesGuardedHostCommand() throws Exception {
+        var fixture = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var mapper = dmmt.service.JsonMappers.create();
+        var root = java.util.UUID.randomUUID();
+        var map = java.util.UUID.randomUUID();
+        var context = java.util.UUID.randomUUID();
+        var notifications = new java.util.concurrent.atomic.AtomicInteger();
+        var sent = new java.util.concurrent.atomic.AtomicReference<com.fasterxml.jackson.databind.JsonNode>();
+        var listing = new dmmt.remote.RemoteMaps.Listing(context, 9, List.of(
+                new dmmt.remote.RemoteMaps.Node(root, null, "Library", dmmt.remote.RemoteMapCatalog.Kind.FOLDER, List.of(), 0, 1),
+                new dmmt.remote.RemoteMaps.Node(map, root, "Tower", dmmt.remote.RemoteMapCatalog.Kind.MULTILEVEL, List.of(), 2, 1)),
+                map, "Tower", List.of(map));
+        var levels = mapper.createObjectNode().put("currentLevelId", "ground");
+        levels.putArray("levels").addObject().put("id", "ground").put("name", "Ground");
+        levels.withArray("levels").addObject().put("id", "roof").put("name", "Roof");
+        dmmt.remote.RemoteOperations.Connection connection = new dmmt.remote.RemoteOperations.Connection() {
+            public boolean connected() { return true; }
+            public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(String domain, String action, com.fasterxml.jackson.databind.JsonNode body) {
+                return CompletableFuture.completedFuture(action.equals("list") ? mapper.valueToTree(listing)
+                        : action.equals("levels") ? levels : com.fasterxml.jackson.databind.node.NullNode.getInstance());
+            }
+            public CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(String domain, String action, com.fasterxml.jackson.databind.JsonNode body) {
+                assertEquals("openLevel", action);
+                sent.set(body);
+                return CompletableFuture.completedFuture(com.fasterxml.jackson.databind.node.NullNode.getInstance());
+            }
+            public CompletableFuture<dmmt.remote.RemoteAssetStore.AssetDescriptor> upload(Path file) { throw new AssertionError(); }
+            public CompletableFuture<Path> download(dmmt.remote.RemoteAssetStore.AssetDescriptor asset) { throw new AssertionError(); }
+        };
+        onFx(() -> {
+            var f = new Fixture();
+            fixture.set(f);
+            f.browser.setRemoteLevelsChanged(notifications::incrementAndGet);
+            f.browser.beginRemote(connection);
+        });
+        onFx(() -> {
+            var browser = fixture.get().browser;
+            assertEquals(List.of("Ground", "Roof"), browser.remoteLevels().stream().map(dmmt.remote.RemoteMaps.Level::name).toList());
+            assertEquals("ground", browser.remoteCurrentLevelId());
+            assertEquals(1, notifications.get());
+            browser.remoteOpenLevel("roof");
+            assertEquals("roof", sent.get().path("options").path("id").asText());
+            assertEquals(map.toString(), sent.get().path("entries").get(0).asText());
+            assertEquals(9, sent.get().path("revision").asInt());
+            browser.remoteOpenLevel("missing");
+        });
+        onFx(() -> {
+            assertEquals(1, notifications.get(), "Unchanged accepted metadata must not rebuild the selector.");
+            fixture.get().browser.endRemote();
+            assertTrue(fixture.get().browser.remoteLevels().isEmpty());
+        });
+    }
+
+    @Test
     void multipleMapsEnableOnlyTagAddDuplicateAndDeleteForEitherMapKind() throws Exception {
         onFx(() -> {
             Fixture fixture = new Fixture();
@@ -573,7 +1103,22 @@ class MapBrowserTest {
         }
     }
 
+    @Test void remotePartialImportReportIncludesAcceptedCountsAndEveryFailure() {
+        var mapper = dmmt.service.JsonMappers.create();
+        var report = mapper.createObjectNode().put("imported", 2).put("total", 4);
+        var failures = report.putArray("failures");
+        failures.addObject().put("source", "tower.dd2vtt").put("reason", "Invalid image");
+        failures.addObject().put("source", "cave.uvtt").put("reason", "Name already exists");
+        String message = MapBrowser.remoteImportFailures(report);
+        assertTrue(message.contains("Imported 2 of 4 maps on the host"));
+        assertTrue(message.contains("tower.dd2vtt: Invalid image"));
+        assertTrue(message.contains("cave.uvtt: Name already exists"));
+        assertNull(MapBrowser.remoteImportFailures(mapper.createObjectNode().put("imported", 4).put("total", 4)));
+        assertNull(MapBrowser.remoteImportFailures(com.fasterxml.jackson.databind.node.NullNode.getInstance()));
+    }
+
     private static final class RecordingLibrary extends MapLibraryService {
+        boolean forbidLocalScan;
         final List<Entry> copied = new ArrayList<>();
         final List<Entry> deleted = new ArrayList<>();
 
@@ -583,6 +1128,7 @@ class MapBrowserTest {
 
         @Override
         public Entry scan() {
+            assertFalse(forbidLocalScan, "Remote browser must not scan the local library.");
             Path ordinary = getRoot().resolve("Ordinary");
             Path multilevel = getRoot().resolve("Multilevel");
             return new Entry(Kind.FOLDER, "Library", getRoot(), null, List.of(

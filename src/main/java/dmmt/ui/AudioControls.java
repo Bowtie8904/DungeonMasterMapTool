@@ -64,6 +64,9 @@ public final class AudioControls {
     private long lastTickNanos;
     private long lastReadoutNanos;
     private volatile boolean preparationStopped;
+    private dmmt.remote.RemoteAudio.Client remote;
+    private long remoteCatalogRevision = -2;
+    private java.util.function.Consumer<String> remoteStatus = ignored -> { };
     private final Runnable preparationChanged = () -> javafx.application.Platform.runLater(() -> {
         if (!preparationStopped) {
             refreshLibraryChoices();
@@ -72,6 +75,15 @@ public final class AudioControls {
 
     public AudioControls(AppSettings settings, Supplier<Window> owner) {
         this(settings, owner, new AudioLibraryService(resolveFolder()), new JavaFxAudioOutput());
+    }
+
+    /** Creates controls without reading, maintaining or playing this machine's disabled local audio library. */
+    public static AudioControls remoteReplica(AppSettings settings, Supplier<Window> owner,
+                                              dmmt.remote.RemoteOperations.Connection connection) {
+        AudioControls controls = new AudioControls(settings, owner, AudioLibraryService.remoteReplica(resolveFolder()),
+                (file, loop) -> { throw new IllegalStateException("Remote audio cannot play on B."); });
+        controls.beginRemote(connection);
+        return controls;
     }
 
     AudioControls(AppSettings settings, Supplier<Window> owner, AudioLibraryService library,
@@ -112,6 +124,55 @@ public final class AudioControls {
 
     public AudioOverlay overlay() {
         return overlay;
+    }
+
+    public void setRemoteStatusHandler(java.util.function.Consumer<String> handler) {
+        remoteStatus = handler == null ? ignored -> { } : handler;
+    }
+
+    /** Switches the existing controls to an accepted host replica, disposing every local playback voice first. */
+    public void beginRemote(dmmt.remote.RemoteOperations.Connection connection) {
+        if (remote != null) throw new IllegalStateException("Audio is already remote.");
+        AudioLibraryWindow.closeOpen();
+        AudioCutWindow.closeOpen();
+        library.preparationQueue().removeListener(preparationChanged);
+        java.util.concurrent.Executor ownerThread = action -> {
+            if (javafx.application.Platform.isFxApplicationThread()) action.run();
+            else javafx.application.Platform.runLater(action);
+        };
+        remote = new dmmt.remote.RemoteAudio.Client(connection, library, engine,
+                dmmt.service.WorkScheduler.shared().executor(dmmt.service.WorkScheduler.Kind.COPY), ownerThread,
+                () -> {
+                    if (remote != null && remoteCatalogRevision != remote.acceptedCatalogRevision()) {
+                        remoteCatalogRevision = remote.acceptedCatalogRevision();
+                        refreshLibraryChoices();
+                    } else refreshPlaybackState();
+                }, message -> remoteStatus.accept(message));
+        engine.beginRemote(remote);
+        library.beginRemote(remote);
+        library.preparationQueue().addListener(preparationChanged);
+        refreshLibraryChoices();
+        remote.tick();
+    }
+
+    /** Restores this machine's untouched library with transport deliberately stopped. */
+    public void endRemote() {
+        if (remote == null) return;
+        AudioLibraryWindow.closeOpen();
+        AudioCutWindow.closeOpen();
+        remote.close();
+        remote = null;
+        remoteCatalogRevision = -2;
+        library.preparationQueue().removeListener(preparationChanged);
+        library.endRemote();
+        engine.endRemote();
+        applySettings();
+        library.preparationQueue().addListener(preparationChanged);
+        refreshLibraryChoices();
+    }
+
+    public void tickRemote() {
+        if (remote != null) remote.tick();
     }
 
     /** The transport group for the right-hand side of the status bar. */
@@ -205,7 +266,7 @@ public final class AudioControls {
                     Button play = new Button();
                     play.setOnAction(event -> {
                         AudioTrack current = library.track(id).orElseThrow();
-                        settings.put("audio.lastCategory", current.getCategoryId());
+                        if (!engine.isRemote()) settings.put("audio.lastCategory", current.getCategoryId());
                         engine.playTrack(id);
                     });
                     return play;
@@ -243,7 +304,7 @@ public final class AudioControls {
                 if (engine.isCategoryActive(id)) {
                     engine.stopMusic();
                 } else {
-                    settings.put("audio.lastCategory", id);
+                    if (!engine.isRemote()) settings.put("audio.lastCategory", id);
                     engine.playCategory(id);
                 }
             });
@@ -283,6 +344,7 @@ public final class AudioControls {
 
     /** Pushes the current settings values into the engine; called at start-up and after settings changes. */
     public void applySettings() {
+        if (remote != null) return;
         engine.setVolumes(settings.getDouble("audio.masterVolume", 0.8),
                 settings.getDouble("audio.musicVolume", 0.7),
                 settings.getDouble("audio.effectsVolume", 0.6));
@@ -305,6 +367,7 @@ public final class AudioControls {
 
     /** Updates the status bar buttons and the overlay from the engine. */
     private void refreshPlaybackState() {
+        group.setDisable(remote != null && remote.state() != null && !remote.state().enabled());
         syncing = true;
         try {
             boolean playing = engine.isMusicPlaying()
@@ -335,6 +398,11 @@ public final class AudioControls {
 
     /** Advances effect loops and music crossfades smoothly, keeping readouts and other playback on their slower cadence. */
     private void tick() {
+        if (remote != null) {
+            remote.tick();
+            overlay.refreshTime();
+            return;
+        }
         long now = System.nanoTime();
         double delta = lastTickNanos == 0 ? 0 : (now - lastTickNanos) / 1_000_000_000.0;
         double readoutInterval = 1.0 / Tuning.AUDIO_UPDATE_FPS.get();
@@ -363,6 +431,12 @@ public final class AudioControls {
 
     /** Stops playback and releases the media resources; called when the application closes. */
     public void shutdown() {
+        AudioLibraryWindow.closeOpen();
+        AudioCutWindow.closeOpen();
+        if (remote != null) {
+            remote.close();
+            remote = null;
+        }
         preparationStopped = true;
         library.preparationQueue().removeListener(preparationChanged);
         library.stopPreparation();

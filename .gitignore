@@ -44,3 +44,5 @@ dmmt-settings.ini
 /dmmap-audio/
 /dmmap-handouts/
 /dmmap-tokens/
+/remote-session/
+/.browser-validation/

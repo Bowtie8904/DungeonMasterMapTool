@@ -8,6 +8,24 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import dmmt.model.MultiLevelManifest;
+import dmmt.remote.RemoteAssetStore;
+import dmmt.remote.RemoteProjectChanges;
+import dmmt.remote.RemoteWorkspaceAuthority;
+import dmmt.remote.RemoteWorkspaceHost;
+import dmmt.remote.RemoteWorkspaceReplica;
+import dmmt.remote.RemoteSettingsLink;
+import dmmt.remote.RemoteProjectDocument;
+import dmmt.remote.RemoteHostingController;
+import dmmt.remote.RemoteConnectionController;
+import dmmt.remote.RemoteSessionStorage;
+import dmmt.remote.RemotePlayerSession;
+import dmmt.remote.RemotePlayerLink;
+import dmmt.remote.RemoteHandoutSession;
+import dmmt.remote.RemoteHandoutLink;
+import dmmt.remote.RemoteSaves;
+import dmmt.remote.RemoteSaveLink;
+import dmmt.remote.RemoteHandouts;
+import dmmt.ui.RemoteSessionPanel;
 import dmmt.render.CanvasMapRenderer;
 import dmmt.render.FrameProfiler;
 import dmmt.render.HistoryFeedback;
@@ -65,6 +83,7 @@ import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
@@ -173,6 +192,54 @@ public class DungeonMasterMapToolApplication extends Application {
     private LocalApiServer localApiServer;
     private DmControlApi controlApi;
     private boolean apiActionRunning;
+    private RemoteWorkspaceHost remoteWorkspaceHost;
+    private RemoteWorkspaceReplica remoteWorkspaceReplica;
+    private dmmt.remote.RemoteOperationLink remoteOperationLink;
+    private dmmt.remote.RemoteMaps remoteMapsHost;
+    private HBox applicationStatusBar;
+    private HBox audioStatusSection;
+    private boolean remoteOnlyAudioControls;
+    private record QueuedMapOperation(String action, com.fasterxml.jackson.databind.JsonNode payload,
+                                      UUID context, java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> result) { }
+    private QueuedMapOperation queuedMapOperation;
+    private boolean preparingRemoteMapOperation;
+    private String remoteLevelStamp;
+    private RemoteSettingsLink remoteSettingsLink;
+    private RemotePlayerLink remotePlayerLink;
+    private RemotePlayerSession remotePlayerHost;
+    private ToggleButton scaleTestToggle;
+    private final java.util.ArrayList<CanvasMapRenderer.LaserPoint> remoteLaserTrail = new java.util.ArrayList<>();
+    private boolean remoteLaserActive;
+    private long remoteLaserReceivedMillis;
+    private UUID remotePointerContext;
+    private LocalWorkspace retainedLocalWorkspace;
+    private UUID remoteDisplayedContext;
+    private boolean applyingReplica;
+    private String remoteEditLabel;
+    private Button undoButton;
+    private Button redoButton;
+    private RemoteWorkspaceAuthority.History displayedRemoteHistory;
+    private ToggleButton sessionToggle;
+    private RemoteSessionPanel sessionPanel;
+    private ScrollPane sessionScroll;
+    private dmmt.ui.RemoteBusyDialog remoteBusyDialog;
+    private dmmt.ui.RemoteTransferOverlay remoteTransferOverlay;
+    private Runnable remoteMapBusyEnd;
+    private long remoteMapBusyDeadline;
+    private boolean sessionWasActive;
+    private UUID displayedRemoteApproval;
+    private RemoteSessionStorage remoteSessionStorage;
+    private RemoteHostingController remoteHostingController;
+    private RemoteConnectionController remoteConnectionController;
+    private java.util.concurrent.ExecutorService remoteSessionWorker;
+    private DmProject remoteTransitionProject;
+    private long remoteTransitionVersion;
+    private String remoteTransitionFingerprint;
+    private boolean remoteCommitPending;
+    private boolean remoteCommitScheduled;
+    private boolean applyingRemoteWorkspace;
+    private boolean remoteControlsPending;
+    private RemoteViewStamp remoteViewStamp;
     private volatile Path apiStateMapFile;
     private volatile String apiStateMapId = "";
     private final Map<String, javafx.scene.Node> extraApiControls = new java.util.LinkedHashMap<>();
@@ -243,6 +310,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private MapLibraryService mapLibrary;
     private MapBrowser mapBrowser;
     private dmmt.ui.TokenBrowser tokenBrowser;
+    private ToggleButton sidebarToggle;
     private VBox librarySidebar;
     private ToggleButton tokenBrowserToggle;
     private ToggleButton mapBrowserToggle;
@@ -280,6 +348,13 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean showPlayerGrid = preferences.getBoolean(PREF_PLAYER_SHOW_GRID, false);
     private boolean showScaleTestSquare;
     private HandoutWindow handoutWindow;
+    private HandoutWindow retainedLocalHandoutWindow;
+    private RemoteHandoutSession remoteHandoutHost;
+    private RemoteHandoutLink remoteHandoutLink;
+    private RemoteSaveLink remoteSaveLink;
+    private boolean remoteSaveQueued;
+    private java.util.UUID remoteSaveContext;
+    private dmmt.remote.RemoteHandoutLibrary remoteHandoutLibrary;
     private DmProject.WallSegment draftWall;
     /** One-tile door/window suggested on the wall under the cursor when the current portal stroke was pressed. */
     private PortalSuggestion pressedPortalSuggestion;
@@ -543,6 +618,8 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setMargin(levelSwitcher, new Insets(10));
         center.getChildren().addAll(chip, imageUnlockBanner, levelSwitcher, controls);
         center.getChildren().add(createBrushSizeLabel());
+        remoteTransferOverlay = new dmmt.ui.RemoteTransferOverlay();
+        center.getChildren().add(remoteTransferOverlay);
         if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
             center.getChildren().add(audioControls.overlayLayer());
         }
@@ -571,7 +648,7 @@ public class DungeonMasterMapToolApplication extends Application {
         statusLabel.getStyleClass().add("status-message");
         statusTooltip = Icons.tooltip("Current application activity");
         statusLabel.setTooltip(statusTooltip);
-        ToggleButton sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map and token libraries");
+        sidebarToggle = Icons.toggle(MaterialDesignD.DOCK_LEFT, "Show / hide the map and token libraries");
         sidebarToggle.setSelected(preferences.getBoolean(PREF_SIDEBAR_VISIBLE, true));
         sidebarToggle.selectedProperty().addListener((obs, was, visible) -> {
             root.setLeft(visible ? librarySidebar : null);
@@ -652,9 +729,11 @@ public class DungeonMasterMapToolApplication extends Application {
         applyApiUrlOptionVisibility();
         HBox statusBar = new HBox(sidebarToggle, performanceToggle, diagnosticsToggle, settingsButton, activityHeading,
                 statusLabel, playerOutputLabel);
+        applicationStatusBar = statusBar;
         HBox.setHgrow(statusLabel, Priority.ALWAYS);
         if (audioControls != null && Tuning.AUDIO_ENABLED.get()) {
             HBox audioStatus = new HBox(audioControls.statusBarGroup());
+            audioStatusSection = audioStatus;
             audioStatus.getStyleClass().add("status-audio-section");
             statusBar.getChildren().add(audioStatus);
             registerAudioApiControls();
@@ -763,6 +842,11 @@ public class DungeonMasterMapToolApplication extends Application {
         stage.setScene(scene);
         stage.getIcons().setAll(appIcons());
         stage.setOnCloseRequest(event -> {
+            event.consume();
+            if (stopping) {
+                return;
+            }
+            stopping = true;
             saveOnExit();
             if (diagnosticsPopup != null) {
                 diagnosticsPopup.hide();
@@ -774,7 +858,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 audioControls.shutdown();
             }
             closePlayerWindow();
-            Platform.exit();
+            stopRemoteSessions().whenComplete((unused, failure) -> Platform.runLater(() -> {
+                if (failure != null) {
+                    System.getLogger(getClass().getName()).log(System.Logger.Level.WARNING,
+                            "Remote session cleanup failed while closing the application.", failure);
+                }
+                Platform.exit();
+            }));
         });
         updateWindowTitle();
         stage.show();
@@ -792,9 +882,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 applyPlayerGridSetting();
                 syncWeatherIndoorsToggle();
                 applyApiUrlOptionVisibility();
-                if (audioControls != null) {
-                    audioControls.applySettings();
-                }
+                synchronizeAudioControls();
                 status("Settings reloaded from " + preferences.getFile().getFileName()
                         + " (entries marked 'Restart required' apply after a restart)");
                 applyLocalApiSettings();
@@ -827,9 +915,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 lastFrameNanos = now;
                 long frameStart = System.nanoTime();
                 long section = FrameProfiler.start();
-                lightingEngine.update(project);
+                updateWorkspaceLighting();
                 applyPlayerScale();
                 updatePlayerViewportDrag(now);
+                remoteFrameBoundary();
                 if (frozenPlayerProject != null) {
                     playerLightingEngine.update(frozenPlayerProject);
                 }
@@ -846,7 +935,7 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean animated = hasAnimation(project)
                 || (frozenPlayerProject != null && hasAnimation(frozenPlayerProject));
         boolean recentInput = now - lastInputNanos < Tuning.RECENT_INPUT_MS.get() * 1_000_000L
-                || laserActive || laserToolActive || !laserTrail.isEmpty()
+                || laserActive || laserToolActive || !laserTrail.isEmpty() || !remoteLaserTrail.isEmpty()
                 || fogFading || historyFeedback.active(now) || viewportScrolling;
         return PerformanceMode.isEnabled()
                 ? recentInput ? Math.min(PerformanceMode.interactionFps(), targetFps)
@@ -855,6 +944,23 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void recordInteractionInput(javafx.scene.input.InputEvent event) {
+        boolean editInput = event instanceof javafx.scene.input.MouseEvent mouse
+                && (mouse.getButton() == javafx.scene.input.MouseButton.PRIMARY || mouse.isPrimaryButtonDown())
+                || event instanceof javafx.scene.input.KeyEvent key
+                && key.getEventType() == javafx.scene.input.KeyEvent.KEY_PRESSED && key.getCode() != KeyCode.ESCAPE
+                || event instanceof javafx.scene.input.DragEvent;
+        if (remoteWorkspaceReplica != null && !remoteEditsReady() && editInput) {
+            if (!isRemoteLifecycleControl(event.getTarget())) {
+                if (event instanceof javafx.scene.input.MouseEvent mouse
+                        && mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_PRESSED
+                        || event instanceof javafx.scene.input.KeyEvent key
+                        && key.getEventType() == javafx.scene.input.KeyEvent.KEY_PRESSED) {
+                    status("Remote editing is paused: " + remoteWorkspaceReplica.status());
+                }
+                event.consume();
+                return;
+            }
+        }
         if (event instanceof javafx.scene.input.MouseEvent mouse
                 && !mouse.isPrimaryButtonDown() && !mouse.isSecondaryButtonDown() && !mouse.isMiddleButtonDown()
                 && (mouse.getEventType() == javafx.scene.input.MouseEvent.MOUSE_MOVED
@@ -944,9 +1050,10 @@ public class DungeonMasterMapToolApplication extends Application {
         wallLayerToggle.setOnAction(e -> setWallLayerVisible(wallLayerToggle.isSelected()));
         Region toolSpacer = new Region();
         HBox.setHgrow(toolSpacer, Priority.ALWAYS);
+        undoButton = Icons.button(MaterialDesignU.UNDO, "Undo (Ctrl+Z)", this::undo);
+        redoButton = Icons.button(MaterialDesignR.REDO, "Redo (Ctrl+Y)", this::redo);
         HBox toolsRow = row(toolButtons.get(EditorTool.SELECT), pingToggle, laserToggle, toolSpacer,
-                Icons.button(MaterialDesignU.UNDO, "Undo (Ctrl+Z)", this::undo),
-                Icons.button(MaterialDesignR.REDO, "Redo (Ctrl+Y)", this::redo));
+                undoButton, redoButton);
 
         // Fog of war
         fogToggleButton = Icons.toggle(MaterialDesignW.WEATHER_FOG,
@@ -1334,8 +1441,14 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         ToggleButton scaleTest = Icons.toggle(MaterialDesignR.RULER_SQUARE,
                 "Show a 1-inch test square on the player screen to check the scale");
+        scaleTestToggle = scaleTest;
         scaleTest.setOnAction(e -> {
+            if (remoteWorkspaceReplica != null) {
+                controlRemotePlayer(RemotePlayerSession.Action.SCALE_TEST, scaleTest.isSelected(), 0);
+                return;
+            }
             showScaleTestSquare = scaleTest.isSelected();
+            if (remotePlayerHost != null) remotePlayerHost.outputChanged();
             status(showScaleTestSquare
                     ? "A 1-inch square is shown on the player screen. If it does not measure 1 inch, correct the screen size."
                     : "Test square hidden.");
@@ -1375,6 +1488,7 @@ public class DungeonMasterMapToolApplication extends Application {
         Icons.tooltip(playerScreenSelector, "Screen used for the player window");
         refreshPlayerScreenSelector();
         playerScreenSelector.setOnAction(e -> {
+            if (syncingControls) return;
             rememberSelectedPlayerScreenIndex();
             if (screenInchesSpinner != null) {
                 syncingControls = true;
@@ -1399,7 +1513,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 preferences.getDouble(PREF_TILE_INCHES, 1.0), 0.05, 84);
         Icons.tooltip(tileInchesSpinner, "Size of one map tile on the player screen in inches");
         tileInchesSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
-            if (newValue != null) {
+            if (!syncingControls && newValue != null) {
                 preferences.putDouble(PREF_TILE_INCHES, newValue);
             }
         });
@@ -1570,7 +1684,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void applyLocalApiSettings() {
-        if (!Tuning.API_ENABLED.get()) {
+        if (retainedLocalWorkspace != null || !Tuning.API_ENABLED.get()) {
             if (localApiServer != null) {
                 LocalApiServer previous = localApiServer;
                 localApiServer = null;
@@ -1602,6 +1716,15 @@ public class DungeonMasterMapToolApplication extends Application {
     @Override
     public void stop() {
         stopping = true;
+        if (sessionPanel != null) {
+            sessionPanel.dispose();
+        }
+        stopRemoteSessions();
+        endRemoteReplica();
+        endRemoteWorkspace();
+        if (remoteSessionWorker != null) {
+            remoteSessionWorker.shutdown();
+        }
         prefetchGeneration++;
         cancelImageAdds();
         if (adjacentPrefetch != null) {
@@ -1790,7 +1913,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void ensureApiCanAct() {
-        if (ioBusy || apiActionRunning || canvasMouseDown || fogDragging) {
+        if (remoteWorkspaceReplica != null || ioBusy || apiActionRunning || canvasMouseDown || fogDragging) {
             throw new LocalApiServer.ApiException(409, "A DM operation is in progress.");
         }
         boolean modalDialog = javafx.stage.Window.getWindows().stream()
@@ -1808,10 +1931,11 @@ public class DungeonMasterMapToolApplication extends Application {
             syncWeatherIndoorsToggle();
             applyApiUrlOptionVisibility();
             applyLocalApiSettings();
-            if (audioControls != null) {
-                audioControls.applySettings();
-            }
-        });
+            synchronizeAudioControls();
+        }, query -> remoteConnectionController == null
+                ? java.util.concurrent.CompletableFuture.failedFuture(
+                        new java.io.IOException("No connected host is available for folder browsing."))
+                : remoteConnectionController.directories(query));
     }
 
     private void applyApiUrlOptionVisibility() {
@@ -1845,7 +1969,9 @@ public class DungeonMasterMapToolApplication extends Application {
      * category and per sound effect; called again whenever the library changed (3.35.6).
      */
     private void registerAudioApiControls() {
-        if (controlApi == null || audioControls == null || !Tuning.AUDIO_ENABLED.get()) {
+        if (controlApi == null) return;
+        if (audioControls == null || !Tuning.AUDIO_ENABLED.get()) {
+            controlApi.replaceGroup("audio", Map.of());
             return;
         }
         controlApi.replaceGroup("audio", audioControls.apiControls());
@@ -1860,6 +1986,13 @@ public class DungeonMasterMapToolApplication extends Application {
             tokenBrowserToggle.setVisible(visible);
             tokenBrowserToggle.setManaged(visible);
             if (!visible) mapBrowserToggle.setSelected(true);
+        }
+        if (sessionToggle != null) {
+            boolean active = remoteSessionActive();
+            boolean visible = active || !hidden.contains("session") && !preferences.hiddenControls().contains("session.browser");
+            sessionToggle.setVisible(visible);
+            sessionToggle.setManaged(visible);
+            if (!visible && sessionToggle.isSelected()) mapBrowserToggle.setSelected(true);
         }
         dmSections.forEach((id, section) -> {
             boolean show = !hidden.contains(id);
@@ -2573,24 +2706,52 @@ public class DungeonMasterMapToolApplication extends Application {
         mapBrowserToggle.setGraphic(Icons.icon(MaterialDesignM.MAP_OUTLINE));
         tokenBrowserToggle = new ToggleButton("Tokens");
         tokenBrowserToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignA.ACCOUNT_CIRCLE_OUTLINE));
+        sessionToggle = new ToggleButton("Session");
+        sessionToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignL.LAN_CONNECT));
+        sessionToggle.getProperties().put("remote.lifecycle", true);
+        sessionPanel = new RemoteSessionPanel(new RemoteSessionPanel.Actions() {
+            @Override public RemoteHostingController host() { return remoteHostingController; }
+            @Override public RemoteConnectionController client() { return remoteConnectionController; }
+            @Override public java.util.concurrent.CompletableFuture<RemoteHostingController.Details> start(
+                    RemoteHostingController.Configuration configuration) {
+                return startRemoteHosting(configuration);
+            }
+            @Override public void connect(RemoteConnectionController.Configuration configuration, String code) {
+                connectRemoteSession(configuration, code);
+            }
+            @Override public void disconnect() { disconnectRemoteSession(); }
+        }, defaultRemoteSessionStorage(), remoteSessionWorker());
+        sessionScroll = new ScrollPane(sessionPanel);
+        sessionScroll.setFitToWidth(true);
+        sessionScroll.getStyleClass().add("session-scroll");
+        sessionScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         ToggleGroup libraryTabs = new ToggleGroup();
         mapBrowserToggle.setToggleGroup(libraryTabs);
         tokenBrowserToggle.setToggleGroup(libraryTabs);
+        sessionToggle.setToggleGroup(libraryTabs);
         mapBrowserToggle.setSelected(true);
-        HBox tabs = new HBox(mapBrowserToggle, tokenBrowserToggle);
+        HBox tabs = new HBox(mapBrowserToggle, tokenBrowserToggle, sessionToggle);
+        for (ToggleButton tab : List.of(mapBrowserToggle, tokenBrowserToggle, sessionToggle)) {
+            tab.setMaxWidth(Double.MAX_VALUE);
+            tab.setMinWidth(Region.USE_PREF_SIZE);
+            HBox.setHgrow(tab, Priority.ALWAYS);
+        }
         tabs.getStyleClass().add("library-tabs");
         librarySidebar = new VBox(tabs, mapBrowser);
-        librarySidebar.setPrefWidth(270);
+        librarySidebar.setPrefWidth(290);
         VBox.setVgrow(mapBrowser, Priority.ALWAYS);
         VBox.setVgrow(tokenBrowser, Priority.ALWAYS);
+        VBox.setVgrow(sessionScroll, Priority.ALWAYS);
         libraryTabs.selectedToggleProperty().addListener((obs, was, selected) -> {
             if (selected == null) {
                 libraryTabs.selectToggle(mapBrowserToggle);
                 return;
             }
-            librarySidebar.getChildren().set(1, selected == tokenBrowserToggle ? tokenBrowser : mapBrowser);
+            librarySidebar.getChildren().set(1, selected == tokenBrowserToggle ? tokenBrowser
+                    : selected == sessionToggle ? sessionScroll : mapBrowser);
         });
         dmControlVisibility.register("tokens.browser", tokenBrowserToggle);
+        dmControlVisibility.register("session.browser", sessionToggle);
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         applySectionVisibility();
         return librarySidebar;
@@ -2792,7 +2953,7 @@ public class DungeonMasterMapToolApplication extends Application {
             Dragboard board = event.getDragboard();
             boolean success = false;
             if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)) {
-                DmProject.TokenDefinition definition = tokenBrowser.find((String) board.getContent(dmmt.ui.TokenBrowser.TOKEN));
+                DmProject.TokenDefinition definition = tokenBrowser.resolveDefinition((String) board.getContent(dmmt.ui.TokenBrowser.TOKEN));
                 if (definition != null) {
                     var world = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(),
                             dmCanvas.getHeight(), project.getViews().getDmCamera());
@@ -3604,6 +3765,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void openPlayerWindow() {
+        if (remoteWorkspaceReplica != null) {
+            controlRemotePlayer(RemotePlayerSession.Action.WINDOW, true, 0);
+            return;
+        }
         refreshPlayerScreenSelector();
         if (playerStage != null) {
             playerStage.toFront();
@@ -3672,6 +3837,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerAmbientCanvas = null;
             playerFogMaskCanvas = null;
             playerFogCanvas = null;
+            if (remotePlayerHost != null) remotePlayerHost.outputChanged();
             syncPlayerWindowToggle();
             updatePlayerOutputStatus();
         });
@@ -3683,6 +3849,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerStage.setWidth(bounds.getWidth());
         playerStage.setHeight(bounds.getHeight());
         playerStage.show();
+        if (remotePlayerHost != null) remotePlayerHost.outputChanged();
         boolean windowsIntegrationReady = WindowsPlayerWindow.configure(playerStage);
         syncPlayerWindowToggle();
         updatePlayerOutputStatus();
@@ -3691,25 +3858,54 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void openHandoutWindow(Stage owner) {
-        if (handoutWindow == null) {
-            handoutWindow = new HandoutWindow(owner, appIcons(), () -> playerStage != null,
-                    () -> lastInputNanos = System.nanoTime(), () -> lastInputNanos = System.nanoTime(),
-                    RecentHandouts.openDefault());
+        if (remoteHandoutLibrary != null && remoteHandoutLibrary.store() == null) {
+            status("Preparing host recent handouts; open the board again when preparation finishes.");
+            return;
         }
+        ensureHandoutWindow(owner);
+        if (remoteHandoutLink != null) remoteHandoutLink.retryDownload();
         handoutWindow.show();
+    }
+
+    private void ensureHandoutWindow(Stage owner) {
+        if (handoutWindow == null) {
+            handoutWindow = new HandoutWindow(owner, appIcons(), this::playerOutputVisible,
+                    this::handoutsChanged, this::handoutsChanged,
+                    remoteWorkspaceReplica != null ? null : remoteHandoutLibrary != null
+                            ? remoteHandoutLibrary.store() : RecentHandouts.open(preferences.getFile()));
+            if (remoteWorkspaceReplica != null) {
+                handoutWindow.remoteStatus(true, "Loading host handouts...");
+                handoutWindow.remoteFilePaste(files -> remoteHandoutLink.pasteFiles(
+                        files.stream().map(java.io.File::toPath).toList()));
+                handoutWindow.remoteRecents(id -> remoteHandoutLink.recent(RemoteHandouts.Operation.ADD_RECENT, id),
+                        id -> remoteHandoutLink.recent(RemoteHandouts.Operation.REMOVE_RECENT, id));
+            }
+        }
+    }
+
+    private void handoutsChanged() {
+        lastInputNanos = System.nanoTime();
+        if (remoteHandoutHost != null) remoteHandoutHost.changed();
+        if (remoteHandoutLink != null && !handoutWindow.isRemoteReadOnly()) remoteHandoutLink.changed(handoutWindow.snapshot());
     }
 
     private void syncPlayerWindowToggle() {
         if (handoutWindow != null) {
-            handoutWindow.playerWindowChanged();
+            if (remoteHandoutLink == null) handoutWindow.playerWindowChanged();
+            else handoutWindow.refreshPlayerAvailability();
         }
         if (playerWindowToggle != null) {
-            playerWindowToggle.setSelected(playerStage != null);
+            playerWindowToggle.setSelected(playerOutputVisible());
         }
         updatePlayerOutputStatus();
     }
 
     private void closePlayerWindow() {
+        if (remoteWorkspaceReplica != null && !stopping) {
+            finishPlayerViewportDrag();
+            controlRemotePlayer(RemotePlayerSession.Action.WINDOW, false, 0);
+            return;
+        }
         finishPlayerViewportDrag();
         if (playerStage != null) {
             playerStage.close();
@@ -3725,6 +3921,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerAmbientCanvas = null;
             playerFogMaskCanvas = null;
             playerFogCanvas = null;
+            if (remotePlayerHost != null) remotePlayerHost.outputChanged();
         }
         syncPlayerWindowToggle();
     }
@@ -3733,9 +3930,89 @@ public class DungeonMasterMapToolApplication extends Application {
         laserTrail.add(new CanvasMapRenderer.LaserPoint(worldX, worldY, System.currentTimeMillis()));
     }
 
+    private RemotePlayerSession.Output remotePlayerOutput() {
+        return remotePlayerLink == null || remotePlayerLink.state() == null
+                || !java.util.Objects.equals(remoteDisplayedContext, remotePlayerLink.state().contextId())
+                ? null : remotePlayerLink.state().output();
+    }
+
+    private boolean playerOutputVisible() {
+        return remoteWorkspaceReplica == null ? playerStage != null
+                : remotePlayerOutput() != null && remotePlayerOutput().visible();
+    }
+
+    private void controlRemotePlayer(RemotePlayerSession.Action action, boolean enabled, int screenIndex) {
+        if (remotePlayerLink == null) status("The host player-output controls are not available yet.");
+        else remotePlayerLink.control(action, enabled, screenIndex);
+        syncPlayerWindowToggle();
+        if (scaleTestToggle != null) scaleTestToggle.setSelected(
+                remotePlayerOutput() != null && remotePlayerOutput().scaleTest());
+        refreshPlayerScreenSelector();
+    }
+
+    private void displayRemotePlayer(RemotePlayerSession.State state) {
+        showScaleTestSquare = state.output().scaleTest();
+        syncPlayerWindowToggle();
+        refreshPlayerScreenSelector();
+        if (scaleTestToggle != null) scaleTestToggle.setSelected(showScaleTestSquare);
+        if (screenInchesSpinner != null) {
+            boolean wasSyncing = syncingControls;
+            syncingControls = true;
+            try {
+                screenInchesSpinner.getValueFactory().setValue(loadScreenDiagonal());
+            } finally {
+                syncingControls = wasSyncing;
+            }
+        }
+    }
+
+    private RemotePlayerSession.Output capturePlayerOutput() {
+        var screens = Screen.getScreens();
+        var monitors = screens.stream().map(screen -> {
+            var bounds = screen.getBounds();
+            String label = "Screen " + (screens.indexOf(screen) + 1) + " (" + (int) bounds.getWidth()
+                    + "x" + (int) bounds.getHeight() + " at " + (int) bounds.getMinX() + "," + (int) bounds.getMinY() + ")";
+            return new RemotePlayerSession.Monitor(label, bounds.getWidth(), bounds.getHeight(),
+                    screen.getOutputScaleX(), screen.getOutputScaleY(), screen.getDpi());
+        }).toList();
+        return new RemotePlayerSession.Output(playerStage != null, showScaleTestSquare,
+                playerCanvas == null ? 0 : playerCanvas.getWidth(), playerCanvas == null ? 0 : playerCanvas.getHeight(),
+                Math.clamp(selectedScreenIndex(), 0, monitors.size() - 1), monitors);
+    }
+
+    private RemotePlayerSession.Point localLaserPoint() {
+        if (!(laserActive || laserToolActive) || !hoverInsideCanvas || laserTrail.isEmpty()) return null;
+        var point = laserTrail.getLast();
+        return new RemotePlayerSession.Point(point.x(), point.y());
+    }
+
+    private void receiveRemotePointer(RemotePlayerSession.Pointer pointer) {
+        long now = System.currentTimeMillis();
+        if (!java.util.Objects.equals(remotePointerContext, pointer.contextId())) remoteLaserTrail.clear();
+        remotePointerContext = pointer.contextId();
+        remoteLaserActive = pointer.laser() != null;
+        remoteLaserReceivedMillis = now;
+        if (pointer.contextId() == null) remoteLaserTrail.clear();
+        if (pointer.laser() != null) {
+            if (remoteLaserTrail.size() >= 256) remoteLaserTrail.removeFirst();
+            remoteLaserTrail.add(new CanvasMapRenderer.LaserPoint(pointer.laser().x(), pointer.laser().y(), now));
+        }
+        for (var ping : pointer.pings()) {
+            if (project.getActivePings().size() >= 256) project.getActivePings().removeFirst();
+            project.getActivePings().add(DmProject.PingEvent.builder().x(ping.point().x()).y(ping.point().y())
+                    .createdAtMillis(now).durationMillis(ping.remainingMillis()).build());
+        }
+        if (remoteLaserActive || !pointer.pings().isEmpty()) lastInputNanos = System.nanoTime();
+    }
+
     /** Drops expired trail points; while the button is held the newest point stays so the dot remains visible. */
     private void pruneLaserTrail() {
         long now = System.currentTimeMillis();
+        if (!remoteLaserTrail.isEmpty()) {
+            if (now - remoteLaserReceivedMillis > 500) remoteLaserActive = false;
+            var remoteHead = remoteLaserActive ? remoteLaserTrail.getLast() : null;
+            remoteLaserTrail.removeIf(p -> p != remoteHead && now - p.millis() > CanvasMapRenderer.laserTrailMillis());
+        }
         if ((laserActive || laserToolActive) && !laserTrail.isEmpty()) {
             CanvasMapRenderer.LaserPoint last = laserTrail.getLast();
             if (now - last.millis() > 50) {
@@ -3747,10 +4024,14 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void drawLaser(GraphicsContext gc, Canvas canvas, DmProject.CameraState camera, double dotRadius) {
-        if (laserTrail.isEmpty()) {
-            return;
+        if (!remoteLaserTrail.isEmpty()) {
+            renderer.drawLaser(gc, remoteLaserTrail, remoteLaserActive, dotRadius,
+                    canvas.getWidth(), canvas.getHeight(), camera);
         }
-        renderer.drawLaser(gc, laserTrail, laserActive || laserToolActive, dotRadius, canvas.getWidth(), canvas.getHeight(), camera);
+        if (!laserTrail.isEmpty()) {
+            renderer.drawLaser(gc, laserTrail, laserActive || laserToolActive, dotRadius,
+                    canvas.getWidth(), canvas.getHeight(), camera);
+        }
     }
 
     private void renderDm() {
@@ -3822,7 +4103,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
                 Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
         boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || rotatingToken || draftOverlay != null || draftWall != null
-                || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty()
+                || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty() || !remoteLaserTrail.isEmpty()
                 || !project.getActivePings().isEmpty() || historyFeedback.active(System.nanoTime());
         if (!dynamic && key.equals(dmOverlayKey)) {
             return;
@@ -3911,7 +4192,8 @@ public class DungeonMasterMapToolApplication extends Application {
         FrameProfiler.lap("player fog", section);
         long pointerTime = System.currentTimeMillis();
         shown.getActivePings().removeIf(p -> pointerTime - p.getCreatedAtMillis() > p.getDurationMillis());
-        boolean pointers = showScaleTestSquare || (!frozen && !laserTrail.isEmpty()) || !shown.getActivePings().isEmpty();
+        boolean pointers = showScaleTestSquare || (!frozen && (!laserTrail.isEmpty() || !remoteLaserTrail.isEmpty()))
+                || !shown.getActivePings().isEmpty();
         if (pointers || playerFogCanvas.isVisible()) {
             playerView.renderFogOverlayLayer(
                     playerFogCanvas.getGraphicsContext2D(), shown,
@@ -4006,6 +4288,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleNewMap() {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteNewMap();
+            return;
+        }
         leaveCurrentMap(() -> {
             switchProject(freshProject(), null);
             status("New empty map. Drop images onto it to build it, then save with Ctrl+S.");
@@ -4013,6 +4299,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleNewMapIn(Path folder) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteNewMap();
+            return;
+        }
         String folderName = folder.equals(mapLibrary.getRoot()) ? "Library" : folder.getFileName().toString();
         Optional<String> name = Dialogs.askText(primaryStage, "New map", "Create an empty map in \"" + folderName + "\"",
                 MaterialDesignM.MAP_PLUS, "Create", "New map", text -> {
@@ -4041,6 +4331,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleExportMaps(List<MapLibraryService.Entry> maps) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteExportMaps();
+            return;
+        }
         if (maps.isEmpty()) {
             return;
         }
@@ -4072,6 +4366,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleImportDd2vtt(Path suggestedFolder) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteImportMaps();
+            return;
+        }
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Select maps to import");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Maps (Universal VTT, exported)",
@@ -4187,6 +4485,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleImportDd2vttFolder(Path suggestedFolder) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteImportFolder();
+            return;
+        }
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Select a folder with maps to import");
         applyInitialImportDirectory(chooser);
@@ -4288,11 +4590,136 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void handleSave() {
         finishNudge();
+        if (remoteWorkspaceReplica != null) {
+            commitTextEdit();
+            if (remoteSaveLink == null) {
+                status("The host save service is unavailable.");
+            } else if (remoteWorkspaceReplica.accepted() == null) {
+                status("Wait for the host map to synchronize before saving.");
+            } else if (remoteSaveQueued || remoteSaveLink.busy()) {
+                status("A host save is already pending; wait for its acknowledgement.");
+            } else {
+                remoteSaveQueued = true;
+                remoteSaveContext = remoteWorkspaceReplica.accepted().contextId();
+                status("Waiting for completed edits to be accepted before saving on host A.");
+                flushReplicaCommit();
+                flushRemoteSave();
+            }
+            return;
+        }
         if (projectFile == null) {
             saveNewMap(null);
         } else {
             saveCurrentThen(null);
         }
+    }
+
+    private void flushRemoteSave() {
+        if (!remoteSaveQueued || remoteSaveLink == null || !remoteEditsReady()
+                || remoteWorkspaceGestureInProgress() || remoteEditLabel != null) return;
+        remoteSaveQueued = false;
+        if (remoteSaveContext != null && !remoteSaveContext.equals(remoteWorkspaceReplica.accepted().contextId())) {
+            status("The host switched maps. The queued save was cancelled.");
+            return;
+        }
+        remoteSaveLink.save(remoteWorkspaceReplica.accepted(), this::chooseRemoteSaveDestination);
+    }
+
+    private RemoteSaveLink.Destination chooseRemoteSaveDestination(RemoteSaves.Target target) {
+        var dialog = new javafx.scene.control.Dialog<RemoteSaveLink.Destination>();
+        dialog.initOwner(primaryStage);
+        dialog.setTitle("Save map on host A");
+        var name = new TextField("New map");
+        name.setId("remote-save-name");
+        var folder = new TextField(target.libraryFolder());
+        folder.setId("remote-save-folder");
+        var browse = new Button("Browse host");
+        browse.setOnAction(event -> dmmt.ui.RemoteDirectoryWindow.show(dialog.getDialogPane().getScene().getWindow(),
+                query -> remoteConnectionController == null
+                        ? java.util.concurrent.CompletableFuture.failedFuture(new IOException("Host folder browsing is unavailable."))
+                        : remoteConnectionController.directories(query),
+                selected -> { if (dialog.isShowing()) folder.setText(selected); }));
+        dialog.getDialogPane().setContent(new VBox(10,
+                new Label("Name and destination in A's map library. Nothing is saved on this PC."),
+                new Label("Map name"), name, new Label("Host library folder"), new HBox(8, folder, browse)));
+        var save = new javafx.scene.control.ButtonType("Save on host", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(save, javafx.scene.control.ButtonType.CANCEL);
+        dialog.getDialogPane().lookupButton(save).disableProperty().bind(
+                name.textProperty().isEmpty().or(folder.textProperty().isEmpty()));
+        dialog.setResultConverter(button -> button == save
+                ? new RemoteSaveLink.Destination(name.getText().strip(), folder.getText().strip()) : null);
+        return dialog.showAndWait().orElse(null);
+    }
+
+    private java.util.concurrent.CompletableFuture<String> saveRemoteSnapshot(RemoteSaves.Request request) {
+        var completion = new java.util.concurrent.CompletableFuture<String>();
+        if (ioBusy || stopping || remoteWorkspaceReplica != null) {
+            return java.util.concurrent.CompletableFuture.failedFuture(new IOException("The host cannot start a save now."));
+        }
+        SaveTarget existing = currentSaveTarget();
+        DmProject savedProject = project;
+        long version = historyVersion;
+        DmProject snapshot;
+        try {
+            snapshot = projectService.copy(project);
+        } catch (IOException failure) {
+            status("Save failed: " + failure.getMessage());
+            return java.util.concurrent.CompletableFuture.failedFuture(failure);
+        }
+        var library = mapLibrary;
+        var service = projectService;
+        var originalLayerPaths = new java.util.HashMap<String, String>();
+        for (var layer : snapshot.getImageLayers()) originalLayerPaths.put(layer.getId(), layer.getPath());
+        String originalMapPath = snapshot.getMap() == null ? null : snapshot.getMap().getImagePath();
+        runInBackground("Saving remote request on host...", "Save failed: ", () -> {
+            SaveTarget destination = existing;
+            if (destination == null) {
+                Path folder = Path.of(request.folder());
+                if (!folder.isAbsolute() || !java.nio.file.Files.isDirectory(folder)) {
+                    throw new IOException("Choose an existing absolute host map-library folder.");
+                }
+                destination = new SaveTarget(library.newMapFile(folder, request.name()), null, null);
+            }
+            saveTo(destination, snapshot, library, service);
+            return destination;
+        }, saved -> {
+            try {
+                if (project == savedProject) {
+                    if (existing == null) projectFile = saved.file();
+                    for (var layer : snapshot.getImageLayers()) {
+                        var live = findLayerById(layer.getId());
+                        if (live != null && java.util.Objects.equals(live.getPath(), originalLayerPaths.get(layer.getId()))) {
+                            live.setPath(layer.getPath());
+                        }
+                    }
+                    if (project.getMap() != null && snapshot.getMap() != null
+                            && java.util.Objects.equals(project.getMap().getImagePath(), originalMapPath)) {
+                        project.getMap().setImagePath(snapshot.getMap().getImagePath());
+                    }
+                    requestRemoteWorkspaceCommit();
+                    markSaved(snapshot, version);
+                    updateWindowTitle();
+                }
+                if (mapBrowser != null) {
+                    if (existing == null) {
+                        mapBrowser.refresh();
+                        mapBrowser.select(saved.file());
+                    } else {
+                        mapBrowser.invalidateThumbnails();
+                    }
+                }
+                String message = "Saved " + saved.displayName() + " on host A."
+                        + (project == savedProject && historyVersion != version ? " Newer edits remain unsaved." : "");
+                status(message);
+                completion.complete(message);
+            } catch (RuntimeException failure) {
+                System.getLogger(getClass().getName()).log(System.Logger.Level.ERROR,
+                        "Map persisted but host save reconciliation failed.", failure);
+                status("Map persisted, but host reconciliation failed; inspect the saved map before retrying.");
+                completion.completeExceptionally(failure);
+            }
+        }, completion::completeExceptionally);
+        return completion;
     }
 
     private void saveCurrentThen(Runnable next) {
@@ -4335,10 +4762,15 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Blocking save (background thread); a level also stores the shared settings of its multilevel map. */
     private void saveTo(SaveTarget target, DmProject snapshot) throws IOException {
+        saveTo(target, snapshot, mapLibrary, projectService);
+    }
+
+    private static void saveTo(SaveTarget target, DmProject snapshot,
+                               MapLibraryService library, ProjectService service) throws IOException {
         if (target.manifest() != null) {
-            mapLibrary.multiLevels().saveLevel(target.manifest(), target.levelId(), snapshot);
+            library.multiLevels().saveLevel(target.manifest(), target.levelId(), snapshot);
         } else {
-            projectService.save(target.file(), snapshot);
+            service.save(target.file(), snapshot);
         }
     }
 
@@ -4361,6 +4793,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Records the just-saved state; edits made while the save ran keep the map dirty. */
     private void markSaved(DmProject snapshot, long versionAtSnapshot) {
+        if (remoteMapsHost != null) remoteMapsHost.invalidate();
         savedFingerprint = fingerprintOrNull(historyVersion == versionAtSnapshot ? project : snapshot);
     }
 
@@ -4445,6 +4878,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Background save of a map that already exists on disk; postponed during drags, skipped while another save runs. */
     private void autoSaveIfDirty() {
+        if (remoteWorkspaceReplica != null) {
+            return;
+        }
         if (!autoSaveEnabled() || projectFile == null || ioBusy || interactionInProgress()
                 || nudgeStartPositions != null || !hasUnsavedChanges()) {
             return;
@@ -4475,6 +4911,9 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** The app is about to exit, so the save has to finish before the window closes. */
     private void saveOnExit() {
+        if (remoteWorkspaceReplica != null) {
+            return;
+        }
         if (!autoSaveEnabled() || ioBusy || !hasUnsavedChanges()) {
             return;
         }
@@ -4585,6 +5024,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 }
             }
             onDone.accept(outcome.result());
+            if (remoteMapsHost != null) remoteMapsHost.invalidate();
             mapBrowser.updateCurrentMap();
             updateWindowTitle();
             if (touchesOpenMap) {
@@ -4640,6 +5080,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (saved.getMap() != null && saved.getMap().getImagePath() != null) {
             project.getMap().setImagePath(saved.getMap().getImagePath());
         }
+        requestRemoteWorkspaceCommit();
     }
 
     private record LoadedProject(DmProject project, Path file, LevelContext level,
@@ -4680,6 +5121,10 @@ public class DungeonMasterMapToolApplication extends Application {
     /** Runs blocking file work off the FX thread; result handling happens back on the FX thread. */
     private <T> void runInBackground(String busyMessage, String failurePrefix, IoWork<T> work, Consumer<T> onSuccess,
                                      Consumer<Exception> onFailure) {
+        if (remoteWorkspaceReplica != null) {
+            status("Local workspace file operations are unavailable while controlling host A.");
+            return;
+        }
         if (ioBusy) {
             status("Still working on the previous file operation.");
             return;
@@ -4972,7 +5417,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private javafx.geometry.Point2D playerViewportScrollVelocity() {
-        if (!draggingPlayerViewport || playerStage == null || activeTool != EditorTool.SELECT
+        if (!draggingPlayerViewport || !playerOutputVisible() || activeTool != EditorTool.SELECT
                 || !Tuning.PLAYER_VIEWPORT_EDGE_SCROLL.get() || ioBusy
                 || (primaryStage != null && !primaryStage.isFocused())) {
             return javafx.geometry.Point2D.ZERO;
@@ -4999,7 +5444,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void updatePlayerViewportDrag(long now) {
-        if (!draggingPlayerViewport || playerStage == null) {
+        if (!draggingPlayerViewport || !playerOutputVisible()) {
             viewportScrollNanos = 0;
             return;
         }
@@ -5055,6 +5500,14 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private CanvasMapRenderer.WorldRect getPlayerViewportRect() {
+        if (remoteWorkspaceReplica != null) {
+            var output = remotePlayerOutput();
+            if (output == null || !output.visible()) return null;
+            var camera = project.getViews().getPlayerCamera();
+            double zoom = Math.max(camera.getZoom(), 0.01);
+            return new CanvasMapRenderer.WorldRect(camera.getX() - output.width() / zoom / 2,
+                    camera.getY() - output.height() / zoom / 2, output.width() / zoom, output.height() / zoom);
+        }
         if (playerCanvas == null || playerStage == null) {
             return null;
         }
@@ -5071,7 +5524,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private boolean isOnPlayerViewportResetButton(double worldX, double worldY) {
         CanvasMapRenderer.WorldRect rect = getPlayerViewportRect();
-        if (playerStage == null || rect == null || dmCanvas == null) {
+        if (!playerOutputVisible() || rect == null || dmCanvas == null) {
             return false;
         }
         DmProject.CameraState dmCamera = project.getViews().getDmCamera();
@@ -5090,7 +5543,7 @@ public class DungeonMasterMapToolApplication extends Application {
     /** True if the world point is on the player viewport's grab bar (only when the player window is open). */
     private boolean isOnPlayerViewportTitleBar(double worldX, double worldY) {
         CanvasMapRenderer.WorldRect rect = getPlayerViewportRect();
-        if (playerStage == null || rect == null || dmCanvas == null) {
+        if (!playerOutputVisible() || rect == null || dmCanvas == null) {
             return false;
         }
         DmProject.CameraState dmCamera = project.getViews().getDmCamera();
@@ -5102,6 +5555,15 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void addPing(double worldX, double worldY) {
+        if (remoteWorkspaceReplica != null && (remotePlayerLink == null || !remotePlayerLink.ping(
+                remoteDisplayedContext, worldX, worldY, Tuning.PING_DURATION_MS.get()))) {
+            status("The player ping was not sent; wait for the host connection.");
+            return;
+        }
+        if (remotePlayerHost != null && remoteWorkspaceHost.ready()) {
+            remotePlayerHost.ping(new RemotePlayerSession.Point(worldX, worldY), Tuning.PING_DURATION_MS.get());
+        }
+        if (project.getActivePings().size() >= 256) project.getActivePings().removeFirst();
         project.getActivePings().add(DmProject.PingEvent.builder()
                 .x(worldX)
                 .y(worldY)
@@ -5352,13 +5814,17 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private void executeWithFogHistory(String label, Runnable doAction, Runnable undoAction) {
         finishNudge();
+        if (remoteWorkspaceReplica != null && !remoteEditsReady()) {
+            status("Remote editing is paused; this action was not applied.");
+            return;
+        }
         FogMask.Snapshot before = snapshotFog();
         doAction.run();
         recordWithFog(label, before, doAction, undoAction);
     }
 
     private void recordWithFog(String label, FogMask.Snapshot before, Runnable redo, Runnable undo) {
-        lightingEngine.update(project);
+        updateWorkspaceLighting();
         FogMask.Snapshot after = snapshotFog();
         pushHistory(new HistoryAction(
                 label,
@@ -5607,6 +6073,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void switchProject(DmProject next, Path file, LevelContext level) {
+        if (remoteMapsHost != null) remoteMapsHost.invalidate();
         prefetchGeneration++;
         cancelImageAdds();
         if (adjacentPrefetch != null) {
@@ -5653,6 +6120,7 @@ public class DungeonMasterMapToolApplication extends Application {
         fogDragging = false;
         undoStack.clear();
         redoStack.clear();
+        historyVersion++;
         historyFeedback.clear();
         savedFingerprint = fingerprintOrNull(project);
         syncControlsFromProject();
@@ -5664,6 +6132,13 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         updateWindowTitle();
         scheduleAdjacentPrefetch();
+        if (remoteWorkspaceHost != null) {
+            receiveRemotePointer(RemotePlayerSession.Pointer.empty(null));
+            project.getViews().setPlayerFrozen(frozenPlayerProject != null);
+            remoteCommitPending = false;
+            remoteWorkspaceHost.switchedContext();
+            remoteViewStamp = remoteViewStamp();
+        }
     }
 
     private static ImagePyramidStore.Viewport imageViewport(Canvas canvas) {
@@ -5736,7 +6211,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 playerZoomSlider.setValue(project.getViews().getPlayerZoomStep());
             }
             if (freezePlayerButton != null) {
-                freezePlayerButton.setSelected(frozenPlayerProject != null);
+                freezePlayerButton.setSelected(remoteWorkspaceReplica == null
+                        ? frozenPlayerProject != null : project.getViews().isPlayerFrozen());
             }
             updateImageLockToggle();
             if (weatherBox != null) {
@@ -6124,12 +6600,27 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- Player scale (1 inch per tile) ----
 
     private int selectedScreenIndex() {
+        if (remoteWorkspaceReplica != null) {
+            return remotePlayerOutput() == null ? preferences.getInt(PREF_PLAYER_SCREEN_INDEX, 0)
+                    : remotePlayerOutput().screenIndex();
+        }
         int index = playerScreenSelector == null ? -1 : playerScreenSelector.getSelectionModel().getSelectedIndex();
         return index >= 0 ? index : preferences.getInt(PREF_PLAYER_SCREEN_INDEX, 0);
     }
 
     /** Stored diagonal for the selected screen, or an estimate from the OS-reported DPI. */
     private double loadScreenDiagonal() {
+        if (remoteWorkspaceReplica != null) {
+            var output = remotePlayerOutput();
+            int index = output == null ? preferences.getInt(PREF_PLAYER_SCREEN_INDEX, 0) : output.screenIndex();
+            double stored = preferences.getDouble(PREF_SCREEN_DIAGONAL_PREFIX + index, 0);
+            if (stored >= diagonalMin()) return stored;
+            if (output == null) return Tuning.PLAYER_DIAGONAL_FALLBACK.get();
+            var screen = output.monitors().get(index);
+            double guess = Math.hypot(screen.width() * screen.scaleX(), screen.height() * screen.scaleY())
+                    / Math.max(48, screen.dpi());
+            return Math.clamp(Math.round(guess * 2) / 2.0, diagonalMin(), diagonalMax());
+        }
         List<Screen> screens = Screen.getScreens();
         int index = Math.max(0, Math.min(selectedScreenIndex(), screens.size() - 1));
         double stored = preferences.getDouble(PREF_SCREEN_DIAGONAL_PREFIX + index, 0);
@@ -6147,6 +6638,12 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Player-canvas pixels (device-independent) per physical inch on the selected screen. */
     private double playerPixelsPerInch() {
+        if (remoteWorkspaceReplica != null) {
+            var output = remotePlayerOutput();
+            if (output == null) return 0;
+            var monitor = output.monitors().get(output.screenIndex());
+            return Math.hypot(monitor.width(), monitor.height()) / Math.max(1, loadScreenDiagonal());
+        }
         Screen screen = resolveSelectedPlayerScreen();
         Rectangle2D bounds = screen.getBounds();
         double diagonal = screenInchesSpinner == null || screenInchesSpinner.getValue() == null
@@ -6156,7 +6653,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Keeps the player camera zoom so that one map tile measures the configured number of inches. */
     private void applyPlayerScale() {
-        if (playerStage == null || tileInchesSpinner == null || tileInchesSpinner.getValue() == null) {
+        if (remoteWorkspaceReplica != null || playerStage == null
+                || tileInchesSpinner == null || tileInchesSpinner.getValue() == null) {
             return;
         }
         double ppi = playerPixelsPerInch();
@@ -6291,17 +6789,25 @@ public class DungeonMasterMapToolApplication extends Application {
      * the level opened last, else the lowest one).
      */
     private void switchToMap(Path file, String levelId) {
+        switchToMapAsync(file, levelId);
+    }
+
+    private java.util.concurrent.CompletableFuture<Void> switchToMapAsync(Path file, String levelId) {
+        var completion = new java.util.concurrent.CompletableFuture<Void>();
+        if (remoteWorkspaceReplica != null) {
+            return java.util.concurrent.CompletableFuture.failedFuture(new IOException("Use the host map browser to switch remote maps."));
+        }
         Path target = file.toAbsolutePath().normalize();
         boolean multiLevel = MultiLevelService.isMultiLevelFile(target);
         if (multiLevel) {
             if (multiLevelFile != null && target.equals(multiLevelFile.toAbsolutePath().normalize())
                     && (levelId == null || levelId.equals(currentLevelId))) {
                 status("That level is already open.");
-                return;
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
             }
         } else if (projectFile != null && target.equals(projectFile.toAbsolutePath().normalize())) {
             status("That map is already open.");
-            return;
+            return java.util.concurrent.CompletableFuture.completedFuture(null);
         }
         SaveTarget current = currentSaveTarget();
         DmProject snapshot;
@@ -6309,12 +6815,12 @@ public class DungeonMasterMapToolApplication extends Application {
             snapshot = current == null ? null : projectService.copy(project);
         } catch (IOException ex) {
             status("Could not switch map: " + ex.getMessage());
-            return;
+            return java.util.concurrent.CompletableFuture.failedFuture(ex);
         }
         if (ioBusy) {
             status("Still working on the previous file operation.");
             updateLevelSwitcher();
-            return;
+            return java.util.concurrent.CompletableFuture.failedFuture(new IOException("The host is finishing another file operation."));
         }
         boolean sameMultiLevel = multiLevel && multiLevelFile != null
                 && target.equals(multiLevelFile.toAbsolutePath().normalize());
@@ -6364,6 +6870,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 if (multiLevel) {
                     mapBrowser.invalidateThumbnails();
                 }
+                completion.complete(null);
+            } catch (RuntimeException failure) {
+                completion.completeExceptionally(failure);
+                status("Could not display the map: " + failure.getMessage());
             } finally {
                 setMapLoading(false, null);
             }
@@ -6371,7 +6881,9 @@ public class DungeonMasterMapToolApplication extends Application {
             setMapLoading(false, null);
             updateLevelSwitcher();
             scheduleAdjacentPrefetch();
+            completion.completeExceptionally(ex);
         });
+        return completion;
     }
 
     // ---- Multilevel maps ----
@@ -6435,6 +6947,10 @@ public class DungeonMasterMapToolApplication extends Application {
         levelPositionLabel.getStyleClass().add("level-position");
         Button manage = Icons.button(MaterialDesignP.PENCIL_OUTLINE, "Manage levels: add, remove, rename, reorder",
                 () -> {
+                    if (remoteWorkspaceReplica != null) {
+                        mapBrowser.remoteManageCurrentLevels();
+                        return;
+                    }
                     if (multiLevelFile != null) {
                         handleManageLevels(multiLevelFile);
                     }
@@ -6456,6 +6972,26 @@ public class DungeonMasterMapToolApplication extends Application {
         if (levelSwitcher == null) {
             return;
         }
+        if (remoteWorkspaceReplica != null && mapBrowser != null) {
+            var levels = mapBrowser.remoteLevels();
+            int index = -1;
+            for (int i = 0; i < levels.size(); i++) {
+                if (levels.get(i).id().equals(mapBrowser.remoteCurrentLevelId())) index = i;
+            }
+            syncingLevelSelector = true;
+            try {
+                levelSelector.getItems().setAll(levels.stream().map(level ->
+                        MultiLevelManifest.Level.builder().id(level.id()).name(level.name()).build()).toList());
+                levelSelector.getSelectionModel().select(index);
+            } finally {
+                syncingLevelSelector = false;
+            }
+            levelSwitcher.setVisible(levels.size() >= 2);
+            levelDownButton.setDisable(index <= 0);
+            levelUpButton.setDisable(index < 0 || index >= levels.size() - 1);
+            levelPositionLabel.setText(index < 0 ? "" : (index + 1) + " / " + levels.size());
+            return;
+        }
         List<MultiLevelManifest.Level> levels = multiLevelManifest == null ? List.of() : multiLevelManifest.getLevels();
         levelSwitcher.setVisible(multiLevelFile != null && levels.size() >= 2);
         int index = multiLevelManifest == null ? -1 : multiLevelManifest.indexOf(currentLevelId);
@@ -6473,6 +7009,18 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** {@code +1} goes one level up, {@code -1} one level down. */
     private void stepLevel(int delta) {
+        if (remoteWorkspaceReplica != null && mapBrowser != null) {
+            var levels = mapBrowser.remoteLevels();
+            for (int i = 0; i < levels.size(); i++) {
+                if (levels.get(i).id().equals(mapBrowser.remoteCurrentLevelId())) {
+                    int next = i + delta;
+                    if (next >= 0 && next < levels.size()) switchLevel(levels.get(next).id());
+                    else status(delta > 0 ? "This is the highest level." : "This is the lowest level.");
+                    return;
+                }
+            }
+            return;
+        }
         if (multiLevelManifest == null) {
             return;
         }
@@ -6486,6 +7034,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void switchLevel(String levelId) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteOpenLevel(levelId);
+            return;
+        }
         if (multiLevelFile == null) {
             return;
         }
@@ -6508,6 +7060,10 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void handleImportMultiLevel(Path suggestedFolder) {
+        if (remoteWorkspaceReplica != null) {
+            mapBrowser.remoteImportMultiLevelMap();
+            return;
+        }
         List<Path> files = new ArrayList<>(pickDd2vttFiles(primaryStage));
         if (files.isEmpty()) {
             return;
@@ -6846,6 +7402,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     mapBrowser.select(select);
                 }
                 status(doneMessage.apply(result));
+                if (remoteMapsHost != null) remoteMapsHost.invalidate();
             } finally {
                 setMapLoading(false, null);
             }
@@ -8163,6 +8720,7 @@ public class DungeonMasterMapToolApplication extends Application {
         if (project.getTokenDefinitions().containsKey(definition.getId())) {
             project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
             historyVersion++;
+            requestRemoteWorkspaceCommit();
         }
         if (CopiedItems != null && CopiedItems.definitions.containsKey(definition.getId())) {
             CopiedItems.definitions.put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
@@ -8634,8 +9192,10 @@ public class DungeonMasterMapToolApplication extends Application {
             moveGroupItemTo(key, position[0] + dx, position[1] + dy);
         }
         // Rotation transforms the model itself; world axes already match the displayed DM axes.
-        lightingEngine.update(project);
-        historyVersion++;
+        updateWorkspaceLighting();
+        if (remoteWorkspaceReplica == null) {
+            historyVersion++;
+        }
         lastInputNanos = System.nanoTime();
         renderDm();
         renderPlayer();
@@ -9201,6 +9761,21 @@ public class DungeonMasterMapToolApplication extends Application {
         if (playerScreenSelector == null) {
             return;
         }
+        if (remoteWorkspaceReplica != null) {
+            var output = remotePlayerOutput();
+            boolean wasSyncing = syncingControls;
+            syncingControls = true;
+            try {
+                playerScreenSelector.getItems().setAll(output == null ? List.of("Loading host monitors...")
+                        : output.monitors().stream().map(m -> "Host " + m.label()).toList());
+                playerScreenSelector.setDisable(output == null);
+                if (output != null) playerScreenSelector.getSelectionModel().select(output.screenIndex());
+            } finally {
+                syncingControls = wasSyncing;
+            }
+            return;
+        }
+        playerScreenSelector.setDisable(false);
         List<Screen> screens = Screen.getScreens();
         playerScreenSelector.getItems().clear();
         for (int i = 0; i < screens.size(); i++) {
@@ -9218,12 +9793,18 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void rememberSelectedPlayerScreenIndex() {
-        if (playerScreenSelector == null) {
+        if (playerScreenSelector == null || syncingControls) {
             return;
         }
         int selected = playerScreenSelector.getSelectionModel().getSelectedIndex();
         if (selected >= 0) {
-            preferences.putInt(PREF_PLAYER_SCREEN_INDEX, selected);
+            if (remoteWorkspaceReplica != null) controlRemotePlayer(RemotePlayerSession.Action.SCREEN, false, selected);
+            else {
+                if (remotePlayerHost != null && preferences.getInt(PREF_PLAYER_SCREEN_INDEX, 0) != selected) {
+                    remotePlayerHost.outputChanged();
+                }
+                preferences.putInt(PREF_PLAYER_SCREEN_INDEX, selected);
+            }
         }
     }
 
@@ -9264,13 +9845,13 @@ public class DungeonMasterMapToolApplication extends Application {
         String text;
         String tooltip;
         String stateClass;
-        if (frozenPlayerProject != null) {
-            text = playerStage == null ? "Player view: Frozen (window off)" : "Player view: Frozen";
-            tooltip = playerStage == null
+        if (frozenPlayerProject != null || remoteWorkspaceReplica != null && project.getViews().isPlayerFrozen()) {
+            text = !playerOutputVisible() ? "Player view: Frozen (window off)" : "Player view: Frozen";
+            tooltip = !playerOutputVisible()
                     ? "The player window is closed. Its frozen snapshot is retained for when it is reopened."
                     : "Players see a frozen snapshot while you prepare changes in the DM view.";
             stateClass = "player-output-frozen";
-        } else if (playerStage == null) {
+        } else if (!playerOutputVisible()) {
             text = "Player view: Off";
             tooltip = "The player window is closed; no player output is currently visible.";
             stateClass = "player-output-off";
@@ -9292,6 +9873,11 @@ public class DungeonMasterMapToolApplication extends Application {
      * so the DM can edit or switch maps without the players seeing any of it until unfreezing.
      */
     private void setPlayerFrozen(boolean frozen) {
+        if (remoteWorkspaceReplica != null) {
+            project.getViews().setPlayerFrozen(frozen);
+            requestReplicaCommit("Change player freeze");
+            return;
+        }
         if (!frozen) {
             if (frozenPlayerProject != null && PlayerViewTransition.contentChanged(
                     frozenPlayerProject, frozenPlayerProjectFile, frozenPlayerCamera,
@@ -9303,6 +9889,8 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerCamera = null;
             playerRenderer.setWeatherFrozen(false);
             playerLightingEngine.reset();
+            project.getViews().setPlayerFrozen(false);
+            requestRemoteWorkspaceCommit();
             updatePlayerOutputStatus();
             return;
         }
@@ -9312,9 +9900,13 @@ public class DungeonMasterMapToolApplication extends Application {
             frozenPlayerCamera = copyCamera(project.getViews().getPlayerCamera());
             playerRenderer.setWeatherFrozen(true);
             playerLightingEngine.reset();
+            project.getViews().setPlayerFrozen(true);
+            requestRemoteWorkspaceCommit();
             updatePlayerOutputStatus();
         } catch (IOException ex) {
             frozenPlayerProject = null;
+            project.getViews().setPlayerFrozen(false);
+            requestRemoteWorkspaceCommit();
             updatePlayerOutputStatus();
             status("Could not freeze player view: " + ex.getMessage());
             syncControlsFromProject();
@@ -9386,22 +9978,1586 @@ public class DungeonMasterMapToolApplication extends Application {
         );
     }
 
+    java.util.concurrent.CompletableFuture<RemoteHostingController.Details> startRemoteHosting(
+            RemoteHostingController.Configuration configuration) {
+        if (stopping || retainedLocalWorkspace != null
+                || remoteConnectionController != null && remoteConnectionController.active()) {
+            throw new IllegalStateException("Return to the standalone workspace before hosting.");
+        }
+        remoteSessionStorage = configuration.storage();
+        if (remoteHostingController == null) {
+            remoteHostingController = new RemoteHostingController(preferences, new RemoteHostingController.Workspace() {
+                @Override
+                public dmmt.remote.RemoteWorkspaceEndpoint open(RemoteAssetStore store, Path cache,
+                                                                java.util.concurrent.Executor worker) {
+                    return beginRemoteWorkspace(store, cache, worker);
+                }
+                @Override public void close() { endRemoteWorkspace(); }
+            }, Platform::runLater, remoteSessionWorker());
+        }
+        return remoteHostingController.start(configuration);
+    }
+
+    void connectRemoteSession(RemoteConnectionController.Configuration configuration, String pairingCode) {
+        java.util.Objects.requireNonNull(configuration, "configuration");
+        if (pairingCode == null) new dmmt.remote.RemoteProtocol.ControlRequest(configuration.clientName());
+        else new dmmt.remote.RemoteProtocol.Pair(pairingCode, configuration.clientName());
+        remoteSessionStorage = configuration.storage();
+        if (stopping || remoteWorkspaceReplica != null || remoteWorkspaceHost != null
+                || remoteHostingController != null && remoteHostingController.active()
+                || remoteConnectionController != null && remoteConnectionController.active()
+                || ioBusy || imageAddTask != null || !pendingImageAdds.isEmpty()) {
+            throw new IllegalStateException("Finish or stop the current workspace operation before connecting.");
+        }
+        finishNudge();
+        finishPlayerViewportDrag();
+        commitTextEdit();
+        if (remoteWorkspaceGestureInProgress()) {
+            throw new IllegalStateException("Finish the local gesture before connecting.");
+        }
+        Runnable connect = () -> {
+            if (stopping || retainedLocalWorkspace != null || remoteWorkspaceHost != null
+                    || remoteHostingController != null && remoteHostingController.active()
+                    || remoteConnectionController != null && remoteConnectionController.active()
+                    || ioBusy || imageAddTask != null || !pendingImageAdds.isEmpty()
+                    || remoteWorkspaceGestureInProgress()) {
+                status("The local workspace is busy or its session role changed; remote connection was not started.");
+                return;
+            }
+            DmProject expectedLocal = project;
+            long expectedVersion = historyVersion;
+            String expectedFingerprint = fingerprintOrNull(project);
+            if (expectedFingerprint == null) {
+                status("Could not capture the local workspace before connecting; no connection was started.");
+                return;
+            }
+            if (remoteConnectionController == null) {
+                remoteConnectionController = createRemoteConnectionController();
+            }
+            remoteTransitionProject = expectedLocal;
+            remoteTransitionVersion = expectedVersion;
+            remoteTransitionFingerprint = expectedFingerprint;
+            remoteConnectionController.connect(configuration, pairingCode).whenComplete((unused, failure) ->
+                    Platform.runLater(() -> {
+                        remoteTransitionProject = null;
+                        remoteTransitionFingerprint = null;
+                        if (failure != null && !stopping) {
+                            status(remoteConnectionController.status().message());
+                        }
+                    }));
+        };
+        if (projectFile == null && hasContent(project) || hasUnsavedChanges()) {
+            switch (Dialogs.askSaveChanges(primaryStage, "Save the local workspace before connecting?",
+                    "Remote control uses the host's workspace. Your local workspace is retained for Disconnect. "
+                            + "Save its current changes before connecting?")) {
+                case SAVE -> {
+                    if (projectFile == null) saveNewMap(connect);
+                    else saveCurrentThen(connect);
+                }
+                case DISCARD -> connect.run();
+                case CANCEL -> { }
+            }
+        } else {
+            connect.run();
+        }
+    }
+
+    private RemoteConnectionController createRemoteConnectionController() {
+        return new RemoteConnectionController(new RemoteConnectionController.Workspace() {
+                    @Override
+                    public RemoteWorkspaceReplica open(RemoteWorkspaceReplica.Connection workspace,
+                                                       RemoteSettingsLink.Connection settings, RemoteAssetStore store,
+                                                       Path cache, java.util.concurrent.Executor worker) {
+                        if (project != remoteTransitionProject || historyVersion != remoteTransitionVersion
+                                || !java.util.Objects.equals(remoteTransitionFingerprint, fingerprintOrNull(project))) {
+                            throw new RemoteConnectionController.LocalWorkspaceChangedException();
+                        }
+                        return beginRemoteReplica(workspace, settings, store, cache, worker);
+                    }
+                    @Override public void close() { endRemoteReplica(); }
+                }, Platform::runLater, remoteSessionWorker());
+    }
+
+    private java.util.concurrent.ExecutorService remoteSessionWorker() {
+        if (remoteSessionWorker == null) {
+            var worker = new java.util.concurrent.ThreadPoolExecutor(2, 2, 1,
+                    java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(),
+                    Thread.ofPlatform().daemon().name("dmmt-remote-prepare-", 0).factory());
+            worker.allowCoreThreadTimeOut(true);
+            remoteSessionWorker = worker;
+        }
+        return remoteSessionWorker;
+    }
+
+    private RemoteSessionStorage defaultRemoteSessionStorage() {
+        if (remoteSessionStorage == null) {
+            long gibibyte = 1024L * 1024 * 1024;
+            remoteSessionStorage = new RemoteSessionStorage(
+                    preferences.getFile().toAbsolutePath().getParent().resolve("remote-session"),
+                    gibibyte, 16 * gibibyte, 2 * gibibyte);
+        }
+        return remoteSessionStorage;
+    }
+
+    private java.util.concurrent.CompletableFuture<Void> disconnectRemoteSession() {
+        return remoteConnectionController != null && remoteConnectionController.active()
+                ? remoteConnectionController.disconnect()
+                : closeInternalReplica();
+    }
+
+    private java.util.concurrent.CompletableFuture<Void> closeInternalReplica() {
+        endRemoteReplica();
+        return java.util.concurrent.CompletableFuture.completedFuture(null);
+    }
+
+    private java.util.concurrent.CompletableFuture<Void> stopRemoteSessions() {
+        var host = remoteHostingController == null ? java.util.concurrent.CompletableFuture.<Void>completedFuture(null)
+                : remoteHostingController.stop();
+        var client = disconnectRemoteSession();
+        return java.util.concurrent.CompletableFuture.allOf(host, client);
+    }
+
+    private void remoteSessionLifecycleBoundary() {
+        if (remoteWorkspaceHost != null && preferences.consumeAppliedChange()) refreshRemoteSettings();
+        if (remoteHandoutHost != null && handoutWindow != null && handoutWindow.isShowing()) handoutWindow.refreshRecents();
+        if (remoteConnectionController != null && remoteConnectionController.active()) {
+            remoteConnectionController.tick();
+            var failure = remoteConnectionController.workspaceFailure();
+            if (failure != null) remoteErrorDialogs().report(failure);
+        } else if (remoteHostingController != null && remoteHostingController.active()) {
+            var host = remoteHostingController.status();
+            var pending = host.access() == null ? null : host.access().pending();
+            if (pending != null && !pending.id().equals(displayedRemoteApproval) && primaryStage != null) {
+                displayedRemoteApproval = pending.id();
+                showRemoteApprovalDialog(pending, host.access().client());
+            } else if (pending == null && remoteApprovalDialog != null) {
+                remoteApprovalDialog.dismiss();
+                remoteApprovalDialog = null;
+            }
+        }
+        boolean active = remoteSessionActive();
+        if (active != sessionWasActive) {
+            sessionWasActive = active;
+            applySectionVisibility();
+            if (active) revealRemoteSessionTab();
+        }
+    }
+
+    private boolean remoteSessionActive() {
+        return remoteWorkspaceReplica != null || remoteWorkspaceHost != null
+                || remoteHostingController != null && remoteHostingController.active()
+                || remoteConnectionController != null && remoteConnectionController.active();
+    }
+
+    private dmmt.ui.RemoteApprovalDialog remoteApprovalDialog;
+
+    /** Shows a modal prompt for an incoming request; the Session tab buttons stay usable as an alternative. */
+    private void showRemoteApprovalDialog(dmmt.remote.RemoteSessionAccess.ApprovalRequest request,
+                                          dmmt.remote.RemoteSessionAccess.Client current) {
+        Platform.runLater(() -> {
+            if (remoteHostingController == null || !remoteHostingController.active()) return;
+            var access = remoteHostingController.status().access();
+            if (access == null || access.pending() == null || !access.pending().id().equals(request.id())) return;
+            if (remoteApprovalDialog != null) remoteApprovalDialog.dismiss();
+            if (primaryStage.isIconified()) primaryStage.setIconified(false);
+            primaryStage.toFront();
+            var client = request.client();
+            var dialog = new dmmt.ui.RemoteApprovalDialog(primaryStage, client.name(), client.address(),
+                    current == null ? null : current.name(), decision -> {
+                remoteApprovalDialog = null;
+                if (remoteHostingController == null || !remoteHostingController.active()) return;
+                try {
+                    switch (decision) {
+                        case ALLOW_ONCE -> remoteHostingController.approve(request.id());
+                        case ALWAYS_ALLOW -> remoteHostingController.approveAlways(request.id());
+                        case BLOCK -> remoteHostingController.block(request.id());
+                        case DENY -> remoteHostingController.reject(request.id());
+                    }
+                } catch (IllegalStateException | dmmt.remote.RemoteSessionAccess.AccessException expired) {
+                    // The request expired or was cancelled while the prompt was open.
+                }
+            });
+            remoteApprovalDialog = dialog;
+            dialog.show();
+        });
+    }
+
+    /** Brings the Session tab to the front, re-showing the sidebar if it was collapsed. */
+    private void revealRemoteSessionTab() {
+        if (sessionToggle == null) return;
+        if (sidebarToggle != null && !sidebarToggle.isSelected()) sidebarToggle.setSelected(true);
+        sessionToggle.setSelected(true);
+        sessionPanel.show();
+    }
+
+    private dmmt.ui.RemoteErrorDialogs remoteErrors;
+
+    private dmmt.ui.RemoteErrorDialogs remoteErrorDialogs() {
+        if (remoteErrors == null) remoteErrors = new dmmt.ui.RemoteErrorDialogs(primaryStage);
+        return remoteErrors;
+    }
+
+    private void reportRemoteError(Throwable failure) {
+        remoteErrorDialogs().report(failure);
+    }
+
+    private void remoteFrameBoundary() {
+        if (remoteWorkspaceHost != null) remoteWorkspaceFrameBoundary();
+        if (remoteWorkspaceReplica != null) remoteReplicaFrameBoundary();
+        if (remoteWorkspaceHost != null || remoteWorkspaceReplica != null
+                || remoteHostingController != null && remoteHostingController.active()
+                || remoteConnectionController != null && remoteConnectionController.active()
+                || sessionWasActive) {
+            remoteSessionLifecycleBoundary();
+        }
+    }
+
+    private record LocalWorkspace(DmProject project, Path file, Path manifestFile, MultiLevelManifest manifest,
+                                  String levelId, List<HistoryAction> undo, List<HistoryAction> redo,
+                                  long historyVersion, String savedFingerprint, EditorTool tool,
+                                  String tokenId, DmProject.ImageLayer layer, DmProject.LightSource light,
+                                  String overlayId, String textId, Set<String> group,
+                                  DmProject frozenProject, Path frozenFile, DmProject.CameraState frozenCamera,
+                                  boolean scaleTest, boolean laserTool, boolean pingTool) {
+    }
+
+    RemoteWorkspaceReplica beginRemoteReplica(RemoteWorkspaceReplica.Connection connection,
+                                               RemoteSettingsLink.Connection settingsConnection,
+                                               RemoteAssetStore store, Path cache,
+                                               java.util.concurrent.Executor workerExecutor) {
+        if (!Platform.isFxApplicationThread() || remoteWorkspaceReplica != null || remoteWorkspaceHost != null
+                || ioBusy || imageAddTask != null || !pendingImageAdds.isEmpty()) {
+            throw new IllegalStateException("Finish local file operations before entering remote control.");
+        }
+        finishNudge();
+        finishPlayerViewportDrag();
+        commitTextEdit();
+        if (remoteWorkspaceGestureInProgress() || remoteModalShowing()) {
+            throw new IllegalStateException("Finish the local edit and close its dialog before entering remote control.");
+        }
+        retainedLocalWorkspace = new LocalWorkspace(project, projectFile, multiLevelFile, multiLevelManifest,
+                currentLevelId, List.copyOf(undoStack), List.copyOf(redoStack), historyVersion, savedFingerprint,
+                activeTool, selectedTokenId, selectedLayer, selectedLight, selectedOverlayId, selectedTextId,
+                Set.copyOf(groupKeys), frozenPlayerProject, frozenPlayerProjectFile, frozenPlayerCamera,
+                showScaleTestSquare, laserToolActive, pingArmed);
+        closePlayerWindow();
+        if (handoutWindow != null) {
+            handoutWindow.close();
+        }
+        retainedLocalHandoutWindow = handoutWindow;
+        handoutWindow = null;
+        if (audioControls != null) {
+            audioControls.engine().stopMusic();
+            audioControls.engine().stopAllEffects();
+            audioControls.closeOverlay();
+        }
+        if (localApiServer != null) {
+            localApiServer.close();
+            localApiServer = null;
+        }
+        prefetchGeneration++;
+        if (adjacentPrefetch != null) {
+            adjacentPrefetch.close();
+            adjacentPrefetch = null;
+        }
+        // Keep the original object exclusively in the retained local context, even before assets finish loading.
+        try {
+            project = projectService.copy(project);
+            frozenPlayerProject = null;
+            frozenPlayerProjectFile = null;
+            frozenPlayerCamera = null;
+            projectFile = null;
+            multiLevelFile = null;
+            multiLevelManifest = null;
+            currentLevelId = null;
+            undoStack.clear();
+            redoStack.clear();
+            remoteSettingsLink = new RemoteSettingsLink(preferences, settingsConnection,
+                    this::refreshRemoteSettings, this::status, Platform::runLater);
+            remoteWorkspaceReplica = new RemoteWorkspaceReplica(settingsAwareConnection(connection), store, cache, () -> project,
+                    this::remoteWorkspaceGestureInProgress, this::cancelReplicaGesture,
+                    this::displayRemoteReplica, this::status, Platform::runLater, workerExecutor);
+            remoteWorkspaceReplica.setErrorHandler(this::reportRemoteError);
+            remoteOperationLink = new dmmt.remote.RemoteOperationLink(
+                    () -> connection.connected() && remoteSettingsLink != null && remoteSettingsLink.usable(),
+                    connection::operation, connection::transfer, store, cache.resolve("operations"),
+                    workerExecutor, Platform::runLater);
+            remoteOperationLink.setErrorHandler(this::reportRemoteError);
+            remoteOperationLink.setUploadObserver(this::beginRemoteUploadBusy);
+            remoteOperationLink.setProgressSource(() -> remoteConnectionController != null
+                    && remoteConnectionController.active()
+                    ? remoteConnectionController.transferProgress() : java.util.List.of());
+            if (tokenBrowser != null) tokenBrowser.beginRemote(remoteOperationLink);
+            if (audioControls == null) {
+                audioControls = AudioControls.remoteReplica(preferences, () -> primaryStage, remoteOperationLink);
+                remoteOnlyAudioControls = true;
+            } else audioControls.beginRemote(remoteOperationLink);
+            audioControls.setRemoteStatusHandler(this::status);
+            attachAudioControls();
+            if (mapBrowser != null) {
+                mapBrowser.getProperties().put("remote.lifecycle", true);
+                mapBrowser.setRemoteErrorHandler(this::reportRemoteError);
+                mapBrowser.beginRemote(remoteLibraryConnection());
+            }
+            var player = connection.player();
+            var saves = connection.saves();
+            if (saves != null) {
+                remoteSaveLink = new RemoteSaveLink(saves, Platform::runLater, this::status);
+            }
+            if (player != null) {
+                remotePlayerLink = new RemotePlayerLink(player, this::displayRemotePlayer,
+                        this::receiveRemotePointer, this::status, Platform::runLater);
+            }
+            var handouts = connection.handouts();
+            if (handouts != null) {
+                remoteHandoutLink = new RemoteHandoutLink(handouts, store,
+                        new RemoteHandouts.Artwork(store, cache.resolve("handouts")),
+                        workerExecutor, Platform::runLater, snapshot -> {
+                            ensureHandoutWindow(primaryStage);
+                            handoutWindow.applySnapshot(snapshot);
+                        }, (readOnly, message) -> {
+                            if (handoutWindow != null) handoutWindow.remoteStatus(readOnly, message);
+                        }, this::status);
+                remoteHandoutLink.configureLibrary((library, thumbnails) -> handoutWindow.applyRemoteRecents(thumbnails, library.max()));
+            }
+            laserTrail.clear();
+            receiveRemotePointer(RemotePlayerSession.Pointer.empty(null));
+            refreshPlayerScreenSelector();
+            remoteViewStamp = remoteViewStamp();
+            remoteWorkspaceReplica.tick();
+            return remoteWorkspaceReplica;
+        } catch (IOException | RuntimeException failure) {
+            endRemoteReplica();
+            throw new IllegalStateException("Could not enter remote control; the local workspace was restored.", failure);
+        }
+    }
+
+    void endRemoteReplica() {
+        if (queuedMapOperation != null) queuedMapOperation.result().completeExceptionally(
+                new IOException("Remote workspace closed before the map operation was confirmed."));
+        queuedMapOperation = null;
+        preparingRemoteMapOperation = false;
+        remoteLevelStamp = null;
+        endRemoteMapBusy();
+        remoteDmCameras.clear();
+        if (remoteBusyDialog != null) remoteBusyDialog.close();
+        if (remoteTransferOverlay != null) remoteTransferOverlay.update(null);
+        if (remoteOperationLink != null) {
+            remoteOperationLink.close();
+            remoteOperationLink = null;
+        }
+        remoteSaveQueued = false;
+        remoteSaveContext = null;
+        if (remoteSaveLink != null) {
+            remoteSaveLink.close();
+            remoteSaveLink = null;
+        }
+        if (remoteHandoutLink != null) {
+            remoteHandoutLink.close();
+            remoteHandoutLink = null;
+        }
+        if (retainedLocalWorkspace != null) {
+            if (handoutWindow != null) handoutWindow.close();
+            handoutWindow = retainedLocalHandoutWindow;
+            retainedLocalHandoutWindow = null;
+        }
+        if (remotePlayerLink != null) {
+            remotePlayerLink.close();
+            remotePlayerLink = null;
+        }
+        if (remoteWorkspaceReplica != null) {
+            remoteWorkspaceReplica.close();
+            remoteWorkspaceReplica = null;
+        }
+        if (remoteSettingsLink != null) {
+            remoteSettingsLink.close();
+            remoteSettingsLink = null;
+        }
+        if (audioControls != null) {
+            audioControls.endRemote();
+            if (remoteOnlyAudioControls) {
+                audioControls.shutdown();
+                if (mapCenter != null) mapCenter.getChildren().remove(audioControls.overlayLayer());
+                if (applicationStatusBar != null && audioStatusSection != null) applicationStatusBar.getChildren().remove(audioStatusSection);
+                audioControls = null;
+                audioStatusSection = null;
+                registerAudioApiControls();
+                remoteOnlyAudioControls = false;
+            } else attachAudioControls();
+        }
+        if (retainedLocalWorkspace == null) {
+            return;
+        }
+        cancelImageAdds();
+        cancelReplicaGesture();
+        var local = retainedLocalWorkspace;
+        retainedLocalWorkspace = null;
+        project = local.project();
+        frozenPlayerProject = local.frozenProject();
+        frozenPlayerProjectFile = local.frozenFile();
+        frozenPlayerCamera = local.frozenCamera();
+        showScaleTestSquare = local.scaleTest();
+        projectFile = local.file();
+        multiLevelFile = local.manifestFile();
+        multiLevelManifest = local.manifest();
+        currentLevelId = local.levelId();
+        undoStack.clear();
+        undoStack.addAll(local.undo());
+        redoStack.clear();
+        redoStack.addAll(local.redo());
+        historyVersion = local.historyVersion();
+        savedFingerprint = local.savedFingerprint();
+        activeTool = local.tool();
+        laserToolActive = local.laserTool();
+        pingArmed = local.pingTool();
+        if (laserToggle != null) laserToggle.setSelected(laserToolActive);
+        if (pingToggle != null) pingToggle.setSelected(pingArmed);
+        updateToolChip();
+        updateCanvasCursor();
+        selectedTokenId = local.tokenId();
+        selectedLayer = local.layer();
+        selectedLight = local.light();
+        selectedOverlayId = local.overlayId();
+        selectedTextId = local.textId();
+        groupKeys.addAll(local.group());
+        remoteDisplayedContext = null;
+        remoteEditLabel = null;
+        remoteViewStamp = null;
+        displayedRemoteHistory = null;
+        if (undoButton != null) {
+            undoButton.setTooltip(new javafx.scene.control.Tooltip("Undo (Ctrl+Z)"));
+            redoButton.setTooltip(new javafx.scene.control.Tooltip("Redo (Ctrl+Y)"));
+            undoButton.setDisable(false);
+            redoButton.setDisable(false);
+        }
+        lightingEngine.reset();
+        historyFeedback.clear();
+        syncControlsFromProject();
+        refreshPlayerScreenSelector();
+        syncPlayerWindowToggle();
+        if (scaleTestToggle != null) scaleTestToggle.setSelected(showScaleTestSquare);
+        updateLevelSwitcher();
+        updateWindowTitle();
+        if (mapBrowser != null) {
+            mapBrowser.endRemote();
+            mapBrowser.getProperties().remove("remote.lifecycle");
+            mapBrowser.updateCurrentMap();
+        }
+        if (!stopping) {
+            applyLocalApiSettings();
+            scheduleAdjacentPrefetch();
+        }
+        status("Returned to the local workspace. Local player output and audio remain stopped.");
+    }
+
+    private void refreshRemoteSettings() {
+        SettingsWindow.refresh(preferences);
+        applySectionVisibility();
+        applyPlayerGridSetting();
+        syncWeatherIndoorsToggle();
+        applyApiUrlOptionVisibility();
+        refreshPlayerScreenSelector();
+        boolean wasSyncing = syncingControls;
+        syncingControls = true;
+        try {
+            if (screenInchesSpinner != null) screenInchesSpinner.getValueFactory().setValue(loadScreenDiagonal());
+            if (tileInchesSpinner != null) tileInchesSpinner.getValueFactory().setValue(
+                    preferences.getDouble(PREF_TILE_INCHES, 1.0));
+        } finally {
+            syncingControls = wasSyncing;
+        }
+        synchronizeAudioControls();
+    }
+
+    private RemoteWorkspaceReplica.Connection settingsAwareConnection(RemoteWorkspaceReplica.Connection workspace) {
+        return new RemoteWorkspaceReplica.Connection() {
+            @Override public java.util.concurrent.CompletableFuture<dmmt.remote.RemoteOperations.Reply> operation(
+                    dmmt.remote.RemoteOperations.Query query) {
+                return workspace.operation(query);
+            }
+
+            @Override public java.util.function.Supplier<java.util.concurrent.CompletableFuture<dmmt.remote.RemoteMapCatalog.Listing>> maps() {
+                return workspace.maps();
+            }
+            @Override public RemoteSaveLink.Connection saves() { return workspace.saves(); }
+            @Override public RemoteHandoutLink.Connection handouts() { return workspace.handouts(); }
+            @Override public RemotePlayerLink.Connection player() { return workspace.player(); }
+            @Override public boolean connected() {
+                return workspace.connected() && remoteSettingsLink.usable();
+            }
+            @Override public boolean ready() {
+                return workspace.ready() && (remotePlayerLink == null || remotePlayerLink.state() != null
+                        && workspace.latest() != null
+                        && remotePlayerLink.state().contextId().equals(workspace.latest().contextId()))
+                        && (remoteHandoutLink == null || remoteHandoutLink.hasBaseline());
+            }
+            @Override public String unavailableReason() { return workspace.unavailableReason(); }
+            @Override public RemoteWorkspaceAuthority.State latest() { return workspace.latest(); }
+            @Override public java.util.concurrent.CompletableFuture<RemoteWorkspaceAuthority.Result> send(
+                    RemoteWorkspaceAuthority.Request request) { return workspace.send(request); }
+            @Override public java.util.concurrent.CompletableFuture<RemoteAssetStore.AssetDescriptor> transfer(
+                    dmmt.remote.RemoteAssetTransfer.Direction direction, RemoteAssetStore.AssetDescriptor asset) {
+                return workspace.transfer(direction, asset);
+            }
+            @Override public void close() { workspace.close(); }
+        };
+    }
+
+    private void attachAudioControls() {
+        if (audioControls == null) return;
+        if (mapCenter != null && !mapCenter.getChildren().contains(audioControls.overlayLayer())) {
+            mapCenter.getChildren().add(audioControls.overlayLayer());
+        }
+        if (applicationStatusBar != null) {
+            if (audioStatusSection == null) {
+                audioStatusSection = new HBox(audioControls.statusBarGroup());
+                audioStatusSection.getStyleClass().add("status-audio-section");
+                applicationStatusBar.getChildren().add(audioStatusSection);
+            }
+            audioStatusSection.setVisible(Tuning.AUDIO_ENABLED.get());
+            audioStatusSection.setManaged(Tuning.AUDIO_ENABLED.get());
+        }
+        audioControls.setApiControlsChangedHandler(this::registerAudioApiControls);
+        registerAudioApiControls();
+    }
+
+    private void synchronizeAudioControls() {
+        if (preferences.usesHostSettings()) {
+            if (audioControls != null) attachAudioControls();
+            return;
+        }
+        if (Tuning.AUDIO_ENABLED.get() && audioControls == null) {
+            audioControls = new AudioControls(preferences, () -> primaryStage);
+        } else if (!Tuning.AUDIO_ENABLED.get() && audioControls != null) {
+            audioControls.shutdown();
+            if (mapCenter != null) mapCenter.getChildren().remove(audioControls.overlayLayer());
+            if (applicationStatusBar != null && audioStatusSection != null) applicationStatusBar.getChildren().remove(audioStatusSection);
+            audioControls = null;
+            audioStatusSection = null;
+            registerAudioApiControls();
+        }
+        if (audioControls != null) {
+            audioControls.applySettings();
+            attachAudioControls();
+        }
+    }
+
+    private boolean remoteEditsReady() {
+        return remoteWorkspaceReplica != null && remoteSettingsLink.usable() && remoteWorkspaceReplica.canEdit();
+    }
+
+    private static boolean isRemoteLifecycleControl(Object target) {
+        if (target instanceof javafx.scene.Node node) {
+            for (var current = node; current != null; current = current.getParent()) {
+                if (Boolean.TRUE.equals(current.getProperties().get("remote.lifecycle"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void cancelReplicaGesture() {
+        laserActive = false;
+        laserTrail.clear();
+        remoteLaserActive = false;
+        remoteLaserTrail.clear();
+        draggingToken = resizingToken = rotatingToken = false;
+        draggingLayer = resizingLayer = draggingLight = false;
+        draggingOverlay = resizingOverlay = draggingText = false;
+        draggingGroup = draggingPlayerViewport = panningDmCamera = fogDragging = false;
+        canvasMouseDown = false;
+        resizingTextHandle = -1;
+        draftWall = null;
+        draftOverlay = null;
+        draftText = null;
+        overlayStyleBefore = null;
+        editingTextId = null;
+        editingTextBefore = null;
+        editingTextIsNew = false;
+        groupStartPositions = null;
+        nudgeStartPositions = null;
+        nudgeArrowKeys.clear();
+        groupKeys.clear();
+        if (textEditor != null) {
+            textEditor.hide();
+        }
+        renderer.setEditingTextBoxId(null);
+        remoteEditLabel = null;
+    }
+
+    /** B's own DM camera per host map; it is never sent to the host. */
+    private final Map<String, DmProject.CameraState> remoteDmCameras = new java.util.HashMap<>();
+
+    private void rememberRemoteDmCamera(DmProject left) {
+        if (left == null || left.getId() == null) return;
+        var camera = left.getViews().getDmCamera();
+        remoteDmCameras.put(left.getId(), new DmProject.CameraState(camera.getX(), camera.getY(), camera.getZoom()));
+    }
+
+    /** Returns to the remembered camera of this map, or centers on its content like a local map does. */
+    private void restoreRemoteDmCamera(DmProject shown) {
+        var camera = shown.getViews().getDmCamera();
+        var remembered = shown.getId() == null ? null : remoteDmCameras.get(shown.getId());
+        if (remembered != null) {
+            camera.setX(remembered.getX());
+            camera.setY(remembered.getY());
+            camera.setZoom(remembered.getZoom());
+            return;
+        }
+        camera.setX(0);
+        camera.setY(0);
+        camera.setZoom(1.0);
+        double[] bounds = new FogService().contentBounds(shown);
+        camera.setX((bounds[0] + bounds[2]) / 2.0);
+        camera.setY((bounds[1] + bounds[3]) / 2.0);
+    }
+
+    private void displayRemoteReplica(RemoteWorkspaceReplica.Display shown) {
+        applyingReplica = true;
+        try {
+            boolean contextChanged = !shown.contextId().equals(remoteDisplayedContext);
+            if (contextChanged) {
+                cancelReplicaGesture();
+                if (remoteDisplayedContext != null) rememberRemoteDmCamera(project);
+                project = shown.project();
+                restoreRemoteDmCamera(project);
+                endRemoteMapBusy();
+                projectFile = null;
+                selectedTokenId = selectedOverlayId = selectedTextId = null;
+                selectedLayer = null;
+                selectedLight = null;
+                remoteDisplayedContext = shown.contextId();
+                lightingEngine.reset();
+                historyFeedback.clear();
+            } else {
+                var before = RemoteProjectDocument.capture(project).parts();
+                var after = RemoteProjectDocument.capture(shown.project()).parts();
+                Set<String> changed = new java.util.LinkedHashSet<>(before.keySet());
+                changed.addAll(after.keySet());
+                changed.removeIf(key -> java.util.Objects.equals(before.get(key), after.get(key)));
+                RemoteProjectChanges.apply(project, shown.project(), changed);
+                selectedLayer = selectedLayer == null ? null : findLayerById(selectedLayer.getId());
+                selectedLight = selectedLight == null ? null : findLightById(selectedLight.getId());
+                if (findToken(selectedTokenId) == null) selectedTokenId = null;
+                if (findTextBox(selectedTextId) == null) selectedTextId = null;
+                if (findOverlay(selectedOverlayId) == null) selectedOverlayId = null;
+                groupKeys.removeIf(key -> groupPosition(key) == null);
+            }
+            lightingEngine.updateReplica(project);
+            roomBarrier = null;
+            roomPreview = null;
+            renderer.invalidatePlayerLayerCaches();
+            syncControlsFromProject();
+            if (mapBrowser != null) mapBrowser.remoteContext(shown.contextId());
+            remoteViewStamp = remoteViewStamp();
+        } finally {
+            applyingReplica = false;
+        }
+    }
+
+    private void requestReplicaCommit(String label) {
+        if (applyingReplica) {
+            return;
+        }
+        if (!remoteEditsReady()) {
+            remoteWorkspaceReplica.discardUnsentEdit();
+            return;
+        }
+        remoteEditLabel = label;
+        flushReplicaCommit();
+        if (remoteEditLabel != null) {
+            Platform.runLater(this::flushReplicaCommit);
+        }
+    }
+
+    private void flushReplicaCommit() {
+        if (remoteWorkspaceReplica == null || remoteEditLabel == null || applyingReplica
+                || remoteWorkspaceGestureInProgress() || !remoteEditsReady()) {
+            return;
+        }
+        String label = remoteEditLabel;
+        remoteEditLabel = null;
+        remoteWorkspaceReplica.committed(label);
+        remoteViewStamp = remoteViewStamp();
+    }
+
+    private void remoteReplicaFrameBoundary() {
+        if (remoteWorkspaceReplica == null) {
+            return;
+        }
+        remoteSettingsLink.tick();
+        updateRemoteBusyProgress();
+        if (remoteOperationLink != null) remoteOperationLink.tick();
+        if (tokenBrowser != null) tokenBrowser.tickRemote();
+        if (audioControls != null) audioControls.tickRemote();
+        if (mapBrowser != null) {
+            mapBrowser.tickRemote();
+            String stamp = mapBrowser.remoteCurrentLevelId() + ":" + mapBrowser.remoteLevels();
+            if (!stamp.equals(remoteLevelStamp)) {
+                remoteLevelStamp = stamp;
+                updateLevelSwitcher();
+            }
+        }
+        flushRemoteMapOperation();
+        if (!remoteEditsReady()) {
+            remoteWorkspaceReplica.tick();
+        }
+        flushReplicaCommit();
+        if (remoteWorkspaceReplica.canEdit() && !remoteWorkspaceGestureInProgress()
+                && !java.util.Objects.equals(remoteViewStamp, remoteViewStamp())) {
+            requestReplicaCommit("Change player view");
+        }
+        remoteWorkspaceReplica.tick();
+        if (remotePlayerLink != null) remotePlayerLink.tick(remoteDisplayedContext,
+                remoteEditsReady() ? localLaserPoint() : null);
+        if (remoteHandoutLink != null) remoteHandoutLink.tick();
+        if (remoteSaveLink != null) {
+            remoteSaveLink.tick();
+            flushRemoteSave();
+        }
+        var accepted = remoteWorkspaceReplica.accepted();
+        if (undoButton != null && accepted != null) {
+            var history = accepted.history();
+            if (!history.equals(displayedRemoteHistory)) {
+                displayedRemoteHistory = history;
+                undoButton.setTooltip(new javafx.scene.control.Tooltip(remoteHistoryDescription("Undo", history.undo())));
+                redoButton.setTooltip(new javafx.scene.control.Tooltip(remoteHistoryDescription("Redo", history.redo())));
+            }
+            undoButton.setDisable(!remoteEditsReady() || history.undo() == null);
+            redoButton.setDisable(!remoteEditsReady() || history.redo() == null);
+        }
+    }
+
+    private static String remoteHistoryDescription(String operation, RemoteWorkspaceAuthority.HistoryEntry entry) {
+        return entry == null ? "Nothing to " + operation.toLowerCase(java.util.Locale.ROOT)
+                : operation + ": " + entry.label() + " (" + (entry.origin() == RemoteWorkspaceAuthority.Origin.HOST
+                ? "Host" : "Remote") + ")";
+    }
+
+    private void updateWorkspaceLighting() {
+        if (remoteWorkspaceReplica == null) {
+            lightingEngine.update(project);
+        } else {
+            lightingEngine.updateReplica(project);
+        }
+    }
+
+    private dmmt.remote.RemoteOperations.Connection remoteLibraryConnection() {
+        var link = remoteOperationLink;
+        return new dmmt.remote.RemoteOperations.Connection() {
+            @Override public boolean connected() { return remoteOperationLink == link && link.connected(); }
+            @Override public java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(
+                    String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                return connected() ? link.query(domain, action, payload)
+                        : java.util.concurrent.CompletableFuture.failedFuture(new IOException("Remote workspace changed."));
+            }
+            @Override public java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> command(
+                    String domain, String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                if (!connected()) return java.util.concurrent.CompletableFuture.failedFuture(new IOException("Host is disconnected."));
+                if (!"maps".equals(domain)) return link.command(domain, action, payload);
+                if (remoteConnectionController != null && remoteConnectionController.workspaceFailure() != null) {
+                    var failure = remoteConnectionController.workspaceFailure();
+                    reportRemoteError(failure.exception());
+                    return java.util.concurrent.CompletableFuture.failedFuture(failure.exception());
+                }
+                if (payload == null || !payload.isObject())
+                    return java.util.concurrent.CompletableFuture.failedFuture(new IllegalArgumentException("Invalid remote map command."));
+                if (queuedMapOperation != null || preparingRemoteMapOperation || remoteWorkspaceReplica.accepted() == null) {
+                    return java.util.concurrent.CompletableFuture.failedFuture(new IOException("Wait for the current host map operation."));
+                }
+                var result = new java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode>();
+                finishNudge();
+                commitTextEdit();
+                queuedMapOperation = new QueuedMapOperation(action, payload.deepCopy(),
+                        remoteWorkspaceReplica.accepted().contextId(), result);
+                flushReplicaCommit();
+                flushRemoteMapOperation();
+                return result;
+            }
+            @Override public java.util.concurrent.CompletableFuture<RemoteAssetStore.AssetDescriptor> upload(Path file) {
+                return connected() ? link.upload(file)
+                        : java.util.concurrent.CompletableFuture.failedFuture(new IOException("Remote workspace changed."));
+            }
+            @Override public java.util.concurrent.CompletableFuture<Path> download(RemoteAssetStore.AssetDescriptor asset) {
+                return connected() ? link.download(asset)
+                        : java.util.concurrent.CompletableFuture.failedFuture(new IOException("Remote workspace changed."));
+            }
+            @Override public java.util.concurrent.CompletableFuture<Path> download(RemoteAssetStore.AssetDescriptor asset, String label) {
+                return connected() ? link.download(asset, label)
+                        : java.util.concurrent.CompletableFuture.failedFuture(new IOException("Remote workspace changed."));
+            }
+            @Override public java.util.List<dmmt.remote.RemoteSessionClient.TransferProgress> transferProgress() {
+                return remoteConnectionController != null && remoteConnectionController.active()
+                        ? remoteConnectionController.transferProgress() : java.util.List.of();
+            }
+        };
+    }
+
+    private void flushRemoteMapOperation() {
+        if (queuedMapOperation == null || preparingRemoteMapOperation || !remoteEditsReady()
+                || remoteWorkspaceGestureInProgress() || remoteEditLabel != null) return;
+        var operation = queuedMapOperation;
+        var link = remoteOperationLink;
+        var accepted = remoteWorkspaceReplica.accepted();
+        if (!operation.context().equals(accepted.contextId())) {
+            queuedMapOperation = null;
+            operation.result().completeExceptionally(new IOException("The host switched maps; the queued operation was cancelled."));
+            return;
+        }
+        preparingRemoteMapOperation = true;
+        link.query("workspace", "state", com.fasterxml.jackson.databind.node.NullNode.getInstance())
+                .whenComplete((state, failure) -> {
+                    if (queuedMapOperation != operation || remoteOperationLink != link) return;
+                    if (failure != null) {
+                        finishRemoteMapOperation(operation, null, failure);
+                        return;
+                    }
+                    if (!operation.context().toString().equals(state.path("context").asText())
+                            || accepted.revision() != state.path("revision").asLong(-1)) {
+                        finishRemoteMapOperation(operation, null, new IOException("A changed the map; synchronize before repeating the operation."));
+                        return;
+                    }
+                    var payload = (com.fasterxml.jackson.databind.node.ObjectNode) operation.payload().deepCopy();
+                    var options = payload.path("options").isObject()
+                            ? (com.fasterxml.jackson.databind.node.ObjectNode) payload.path("options")
+                            : dmmt.service.JsonMappers.create().createObjectNode();
+                    payload.set("options", options);
+                    options.put("workspaceRevision", accepted.revision());
+                    boolean leaving = Set.of("new", "open", "openLevel", "import", "importMultiLevel").contains(operation.action());
+                    if (leaving && !state.path("saved").asBoolean() && state.path("hasContent").asBoolean()) {
+                        switch (Dialogs.askSaveChanges(primaryStage, "Save the new map on host A?",
+                                "The current host map has not been saved. Save it before this operation?")) {
+                            case CANCEL -> finishRemoteMapOperation(operation, null, new IOException("Host map operation cancelled."));
+                            case DISCARD -> {
+                                options.put("discardUnsaved", true);
+                                sendRemoteMapOperation(operation, payload);
+                            }
+                            case SAVE -> {
+                                if (remoteSaveLink == null) {
+                                    finishRemoteMapOperation(operation, null, new IOException("Host saving is unavailable."));
+                                } else {
+                                    remoteSaveLink.saveAsync(accepted, this::chooseRemoteSaveDestination)
+                                            .whenComplete((saved, saveFailure) -> {
+                                                if (queuedMapOperation != operation) return;
+                                                if (saveFailure != null) finishRemoteMapOperation(operation, null, saveFailure);
+                                                else if (!saved) finishRemoteMapOperation(operation, null, new IOException("Host map operation cancelled."));
+                                                else continueSavedMapOperation(operation, payload, accepted.history().version());
+                                            });
+                                }
+                            }
+                        }
+                    } else sendRemoteMapOperation(operation, payload);
+                });
+    }
+
+    private void sendRemoteMapOperation(QueuedMapOperation operation, com.fasterxml.jackson.databind.JsonNode payload) {
+        if (queuedMapOperation != operation || remoteOperationLink == null) return;
+        beginRemoteMapBusy(operation.action());
+        remoteOperationLink.command("maps", operation.action(), payload)
+                .whenComplete((value, failure) -> finishRemoteMapOperation(operation, value, failure));
+    }
+
+    private void continueSavedMapOperation(QueuedMapOperation operation, com.fasterxml.jackson.databind.node.ObjectNode payload,
+                                          long expectedHistory) {
+        var link = remoteOperationLink;
+        if (link == null || queuedMapOperation != operation) return;
+        link.query("workspace", "state", com.fasterxml.jackson.databind.node.NullNode.getInstance())
+                .thenCompose(state -> {
+                    if (!operation.context().toString().equals(state.path("context").asText())
+                            || state.path("historyVersion").asLong(-1) != expectedHistory) {
+                        return java.util.concurrent.CompletableFuture.<com.fasterxml.jackson.databind.JsonNode>failedFuture(
+                                new IOException("A changed the map while saving. Your map was saved; review the host workspace before switching."));
+                    }
+                    ((com.fasterxml.jackson.databind.node.ObjectNode) payload.path("options"))
+                            .put("workspaceRevision", state.path("revision").asLong());
+                    return link.query("maps", "list", com.fasterxml.jackson.databind.node.NullNode.getInstance());
+                }).whenComplete((listing, failure) -> {
+                    if (queuedMapOperation != operation || remoteOperationLink != link) return;
+                    if (failure != null) {
+                        finishRemoteMapOperation(operation, null, failure);
+                        return;
+                    }
+                    var handles = new HashSet<String>();
+                    listing.path("nodes").forEach(node -> handles.add(node.path("id").asText()));
+                    boolean missing = false;
+                    for (var selected : payload.path("entries")) missing |= !handles.contains(selected.asText());
+                    if (!payload.path("destination").isNull() && !payload.path("destination").isMissingNode()) {
+                        missing |= !handles.contains(payload.path("destination").asText());
+                    }
+                    if (missing || !operation.context().toString().equals(listing.path("context").asText())) {
+                        finishRemoteMapOperation(operation, null, new IOException("The host library selection changed while saving. Refresh and repeat the action."));
+                    } else {
+                        payload.put("revision", listing.path("revision").asLong());
+                        if (Set.of("import", "importFolder", "importMultiLevel").contains(operation.action())) {
+                            refreshSavedImportPreflight(operation, payload);
+                        } else sendRemoteMapOperation(operation, payload);
+                    }
+                });
+    }
+
+    private void refreshSavedImportPreflight(QueuedMapOperation operation,
+                                            com.fasterxml.jackson.databind.node.ObjectNode payload) {
+        var link = remoteOperationLink;
+        var mapper = dmmt.service.JsonMappers.create();
+        var options = (com.fasterxml.jackson.databind.node.ObjectNode) payload.path("options");
+        var checkOptions = mapper.createObjectNode();
+        var names = checkOptions.putArray("names");
+        options.path("sources").forEach(source -> names.add(source.path("name").asText()));
+        var check = new dmmt.remote.RemoteMaps.Command(operation.context(), payload.path("revision").asLong(),
+                List.of(), null, null, checkOptions);
+        link.query("maps", "importPreflight", mapper.valueToTree(check)).whenComplete((reply, failure) -> {
+            if (queuedMapOperation != operation || remoteOperationLink != link) return;
+            if (failure != null) {
+                finishRemoteMapOperation(operation, null, failure);
+                return;
+            }
+            var approved = new HashSet<String>();
+            options.path("duplicateAccepted").forEach(name -> approved.add(name.asText()));
+            String behavior = reply.path("behavior").asText();
+            if (!reply.path("duplicates").isArray() || !reply.path("preflight").isTextual()
+                    || !Set.of("ask", "always", "never").contains(behavior)) {
+                finishRemoteMapOperation(operation, null, new IOException("Invalid host import confirmation."));
+                return;
+            }
+            for (var duplicate : reply.path("duplicates")) {
+                if (behavior.equals("never") || behavior.equals("ask") && !approved.contains(duplicate.asText())) {
+                    finishRemoteMapOperation(operation, null, new IOException(
+                            "The host map was saved, but its library now contains additional duplicates. Repeat the import to review them."));
+                    return;
+                }
+            }
+            options.set("preflight", reply.path("preflight"));
+            sendRemoteMapOperation(operation, payload);
+        });
+    }
+
+    private void finishRemoteMapOperation(QueuedMapOperation operation, com.fasterxml.jackson.databind.JsonNode value, Throwable failure) {
+        if (queuedMapOperation == operation) {
+            queuedMapOperation = null;
+            preparingRemoteMapOperation = false;
+        }
+        if (failure != null || !MAP_SWITCHING_ACTIONS.contains(operation.action())) endRemoteMapBusy();
+        else remoteMapBusyDeadline = System.nanoTime() + 20_000_000_000L; // keep busy until the new map is shown
+        if (failure != null) operation.result().completeExceptionally(failure);
+        else operation.result().complete(value);
+    }
+
+    private static final Set<String> MAP_SWITCHING_ACTIONS =
+            Set.of("new", "open", "openLevel", "import", "importMultiLevel");
+
+    private dmmt.ui.RemoteBusyDialog remoteBusy() {
+        if (remoteBusyDialog == null) remoteBusyDialog = new dmmt.ui.RemoteBusyDialog(primaryStage);
+        return remoteBusyDialog;
+    }
+
+    private void beginRemoteMapBusy(String action) {
+        endRemoteMapBusy();
+        String[] text = switch (action) {
+            case "open", "openLevel" -> new String[] {"Opening map", "Waiting for the host to load the map..."};
+            case "new" -> new String[] {"Creating map", "Waiting for the host to create the map..."};
+            case "import", "importFolder", "importMultiLevel" ->
+                    new String[] {"Importing map", "The host is importing the map. Large maps can take a while..."};
+            case "export" -> new String[] {"Exporting maps", "The host is exporting the selected maps..."};
+            default -> new String[] {"Updating host library", "Waiting for the host..."};
+        };
+        remoteMapBusyEnd = remoteBusy().begin(text[0], text[1]);
+        remoteMapBusyDeadline = 0;
+    }
+
+    private void endRemoteMapBusy() {
+        remoteMapBusyDeadline = 0;
+        if (remoteMapBusyEnd != null) {
+            var end = remoteMapBusyEnd;
+            remoteMapBusyEnd = null;
+            end.run();
+        }
+    }
+
+    /** Shows import progress for asset uploads from this client to the host. */
+    private Runnable beginRemoteUploadBusy(Path file) {
+        var name = file == null || file.getFileName() == null ? "file" : file.getFileName().toString();
+        return remoteBusy().begin("Uploading to host", "Sending " + name + " to the host...");
+    }
+
+    private void updateRemoteBusyProgress() {
+        if (remoteTransferOverlay != null) {
+            remoteTransferOverlay.update(remoteConnectionController != null && remoteConnectionController.active()
+                    ? remoteConnectionController.transferProgress() : java.util.List.of(),
+                    sha -> remoteOperationLink == null ? null : remoteOperationLink.transferLabel(sha));
+        }
+        if (remoteBusyDialog == null || !remoteBusyDialog.busy()) return;
+        if (remoteMapBusyDeadline != 0 && System.nanoTime() > remoteMapBusyDeadline) endRemoteMapBusy();
+        long total = 0;
+        long done = 0;
+        if (remoteConnectionController != null && remoteConnectionController.active()) {
+            for (var transfer : remoteConnectionController.transferProgress()) {
+                total += transfer.totalBytes();
+                done += transfer.transferredBytes();
+            }
+        }
+        if (total > 0) {
+            remoteBusyDialog.progress(done / (double) total, String.format(Locale.ROOT, "%.1f / %.1f MB",
+                    done / 1_048_576.0, total / 1_048_576.0));
+        } else remoteBusyDialog.progress(-1, null);
+    }
+
+    private record RemoteLibraryOutcome(MapLibraryService.Result result, LoadedProject loaded,
+                                        boolean preserveHistory, boolean deleted, MultiLevelManifest manifest,
+                                        List<String> tags, com.fasterxml.jackson.databind.JsonNode reply) { }
+
+    private java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> executeRemoteMapRequest(
+            dmmt.remote.RemoteMaps.Request request, RemoteAssetStore store, Path cache) {
+        var completion = new java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode>();
+        try {
+            if (stopping || remoteWorkspaceHost == null || !remoteWorkspaceHost.ready()
+                    || remoteWorkspaceGestureInProgress() || ioBusy || !pendingImageAdds.isEmpty() || imageAddTask != null) {
+                throw new IOException("A is finishing a local operation. Repeat the action after synchronization.");
+            }
+            var state = remoteWorkspaceHost.state();
+            if (!state.contextId().equals(request.context()) || request.options() == null
+                    || request.options().path("workspaceRevision").asLong(-1) != state.revision()) {
+                throw new IOException("A changed the workspace before this map action. Synchronize and repeat it.");
+            }
+            boolean leaving = Set.of("new", "open", "openLevel", "import", "importMultiLevel").contains(request.action());
+            if (leaving && projectFile == null && hasContent(project)
+                    && !request.options().path("discardUnsaved").asBoolean(false)) {
+                throw new IOException("Save or explicitly discard the new host map before leaving it.");
+            }
+            if (request.action().equals("open") || request.action().equals("openLevel")) {
+                var entry = request.entries().getFirst();
+                if (!entry.isMap()) throw new IOException("Choose a map, not a folder.");
+                return switchToMapAsync(entry.mapFile(), request.action().equals("openLevel")
+                        ? request.options().path("id").asText() : null)
+                        .thenApply(ignored -> com.fasterxml.jackson.databind.node.NullNode.getInstance());
+            }
+            var library = mapLibrary;
+            var service = projectService;
+            var files = new dmmt.remote.RemoteMapFiles(store, cache, library, service);
+            var mapper = dmmt.service.JsonMappers.create();
+            Path oldFile = projectFile == null ? null : projectFile.toAbsolutePath().normalize();
+            Path oldManifest = multiLevelFile == null ? null : multiLevelFile.toAbsolutePath().normalize();
+            var selected = new ArrayList<>(request.entries());
+            if (request.destination() != null && request.destination().isMap()) selected.add(request.destination());
+            boolean touches = oldFile != null && selected.stream().anyMatch(entry ->
+                    oldFile.startsWith(entry.path().toAbsolutePath().normalize()));
+            SaveTarget saveTarget = currentSaveTarget();
+            DmProject live = project;
+            long version = historyVersion;
+            DmProject snapshot = saveTarget != null && (touches || leaving) ? service.copy(project) : null;
+            var dmViewport = imageViewport(dmBaseCanvas);
+            var playerViewport = imageViewport(playerBaseCanvas);
+            if (adjacentPrefetch != null && touches) {
+                prefetchGeneration++;
+                adjacentPrefetch.clear();
+            }
+            runInBackground("Applying remote map operation...", "Remote map operation failed: ", () -> {
+                if (snapshot != null) saveTo(saveTarget, snapshot, library, service);
+                MapLibraryService.Result result = new MapLibraryService.Result(Map.of(), null);
+                LoadedProject loaded = null;
+                boolean preserveHistory = false;
+                boolean deleted = false;
+                MultiLevelManifest manifest = null;
+                List<String> tags = null;
+                com.fasterxml.jackson.databind.JsonNode reply = com.fasterxml.jackson.databind.node.NullNode.getInstance();
+                switch (request.action()) {
+                    case "new" -> {
+                        Path target = library.newMapFile(request.destination().path(), request.name());
+                        var fresh = freshProject();
+                        new FogService().ensureMask(fresh);
+                        service.save(target, fresh);
+                        loaded = prepareLoadedProject(fresh, target, null, dmViewport, playerViewport);
+                        result = new MapLibraryService.Result(Map.of(), target);
+                    }
+                    case "import", "importFolder", "importMultiLevel" -> {
+                        var options = (com.fasterxml.jackson.databind.node.ObjectNode) request.options().deepCopy();
+                        options.remove(List.of("workspaceRevision", "discardUnsaved", "preflight", "duplicateAccepted", "batch"));
+                        var inputs = mapper.treeToValue(options, dmmt.remote.RemoteMapFiles.Import.class);
+                        var imported = files.importFiles(inputs, request.destination().path());
+                        var report = mapper.createObjectNode().put("imported", imported.imported().size()).put("total", imported.total());
+                        var failures = report.putArray("failures");
+                        for (var failure : imported.failures()) failures.addObject()
+                                .put("source", failure.source().getFileName().toString()).put("reason", failure.reason());
+                        reply = report;
+                        if (imported.imported().isEmpty() && !imported.failures().isEmpty()) {
+                            throw new IOException("No maps were imported. " + imported.failures().getFirst().reason());
+                        }
+                        if (!imported.imported().isEmpty()) {
+                            Path first = imported.imported().getFirst();
+                            result = new MapLibraryService.Result(Map.of(), first);
+                            if (!request.action().equals("importFolder") && !request.options().path("batch").asBoolean(false)
+                                    && (inputs.multiLevel() || inputs.sources().size() == 1 && !MapExportService.isPackFile(
+                                    Path.of(inputs.sources().getFirst().name())))) {
+                                loaded = loadAnyMap(library.multiLevels(), first, null, dmViewport, playerViewport);
+                            }
+                        }
+                    }
+                    case "export" -> reply = mapper.valueToTree(files.export(request.entries()));
+                    default -> {
+                        Files.createDirectories(cache);
+                        Path staging = Files.createTempDirectory(cache, "level-import-");
+                        try {
+                            result = dmmt.remote.RemoteMaps.mutate(library, request, item -> {
+                                var asset = mapper.treeToValue(item.path("asset"), RemoteAssetStore.AssetDescriptor.class);
+                                var input = new dmmt.remote.RemoteMapFiles.Input(item.path("sourceName").asText(), asset, null);
+                                if (MapExportService.isPackFile(Path.of(input.name()))) throw new IOException("Choose a Universal VTT level.");
+                                if (!store.descriptor(asset.sha256()).equals(asset)) throw new IOException("Level asset metadata does not match.");
+                                Path source = staging.resolve(UUID.randomUUID() + "-" + input.name());
+                                try (var output = Files.newOutputStream(source, java.nio.file.StandardOpenOption.CREATE_NEW)) {
+                                    store.transferTo(asset.sha256(), output);
+                                }
+                                return source;
+                            });
+                        } finally {
+                            MapLibraryService.deleteRecursive(staging);
+                        }
+                    }
+                }
+                if (touches && loaded == null && !request.action().equals("export") && !request.action().equals("copy")) {
+                    Path moved = movedLocation(result, oldFile);
+                    if (moved != null) {
+                        loaded = loadAnyMap(library.multiLevels(), moved, null, dmViewport, playerViewport);
+                        preserveHistory = Set.of("rename", "move").contains(request.action());
+                    }
+                    else if (!Files.isRegularFile(oldFile)) {
+                        if (oldManifest != null && Files.isRegularFile(oldManifest)) {
+                            loaded = loadAnyMap(library.multiLevels(), oldManifest, null, dmViewport, playerViewport);
+                        } else if (result.createdMap() != null && Files.isRegularFile(result.createdMap())) {
+                            loaded = loadAnyMap(library.multiLevels(), result.createdMap(), null, dmViewport, playerViewport);
+                        } else deleted = true;
+                    } else {
+                        if (request.action().equals("tags")) tags = library.tags().readTags(oldFile);
+                        if (oldManifest != null && Files.isRegularFile(oldManifest)) manifest = library.multiLevels().loadManifest(oldManifest);
+                    }
+                }
+                return new RemoteLibraryOutcome(result, loaded, preserveHistory, deleted, manifest, tags, reply);
+            }, outcome -> {
+                try {
+                    if (project == live && snapshot != null) {
+                        adoptCopiedAssetPaths(snapshot);
+                        markSaved(snapshot, version);
+                    }
+                    if (outcome.loaded() != null) {
+                        var loaded = outcome.loaded();
+                        ImagePyramidStore.shared().adopt(loaded.images());
+                        if (outcome.preserveHistory() && project == live) {
+                            projectFile = loaded.file();
+                            if (oldManifest != null) {
+                                Path movedManifest = movedLocation(outcome.result(), oldManifest);
+                                if (movedManifest != null) multiLevelFile = movedManifest;
+                            }
+                            adoptCopiedAssetPaths(loaded.project());
+                            requestRemoteWorkspaceCommit();
+                        } else switchProject(loaded.project(), loaded.file(), loaded.level());
+                    } else if (outcome.deleted()) switchProject(freshProject(), null);
+                    else if (project == live) {
+                        if (outcome.manifest() != null) multiLevelManifest = outcome.manifest();
+                        if (outcome.tags() != null) {
+                            project.getMap().setTags(new ArrayList<>(outcome.tags()));
+                            savedFingerprint = fingerprintOrNull(project);
+                            requestRemoteWorkspaceCommit();
+                        }
+                    }
+                    if (frozenPlayerProjectFile != null) {
+                        Path moved = movedLocation(outcome.result(), frozenPlayerProjectFile.toAbsolutePath().normalize());
+                        if (moved != null) frozenPlayerProjectFile = moved;
+                    }
+                    if (remoteMapsHost != null) remoteMapsHost.invalidate();
+                    if (mapBrowser != null) {
+                        mapBrowser.refresh();
+                        mapBrowser.invalidateThumbnails();
+                        if (outcome.result().createdMap() != null) mapBrowser.select(outcome.result().createdMap());
+                        mapBrowser.updateCurrentMap();
+                    }
+                    updateLevelSwitcher();
+                    updateWindowTitle();
+                    scheduleAdjacentPrefetch();
+                    status("Remote map operation completed on host A.");
+                    completion.complete(outcome.reply());
+                } catch (RuntimeException failure) {
+                    completion.completeExceptionally(failure);
+                    status("Could not display the remote library result: " + failure.getMessage());
+                }
+            }, completion::completeExceptionally);
+        } catch (IOException | RuntimeException failure) {
+            completion.completeExceptionally(failure);
+        }
+        return completion;
+    }
+
+    RemoteWorkspaceHost beginRemoteWorkspace(RemoteAssetStore store, Path cache,
+                                            java.util.concurrent.Executor workerExecutor) {
+        if (!Platform.isFxApplicationThread() || remoteWorkspaceHost != null || preferences.usesHostSettings()) {
+            throw new IllegalStateException("Only a standalone host can start an application-owned remote workspace.");
+        }
+        finishNudge();
+        finishPlayerViewportDrag();
+        commitTextEdit();
+        if (remoteWorkspaceGestureInProgress()) {
+            throw new IllegalStateException("Finish the current edit before starting remote hosting.");
+        }
+        lightingEngine.update(project);
+        project.getViews().setPlayerFrozen(frozenPlayerProject != null);
+        remoteViewStamp = remoteViewStamp();
+        remoteCommitPending = false;
+        remoteWorkspaceHost = new RemoteWorkspaceHost(() -> project, () -> projectFile,
+                this::remoteProtectedTargets, this::applyRemoteWorkspaceCommit, store, cache,
+                Platform::runLater, workerExecutor, this::status, () -> {
+                    flushRemoteWorkspaceCommit();
+                    return !remoteCommitPending && !ioBusy && !remoteModalShowing();
+                }, (before, after) -> new LightingEngine().completeCommittedEdit(before, after));
+        remoteWorkspaceHost.configureHistory(() -> new RemoteWorkspaceAuthority.History(historyVersion,
+                remoteHistoryEntry(undoStack.peek()), remoteHistoryEntry(redoStack.peek())), operation -> {
+            applyingRemoteWorkspace = true;
+            try {
+                if (operation == RemoteWorkspaceAuthority.Operation.UNDO) {
+                    undo();
+                } else {
+                    redo();
+                }
+            } finally {
+                applyingRemoteWorkspace = false;
+            }
+        });
+        remotePlayerHost = new RemotePlayerSession(() -> remoteWorkspaceHost.state().contextId(),
+                this::capturePlayerOutput, this::localLaserPoint, this::receiveRemotePointer,
+                request -> {
+                    switch (request.action()) {
+                        case WINDOW -> { if (request.enabled()) openPlayerWindow(); else closePlayerWindow(); }
+                        case SCALE_TEST -> {
+                            showScaleTestSquare = request.enabled();
+                            if (scaleTestToggle != null) scaleTestToggle.setSelected(showScaleTestSquare);
+                        }
+                        case SCREEN -> {
+                            preferences.putInt(PREF_PLAYER_SCREEN_INDEX, request.screenIndex());
+                            refreshPlayerScreenSelector();
+                        }
+                    }
+                    lastInputNanos = System.nanoTime();
+                }, () -> !stopping && !ioBusy && !remoteModalShowing() && !draggingPlayerViewport);
+        remoteWorkspaceHost.configurePlayer(remotePlayerHost);
+        remoteHandoutHost = new RemoteHandoutSession(
+                () -> handoutWindow == null
+                        ? new HandoutWindow.Snapshot(List.of(), 0, false, false, null) : handoutWindow.snapshot(),
+                snapshot -> {
+                    if (snapshot.shown() && !playerOutputVisible()) {
+                        throw new IllegalStateException("Open the host player window before showing handouts.");
+                    }
+                    ensureHandoutWindow(primaryStage);
+                    handoutWindow.applySnapshot(snapshot);
+                    lastInputNanos = System.nanoTime();
+                }, new RemoteHandouts.Artwork(store, cache.resolve("handouts")),
+                RecentHandouts.worker(), Platform::runLater, this::status);
+        var existingRecents = handoutWindow == null ? null : handoutWindow.recentStore();
+        Path handoutSettingsFile = preferences.getFile();
+        remoteHandoutLibrary = new dmmt.remote.RemoteHandoutLibrary(
+                existingRecents == null ? () -> RecentHandouts.open(handoutSettingsFile) : () -> existingRecents,
+                store, cache.resolve("recent-handouts"));
+        remoteHandoutHost.configureLibrary(remoteHandoutLibrary, () -> Tuning.HANDOUT_RECENT_MAX.get());
+        remoteWorkspaceHost.configureHandouts(remoteHandoutHost);
+        var saveHost = remoteWorkspaceHost;
+        saveHost.configureOperations(new dmmt.remote.RemoteOperations(Platform::runLater));
+        var tokens = new dmmt.remote.RemoteTokens(
+                () -> tokenLibrary, store, cache.resolve("tokens"), workerExecutor, Platform::runLater,
+                this::tokenDefinitionChanged);
+        if (tokenBrowser != null) tokens.setLibraryChanged(tokenBrowser::refresh);
+        saveHost.operations().register("tokens", tokens);
+        var audio = new dmmt.remote.RemoteAudio(
+                () -> Tuning.AUDIO_ENABLED.get() ? audioControls : null,
+                store, cache.resolve("audio"), workerExecutor, Platform::runLater, this::status);
+        audio.configureSettings(preferences);
+        saveHost.operations().register("audio", audio);
+        saveHost.operations().register("workspace", new dmmt.remote.RemoteOperations.Endpoint() {
+            @Override public java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> query(
+                    String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                if (!"state".equals(action)) return java.util.concurrent.CompletableFuture.failedFuture(
+                        new IOException("Unknown host workspace query."));
+                var state = saveHost.state();
+                var value = dmmt.service.JsonMappers.create().createObjectNode();
+                value.put("context", state.contextId().toString()).put("revision", state.revision())
+                        .put("historyVersion", historyVersion)
+                        .put("saved", projectFile != null).put("hasContent", hasContent(project));
+                return java.util.concurrent.CompletableFuture.completedFuture(value);
+            }
+            @Override public java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode> execute(
+                    String action, com.fasterxml.jackson.databind.JsonNode payload) {
+                return java.util.concurrent.CompletableFuture.failedFuture(new IOException("Use an explicit host map operation."));
+            }
+        });
+        remoteMapsHost = new dmmt.remote.RemoteMaps(
+                () -> new dmmt.remote.RemoteMapCatalog.Source(mapLibrary, openMapFile(),
+                        projectFile == null ? "Unsaved new map" : currentSaveTarget().displayName(),
+                        saveHost.state().contextId()),
+                () -> new RecentMaps(preferences).snapshot(), store, workerExecutor, Platform::runLater,
+                request -> executeRemoteMapRequest(request, store, cache.resolve("map-files")));
+        saveHost.operations().register("maps", remoteMapsHost);
+        saveHost.configureSaves(new RemoteSaves(saveHost::state,
+                () -> new RemoteSaves.Target(projectFile != null,
+                        projectFile == null ? "New map" : currentSaveTarget().displayName(),
+                        mapLibrary.getRoot().toString()),
+                () -> saveHost.ready() && !remoteWorkspaceGestureInProgress(),
+                this::saveRemoteSnapshot, Platform::runLater));
+        saveHost.configureMaps(new dmmt.remote.RemoteMapCatalog(
+                () -> new dmmt.remote.RemoteMapCatalog.Source(mapLibrary, openMapFile(),
+                        projectFile == null ? "Unsaved new map" : currentSaveTarget().displayName(),
+                        saveHost.state().contextId()),
+                workerExecutor, Platform::runLater));
+        return remoteWorkspaceHost;
+    }
+
+    private static RemoteWorkspaceAuthority.HistoryEntry remoteHistoryEntry(HistoryAction action) {
+        return action == null ? null : new RemoteWorkspaceAuthority.HistoryEntry(action.label, action.origin);
+    }
+
+    void endRemoteWorkspace() {
+        remoteMapsHost = null;
+        remoteHandoutHost = null;
+        remoteHandoutLibrary = null;
+        remotePlayerHost = null;
+        receiveRemotePointer(RemotePlayerSession.Pointer.empty(null));
+        if (remoteWorkspaceHost != null) {
+            remoteWorkspaceHost.close();
+            remoteWorkspaceHost = null;
+        }
+        remoteCommitPending = false;
+        remoteControlsPending = false;
+        remoteViewStamp = null;
+    }
+
+    private void requestRemoteWorkspaceCommit() {
+        if (remoteWorkspaceReplica != null) {
+            requestReplicaCommit("Change workspace");
+            return;
+        }
+        if (remoteWorkspaceHost == null || applyingRemoteWorkspace) {
+            return;
+        }
+        remoteCommitPending = true;
+        flushRemoteWorkspaceCommit();
+        if (!remoteCommitPending) {
+            return;
+        }
+        if (!remoteCommitScheduled) {
+            remoteCommitScheduled = true;
+            Platform.runLater(() -> {
+                remoteCommitScheduled = false;
+                flushRemoteWorkspaceCommit();
+            });
+        }
+    }
+
+    private void flushRemoteWorkspaceCommit() {
+        if (remoteWorkspaceHost == null || !remoteCommitPending || applyingRemoteWorkspace
+                || remoteWorkspaceGestureInProgress()) {
+            return;
+        }
+        lightingEngine.update(project);
+        remoteWorkspaceHost.committed();
+        remoteCommitPending = false;
+        remoteViewStamp = remoteViewStamp();
+    }
+
+    private void remoteWorkspaceFrameBoundary() {
+        if (remoteWorkspaceHost == null || applyingRemoteWorkspace || remoteWorkspaceGestureInProgress()) {
+            return;
+        }
+        if (!java.util.Objects.equals(remoteViewStamp, remoteViewStamp())) {
+            remoteCommitPending = true;
+        }
+        flushRemoteWorkspaceCommit();
+        if (remoteControlsPending) {
+            remoteControlsPending = false;
+            syncControlsFromProject();
+        }
+    }
+
+    private RemoteViewStamp remoteViewStamp() {
+        var view = project.getViews();
+        var camera = view.getPlayerCamera();
+        var mask = project.getFog().getMask();
+        return new RemoteViewStamp(mask, mask == null ? 0 : mask.getVersion(), camera.getX(), camera.getY(),
+                camera.getZoom(), view.getPlayerZoomStep(), remoteWorkspaceReplica == null
+                ? frozenPlayerProject != null : view.isPlayerFrozen());
+    }
+
+    private record RemoteViewStamp(FogMask mask, long fogVersion, double x, double y, double zoom,
+                                   double zoomStep, boolean frozen) {
+    }
+
+    private boolean remoteWorkspaceGestureInProgress() {
+        return interactionInProgress() || draggingGroup || nudgeStartPositions != null || editingTextId != null
+                || overlayStyleBefore != null
+                || java.util.stream.Stream.of(ambientBrightnessSlider, lightTintSlider, brightCoreSlider,
+                        weatherIntensitySlider, lightningIntervalSlider, playerZoomSlider, overlayAlphaSlider)
+                .anyMatch(slider -> slider != null && slider.isValueChanging());
+    }
+
+    private boolean remoteModalShowing() {
+        return javafx.stage.Window.getWindows().stream().anyMatch(window -> window.isShowing()
+                && window instanceof Stage stage && stage.getModality() != javafx.stage.Modality.NONE);
+    }
+
+    private Set<String> remoteProtectedTargets() {
+        Set<String> targets = new java.util.LinkedHashSet<>();
+        if ((draggingToken || resizingToken || rotatingToken) && selectedTokenId != null) {
+            targets.add("tokens:" + selectedTokenId);
+        }
+        if ((draggingLayer || resizingLayer) && selectedLayer != null) {
+            targets.add("imageLayers:" + selectedLayer.getId());
+        }
+        if (draggingLight && selectedLight != null) {
+            targets.add("lights:" + selectedLight.getId());
+            targets.add("fog:geometry");
+        }
+        if ((draggingOverlay || resizingOverlay || overlayStyleBefore != null) && selectedOverlayId != null) {
+            targets.add("overlays:" + selectedOverlayId);
+            targets.add("fog:geometry");
+        }
+        if ((draggingText || resizingTextHandle >= 0) && selectedTextId != null) {
+            targets.add("textBoxes:" + selectedTextId);
+        }
+        if (editingTextId != null) {
+            targets.add("textBoxes:" + editingTextId);
+        }
+        if (fogDragging) {
+            targets.add("fog:geometry");
+        }
+        if (draggingPlayerViewport || (playerZoomSlider != null && playerZoomSlider.isValueChanging())) {
+            targets.add("views:playerCamera");
+            targets.add("views:playerZoomStep");
+        }
+        if (draggingGroup && groupStartPositions != null) {
+            groupStartPositions.keySet().forEach(key -> addRemoteMovementTarget(targets, key));
+        }
+        if (nudgeStartPositions != null) {
+            nudgeStartPositions.keySet().forEach(key -> addRemoteMovementTarget(targets, key));
+        }
+        protectRemoteSlider(targets, ambientBrightnessSlider, "lighting:ambientBrightness");
+        protectRemoteSlider(targets, lightTintSlider, "lighting:lightTint");
+        protectRemoteSlider(targets, brightCoreSlider, "lighting:brightCore");
+        protectRemoteSlider(targets, weatherIntensitySlider, "project:weather");
+        protectRemoteSlider(targets, lightningIntervalSlider, "project:weather");
+        if (targets.contains("fog:geometry")) {
+            targets.add("fog:enabled");
+            targets.add("fog:maskResolution");
+        }
+        return targets;
+    }
+
+    private static void protectRemoteSlider(Set<String> targets, Slider slider, String target) {
+        if (slider != null && slider.isValueChanging()) {
+            targets.add(target);
+        }
+    }
+
+    private static void addRemoteMovementTarget(Set<String> targets, String key) {
+        String[] parts = key.split(":", 2);
+        String group = switch (parts[0]) {
+            case "token" -> "tokens";
+            case "layer" -> "imageLayers";
+            case "light" -> "lights";
+            case "overlay" -> "overlays";
+            case "text" -> "textBoxes";
+            default -> throw new IllegalArgumentException("Unknown editor movement target.");
+        };
+        targets.add(group + ":" + parts[1]);
+        if (group.equals("lights") || group.equals("overlays")) {
+            targets.add("fog:geometry");
+        }
+    }
+
+    private void applyRemoteWorkspaceCommit(RemoteWorkspaceAuthority.Commit commit) {
+        applyingRemoteWorkspace = true;
+        try {
+            applyRemoteWorkspaceState(commit.after(), commit.targets());
+            pushHistory(new HistoryAction("Remote: " + commit.label(),
+                    () -> applyRemoteWorkspaceState(commit.after(), commit.targets()),
+                    () -> applyRemoteWorkspaceState(commit.before(), commit.targets()), commit.origin()));
+        } finally {
+            applyingRemoteWorkspace = false;
+        }
+    }
+
+    private void applyRemoteWorkspaceState(DmProject state, Set<String> targets) {
+        DmProject freezeSnapshot = null;
+        boolean freezeChanged = targets.contains("views:playerFrozen")
+                && state.getViews().isPlayerFrozen() != (frozenPlayerProject != null);
+        if (freezeChanged && state.getViews().isPlayerFrozen()) {
+            try {
+                freezeSnapshot = projectService.copy(state);
+            } catch (IOException failure) {
+                throw new IllegalArgumentException("Could not prepare the frozen player output.", failure);
+            }
+        }
+        RemoteProjectChanges.apply(project, state, targets);
+        if (freezeChanged) {
+            if (freezeSnapshot == null) {
+                setPlayerFrozen(false);
+            } else {
+                frozenPlayerProject = freezeSnapshot;
+                frozenPlayerProjectFile = projectFile;
+                frozenPlayerCamera = copyCamera(state.getViews().getPlayerCamera());
+                playerRenderer.setWeatherFrozen(true);
+                playerLightingEngine.reset();
+                updatePlayerOutputStatus();
+            }
+        }
+        if (targets.stream().anyMatch(target -> target.startsWith("fog:") || target.startsWith("fogBits:"))) {
+            lightingEngine.acceptCommittedState(project);
+        }
+        roomBarrier = null;
+        roomPreview = null;
+        selectedLayer = selectedLayer == null ? null : findLayerById(selectedLayer.getId());
+        selectedLight = selectedLight == null ? null : findLightById(selectedLight.getId());
+        if (findToken(selectedTokenId) == null) {
+            selectedTokenId = null;
+        }
+        if (findOverlay(selectedOverlayId) == null) {
+            selectedOverlayId = null;
+        }
+        if (findTextBox(selectedTextId) == null) {
+            selectedTextId = null;
+        }
+        groupKeys.removeIf(key -> groupPosition(key) == null);
+        renderer.invalidatePlayerLayerCaches();
+        playerRenderer.invalidatePlayerLayerCaches();
+        if (remoteWorkspaceGestureInProgress()) {
+            remoteControlsPending = true;
+        } else {
+            syncControlsFromProject();
+        }
+        remoteViewStamp = remoteViewStamp();
+    }
+
     private void executeWithHistory(String label, Runnable doAction, Runnable undoAction) {
         finishNudge();
+        if (remoteWorkspaceReplica != null && !remoteEditsReady()) {
+            status("Remote editing is paused; this action was not applied.");
+            return;
+        }
         doAction.run();
         pushHistory(new HistoryAction(label, doAction, undoAction));
     }
 
     private void pushHistory(HistoryAction action) {
+        if (remoteWorkspaceReplica != null) {
+            requestReplicaCommit(action.label);
+            return;
+        }
         historyVersion++;
         undoStack.push(action);
         redoStack.clear();
         while (undoStack.size() > Tuning.HISTORY_MAX_STEPS.get()) {
             undoStack.removeLast();
         }
+        requestRemoteWorkspaceCommit();
     }
 
     private void undo() {
+        if (remoteWorkspaceReplica != null) {
+            changeRemoteHistory(RemoteWorkspaceAuthority.Operation.UNDO);
+            return;
+        }
         if (activeTool == EditorTool.WALL_DRAW) {
             draftWall = null;
         }
@@ -9419,10 +11575,15 @@ public class DungeonMasterMapToolApplication extends Application {
         action.undo.run();
         historyFeedback.show(before, HistoryFeedback.capture(project, renderer.isWallLayerVisible()), System.nanoTime());
         redoStack.push(action);
+        requestRemoteWorkspaceCommit();
         status("Undid: " + action.label);
     }
 
     private void redo() {
+        if (remoteWorkspaceReplica != null) {
+            changeRemoteHistory(RemoteWorkspaceAuthority.Operation.REDO);
+            return;
+        }
         if (activeTool == EditorTool.WALL_DRAW) {
             draftWall = null;
         }
@@ -9440,7 +11601,28 @@ public class DungeonMasterMapToolApplication extends Application {
         action.redo.run();
         historyFeedback.show(before, HistoryFeedback.capture(project, renderer.isWallLayerVisible()), System.nanoTime());
         undoStack.push(action);
+        requestRemoteWorkspaceCommit();
         status("Redid: " + action.label);
+    }
+
+    private void changeRemoteHistory(RemoteWorkspaceAuthority.Operation operation) {
+        if (activeTool == EditorTool.WALL_DRAW) {
+            draftWall = null;
+        }
+        finishNudge();
+        finishPlayerViewportDrag();
+        commitTextEdit();
+        if (!remoteEditsReady() || remoteWorkspaceGestureInProgress()) {
+            status("Finish the current edit and wait for host confirmation before changing shared history.");
+            return;
+        }
+        var history = remoteWorkspaceReplica.accepted().history();
+        var entry = operation == RemoteWorkspaceAuthority.Operation.UNDO ? history.undo() : history.redo();
+        if (entry == null) {
+            status(operation == RemoteWorkspaceAuthority.Operation.UNDO ? "Nothing to undo." : "Nothing to redo.");
+            return;
+        }
+        remoteWorkspaceReplica.history(operation);
     }
 
     private DmProject.ImageLayer findLayerById(String id) {
@@ -9629,11 +11811,17 @@ public class DungeonMasterMapToolApplication extends Application {
         private final String label;
         private final Runnable redo;
         private final Runnable undo;
+        private final RemoteWorkspaceAuthority.Origin origin;
 
         private HistoryAction(String label, Runnable redo, Runnable undo) {
+            this(label, redo, undo, RemoteWorkspaceAuthority.Origin.HOST);
+        }
+
+        private HistoryAction(String label, Runnable redo, Runnable undo, RemoteWorkspaceAuthority.Origin origin) {
             this.label = label;
             this.redo = redo;
             this.undo = undo;
+            this.origin = origin;
         }
     }
 }

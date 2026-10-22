@@ -176,6 +176,25 @@ public class MapLibraryService {
         return new Entry(Kind.FOLDER, "Library", root, null, scanChildren(root, true));
     }
 
+    /** Metadata-only remote browsing: bounded traversal, no tag parsing, directory creation or map writes. */
+    public Entry scanRemote() throws IOException {
+        var budget = new ScanBudget();
+        return new Entry(Kind.FOLDER, "Library", root, null,
+                scanChildren(root, true, new HashSet<>(), budget, 0));
+    }
+
+    private static final class ScanBudget {
+        private int inspected, entries = 1;
+
+        void inspect() throws IOException {
+            if (++inspected > 65536) throw new IOException("Host map library exceeds the 65536-entry scan limit.");
+        }
+
+        void entry() throws IOException {
+            if (++entries > 1024) throw new IOException("Host map library exceeds the 1024-item catalog limit.");
+        }
+    }
+
     /** Folders only (for the location picker). */
     public Entry scanFolders() throws IOException {
         Files.createDirectories(root);
@@ -187,6 +206,12 @@ public class MapLibraryService {
     }
 
     private List<Entry> scanChildren(Path dir, boolean includeMaps, Set<Path> visited) throws IOException {
+        return scanChildren(dir, includeMaps, visited, null, 0);
+    }
+
+    private List<Entry> scanChildren(Path dir, boolean includeMaps, Set<Path> visited, ScanBudget budget,
+                                     int depth) throws IOException {
+        if (budget != null && depth > 24) throw new IOException("Host map library exceeds the 24-folder depth limit.");
         Path real = dir.toRealPath();
         if (!real.startsWith(root.toRealPath()) || !visited.add(real)) {
             return List.of();
@@ -194,11 +219,19 @@ public class MapLibraryService {
         List<Entry> folders = new ArrayList<>();
         List<Entry> maps = new ArrayList<>();
         boolean hasLooseMaps;
-        try (Stream<Path> list = Files.list(dir)) {
-            hasLooseMaps = list.anyMatch(MapLibraryService::isMapFile);
+        try (DirectoryStream<Path> list = Files.newDirectoryStream(dir)) {
+            hasLooseMaps = false;
+            for (Path child : list) {
+                if (budget != null) budget.inspect();
+                if (isMapFile(child)) {
+                    hasLooseMaps = true;
+                    break;
+                }
+            }
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path child : stream) {
+                if (budget != null) budget.inspect();
                 if (Files.isSymbolicLink(child) || !child.toRealPath().startsWith(root.toRealPath())) {
                     continue;
                 }
@@ -211,19 +244,23 @@ public class MapLibraryService {
                     if (hasLooseMaps && ASSET_FOLDERS.contains(fileName.toLowerCase(Locale.ROOT))) {
                         continue;
                     }
-                    Path multiLevel = MultiLevelService.findManifest(child);
-                    Path packagedMap = multiLevel != null ? multiLevel : findPackagedMap(child);
+                    Path multiLevel = budget == null ? MultiLevelService.findManifest(child) : findRemoteManifest(child, budget);
+                    Path packagedMap = multiLevel != null ? multiLevel : findPackagedMap(child, budget);
                     if (packagedMap != null) {
                         if (includeMaps) {
+                            if (budget != null) budget.entry();
                             maps.add(new Entry(Kind.MAP, fileName, child, packagedMap, List.of(),
-                                    tags().readTagsForScan(packagedMap)));
+                                    budget == null ? tags().readTagsForScan(packagedMap) : List.of()));
                         }
                     } else {
-                        folders.add(new Entry(Kind.FOLDER, fileName, child, null, scanChildren(child, includeMaps, visited)));
+                        if (budget != null) budget.entry();
+                        folders.add(new Entry(Kind.FOLDER, fileName, child, null,
+                                scanChildren(child, includeMaps, visited, budget, depth + 1)));
                     }
                 } else if (isMapFile(child) && includeMaps) {
+                    if (budget != null) budget.entry();
                     maps.add(new Entry(Kind.MAP, stripExtension(fileName), child, child, List.of(),
-                            tags().readTagsForScan(child)));
+                            budget == null ? tags().readTagsForScan(child) : List.of()));
                 }
             }
         }
@@ -237,15 +274,33 @@ public class MapLibraryService {
         return all;
     }
 
+    private static Path findRemoteManifest(Path dir, ScanBudget budget) throws IOException {
+        Path found = null;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+            for (Path child : stream) {
+                budget.inspect();
+                if (!Files.isSymbolicLink(child) && Files.isRegularFile(child) && MultiLevelService.isMultiLevelFile(child)) {
+                    if (found != null) return null;
+                    found = child;
+                }
+            }
+        }
+        return found;
+    }
+
     /**
      * A directory is a map package if it directly contains exactly one {@code .dmmap} file and none of its
      * subdirectories contain maps (those would make it a user folder that happens to hold a loose map).
      */
-    private Path findPackagedMap(Path dir) throws IOException {
+    private Path findPackagedMap(Path dir, ScanBudget budget) throws IOException {
         Path found = null;
         List<Path> subdirectories = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path child : stream) {
+                if (budget != null) {
+                    budget.inspect();
+                    if (Files.isSymbolicLink(child)) continue;
+                }
                 if (isMapFile(child)) {
                     if (found != null) {
                         return null;
@@ -261,8 +316,11 @@ public class MapLibraryService {
         }
         for (Path sub : subdirectories) {
             try (Stream<Path> walk = Files.walk(sub, 4)) {
-                if (walk.anyMatch(path -> isMapFile(path) || MultiLevelService.isMultiLevelFile(path))) {
-                    return null;
+                var iterator = walk.iterator();
+                while (iterator.hasNext()) {
+                    Path path = iterator.next();
+                    if (budget != null) budget.inspect();
+                    if (isMapFile(path) || MultiLevelService.isMultiLevelFile(path)) return null;
                 }
             }
         }
@@ -623,6 +681,22 @@ public class MapLibraryService {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    /** Validates a previously resolved remote-library destination without creating it. */
+    public void validateDirectory(Path folder) throws IOException {
+        requireInsideLibrary(folder);
+        Path normalized = folder.toAbsolutePath().normalize();
+        Path realRoot = root.toRealPath();
+        if (!normalized.toRealPath().startsWith(realRoot)) {
+            throw new IOException("The destination resolves outside the map library.");
+        }
+        Path current = root;
+        if (Files.isSymbolicLink(current)) throw new IOException("A remote library destination cannot use symbolic links.");
+        for (Path component : root.relativize(normalized)) {
+            current = current.resolve(component);
+            if (Files.isSymbolicLink(current)) throw new IOException("A remote library destination cannot use symbolic links.");
+        }
     }
 
     private void requireInsideLibrary(Path folder) throws IOException {
