@@ -279,7 +279,10 @@ public final class RemoteAssetStore
         if (Files.isSymbolicLink(cacheRoot))
             throw new IOException("Asset cache directory must not be a symbolic link.");
         Path realCacheRoot = cacheRoot.toRealPath();
-        if (!Files.isDirectory(realCacheRoot, LinkOption.NOFOLLOW_LINKS) || !realCacheRoot.equals(cacheRoot))
+        // Compare against the non-following canonical form so Windows 8.3 short names (RUNNER~1) are not
+        // mistaken for redirected paths while junctions/symlinks still are.
+        if (!Files.isDirectory(realCacheRoot, LinkOption.NOFOLLOW_LINKS)
+                || !realCacheRoot.equals(cacheRoot.toRealPath(LinkOption.NOFOLLOW_LINKS)))
             throw new IOException("Asset cache directory is not a safe directory.");
         cacheRoot = realCacheRoot;
         Path target = cacheRoot.resolve(sha256 + "." + safeExtension);
