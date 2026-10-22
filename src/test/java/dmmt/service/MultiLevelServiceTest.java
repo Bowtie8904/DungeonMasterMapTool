@@ -211,7 +211,7 @@ class MultiLevelServiceTest {
     }
 
     @Test
-    void sharedSettingsFollowToOtherLevelsButFogAndCameraStayPerLevel() throws IOException {
+    void sharedSettingsFollowAcrossLevelsButRotationAndCameraStayPerLevel() throws IOException {
         Path manifestFile = createTower().manifestFile();
         MultiLevelManifest manifest = service.loadManifest(manifestFile);
         String ground = manifest.getLevels().get(0).getId();
@@ -229,6 +229,12 @@ class MultiLevelServiceTest {
         new MapRotationService().rotateClockwise(groundProject);
         service.saveLevel(manifestFile, ground, groundProject);
 
+        var legacyManifest = (com.fasterxml.jackson.databind.node.ObjectNode)
+                JsonMappers.create().readTree(manifestFile.toFile());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) legacyManifest.get("shared"))
+                .put("rotationQuarterTurns", 2);
+        JsonMappers.create().writeValue(manifestFile.toFile(), legacyManifest);
+
         DmProject firstProject = service.loadLevel(manifestFile, first).project();
         assertEquals("NIGHT", firstProject.getLighting().getTimeOfDayPreset());
         assertEquals(0.3, firstProject.getLighting().ambientBrightnessFor("NIGHT"), 1e-9);
@@ -238,10 +244,14 @@ class MultiLevelServiceTest {
         assertFalse(firstProject.getFog().isEnabled());
         assertEquals(1.0, firstProject.getViews().getPlayerZoomStep(), 1e-9);
         assertFalse(firstProject.isTextLayerVisible());
-        assertEquals(1, firstProject.getMap().getRotationQuarterTurns());
-        // 30x30 level rotated by 90 degrees: the layer keeps its square footprint, its rotation follows the map.
-        assertEquals(90, firstProject.getImageLayers().get(0).getRotationDeg(), 1e-9);
+        assertEquals(0, firstProject.getMap().getRotationQuarterTurns());
+        assertEquals(0, firstProject.getImageLayers().get(0).getRotationDeg(), 1e-9);
         assertTrue(firstProject.getViews().getDmCamera().getX() != 1234);
+
+        new MapRotationService().rotateCounterClockwise(firstProject);
+        service.saveLevel(manifestFile, first, firstProject);
+        assertEquals(1, service.loadLevel(manifestFile, ground).project().getMap().getRotationQuarterTurns());
+        assertEquals(3, service.loadLevel(manifestFile, first).project().getMap().getRotationQuarterTurns());
     }
 
     @Test

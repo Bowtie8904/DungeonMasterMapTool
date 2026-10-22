@@ -107,7 +107,6 @@ public class MultiLevelService {
     private final MapLibraryService library;
     private final ProjectService projectService;
     private final Dd2vttImportService importService;
-    private final MapRotationService rotationService = new MapRotationService();
 
     public MultiLevelService(MapLibraryService library, ProjectService projectService, Dd2vttImportService importService) {
         this.library = library;
@@ -248,7 +247,6 @@ public class MultiLevelService {
                 .weather(weather)
                 .imageLayersLocked(project.getMap().imageLayersLockedOrDefault())
                 .fogEnabled(project.getFog().isEnabled())
-                .rotationQuarterTurns(Math.floorMod(project.getMap().getRotationQuarterTurns(), 4))
                 .playerZoomStep(project.getViews().getPlayerZoomStep())
                 .dmZoom(project.getViews().getDmCamera().getZoom())
                 .textLayerVisible(project.isTextLayerVisible())
@@ -262,7 +260,7 @@ public class MultiLevelService {
                 .build();
     }
 
-    /** Makes a level match the shared settings; the level is rotated to the shared rotation. */
+    /** Makes a level match the settings shared by all levels. */
     public void applyShared(MultiLevelManifest.SharedSettings shared, DmProject project) {
         if (shared == null) {
             return;
@@ -297,10 +295,6 @@ public class MultiLevelService {
                     .borderColor(text.getBorderColor())
                     .autoSize(text.isAutoSize())
                     .build());
-        }
-        int turns = Math.floorMod(shared.getRotationQuarterTurns() - project.getMap().getRotationQuarterTurns(), 4);
-        for (int i = 0; i < turns; i++) {
-            rotationService.rotateClockwise(project);
         }
     }
 

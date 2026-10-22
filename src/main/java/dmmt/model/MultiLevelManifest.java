@@ -91,8 +91,6 @@ public class MultiLevelManifest {
         @Builder.Default
         private boolean fogEnabled = true;
         @Builder.Default
-        private int rotationQuarterTurns = 0;
-        @Builder.Default
         private double playerZoomStep = 0;
         /** DM camera zoom; {@code null} in manifests written before it was shared. */
         private Double dmZoom;

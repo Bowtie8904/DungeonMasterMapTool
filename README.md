@@ -414,8 +414,8 @@ maps/levels, and never changes frozen player output.
 
 **What is per level and what is shared**
 
-- **Per level:** fog of war, camera positions and the player view zoom, image layers, walls, doors/windows, lights, effects and text boxes.
-- **Shared by all levels** (changing it on any level changes it for all): time of day, ambient brightness, weather, image layer lock, fog on/off, map rotation, DM view zoom, player zoom offset, text layer visibility and the last used text settings.
+- **Per level:** map rotation, fog of war, camera positions and the player view zoom, image layers, walls, doors/windows, lights, effects and text boxes. Rotating one level does not rotate the others.
+- **Shared by all levels** (changing it on any level changes it for all): time of day, ambient brightness, weather, image layer lock, fog on/off, DM view zoom, player zoom offset, text layer visibility and the last used text settings.
 
 **Manage levels** (right-click the multilevel map → *Manage levels…*, or the pencil in the switcher)
 
