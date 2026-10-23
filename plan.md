@@ -1505,7 +1505,9 @@ having to know the control's units. An explicit amount overrides it.
   Deduplicate repeated polling failures so dialogs do not flood the UI. Distinguish failed workspace
   publication from a temporary busy state and allow recovery after corrected artwork/context changes.
   Keep unchanged library listings stable (selection, scroll and thumbnails); failed previews are
-  explicit and retryable, not cached as absent. While workspace edits are paused, safe local dialogs
+  explicit and retryable, not cached as absent. Read-only map preview queries require the same host
+  library context and a still-existing entry, but not the exact listing revision: on-demand thumbnail
+  generation changes listing stamps, and concurrent previews must not fail because of that. While workspace edits are paused, safe local dialogs
   and library browsing remain accessible; unsafe edits report why they are unavailable.
   Shared artwork caches may contain validated namespaces (handouts and operations); account for their
   contents recursively within the cache quota while rejecting symlinks, escapes and malformed files.

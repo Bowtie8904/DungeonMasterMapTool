@@ -73,6 +73,10 @@ class RemoteMapsTest
             var preview = endpoint.query("preview", mapper.valueToTree(new RemoteMaps.Command(context,
                     listing.revision(), List.of(map.id()), null, null, null))).join();
             assertTrue(preview.isObject(), preview.toString());
+            var stale = endpoint.query("preview", mapper.valueToTree(new RemoteMaps.Command(context,
+                    listing.revision() - 1 > 0 ? listing.revision() - 1 : listing.revision() + 1,
+                    List.of(map.id()), null, null, null))).join();
+            assertTrue(stale.isObject(), "Previews tolerate listing revision drift: " + stale);
         }
     }
 

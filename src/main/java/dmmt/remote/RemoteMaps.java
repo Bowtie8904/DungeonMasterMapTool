@@ -261,7 +261,8 @@ public final class RemoteMaps implements RemoteOperations.Endpoint, AutoCloseabl
             try
             {
                 Command command = mapper.treeToValue(payload, Command.class);
-                return validate(command, false).thenCompose(ignored -> {
+                // Previews are read-only; generating thumbnails changes listing stamps and thus the revision.
+                return validate(command, false, false).thenCompose(ignored -> {
                     if (command.entries().size() != 1)
                         return failed("Choose one map preview.");
                     Entry entry = entries.get(command.entries().getFirst());
@@ -346,10 +347,15 @@ public final class RemoteMaps implements RemoteOperations.Endpoint, AutoCloseabl
 
     private CompletableFuture<Listing> validate(Command command, boolean refresh)
     {
+        return validate(command, refresh, true);
+    }
+
+    private CompletableFuture<Listing> validate(Command command, boolean refresh, boolean exactRevision)
+    {
         if (closed)
             return CompletableFuture.failedFuture(new IOException("Host map library is closed."));
         return listing(refresh).thenApply(list -> {
-            if (!list.context().equals(command.context()) || list.revision() != command.revision())
+            if (!list.context().equals(command.context()) || exactRevision && list.revision() != command.revision())
                 throw new IllegalStateException("The host map or library changed. Refresh and repeat the action.");
             if (!entries.keySet().containsAll(command.entries())
                     || command.destination() != null && !entries.containsKey(command.destination()))
