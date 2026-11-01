@@ -1381,10 +1381,10 @@ Each preset has four values, all **live**, range 0 to 1:
 |-----|---------|-----|---------|
 | `timeOfDay.day.darkness` | `0` | `timeOfDay.day.red` | `0` |
 | `timeOfDay.day.green` | `0` | `timeOfDay.day.blue` | `0` |
-| `timeOfDay.dawn.darkness` | `0.35` | `timeOfDay.dawn.red` | `0.22` |
-| `timeOfDay.dawn.green` | `0.16` | `timeOfDay.dawn.blue` | `0.3` |
-| `timeOfDay.dusk.darkness` | `0.55` | `timeOfDay.dusk.red` | `0.2` |
-| `timeOfDay.dusk.green` | `0.09` | `timeOfDay.dusk.blue` | `0.12` |
+| `timeOfDay.dawn.darkness` | `0.5` | `timeOfDay.dawn.red` | `1` |
+| `timeOfDay.dawn.green` | `0.45` | `timeOfDay.dawn.blue` | `0.25` |
+| `timeOfDay.dusk.darkness` | `0.62` | `timeOfDay.dusk.red` | `0.85` |
+| `timeOfDay.dusk.green` | `0.2` | `timeOfDay.dusk.blue` | `0.32` |
 | `timeOfDay.night.darkness` | `0.86` | `timeOfDay.night.red` | `0.01` |
 | `timeOfDay.night.green` | `0.02` | `timeOfDay.night.blue` | `0.08` |
 

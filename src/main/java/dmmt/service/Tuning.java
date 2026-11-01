@@ -562,8 +562,8 @@ public final class Tuning {
 
     static {
         timeOfDay("day", "Day", 0, 0, 0, 0);
-        timeOfDay("dawn", "Dawn", 0.35, 0.22, 0.16, 0.30);
-        timeOfDay("dusk", "Dusk", 0.55, 0.20, 0.09, 0.12);
+        timeOfDay("dawn",         "Dawn", 0.50, 1.00, 0.45, 0.25);
+                timeOfDay("dusk", "Dusk", 0.62, 0.85, 0.20, 0.32);
         timeOfDay("night", "Night", 0.86, 0.01, 0.02, 0.08);
     }
 
