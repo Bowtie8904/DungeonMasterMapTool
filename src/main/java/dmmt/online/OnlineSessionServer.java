@@ -114,6 +114,12 @@ public final class OnlineSessionServer {
     private String currentMapKey;
     private long seq;
     private long chatId;
+    private final Map<String, JsonNode> sharedCards = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, JsonNode> eldest) {
+            return size() > 512;
+        }
+    };
     private final Map<String, OnlineMeasurement> measurements = new java.util.LinkedHashMap<>();
 
     private static final class Client {
@@ -179,6 +185,9 @@ public final class OnlineSessionServer {
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
+        javalin.post("/api/chat-cards", this::handleShareCard);
+        javalin.get("/api/chat-cards/{id}", this::handleCardStock);
+        javalin.post("/api/chat-cards/{id}/grab", this::handleGrabCard);
         javalin.get("/api/compendium", this::handleCompendiumIndex);
         javalin.get("/api/compendium/{category}", this::handleCompendiumCategory);
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
@@ -266,8 +275,9 @@ public final class OnlineSessionServer {
 
     // ---- state publication ----
 
-    public void setCampaign(Campaign campaign) {
+    public synchronized void setCampaign(Campaign campaign) {
         this.campaign = campaign;
+        sharedCards.clear();
     }
 
     public Campaign campaign() {
@@ -382,6 +392,15 @@ public final class OnlineSessionServer {
         ObjectNode state = current.deepCopy();
         state.put("paused", paused);
         Campaign c = campaign;
+        if (c != null) {
+            ArrayNode tail = state.putArray("chatTail");
+            for (JsonNode entry : store.historyTail(c.getId(), 50)) {
+                String to = entry.path("toId").asText("");
+                if (to.isEmpty() || client.playerId.equals(to) || client.playerId.equals(entry.path("fromId").asText())) {
+                    tail.add(entry);
+                }
+            }
+        }
         String mapId = state.path("mapId").asText();
         String levelId = state.path("levelId").asText();
         if (c != null && CampaignStore.safeId(mapId) && CampaignStore.safeId(levelId)) {
@@ -696,7 +715,7 @@ public final class OnlineSessionServer {
         }
     }
 
-    private void handleSheet(Context ctx) {
+    private synchronized void handleSheet(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) {
             return;
@@ -718,14 +737,15 @@ public final class OnlineSessionServer {
                 body.set("sheet", MAPPER.readTree(stored));
             }
         } catch (IOException e) {
-            body.putNull("sheet");
+            json(ctx, 500, errorBody("Could not read the character sheet."));
+            return;
         }
         json(ctx, 200, body);
     }
 
     static final int MAX_SHEET_BYTES = 512 * 1024;
 
-    private void handleSheetSave(Context ctx) {
+    private synchronized void handleSheetSave(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) {
             return;
@@ -742,15 +762,166 @@ public final class OnlineSessionServer {
             return;
         }
         try {
-            if (!MAPPER.readTree(bytes).isObject()) {
+            JsonNode sheet = MAPPER.readTree(bytes);
+            if (sheet == null || !sheet.isObject()) {
                 json(ctx, 400, errorBody("Sheet must be a JSON object"));
                 return;
             }
+            ObjectNode previous = storedSheet(actor.getId());
+            if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)) {
+                ObjectNode conflict = errorBody("Inventory changed in chat. Refresh inventory before saving.");
+                conflict.set("sheet", previous);
+                json(ctx, 409, conflict);
+                return;
+            }
             store.saveSheet(c.getId(), actor.getId(), new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            stockChanged(actor.getId());
             json(ctx, 200, MAPPER.createObjectNode().put("saved", true));
-        } catch (IOException e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read or save the character sheet."));
         }
+    }
+
+    private ObjectNode storedSheet(String actorId) throws IOException {
+        String stored = store.loadSheet(campaign.getId(), actorId);
+        if (stored == null)
+            return MAPPER.createObjectNode();
+        JsonNode sheet = MAPPER.readTree(stored);
+        if (!(sheet instanceof ObjectNode object))
+            throw new IOException("Invalid stored sheet");
+        return object;
+    }
+
+    private Campaign.Actor ownedActor(String playerId, String actorId) {
+        Campaign.Actor actor = campaign == null ? null : campaign.actor(actorId);
+        if (actor == null || !playerId.equals(actor.getOwnerId())) {
+            throw new IllegalArgumentException("Choose a character you own.");
+        }
+        return actor;
+    }
+
+    private synchronized void handleShareCard(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null)
+            return;
+        try {
+            if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+                json(ctx, 413, errorBody("Shared card is too large"));
+                return;
+            }
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject()) throw new IllegalArgumentException("Invalid shared card request.");
+            Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
+            String category = request.path("category").asText();
+            ObjectNode sheet = storedSheet(actor.getId());
+            ObjectNode item = ChatCards.resolve(sheet, category, request.path("item"));
+            String to = chatRecipient(request);
+            ObjectNode card = MAPPER.createObjectNode().put("cardId", java.util.UUID.randomUUID().toString())
+                                    .put("actorId", actor.getId()).put("actorName", actor.getName()).put("category", category);
+            card.set("item", item);
+            card.put("available", ChatCards.transferable(category) ? ChatCards.available(sheet, category, item) : 0);
+            String description = item.path("text").asText(item.path("note").asText(
+                    item.path("feature").path("text").asText("")));
+            ObjectNode message = chatMessage(playerId, campaign.player(playerId).getName(), to,
+                                             item.path("name").asText() + (description.isBlank() ? "" : "\n" + description));
+            message.set("sharedCard", card);
+            store.appendHistoryChecked(campaign.getId(), message);
+            sharedCards.put(card.path("cardId").asText(), message);
+            deliver(message, to, false);
+            json(ctx, 200, card);
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read the source sheet or shared card."));
+        }
+    }
+
+    private JsonNode visibleCard(String playerId, String cardId) {
+        JsonNode message = sharedCards.get(cardId);
+        if (message == null) {
+            for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE)) {
+                if (cardId.equals(entry.path("sharedCard").path("cardId").asText())) {
+                    message = entry;
+                    sharedCards.put(cardId, message);
+                    break;
+                }
+            }
+        }
+        if (message != null) {
+            String to = message.path("toId").asText("");
+            if (to.isEmpty() || playerId.equals(to) || playerId.equals(message.path("fromId").asText()))
+                return message.path("sharedCard");
+        }
+        throw new IllegalArgumentException("Shared card is unavailable.");
+    }
+
+    private synchronized void handleCardStock(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null)
+            return;
+        try {
+            JsonNode card = visibleCard(playerId, ctx.pathParam("id"));
+            String category = card.path("category").asText();
+            int count = campaign.actor(card.path("actorId").asText()) == null ? 0
+                                                                              : ChatCards.available(storedSheet(card.path("actorId").asText()), category, card.path("item"));
+            json(ctx, 200, MAPPER.createObjectNode().put("available", count));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 404, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read inventory availability."));
+        }
+    }
+
+    private synchronized void handleGrabCard(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null)
+            return;
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject()) throw new IllegalArgumentException("Invalid grab request.");
+            JsonNode card = visibleCard(playerId, ctx.pathParam("id"));
+            String sourceId = card.path("actorId").asText();
+            Campaign.Actor sourceActor = campaign.actor(sourceId);
+            Campaign.Actor targetActor = ownedActor(playerId, request.path("actorId").asText());
+            if (sourceActor == null || sourceId.equals(targetActor.getId())) {
+                throw new IllegalArgumentException("Choose a different receiving character.");
+            }
+            ObjectNode source = storedSheet(sourceId);
+            ObjectNode target = storedSheet(targetActor.getId());
+            if (target.isEmpty())
+                throw new IllegalArgumentException("Create and save the receiving character first.");
+            ChatCards.transfer(source, target, card.path("category").asText(), card.path("item"));
+            source.put("inventoryRevision", source.path("inventoryRevision").asLong(0) + 1);
+            target.put("inventoryRevision", target.path("inventoryRevision").asLong(0) + 1);
+            store.transferSheets(campaign.getId(), sourceId, source, targetActor.getId(), target);
+            inventoryChanged(sourceActor, source);
+            inventoryChanged(targetActor, target);
+            json(ctx, 200, MAPPER.createObjectNode().put("transferred", true));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not complete the inventory transfer. Refresh both inventories before retrying."));
+        }
+    }
+
+    private void inventoryChanged(Campaign.Actor actor, ObjectNode sheet) {
+        ObjectNode message = MAPPER.createObjectNode().put("type", "sheetInventory").put("actorId", actor.getId());
+        ObjectNode inventory = message.putObject("inventory");
+        for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor")) {
+            if (sheet.has(field))
+                inventory.set(field, sheet.get(field));
+        }
+        for (Client client : clients.values()) {
+            if (actor.getOwnerId().equals(client.playerId))
+                sendTo(client.ctx, message.toString());
+        }
+        stockChanged(actor.getId());
+    }
+
+    private void stockChanged(String actorId) {
+        broadcast(MAPPER.createObjectNode().put("type", "cardStock").put("actorId", actorId).toString());
     }
 
     private void handleArtwork(Context ctx) {
@@ -900,6 +1071,7 @@ public final class OnlineSessionServer {
             hello.put("paused", paused);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("playerWhispers", true);
+            hello.put("chatCards", true);
             sendTo(ctx, hello.toString());
             if (audioJson != null) {
                 sendTo(ctx, audioJson);
@@ -1056,10 +1228,43 @@ public final class OnlineSessionServer {
 
     private void onRoll(Client client, JsonNode msg) {
         DiceRoller.Result result;
+        List<DiceRoller.Detail> breakdown = null;
+        List<ArrayNode> breakdownNotes = new ArrayList<>();
         String to;
         try {
             to = chatRecipient(msg);
             result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
+            if (msg.has("contributions")) {
+                JsonNode sources = msg.path("contributions");
+                if (!sources.isArray() || sources.isEmpty() || sources.size() > 64) {
+                    throw new IllegalArgumentException("Roll contributions must contain 1 to 64 sources");
+                }
+                List<DiceRoller.Contribution> contributions = new ArrayList<>();
+                for (JsonNode source : sources) {
+                    String name = source.path("label").asText("").strip();
+                    String expression = source.path("expression").asText("");
+                    if (name.isEmpty() || name.length() > 120 || expression.length() > 100) {
+                        throw new IllegalArgumentException("Invalid roll contribution");
+                    }
+                    contributions.add(new DiceRoller.Contribution(name, expression));
+                    ArrayNode notes = MAPPER.createArrayNode();
+                    if (source.has("notes")) {
+                        if (!source.path("notes").isArray() || source.path("notes").size() > 64) {
+                            throw new IllegalArgumentException("Invalid roll source notes");
+                        }
+                        for (JsonNode note : source.path("notes")) {
+                            String noteLabel = note.path("label").asText("").strip();
+                            String impact = note.path("impact").asText("").strip();
+                            if (noteLabel.isEmpty() || noteLabel.length() > 120 || impact.isEmpty() || impact.length() > 120) {
+                                throw new IllegalArgumentException("Invalid roll source note");
+                            }
+                            notes.addObject().put("label", noteLabel).put("impact", impact);
+                        }
+                    }
+                    breakdownNotes.add(notes);
+                }
+                breakdown = DiceRoller.breakdown(result, contributions, config.maxDice());
+            }
         } catch (IllegalArgumentException e) {
             sendTo(client.ctx, error(e.getMessage()));
             return;
@@ -1075,11 +1280,20 @@ public final class OnlineSessionServer {
         ArrayNode rolls = out.putArray("rolls");
         result.rolls().forEach(rolls::add);
         out.put("total", result.total());
+        if (breakdown != null) {
+            ArrayNode details = MAPPER.valueToTree(breakdown);
+            for (int i = 0; i < breakdownNotes.size(); i++) {
+                if (!breakdownNotes.get(i).isEmpty()) {
+                    ((ObjectNode)details.get(i)).set("notes", breakdownNotes.get(i));
+                }
+            }
+            out.set("breakdown", details);
+        }
         String label = msg.path("label").asText("").strip();
         if (!label.isEmpty()) {
             out.put("label", label.length() > 80 ? label.substring(0, 80) : label);
         }
-        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^2d12([+-]1d6)?([+-]\\d+)?$")) {
+        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^2d12(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
             if (msg.path("difficulty").isInt()) {
                 out.put("difficulty", msg.path("difficulty").asInt());
@@ -1102,8 +1316,12 @@ public final class OnlineSessionServer {
 
     /** Sends a chat/roll message to everyone, or only to the sender and the addressee for whispers. */
     private void deliver(ObjectNode message, String toId) {
+        deliver(message, toId, true);
+    }
+
+    private void deliver(ObjectNode message, String toId, boolean persist) {
         Campaign c = campaign;
-        if (c != null) {
+        if (c != null && persist) {
             store.appendHistory(c.getId(), message);
         }
         String json = message.toString();

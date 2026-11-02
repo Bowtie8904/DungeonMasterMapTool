@@ -154,13 +154,17 @@ public final class CampaignStore {
 
     public synchronized void appendHistory(String campaignId, ObjectNode entry) {
         try {
-            Path folder = dir(campaignId);
-            Files.createDirectories(folder);
-            Files.writeString(folder.resolve("history.jsonl"), MAPPER.writeValueAsString(entry) + "\n",
-                    StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            appendHistoryChecked(campaignId, entry);
         } catch (IOException ignored) {
             // history is best effort
         }
+    }
+
+    public synchronized void appendHistoryChecked(String campaignId, ObjectNode entry) throws IOException {
+        Path folder = dir(campaignId);
+        Files.createDirectories(folder);
+        Files.writeString(folder.resolve("history.jsonl"), MAPPER.writeValueAsString(entry) + "\n",
+                StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
     public synchronized List<JsonNode> historyTail(String campaignId, int limit) {
@@ -237,11 +241,44 @@ public final class CampaignStore {
 
     /** Stored sheet JSON of an actor, or {@code null} when it was never saved. */
     public synchronized String loadSheet(String campaignId, String actorId) throws IOException {
+        recoverSheetTransfer(campaignId);
         Path file = sheetFile(campaignId, actorId);
         return Files.isRegularFile(file) ? Files.readString(file, java.nio.charset.StandardCharsets.UTF_8) : null;
     }
 
     public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
+        recoverSheetTransfer(campaignId);
+        writeSheet(campaignId, actorId, json);
+    }
+
+    public synchronized void transferSheets(String campaignId, String sourceId, ObjectNode source,
+                                            String targetId, ObjectNode target) throws IOException {
+        recoverSheetTransfer(campaignId);
+        ObjectNode transaction = MAPPER.createObjectNode();
+        transaction.set(sourceId, source);
+        transaction.set(targetId, target);
+        Path journal = dir(campaignId).resolve("sheet-transfer.json");
+        Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
+        Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
+        Files.move(temp, journal, StandardCopyOption.REPLACE_EXISTING);
+        recoverSheetTransfer(campaignId);
+    }
+
+    // A write-ahead record makes an interrupted two-sheet transfer replayable before any subsequent read/save.
+    private void recoverSheetTransfer(String campaignId) throws IOException {
+        Path journal = dir(campaignId).resolve("sheet-transfer.json");
+        if (!Files.isRegularFile(journal))
+            return;
+        JsonNode transaction = MAPPER.readTree(journal.toFile());
+        var fields = transaction.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
+        }
+        Files.delete(journal);
+    }
+
+    private void writeSheet(String campaignId, String actorId, String json) throws IOException {
         Path file = sheetFile(campaignId, actorId);
         Files.createDirectories(file.getParent());
         Path temp = file.resolveSibling(actorId + ".json.tmp");

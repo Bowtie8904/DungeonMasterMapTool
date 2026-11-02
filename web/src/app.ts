@@ -1,10 +1,11 @@
-import { uploadArtwork, logout } from './api';
+import { cardRequest, uploadArtwork, logout } from './api';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
-import { OUTCOME_LABEL, dualityResult, dualitySucceeds, signed } from './daggerheart/data';
-import { autosave, loadCharacter } from './daggerheart/persist';
+import { LogEntry, renderLogEntry } from './chat';
+import { applyInventory, autosave, loadCharacter, type SheetSave } from './daggerheart/persist';
+import { INVENTORY_DRAG, postCard, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
 import { addToSheet } from './daggerheart/compendium';
@@ -19,9 +20,9 @@ import { Store } from './store';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
-type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: RollMessage };
 type SidebarSection = 'chat' | 'actors' | 'compendium' | 'settings';
 type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?: Overlay };
+type SheetHandle = { character: CharacterSheet; bus: SheetBus; save: SheetSave };
 
 export class App {
   private store = new Store();
@@ -29,6 +30,7 @@ export class App {
   private conn: Connection;
   private playerId = '';
   private playerWhispers = false;
+  private chatCards = false;
   private drawingHistory: DrawingEdit[] = [];
   private pendingDrawings = new Map<string, { inverse: DrawingEdit; undo: boolean; after?: Overlay; record: boolean }>();
   private historyMap = '';
@@ -76,7 +78,7 @@ export class App {
   private chatRecipient = el('select', { id: 'chat-recipient' },
     el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
-  private sheetHandles = new Map<string, { character: CharacterSheet; bus: SheetBus }>();
+  private sheetHandles = new Map<string, SheetHandle>();
   private myActors: Actor[] = [];
   private compendium = new CompendiumPanel({
     actors: () => this.myActors.map((a) => ({ id: a.id, name: a.name })),
@@ -260,7 +262,7 @@ export class App {
     };
     send.addEventListener('click', submit);
     input.addEventListener('keydown', (e) => e.key === 'Enter' && submit());
-    return el(
+    const section = el(
       'div',
       { class: 'chat-section' },
       this.logEl,
@@ -268,6 +270,74 @@ export class App {
       el('label', { class: 'recipient' }, 'To', this.chatRecipient),
       el('div', { class: 'row' }, input, send)),
     );
+    section.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types.includes(INVENTORY_DRAG)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      section.classList.add('inventory-drop-target');
+    });
+    section.addEventListener('dragleave', (e) => {
+      if (!(e.relatedTarget instanceof Node) || !section.contains(e.relatedTarget)) section.classList.remove('inventory-drop-target');
+    });
+    section.addEventListener('drop', (e) => {
+      section.classList.remove('inventory-drop-target');
+      if (!e.dataTransfer?.types.includes(INVENTORY_DRAG)) return;
+      e.preventDefault();
+      const drop = async () => {
+        const payload: { actorId: string; entry: SharedEntry; token: string } = JSON.parse(e.dataTransfer!.getData(INVENTORY_DRAG));
+        await waitForInventoryDrag(payload.token);
+        await this.shareEntry(payload.actorId, payload.entry);
+      };
+      void drop().catch((e: Error) => this.toast(e.message));
+    });
+    return section;
+  }
+
+  private async shareEntry(actorId: string, entry: SharedEntry): Promise<void> {
+    if (!this.chatCards) throw new Error('This host does not support shared chat cards. Update the host to share cards.');
+    if (!this.conn.isOpen) throw new Error('Not connected. Your card was not posted.');
+    if (this.chatRecipient.selectedOptions[0]?.disabled) throw new Error('That player is offline. Choose a recipient before sharing.');
+    const handle = this.sheetHandles.get(actorId);
+    if (handle) await handle.save.flush();
+    await postCard(actorId, entry, this.chatRecipient.value || undefined);
+    this.showSection('chat');
+  }
+
+  private async grabCard(card: SharedCard): Promise<void> {
+    const actors = this.myActors.filter(a => a.id !== card.actorId);
+    if (!actors.length) throw new Error('You need a different owned character to receive this item.');
+    const actor = actors.length === 1 ? actors[0] : await new Promise<Actor | null>((resolve) => {
+      const dialog = el('dialog', { class: 'inventory-picker' });
+      const select = el('select', {}, ...actors.map(a => el('option', { value: a.id }, a.name)));
+      select.setAttribute('aria-label', 'Receiving character');
+      const cancel = el('button', { type: 'button' }, 'Cancel');
+      const grab = el('button', { type: 'button', class: 'primary' }, 'Grab one');
+      let selected: Actor | null = null;
+      cancel.addEventListener('click', () => dialog.close());
+      grab.addEventListener('click', () => { selected = actors.find(a => a.id === select.value)!; dialog.close(); });
+      dialog.addEventListener('close', () => { dialog.remove(); resolve(selected); }, { once: true });
+      dialog.append(el('h3', {}, `Receive ${card.item.name}`), select, el('div', { class: 'row' }, cancel, grab));
+      document.body.append(dialog);
+      dialog.showModal();
+    });
+    if (!actor) return;
+    const handle = await this.ensureSheet(actor);
+    await handle.save.flush();
+    try {
+      await cardRequest(`/${encodeURIComponent(card.cardId)}/grab`, { actorId: actor.id });
+      await handle.save.refresh();
+      handle.bus.notify();
+      this.toast(`${card.item.name} transferred to ${actor.name}.`);
+    } finally {
+      this.refreshCardStock(card.actorId);
+    }
+  }
+
+  private refreshCardStock(actorId?: string): void {
+    for (const entry of this.log) {
+      if (entry.kind !== 'chat' || !entry.m.sharedCard || actorId && entry.m.sharedCard.actorId !== actorId) continue;
+      this.logCards.get(entry)?.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
+    }
   }
 
   private buildSidebar(): HTMLElement {
@@ -530,6 +600,10 @@ export class App {
       case 'hello':
         this.playerId = msg.playerId;
         this.playerWhispers = msg.playerWhispers === true;
+        this.chatCards = msg.chatCards === true;
+        for (const handle of this.sheetHandles.values()) {
+          void handle.save.refresh().then(() => handle.bus.notify()).catch((e: Error) => this.toast(e.message));
+        }
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
@@ -599,6 +673,14 @@ export class App {
       case 'chat':
         this.addLog({ kind: 'chat', m: msg });
         break;
+      case 'cardStock':
+        this.refreshCardStock(msg.actorId);
+        break;
+      case 'sheetInventory': {
+        const handle = this.sheetHandles.get(msg.actorId);
+        if (handle && applyInventory(handle.character, msg.inventory)) handle.bus.notify();
+        break;
+      }
       case 'roll':
         this.addLog({ kind: 'roll', m: msg });
         break;
@@ -741,29 +823,24 @@ export class App {
     this.renderLog();
   }
 
+  private logCards = new WeakMap<LogEntry, HTMLElement>();
+
   private renderLog(): void {
-    this.logEl.replaceChildren(
-      ...this.log.map((e) => {
-        const time = new Date(e.m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const whisper = !!e.m.toId;
-        const label = whisper ? el('span', { class: 'whisper-label' },
-          `Whisper to ${e.m.toId === 'dm' ? 'Gamemaster' : e.m.to ?? (e.m.toId === this.playerId ? 'you' : e.m.toId)}`) : null;
-        if (e.kind === 'roll') {
-          if (e.m.kind === 'duality' && Array.isArray(e.m.rolls)) {
-            const entry = this.dualityEntry(time, e.m);
-            if (label) { entry.classList.add('whisper'); entry.prepend(label, ' '); }
-            return entry;
-          }
-          const rolls = Array.isArray(e.m.rolls) ? `[${e.m.rolls.join(', ')}]` : '';
-          const rollLabel = e.m.label ? ` (${e.m.label})` : '';
-          return el('div', { class: `entry roll${whisper ? ' whisper' : ''}` }, ...(label ? [label, ' '] : []),
-            `${time} ${e.m.from} rolled ${e.m.expression}${rollLabel} ${rolls} = `, el('b', {}, String(e.m.total)));
-        }
-        return el('div', { class: `entry${whisper ? ' whisper' : ''}` }, ...(label ? [label, ' '] : []),
-          `${time} `, el('b', {}, e.m.from), `: ${e.m.text}`);
-      }),
-    );
-    this.logEl.scrollTop = this.logEl.scrollHeight;
+    const follow = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight < 48;
+    const scroll = this.logEl.scrollTop;
+    const cards = this.log.map((e) => {
+      let card = this.logCards.get(e);
+      if (!card) {
+        card = renderLogEntry(e, this.playerId, (card) => this.grabCard(card), (message) => this.toast(message));
+        this.logCards.set(e, card);
+        card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
+      }
+      return card;
+    });
+    const keep = new Set<Element>(cards);
+    for (const child of Array.from(this.logEl.children)) if (!keep.has(child)) child.remove();
+    for (const card of cards) if (card.parentElement !== this.logEl) this.logEl.append(card);
+    this.logEl.scrollTop = follow ? this.logEl.scrollHeight : scroll;
   }
 
   private updateRecipients(players: Array<{ playerId: string; playerName: string }>): void {
@@ -783,37 +860,30 @@ export class App {
     this.chatRecipient.value = selected;
   }
 
-  private dualityEntry(time: string, m: RollMessage): HTMLElement {
-    const r = dualityResult((m.rolls as unknown[]).map(Number), m.total);
-    const die = (cls: string, v: number | string) => el('span', { class: `die ${cls}` }, String(v));
-    const parts: Array<Node | string> = [`${time} ${m.from}: `, el('b', {}, m.label ?? 'Duality roll'), ' ', die('hope', r.hope), die('fear', r.fear)];
-    if (r.advantage !== 0) parts.push(die('misc', r.advantage > 0 ? `+${r.advantage}` : String(r.advantage)));
-    if (r.mod !== 0) parts.push(` ${signed(r.mod)}`);
-    parts.push(' = ', el('b', {}, String(r.total)), ' ', el('span', { class: `outcome ${r.outcome}` }, OUTCOME_LABEL[r.outcome]));
-    if (typeof m.difficulty === 'number') {
-      parts.push(` vs ${m.difficulty}: `, el('b', {}, dualitySucceeds(r, m.difficulty) ? 'success' : 'failure'));
-    }
-    return el('div', { class: 'entry roll' }, ...parts);
-  }
+  private sheetLoads = new Map<string, Promise<SheetHandle>>();
 
-  private sheetLoads = new Map<string, Promise<{ character: CharacterSheet; bus: SheetBus }>>();
-
-  private ensureSheet(a: Actor): Promise<{ character: CharacterSheet; bus: SheetBus }> {
+  private ensureSheet(a: Actor): Promise<SheetHandle> {
     let load = this.sheetLoads.get(a.id);
     if (!load) {
       load = loadCharacter(a.id, a.name).then((character) => {
         const bus = new SheetBus();
         const changed = autosave(a.id, character, (m) => this.toast(m));
-        this.sheetHandles.set(a.id, { character, bus });
+        this.sheetHandles.set(a.id, { character, bus, save: changed });
+        document.addEventListener('dmmt-inventory-refreshed', (event) => {
+          if ((event as CustomEvent<string>).detail === a.id) bus.notify();
+        });
         const win = new SheetWindow(
           {
             character,
             bus,
             onChange: changed,
+            actorId: a.id,
+            onShare: (entry) => { void this.shareEntry(a.id, entry).catch((e: Error) => this.toast(e.message)); },
+            onPrepareShare: () => changed.flush(),
             onLog: (text) => { this.conn.send({ type: 'chat', text, whisper: false }); },
             artwork: a.artwork,
             onRoll: (r) => {
-              const sent = this.conn.send({ type: 'roll', expression: r.expression, label: r.label, kind: r.kind, difficulty: r.difficulty });
+              const sent = this.conn.send({ type: 'roll', ...r });
               if (!sent) this.toast('Not connected. Your roll was not sent.');
               return sent;
             },
@@ -825,7 +895,7 @@ export class App {
         );
         this.sheetWindows.set(a.id, win);
         this.stageEl.append(win.element);
-        return { character, bus };
+        return { character, bus, save: changed };
       });
       load.catch(() => this.sheetLoads.delete(a.id));
       this.sheetLoads.set(a.id, load);

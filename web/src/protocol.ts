@@ -193,6 +193,18 @@ export interface ChatMessage {
   toId?: string;
   to?: string;
   text: string;
+  sharedCard?: import('./shared-cards').SharedCard;
+}
+
+export interface RollContribution {
+  label: string;
+  expression: string;
+  notes?: Array<{ label: string; impact: string }>;
+}
+
+export interface RollDetail extends RollContribution {
+  rolls: number[];
+  total: number;
 }
 
 export interface RollMessage {
@@ -208,6 +220,7 @@ export interface RollMessage {
   label?: string;
   kind?: string;
   difficulty?: number;
+  breakdown?: RollDetail[];
 }
 
 export interface GameState {
@@ -265,12 +278,15 @@ export interface Hello {
   drawingTools?: boolean;
   measurementTools?: boolean;
   playerWhispers?: boolean;
+  chatCards?: boolean;
 }
 
 import type { AudioMessage } from './audio';
 
 export type ServerMessage =
   | Hello
+  | { type: 'cardStock'; actorId: string }
+  | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }
   | { type: 'roster'; players: Array<{ playerId: string; playerName: string; connections: number; pingMs: number }> }
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }

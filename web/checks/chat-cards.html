@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Chat card visual check</title></head>
+<body>
+<main style="display:flex;flex-wrap:wrap;gap:24px;padding:24px;align-items:flex-start" id="cards"></main>
+<script type="module">
+import '../src/style.css';
+import { renderLogEntry } from '../src/chat.ts';
+const common = { ts: Date.now(), fromId: 'mira', from: 'Mira Ashvale' };
+const roll = {
+  ...common, id: 2, kind: 'duality', label: 'Attack - Shortbow (Agility)',
+  expression: '2d12+1d6+4', rolls: [9, 4, 3], total: 20, difficulty: 15,
+  breakdown: [
+    { label: 'Hope die', expression: '1d12', rolls: [9], total: 9 },
+    { label: 'Fear die', expression: '1d12', rolls: [4], total: 4 },
+    { label: 'Advantage', expression: '1d6', rolls: [3], total: 3 },
+    { label: 'Agility trait', expression: '2', rolls: [], total: 2 },
+    { label: 'Experience - Raised by Wolves', expression: '2', rolls: [], total: 2 },
+    { label: 'Shortbow - Accurate', expression: '1', rolls: [], total: 1 },
+    { label: 'Weakened', expression: '-1', rolls: [], total: -1 },
+  ],
+};
+for (const expanded of [false, true]) {
+  const column = document.createElement('section');
+  column.style.width = '296px';
+  column.append(
+    renderLogEntry({ kind: 'chat', m: { ...common, id: 1, text: 'I draw my bow and aim at the creature in the shadows.' } }, 'mira'),
+    renderLogEntry({ kind: 'roll', m: roll }, 'mira'),
+    renderLogEntry({ kind: 'roll', m: { ...common, id: 3, expression: '2d6+3', rolls: [5, 6], total: 14, label: 'Shortbow damage' } }, 'mira'),
+    renderLogEntry({ kind: 'chat', m: { ...common, id: 4, from: 'Gamemaster', fromId: 'dm', toId: 'mira', to: 'Mira', text: 'You notice a second set of eyes behind the creature.' } }, 'mira'));
+  column.querySelector('details').open = expanded;
+  document.getElementById('cards').append(column);
+}
+</script>
+</body>
+</html>

@@ -19,6 +19,25 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void interruptedTransferReplaysBothSheetsBeforeReadsAndSaves() throws Exception {
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Transfer");
+        store.saveSheet(campaign.getId(), "source", "{\"qty\":0}");
+        store.saveSheet(campaign.getId(), "target", "{\"qty\":0}");
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, "{\"source\":{\"qty\":0},\"target\":{\"qty\":1}}");
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals("{\"qty\":1}", reopened.loadSheet(campaign.getId(), "target"));
+        assertEquals("{\"qty\":0}", reopened.loadSheet(campaign.getId(), "source"));
+        assertTrue(Files.notExists(journal));
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        reopened.transferSheets(campaign.getId(), "source", mapper.createObjectNode().put("qty", 1),
+                "target", mapper.createObjectNode().put("qty", 0));
+        assertEquals("{\"qty\":1}", reopened.loadSheet(campaign.getId(), "source"));
+        assertEquals("{\"qty\":0}", reopened.loadSheet(campaign.getId(), "target"));
+    }
+
+    @Test
     void createStoresSystemAndListsSummaries() throws IOException {
         CampaignStore store = new CampaignStore(dir);
         Campaign campaign = store.create("  Frosthaven  ", "Daggerheart");

@@ -7,6 +7,12 @@ export class ApiError extends Error {
   }
 }
 
+export class InventoryConflict extends ApiError {
+  constructor(public sheet: Partial<CharacterSheet>) {
+    super('Inventory changed in chat; inventory refreshed. Please review your changes.', 409);
+  }
+}
+
 async function readError(res: Response): Promise<ApiError> {
   let body: { error?: string; retryAfterSeconds?: number } = {};
   try {
@@ -74,5 +80,21 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sheet),
   });
+  if (res.status === 409) {
+    const body: { error?: string; sheet?: Partial<CharacterSheet> } = await res.json();
+    if (body.sheet && typeof body.sheet === 'object' && !Array.isArray(body.sheet)) throw new InventoryConflict(body.sheet);
+    throw new ApiError(body.error ?? 'The character sheet changed. Reload before saving.', 409);
+  }
   if (!res.ok) throw await readError(res);
+}
+
+export async function cardRequest<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`/api/chat-cards${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as T;
 }

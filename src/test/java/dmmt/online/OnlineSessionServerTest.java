@@ -46,6 +46,140 @@ class OnlineSessionServerTest {
     private volatile boolean drawingSupported;
     private volatile Path compendiumDir;
 
+    private HttpResponse<String> cardHttp(String cookie, String path, JsonNode body) throws Exception {
+        var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/chat-cards" + path))
+                .header("Cookie", cookie).header("Content-Type", "application/json");
+        if (body != null) builder.POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void sharedCardsTransferLiveStockAtomicallyAndRejectStaleSaves() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Rook").ownerId(playerId()).build());
+        ObjectNode original = (ObjectNode) MAPPER.readTree("""
+                {"name":"Mara","inventory":[{"name":"Potion","type":"consumable","note":"Clear **HP**","qty":2}]}
+                """);
+        store.saveSheet(campaign.getId(), "source", original.toString());
+        store.saveSheet(campaign.getId(), "target", "{\"name\":\"Rook\",\"inventory\":[]}");
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        assertTrue(inbox.next("hello").path("chatCards").asBoolean());
+        inbox.next("snapshot");
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item");
+            request.set("item", original.path("inventory").get(0));
+            HttpResponse<String> post = cardHttp(cookie, "", request);
+            assertEquals(200, post.statusCode(), post.body());
+            String id = MAPPER.readTree(post.body()).path("cardId").asText();
+            JsonNode message = inbox.next("chat");
+            assertTrue(message.path("text").asText().contains("Clear **HP**"));
+            assertEquals("Potion", message.path("sharedCard").path("item").path("name").asText());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
+            HttpResponse<String> duplicate = cardHttp(cookie, "", request);
+            assertEquals(200, duplicate.statusCode());
+            String duplicateId = MAPPER.readTree(duplicate.body()).path("cardId").asText();
+            var grabs = new java.util.ArrayList<CompletableFuture<HttpResponse<String>>>();
+            for (int i = 0; i < 3; i++) {
+                grabs.add(http.sendAsync(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                                + "/api/chat-cards/" + (i == 1 ? duplicateId : id) + "/grab")).header("Cookie", cookie)
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"actorId\":\"target\"}")).build(),
+                        HttpResponse.BodyHandlers.ofString()));
+            }
+            int success = 0;
+            for (var grab : grabs) {
+                int status = grab.get(5, TimeUnit.SECONDS).statusCode();
+                if (status == 200) success++;
+                else assertEquals(409, status);
+            }
+            assertEquals(2, success);
+            assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + id, null).body()).path("available").asInt());
+            assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + duplicateId, null).body()).path("available").asInt());
+            JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
+            JsonNode target = MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+            assertEquals(0, source.path("inventory").get(0).path("qty").asInt());
+            assertEquals(2, target.path("inventory").get(0).path("qty").asInt());
+            assertEquals(2, source.path("inventoryRevision").asInt());
+            assertEquals("sheetInventory", inbox.next("sheetInventory").path("type").asText());
+            var stale = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/source"))
+                    .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(original.toString())).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(409, stale.statusCode());
+            assertEquals(source, MAPPER.readTree(stale.body()).path("sheet"));
+            var current = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/source"))
+                    .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(source.toString())).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, current.statusCode());
+            Inbox late = new Inbox();
+            WebSocket second = connect(cookie, late);
+            try {
+                assertEquals(2, late.next("snapshot").path("state").path("chatTail").size());
+            } finally { second.abort(); }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void sharedWhispersEnforceVisibilityOwnershipAndDescriptionIntegrity() throws Exception {
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Rook").ownerId(bob.getId()).build());
+        ObjectNode source = (ObjectNode) MAPPER.readTree("""
+                {"features":[{"source":"Class","name":"Feature","text":"**Feature** description"}],
+                 "loadout":[{"name":"Spell","domain":"Sage","level":1,"type":"Spell","recall":1,"text":"Spell description","spellcast":"Instinct"}],
+                 "inventory":[{"name":"Torch","type":"gear","qty":1}]}
+                """);
+        store.saveSheet(campaign.getId(), "source", source.toString());
+        store.saveSheet(campaign.getId(), "target", "{\"name\":\"Rook\"}");
+        server.publish(state("m1", 0), "m1/l1");
+        String aliceCookie = cookie();
+        String bobCookie = playerCookie(bob);
+        Inbox aliceInbox = new Inbox();
+        Inbox bobInbox = new Inbox();
+        WebSocket alice = connect(aliceCookie, aliceInbox);
+        WebSocket bobSocket = connect(bobCookie, bobInbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "domain").put("toId", "dm");
+            request.set("item", source.path("loadout").get(0));
+            assertEquals(400, cardHttp(bobCookie, "", request).statusCode(), "Cannot post another actor's entries");
+            ObjectNode forged = request.deepCopy();
+            ((ObjectNode) forged.get("item")).put("text", "Forged");
+            assertEquals(400, cardHttp(aliceCookie, "", forged).statusCode());
+            var posted = cardHttp(aliceCookie, "", request);
+            assertEquals(200, posted.statusCode());
+            String id = MAPPER.readTree(posted.body()).path("cardId").asText();
+            assertEquals(404, cardHttp(bobCookie, "/" + id, null).statusCode());
+            assertEquals(409, cardHttp(bobCookie, "/" + id + "/grab",
+                    MAPPER.createObjectNode().put("actorId", "target")).statusCode());
+            Inbox late = new Inbox();
+            WebSocket later = connect(bobCookie, late);
+            try {
+                assertTrue(late.next("snapshot").path("state").path("chatTail").isEmpty(), "Private cards stay private in snapshots");
+            } finally { later.abort(); }
+            request.remove("toId");
+            request.put("category", "feature").set("item", source.path("features").get(0));
+            var feature = cardHttp(aliceCookie, "", request);
+            assertEquals(200, feature.statusCode());
+            String featureId = MAPPER.readTree(feature.body()).path("cardId").asText();
+            assertEquals(409, cardHttp(bobCookie, "/" + featureId + "/grab",
+                    MAPPER.createObjectNode().put("actorId", "target")).statusCode());
+            assertEquals(source, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")));
+            request.put("category", "item").set("item", source.path("inventory").get(0));
+            var item = cardHttp(aliceCookie, "", request);
+            assertEquals(200, item.statusCode());
+            String itemId = MAPPER.readTree(item.body()).path("cardId").asText();
+            assertEquals(409, cardHttp(bobCookie, "/" + itemId + "/grab",
+                    MAPPER.createObjectNode().put("actorId", "source")).statusCode(), "Receiving actor must be owned");
+            assertEquals(200, cardHttp(bobCookie, "/" + itemId + "/grab",
+                    MAPPER.createObjectNode().put("actorId", "target")).statusCode());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("qty").asInt());
+        } finally { alice.abort(); bobSocket.abort(); }
+    }
+
     @Test
     void compendiumRequiresLoginAndServesCategoryFiles() throws Exception {
         Path dir = temp.resolve("dh");
@@ -473,11 +607,30 @@ class OnlineSessionServerTest {
         assertEquals("Agility", duality.path("label").asText());
         assertEquals("duality", duality.path("kind").asText());
         assertEquals(12, duality.path("difficulty").asInt());
+        ws.sendText("""
+                {"type":"roll","expression":"2d12-1d6+3+1d4","kind":"duality","contributions":[
+                  {"label":"Hope die","expression":"1d12"},{"label":"Fear die","expression":"1d12"},
+                  {"label":"Disadvantage","expression":"-1d6"},{"label":"Agility","expression":"2"},
+                  {"label":"Potion","expression":"1+1d4","notes":[{"label":"Potion bonus die","impact":"+1d4"}]}]}
+                """, true).join();
+        JsonNode detailed = inbox.next("roll");
+        assertEquals("duality", detailed.path("kind").asText());
+        assertEquals(5, detailed.path("breakdown").size());
+        assertEquals("Potion", detailed.path("breakdown").get(4).path("label").asText());
+        assertEquals("+1d4", detailed.path("breakdown").get(4).path("notes").get(0).path("impact").asText());
+        int sum = 0;
+        for (JsonNode part : detailed.path("breakdown")) sum += part.path("total").asInt();
+        assertEquals(detailed.path("total").asInt(), sum);
+        assertEquals(detailed, store.historyTail(campaign.getId(), 1).getFirst());
+        ws.sendText("""
+                {"type":"roll","expression":"2d12+2","contributions":[{"label":"False bonus","expression":"2d12+99"}]}
+                """, true).join();
+        assertTrue(inbox.next("error").path("message").asText().contains("breakdown"));
         ws.sendText("{\"type\":\"roll\",\"expression\":\"3d6\",\"kind\":\"duality\"}", true).join();
         assertFalse(inbox.next("roll").has("kind"));
         ws.sendText("{\"type\":\"chat\",\"text\":\"hi\"}", true).join();
         assertEquals("hi", inbox.next("chat").path("text").asText());
-        assertEquals(4, store.historyTail(campaign.getId(), 10).size());
+        assertEquals(5, store.historyTail(campaign.getId(), 10).size());
         ws.abort();
     }
 

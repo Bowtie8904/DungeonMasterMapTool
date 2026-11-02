@@ -12,6 +12,15 @@ public final class DiceRoller {
     public record Result(String expression, List<Integer> rolls, int total) {
     }
 
+    public record Contribution(String label, String expression) {
+    }
+
+    public record Detail(String label, String expression, List<Integer> rolls, int total) {
+    }
+
+    private record Terms(List<Integer> dice, int modifier) {
+    }
+
     private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)|(\\d+))");
     private static final int MAX_SIDES = 1000;
 
@@ -27,13 +36,54 @@ public final class DiceRoller {
         if (cleaned.isEmpty() || cleaned.length() > 100) {
             throw new IllegalArgumentException("Invalid dice expression");
         }
-        Matcher matcher = TERM.matcher(cleaned);
+        Terms terms = terms(cleaned, maxDice);
+        List<Integer> rolls = new ArrayList<>();
+        int total = terms.modifier();
+        for (int die : terms.dice()) {
+            int value = Integer.signum(die) * (random.nextInt(Math.abs(die)) + 1);
+            rolls.add(value);
+            total += value;
+        }
+        return new Result(cleaned, rolls, total);
+    }
+
+    /** Resolves sheet-provided descriptions using host dice, rejecting a different formula. */
+    public static List<Detail> breakdown(Result result, List<Contribution> contributions, int maxDice) {
+        Terms expected = terms(result.expression(), maxDice);
+        List<Integer> dice = new ArrayList<>();
+        List<Detail> details = new ArrayList<>();
+        int modifier = 0;
+        int index = 0;
+        for (Contribution contribution : contributions) {
+            Terms part = terms(contribution.expression(), maxDice);
+            dice.addAll(part.dice());
+            modifier += part.modifier();
+            if (index + part.dice().size() > result.rolls().size()) {
+                throw new IllegalArgumentException("Roll breakdown does not match the dice expression");
+            }
+            List<Integer> values = List.copyOf(result.rolls().subList(index, index + part.dice().size()));
+            index += values.size();
+            details.add(new Detail(contribution.label(), contribution.expression(), values,
+                    part.modifier() + values.stream().mapToInt(Integer::intValue).sum()));
+        }
+        if (!dice.equals(expected.dice()) || modifier != expected.modifier()) {
+            throw new IllegalArgumentException("Roll breakdown does not match the dice expression");
+        }
+        return details;
+    }
+
+    private static Terms terms(String expression, int maxDice) {
+        expression = expression == null ? "" : expression.trim().toLowerCase(Locale.ROOT).replace(" ", "");
+        if (expression.isEmpty() || expression.length() > 100) {
+            throw new IllegalArgumentException("Invalid dice expression");
+        }
+        Matcher matcher = TERM.matcher(expression);
         int position = 0;
         int total = 0;
         int dice = 0;
-        List<Integer> rolls = new ArrayList<>();
+        List<Integer> sidesList = new ArrayList<>();
         boolean first = true;
-        while (position < cleaned.length()) {
+        while (position < expression.length()) {
             if (!matcher.find(position) || matcher.start() != position) {
                 throw new IllegalArgumentException("Invalid dice expression");
             }
@@ -53,9 +103,7 @@ public final class DiceRoller {
                     throw new IllegalArgumentException("At most " + maxDice + " dice per roll");
                 }
                 for (int i = 0; i < count; i++) {
-                    int value = random.nextInt(sides) + 1;
-                    rolls.add(factor * value);
-                    total += factor * value;
+                    sidesList.add(factor * sides);
                 }
             } else {
                 total += factor * parse(matcher.group(4));
@@ -63,7 +111,7 @@ public final class DiceRoller {
             first = false;
             position = matcher.end();
         }
-        return new Result(cleaned, rolls, total);
+        return new Terms(sidesList, total);
     }
 
     private static int parse(String digits) {

@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Player layout browser regression</title></head>
+<body><div id="app"></div><pre id="result" style="position:fixed;bottom:0;left:250px;z-index:100;background:#111;color:#fff"></pre>
+<script type="module">
+import '../src/style.css';
+import { App } from '../src/app.ts';
+import { defaultState } from '../src/protocol.ts';
+import { settings } from '../src/settings.ts';
+import { renderSheetView } from '../src/daggerheart/view.ts';
+import { mockCharacter } from '../src/daggerheart/data.ts';
+import { addEffect } from '../src/daggerheart/engine.ts';
+
+const result = document.getElementById('result');
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push(name); };
+const click = (label, within = document) => {
+  const button = within.querySelector(`button[aria-label="${label}"]`);
+  if (!button) throw Error(`Missing button: ${label}`);
+  button.click(); return button;
+};
+const errors = [];
+addEventListener('error', event => errors.push(event.message));
+try {
+  const app = new App(document.getElementById('app'), () => {});
+  const sent = [];
+  app.conn.send = command => { sent.push(command); return true; };
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex', campaignId: 'campaign',
+    sessionName: 'Browser regression', paused: false, drawingTools: true, measurementTools: true, playerWhispers: true });
+  const state = { ...defaultState(), mapId: 'map', levelId: 'level', mapName: 'Layout regression',
+    images: [{ id: 'map-image', url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><defs><pattern id="g" width="70" height="70" patternUnits="userSpaceOnUse"><rect width="70" height="70" fill="#303438"/><path d="M70 0H0V70" fill="none" stroke="#42474d"/></pattern></defs><rect width="1000" height="1000" fill="url(#g)"/></svg>'),
+      x: 0, y: 0, width: 1000, height: 1000, rotationDeg: 0, zIndex: 0 }],
+    effectTextures: [{ id: 'none', label: 'Flat color', color: null, emits: false, above: true },
+      { id: 'fire', label: 'Fire', color: '#ff4a1a', emits: true, above: true }] };
+  app.handle({ type: 'snapshot', seq: 1, state });
+  app.handle({ type: 'roster', players: [{ playerId: 'alice', playerName: 'Alex', connections: 1, pingMs: 24 }] });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert(document.querySelector('.players-overlay').textContent.includes('24 ms'), 'host ping overlay');
+  assert(document.querySelector('#player-sidebar .panel-heading h2').textContent === 'Chat', 'chat heading');
+  assert(document.querySelector('.section-rail button:last-child').title === 'Settings', 'settings last in navigation');
+  assert(!document.querySelector('.section-rail button[aria-label="Character sheet"]'), 'no sheet navigation shortcut');
+  assert(document.querySelectorAll('.composer input').length === 1, 'no standalone dice composer');
+  const recipient = document.getElementById('chat-recipient');
+  const chatInput = document.querySelector('.composer input');
+  const submitChat = text => { chatInput.value = text; chatInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); };
+  app.handle({ type: 'roster', players: [
+    { playerId: 'alice', playerName: 'Alex', connections: 1, pingMs: 24 },
+    { playerId: 'bob', playerName: 'Bob', connections: 2, pingMs: 30 },
+    { playerId: 'cara', playerName: 'Cara', connections: 1, pingMs: 40 },
+  ] });
+  assert([...recipient.options].map(o => o.textContent).join() === 'Everyone,Gamemaster,Bob,Cara', 'recipient choices exclude self');
+  submitChat('public');
+  assert(sent.at(-1).type === 'chat' && !sent.at(-1).toId, 'public chat');
+  recipient.value = 'bob';
+  submitChat('private');
+  assert(sent.at(-1).text === 'private' && sent.at(-1).toId === 'bob', 'player whisper');
+  submitChat('/r 2d6+3');
+  assert(sent.at(-1).type === 'roll' && sent.at(-1).expression === '2d6+3' && sent.at(-1).toId === 'bob', 'short roll command uses recipient');
+  recipient.value = 'dm';
+  submitChat('/ROLL 1d20');
+  assert(sent.at(-1).type === 'roll' && sent.at(-1).expression === '1d20' && sent.at(-1).toId === 'dm' && sent.at(-1).whisper,
+    'roll command and Gamemaster recipient retain legacy whisper flag');
+  recipient.value = 'bob';
+  app.handle({ type: 'roster', players: [{ playerId: 'alice', playerName: 'Alex', connections: 1, pingMs: 24 }] });
+  const beforeOffline = sent.length;
+  submitChat('do not publish');
+  assert(sent.length === beforeOffline && chatInput.value === 'do not publish' && recipient.value === 'bob', 'offline recipient never falls back to public');
+  app.handle({ type: 'chat', id: 1, ts: Date.now(), fromId: 'alice', from: 'Alex', toId: 'bob', to: 'Bob', text: 'secret' });
+  assert(document.querySelector('.entry.whisper .whisper-label').textContent === 'Whisper to Bob', 'whispers visibly labeled with recipient');
+  app.handle({ type: 'roll', id: 2, ts: Date.now(), fromId: 'bob', from: 'Bob', toId: 'alice', to: 'Alex', expression: '1d20', rolls: [5], total: 5 });
+  assert(document.querySelector('.entry.roll.whisper .whisper-label').textContent === 'Whisper to Alex', 'private rolls marked as whispers');
+  app.handle({ type: 'chat', id: 3, ts: Date.now(), fromId: 'bob', from: 'Bob', text: 'public' });
+  assert(getComputedStyle(document.querySelector('.entry.whisper')).color !== getComputedStyle(document.querySelector('.entry:not(.whisper)')).color,
+    'whispers have a distinct color');
+  app.handle({ type: 'roll', id: 4, ts: Date.now(), fromId: 'alice', from: 'Alex', kind: 'duality',
+    label: 'Attack - Shortbow (Agility)', expression: '2d12+1d6+4', rolls: [9, 4, 3], total: 20, difficulty: 15,
+    breakdown: [
+      { label: 'Hope die', expression: '1d12', rolls: [9], total: 9 },
+      { label: 'Fear die', expression: '1d12', rolls: [4], total: 4 },
+      { label: 'Advantage', expression: '1d6', rolls: [3], total: 3 },
+      { label: 'Agility trait', expression: '2', rolls: [], total: 2 },
+      { label: 'Blessing', expression: '3', rolls: [], total: 3 },
+      { label: 'Armor penalty', expression: '-1', rolls: [], total: -1 },
+    ] });
+  const rollCard = document.querySelector('.entry:last-child');
+  assert(rollCard.querySelector('.message-sender').textContent === 'Alex', 'sender in roll card header');
+  assert(rollCard.querySelector('.roll-total strong').textContent === '20', 'prominent roll total');
+  assert(rollCard.querySelector('.roll-modifier').textContent === '+7', 'combined roll bonus includes advantage');
+  assert(rollCard.querySelectorAll('.roll-die').length === 2, 'compact Hope and Fear dice');
+  const breakdown = rollCard.querySelector('details');
+  assert(!breakdown.open, 'breakdown initially collapsed');
+  breakdown.querySelector('summary').click();
+  assert(breakdown.open && breakdown.textContent.includes('Armor penalty') && breakdown.textContent.includes('Advantage'),
+    'expandable named modifiers');
+  breakdown.querySelector('summary').focus();
+  app.handle({ type: 'chat', id: 5, ts: Date.now(), fromId: 'bob', from: 'Bob', text: '<img src=x onerror=alert(1)>' });
+  assert(breakdown.isConnected && breakdown.open, 'incoming messages preserve expanded details');
+  assert(document.activeElement === breakdown.querySelector('summary'), 'incoming messages preserve keyboard focus');
+  assert(!document.querySelector('.message-text img'), 'chat uses plain text, not markup');
+  assert(rollCard.scrollWidth <= rollCard.clientWidth, 'roll card fits sidebar');
+  const character = mockCharacter();
+  addEffect(character, { name: 'Blessing', kind: 'buff', modifiers: [{ roll: 'trait:Agility', value: 1, dice: 'd4', consume: true }] });
+  let sheetRoll;
+  const sheet = renderSheetView({ character, onRoll: request => { sheetRoll = request; return true; } });
+  sheet.querySelector('.trait').click();
+  const dialog = document.querySelector('.dh-rolldlg');
+  dialog.querySelectorAll('select')[0].value = '-1';
+  dialog.querySelectorAll('select')[1].value = '0';
+  dialog.querySelector('button.primary').click();
+  assert(sheetRoll.expression === '2d12-1d6+5+1d4', 'sheet includes trait, Experience, disadvantage and buff dice');
+  assert(sheetRoll.contributions.map(s => s.label).join() ===
+    'Hope die,Fear die,Disadvantage,Agility trait,Blessing,Experience - Raised by Wolves', 'sheet sends all named roll sources');
+  assert(character.effects.length === 0, 'consumed effect removed only after sending its roll');
+  assert(!document.querySelector('.dh-rolldlg'), 'successful roll closes dialog');
+  recipient.value = '';
+  chatInput.value = '';
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex',
+    paused: false, drawingTools: true, measurementTools: true });
+  app.handle({ type: 'roster', players: [{ playerId: 'bob', playerName: 'Bob', connections: 1, pingMs: 30 }] });
+  assert([...recipient.options].map(o => o.textContent).join() === 'Everyone,Gamemaster', 'older hosts cannot receive unsupported player whispers');
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex', campaignId: 'campaign',
+    sessionName: 'Browser regression', paused: false, drawingTools: true, measurementTools: true, playerWhispers: true });
+  click('Chat');
+  assert(document.getElementById('player-sidebar').classList.contains('hidden'), 'selected section collapses');
+  click('My actors');
+  assert(!document.querySelector('.actors').classList.contains('hidden'), 'actors section opens');
+  click('Settings');
+  assert(!document.querySelector('.settings-section').classList.contains('hidden'), 'settings section opens');
+  click('Drawing');
+  const modes = document.querySelectorAll('.mode-buttons')[0].querySelectorAll('button');
+  assert(modes.length === 5 && modes[0].title === 'Pen' && [...modes].every(b => b.textContent === ''), 'compact icon drawing modes with Pen first');
+  assert(app.view.style.alpha === 1 && document.getElementById('drawing-opacity').value === '1', 'default drawing opacity is 100 percent');
+  click('Freehand brush');
+  click('Navigate / select');
+  const texture = document.getElementById('effect-texture');
+  texture.value = 'fire'; texture.dispatchEvent(new Event('change'));
+  assert(app.view.style.texture === 'fire' && app.view.style.emits, 'host texture metadata and default emission');
+  assert(app.view.tool === 'draw' && app.view.drawMode === 'brush'
+    && document.querySelector('button[aria-label="Drawing"]').getAttribute('aria-pressed') === 'true'
+    && !document.getElementById('tool-flyout').classList.contains('hidden'), 'texture change reactivates selected drawing mode and preserves flyout');
+  click('Measure');
+  assert(document.querySelectorAll('.tool-options')[0].classList.contains('hidden'), 'mutually exclusive flyouts');
+  click('Cone (60 degrees)');
+  assert(app.view.measureMode === 'cone', 'measuring mode selection');
+  click('Measure');
+  assert(document.getElementById('tool-flyout').classList.contains('hidden'), 'selected tool flyout collapses');
+  click('Drawing'); click('Rectangle');
+  const canvas = document.querySelector('canvas.map');
+  canvas.setPointerCapture = () => {};
+  const point = (x, y) => ({ clientX: x * app.view.cam.scale + app.view.cam.x,
+    clientY: y * app.view.cam.scale + app.view.cam.y, pointerId: 1, button: 0, shiftKey: true });
+  app.view.pointerDown(point(100, 100)); app.view.pointerMove(point(200, 180)); app.view.pointerUp(point(200, 180));
+  const create = sent.find(c => c.kind === 'drawing');
+  assert(create?.action === 'create' && create.shape.type === 'rect' && Math.abs(create.shape.width - 100) < 0.001
+    && create.mapId === 'map' && create.shape.texture === 'fire' && create.shape.alpha === 1, 'drawing gesture sends full-opacity owned shape and map identity');
+  app.handle({ type: 'delta', seq: 2, ops: [{ op: 'set', path: 'overlays', value: [create.shape] }] });
+  click('Navigate / select');
+  assert(!document.getElementById('tool-flyout').classList.contains('hidden'), 'Select keeps drawing flyout open');
+  app.view.pointerDown(point(150, 140)); app.view.pointerMove(point(160, 150)); app.view.pointerUp(point(160, 150));
+  assert(sent.at(-1).action === 'update' && Math.abs(sent.at(-1).shape.x - 110) < 0.001, 'owner can select and move drawing');
+  app.view.pointerDown(point(200, 180)); app.view.pointerMove(point(250, 210)); app.view.pointerUp(point(250, 210));
+  assert(sent.at(-1).action === 'update' && Math.abs(sent.at(-1).shape.width - 150) < 0.001, 'owner can resize drawing');
+  click('Drawing');
+  texture.value = 'none'; texture.dispatchEvent(new Event('change'));
+  assert(sent.at(-1).action === 'update' && sent.at(-1).shape.texture === 'none', 'selected drawing style editing');
+  click('Navigate / select');
+  app.view.pointerDown(point(150, 140)); app.view.pointerUp(point(150, 140));
+  app.view.deleteSelection();
+  assert(sent.at(-1).action === 'delete', 'owner can delete drawing');
+  const other = { ...create.shape, id: 'other', ownerId: 'bob' };
+  app.handle({ type: 'delta', seq: 3, ops: [{ op: 'set', path: 'overlays', value: [other] }] });
+  app.view.pointerDown(point(150, 140)); app.view.pointerUp(point(150, 140));
+  assert(app.view.selectedDrawing === null, 'other player drawing cannot be selected');
+  click('Drawing');
+  for (const [label, kind] of [['Pen', 'pen'], ['Freehand brush', 'brush'], ['Line', 'line'], ['Circle', 'circle']]) {
+    click(label, document.querySelector('[aria-label="Drawing tool"]'));
+    app.view.pointerDown(point(300, 300)); app.view.pointerMove(point(370, 340)); app.view.pointerUp(point(370, 340));
+    assert(sent.at(-1).kind === 'drawing' && sent.at(-1).shape.type === kind, `${kind} drawing gesture`);
+  }
+  click('Measure'); click('Distance ruler');
+  app.view.pointerDown(point(300, 200)); app.view.pointerMove(point(370, 200)); app.view.pointerUp(point(370, 200));
+  const measure = sent.at(-1);
+  const sharedMeasure = { id: measure.id, ownerId: 'alice', kind: measure.kind,
+    x1: measure.x1, y1: measure.y1, x2: measure.x2, y2: measure.y2 };
+  assert(measure.type === 'measurement' && measure.action === 'upsert' && Math.abs(measure.x2 - 370) < 0.001, 'measurement shared after release');
+  app.handle({ type: 'measurements', mapKey: 'map/level', items: [sharedMeasure] });
+  assert(app.view.measurements.length === 1, 'measurement retained after gesture');
+  click('Navigate / select');
+  app.view.pointerDown(point(335, 200));
+  app.view.lastMeasureTick = -1000;
+  app.view.pointerMove(point(355, 220));
+  assert(Math.abs(sent.at(-1).x1 - 320) < 0.001, 'creator can move a measurement');
+  app.view.cancelGesture();
+  assert(Math.abs(sent.at(-1).x1 - 300) < 0.001, 'cancelling move restores broadcast measurement');
+  app.view.pointerDown(point(335, 200));
+  app.handle({ type: 'measurements', mapKey: 'map/level', items: [] });
+  const afterRemoval = sent.length;
+  app.view.pointerMove(point(355, 220)); app.view.pointerUp(point(355, 220));
+  assert(sent.length === afterRemoval, 'DM deletion stops active measurement move');
+  app.handle({ type: 'measurements', mapKey: 'map/level', items: [sharedMeasure] });
+  app.view.pointerDown(point(335, 200)); app.view.pointerUp(point(335, 200)); app.view.deleteSelection();
+  assert(sent.at(-1).action === 'delete' && sent.at(-1).id === measure.id, 'creator can delete a measurement');
+  click('Measure');
+  app.view.pointerDown(point(400, 300));
+  const beforeCancel = sent.length;
+  app.view.cancelGesture();
+  assert(sent.length === beforeCancel, 'unpublished cancellation sends no deletion');
+  app.view.pointerDown(point(400, 300));
+  app.view.lastMeasureTick = -1000;
+  app.view.pointerMove(point(450, 350)); app.view.cancelGesture();
+  assert(sent.at(-1).action === 'delete', 'cancelling live measurement deletes broadcast draft');
+  for (const [label, kind] of [['Circle radius', 'radius'], ['Cone (60 degrees)', 'cone'], ['Rectangle', 'rect']]) {
+    click(label, document.querySelector('[aria-label="Measuring tool"]'));
+    app.view.pointerDown(point(400, 300)); app.view.pointerMove(point(470, 340)); app.view.pointerUp(point(470, 340));
+    assert(sent.at(-1).type === 'measurement' && sent.at(-1).kind === kind, `${kind} measurement gesture`);
+  }
+  const rightStart = point(600, 500);
+  const cameraBefore = { ...app.view.cam };
+  app.view.pointerDown({ ...rightStart, button: 2 });
+  assert(app.view.tool === 'measure', 'right press does not switch tools before click or drag is known');
+  app.view.pointerMove({ ...rightStart, clientX: rightStart.clientX + 30, clientY: rightStart.clientY + 40 });
+  app.view.pointerUp({ ...rightStart, clientX: rightStart.clientX + 30, clientY: rightStart.clientY + 40, button: 2 });
+  assert(Math.abs(app.view.cam.x - cameraBefore.x - 30) < 0.001 && Math.abs(app.view.cam.y - cameraBefore.y - 40) < 0.001, 'only right drag pans');
+  assert(app.view.tool === 'measure' && document.querySelector('button[aria-label="Measure"]').getAttribute('aria-pressed') === 'true',
+    'right drag preserves active measuring tool and rail selection');
+  app.view.pointerDown({ ...point(600, 500), button: 2 });
+  app.view.pointerUp({ ...point(600, 500), button: 2 });
+  assert(app.view.tool === 'navigate' && !document.getElementById('tool-flyout').classList.contains('hidden')
+    && !document.querySelector('[aria-label="Measuring tool"]').parentElement.classList.contains('hidden'),
+    'right click selects without closing Measure flyout');
+  click('Drawing');
+  const drawPan = point(600, 500);
+  app.view.pointerDown({ ...drawPan, button: 2 });
+  app.view.pointerMove({ ...drawPan, clientX: drawPan.clientX + 20 });
+  app.view.pointerMove(drawPan);
+  app.view.pointerUp({ ...drawPan, button: 2 });
+  assert(app.view.tool === 'draw', 'right drag returning to start still preserves drawing tool');
+  app.view.pointerDown({ ...drawPan, button: 2 });
+  canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }));
+  assert(app.view.tool === 'draw' && app.view.drag === null, 'cancelled right gesture does not deselect tool');
+  app.view.pointerDown({ ...drawPan, button: 2 });
+  app.view.pointerMove({ ...drawPan, clientX: drawPan.clientX + 2 });
+  app.view.pointerUp({ ...drawPan, clientX: drawPan.clientX + 2, button: 2 });
+  assert(app.view.tool === 'navigate', 'small right-click jitter still returns to Select');
+  const afterPan = { ...app.view.cam };
+  app.view.pointerDown(point(600, 500)); app.view.pointerMove(point(700, 600)); app.view.pointerUp(point(700, 600));
+  assert(app.view.cam.x === afterPan.x && app.view.cam.y === afterPan.y, 'empty left drag does not pan');
+
+  const ownRect = { ...create.shape, id: 'box-owned', x: 100, y: 100, width: 50, height: 50 };
+  const foreignRect = { ...ownRect, id: 'box-other', ownerId: 'bob', x: 170 };
+  const dmRect = { ...ownRect, id: 'box-dm', ownerId: null, x: 230 };
+  const ownToken = { id: 'actor-owned', x: 200, y: 240, sizeTiles: 1, rotationDeg: 0, controlledBy: ['alice'] };
+  const foreignToken = { ...ownToken, id: 'actor-other', x: 270, controlledBy: ['bob'] };
+  app.handle({ type: 'snapshot', seq: 4, state: { ...state, overlays: [ownRect, foreignRect, dmRect], tokens: [ownToken, foreignToken] } });
+  app.handle({ type: 'measurements', mapKey: 'map/level', items: [sharedMeasure, { ...sharedMeasure, id: 'foreign-measure', ownerId: 'bob' }] });
+  app.view.pointerDown(point(50, 50)); app.view.pointerMove(point(400, 300)); app.view.pointerUp(point(400, 300));
+  assert([...app.view.selectedDrawings].join() === 'box-owned' && [...app.view.selectedTokens].join() === 'actor-owned'
+    && [...app.view.selectedMeasures].join() === sharedMeasure.id, 'box selection includes only owned shapes, actors and measurements');
+  const beforeGroup = sent.length;
+  app.view.pointerDown(point(125, 125)); app.view.pointerMove(point(145, 145)); app.view.pointerUp(point(145, 145));
+  const groupCommands = sent.slice(beforeGroup);
+  assert(groupCommands.length === 3 && groupCommands.some(c => c.kind === 'moveToken' && c.tokenId === 'actor-owned')
+    && groupCommands.some(c => c.kind === 'drawing' && c.id === 'box-owned')
+    && groupCommands.some(c => c.type === 'measurement' && c.id === sharedMeasure.id), 'box-selected group moves only owned objects');
+  app.view.pointerDown(point(125, 125)); app.view.pointerMove(point(145, 145));
+  const beforeGroupCancel = sent.length;
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  app.view.pointerUp(point(145, 145));
+  assert(sent.length === beforeGroupCancel, 'Escape cancels group movement without commands');
+  const beforeDeleteButton = sent.length;
+  app.view.pointerDown(point(sharedMeasure.x2 + 12 / app.view.cam.scale, sharedMeasure.y2 + 12 / app.view.cam.scale));
+  app.view.pointerUp(point(sharedMeasure.x2 + 12 / app.view.cam.scale, sharedMeasure.y2 + 12 / app.view.cam.scale));
+  assert(sent.length === beforeDeleteButton + 1 && sent.at(-1).action === 'delete' && sent.at(-1).id === sharedMeasure.id,
+    'subtle measurement button deletes creator measurement without selecting');
+  app.view.playerId = 'charlie';
+  assert(!app.view.measurementDeleteAt(sharedMeasure.x2 + 12 / app.view.cam.scale, sharedMeasure.y2 + 12 / app.view.cam.scale),
+    'measurement delete button is not available to other players');
+  app.view.playerId = 'alice';
+
+  app.handle({ type: 'snapshot', seq: 5, state: { ...state, mapId: 'undo-map', overlays: [] } });
+  click('Drawing'); click('Freehand brush');
+  app.view.pointerMove(point(500, 500));
+  const arcs = [], boxes = [];
+  const context = canvas.getContext('2d');
+  const originalArc = context.arc, originalRect = context.strokeRect;
+  context.arc = function(...args) { arcs.push(args); return originalArc.apply(this, args); };
+  context.strokeRect = function(...args) { boxes.push(args); return originalRect.apply(this, args); };
+  app.view.drawToolAnnotations(context, app.view.state);
+  assert(arcs.some(a => Math.abs(a[2] - app.view.style.size * state.grid.pixelsPerCell / 2) < 0.001), 'brush cursor matches world-space brush radius');
+  app.view.pointerDown(point(500, 500)); app.view.pointerMove(point(550, 540));
+  boxes.length = 0;
+  app.view.drawToolAnnotations(context, app.view.state);
+  assert(boxes.length === 0, 'freehand draft draws no bounding box');
+  context.arc = originalArc; context.strokeRect = originalRect;
+  const beforeCancelDrawing = sent.length;
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  app.view.pointerUp(point(550, 540));
+  assert(sent.length === beforeCancelDrawing, 'Ctrl Z cancels active freehand without publishing');
+  app.view.pointerDown(point(500, 500)); app.view.pointerMove(point(550, 540)); app.view.pointerUp(point(550, 540));
+  const undoCreate = sent.at(-1);
+  app.handle({ type: 'delta', seq: 6, ops: [{ op: 'set', path: 'overlays', value: [undoCreate.shape] }] });
+  app.handle({ type: 'ack', cmdId: undoCreate.cmdId, seq: 6 });
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).action === 'delete' && sent.at(-1).id === undoCreate.id, 'Ctrl Z undoes acknowledged creation');
+  const undoCommand = sent.at(-1);
+  app.handle({ type: 'reject', cmdId: undoCommand.cmdId, reason: 'paused' });
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).action === 'delete' && sent.at(-1).cmdId !== undoCommand.cmdId, 'rejected undo remains retryable');
+  app.handle({ type: 'ack', cmdId: sent.at(-1).cmdId, seq: 6 });
+  click('Navigate / select');
+  app.view.pointerDown(point(520, 520)); app.view.pointerMove(point(540, 540)); app.view.pointerUp(point(540, 540));
+  const moveEdit = sent.at(-1);
+  app.handle({ type: 'delta', seq: 7, ops: [{ op: 'set', path: 'overlays', value: [moveEdit.shape] }] });
+  app.handle({ type: 'ack', cmdId: moveEdit.cmdId, seq: 7 });
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).action === 'update' && sent.at(-1).shape.points[0] === undoCreate.shape.points[0], 'Ctrl Z restores geometry before move');
+  app.handle({ type: 'ack', cmdId: sent.at(-1).cmdId, seq: 7 });
+  app.view.deleteSelection();
+  const deleteEdit = sent.at(-1);
+  app.handle({ type: 'delta', seq: 8, ops: [{ op: 'set', path: 'overlays', value: [] }] });
+  app.handle({ type: 'ack', cmdId: deleteEdit.cmdId, seq: 8 });
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).action === 'create' && sent.at(-1).shape.id === undoCreate.id, 'Cmd Z restores a deleted drawing');
+  app.handle({ type: 'snapshot', seq: 9, state: { ...state, mapId: 'other-map' } });
+  const beforeMapUndo = sent.length;
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.length === beforeMapUndo, 'map switch clears drawing undo history');
+  assert(app.view.measurements.length === 0, 'measurement cleared on map switch');
+  app.handle({ type: 'snapshot', seq: 10, state: { ...state, mapId: 'history-map', overlays: [ownRect] } });
+  click('Navigate / select');
+  app.view.pointerDown(point(125, 125)); app.view.pointerUp(point(125, 125));
+  const firstStyle = { ...ownRect, color: '#112233' }, secondStyle = { ...ownRect, color: '#445566' };
+  app.view.onDrawing('update', ownRect.id, firstStyle);
+  const firstCommand = sent.at(-1);
+  app.view.onDrawing('update', ownRect.id, secondStyle);
+  const secondCommand = sent.at(-1);
+  app.handle({ type: 'delta', seq: 11, ops: [{ op: 'set', path: 'overlays', value: [firstStyle] }] });
+  app.handle({ type: 'ack', cmdId: firstCommand.cmdId, seq: 11 });
+  app.handle({ type: 'delta', seq: 12, ops: [{ op: 'set', path: 'overlays', value: [secondStyle] }] });
+  app.handle({ type: 'ack', cmdId: secondCommand.cmdId, seq: 12 });
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).shape.color === firstStyle.color, 'rapid drawing edits undo to the immediately preceding edit');
+  const undoStyle = sent.at(-1);
+  app.handle({ type: 'delta', seq: 13, ops: [{ op: 'set', path: 'overlays', value: [undoStyle.shape] }] });
+  app.handle({ type: 'ack', cmdId: undoStyle.cmdId, seq: 13 });
+  assert(document.getElementById('drawing-color').value === firstStyle.color, 'undo refreshes selected drawing controls');
+  const beforeTextUndo = sent.length;
+  const textUndo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true });
+  document.querySelector('.composer input[type="text"]').dispatchEvent(textUndo);
+  assert(!textUndo.defaultPrevented && sent.length === beforeTextUndo, 'text fields retain native undo');
+  document.getElementById('drawing-size').dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(sent.at(-1).shape.color === ownRect.color, 'drawing undo also works with a style slider focused');
+  app.status('closed');
+  assert(app.pendingDrawings.size === 0 && app.drawingHistory.length === 0, 'lost confirmation cannot permanently block undo');
+  app.handle({ type: 'snapshot', seq: 14, state: { ...state, mapId: 'color-map', overlays: [ownRect] } });
+  click('Navigate / select');
+  app.view.pointerDown(point(125, 125)); app.view.pointerUp(point(125, 125));
+  const colorPicker = document.getElementById('drawing-color');
+  colorPicker.value = '#00aaff'; colorPicker.dispatchEvent(new Event('input'));
+  assert(app.view.style.color === '#00aaff' && sent.at(-1).shape.color === '#00aaff',
+    'color input immediately updates style and selected textured drawing');
+  app.handle({ type: 'delta', seq: 15, ops: [{ op: 'set', path: 'overlays', value: [ownRect] }] });
+  assert(colorPicker.value === '#00aaff' && app.view.style.color === '#00aaff', 'host refresh does not overwrite active color edit');
+  const beforeColorBurst = sent.length;
+  for (const color of ['#ff00aa', '#11cc44', '#1234ff']) {
+    colorPicker.value = color; colorPicker.dispatchEvent(new Event('input'));
+  }
+  assert(sent.length === beforeColorBurst, 'rapid color input is throttled');
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert(sent.length === beforeColorBurst + 1 && sent.at(-1).shape.color === '#1234ff', 'trailing color edit sends latest choice');
+  colorPicker.value = '#aa33dd'; colorPicker.dispatchEvent(new Event('input'));
+  colorPicker.dispatchEvent(new Event('change'));
+  assert(sent.at(-1).shape.color === '#aa33dd' && app.colorTimer === null, 'picker completion flushes final color');
+  app.handle({ type: 'delta', seq: 16, ops: [{ op: 'set', path: 'overlays', value: [ownRect] }] });
+  assert(colorPicker.value === '#aa33dd', 'unconfirmed final color survives stale host state');
+  click('Drawing');
+  colorPicker.value = '#22bbff'; colorPicker.dispatchEvent(new Event('input'));
+  app.view.pointerDown(point(500, 500)); app.view.pointerMove(point(550, 540)); app.view.pointerUp(point(550, 540));
+  assert(sent.at(-1).action === 'create' && sent.at(-1).shape.color === '#22bbff',
+    'new textured drawing uses live picker color before change event');
+  app.handle({ type: 'snapshot', seq: 17, state: { ...state, mapId: 'next-color-map', overlays: [ownRect] } });
+  click('Navigate / select');
+  app.view.pointerDown(point(125, 125)); app.view.pointerUp(point(125, 125));
+  colorPicker.value = '#123456'; colorPicker.dispatchEvent(new Event('input'));
+  colorPicker.value = '#654321'; colorPicker.dispatchEvent(new Event('input'));
+  app.view.setTool('navigate');
+  const afterColorDeselect = sent.length;
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert(sent.length === afterColorDeselect && app.colorTimer === null, 'selection change cancels pending color send');
+  const borderCanvas = document.createElement('canvas');
+  borderCanvas.width = canvas.width; borderCanvas.height = canvas.height;
+  const borderContext = borderCanvas.getContext('2d');
+  const brush = { ...ownRect, id: 'border-check', type: 'brush', points: [500, 500], strokeWidth: 80,
+    color: '#ffffff', alpha: 1, border: true, tile: 'test-tile', layers: [[0, 0, 1, 1, 0, 0]], soft: false };
+  const originalLayers = app.view.paintLayers, originalSoft = app.view.paintSoft;
+  app.view.paintLayers = () => {}; app.view.paintSoft = () => {};
+  const pixelAlpha = (x, y) => borderContext.getImageData(Math.round((x * app.view.cam.scale + app.view.cam.x) * devicePixelRatio),
+    Math.round((y * app.view.cam.scale + app.view.cam.y) * devicePixelRatio), 1, 1).data[3];
+  const drawBorderCheck = shape => {
+    borderContext.setTransform(1, 0, 0, 1, 0, 0); borderContext.clearRect(0, 0, borderCanvas.width, borderCanvas.height);
+    app.view.world(borderContext); app.view.drawOverlay(borderContext, shape, state.grid.pixelsPerCell);
+  };
+  drawBorderCheck({ ...brush, border: false });
+  assert(pixelAlpha(538, 500) === 0, 'disabled textured brush border adds no pixels');
+  drawBorderCheck(brush);
+  assert(pixelAlpha(538, 500) > 100 && pixelAlpha(500, 500) === 0, 'textured brush dot has an outer border, not a center line');
+  drawBorderCheck({ ...brush, soft: true });
+  assert(pixelAlpha(538, 500) > 100, 'soft textured brush also draws border');
+  const borderCamera = { ...app.view.cam };
+  app.view.cam.scale *= 1.5;
+  app.view.cam.x = borderCanvas.width / devicePixelRatio / 2 - 500 * app.view.cam.scale;
+  app.view.cam.y = borderCanvas.height / devicePixelRatio / 2 - 500 * app.view.cam.scale;
+  drawBorderCheck(brush);
+  assert(pixelAlpha(539, 500) > 100 && pixelAlpha(500, 500) === 0, 'brush border updates correctly after zoom');
+  app.view.cam = borderCamera;
+  drawBorderCheck({ ...brush, points: [400, 400, 600, 600, 400, 600, 600, 400], strokeWidth: 60 });
+  assert(pixelAlpha(500, 500) === 0 && pixelAlpha(400, 400) === 0, 'brush crossing and joins have no internal border seams');
+  drawBorderCheck({ ...brush, tile: undefined, layers: undefined, texture: 'none', alpha: 0.1 });
+  assert(pixelAlpha(538, 500) > pixelAlpha(500, 500) + 40, 'flat brush paints a visible border too');
+  drawBorderCheck({ ...brush, points: [700, 500] });
+  assert(pixelAlpha(538, 500) === 0 && pixelAlpha(738, 500) > 100, 'moving brush invalidates cached border');
+  app.view.paintLayers = originalLayers; app.view.paintSoft = originalSoft;
+  app.view.setTool('draw');
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex', paused: false });
+  assert(document.querySelector('button[aria-label="Drawing"]').disabled, 'older hosts disable unsupported tools');
+  assert(app.view.tool === 'navigate' && document.getElementById('tool-flyout').classList.contains('hidden'), 'unsupported host cancels an active drawing tool');
+  click('Settings');
+  const before = settings.volume;
+  const master = document.querySelector('input[title="Master volume"]');
+  master.value = '0.35'; master.dispatchEvent(new Event('input'));
+  assert(settings.volume === 0.35, 'audio settings connected');
+  settings.volume = before;
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert(errors.length === 0, 'no browser runtime errors');
+  assert(document.documentElement.scrollWidth <= window.innerWidth, 'layout has no horizontal page overflow');
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex', campaignId: 'campaign',
+    sessionName: 'Browser regression', paused: false, drawingTools: true, measurementTools: true });
+  click('Drawing');
+  click('Chat');
+  result.textContent = `PASS: ${checks.length} browser checks`;
+  document.body.dataset.result = 'pass';
+  app.dispose();
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+  document.body.dataset.result = 'fail';
+}
+</script></body>
+</html>

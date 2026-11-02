@@ -72,6 +72,19 @@ Nothing starts until you click **Start online session**, so offline play and the
   block anything else. Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
+  Chat messages appear as individual sender-headed cards. Roll cards show styled dice, a combined bonus and a
+  prominent total; expand **Roll breakdown** for individual dice and each applied trait, Experience,
+  advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
+  Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
+  Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
+  Historical rolls and older hosts show the formula and dice without inventing missing source names;
+  conditional features without automation are not claimed as applied bonuses.
+- **Share to chat:** subtle chat icons on sheet features, domain cards and equipment post formatted descriptions
+  without cast/roll/use/equip actions. You can also drag weapons, armor, items and consumables from the sheet
+  onto Chat. The small grab button transfers one unit into an owned character's carried equipment or inventory;
+  choose the receiving character if you own several. Posting leaves inventory unchanged; grabbing reduces the
+  source quantity, respects consumable limits and disables grabbing when none remain. Duplicate posts share
+  the same live stock. Transfers update open sheets/pop-outs and are saved by the host.
 - **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
   tool options fly out over the map. The right vertical icon rail switches between Chat, My actors, Compendium and
   Settings (at the bottom). Open character sheets from My actors, not a separate navigation shortcut.
