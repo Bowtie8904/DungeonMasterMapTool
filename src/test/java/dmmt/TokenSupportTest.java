@@ -577,7 +577,7 @@ class TokenSupportTest
         set(app, "project", project);
         Canvas canvas = new Canvas(400, 300);
         set(app, "dmCanvas", canvas);
-        for (String field : List.of("dmBaseCanvas", "dmBrightCoreCanvas", "dmAmbientCanvas", "dmFogCanvas",
+        for (String field : List.of("dmBaseCanvas", "dmFloorEffectsCanvas", "dmBrightCoreCanvas", "dmAmbientCanvas", "dmFogCanvas",
                                     "dmFogMaskCanvas", "dmWeatherCanvas", "dmLightningCanvas", "dmForegroundCanvas"))
         {
             set(app, field, new Canvas(400, 300));

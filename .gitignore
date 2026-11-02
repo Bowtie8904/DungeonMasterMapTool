@@ -49,3 +49,6 @@ dmmt-settings.ini
 
 ### Application logs ###
 logs/
+/campaigns/
+/dmmap-campaigns/
+/web/

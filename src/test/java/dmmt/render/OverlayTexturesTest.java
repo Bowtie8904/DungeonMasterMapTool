@@ -9,6 +9,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OverlayTexturesTest {
     @Test
+    void effectLayerDefaultsToTextureAndExplicitFlagWins() {
+        var water = dmmt.model.DmProject.OverlayShape.builder().texture("water").build();
+        var smoke = dmmt.model.DmProject.OverlayShape.builder().texture("smoke").build();
+        assertFalse(OverlayTextures.isAboveTokens(water));
+        assertTrue(OverlayTextures.isAboveTokens(smoke));
+        water.setAboveTokens(true);
+        smoke.setAboveTokens(false);
+        assertTrue(OverlayTextures.isAboveTokens(water));
+        assertFalse(OverlayTextures.isAboveTokens(smoke));
+    }
+
+    @Test
     void unknownKindsFallBackToFlat() {
         assertEquals(OverlayTextures.NONE, OverlayTextures.normalize(null));
         assertEquals(OverlayTextures.NONE, OverlayTextures.normalize("plasma"));

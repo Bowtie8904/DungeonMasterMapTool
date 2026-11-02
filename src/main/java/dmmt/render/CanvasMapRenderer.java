@@ -190,6 +190,8 @@ public class CanvasMapRenderer {
     private final LayerCache playerEffectsCache = new LayerCache();
     private final LayerCache playerTextCache = new LayerCache();
     private final LayerCache dmEffectsCache = new LayerCache();
+    private final LayerCache playerFloorEffectsCache = new LayerCache();
+    private final LayerCache dmFloorEffectsCache = new LayerCache();
     private final LayerCache dmForegroundCache = new LayerCache();
     private Double frameEffectSeconds;
 
@@ -271,6 +273,7 @@ public class CanvasMapRenderer {
         playerWeatherCache.valid = false;
         playerFlashCache.valid = false;
         playerEffectsCache.valid = false;
+        playerFloorEffectsCache.valid = false;
         playerTextCache.valid = false;
     }
 
@@ -413,6 +416,7 @@ public class CanvasMapRenderer {
                     ? ensureLightComposite(project, width, height, camera, playerMode, preset, ambient, darkness) : null;
             List<EffectState> effects = project.getOverlays().stream()
                     .filter(shape -> !playerMode || shape.isPlayerVisible())
+                    .filter(shape -> OverlayTextures.isAboveTokens(shape))
                     .filter(shape -> !playerMode || overlayTouchesScreen(shape, width, height, camera))
                     .map(EffectState::of).toList();
             boolean moving = effectAnimationsEnabled && effects.stream()
@@ -450,6 +454,48 @@ public class CanvasMapRenderer {
         renderContent(gc, project, width, height, camera, playerMode, true);
     }
 
+    /** Effects under the tokens: drawn on their own canvas below the ambient multiply so light and darkness affect them. */
+    public void renderFloorEffectsLayer(GraphicsContext gc, DmProject project, double width, double height,
+                                        DmProject.CameraState camera, boolean playerMode) {
+        LayerCache cache = playerMode ? playerFloorEffectsCache : dmFloorEffectsCache;
+        cache.bind(gc.getCanvas());
+        if (project == null) {
+            gc.getCanvas().setVisible(false);
+            cache.valid = false;
+            gc.clearRect(0, 0, width, height);
+            return;
+        }
+        List<EffectState> effects = project.getOverlays().stream()
+                .filter(shape -> !playerMode || shape.isPlayerVisible())
+                .filter(shape -> !OverlayTextures.isAboveTokens(shape))
+                .filter(shape -> !playerMode || overlayTouchesScreen(shape, width, height, camera))
+                .map(EffectState::of).toList();
+        boolean active = !effects.isEmpty();
+        gc.getCanvas().setVisible(active);
+        boolean moving = effectAnimationsEnabled && effects.stream()
+                .anyMatch(effect -> OverlayTextures.isMoving(effect.texture()));
+        boolean hardMoving = moving && effects.stream()
+                .anyMatch(effect -> !effect.soft() && OverlayTextures.isMoving(effect.texture()));
+        double seconds = effectSeconds();
+        double tick = moving ? (hardMoving ? seconds : Math.floor(seconds * animationFps) / animationFps) : 0;
+        EffectsLayerKey key = new EffectsLayerKey(project, viewKey(width, height, camera), 0,
+                project.getMap().getGrid().getPixelsPerCell(), effects, tick, PerformanceMode.isEnabled(),
+                OverlayTextures.tileCells(), OverlayTextures.featherCells(), OverlayTextures.featherPasses(),
+                Tuning.EFFECT_SOFT_RESOLUTION.get(), playerMode ? 1 : Tuning.HIDDEN_SHAPE_OPACITY.get());
+        if (cache.matches(key, active)) {
+            return;
+        }
+        gc.clearRect(0, 0, width, height);
+        frameEffectSeconds = seconds;
+        try {
+            drawOverlays(gc, project, width, height, camera, playerMode, false, true);
+            drawOverlays(gc, project, width, height, camera, playerMode, true, true);
+        } finally {
+            frameEffectSeconds = null;
+        }
+        cache.update(key, active);
+    }
+
     private LightViewKey viewKey(double width, double height, DmProject.CameraState camera) {
         return new LightViewKey(width, height, camera.getX(), camera.getY(), camera.getZoom(), 1);
     }
@@ -481,11 +527,11 @@ public class CanvasMapRenderer {
 
         String who = playerMode ? "player " : "dm ";
         long t = FrameProfiler.start();
-        drawOverlays(gc, project, width, height, camera, playerMode, false);
+        drawOverlays(gc, project, width, height, camera, playerMode, false, false);
         t = FrameProfiler.lap(who + "effects", t);
         drawLighting(gc, project, width, height, camera, playerMode);
         t = FrameProfiler.lap(who + "lighting", t);
-        drawOverlays(gc, project, width, height, camera, playerMode, true);
+        drawOverlays(gc, project, width, height, camera, playerMode, true, false);
         if (!playerMode) {
             drawHiddenOverlayBadges(gc, project, width, height, camera);
         }
@@ -1009,16 +1055,20 @@ public class CanvasMapRenderer {
 
 
     /**
-     * AOE shapes sit above the map and below fog. Shapes that do not emit light are drawn before the lighting
-     * pass so darkness dims them; emitting shapes are drawn after it and stay fully bright.
+     * AOE shapes sit above the map and below fog. The above-token layer is drawn after the lighting glow (not
+     * dimmed by darkness); the floor layer sits under the tokens and the ambient multiply, so lights and darkness
+     * act on it like on the map. Non-emitting shapes are drawn first, emitting ones on top.
      */
     private void drawOverlays(GraphicsContext gc, DmProject project, double width, double height, DmProject.CameraState camera,
-                              boolean playerMode, boolean emitting) {
+                              boolean playerMode, boolean emitting, boolean floor) {
         double zoom = camera.getZoom();
         brushOutlines.keySet().retainAll(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
         softEffects.retain(project.getOverlays().stream().map(DmProject.OverlayShape::getId).toList());
         for (DmProject.OverlayShape shape : project.getOverlays()) {
             if (playerMode && !shape.isPlayerVisible()) {
+                continue;
+            }
+            if (OverlayTextures.isAboveTokens(shape) == floor) {
                 continue;
             }
             if (emitsLight(shape) != emitting) {
@@ -1214,8 +1264,7 @@ public class CanvasMapRenderer {
             default -> Math.min(OverlayTextures.featherCells() * ppc, 0.4 * shape.getStrokeWidth());
         };
         double feather = featherWorld * zoom;
-        boolean chasm = OverlayTextures.CHASM.equals(texture);
-        if (soft && !chasm) {
+        if (soft) {
             // Soft effects are cached images: stepping the clock at the animation rate lets frames above it reuse them.
             double softSeconds = Math.floor(seconds * animationFps) / animationFps;
             softEffects.draw(gc, shape, type, texture, tile, OverlayTextures.layers(texture), alpha, softSeconds, tileWorld,
@@ -1224,16 +1273,6 @@ public class CanvasMapRenderer {
             return;
         }
         gc.save();
-        if (chasm && "brush".equals(type)) {
-            double rimWorld = Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * shape.getStrokeWidth());
-            OverlayTextures.Layer layer = OverlayTextures.layers(texture).get(0);
-            double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
-            drawChasmBrush(gc, shape, new ImagePattern(tile, originX, originY, tileScreen, tileScreen, false),
-                    rimWorld * zoom, alpha, width, height, camera);
-            gc.restore();
-            drawShapeBorder(gc, shape, type, edge, width, height, camera);
-            return;
-        }
         for (OverlayTextures.Layer layer : OverlayTextures.layers(texture)) {
             double tileScreen = Math.max(8, tileWorld * layer.scale() * zoom);
             double phaseX = OverlayTextures.layerPhase(texture, layer, seconds, true);
@@ -1251,24 +1290,6 @@ public class CanvasMapRenderer {
                 gc.setGlobalAlpha(soft ? 1 - (1 - cumulative) / (1 - previous) : layerAlpha);
                 previous = cumulative;
                 fillShapeInset(gc, shape, type, pattern, feather * pass / passes, width, height, camera);
-            }
-        }
-        if (chasm) {
-            // The shape is a hole: only a rim of broken earth remains at its edge and the rim breaks up into a
-            // black void towards the middle (inset passes whose combined alpha ramps from 0 at the edge to 1).
-            double rimWorld = switch (type) {
-                case "circle" -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * shape.getRadius());
-                case "rect" -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.5 * Math.min(shape.getWidth(), shape.getHeight()));
-                default -> Math.min(OverlayTextures.featherCells() * 1.6 * ppc, 0.45 * shape.getStrokeWidth());
-            };
-            double rim = rimWorld * zoom;
-            int voidPasses = Math.max(passes, 12);
-            double previous = 0;
-            for (int pass = 0; pass < voidPasses; pass++) {
-                double cumulative = Math.min(0.999, alpha * smooth((pass + 1.0) / voidPasses));
-                gc.setGlobalAlpha(1 - (1 - cumulative) / (1 - previous));
-                previous = cumulative;
-                fillShapeInset(gc, shape, type, Color.web("#050403"), rim * pass / voidPasses, width, height, camera);
             }
         }
         gc.restore();
@@ -1321,65 +1342,6 @@ public class CanvasMapRenderer {
             default -> {
             }
         }
-    }
-
-    /**
-     * Draws a freehand chasm from the merged final area of the stroke: the area is clipped, filled with the black
-     * void, and the earth rim is painted as boundary strokes of decreasing width, so the void depends on the distance
-     * to the outline of the whole shape instead of on the path of the brush.
-     */
-    private void drawChasmBrush(GraphicsContext gc, DmProject.OverlayShape shape, ImagePattern earth, double rim,
-                                double alpha, double width, double height, DmProject.CameraState camera) {
-        BrushOutline outline = brushOutline(shape);
-        if (outline == null || outline.polygons().isEmpty()) {
-            return;
-        }
-        gc.beginPath();
-        for (double[] polygon : outline.polygons()) {
-            for (int i = 0; i + 1 < polygon.length; i += 2) {
-                double sx = worldToScreenX(polygon[i], width, camera);
-                double sy = worldToScreenY(polygon[i + 1], height, camera);
-                if (i == 0) {
-                    gc.moveTo(sx, sy);
-                } else {
-                    gc.lineTo(sx, sy);
-                }
-            }
-            gc.closePath();
-        }
-        gc.setFillRule(javafx.scene.shape.FillRule.EVEN_ODD);
-        gc.clip();
-        gc.setGlobalAlpha(alpha);
-        gc.setFill(Color.web("#050403"));
-        gc.fillRect(0, 0, width, height);
-
-        int passes = 12;
-        gc.setStroke(earth);
-        gc.setLineJoin(StrokeLineJoin.ROUND);
-        double previous = 0;
-        for (int pass = 0; pass < passes; pass++) {
-            double half = rim * (passes - pass) / passes;
-            double mid = rim * (passes - pass - 0.5) / passes;
-            double cumulative = Math.min(0.999, alpha * (1 - smooth(mid / rim)));
-            gc.setGlobalAlpha(1 - (1 - cumulative) / (1 - previous));
-            previous = cumulative;
-            gc.setLineWidth(2 * half);
-            for (double[] polygon : outline.polygons()) {
-                gc.beginPath();
-                for (int i = 0; i + 1 < polygon.length; i += 2) {
-                    double sx = worldToScreenX(polygon[i], width, camera);
-                    double sy = worldToScreenY(polygon[i + 1], height, camera);
-                    if (i == 0) {
-                        gc.moveTo(sx, sy);
-                    } else {
-                        gc.lineTo(sx, sy);
-                    }
-                }
-                gc.closePath();
-                gc.stroke();
-            }
-        }
-        gc.setLineJoin(StrokeLineJoin.MITER);
     }
 
     private record BrushOutline(long key, List<double[]> polygons) {

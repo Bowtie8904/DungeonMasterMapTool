@@ -1,0 +1,90 @@
+package dmmt.online;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/** A campaign: players, actors and control links; independent of projects and maps. */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class Campaign {
+    public static final String DEFAULT_SYSTEM = "Daggerheart";
+    /** Game systems offered when creating a campaign. */
+    public static final List<String> SYSTEMS = List.of(DEFAULT_SYSTEM);
+
+    @Builder.Default
+    private int schemaVersion = 1;
+    @Builder.Default
+    private String id = UUID.randomUUID().toString();
+    private String name;
+    /** Game system label; informational for now ({@link #DEFAULT_SYSTEM} is the only supported one). */
+    @Builder.Default
+    private String system = DEFAULT_SYSTEM;
+    @Builder.Default
+    private List<Player> players = new ArrayList<>();
+    @Builder.Default
+    private List<Actor> actors = new ArrayList<>();
+    /** Actor folder paths ("a/b"), kept so empty folders survive. */
+    @Builder.Default
+    private List<String> actorFolders = new ArrayList<>();
+    /** Individual regular tokens (companions, summons) a player may move besides their actors. */
+    @Builder.Default
+    private List<TokenLink> controlledTokens = new ArrayList<>();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Player {
+        @Builder.Default
+        private String id = UUID.randomUUID().toString();
+        private String name;
+        /** {@code argon2id$m$t$p$saltB64$hashB64}; empty until the DM sets a password. */
+        private String passwordHash;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Actor {
+        @Builder.Default
+        private String id = UUID.randomUUID().toString();
+        private String name;
+        private String ownerId;
+        /** sha256 hex of the re-encoded PNG in {@code artwork/}; {@code null} when none. */
+        private String artwork;
+        /** Folder path ("a/b") in the DM's actor tree; empty or {@code null} for the root. */
+        private String folder;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TokenLink {
+        private String playerId;
+        private String mapId;
+        private String tokenId;
+    }
+
+    public Player player(String playerId) {
+        return playerId == null ? null : players.stream().filter(p -> playerId.equals(p.getId())).findFirst().orElse(null);
+    }
+
+    public Actor actor(String actorId) {
+        return actorId == null ? null : actors.stream().filter(a -> actorId.equals(a.getId())).findFirst().orElse(null);
+    }
+}

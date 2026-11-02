@@ -42,6 +42,7 @@ public final class Tuning {
     static final String STORAGE = "Storage and caches";
     static final String UI = "User interface";
     static final String LOCAL_API = "Local control API";
+    static final String ONLINE = "Online play";
 
     private static final Pattern HEX_COLOR = Pattern.compile("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?");
     private static final List<Setting<?>> ALL = new ArrayList<>();
@@ -260,6 +261,31 @@ public final class Tuning {
             "network", "local");
     public static final Setting<Boolean> API_SHOW_URL_OPTIONS = bool(LOCAL_API, "api.showUrlOptions", false, false,
             "Show API and key-image URL copy options in right-click menus.");
+
+    public static final Setting<Integer> ONLINE_PORT = integer(ONLINE, "online.port", 7080, 1024, 65535, false,
+            "TCP port of the Online Play web server for players' browsers (only listening while an online session runs).");
+    public static final Setting<String> ONLINE_SESSION_NAME = text(ONLINE, "online.sessionName", "Game night", false,
+            "Session name shown on the Online Play login page.");
+    public static final Setting<Integer> ONLINE_MAX_PLAYERS = integer(ONLINE, "online.maxPlayers", 8, 1, 64, false,
+            "Maximum number of players connected at the same time.");
+    public static final Setting<Boolean> ONLINE_AUDIO_STREAMING = bool(ONLINE, "online.audioStreaming", true, false,
+            "Let players' browsers play the DM's music and sound effects during an online session (the DM can toggle it per session).");
+    public static final Setting<String> ONLINE_CAMPAIGNS_DIR = text(ONLINE, "online.campaignsDirectory", "", false,
+            "Folder holding the Online Play campaigns. Empty uses a dmmap-campaigns folder beside the settings file.");
+    public static final Setting<String> ONLINE_PAUSE_KEY = text(ONLINE, "online.pauseKey", "SPACE", false,
+            "Key that pauses and resumes a running online session (JavaFX KeyCode name such as SPACE or F9; empty disables). Ignored while typing.");
+    public static final Setting<Integer> ONLINE_MAX_IMAGE_EDGE = integer(ONLINE, "online.maxImageEdge", 4096, 512, 16384, false,
+            "Longest edge in pixels of map images served to browsers; larger images are downscaled.");
+    public static final Setting<Integer> ONLINE_MAX_MESSAGE_BYTES = integer(ONLINE, "online.maxMessageBytes", 65536, 1024, 4194304, false,
+            "Maximum size of one WebSocket message from a browser.");
+    public static final Setting<Integer> ONLINE_CHANGE_LOG_SIZE = integer(ONLINE, "online.changeLogSize", 200, 10, 5000, false,
+            "Number of recent state changes kept so reconnecting browsers can catch up without a full snapshot.");
+    public static final Setting<Integer> ONLINE_MAX_DICE = integer(ONLINE, "online.maxDice", 100, 1, 1000, false,
+            "Maximum number of dice in one roll.");
+    public static final Setting<Integer> ONLINE_LOGIN_MAX_FAILURES = integer(ONLINE, "online.loginMaxFailures", 5, 1, 100, false,
+            "Failed logins per address or player before a temporary lockout.");
+    public static final Setting<Integer> ONLINE_LOGIN_LOCKOUT_SECONDS = integer(ONLINE, "online.loginLockoutSeconds", 60, 5, 3600, false,
+            "Duration of the login lockout in seconds.");
 
     public static final Setting<Integer> DM_WINDOW_WIDTH = integer(WINDOW, "window.dmWidth", 1500, 400, 10000, true,
             "Initial width of the main (DM) window in pixels.");

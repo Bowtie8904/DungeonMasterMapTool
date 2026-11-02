@@ -47,7 +47,7 @@ import dmmt.service.RecentMaps;
 import dmmt.service.ProjectService;
 import dmmt.service.Tuning;
 import dmmt.ui.AudioControls;
-import dmmt.ui.CollapsibleSection;
+import dmmt.ui.ControlSection;
 import dmmt.ui.ControlVisibility;
 import dmmt.ui.Dialogs;
 import dmmt.ui.DuplicateMapsDialog;
@@ -179,7 +179,6 @@ public class DungeonMasterMapToolApplication extends Application {
     private static final String PREF_PERFORMANCE_MODE = "ui.performanceMode";
     private static final String PREF_LIGHT_FLICKER = "ui.lightFlicker";
     private static final String PREF_EFFECT_ANIMATIONS = "ui.effectAnimations";
-    private static final String PREF_CONTROLS_EXPANDED = "ui.controlsExpanded";
     private static final String PREF_FOG_CELLS_PER_GRID = "fog.cellsPerGrid";
     private static final String PREF_FOG_SOFTNESS = "fog.softness";
     private static final String PREF_FOG_FADE = "fog.fadeAnimation";
@@ -222,6 +221,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private Button redoButton;
     private RemoteWorkspaceAuthority.History displayedRemoteHistory;
     private ToggleButton sessionToggle;
+    private ToggleButton onlineToggle;
+    private dmmt.ui.OnlinePlayPanel onlinePanel;
+    private Region onlineScroll;
+    private dmmt.online.OnlineSessionController onlineController;
     private RemoteSessionPanel sessionPanel;
     private ScrollPane sessionScroll;
     private dmmt.ui.RemoteBusyDialog remoteBusyDialog;
@@ -273,6 +276,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private long imageAddGeneration;
 
     private Canvas dmBaseCanvas;
+    private Canvas dmFloorEffectsCanvas;
+    private Canvas playerFloorEffectsCanvas;
     private Canvas dmTokenCanvas = new Canvas(1280, 800);
     private final CanvasMapRenderer.TokenLayerState dmTokenState = new CanvasMapRenderer.TokenLayerState();
     private Canvas playerTokenCanvas;
@@ -331,6 +336,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton wallLayerToggle;
     private ToggleButton imageLockToggle;
     private HBox imageUnlockBanner;
+    private HBox onlinePausedBanner;
+    private Label onlinePausedHint;
     private ToggleButton playerWindowToggle;
     private ToggleButton playerGridToggle;
     private Slider gridOpacitySlider;
@@ -365,7 +372,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private StackPane mapCenter;
     private Region dmControls;
     private AudioControls audioControls;
-    private final java.util.Map<String, CollapsibleSection> dmSections = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, ControlSection> dmSections = new java.util.LinkedHashMap<>();
     private final ControlVisibility dmControlVisibility = new ControlVisibility();
     private StackPane loadingOverlay;
     private String savedFingerprint;
@@ -420,9 +427,16 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean overlayBorder;
     private ToggleButton overlayBorderToggle;
     private boolean overlayEmitsLight;
+    private boolean overlayAboveTokens = true;
+    private ToggleButton overlayAboveToggle;
     private ToggleButton overlayLightToggle;
     private String selectedOverlayId;
     private DmProject.OverlayShape draftOverlay;
+    private String selectedMeasurementId;
+    private dmmt.online.OnlineMeasurement measurementDrag;
+    private double measurementStartX;
+    private double measurementStartY;
+    private String measurementMapKey;
     private double overlayStartX;
     private double overlayStartY;
     private boolean draggingOverlay;
@@ -580,6 +594,8 @@ public class DungeonMasterMapToolApplication extends Application {
 
         dmBaseCanvas = new Canvas(1280, 800);
         dmBaseCanvas.setMouseTransparent(true);
+        dmFloorEffectsCanvas = new Canvas(1280, 800);
+        dmFloorEffectsCanvas.setMouseTransparent(true);
         dmBrightCoreCanvas = new Canvas(1280, 800);
         dmBrightCoreCanvas.setMouseTransparent(true);
         dmBrightCoreCanvas.setBlendMode(BlendMode.ADD);
@@ -596,10 +612,10 @@ public class DungeonMasterMapToolApplication extends Application {
         dmFogCanvas.setMouseTransparent(true);
         textEditor = new TextBoxEditor();
         initTextEditor();
-        StackPane center = new StackPane(dmBaseCanvas, dmTokenCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas,
+        StackPane center = new StackPane(dmBaseCanvas, dmFloorEffectsCanvas, dmTokenCanvas, dmBrightCoreCanvas, dmAmbientCanvas, dmCanvas,
                 dmLightningCanvas, dmWeatherCanvas, dmForegroundCanvas,
                 dmFogMaskCanvas, dmFogCanvas, textEditor.node());
-        for (Canvas layer : List.of(dmTokenCanvas, dmWeatherCanvas, dmLightningCanvas, dmForegroundCanvas)) {
+        for (Canvas layer : List.of(dmFloorEffectsCanvas, dmTokenCanvas, dmWeatherCanvas, dmLightningCanvas, dmForegroundCanvas)) {
             layer.setMouseTransparent(true);
             layer.widthProperty().bind(center.widthProperty());
             layer.heightProperty().bind(center.heightProperty());
@@ -614,12 +630,20 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setAlignment(chip, Pos.TOP_CENTER);
         StackPane.setMargin(chip, new Insets(12, 0, 0, 0));
         imageUnlockBanner = createImageUnlockBanner();
-        StackPane.setAlignment(imageUnlockBanner, Pos.TOP_CENTER);
-        StackPane.setMargin(imageUnlockBanner, new Insets(58, 0, 0, 0));
+        onlinePausedBanner = createOnlinePausedBanner();
+        for (Region banner : List.of(onlinePausedBanner, imageUnlockBanner)) {
+            banner.managedProperty().bind(banner.visibleProperty());
+        }
+        VBox topBanners = new VBox(6, onlinePausedBanner, imageUnlockBanner);
+        topBanners.setAlignment(Pos.TOP_CENTER);
+        topBanners.setPickOnBounds(false);
+        topBanners.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        StackPane.setAlignment(topBanners, Pos.TOP_CENTER);
+        StackPane.setMargin(topBanners, new Insets(58, 0, 0, 0));
         levelSwitcher = createLevelSwitcher();
         StackPane.setAlignment(levelSwitcher, Pos.TOP_LEFT);
         StackPane.setMargin(levelSwitcher, new Insets(10));
-        center.getChildren().addAll(chip, imageUnlockBanner, levelSwitcher, controls);
+        center.getChildren().addAll(chip, topBanners, levelSwitcher, controls);
         center.getChildren().add(createBrushSizeLabel());
         remoteTransferOverlay = new dmmt.ui.RemoteTransferOverlay();
         center.getChildren().add(remoteTransferOverlay);
@@ -757,6 +781,17 @@ public class DungeonMasterMapToolApplication extends Application {
             finishNudge();
             hideLightMenu();
         });
+        scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+            if (onlineController == null || !onlineController.running()) return;
+            KeyCode key = onlinePauseKey();
+            if (key == null || event.getCode() != key || event.isControlDown() || event.isAltDown()
+                    || event.isShiftDown() || event.isMetaDown() || event.isShortcutDown()) {
+                return;
+            }
+            if (scene.getFocusOwner() instanceof TextInputControl || textEditor.isFocused()) return;
+            onlineController.setPaused(!onlineController.paused());
+            event.consume();
+        });
         scene.setOnKeyPressed(event -> {
             if (event.isControlDown() && event.getCode() == KeyCode.S) {
                 handleSave();
@@ -824,6 +859,14 @@ public class DungeonMasterMapToolApplication extends Application {
                 cancelActiveTool();
             }
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                if (selectedMeasurementId != null && onlineController != null && onlineController.server() != null) {
+                    onlineController.server().measurements().stream().filter(m -> m.id().equals(selectedMeasurementId))
+                            .findFirst().ifPresent(m -> onlineController.server().dmMeasurement(m, true));
+                    selectedMeasurementId = null;
+                    renderDm();
+                    event.consume();
+                    return;
+                }
                 finishNudge();
                 pruneGroup();
                 if (!groupKeys.isEmpty()) {
@@ -1238,10 +1281,13 @@ public class DungeonMasterMapToolApplication extends Application {
             String textureColor = OverlayTextures.defaultColor(overlayTexture);
             double textureAlpha = OverlayTextures.defaultAlpha(overlayTexture);
             boolean textureLight = OverlayTextures.defaultEmitsLight(overlayTexture);
+            boolean textureAbove = OverlayTextures.defaultAboveTokens(overlayTexture);
             syncingControls = true;
             try {
                 overlayEmitsLight = textureLight;
                 overlayLightToggle.setSelected(textureLight);
+                overlayAboveTokens = textureAbove;
+                overlayAboveToggle.setSelected(textureAbove);
                 if (textureColor != null) {
                     overlayColor = textureColor;
                     overlayColorPicker.setValue(Color.web(textureColor));
@@ -1258,6 +1304,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect texture", selected.getId(), s -> {
                     s.setTexture(overlayTexture);
                     s.setEmitsLight(textureLight);
+                    s.setAboveTokens(textureAbove);
                     if (textureColor != null) {
                         s.setColor(textureColor);
                     }
@@ -1293,6 +1340,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 executeOverlayChange("Change effect light", selected.getId(), s -> s.setEmitsLight(overlayEmitsLight));
             }
         });
+        overlayAboveToggle = Icons.toggle(MaterialDesignL.LAYERS_OUTLINE,
+                "Effect is drawn above tokens and is not affected by light (smoke, gas, fire); off = on the floor, below tokens, lit and darkened with the map — also changes the selected effect. Picking a texture applies its default");
+        overlayAboveToggle.setSelected(overlayAboveTokens);
+        overlayAboveToggle.setOnAction(e -> {
+            if (syncingControls) {
+                return;
+            }
+            overlayAboveTokens = overlayAboveToggle.isSelected();
+            DmProject.OverlayShape selected = findOverlay(selectedOverlayId);
+            if (selected != null) {
+                executeOverlayChange("Change effect layer", selected.getId(), s -> s.setAboveTokens(overlayAboveTokens));
+            }
+        });
         effectAnimationsToggle = Icons.toggle(MaterialDesignP.PLAY_CIRCLE_OUTLINE,
                 "Animate effect textures and weather on all maps (light flicker has its own toggle in the Lighting section; turn off to improve performance)");
         effectAnimationsToggle.setSelected(preferences.getBoolean(PREF_EFFECT_ANIMATIONS, true));
@@ -1305,7 +1365,7 @@ public class DungeonMasterMapToolApplication extends Application {
             renderDm();
             renderPlayer();
         });
-        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, overlayLightToggle, effectAnimationsToggle);
+        HBox effectTextureRow = row(overlayTextureBox, overlayBorderToggle, overlayLightToggle, overlayAboveToggle, effectAnimationsToggle);
         HBox effectBrushRow = row(brushSlider());
 
         // Text
@@ -1593,7 +1653,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 "lightningInterval", "lightningInterval", "lightningInterval");
         dmControlVisibility.registerRow("effects", effectToolsRow, "circle", "rectangle", "brush", "pen", "line", null, "delete", "clear");
         dmControlVisibility.registerRow("effects", effectStyleRow, "color", "opacity", "players");
-        dmControlVisibility.registerRow("effects", effectTextureRow, "texture", "border", "light", "animations");
+        dmControlVisibility.registerRow("effects", effectTextureRow, "texture", "border", "light", "layer", "animations");
         dmControlVisibility.register("effects.brushSize", effectBrushRow);
         dmControlVisibility.registerRow("text", textToolsRow, "add", "layer", "autoSize", "players", null, "delete");
         dmControlVisibility.registerRow("text", textSizeRow, "size", "size", "color", "color", "rotateLeft", "rotateRight");
@@ -1610,67 +1670,89 @@ public class DungeonMasterMapToolApplication extends Application {
             audioControls.setApiControlsChangedHandler(this::registerAudioApiControls);
         }
 
-        VBox sections = new VBox(
-                new CollapsibleSection("Tools", MaterialDesignC.CURSOR_DEFAULT, preferences, "tools", toolsRow),
-                new CollapsibleSection("Fog of war", MaterialDesignW.WEATHER_FOG, preferences, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
-                new CollapsibleSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, preferences, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
-                new CollapsibleSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, preferences, "weather",
+        List<ControlSection> sectionList = List.of(
+                new ControlSection("Tools", MaterialDesignC.CURSOR_DEFAULT, "tools", toolsRow),
+                new ControlSection("Fog of war", MaterialDesignW.WEATHER_FOG, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
+                new ControlSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
+                new ControlSection("Weather", MaterialDesignW.WEATHER_PARTLY_RAINY, "weather",
                         weatherRow, weatherIndoorsRow, lightningIntervalRow),
-                new CollapsibleSection("Effects", MaterialDesignF.FORMAT_PAINT, preferences, "effects",
+                new ControlSection("Effects", MaterialDesignF.FORMAT_PAINT, "effects",
                         effectToolsRow, effectStyleRow, effectTextureRow, effectBrushRow),
-                new CollapsibleSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, preferences, "text",
+                new ControlSection("Text", MaterialDesignT.TEXT_BOX_OUTLINE, "text",
                         textToolsRow, textSizeRow, textBoxColorRow),
-                new CollapsibleSection("Map building", MaterialDesignW.WALL, preferences, "building", buildRow, portalRow),
-                new CollapsibleSection("Player view", MaterialDesignP.PROJECTOR, preferences, "player",
+                new ControlSection("Map building", MaterialDesignW.WALL, "building", buildRow, portalRow),
+                new ControlSection("Player view", MaterialDesignP.PROJECTOR, "player",
                         playerRow, playerGridRow, screenRow, scaleGrid, playerZoomRow),
-                new CollapsibleSection("Performance", MaterialDesignS.SPEEDOMETER, preferences, "performance",
+                new ControlSection("Performance", MaterialDesignS.SPEEDOMETER, "performance",
                         frameRateGrid()));
 
-        String[] sectionIds = {"tools", "fog", "lighting", "weather", "effects", "text", "building", "player", "performance"};
-        for (int i = 0; i < sectionIds.length; i++) {
-            dmSections.put(sectionIds[i], (CollapsibleSection) sections.getChildren().get(i));
-        }
-        applySectionVisibility();
-
-        // Reports the content's preferred height so hiding or collapsing sections resizes the panel in the same layout pass.
-        ScrollPane scroll = new ScrollPane(sections) {
+        // The flyout shows one section at a time; its icon on the rail opens and closes it.
+        VBox flyout = new VBox();
+        flyout.getStyleClass().add("dm-flyout");
+        flyout.setPrefWidth(268);
+        flyout.setMaxWidth(268);
+        flyout.setVisible(false);
+        flyout.setManaged(false);
+        ScrollPane scroll = new ScrollPane(flyout) {
             @Override
             protected double computePrefHeight(double width) {
-                return sections.prefHeight(Math.max(0, width - 2)) + 2;
+                var in = getInsets();
+                double inner = width < 0 ? getPrefWidth() - in.getLeft() - in.getRight() : width - in.getLeft() - in.getRight();
+                return Math.ceil(flyout.prefHeight(Math.max(0, inner)) + in.getTop() + in.getBottom()) + 2;
             }
         };
+        scroll.getStyleClass().add("dm-flyout-scroll");
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroll.setMinHeight(0);
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        scroll.setPrefWidth(268);
+        scroll.setMaxWidth(268);
+        scroll.setMaxHeight(Region.USE_PREF_SIZE);
+        scroll.setVisible(false);
+        scroll.setManaged(false);
 
-        Label title = new Label("DM Controls");
-        title.getStyleClass().add("panel-title");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button collapse = Icons.button(MaterialDesignC.CHEVRON_UP, "Collapse / expand the controls", null);
-        collapse.setOnAction(e -> {
-            boolean show = !scroll.isVisible();
-            scroll.setVisible(show);
-            scroll.setManaged(show);
-            ((FontIcon) collapse.getGraphic()).setIconCode(show ? MaterialDesignC.CHEVRON_UP : MaterialDesignC.CHEVRON_DOWN);
-            preferences.putBoolean(PREF_CONTROLS_EXPANDED, show);
-        });
-        if (!preferences.getBoolean(PREF_CONTROLS_EXPANDED, true)) {
-            collapse.fire();
+        ToggleGroup railGroup = new ToggleGroup();
+        VBox rail = new VBox(4);
+        rail.getStyleClass().add("dm-rail");
+        rail.setMaxHeight(Region.USE_PREF_SIZE);
+        for (ControlSection section : sectionList) {
+            dmSections.put(section.id(), section);
+            section.railButton().setToggleGroup(railGroup);
+            rail.getChildren().add(section.railButton());
         }
+        railGroup.selectedToggleProperty().addListener((observable, oldToggle, newToggle) -> {
+            flyout.getChildren().clear();
+            if (newToggle != null) {
+                flyout.getChildren().add(dmSections.get((String) newToggle.getUserData()));
+            }
+            boolean open = newToggle != null;
+            scroll.setVisible(open);
+            scroll.setManaged(open);
+            flyout.setVisible(open);
+            flyout.setManaged(open);
+        });
+        applySectionVisibility();
+
+        // Not shown in the rail: the status bar cog opens the settings, but both stay reachable through the local API.
         Button settingsButton = Icons.button(MaterialDesignC.COG_OUTLINE, "Settings: all options that are not part of the DM controls, "
                 + "and which tabs and individual controls are shown", this::openSettings);
-        extraApiControls.put("ui.controls", collapse);
+        Button toggleOverlay = Icons.button(MaterialDesignT.TUNE_VARIANT, "Close the open DM controls section, or open the first one", null);
+        toggleOverlay.setOnAction(e -> {
+            if (railGroup.getSelectedToggle() != null) {
+                railGroup.selectToggle(null);
+                return;
+            }
+            sectionList.stream().map(ControlSection::railButton).filter(ToggleButton::isManaged).findFirst()
+                    .ifPresent(button -> railGroup.selectToggle(button));
+        });
+        extraApiControls.put("ui.controls", toggleOverlay);
         extraApiControls.put("ui.panelSettings", settingsButton);
-        HBox titleRow = new HBox(Icons.icon(MaterialDesignT.TUNE_VARIANT), title, spacer, settingsButton, collapse);
-        titleRow.getStyleClass().add("panel-header");
 
-        VBox panel = new VBox(titleRow, scroll);
-        panel.getStyleClass().add("dm-panel");
-        panel.setPrefWidth(268);
-        panel.setMaxWidth(268);
+        HBox panel = new HBox(6, scroll, rail);
+        panel.setAlignment(Pos.TOP_RIGHT);
+        panel.setFillHeight(false);
+        panel.setMaxWidth(Region.USE_PREF_SIZE);
         panel.setMaxHeight(Region.USE_PREF_SIZE);
         panel.setPickOnBounds(false);
         setActiveTool(EditorTool.SELECT);
@@ -1732,6 +1814,9 @@ public class DungeonMasterMapToolApplication extends Application {
             sessionPanel.dispose();
         }
         stopRemoteSessions();
+        if (onlineController != null) {
+            onlineController.stop();
+        }
         endRemoteReplica();
         endRemoteWorkspace();
         if (remoteSessionWorker != null) {
@@ -2009,10 +2094,20 @@ public class DungeonMasterMapToolApplication extends Application {
             sessionToggle.setManaged(visible);
             if (!visible && sessionToggle.isSelected()) mapBrowserToggle.setSelected(true);
         }
+        if (onlineToggle != null) {
+            boolean visible = onlineController != null && onlineController.running()
+                    || !hidden.contains("online") && !preferences.hiddenControls().contains("online.browser");
+            onlineToggle.setVisible(visible);
+            onlineToggle.setManaged(visible);
+            if (!visible && onlineToggle.isSelected()) mapBrowserToggle.setSelected(true);
+        }
         dmSections.forEach((id, section) -> {
             boolean show = !hidden.contains(id);
-            section.setVisible(show);
-            section.setManaged(show);
+            section.railButton().setVisible(show);
+            section.railButton().setManaged(show);
+            if (!show) {
+                section.railButton().setSelected(false);
+            }
         });
     }
 
@@ -2721,7 +2816,7 @@ public class DungeonMasterMapToolApplication extends Application {
         mapBrowserToggle.setGraphic(Icons.icon(MaterialDesignM.MAP_OUTLINE));
         tokenBrowserToggle = new ToggleButton("Tokens");
         tokenBrowserToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignA.ACCOUNT_CIRCLE_OUTLINE));
-        sessionToggle = new ToggleButton("Session");
+        sessionToggle = new ToggleButton("DM Link");
         sessionToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignL.LAN_CONNECT));
         sessionToggle.getProperties().put("remote.lifecycle", true);
         sessionPanel = new RemoteSessionPanel(new RemoteSessionPanel.Actions() {
@@ -2740,13 +2835,17 @@ public class DungeonMasterMapToolApplication extends Application {
         sessionScroll.setFitToWidth(true);
         sessionScroll.getStyleClass().add("session-scroll");
         sessionScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        onlineToggle = new ToggleButton("Online Play");
+        onlineToggle.setGraphic(Icons.icon(org.kordamp.ikonli.materialdesign2.MaterialDesignE.EARTH));
+        createOnlinePlay();
         ToggleGroup libraryTabs = new ToggleGroup();
         mapBrowserToggle.setToggleGroup(libraryTabs);
         tokenBrowserToggle.setToggleGroup(libraryTabs);
         sessionToggle.setToggleGroup(libraryTabs);
+        onlineToggle.setToggleGroup(libraryTabs);
         mapBrowserToggle.setSelected(true);
-        HBox tabs = new HBox(mapBrowserToggle, tokenBrowserToggle, sessionToggle);
-        for (ToggleButton tab : List.of(mapBrowserToggle, tokenBrowserToggle, sessionToggle)) {
+        HBox tabs = new HBox(mapBrowserToggle, tokenBrowserToggle, sessionToggle, onlineToggle);
+        for (ToggleButton tab : List.of(mapBrowserToggle, tokenBrowserToggle, sessionToggle, onlineToggle)) {
             tab.setMaxWidth(Double.MAX_VALUE);
             tab.setMinWidth(Region.USE_PREF_SIZE);
             HBox.setHgrow(tab, Priority.ALWAYS);
@@ -2757,16 +2856,21 @@ public class DungeonMasterMapToolApplication extends Application {
         VBox.setVgrow(mapBrowser, Priority.ALWAYS);
         VBox.setVgrow(tokenBrowser, Priority.ALWAYS);
         VBox.setVgrow(sessionScroll, Priority.ALWAYS);
+        VBox.setVgrow(onlineScroll, Priority.ALWAYS);
         libraryTabs.selectedToggleProperty().addListener((obs, was, selected) -> {
             if (selected == null) {
                 libraryTabs.selectToggle(mapBrowserToggle);
                 return;
             }
+            if (selected == onlineToggle) onlinePanel.show();
             librarySidebar.getChildren().set(1, selected == tokenBrowserToggle ? tokenBrowser
-                    : selected == sessionToggle ? sessionScroll : mapBrowser);
+                    : selected == sessionToggle ? sessionScroll
+                    : selected == onlineToggle ? onlineScroll : mapBrowser);
         });
         dmControlVisibility.register("tokens.browser", tokenBrowserToggle);
         dmControlVisibility.register("session.browser", sessionToggle);
+        dmControlVisibility.register("online.browser", onlineToggle);
+        onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         applySectionVisibility();
         return librarySidebar;
@@ -2955,9 +3059,59 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event ->
                 canvasMouseDown = event.isPrimaryButtonDown() || event.isSecondaryButtonDown() || event.isMiddleButtonDown());
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            if (project == null || activeTool != EditorTool.SELECT || onlineController == null
+                    || onlineController.server() == null) return;
+            var camera = project.getViews().getDmCamera();
+            var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
+            var deleteHit = dmmt.ui.OnlineMeasurementOverlay.pickDelete(onlineController.server().measurements(),
+                    point.x(), point.y(), camera.getZoom());
+            if (deleteHit != null && event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                onlineController.server().dmMeasurement(deleteHit, true);
+                selectedMeasurementId = null;
+                event.consume();
+                renderDm();
+                return;
+            }
+            var hit = dmmt.ui.OnlineMeasurementOverlay.pick(onlineController.server().measurements(),
+                    point.x(), point.y(), 10 / camera.getZoom());
+            selectedMeasurementId = hit == null ? null : hit.id();
+            if (hit == null) return;
+            dmCanvas.requestFocus();
+            if (event.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                MenuItem remove = new MenuItem("Delete measurement");
+                remove.setOnAction(e -> onlineController.server().dmMeasurement(hit, true));
+                new ContextMenu(remove).show(dmCanvas, event.getScreenX(), event.getScreenY());
+            } else if (event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                measurementDrag = hit;
+                measurementStartX = point.x(); measurementStartY = point.y();
+                measurementMapKey = onlineController.mapKey();
+            } else return;
+            event.consume();
+            renderDm();
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_DRAGGED, event -> {
+            if (measurementDrag == null) return;
+            if (onlineController != null && onlineController.server() != null
+                    && java.util.Objects.equals(measurementMapKey, onlineController.mapKey())) {
+                var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(),
+                        project.getViews().getDmCamera());
+                onlineController.server().dmMeasurement(measurementDrag.translate(point.x() - measurementStartX,
+                        point.y() - measurementStartY), false);
+                renderDm();
+            }
+            event.consume();
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> {
+            if (measurementDrag != null) {
+                measurementDrag = null;
+                event.consume();
+            }
+        });
         dmCanvas.setOnDragOver(event -> {
             Dragboard board = event.getDragboard();
             if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)
+                    || board.hasContent(dmmt.ui.OnlinePlayPanel.ACTOR) && project != null
                     || board.hasFiles() && board.getFiles().stream().anyMatch(this::isImageFile)) {
                 event.acceptTransferModes(TransferMode.COPY);
             }
@@ -2967,7 +3121,16 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.setOnDragDropped(event -> {
             Dragboard board = event.getDragboard();
             boolean success = false;
-            if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)) {
+            if (board.hasContent(dmmt.ui.OnlinePlayPanel.ACTOR) && onlinePanel != null && project != null) {
+                dmmt.online.Campaign campaign = onlinePanel.selectedCampaign();
+                dmmt.online.Campaign.Actor actor = onlinePanel.actorForDrop((String) board.getContent(dmmt.ui.OnlinePlayPanel.ACTOR));
+                if (campaign != null && actor != null) {
+                    var world = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(),
+                            dmCanvas.getHeight(), project.getViews().getDmCamera());
+                    placeCampaignActor(campaign, actor, world.x(), world.y());
+                    success = true;
+                }
+            } else if (board.hasContent(dmmt.ui.TokenBrowser.TOKEN)) {
                 DmProject.TokenDefinition definition = tokenBrowser.resolveDefinition((String) board.getContent(dmmt.ui.TokenBrowser.TOKEN));
                 if (definition != null) {
                     var world = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(),
@@ -3797,6 +3960,7 @@ public class DungeonMasterMapToolApplication extends Application {
         playerTokenState = new CanvasMapRenderer.TokenLayerState();
         lastPlayerLayerRenderer = null;
         playerBaseCanvas.setMouseTransparent(true);
+        playerFloorEffectsCanvas = new Canvas(1280, 720);
         playerBaseState = new CanvasMapRenderer.BaseLayerState();
         playerBrightCoreCanvas = new Canvas(1280, 720);
         playerBrightCoreCanvas.setMouseTransparent(true);
@@ -3812,10 +3976,10 @@ public class DungeonMasterMapToolApplication extends Application {
         playerFogMaskCanvas.setMouseTransparent(true);
         playerFogCanvas = new Canvas(1280, 720);
         playerFogCanvas.setMouseTransparent(true);
-        StackPane root = new StackPane(playerBaseCanvas, playerTokenCanvas, playerBrightCoreCanvas, playerAmbientCanvas,
+        StackPane root = new StackPane(playerBaseCanvas, playerFloorEffectsCanvas, playerTokenCanvas, playerBrightCoreCanvas, playerAmbientCanvas,
                 playerCanvas, playerLightningCanvas, playerWeatherCanvas, playerForegroundCanvas,
                 playerFogMaskCanvas, playerFogCanvas);
-        for (Canvas layer : List.of(playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
+        for (Canvas layer : List.of(playerFloorEffectsCanvas, playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas, playerForegroundCanvas)) {
             layer.setMouseTransparent(true);
             layer.widthProperty().bind(root.widthProperty());
             layer.heightProperty().bind(root.heightProperty());
@@ -4068,6 +4232,8 @@ public class DungeonMasterMapToolApplication extends Application {
         renderer.setViewportZoom(formatPlayerZoom(playerZoomStep), Math.abs(playerZoomStep) > 1e-9);
         renderer.renderBase(dmBaseCanvas.getGraphicsContext2D(), dmBaseState, project, projectFile,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera());
+        renderer.renderFloorEffectsLayer(dmFloorEffectsCanvas.getGraphicsContext2D(), project, dmCanvas.getWidth(),
+                dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
         renderer.renderTokenLayer(dmTokenCanvas.getGraphicsContext2D(), dmTokenState, project,
                 dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
         long section = FrameProfiler.start();
@@ -4127,6 +4293,12 @@ public class DungeonMasterMapToolApplication extends Application {
                         project.getOverlays(), project.getTokens()),
                 Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
                 Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
+        var onlineMeasurements = onlineController == null || onlineController.server() == null
+                ? java.util.List.<dmmt.online.OnlineMeasurement>of() : onlineController.server().measurements();
+        if (selectedMeasurementId != null && onlineMeasurements.stream().noneMatch(m -> m.id().equals(selectedMeasurementId))) {
+            selectedMeasurementId = null;
+        }
+        key = java.util.Arrays.asList(key, onlineMeasurements, selectedMeasurementId);
         boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || rotatingToken || draftOverlay != null || draftWall != null
                 || draftText != null || fogDragging || marqueeActive || !laserTrail.isEmpty() || !remoteLaserTrail.isEmpty()
                 || !project.getActivePings().isEmpty() || historyFeedback.active(System.nanoTime());
@@ -4150,6 +4322,8 @@ public class DungeonMasterMapToolApplication extends Application {
         drawTokenSelection(fogGc);
         drawGroupSelection(fogGc);
         drawToolPreview(fogGc);
+        dmmt.ui.OnlineMeasurementOverlay.draw(fogGc, onlineMeasurements, camera,
+                dmCanvas.getWidth(), dmCanvas.getHeight(), project.getMap().getGrid().getPixelsPerCell(), selectedMeasurementId);
         historyFeedback.draw(fogGc, dmCanvas.getWidth(), dmCanvas.getHeight(),
                 project.getViews().getDmCamera(), System.nanoTime());
     }
@@ -4163,7 +4337,7 @@ public class DungeonMasterMapToolApplication extends Application {
             playerTransition.cancel();
             renderer.invalidatePlayerLayerCaches();
             playerRenderer.invalidatePlayerLayerCaches();
-            for (Canvas layer : List.of(playerBaseCanvas, playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas,
+            for (Canvas layer : List.of(playerBaseCanvas, playerFloorEffectsCanvas, playerTokenCanvas, playerWeatherCanvas, playerLightningCanvas,
                     playerForegroundCanvas, playerFogMaskCanvas, playerFogCanvas, playerBrightCoreCanvas, playerAmbientCanvas)) {
                 layer.setVisible(false);
             }
@@ -4187,6 +4361,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 frozen ? frozenPlayerProjectFile : projectFile, playerCanvas.getWidth(), playerCanvas.getHeight(),
                 getEffectivePlayerCamera(), showPlayerGrid
                         ? CanvasMapRenderer.GridMode.OVERLAY : CanvasMapRenderer.GridMode.HIDDEN);
+        playerView.renderFloorEffectsLayer(playerFloorEffectsCanvas.getGraphicsContext2D(), shown,
+                playerCanvas.getWidth(), playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
         playerView.renderTokenLayer(playerTokenCanvas.getGraphicsContext2D(), playerTokenState, shown,
                 playerCanvas.getWidth(), playerCanvas.getHeight(), getEffectivePlayerCamera(), true);
         long section = FrameProfiler.start();
@@ -5429,7 +5605,7 @@ public class DungeonMasterMapToolApplication extends Application {
             var bounds = dmCanvas.sceneToLocal(dmControls.localToScene(dmControls.getBoundsInLocal()));
             right = clamp(bounds.getMinX(), 0, right);
         }
-        for (javafx.scene.Node overlay : new javafx.scene.Node[]{toolChip, imageUnlockBanner, levelSwitcher}) {
+        for (javafx.scene.Node overlay : new javafx.scene.Node[]{toolChip, imageUnlockBanner, onlinePausedBanner, levelSwitcher}) {
             if (overlay != null && overlay.isVisible()) {
                 var bounds = dmCanvas.sceneToLocal(overlay.localToScene(overlay.getBoundsInLocal()));
                 if (bounds.getMinX() < right && bounds.getMaxX() > 0) {
@@ -5671,6 +5847,41 @@ public class DungeonMasterMapToolApplication extends Application {
         updateImageLockToggle();
         updateCanvasCursor();
         status(locked ? "Image layer locked — map images can't be moved." : "Image layer unlocked — map images can be moved and resized with Select.");
+    }
+
+    private HBox createOnlinePausedBanner() {
+        Label label = new Label("Online game paused — players can't move tokens.");
+        label.getStyleClass().add("image-unlock-banner-label");
+        onlinePausedHint = new Label();
+        onlinePausedHint.getStyleClass().add("tool-chip-hint");
+        Button resume = new Button("Resume", Icons.icon(MaterialDesignP.PLAY));
+        resume.setOnAction(e -> {
+            if (onlineController != null) onlineController.setPaused(false);
+        });
+        HBox banner = new HBox(new FontIcon(MaterialDesignP.PAUSE_CIRCLE_OUTLINE), label, onlinePausedHint, resume);
+        banner.getStyleClass().addAll("image-unlock-banner", "online-paused-banner");
+        banner.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        banner.setVisible(false);
+        return banner;
+    }
+
+    private void updateOnlinePausedBanner() {
+        if (onlinePausedBanner == null) return;
+        boolean paused = onlineController != null && onlineController.running() && onlineController.paused();
+        onlinePausedBanner.setVisible(paused);
+        KeyCode key = onlinePauseKey();
+        onlinePausedHint.setText(key == null ? "" : "(" + key.getName() + ")");
+    }
+
+    /** The configured online pause key, or {@code null} when disabled or invalid. */
+    private static KeyCode onlinePauseKey() {
+        String name = Tuning.ONLINE_PAUSE_KEY.get().trim();
+        if (name.isEmpty()) return null;
+        try {
+            return KeyCode.valueOf(name.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private HBox createImageUnlockBanner() {
@@ -7493,6 +7704,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private DmProject.OverlayShape cloneOverlay(DmProject.OverlayShape source) {
         return DmProject.OverlayShape.builder()
                 .id(source.getId())
+                .ownerId(source.getOwnerId())
+                .ownerCampaignId(source.getOwnerCampaignId())
                 .type(source.getType())
                 .x(source.getX())
                 .y(source.getY())
@@ -7507,6 +7720,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .texture(source.getTexture())
                 .border(source.isBorder())
                 .emitsLight(source.isEmitsLight())
+                .aboveTokens(source.getAboveTokens())
                 .build();
     }
 
@@ -7583,6 +7797,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .texture(pen ? OverlayTextures.NONE : overlayTexture)
                 .border(!pen && overlayBorder)
                 .emitsLight(!pen && overlayEmitsLight)
+                .aboveTokens(pen || overlayAboveTokens)
                 .build();
         if (isStrokeOverlay(shape)) {
             shape.getPoints().add(worldX);
@@ -7803,6 +8018,7 @@ public class DungeonMasterMapToolApplication extends Application {
         overlayTextureBox.setDisable(pen);
         overlayBorderToggle.setDisable(pen);
         overlayLightToggle.setDisable(pen);
+        overlayAboveToggle.setDisable(pen);
     }
 
     private void translateOverlay(DmProject.OverlayShape shape, double dx, double dy) {
@@ -7862,7 +8078,8 @@ public class DungeonMasterMapToolApplication extends Application {
             overlayBorderToggle.setSelected(overlayBorder);
             overlayEmitsLight = shape.isEmitsLight();
             overlayLightToggle.setSelected(overlayEmitsLight);
-            overlayColor = shape.getColor();
+            overlayAboveTokens = OverlayTextures.isAboveTokens(shape);
+            overlayAboveToggle.setSelected(overlayAboveTokens);
             overlayAlpha = shape.getAlpha();
             overlayPlayerVisible = shape.isPlayerVisible();
         } finally {
@@ -8767,11 +8984,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 .x(token.getX()).y(token.getY()).sizeTiles(token.getSizeTiles())
                 .rotationDeg(token.getRotationDeg())
                 .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible())
-                .light(token.getLight() == null ? null : cloneLight(token.getLight())).build();
-    }
+                .actorId(token.getActorId()).campaignId(token.getCampaignId())
+                .light(token.getLight() == null ? null : cloneLight(token.getLight()))                .build();
+                    }
 
-    private void applyTokenState(String id, DmProject.TokenInstance state) {
-        int index = -1;
+                    private void applyTokenState(String id, DmProject.TokenInstance state) {
+                        int index = -1;
         for (int i = 0; i < project.getTokens().size(); i++) {
             if (id.equals(project.getTokens().get(i).getId())) { index = i; break; }
         }
@@ -8826,6 +9044,36 @@ public class DungeonMasterMapToolApplication extends Application {
             LOG.info("Token '{}': {}", tokenName(token), label);
             executeWithHistory(label, () -> applyTokenState(id, after), () -> applyTokenState(id, before));
         }
+    }
+
+    private HistoryAction lastPlayerMove;
+    private String lastPlayerMoveToken;
+    private long lastPlayerMoveAt;
+
+    /** Applies a player's move tick; ticks of one drag are merged into a single undo step. */
+    private void applyPlayerMove(String id, double x, double y) {
+        DmProject.TokenInstance token = findToken(id);
+        if (token == null) return;
+        long now = System.nanoTime();
+        HistoryAction top = undoStack.peek();
+        if (remoteWorkspaceReplica == null && top != null && top == lastPlayerMove && id.equals(lastPlayerMoveToken)
+                && now - lastPlayerMoveAt < 2_000_000_000L) {
+            DmProject.TokenInstance after = cloneToken(token);
+            after.setX(x);
+            after.setY(y);
+            undoStack.pop();
+            applyTokenState(id, after);
+            lastPlayerMove = new HistoryAction(top.label, () -> applyTokenState(id, after), top.undo);
+            undoStack.push(lastPlayerMove);
+            historyVersion++;
+            requestRemoteWorkspaceCommit();
+        } else {
+            changeToken(id, "Move token (player)", t -> { t.setX(x); t.setY(y); });
+            HistoryAction pushed = undoStack.peek();
+            lastPlayerMove = pushed != null && "Move token (player)".equals(pushed.label) ? pushed : null;
+            lastPlayerMoveToken = id;
+        }
+        lastPlayerMoveAt = now;
     }
 
     private DmProject.TokenInstance pickToken(double x, double y) {
@@ -10288,6 +10536,109 @@ public class DungeonMasterMapToolApplication extends Application {
             remoteApprovalDialog = dialog;
             dialog.show();
         });
+    }
+
+    private void createOnlinePlay() {
+        Path campaigns = AppSettings.resolveConfiguredFolder(preferences.getFile(), Tuning.ONLINE_CAMPAIGNS_DIR.get(),
+                "dmmap-campaigns");
+        onlineController = new dmmt.online.OnlineSessionController(campaigns, new dmmt.online.OnlineSessionController.App() {
+            @Override public DmProject project() { return project; }
+            @Override public Path projectFile() { return projectFile; }
+            @Override public String mapId() {
+                return multiLevelManifest != null ? multiLevelManifest.getId() : project.getId();
+            }
+            @Override public String levelId() {
+                return multiLevelManifest != null && currentLevelId != null ? currentLevelId : project.getId();
+            }
+            @Override public boolean showGrid() { return showPlayerGrid; }
+            @Override public String mapName() {
+                return projectFile == null ? "" : MapBrowser.displayName(multiLevelFile != null ? multiLevelFile : projectFile);
+            }
+            @Override public void applyMove(String tokenId, double x, double y) {
+                applyPlayerMove(tokenId, x, y);
+                renderDm();
+                renderPlayer();
+            }
+            @Override public void applyOverlay(String id, DmProject.OverlayShape shape) {
+                DmProject.OverlayShape before = cloneOverlayOrNull(findOverlay(id));
+                applyOverlayState(id, shape);
+                recordOverlayChange("Player drawing", id, before, shape);
+                renderDm();
+                renderPlayer();
+            }
+            @Override public void measurementsChanged() {
+                renderDm();
+            }
+            @Override public void status(String text) { DungeonMasterMapToolApplication.this.status(text); }
+            @Override public dmmt.audio.AudioEngine audioEngine() {
+                return audioControls == null || audioControls.engine().isRemote() ? null : audioControls.engine();
+            }
+            @Override public dmmt.audio.AudioLibraryService audioLibrary() {
+                return audioControls == null || audioControls.engine().isRemote() ? null : audioControls.library();
+            }
+            @Override public void changed() {
+                if (onlinePanel != null) onlinePanel.refresh();
+                updateOnlinePausedBanner();
+                applySectionVisibility();
+            }
+        });
+        onlinePanel = new dmmt.ui.OnlinePlayPanel(onlineController, new dmmt.ui.OnlinePlayPanel.Actions() {
+            @Override public void placeActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
+                placeCampaignActor(campaign, actor);
+            }
+            @Override public int foreignActorTokens(dmmt.online.Campaign campaign) {
+                return project == null ? 0 : (int) project.getTokens().stream()
+                        .filter(t -> isForeignActorToken(t, campaign)).count();
+            }
+            @Override public void removeForeignActorTokens(dmmt.online.Campaign campaign) {
+                removeForeignActorTokensOf(campaign);
+            }
+        });
+        onlineScroll = onlinePanel;
+    }
+
+    private static boolean isForeignActorToken(DmProject.TokenInstance token, dmmt.online.Campaign campaign) {
+        return token.getActorId() != null && (campaign == null || !campaign.getId().equals(token.getCampaignId()));
+    }
+
+    private void placeCampaignActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
+        if (project == null) return;
+        var world = renderer.screenToWorld(dmCanvas.getWidth() / 2, dmCanvas.getHeight() / 2, dmCanvas.getWidth(),
+                dmCanvas.getHeight(), project.getViews().getDmCamera());
+        placeCampaignActor(campaign, actor, world.x(), world.y());
+    }
+
+    private void placeCampaignActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor,
+                                    double worldX, double worldY) {
+        if (project == null || campaign == null || actor == null) return;
+        String definitionId = "actor:" + actor.getId();
+        DmProject.TokenDefinition definition = DmProject.TokenDefinition.builder().id(definitionId)
+                .name(actor.getName()).build();
+        if (actor.getArtwork() != null) {
+            definition.setImage(onlineController.store().artworkPath(campaign.getId(), actor.getArtwork()).toUri().toString());
+        }
+        project.getTokenDefinitions().put(definitionId, definition);
+        DmProject.TokenInstance token = DmProject.TokenInstance.builder().id(UUID.randomUUID().toString())
+                .definitionId(definitionId).x(snapToken(worldX, false)).y(snapToken(worldY, false))
+                .sizeTiles(definition.getSizeTiles()).nameVisible(true)
+                .actorId(actor.getId()).campaignId(campaign.getId()).build();
+        executeWithHistory("Place actor", () -> applyTokenState(token.getId(), token),
+                () -> applyTokenState(token.getId(), null));
+        selectedTokenId = token.getId();
+        status("Placed actor " + actor.getName() + " (hidden from players until revealed).");
+    }
+
+    private void removeForeignActorTokensOf(dmmt.online.Campaign campaign) {
+        if (project == null) return;
+        List<DmProject.TokenInstance> doomed = project.getTokens().stream()
+                .filter(t -> isForeignActorToken(t, campaign)).map(DungeonMasterMapToolApplication::cloneToken).toList();
+        if (doomed.isEmpty()) return;
+        executeWithHistory("Remove actor tokens of other campaigns",
+                () -> doomed.forEach(t -> applyTokenState(t.getId(), null)),
+                () -> doomed.forEach(t -> applyTokenState(t.getId(), t)));
+        status("Removed " + doomed.size() + " actor token(s) of other campaigns.");
+        renderDm();
+        renderPlayer();
     }
 
     /** Brings the Session tab to the front, re-showing the sidebar if it was collapsed. */

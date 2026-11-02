@@ -48,7 +48,7 @@ class PlayerLayerRetentionTest {
             ((LightingEngine) get(app, "lightingEngine")).update(project);
             Stage stage = new Stage();
             StackPane root = new StackPane();
-            for (String name : List.of("playerBaseCanvas", "playerTokenCanvas", "playerBrightCoreCanvas", "playerAmbientCanvas",
+            for (String name : List.of("playerBaseCanvas", "playerFloorEffectsCanvas", "playerTokenCanvas", "playerBrightCoreCanvas", "playerAmbientCanvas",
                     "playerCanvas", "playerLightningCanvas", "playerWeatherCanvas", "playerForegroundCanvas",
                     "playerFogMaskCanvas", "playerFogCanvas")) {
                 Canvas canvas = new Canvas(128, 96);

@@ -149,6 +149,22 @@ public final class ImagePyramidStore
         return null;
     }
 
+    /** A complete on-disk tile pyramid for a map image. */
+    public record Pyramid(Path dir, ImagePyramidBuilder.Meta meta)
+    {
+    }
+
+    /**
+     * Returns the finished tile pyramid of {@code file}, or null when the image is small enough not to need one or it
+     * is still being built (in which case the build is queued). Call on the JavaFX thread, like {@link #get(Path)}.
+     */
+    public Pyramid pyramid(Path file)
+    {
+        MapImage image = get(file);
+        ImagePyramidBuilder.Meta meta = image == null ? null : image.meta;
+        return meta == null || image.dir == null ? null : new Pyramid(image.dir, meta);
+    }
+
     private MapImage load(Path file, boolean speculative) throws IOException
     {
         int[] size = ImagePyramidBuilder.requireDimensions(file);

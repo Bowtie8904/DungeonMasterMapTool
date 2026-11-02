@@ -58,7 +58,7 @@ public final class HistoryFeedback {
             put(snapshot, "effect:" + shape.getId(), true, overlayBounds(shape),
                     shape.getType(), shape.getX(), shape.getY(), shape.getWidth(), shape.getHeight(),
                     shape.getRadius(), shape.getStrokeWidth(), List.copyOf(shape.getPoints()), shape.getColor(),
-                    shape.getAlpha(), shape.isPlayerVisible(), shape.getTexture(), shape.isBorder(), shape.isEmitsLight());
+                    shape.getAlpha(), shape.isPlayerVisible(), shape.getTexture(), shape.isBorder(), shape.isEmitsLight(), shape.getAboveTokens());
         }
         for (var box : project.getTextBoxes()) {
             double[] b = TextBoxGeometry.bounds(box, 0); // DM text is never rotated with player text.

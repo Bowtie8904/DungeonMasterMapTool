@@ -454,6 +454,7 @@ class ContextualBrushSizeTest {
         Canvas canvas = new Canvas(400, 300);
         set(app, "dmCanvas", canvas);
         set(app, "dmBaseCanvas", new Canvas(400, 300));
+        set(app, "dmFloorEffectsCanvas", new Canvas(400, 300));
         set(app, "dmBrightCoreCanvas", new Canvas(400, 300));
         set(app, "dmAmbientCanvas", new Canvas(400, 300));
         for (String field : new String[]{"dmWeatherCanvas", "dmLightningCanvas", "dmForegroundCanvas", "dmFogMaskCanvas"}) {

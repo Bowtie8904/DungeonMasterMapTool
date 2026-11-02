@@ -133,7 +133,9 @@ class IndoorLightingRenderTest {
                     renderer.seconds = strike;
                     var peak = ambient(renderer, project, player).getPixelReader();
                     if (preset != TimeOfDayPreset.DAY) {
-                        assertTrue(peak.getColor(60, 100).getBrightness() > baseline.getColor(60, 100).getBrightness() + 0.1);
+                        var b = baseline.getColor(60, 100);
+                        var p = peak.getColor(60, 100);
+                        assertTrue(luminance(p) > luminance(b) + 0.1);
                     }
                     assertEquals(baseline.getArgb(60, 50), peak.getArgb(60, 50), "Wall shadow is not flashed");
                     var highlight = weather(renderer, project, player).getPixelReader();
@@ -345,5 +347,9 @@ class IndoorLightingRenderTest {
         });
         Platform.runLater(task);
         task.get(20, TimeUnit.SECONDS);
+    }
+
+    private static double luminance(javafx.scene.paint.Color c) {
+        return 0.2126 * c.getRed() + 0.7152 * c.getGreen() + 0.0722 * c.getBlue();
     }
 }

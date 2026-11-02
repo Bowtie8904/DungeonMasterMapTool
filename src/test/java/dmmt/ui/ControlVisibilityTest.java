@@ -94,7 +94,7 @@ class ControlVisibilityTest {
                 create.invoke(app, new Stage());
                 ControlVisibility visibility = (ControlVisibility) field(app, "dmControlVisibility");
                 Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream()
-                        .filter(control -> !Set.of("tokens", "session").contains(control.sectionId()))
+                        .filter(control -> !Set.of("tokens", "session", "online").contains(control.sectionId()))
                         .map(AppSettings.SidebarControl::id).collect(Collectors.toSet());
                 assertEquals(expected, visibility.registeredIds());
                 AppSettings settings = (AppSettings) field(app, "preferences");
@@ -131,7 +131,7 @@ class ControlVisibilityTest {
                 settings.setHiddenControls(expected);
                 apply.invoke(app);
                 for (Object section : ((java.util.Map<?, ?>) field(app, "dmSections")).values()) {
-                    VBox body = (VBox) ((VBox) section).getChildren().get(1);
+                    VBox body = (VBox) ((ControlSection) section).getChildren().get(1);
                     assertTrue(body.getChildren().stream().noneMatch(Node::isManaged));
                 }
                 settings.setHiddenControls(Set.of());
@@ -139,17 +139,18 @@ class ControlVisibilityTest {
                 assertTrue(diagonal.isManaged());
                 assertTrue(zoom.getParent().isManaged());
                 var sections = (java.util.Map<?, ?>) field(app, "dmSections");
-                CollapsibleSection lighting = (CollapsibleSection) sections.get("lighting");
-                lighting.setExpanded(false);
+                ControlSection lighting = (ControlSection) sections.get("lighting");
+                lighting.railButton().setSelected(true);
                 settings.setHiddenControls(Set.of("lighting.candle"));
                 settings.setHiddenSections(Set.of("lighting"));
                 apply.invoke(app);
-                assertFalse(lighting.isManaged());
+                assertFalse(lighting.railButton().isManaged());
+                assertFalse(lighting.railButton().isVisible());
+                assertFalse(lighting.railButton().isSelected());
                 settings.setHiddenSections(Set.of());
                 apply.invoke(app);
-                assertTrue(lighting.isManaged());
-                assertFalse(lighting.isExpanded());
-                assertFalse(lighting.getChildren().get(1).isManaged());
+                assertTrue(lighting.railButton().isManaged());
+                assertFalse(lighting.railButton().isSelected());
                 assertEquals(Set.of("lighting.candle"), settings.hiddenControls());
             } finally {
                 if (oldProperty == null) {

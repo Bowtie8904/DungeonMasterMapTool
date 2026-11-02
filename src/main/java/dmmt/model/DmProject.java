@@ -28,8 +28,9 @@ public class DmProject {
     @Builder.Default
     private String id = java.util.UUID.randomUUID().toString();
 
+    /** 2 adds optional actor tokens (Online Play); older builds ignore the extra fields. */
     @Builder.Default
-    private int schemaVersion = 1;
+    private int schemaVersion = 2;
 
     @Builder.Default
     private MapInfo map = MapInfo.builder().build();
@@ -110,6 +111,12 @@ public class DmProject {
         private boolean nameVisible;
         /** Optional light attached to this instance only (not part of the token definition); {@code null} when absent. */
         private LightSource light;
+        /** Online Play actor this token represents (id of a campaign actor); {@code null} for ordinary tokens. */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String actorId;
+        /** Campaign owning {@link #actorId}; other campaigns show this token as an unknown actor. */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String campaignId;
 
         /** The attached light always sits at the token center, so it follows every move, rotation and undo. */
         public LightSource getLight() {
@@ -462,6 +469,9 @@ public class DmProject {
     @AllArgsConstructor
     public static class OverlayShape {
         private String id;
+        /** Null ownership denotes a DM-created effect, including legacy maps. */
+        private String ownerId;
+        private String ownerCampaignId;
         /** "circle" (x,y = center, radius), "rect" (x,y = top-left, width, height) or "brush" (points, strokeWidth). */
         private String type;
         private double x;
@@ -488,6 +498,11 @@ public class DmProject {
         /** Whether the effect adds light (in its colour) to the lighting map. */
         @Builder.Default
         private boolean emitsLight = false;
+        /**
+         * Whether the effect is drawn above tokens (unaffected by light) or below them (lit and darkened with the
+         * map). Null means the default of its texture, so maps saved before the flag existed keep working.
+         */
+        private Boolean aboveTokens;
     }
 
     public static final String TRANSPARENT = "#00000000";

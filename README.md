@@ -10,9 +10,95 @@ A desktop application for tabletop game masters who run in-person sessions with 
 
 ![DM view overview](docs/images/dm-view-overview.png)
 
-## LAN remote control
+## Online play (players in browsers)
 
-Open the **Session** tab in the left sidebar (next to Tokens; hideable via Settings > DM controls tabs) to control a host PC (A) from another PC (B) running the
+The **Online Play** tab (next to DM Link) lets you host an optional, DM-controlled web session for players
+who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
+Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
+
+- **Campaigns** are separate from maps: each has a game system (currently Daggerheart; no gameplay effect yet),
+  players (username + password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
+  and per-player fog memory that survives map switches, sessions and browsers. Campaigns live in
+  `online.campaignsDirectory` (default: a `dmmap-campaigns` folder beside the settings file; the older `campaigns`
+  folder is not migrated).
+- **The tab** shows a session card (active campaign, status, invite link with copy button, Start/Stop) above four
+  subtabs. Everything is managed with tables and right-click menus; F2 renames and Delete removes:
+  - **Campaigns:** name, system, player and actor counts. Select a row to make it active; right-click to open,
+    rename, create or delete. *New campaign* asks for a name and a game system.
+  - **Players:** username, password state, owned actors and online status with ping. Right-click to set the
+    password, rename, kick, add or delete (renaming, a new password or deleting signs the player out).
+  - **Actors:** a folder tree with each actor's artwork (default token art when none) and owner. Right-click for
+    owner, artwork, rename, remove, place at view centre and folder management; drag actors and folders into
+    folders, or **drag an actor straight onto the map** to place it there (like the token browser).
+  - **Connected:** connected players with their open tabs and ping; right-click to kick.
+- **Actor tokens** are stored in the map file; older builds still open such maps. Actor tokens of other campaigns
+  are flagged in the Actors tab and can be removed there (never automatic).
+- Share the invite link; players pick their name and enter their password (failed logins are rate limited).
+  Each account allows only one browser login session at a time; occupied accounts disappear from the
+  automatically refreshed login list. Tabs and sheet pop-outs in the same browser session still work.
+- **Daggerheart character sheet (mock data)**: players get a sheet button in the sidebar rail and an "Open sheet"
+  button per actor. The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
+  Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
+  a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
+  Trait tiles use highlighted teal borders to stand out from the other character stats.
+  The sheet currently shows a mock character held in memory only; real data import and persistence come later.
+  The account becomes available when its last tab disconnects, on logout or when you kick the player.
+  An abandoned login reservation expires after 30 seconds if no tab connects.
+  Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
+  **Press Space** in the DM view (setting `online.pauseKey`; local API `online.pause`) to pause or resume: movement
+  is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
+  block anything else. Chat (with whispers to the DM) and dice (`2d6+3`) keep working and are persisted per campaign.
+- **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
+  tool options fly out over the map. The right vertical icon rail switches between Chat & dice, My actors and
+  Settings. Click the selected section again to collapse it to just its icons. Settings contains your audio
+  controls and logout. The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
+  (not to you); `--` means a sample is not available yet.
+- **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
+  Right-drag pans while keeping the active tool;
+  left-drag on empty space box-selects your drawings, controlled actors/tokens and measurements. Drag a selected
+  object to move the group. Delete removes selected drawings/measurements, not actors. Choosing a drawing or
+  measuring mode in the still-open flyout reactivates that tool.
+- **Player drawings:** Drawing offers compact Pen, freehand brush, line, circle and rectangle buttons and a dropdown
+  of all DM effect textures. Default opacity is 100%. Changing the texture while Select is active returns to your
+  previously chosen drawing mode without closing the flyout. Pen and line are plain ink, just like the desktop tools. Drawings are ordinary effects
+  saved with the map, with campaign/player ownership. Only their creator and the DM can edit them; older and
+  DM-created effects remain DM-owned. In Navigate, select your effect and drag to move it, drag its corner handle
+  to resize, or use Delete/the trash button. Open Drawing with an effect selected to edit its style.
+  Pen/brush have a true-size cursor outline; freehand strokes have no bounding box while being drawn.
+  Brush Border outlines the painted area in both browser and DM views, including textured effects, without lines at stroke crossings.
+  The color picker updates drawing color live, including textured effects; selected effects receive live edits
+  and the final color on picker completion without host refreshes resetting your choice.
+  Ctrl+Z (Cmd+Z on macOS) cancels an active stroke or undoes your last confirmed drawing creation, edit or deletion.
+  Undo history is limited to 100 edits in the current map and resets on map changes/reload; it never undoes other
+  players' work or the DM's history. The DM uses the existing effect controls and undo/redo. Drawing edits are blocked while paused.
+- **Shared measuring:** Measure offers distance, circle radius, a 60-degree cone and rectangle, labelled in grid tiles.
+  Drag to create a measurement; everyone, including the DM, sees it while dragging and after release. In Navigate,
+  the creator can move/delete it. In the DM's Select mode, drag a measurement to move it, or use Delete/right-click
+  to remove it. A subtle cross beside each completed measurement also deletes it; only its creator and the DM
+  see this control. Escape cancels a measuring gesture or restores a measurement being moved.
+  Measurements are session-only: switching map/level or restarting the session clears them, and
+  returning to that map does not restore them. Older hosts without these tools leave their browser buttons disabled.
+- The browser renders the map, vision, fog and weather locally. The grid is only drawn while the DM's player-grid
+  toggle is on. Large maps are streamed as full-resolution tiles, so zooming in stays sharp (players may need to
+  reload the page once after updating). Hidden tokens are never sent, but there is
+  no anti-cheat for what the client already receives. Weather follows the host's weather settings, including
+  outdoor-only clipping (`weather.<type>.indoors`), lightning entering through open doors/windows and
+  lightning lifting ambient darkness, matching the DM view.
+- **Remote access:** to play over the internet, expose the port (setting `online.port`) through a tunnel such as
+  Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:<port>`) or Tailscale rather than opening the router.
+- **Music and sound effects:** the host syncs playback state and browsers play the same original audio files
+  (HTTP range support, never the `files/playback` copies). Each track's loudness-matching gain is sent so quiet
+  and loud tracks sound even. Audio streams by default and starts on the player's first click (browser autoplay
+  rule); players have master, music and effects sliders plus a mute button in the right-side **Settings** section. Muting releases all audio resources;
+  unmuting rejoins the DM's current playback position. The setting `online.audioStreaming` can turn it off globally.
+  Files are not transcoded, so very large WAVs take a while to load.
+- Not finished yet: tiled image pyramids
+  (see `plan.md` §3.41). Settings are documented in `docs/SETTINGS.md`; the browser client lives in `web/`
+  (`npm install && npm run build` outputs to `src/main/resources/web`).
+
+## LAN remote control (DM Link)
+
+Open the **DM Link** tab (formerly "Session") in the left sidebar (next to Tokens; hideable via Settings > DM controls tabs) to control a host PC (A) from another PC (B) running the
 same remote compatibility version. Both use the normal DM interface, with independent cameras, tools and
 selections. Completed edits, shared Undo/Redo, map/token libraries and settings synchronize; there is
 no video streaming and unfinished drawing previews stay local. Player windows and all audio output
@@ -78,7 +164,7 @@ Save/Ctrl+S waits for completed edits and host persistence; a new map asks on B 
 folder in A's library. Switching away from an unsaved new host map offers Save, Discard or Cancel.
 Handouts share A's presentation and recent library without replacing B's local recent list.
 Asset uploads and downloads show a temporary progress card (direction and MB counter) at the bottom
-center of the map view, above the status bar; the Session tab no longer shows transfer progress.
+center of the map view, above the status bar; the DM Link tab no longer shows transfer progress.
 
 Connection loss pauses host-directed edits. Use **Reconnect** to recover the exact outcome of an
 in-flight command, not replay it as a new action. Unsent commands are cancelled explicitly; expired
@@ -141,7 +227,7 @@ machines, map sizes and network and are not guaranteed by loopback tests.
 - Shows the map on your **DM screen** with full controls and on a **borderless fullscreen player window** on a second monitor, calibrated so that one grid tile is about **1 inch** in real life (ideal for miniatures).
 - **Fog of war** with brush, area and one-click room reveal tools.
 - **Dynamic lighting** with line of sight against walls and closed doors, flicker, colours, presets and time-of-day ambience.
-- **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, chasms, ...), text labels, pings and a laser pointer.
+- **Effects** such as circles, boxes and freehand areas with 25+ animated textures (fire, smoke, water, webs, ...), text labels, pings and a laser pointer.
 - **Ambient weather**, including thick, high-contrast smoke-textured mist with dense billows, softer gaps, full-screen coverage and seamless edge wrapping. Intermediate intensity shows drifting smoke; **100% mist is opaque**, hiding the map beneath textured fog (text and fog-of-war remain above it).
 - **Handouts**: paste images from the clipboard and show them on the player screen; a persistent recent list lets you reuse earlier handouts.
 - **Ambient audio**: a library of music categories and looping sound effects, with a waveform editor that cuts long recordings into standalone clips and crossfading playback.
@@ -270,7 +356,7 @@ Maps are saved in a versioned JSON format (`.dmmap`) that is identical for impor
 
 - **Left:** the collapsible **map browser** (library and map actions).
 - **Centre:** the **map canvas**. A floating **tool chip** at the top names the active tool ("Esc or right-click to exit").
-- **Right:** the **DM controls** overlay, made of collapsible sections: *Tools, Fog of war, Lighting, Effects, Text, Map building, Player view, Performance*. Collapsed/expanded state is remembered. The whole panel can be collapsed and scrolls in small windows. Tabs you never use can be hidden completely in the **Settings** window (see [Settings file](#16-settings-file)).
+- **Right:** a vertical **icon rail** with one icon per DM controls section: *Tools, Fog of war, Lighting, Weather, Effects, Text, Map building, Player view, Performance*. Click an icon to open that section as an overlay to the left of the rail; click it again to close it, or click another icon to switch. The overlay stays open while you work on the map and nothing is open on startup. Tabs you never use can be hidden in the **Settings** window, which removes their icons from the rail (see [Settings file](#16-settings-file)).
 - **Bottom:** a status bar whose activity message reports saves, imports, loading and errors; a persistent **Player view: Off / Live / Frozen** indicator is separated from the current song by extra spacing and a divider. **Frozen** is bold blue text; if the player window is closed while frozen, it reads **Frozen (window off)**. Use the chart button to toggle optional rendering diagnostics; the panel stays open until toggled off.
 
 ### 2. Map library (left sidebar)
@@ -493,6 +579,7 @@ The *Lighting* section controls lights and ambience.
 - Light is blocked by walls and closed doors; open doors let light through.
 - Overlapping lights (and glowing effects, see [Tactical overlays](#8-tactical-overlays)) brighten the area together and blend their colours by how much each contributes, instead of only the brightest light showing.
 - **Light tint** slider: strength of the light colour over lit areas (0–30 %, saved per map).
+- Online Play uses the DM view's light-tint strength and falloff. Overlapping lights blend colours without stacking extra tint; outdoor lights lose their tint and bright cores outside Night, while indoor lights remain active when indoor darkness is enabled. Player ambient darkness stays at its normal strength.
 - **Bright core** slider: adds a small, additive hot spot right at each light's own position that brightens the map art underneath (not a flat overlay), similar to the bright centers baked into some hand-painted map lights (0–50 %, default 15 %, saved per map).
 
 **Time of day**
@@ -528,9 +615,10 @@ Draw areas of effect that both DM and players see (below fog, above map and ligh
 **Style**
 
 - **Colour** and **opacity** (10–100 %) apply to new shapes and to the selected shape.
-- **Texture** dropdown: Flat colour, Smoke, Fire, Water, Lava, Acid/slime, Ice/frost, Lightning, Arcane runes, Darkness/void, Mist/fog, Blood, Spider web, Holy light, Grease/oil, Sand/dust storm, Wind gusts, Radiation/aura, Poison/toxic gas, Swamp/mud/bog, Rubble/debris, Thorns/brambles, Force/shield, Necrotic/shadow rot, Entropy/portal and Chasm/broken earth. Textures are procedurally generated, animated and tinted with the effect colour; picking a texture loads its default colour and opacity, which you can change (orange water looks like lava, green like acid). Arcane uses a compact field of varied angular glyphs that stays legible in small shapes, not a large circular diagram.
+- **Texture** dropdown: Flat colour, Smoke, Fire, Water, Lava, Acid/slime, Ice/frost, Lightning, Arcane runes, Darkness/void, Mist/fog, Blood, Spider web, Holy light, Grease/oil, Sand/dust storm, Wind gusts, Radiation/aura, Poison/toxic gas, Swamp/mud/bog, Rubble/debris, Thorns/brambles, Force/shield, Necrotic/shadow rot, Entropy/portal. Textures are procedurally generated, animated and tinted with the effect colour; picking a texture loads its default colour and opacity, which you can change (orange water looks like lava, green like acid). Arcane uses a compact field of varied angular glyphs that stays legible in small shapes, not a large circular diagram.
 - **Border** toggle outlines a textured shape.
 - **Arcane movement:** the rune field wanders smoothly with irregular changes in direction and speed, rather than scrolling along a fixed path.
+- **Layer** toggle: an effect is either above the tokens (smoke, gas, magic; not affected by light or darkness) or below them on the floor (water, lava, ice, blood, webs, rubble and similar; darkened and lit like the map). Picking a texture sets its default; it can be changed per effect. Maps saved before this option use the texture default. Browser players see the same layering.
 - **Light emission** (bulb) toggle: the effect glows and lights up dark maps (fire, lava, lightning, arcane, holy light, radiation, portal and force by default). It can be switched on or off for any effect afterwards, whatever the texture default.
 - **Animations** toggle (per map): freezes all textures to a static frame to save performance.
 - **Players see:** hides a shape from the player view (shown dashed and dimmed with a crossed-out eye for the DM). Right-click any shape with Select for a *Visible to players* menu item.
@@ -620,7 +708,7 @@ Closing the handout window stops showing it but keeps the images for reopening d
 
 ### 16. Settings file
 
-**Settings window:** click the **cog button** in the DM controls header (or in the status bar at the bottom) to open the settings window. It lists every setting that has no control in the DM controls (zoom limits, click tolerances, fog fade times, light and weather presets, effect texture defaults, caches, colours, ...), grouped by category. Pick a category on the left (related categories sit next to each other; related settings are grouped in collapsible blocks, e.g. player zoom, map image cache, one block per time of day, weather type, light preset or effect texture) or type into the **search field** (matches names, keys, descriptions and the keywords of docs/SETTINGS.md, e.g. "sunset", "battery" or "slow computer"; several words must all match). Hover a setting for a tooltip with what it does, its range and its default; the arrow button restores the default. Changes are saved to the settings file and apply immediately, except entries marked *restart required*. The first category, **DM controls tabs**, lets you hide whole tabs (e.g. Effects or Performance) from the DM controls overlay if you never use them. Expand a tab's **controls** group there to show or hide its individual controls, such as the candle preset, screen diagonal field or brush-size sliders. Each slider/field's labels and readouts disappear with it, and empty rows collapse. All controls are shown by default; choices are saved globally as `ui.controls.hidden`, apply immediately and survive restarting or hiding/restoring a whole tab. Hiding a control does not change its value, disable its tool or remove keyboard shortcuts (including Alt + mouse wheel for brush size).
+**Settings window:** click the **cog button** in the status bar at the bottom to open the settings window. It lists every setting that has no control in the DM controls (zoom limits, click tolerances, fog fade times, light and weather presets, effect texture defaults, caches, colours, ...), grouped by category. Pick a category on the left (related categories sit next to each other; related settings are grouped in collapsible blocks, e.g. player zoom, map image cache, one block per time of day, weather type, light preset or effect texture) or type into the **search field** (matches names, keys, descriptions and the keywords of docs/SETTINGS.md, e.g. "sunset", "battery" or "slow computer"; several words must all match). Hover a setting for a tooltip with what it does, its range and its default; the arrow button restores the default. Changes are saved to the settings file and apply immediately, except entries marked *restart required*. The first category, **DM controls tabs**, lets you hide whole tabs (e.g. Effects or Performance) from the DM controls rail if you never use them. Expand a tab's **controls** group there to show or hide its individual controls, such as the candle preset, screen diagonal field or brush-size sliders. Each slider/field's labels and readouts disappear with it, and empty rows collapse. All controls are shown by default; choices are saved globally as `ui.controls.hidden`, apply immediately and survive restarting or hiding/restoring a whole tab. Hiding a control does not change its value, disable its tool or remove keyboard shortcuts (including Alt + mouse wheel for brush size).
 
 Global preferences are stored in `dmmt-settings.ini` next to the jar as plain `key = value` lines with `#` comments. The file is created with every setting and its default; settings added by a newer version are appended with their defaults at startup, and unknown keys are preserved. Invalid values fall back to defaults and numbers are clamped to their allowed range. Delete a line to restore its default.
 

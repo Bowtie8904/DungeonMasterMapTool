@@ -202,11 +202,112 @@ API endpoint.
 
 **Keywords:** right click, context menu, copy API URL, key image URL, hide API options, URL menu.
 
+## Online play
+
+Settings of the optional Online Play web server (the **Online Play** tab). Nothing listens until you click **Start online session**. Online Play is for players in browsers and is not the DM Link (LAN remote control between two DM machines). See the README for tunnel setup.
+
+### `online.port`
+
+**Default:** `7080`. **Range:** `1024` to `65535`. **Applies:** Live (next session start).
+
+TCP port of the Online Play web server. Expose it with a tunnel (Cloudflare Tunnel, Tailscale) rather than a router port-forward.
+
+**Keywords:** online, browser, players, web server, port.
+
+### `online.sessionName`
+
+**Default:** `Game night`. **Applies:** Live (next session start).
+
+Session name shown on the player login page.
+
+**Keywords:** online, session name, login page.
+
+### `online.maxPlayers`
+
+**Default:** `8`. **Range:** `1` to `64`. **Applies:** Live (next session start).
+
+Maximum number of simultaneously connected players; further logins are refused.
+
+**Keywords:** online, players, limit.
+
+### `online.audioStreaming`
+
+**Default:** `true`. **Applies:** Live (there is no button for it in the DM view; players opt out with their own mute button).
+
+Syncs the DM's ambient music and sound effects to online players. The host sends only playback state (track, position, loudness-matching gain in dB); browsers download the original hashed audio files from the host and play them locally. Players get their own master, music and effects sliders and a mute button in the right-side **Settings** section (alongside logout). These remain browser-local preferences, independent of the DM's volume. Only original files are served, never the large `files/playback` copies.
+
+**Keywords:** online, audio, music, sound effects, volume.
+
+### `online.campaignsDirectory`
+
+**Default:** empty (a `dmmap-campaigns` folder beside the settings file, next to `dmmap-library` and the other `dmmap-*` folders). **Applies:** Live (next session start / campaign list refresh).
+
+Folder holding campaigns: players (password hashes), actors, actor folders, artwork, fog memory and chat history. Relative paths resolve against the folder of the settings file. Campaigns from the earlier default `campaigns` folder are not moved automatically; point this setting at that folder to keep using them.
+
+**Keywords:** online, campaign, storage, folder, dmmap-campaigns.
+
+### `online.pauseKey`
+
+**Default:** `SPACE`. **Applies:** Live.
+
+Key that pauses and resumes a running online session from the DM view (a JavaFX key name such as `SPACE`, `P` or `F9`; empty disables the shortcut). It is ignored while a text field has focus or a modifier key (Ctrl, Alt, Shift, Meta) is held. While paused, the DM view shows an "Online game paused" banner with a Resume button and players see a non-blocking banner; they cannot move tokens but can keep chatting, rolling and browsing. The local API control `online.pause` toggles pause too.
+
+**Keywords:** online, pause, resume, spacebar, hotkey, shortcut.
+
+### `online.maxImageEdge`
+
+**Default:** `4096`. **Range:** `512` to `16384`. **Applies:** Live (next session start).
+
+Longest edge of map images served to browsers as a single image; larger images are downscaled once and cached.
+Images large enough to have a tile pyramid (see `cache.overviewMaxSize`) are additionally streamed to browsers as
+full-resolution tiles, so this limit only affects the initial/fallback image.
+
+**Keywords:** online, image size, bandwidth.
+
+### `online.maxMessageBytes`
+
+**Default:** `65536`. **Range:** `1024` to `4194304`. **Applies:** Live (next session start).
+
+Largest WebSocket message accepted from a browser; bigger messages close the connection.
+
+**Keywords:** online, WebSocket, limit.
+
+### `online.changeLogSize`
+
+**Default:** `200`. **Range:** `10` to `5000`. **Applies:** Live (next session start).
+
+Number of recent changes kept so a reconnecting browser receives only the missed deltas instead of a full snapshot.
+
+**Keywords:** online, delta, reconnect.
+
+### `online.maxDice`
+
+**Default:** `100`. **Range:** `1` to `1000`. **Applies:** Live.
+
+Maximum number of dice in a single player roll.
+
+**Keywords:** online, dice, roll.
+
+### `online.loginMaxFailures`
+
+**Default:** `5`. **Range:** `1` to `100`. **Applies:** Live.
+
+Failed logins per IP address and per player before a temporary lockout.
+
+**Keywords:** online, login, rate limit, lockout.
+
+### `online.loginLockoutSeconds`
+
+**Default:** `60`. **Range:** `5` to `3600`. **Applies:** Live.
+
+Length of the lockout after too many failed logins.
+
+**Keywords:** online, login, lockout.
+
 ## Contents
 
 1. [How the settings file works](#how-the-settings-file-works)
 2. [Window and panels](#window-and-panels)
-3. [Collapsible sidebar sections](#collapsible-sidebar-sections)
 4. [Player screen](#player-screen)
 5. [Fog and lighting](#fog-and-lighting)
 6. [Frame rates](#frame-rates)
@@ -278,7 +379,7 @@ and never changes map quality, fog boundaries, calibrated scale or music volume.
   (Java preferences: last import folder, player screen and calibration, sidebar and section states, fog sharpness,
   light tint, auto-save and text defaults) are copied into the new file once.
 - **Settings window:** every setting that has no control in the DM controls can also be changed in the application: click the
-  cog button (DM controls header or status bar). Settings are grouped by category, can be found with the search field
+  cog button in the status bar. Settings are grouped by category, can be found with the search field
   (name, key or description), explain themselves in tooltips, can be reset to their default individually, and are
   applied immediately (except entries marked *restart required*). Which DM controls tabs are shown is set there too. Related entries are grouped in collapsible blocks (collapsed by default) inside each category, for example *Player zoom*, *Map image cache*, one block per time of day, weather type, light preset or effect texture (with *Layer* and *Light emission* blocks inside). Numbers are edited with spinners. The search also finds the *Keywords* of this document.
 - Keys the application does not know are kept in an *Other* section at the end of the file.
@@ -294,14 +395,6 @@ Whether the sidebar on the right of the DM window (tools, fog, lighting, effects
 sections) is shown. Toggled with the sidebar button in the toolbar; the last state is remembered here.
 
 *Keywords:* sidebar, side panel, hide panel, show panel, tool panel, layout
-
-### `ui.controlsExpanded`
-**Default:** `true` · **Values:** `true`/`false` · **Applies:** managed by the app
-
-Whether the toolbar controls at the top of the DM window are expanded. Collapse them to get more map space; the state
-is remembered here.
-
-*Keywords:* toolbar, top bar, controls, collapse, expand, layout
 
 ### `ui.performanceMode`
 **Default:** `false` · **Values:** `true`/`false` · **Applies:** managed by the app
@@ -330,7 +423,7 @@ How many maps the **Recent maps** list below the map library keeps. Older entrie
 ### `ui.sections.hidden`
 **Default:** empty · **Values:** comma separated tab ids: `tools`, `tokens`, `fog`, `lighting`, `weather`, `effects`, `text`, `building`, `player`, `performance` · **Applies:** live (also changed from the settings window)
 
-Tabs of the DM controls overlay that are **completely hidden**. A DM who never uses effects or never changes the frame rate can remove those tabs to keep the overlay short. Hidden tabs keep all their settings and data; only their controls disappear from the overlay. Empty = every tab is shown. Easiest to change in **Settings** (cog button in the DM controls header or in the status bar) under *DM controls tabs*.
+Tabs of the DM controls that are **completely hidden**: a hidden tab's icon is removed from the icon rail on the right of the DM view. A DM who never uses effects or never changes the frame rate can remove those tabs to keep the rail short. Hidden tabs keep all their settings and data. Empty = every tab is shown. Easiest to change in **Settings** (cog button in the status bar) under *DM controls tabs*.
 
 *Keywords:* hide tab, hide section, remove section, sidebar tabs, overlay, declutter, DM controls, show hide
 
@@ -350,7 +443,7 @@ Each entry below combines the section prefix with a control suffix (for example,
 | `fog` | `enabled`, `revealBrush`, `hideBrush`, `revealRect`, `hideRect`, `revealAll`, `hideAll`, `revealRoom`, `brushSize`, `sharpness`, `fade`, `softness` |
 | `lighting` | `torch`, `candle`, `campfire`, `magic`, `remove`, `flicker`, `revealPersistent`, `revealWhileLit`, `revealNone`, `day`, `dawn`, `dusk`, `night`, `on`, `off`, `ambient`, `tint`, `brightCore`, `hint` |
 | `weather` | `type`, `intensity`, `lightningInterval`, `indoors` |
-| `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `animations`, `brushSize` |
+| `effects` | `circle`, `rectangle`, `brush`, `pen`, `line`, `delete`, `clear`, `color`, `opacity`, `players`, `texture`, `border`, `light`, `layer`, `animations`, `brushSize` |
 | `text` | `add`, `layer`, `autoSize`, `players`, `delete`, `size`, `color`, `rotateLeft`, `rotateRight`, `background`, `noBackground`, `border`, `noBorder` |
 | `building` | `drawWall`, `drawDoor`, `drawWindow`, `roomLabel`, `eraseWall`, `wallLayer`, `lock`, `snap`, `addImage` |
 | `player` | `window`, `freeze`, `scaleTest`, `handout`, `grid`, `gridOpacity`, `screen`, `diagonal`, `tileSize`, `zoom` |
@@ -382,30 +475,6 @@ afterwards. The player window always fills its whole screen and has no size sett
 Height in pixels of the main (DM) window when the application opens.
 
 *Keywords:* window size, height, startup size, main window, DM window, resolution
-
----
-
-## Collapsible sidebar sections
-
-### `ui.section.<id>.expanded`
-**Default:** `true` · **Values:** `true`/`false` · **Applies:** managed by the app
-
-Remembers whether each collapsible sidebar section is expanded (`true`) or collapsed (`false`). Click a section header
-to toggle it. A missing or invalid value shows the section expanded. One entry exists per section:
-
-| Key | Sidebar section |
-|-----|-----------------|
-| `ui.section.tools.expanded` | Tools (select, fog brushes, rectangles, room fill) |
-| `ui.section.fog.expanded` | Fog (fog sharpness, softness, fade animation) |
-| `ui.section.lighting.expanded` | Lighting (time of day, ambient brightness, light tools, light tint, weather) |
-| `ui.section.effects.expanded` | Effects (circle/box/freehand effects, pen, line, textures, colours) |
-| `ui.section.text.expanded` | Text (text boxes, font size and colours) |
-| `ui.section.building.expanded` | Building (walls, doors and windows) |
-| `ui.section.player.expanded` | Player (player screen, calibration, player zoom) |
-| `ui.section.audio.expanded` | Audio (music categories, sound effects, volumes) |
-| `ui.section.performance.expanded` | Performance (frame rates) |
-
-*Keywords:* collapse, expand, fold, accordion, sidebar section, panel state
 
 ---
 
@@ -1258,6 +1327,8 @@ covering it with a flat tint), mimicking the bright glow often baked into the ce
 
 Share of the time-of-day darkness shown in the DM view. Players see the full darkness; the DM sees only this share so
 the map stays readable. `1` shows the DM the same darkness as the players, `0` none.
+Online Play also uses this factor for light-colour tint strength so tint matches the DM view, without reducing
+player ambient darkness. Overlapping browser lights blend into one capped tint instead of stacking it.
 
 *Keywords:* DM darkness, night view, readability, darkness overlay, DM visibility
 
@@ -2025,7 +2096,7 @@ Performance mode uses at most `performance.maxFeatherPasses`.
 
 `<kind>` is one of: `smoke`, `fire`, `water`, `lava`, `acid`, `ice`, `lightning`, `arcane`, `darkness`, `mist`,
 `blood`, `web`, `holy`, `grease`, `sand`, `wind`, `radiation`, `poison`, `swamp`, `rubble`, `thorns`, `force`,
-`necrotic`, `portal`, `chasm`.
+`necrotic`, `portal`.
 
 #### `texture.<kind>.color`
 Default colour `#RRGGBB` given to a new effect when this texture is picked. The texture is colourised with the effect
@@ -2119,7 +2190,6 @@ are listed in `dmmt-settings.default.ini`.
 | `force` | `#5AC8FF` | 0.85 | false | true | 0.6 | 2 | 0.1 | 0.8 | 2 |
 | `necrotic` | `#5B2A86` | 0.9 | true | false | 0.5 | 2 | 0 | 0.8 | 2 |
 | `portal` | `#8A4DFF` | 0.9 | true | true | 0.6 | 2 | 0.1 | 0.8 | 2 |
-| `chasm` | `#7A6248` | 1 | false | false | 0.5 | 2 | 0 | 0.8 | 1 |
 
 ---
 

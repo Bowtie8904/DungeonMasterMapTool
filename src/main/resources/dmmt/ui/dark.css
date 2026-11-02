@@ -677,19 +677,45 @@
 
 /* ---------- DM controls panel ---------- */
 
-.dm-panel {
+.dm-rail, .dm-flyout-scroll {
     -fx-background-color: rgba(26, 28, 33, 0.94);
     -fx-background-radius: 12;
     -fx-border-color: #30343c;
     -fx-border-radius: 12;
-    -fx-padding: 6;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 18, 0, 0, 5);
 }
 
-.panel-header {
-    -fx-padding: 2 2 4 8;
-    -fx-spacing: 6;
-    -fx-alignment: center-left;
+.dm-rail {
+    -fx-padding: 6;
+}
+
+.dm-rail .rail-toggle {
+    -fx-min-width: 36;
+    -fx-min-height: 36;
+    -fx-pref-width: 36;
+    -fx-pref-height: 36;
+    -fx-max-width: 36;
+    -fx-max-height: 36;
+}
+
+.dm-rail .rail-toggle .ikonli-font-icon {
+    -fx-icon-size: 20px;
+}
+
+.dm-flyout-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.dm-flyout-scroll {
+    -fx-padding: 6;
+}
+
+.dm-flyout {
+    -fx-background-color: transparent;
+}
+
+.dm-section {
+    -fx-border-color: transparent;
 }
 
 .panel-title {
@@ -698,20 +724,10 @@
     -fx-font-weight: bold;
 }
 
-.dm-section {
-    -fx-border-color: #2c3038 transparent transparent transparent;
-}
-
 .section-header {
     -fx-padding: 7 6 7 8;
     -fx-spacing: 7;
     -fx-alignment: center-left;
-    -fx-background-radius: 6;
-    -fx-cursor: hand;
-}
-
-.section-header:hover {
-    -fx-background-color: #262a31;
 }
 
 .section-title {
@@ -1172,4 +1188,214 @@
 
 .remote-transfer .progress-bar {
     -fx-pref-width: 280;
+}
+
+/* ---------- Online Play panel ---------- */
+
+.online-panel {
+    -fx-padding: 12 14 14 14;
+}
+
+.online-session-card .online-status-text {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 12px;
+}
+
+.online-link {
+    -fx-font-size: 11px;
+}
+
+.online-heading {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.online-hint {
+    -fx-font-size: 11px;
+    -fx-text-fill: -dm-muted;
+}
+
+.online-page {
+    -fx-background-color: transparent;
+}
+
+.online-warning {
+    -fx-background-color: #3a2f1c;
+    -fx-background-radius: 6;
+    -fx-padding: 6 8;
+    -fx-spacing: 8;
+}
+
+.online-warning .label {
+    -fx-text-fill: #f3d9a8;
+    -fx-font-size: 11px;
+}
+
+.online-warning .ikonli-font-icon {
+    -fx-icon-color: #f59e0b;
+}
+
+.online-warning-text,
+.table-cell.online-warning-text {
+    -fx-text-fill: #f59e0b;
+}
+
+.table-cell.online-good-text,
+.table-cell.ping-good {
+    -fx-text-fill: #5fd08a;
+}
+
+.table-cell.ping-ok {
+    -fx-text-fill: #f5c542;
+}
+
+.table-cell.ping-bad {
+    -fx-text-fill: -dm-danger;
+}
+
+/* Tabs inside the Online Play panel: flat headers with an accent underline. */
+.online-tabs {
+    -fx-background-color: transparent;
+    -fx-padding: 4 0 0 0;
+}
+
+.online-tabs > .tab-header-area {
+    -fx-padding: 0;
+}
+
+.online-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -dm-border transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-padding: 5 9 5 9;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 12px;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab:hover .tab-label {
+    -fx-text-fill: -dm-text;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-color: transparent transparent -dm-accent transparent;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab:selected .tab-label {
+    -fx-text-fill: -dm-text;
+    -fx-font-weight: bold;
+}
+
+.online-tabs > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+    -fx-border-color: transparent;
+}
+
+.online-tabs > .tab-content-area {
+    -fx-background-color: transparent;
+}
+
+.online-tabs > .tab-header-area > .control-buttons-tab > .container > .tab-down-button {
+    -fx-background-color: transparent;
+}
+
+.online-tabs > .tab-header-area > .control-buttons-tab > .container > .tab-down-button > .arrow {
+    -fx-background-color: -dm-muted;
+}
+
+/* Tables used by the Online Play panel. */
+.online-table {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 6;
+    -fx-table-cell-border-color: transparent;
+}
+
+.online-table:focused {
+    -fx-background-color: transparent;
+}
+
+.online-table > .column-header-background {
+    -fx-background-color: -dm-surface-2;
+    -fx-background-radius: 6 6 0 0;
+}
+
+.online-table .column-header,
+.online-table .filler {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-size: 26;
+}
+
+.online-table .column-header .label {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+    -fx-padding: 0 6;
+}
+
+.online-table .column-header .arrow {
+    -fx-background-color: -dm-muted;
+}
+
+.online-table > .virtual-flow > .clipped-container > .sheet > .table-row-cell {
+    -fx-background-color: transparent;
+}
+
+.online-table > .virtual-flow > .clipped-container > .sheet > .table-row-cell:filled:hover {
+    -fx-background-color: #2a2e36;
+}
+
+.online-table > .virtual-flow > .clipped-container > .sheet > .table-row-cell:filled:selected {
+    -fx-background-color: #3a3325;
+}
+
+.online-table .table-cell {
+    -fx-text-fill: -dm-text;
+    -fx-padding: 0 6;
+    -fx-border-color: transparent;
+}
+
+.online-table .table-row-cell .table-cell:open-map {
+    -fx-text-fill: -dm-accent;
+    -fx-font-weight: bold;
+}
+
+.online-table .placeholder .label,
+.online-table .placeholder .hyperlink {
+    -fx-font-size: 12px;
+}
+
+.online-table .placeholder .label {
+    -fx-text-fill: -dm-muted;
+}
+
+.online-search {
+    -fx-font-size: 12px;
+}
+
+.online-actor-tree .tree-cell .muted {
+    -fx-font-size: 10px;
+}
+
+/* DM-side banner while the online game is paused. */
+.online-paused-banner {
+    -fx-border-color: #e8a33d;
+}
+
+.online-paused-banner .ikonli-font-icon {
+    -fx-icon-color: #e8a33d;
 }

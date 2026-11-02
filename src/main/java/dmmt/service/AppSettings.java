@@ -48,7 +48,8 @@ public final class AppSettings {
     public static final List<SidebarSection> SIDEBAR_SECTIONS = List.of(
             new SidebarSection("tools", "Tools", "Select tool, fog brushes, rectangles and room fill."),
             new SidebarSection("tokens", "Tokens", "Token library tab and creation controls in the left sidebar."),
-            new SidebarSection("session", "Session", "LAN remote-control tab in the left sidebar (always shown while a session is active)."),
+            new SidebarSection("session", "DM Link", "LAN remote-control tab (DM to DM) in the left sidebar (always shown while a link is active)."),
+            new SidebarSection("online", "Online Play", "Tab for hosting browser-based online play for players (not DM control)."),
             new SidebarSection("fog", "Fog of war", "Fog sharpness, softness and fade animation."),
             new SidebarSection("lighting", "Lighting", "Light tools, time of day, ambient brightness and light tint."),
             new SidebarSection("weather", "Weather", "Rain, snow, mist, dust, embers and thunderstorms."),
@@ -65,7 +66,9 @@ public final class AppSettings {
 
     private static List<SidebarControl> sidebarControls() {
         List<SidebarControl> controls = new ArrayList<>();
-        addControls(controls, "session", "browser|Session tab");
+        addControls(controls, "session", "browser|DM Link tab");
+        addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
+                "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
                 "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");
@@ -84,7 +87,7 @@ public final class AppSettings {
         addControls(controls, "effects", "circle|Circle", "rectangle|Box", "brush|Draw", "pen|Pen", "line|Line",
                 "delete|Delete selected effect", "clear|Remove all effects", "color|Effect colour", "opacity|Effect opacity",
                 "players|Players see effect", "texture|Effect texture", "border|Effect border",
-                "light|Effect emits light", "animations|Animate effects and weather", "brushSize|Brush size slider");
+                "light|Effect emits light", "layer|Effect above/below tokens", "animations|Animate effects and weather", "brushSize|Brush size slider");
         addControls(controls, "text", "add|Text tool", "layer|Show/hide text layer", "autoSize|Auto-size text box",
                 "players|Players see text", "delete|Delete selected text", "size|Font size", "color|Text colour",
                 "rotateLeft|Rotate text left", "rotateRight|Rotate text right", "background|Background colour",
@@ -118,9 +121,10 @@ public final class AppSettings {
 
     /** Keys of older versions that were replaced by individual settings; dropped from the file at startup. */
     private static final Set<String> OBSOLETE_KEYS = Set.of("lightMenu.rangeTiles", "lightMenu.colors", "lightMenu.flicker",
-            "lightMenu.brightness");
+            "lightMenu.brightness", "ui.controlsExpanded", "ui.section.tools.expanded", "ui.section.fog.expanded",
+            "ui.section.lighting.expanded", "ui.section.effects.expanded", "ui.section.text.expanded",
+            "ui.section.building.expanded", "ui.section.player.expanded", "ui.section.performance.expanded");
 
-    private static final String[] SECTION_IDS = {"tools", "fog", "lighting", "effects", "text", "building", "player", "performance"};
     private static final Set<String> CLIENT_LOCAL_KEYS = Set.of("import.lastDirectory", "audio.lastDirectory");
 
     private static final class SharedMetadata {
@@ -948,7 +952,6 @@ public final class AppSettings {
         List<Section> sections = new ArrayList<>();
         sections.add(new Section(Tuning.WINDOW, List.of(
                 new Entry("ui.sidebarVisible", "true", "Show the sidebar (true/false)."),
-                new Entry("ui.controlsExpanded", "true", "Show the toolbar controls (true/false)."),
                 new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."),
                 new Entry("ui.effectAnimations", "true", "Animate effect textures and weather on all maps (true/false)."),
                 new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."),
@@ -958,12 +961,6 @@ public final class AppSettings {
                         + "Empty = all controls shown. Configure in Settings > DM controls tabs; values and shortcuts are unchanged."),
                 new Entry("ui.recentMaps.max", "5", "Number of maps kept in the recent maps list below the map library (1 to 30)."),
                 new Entry("ui.recentMaps", null, "Recently opened maps, most recent first, separated by '|' (managed by the app)."))));
-
-        List<Entry> panels = new ArrayList<>();
-        for (String id : SECTION_IDS) {
-            panels.add(new Entry("ui.section." + id + ".expanded", "true", null));
-        }
-        sections.add(new Section("Collapsible sidebar sections (true = expanded)", panels));
 
         sections.add(new Section(Tuning.PLAYER, List.of(
                 new Entry("player.screenIndex", "0", "Index of the monitor used for the player view."),
@@ -1069,7 +1066,7 @@ public final class AppSettings {
     private static final List<String> CATEGORY_ORDER = List.of(Tuning.WINDOW, Tuning.UI, Tuning.DM_VIEW, Tuning.INPUT,
             Tuning.PLAYER, Tuning.EDITING, TEXTURES_CATEGORY, Tuning.TEXT, Tuning.FOG, Tuning.LIGHTS, Tuning.TIME_OF_DAY,
             Tuning.WEATHER, Tuning.PING, Tuning.FRAME_RATES, Tuning.PERFORMANCE_MODE, Tuning.AUTOSAVE, Tuning.IMPORT,
-            Tuning.AUDIO, Tuning.STORAGE, Tuning.LOCAL_API);
+            Tuning.AUDIO, Tuning.STORAGE, Tuning.LOCAL_API, Tuning.ONLINE);
 
     private static int categoryRank(String category) {
         int index = CATEGORY_ORDER.indexOf(category);
@@ -1346,7 +1343,6 @@ public final class AppSettings {
             map.put("playerScreenIndex", "player.screenIndex");
             map.put("playerTileInches", "player.tileInches");
             map.put("sidebarVisible", "ui.sidebarVisible");
-            map.put("controlsExpanded", "ui.controlsExpanded");
             map.put("fogCellsPerGrid", "fog.cellsPerGrid");
             map.put("autoSaveEnabled", "autosave.enabled");
             map.put("autoSaveMinutes", "autosave.minutes");
@@ -1354,9 +1350,6 @@ public final class AppSettings {
             map.put("textColor", "text.textColor");
             map.put("textBackground", "text.backgroundColor");
             map.put("textBorder", "text.borderColor");
-            for (String id : SECTION_IDS) {
-                map.put("section." + id + ".expanded", "ui.section." + id + ".expanded");
-            }
             for (int i = 0; i < 16; i++) {
                 map.put("screenDiagonalInches." + i, "player.screenDiagonalInches." + i);
             }

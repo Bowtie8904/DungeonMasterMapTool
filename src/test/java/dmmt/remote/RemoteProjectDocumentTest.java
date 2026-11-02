@@ -22,6 +22,8 @@ class RemoteProjectDocumentTest {
         project.getFog().getMask().applyCells(new int[]{0, 9, 4096, 9999}, true);
         project.getImageLayers().add(DmProject.ImageLayer.builder().id("z-first").width(100).height(100).build());
         project.getImageLayers().add(DmProject.ImageLayer.builder().id("a-second").width(100).height(100).build());
+        project.getOverlays().add(DmProject.OverlayShape.builder().id("player-drawing").type("rect")
+                .ownerId("alice").ownerCampaignId("campaign").width(40).height(50).build());
         var document = RemoteProjectDocument.capture(project);
         assertFalse(document.parts().containsKey("views:dmCamera"));
         var wire = RemoteWire.message(RemoteWire.Type.STATE, document);
@@ -33,6 +35,7 @@ class RemoteProjectDocumentTest {
         assertEquals(44, restored.getViews().getPlayerCamera().getX());
         assertTrue(restored.getActivePings().isEmpty());
         assertEquals(project.getWalls(), restored.getWalls());
+        assertEquals(project.getOverlays(), restored.getOverlays());
         assertEquals(List.of("z-first", "a-second"), restored.getImageLayers().stream().map(DmProject.ImageLayer::getId).toList());
         assertEquals(project.getFog().getMask().copyBits(), restored.getFog().getMask().copyBits());
     }

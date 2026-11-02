@@ -392,6 +392,7 @@ class CanvasMapRendererTest {
             render.run();
             assertEquals(2, renderer.playerEffectsRedrawCount());
             shape.setTexture("water");
+            shape.setAboveTokens(true);
             render.run();
             clock[0] += 0.001;
             render.run();
