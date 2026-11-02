@@ -191,6 +191,7 @@ export interface ChatMessage {
   fromId: string;
   from: string;
   toId?: string;
+  to?: string;
   text: string;
 }
 
@@ -199,6 +200,8 @@ export interface RollMessage {
   ts: number;
   fromId: string;
   from: string;
+  toId?: string;
+  to?: string;
   expression: string;
   rolls: unknown;
   total: number;
@@ -261,6 +264,7 @@ export interface Hello {
   campaignId?: string;
   drawingTools?: boolean;
   measurementTools?: boolean;
+  playerWhispers?: boolean;
 }
 
 import type { AudioMessage } from './audio';

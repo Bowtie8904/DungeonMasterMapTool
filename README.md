@@ -53,7 +53,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   editable table (`ADVANCEMENT_RULES` in `web/src/daggerheart/rules.ts`). **Transformations** (Hope & Fear, from
   `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
-  shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header names any multiclass.
+  shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header labels the original class as "Class:" and any additional class as "Multiclass:".
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the converted Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
@@ -69,10 +69,13 @@ Nothing starts until you click **Start online session**, so offline play and the
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
   **Press Space** in the DM view (setting `online.pauseKey`; local API `online.pause`) to pause or resume: movement
   is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
-  block anything else. Chat (with whispers to the DM) and dice (`2d6+3`) keep working and are persisted per campaign.
+  block anything else. Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
+  another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
+  are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
 - **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
-  tool options fly out over the map. The right vertical icon rail switches between Chat & dice, My actors and
-  Settings. Click the selected section again to collapse it to just its icons. Settings contains your audio
+  tool options fly out over the map. The right vertical icon rail switches between Chat, My actors, Compendium and
+  Settings (at the bottom). Open character sheets from My actors, not a separate navigation shortcut.
+  Click the selected section again to collapse it to just its icons. Settings contains your audio
   controls and logout. The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
   (not to you); `--` means a sample is not available yet.
 - **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
@@ -1088,4 +1091,3 @@ category, music file and sound effect**, addressed by the entry's library id
 (`/api/controls/audio/category/<id>`, `/api/controls/audio/track/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
 button and a stream deck can switch the whole ambience with one press. `GET /api/controls` lists every endpoint
 with its current name.
-

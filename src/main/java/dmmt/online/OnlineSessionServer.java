@@ -899,6 +899,7 @@ public final class OnlineSessionServer {
             hello.put("campaignName", c.getName());
             hello.put("paused", paused);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
+            hello.put("playerWhispers", true);
             sendTo(ctx, hello.toString());
             if (audioJson != null) {
                 sendTo(ctx, audioJson);
@@ -1021,29 +1022,55 @@ public final class OnlineSessionServer {
         if (text.isBlank()) {
             return;
         }
-        boolean whisper = msg.path("whisper").asBoolean(false) || !msg.path("toId").asText("").isEmpty();
-        String to = whisper ? "dm" : null;
-        deliver(chatMessage(client.playerId, client.playerName, to, text), to);
+        try {
+            String to = chatRecipient(msg);
+            deliver(chatMessage(client.playerId, client.playerName, to, text), to);
+        } catch (IllegalArgumentException e) {
+            sendTo(client.ctx, error(e.getMessage()));
+        }
+    }
+
+    private String chatRecipient(JsonNode msg) {
+        String to = msg.path("toId").asText("");
+        if (to.isEmpty()) {
+            return msg.path("whisper").asBoolean(false) ? "dm" : null;
+        }
+        Campaign c = campaign;
+        if (!"dm".equals(to) && (c == null || c.player(to) == null)) {
+            throw new IllegalArgumentException("Whisper recipient not found. Choose another recipient.");
+        }
+        if (!"dm".equals(to) && clients.values().stream().noneMatch(client -> to.equals(client.playerId))) {
+            throw new IllegalArgumentException("Whisper recipient is offline. Choose another recipient.");
+        }
+        return to;
+    }
+
+    private void putRecipient(ObjectNode out, String to) {
+        if (to == null || to.isEmpty()) return;
+        out.put("toId", to);
+        Campaign c = campaign;
+        Campaign.Player player = c == null ? null : c.player(to);
+        if ("dm".equals(to)) out.put("to", "Gamemaster");
+        else if (player != null) out.put("to", player.getName());
     }
 
     private void onRoll(Client client, JsonNode msg) {
         DiceRoller.Result result;
+        String to;
         try {
+            to = chatRecipient(msg);
             result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
         } catch (IllegalArgumentException e) {
             sendTo(client.ctx, error(e.getMessage()));
             return;
         }
-        boolean whisper = msg.path("whisper").asBoolean(false);
         ObjectNode out = MAPPER.createObjectNode();
         synchronized (this) {
             out.put("id", ++chatId);
         }
         out.put("type", "roll").put("ts", System.currentTimeMillis());
         out.put("fromId", client.playerId).put("from", client.playerName);
-        if (whisper) {
-            out.put("toId", "dm");
-        }
+        putRecipient(out, to);
         out.put("expression", result.expression());
         ArrayNode rolls = out.putArray("rolls");
         result.rolls().forEach(rolls::add);
@@ -1058,7 +1085,7 @@ public final class OnlineSessionServer {
                 out.put("difficulty", msg.path("difficulty").asInt());
             }
         }
-        deliver(out, whisper ? "dm" : null);
+        deliver(out, to);
     }
 
     private ObjectNode chatMessage(String fromId, String from, String toId, String text) {
@@ -1068,9 +1095,7 @@ public final class OnlineSessionServer {
         }
         out.put("type", "chat").put("ts", System.currentTimeMillis());
         out.put("fromId", fromId).put("from", from);
-        if (toId != null && !toId.isEmpty()) {
-            out.put("toId", toId);
-        }
+        putRecipient(out, toId);
         out.put("text", text);
         return out;
     }

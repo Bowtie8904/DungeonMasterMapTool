@@ -63,6 +63,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .sidebar { width: min(320px, calc(100vw - 150px)); background: #171b21f7; border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
 .chat-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .composer { padding: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.recipient { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.recipient select { flex: 1; min-width: 0; }
 .sidebar > .actors, .settings-section { padding: 16px; overflow-y: auto; }
 .settings-section { display: flex; flex-direction: column; gap: 18px; }
 .settings-section h3 { margin: 0; font-size: 13px; color: var(--muted); }
@@ -78,8 +80,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .check { color: var(--muted); }
 .log { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
 .entry { padding: 0 0 20px; word-break: break-word; font-size: 13px; line-height: 1.6; }
-.entry.whisper { color: #ce93d8; font-style: italic; }
 .entry.roll { color: #ffd54f; }
+.entry.whisper { color: #ce93d8; }
+.whisper-label { display: inline-block; padding: 1px 6px; border: 1px solid #9255a0; border-radius: 4px; background: #482852; color: #edbdf5; font-size: 11px; font-weight: 600; }
 .actor { display: flex; gap: 8px; padding: 6px; background: #12161b; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; }
 .actor .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .actor .art { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; background: #2a2f38; }

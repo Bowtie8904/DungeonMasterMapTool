@@ -28,12 +28,13 @@ export class App {
   private view: MapView;
   private conn: Connection;
   private playerId = '';
+  private playerWhispers = false;
   private drawingHistory: DrawingEdit[] = [];
   private pendingDrawings = new Map<string, { inverse: DrawingEdit; undo: boolean; after?: Overlay; record: boolean }>();
   private historyMap = '';
   private section: SidebarSection | null = 'chat';
   private sidebar = el('aside', { class: 'sidebar', id: 'player-sidebar' });
-  private sectionTitle = el('h2', {}, 'Chat & dice');
+  private sectionTitle = el('h2', {}, 'Chat');
   private sections = new Map<string, HTMLElement>();
   private sectionButtons = new Map<string, HTMLButtonElement>();
   private toolButtons = new Map<MapTool, HTMLButtonElement>();
@@ -72,6 +73,8 @@ export class App {
   private pendingMoves = new Map<string, MoveCommit>();
   private log: LogEntry[] = [];
   private logEl = el('div', { class: 'log' });
+  private chatRecipient = el('select', { id: 'chat-recipient' },
+    el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
   private sheetHandles = new Map<string, { character: CharacterSheet; bus: SheetBus }>();
   private myActors: Actor[] = [];
@@ -109,8 +112,6 @@ export class App {
   private fogLoad = 0;
   private audioAvailable = false;
   private sheetWindows = new Map<string, SheetWindow>();
-  private sheetButton?: HTMLButtonElement;
-  private firstActor?: Actor;
   private stageEl = el('div', { class: 'stage' });
   private soundBtn = el('button', { class: 'primary hidden' }, 'Click to enable sound');
   private muteBtn = el('button', { class: 'icon hidden' });
@@ -235,34 +236,37 @@ export class App {
   }
 
   private buildChat(): HTMLElement {
-    const input = el('input', { type: 'text', placeholder: 'Message or /roll 2d6+3', maxLength: 500 });
-    const whisper = el('input', { type: 'checkbox', id: 'whisper' });
+    this.chatRecipient.setAttribute('aria-label', 'Message recipient');
+    const input = el('input', { type: 'text', placeholder: 'Message, /roll or /r 2d6+3', maxLength: 500 });
     const send = el('button', { class: 'primary' }, 'Send');
-    const dice = el('input', { type: 'text', placeholder: '2d6+3', value: '1d20' });
-    const rollBtn = el('button', {}, 'Roll');
     const submit = () => {
       const text = input.value.trim();
       if (!text) return;
-      const roll = /^\/roll\s+(.+)$/i.exec(text);
-      const sent = roll ? this.conn.send({ type: 'roll', expression: roll[1] })
-        : this.conn.send({ type: 'chat', text, whisper: whisper.checked });
+      if (this.chatRecipient.selectedOptions[0]?.disabled) {
+        this.toast('That player is offline. Choose a recipient before sending.');
+        return;
+      }
+      const toId = this.chatRecipient.value || undefined;
+      if (toId && toId !== 'dm' && !this.playerWhispers) {
+        this.toast('This host does not support player whispers. Choose Everyone or Gamemaster.');
+        return;
+      }
+      const whisper = toId === 'dm';
+      const roll = /^\/(?:roll|r)\s+(.+)$/i.exec(text);
+      const sent = roll ? this.conn.send({ type: 'roll', expression: roll[1], toId, whisper })
+        : this.conn.send({ type: 'chat', text, toId, whisper });
       if (sent) input.value = '';
       else this.toast('Not connected. Your message was not sent.');
     };
     send.addEventListener('click', submit);
     input.addEventListener('keydown', (e) => e.key === 'Enter' && submit());
-    rollBtn.addEventListener('click', () => {
-      if (dice.value.trim() && !this.conn.send({ type: 'roll', expression: dice.value.trim() })) this.toast('Not connected. Your roll was not sent.');
-    });
-    dice.addEventListener('keydown', (e) => e.key === 'Enter' && rollBtn.click());
     return el(
       'div',
       { class: 'chat-section' },
       this.logEl,
       el('div', { class: 'composer' },
-      el('div', { class: 'row' }, input, send),
-      el('label', { class: 'check' }, whisper, ' Whisper to DM'),
-      el('div', { class: 'row' }, dice, rollBtn)),
+      el('label', { class: 'recipient' }, 'To', this.chatRecipient),
+      el('div', { class: 'row' }, input, send)),
     );
   }
 
@@ -273,7 +277,7 @@ export class App {
     this.sections.set('actors', this.actorsEl);
     this.sections.set('compendium', this.compendium.element);
     this.sections.set('settings', this.buildSettings());
-    for (const [id, label] of [['chat', 'Chat & dice'], ['actors', 'My actors'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
+    for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
       const button = iconButton(id, label, () => {
         this.showSection(this.section === id ? null : id);
         if (id === 'compendium' && this.section === id) void this.compendium.open();
@@ -283,9 +287,6 @@ export class App {
       rail.append(button);
       this.sections.get(id)!.classList.toggle('hidden', id !== 'chat');
     }
-    this.sheetButton = iconButton('sheet', 'Character sheet', () => { if (this.firstActor) this.openSheet(this.firstActor, true); });
-    this.sheetButton.classList.add('hidden');
-    rail.append(this.sheetButton);
     this.sidebar.append(el('header', { class: 'panel-heading' }, this.sectionTitle,
       iconButton('close', 'Collapse sidebar', () => {
         const previous = this.section; this.showSection(null);
@@ -528,6 +529,7 @@ export class App {
     switch (msg.type) {
       case 'hello':
         this.playerId = msg.playerId;
+        this.playerWhispers = msg.playerWhispers === true;
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
@@ -541,6 +543,7 @@ export class App {
         this.setPaused(msg.paused);
         break;
       case 'roster':
+        this.updateRecipients(msg.players);
         this.rosterEl.replaceChildren(el('div', { class: 'roster-heading' }, 'CONNECTED / PING TO HOST'),
           el('div', { class: 'player-row' }, 'Dungeon Master', el('span', {}, 'Host')),
           ...msg.players.map(p => el('div', { class: 'player-row' }, `${p.playerName}${p.playerId === this.playerId ? ' (you)' : ''}`,
@@ -742,17 +745,42 @@ export class App {
     this.logEl.replaceChildren(
       ...this.log.map((e) => {
         const time = new Date(e.m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const whisper = !!e.m.toId;
+        const label = whisper ? el('span', { class: 'whisper-label' },
+          `Whisper to ${e.m.toId === 'dm' ? 'Gamemaster' : e.m.to ?? (e.m.toId === this.playerId ? 'you' : e.m.toId)}`) : null;
         if (e.kind === 'roll') {
-          if (e.m.kind === 'duality' && Array.isArray(e.m.rolls)) return this.dualityEntry(time, e.m);
+          if (e.m.kind === 'duality' && Array.isArray(e.m.rolls)) {
+            const entry = this.dualityEntry(time, e.m);
+            if (label) { entry.classList.add('whisper'); entry.prepend(label, ' '); }
+            return entry;
+          }
           const rolls = Array.isArray(e.m.rolls) ? `[${e.m.rolls.join(', ')}]` : '';
-          const label = e.m.label ? ` (${e.m.label})` : '';
-          return el('div', { class: 'entry roll' }, `${time} ${e.m.from} rolled ${e.m.expression}${label} ${rolls} = `, el('b', {}, String(e.m.total)));
+          const rollLabel = e.m.label ? ` (${e.m.label})` : '';
+          return el('div', { class: `entry roll${whisper ? ' whisper' : ''}` }, ...(label ? [label, ' '] : []),
+            `${time} ${e.m.from} rolled ${e.m.expression}${rollLabel} ${rolls} = `, el('b', {}, String(e.m.total)));
         }
-        const whisper = e.m.toId !== undefined && e.m.toId !== null && e.m.toId !== '';
-        return el('div', { class: `entry${whisper ? ' whisper' : ''}` }, `${time} `, el('b', {}, e.m.from), whisper ? ' (whisper)' : '', `: ${e.m.text}`);
+        return el('div', { class: `entry${whisper ? ' whisper' : ''}` }, ...(label ? [label, ' '] : []),
+          `${time} `, el('b', {}, e.m.from), `: ${e.m.text}`);
       }),
     );
     this.logEl.scrollTop = this.logEl.scrollHeight;
+  }
+
+  private updateRecipients(players: Array<{ playerId: string; playerName: string }>): void {
+    const selected = this.chatRecipient.value;
+    const previousLabel = this.chatRecipient.selectedOptions[0]?.textContent ?? selected;
+    const options = [
+      el('option', { value: '' }, 'Everyone'),
+      el('option', { value: 'dm' }, 'Gamemaster'),
+      ...players.filter(p => this.playerWhispers && p.playerId !== this.playerId)
+        .sort((a, b) => a.playerName.localeCompare(b.playerName))
+        .map(p => el('option', { value: p.playerId }, p.playerName)),
+    ];
+    if (!options.some(o => o.value === selected)) {
+      options.push(el('option', { value: selected, disabled: true }, `${previousLabel.replace(/ \(offline\)$/, '')} (offline)`));
+    }
+    this.chatRecipient.replaceChildren(...options);
+    this.chatRecipient.value = selected;
   }
 
   private dualityEntry(time: string, m: RollMessage): HTMLElement {
@@ -792,7 +820,7 @@ export class App {
           },
           a.name,
           () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'),
-          () => this.sheetButton?.setAttribute('aria-pressed', String([...this.sheetWindows.values()].some((w) => w.isOpen))),
+          () => {},
           (payload) => this.dropOnSheet(a, payload),
         );
         this.sheetWindows.set(a.id, win);
@@ -828,8 +856,6 @@ export class App {
   private renderActors(s: GameState): void {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
     this.myActors = mine;
-    this.firstActor = mine[0];
-    this.sheetButton?.classList.toggle('hidden', mine.length === 0);
     this.actorsEl.replaceChildren(
       ...(mine.length === 0 ? [el('p', { class: 'muted' }, 'No actors assigned to you.')] : []),
       ...mine.map((a) => {
@@ -871,5 +897,3 @@ export class App {
     this.overlay.classList.remove('hidden');
   }
 }
-
-

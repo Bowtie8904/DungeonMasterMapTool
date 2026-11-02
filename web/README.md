@@ -19,7 +19,13 @@ Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
 Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).
 
-The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Settings rail.
+The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Compendium/Settings rail.
+Settings is anchored at the bottom; character sheets open from Actors. Chat's recipient dropdown targets Everyone,
+Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
+Use `/roll 2d6+3` or `/r 2d6+3` in chat (no separate dice composer). Optional `toId` targets a player or `dm`;
+legacy `whisper:true` remains DM-only. Recipient names are included as additive `to` fields by the host.
+Player recipients require `hello.playerWhispers:true`; older hosts offer only Everyone/Gamemaster, with the
+legacy whisper flag retained for DM chat and rolls so private rolls cannot accidentally become public.
 Drawing commands carry map/level identity; the host assigns and enforces campaign/player ownership and publishes
 the normal map overlays, including generated effect textures. Texture choices/defaults come from the host rather
 than a separate browser list. Measurements are shared session-only annotations, replayed to late joiners and cleared

@@ -42,6 +42,7 @@ class OnlineSessionServerTest {
     private final HttpClient http = HttpClient.newHttpClient();
     private final List<String> moves = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<String> drawings = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<JsonNode> dmMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean drawingSupported;
     private volatile Path compendiumDir;
 
@@ -144,6 +145,7 @@ class OnlineSessionServerTest {
 
                     @Override
                     public void dmMessage(JsonNode message) {
+                        dmMessages.add(message.deepCopy());
                     }
                 });
         server.start();
@@ -477,6 +479,105 @@ class OnlineSessionServerTest {
         assertEquals("hi", inbox.next("chat").path("text").asText());
         assertEquals(4, store.historyTail(campaign.getId(), 10).size());
         ws.abort();
+    }
+
+    @Test
+    void playerWhispersAndRollsReachOnlySenderAndRecipientIncludingTheirOtherTabs() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        Campaign.Player cara = Campaign.Player.builder().name("Cara")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().addAll(List.of(bob, cara));
+        Inbox sender = new Inbox();
+        Inbox senderTab = new Inbox();
+        Inbox recipient = new Inbox();
+        Inbox outsider = new Inbox();
+        String aliceCookie = cookie();
+        WebSocket alice = connect(aliceCookie, sender);
+        WebSocket aliceTab = connect(aliceCookie, senderTab);
+        WebSocket bobSocket = connect(playerCookie(bob), recipient);
+        WebSocket caraSocket = connect(playerCookie(cara), outsider);
+        assertTrue(sender.next("hello").path("playerWhispers").asBoolean());
+        sender.next("snapshot");
+        senderTab.next("snapshot");
+        recipient.next("snapshot");
+        outsider.next("snapshot");
+        try {
+            alice.sendText(MAPPER.createObjectNode().put("type", "chat").put("text", "Secret")
+                    .put("toId", bob.getId()).put("fromId", cara.getId()).put("to", "Forged").toString(), true).join();
+            JsonNode chat = sender.next("chat");
+            assertEquals(playerId(), chat.path("fromId").asText());
+            assertEquals(bob.getId(), chat.path("toId").asText());
+            assertEquals("Bob", chat.path("to").asText());
+            assertEquals(chat, senderTab.next("chat"));
+            assertEquals(chat, recipient.next("chat"));
+            alice.sendText(MAPPER.createObjectNode().put("type", "roll").put("expression", "1d20")
+                    .put("toId", bob.getId()).toString(), true).join();
+            JsonNode roll = sender.next("roll");
+            assertEquals(bob.getId(), roll.path("toId").asText());
+            assertEquals("Bob", roll.path("to").asText());
+            assertEquals(roll, recipient.next("roll"));
+            assertEquals(roll, senderTab.next("roll"));
+            assertEquals(List.of(chat, roll), store.historyTail(campaign.getId(), 10));
+
+            caraSocket.sendText("{\"type\":\"chat\",\"text\":\"Public barrier\"}", true).join();
+            JsonNode publicMessage;
+            do {
+                publicMessage = outsider.messages.poll(5, TimeUnit.SECONDS);
+                assertNotNull(publicMessage);
+                assertFalse(publicMessage.has("toId"), "Other players must not receive private chat or rolls");
+            } while (!"chat".equals(publicMessage.path("type").asText()));
+            assertEquals("Public barrier", publicMessage.path("text").asText());
+            assertFalse(dmMessages.stream().anyMatch(m -> m.has("toId")));
+        } finally {
+            alice.abort(); aliceTab.abort(); bobSocket.abort(); caraSocket.abort();
+        }
+    }
+
+    @Test
+    void whispersValidateRecipientsAndKeepLegacyDmRouting() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        Campaign.Player offline = Campaign.Player.builder().name("Offline").build();
+        campaign.getPlayers().add(offline);
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        inbox.next("snapshot");
+        try {
+            for (String type : List.of("chat", "roll")) {
+                for (String to : List.of("unknown-player", offline.getId())) {
+                    ws.sendText(MAPPER.createObjectNode().put("type", type).put("text", "Secret")
+                            .put("expression", "1d20").put("toId", to).toString(), true).join();
+                    assertTrue(inbox.next("error").path("message").asText().contains("recipient"));
+                }
+            }
+            assertTrue(store.historyTail(campaign.getId(), 10).isEmpty());
+            assertTrue(dmMessages.isEmpty());
+            ws.sendText("{\"type\":\"chat\",\"text\":\"Legacy DM\",\"whisper\":true}", true).join();
+            JsonNode chat = inbox.next("chat");
+            assertEquals("dm", chat.path("toId").asText());
+            assertEquals("Gamemaster", chat.path("to").asText());
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"1d20\",\"whisper\":true}", true).join();
+            assertEquals("dm", inbox.next("roll").path("toId").asText());
+            ws.sendText("{\"type\":\"chat\",\"text\":\"New DM\",\"toId\":\"dm\"}", true).join();
+            assertEquals("dm", inbox.next("chat").path("toId").asText());
+            server.dmChat("Reply", playerId());
+            assertEquals(playerId(), inbox.next("chat").path("toId").asText());
+            ws.sendText("{\"type\":\"chat\",\"text\":\"Public\"}", true).join();
+            assertFalse(inbox.next("chat").has("toId"));
+            assertEquals(5, store.historyTail(campaign.getId(), 10).size());
+        } finally {
+            ws.abort();
+        }
+    }
+
+    private String playerCookie(Campaign.Player player) throws Exception {
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/login"))
+                        .POST(HttpRequest.BodyPublishers.ofString(MAPPER.createObjectNode()
+                                .put("playerId", player.getId()).put("password", "secret").toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode());
+        return response.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
     }
 
     @Test
