@@ -1,0 +1,1881 @@
+{
+ "format": "dmmap-daggerheart",
+ "version": 1,
+ "category": "consumables",
+ "label": "Consumables",
+ "entries": [
+  {
+   "id": "stride-potion",
+   "name": "Stride Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Agility Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Stride Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Agility Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Agility",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "bolster-potion",
+   "name": "Bolster Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Strength Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Bolster Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Strength Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Strength",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "control-potion",
+   "name": "Control Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Finesse Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Control Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Finesse Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Finesse",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "attune-potion",
+   "name": "Attune Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Instinct Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Attune Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Instinct Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Instinct",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "charm-potion",
+   "name": "Charm Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Presence Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Charm Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Presence Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Presence",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "enlighten-potion",
+   "name": "Enlighten Potion",
+   "rarity": "Common",
+   "text": "You gain a +1 bonus to your next Knowledge Roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Enlighten Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Next Knowledge Roll gets +1.",
+         "modifiers": [
+          {
+           "roll": "trait:Knowledge",
+           "value": 1,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "minor-health-potion",
+   "name": "Minor Health Potion",
+   "rarity": "Common",
+   "text": "Clear 1d4 HP.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d4"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "minor-stamina-potion",
+   "name": "Minor Stamina Potion",
+   "rarity": "Common",
+   "text": "Clear 1d4 Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "grindletooth-venom",
+   "name": "Grindletooth Venom",
+   "rarity": "Common",
+   "text": "You can apply this venom to a weapon that deals physical damage to add a d6 to your next damage roll with that weapon.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Apply",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Grindletooth Venom",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Add a d6 to your next damage roll with the coated weapon.",
+         "modifiers": [
+          {
+           "roll": "damage",
+           "dice": "d6",
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "varik-leaves",
+   "name": "Varik Leaves",
+   "rarity": "Common",
+   "text": "You can eat these paired leaves to immediately gain 2 Hope.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Eat",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 2
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "vial-of-moondrip",
+   "name": "Vial of Moondrip",
+   "rarity": "Common",
+   "text": "When you drink the contents of this vial, you can see in total darkness until your next rest."
+  },
+  {
+   "id": "unstable-arcane-shard",
+   "name": "Unstable Arcane Shard",
+   "rarity": "Common",
+   "text": "You can make a Finesse Roll to throw this shard at a group of adversaries within Far range. Targets you succeed against take 1d20 magic damage."
+  },
+  {
+   "id": "potion-of-stability",
+   "name": "Potion of Stability",
+   "rarity": "Uncommon",
+   "text": "You can drink this potion to choose one additional downtime move."
+  },
+  {
+   "id": "improved-grindletooth-venom",
+   "name": "Improved Grindletooth Venom",
+   "rarity": "Uncommon",
+   "text": "You can apply this venom to a weapon that deals physical damage to add a d8 to your next damage roll with that weapon.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Apply",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Improved Grindletooth Venom",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Add a d8 to your next damage roll with the coated weapon.",
+         "modifiers": [
+          {
+           "roll": "damage",
+           "dice": "d8",
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "morphing-clay",
+   "name": "Morphing Clay",
+   "rarity": "Common",
+   "text": "You can spend a Hope to use this clay, altering your face enough to make you unrecognizable until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "vial-of-darksmoke",
+   "name": "Vial of Darksmoke",
+   "rarity": "Uncommon",
+   "text": "When an adversary attacks you, use this vial and roll a number of d6s equal to your Agility. Add the highest result to your Evasion against the attack."
+  },
+  {
+   "id": "jumping-root",
+   "name": "Jumping Root",
+   "rarity": "Common",
+   "text": "Eat this root to leap up to Far range once without needing to roll."
+  },
+  {
+   "id": "snap-powder",
+   "name": "Snap Powder",
+   "rarity": "Common",
+   "text": "Mark a Stress and clear a HP.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 1
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "health-potion",
+   "name": "Health Potion",
+   "rarity": "Uncommon",
+   "text": "Clear 1d4+1 HP.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d4+1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "stamina-potion",
+   "name": "Stamina Potion",
+   "rarity": "Uncommon",
+   "text": "Clear 1d4+1 Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4+1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "armor-stitcher",
+   "name": "Armor Stitcher",
+   "rarity": "Common",
+   "text": "You can use this stitcher to spend any number of Hope and clear that many Armor Slots."
+  },
+  {
+   "id": "gill-salve",
+   "name": "Gill Salve",
+   "rarity": "Uncommon",
+   "text": "You can apply this salve to your neck to breathe underwater for a number of minutes equal to your level."
+  },
+  {
+   "id": "replication-parchment",
+   "name": "Replication Parchment",
+   "rarity": "Uncommon",
+   "text": "By touching this piece of parchment to another, you can perfectly copy the second parchment’s contents. Once used, this parchment becomes mundane paper."
+  },
+  {
+   "id": "improved-arcane-shard",
+   "name": "Improved Arcane Shard",
+   "rarity": "Uncommon",
+   "text": "You can make a Finesse Roll to throw this shard at a group of adversaries within Far range. Targets you succeed against take 2d20 magic damage."
+  },
+  {
+   "id": "major-stride-potion",
+   "name": "Major Stride Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Agility until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Stride Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Agility until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Agility",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-bolster-potion",
+   "name": "Major Bolster Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Strength until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Bolster Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Strength until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Strength",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-control-potion",
+   "name": "Major Control Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Finesse until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Control Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Finesse until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Finesse",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-attune-potion",
+   "name": "Major Attune Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Instinct until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Attune Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Instinct until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Instinct",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-charm-potion",
+   "name": "Major Charm Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Presence until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Charm Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Presence until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Presence",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-enlighten-potion",
+   "name": "Major Enlighten Potion",
+   "rarity": "Uncommon",
+   "text": "You gain a +1 bonus to your Knowledge until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Major Enlighten Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 Knowledge until your next rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Knowledge",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "blood-of-the-yorgi",
+   "name": "Blood of the Yorgi",
+   "rarity": "Uncommon",
+   "text": "You can drink this blood to disappear from where you are and immediately reappear at a point you can see within Very Far range."
+  },
+  {
+   "id": "homets-secret-potion",
+   "name": "Homet’s Secret Potion",
+   "rarity": "Uncommon",
+   "text": "After drinking this potion, the next successful attack you make critically succeeds.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Homet’s Secret Potion",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Your next successful attack critically succeeds.",
+         "modifiers": []
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "redthorn-saliva",
+   "name": "Redthorn Saliva",
+   "rarity": "Uncommon",
+   "text": "You can apply this saliva to a weapon that deals physical damage to add a d12 to your next damage roll with that weapon.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Apply",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Redthorn Saliva",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Add a d12 to your next damage roll with the coated weapon.",
+         "modifiers": [
+          {
+           "roll": "damage",
+           "dice": "d12",
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "channelstone",
+   "name": "Channelstone",
+   "rarity": "Uncommon",
+   "text": "You can use this stone to take a spell or grimoire from your vault, use it once, and return it to your vault."
+  },
+  {
+   "id": "mythic-dust",
+   "name": "Mythic Dust",
+   "rarity": "Uncommon",
+   "text": "You can apply this dust to a weapon that deals magic damage to add a d12 to your next damage roll with that weapon.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Apply",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Mythic Dust",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Add a d12 to your next damage roll with the coated weapon.",
+         "modifiers": [
+          {
+           "roll": "damage",
+           "dice": "d12",
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "acidpaste",
+   "name": "Acidpaste",
+   "rarity": "Uncommon",
+   "text": "This paste eats away walls and other surfaces in bright flashes."
+  },
+  {
+   "id": "hopehold-flare",
+   "name": "Hopehold Flare",
+   "rarity": "Rare",
+   "text": "When you use this flare, allies within Close range roll a d6 when they spend a Hope. On a result of 6, they gain the effect of that Hope without spending it. The flare lasts until the end of the scene."
+  },
+  {
+   "id": "major-arcane-shard",
+   "name": "Major Arcane Shard",
+   "rarity": "Rare",
+   "text": "You can make a Finesse Roll to throw this shard at a group of adversaries within Far range. Targets you succeed against take 4d20 magic damage."
+  },
+  {
+   "id": "featherbone",
+   "name": "Featherbone",
+   "rarity": "Rare",
+   "text": "You can use this bone to control your falling speed for a number of minutes equal to your level."
+  },
+  {
+   "id": "circle-of-the-void",
+   "name": "Circle of the Void",
+   "rarity": "Rare",
+   "text": "Mark a Stress to create a void that extends up to Far range. No magic can be cast inside the void, and creatures within the void are immune to magic damage.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "sun-tree-sap",
+   "name": "Sun Tree Sap",
+   "rarity": "Rare",
+   "text": "Consume this sap to roll a d6. On a result of 5–6, clear 2 HP. On a result of 2–4, clear 3 Stress. On a result of 1, see through the veil of death and return changed, gaining one scar."
+  },
+  {
+   "id": "dripfang-poison",
+   "name": "Dripfang Poison",
+   "rarity": "Rare",
+   "text": "A creature who consumes this poison takes 8d10 direct magic damage."
+  },
+  {
+   "id": "major-health-potion",
+   "name": "Major Health Potion",
+   "rarity": "Rare",
+   "text": "Clear 1d4+2 HP.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d4+2"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "major-stamina-potion",
+   "name": "Major Stamina Potion",
+   "rarity": "Rare",
+   "text": "Clear 1d4+2 Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4+2"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "ogre-musk",
+   "name": "Ogre Musk",
+   "rarity": "Rare",
+   "text": "You can use this musk to prevent anyone from tracking you by mundane or magical means until your next rest."
+  },
+  {
+   "id": "wingsprout",
+   "name": "Wingsprout",
+   "rarity": "Rare",
+   "text": "You gain magic wings that allow you to fly for a number of minutes equal to your level."
+  },
+  {
+   "id": "jar-of-lost-voices",
+   "name": "Jar of Lost Voices",
+   "rarity": "Rare",
+   "text": "You can open this jar to release a deafening echo of voices for a number of minutes equal to your Instinct. Creatures within Far range unprepared for the sound take 6d8 magic damage."
+  },
+  {
+   "id": "dragonbloom-tea",
+   "name": "Dragonbloom Tea",
+   "rarity": "Rare",
+   "text": "You can drink this tea to unleash a fiery breath attack. Make an Instinct Roll against all adversaries in front of you within Close range. Targets you succeed against take d20 physical damage using your Proficiency."
+  },
+  {
+   "id": "bridge-seed",
+   "name": "Bridge Seed",
+   "rarity": "Legendary",
+   "text": "Thick vines grow from your location to a point of your choice within Far range, allowing you to climb up or across them. The vines dissipate on your next short rest."
+  },
+  {
+   "id": "sleeping-sap",
+   "name": "Sleeping Sap",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to fall asleep for a full night’s rest. You clear all Stress upon waking."
+  },
+  {
+   "id": "feast-of-xuria",
+   "name": "Feast of Xuria",
+   "rarity": "Legendary",
+   "text": "You can eat this meal to clear all HP and Stress and gain 1d4 Hope.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Eat",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "all"
+       },
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "all"
+       },
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": "1d4"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "bonding-honey",
+   "name": "Bonding Honey",
+   "rarity": "Legendary",
+   "text": "This honey can be used to glue two objects together permanently."
+  },
+  {
+   "id": "shrinking-potion",
+   "name": "Shrinking Potion",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to halve your size until you choose to drop this form or your next rest. While in this form, you have a +2 bonus to Agility and a −1 penalty to your Proficiency.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Shrinking Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "Halved size: +2 Agility, -1 Proficiency until you drop the form or rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Agility",
+           "value": 2
+          },
+          {
+           "stat": "proficiency",
+           "value": -1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "growing-potion",
+   "name": "Growing Potion",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to double your size until you choose to drop this form or your next rest. While in this form, you have a +2 bonus to Strength and a +1 bonus to your Proficiency.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Growing Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "Doubled size: +2 Strength, +1 Proficiency until you drop the form or rest.",
+         "modifiers": [
+          {
+           "stat": "trait.Strength",
+           "value": 2
+          },
+          {
+           "stat": "proficiency",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "knowledge-stone",
+   "name": "Knowledge Stone",
+   "rarity": "Legendary",
+   "text": "If you die while holding this stone, an ally can take a card from your loadout to place in their loadout or vault. After they take this knowledge, the stone crumbles."
+  },
+  {
+   "id": "sweet-moss",
+   "name": "Sweet Moss",
+   "rarity": "Legendary",
+   "text": "You can consume this moss during a rest to clear 1d10 HP or 1d10 Stress."
+  },
+  {
+   "id": "blinding-orb",
+   "name": "Blinding Orb",
+   "rarity": "Legendary",
+   "text": "You can activate this orb to create a flash of bright light. All targets within Close range become Vulnerable until they mark HP."
+  },
+  {
+   "id": "death-tea",
+   "name": "Death Tea",
+   "rarity": "Legendary",
+   "text": "After you drink this tea, you instantly kill your target when you critically succeed on an attack. If you don’t critically succeed on an attack before your next long rest, you die."
+  },
+  {
+   "id": "mirror-of-marigold",
+   "name": "Mirror of Marigold",
+   "rarity": "Legendary",
+   "text": "When you take damage, you can spend a Hope to negate that damage, after which the mirror shatters.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "stardrop",
+   "name": "Stardrop",
+   "rarity": "Legendary",
+   "text": "You can use this stardrop to summon a hailstorm of comets that deals 8d20 physical damage to all targets within Very Far range."
+  },
+  {
+   "id": "abyssal-sap",
+   "name": "Abyssal Sap",
+   "rarity": "Uncommon",
+   "text": "You can throw a vial of this sap at a target within Far range to have the effect of the Vicious Entangle spell."
+  },
+  {
+   "id": "aetherflower-tea",
+   "name": "Aetherflower Tea",
+   "rarity": "Uncommon",
+   "text": "Until your next rest, you can detect the presence of magic as a faint aura around visible objects within Very Close range."
+  },
+  {
+   "id": "aetherflower",
+   "name": "Aetherflower",
+   "rarity": "Common",
+   "text": "This flower is sensitive to magic, and will point in the direction of the strongest source of magic within Very Close range. It withers when you take your first rest after harvesting it. Craft into: Aetherflower Tea."
+  },
+  {
+   "id": "arcane-stuffing",
+   "name": "Arcane Stuffing",
+   "rarity": "Uncommon",
+   "text": "When you stuff a dead creature with this magic-infused sawdust as a downtime move, it becomes an animate servant, as if by the Book of Exota “Create Construct” feature."
+  },
+  {
+   "id": "archivists-rot",
+   "name": "Archivist’s Rot",
+   "rarity": "Uncommon",
+   "text": "For the scene, you have advantage on all Instinct rolls, but if you fail such a roll, you must mark a Stress. Craft into: Sporemind Tonic."
+  },
+  {
+   "id": "astral-termite-jaws",
+   "name": "Astral Termite Jaws",
+   "rarity": "Uncommon",
+   "text": "Using these jaws, you can chew into any wall to create a portal to another wall within Far range."
+  },
+  {
+   "id": "backsies-stone",
+   "name": "Backsies Stone",
+   "rarity": "Rare",
+   "text": "You can swallow this stone and spend all your Hope (minimum 1) to unsay the last sentence you spoke within this scene. Reality is altered so that the words were never said, and all their consequences are undone."
+  },
+  {
+   "id": "blood-of-the-kaiju",
+   "name": "Blood of the Kaiju",
+   "rarity": "Rare",
+   "text": "When you drink this ichor, your Hope Die becomes a d20 until the end of the scene. When it ends, mark all your remaining Stress slots."
+  },
+  {
+   "id": "blossomveil-petal",
+   "name": "Blossomveil Petal",
+   "rarity": "Common",
+   "text": "You have advantage on your next Presence Reaction Roll until a short or long rest. The petal is destroyed in sunlight."
+  },
+  {
+   "id": "book-of-no-history",
+   "name": "Book of No History",
+   "rarity": "Legendary",
+   "text": "When you first read this book, it tells your own biography up until this very moment. No additional content is added once you opened it. You can remove a single page, those elements of your past are forgotten, but not undone. No one other than you remembers your part in them. One page will contain information about at most a single day in your life. The book burns to ash once you removed a page."
+  },
+  {
+   "id": "boomberry-jam",
+   "name": "Boomberry Jam",
+   "rarity": "Rare",
+   "text": "A jar of this jam contains 5 portions. A single portion makes a tasty meal. Alternatively, you can throw the jar at a point within Far range. All creatures within Close range of it must succeed an Agility reaction roll (16) or take Xd8+4 physical damage, where X is the number of portions remaining. Targets in Melee range automatically fail this roll."
+  },
+  {
+   "id": "boomberry",
+   "name": "Boomberry",
+   "rarity": "Uncommon",
+   "text": "Two of these berries will suffice for a full meal, but when you eat them, on a roll of 1 on a d12 they explode, causing you to mark 2 HP and 2 Stress. Craft into: Boomberry Jam."
+  },
+  {
+   "id": "boomcoin",
+   "name": "Boomcoin",
+   "rarity": "Uncommon",
+   "text": "Spend a Hope to activate the coin and start a Countdown (4). When the countdown triggers, the coin explodes, dealing 3d6 physical damage to all targets within Very Close range. Targets outside Melee range that succeed on an Agility Reaction Roll (12) take no damage.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "bottled-song",
+   "name": "Bottled Song",
+   "rarity": "Common",
+   "text": "Opening the bottle releases a beautiful melody. All creatures within Very Close range clear a Stress."
+  },
+  {
+   "id": "cathartoid-egg",
+   "name": "Cathartoid Egg",
+   "rarity": "Legendary",
+   "text": "As a death move, you can break this egg. You rise again in the form of an ancient, black-winged avian with all your memories, but your only desire is now to reside in the Sanctum Mortalis."
+  },
+  {
+   "id": "crystals-from-beyond",
+   "name": "Crystals from Beyond",
+   "rarity": "Rare",
+   "text": "These azure stones contain the essence of other worlds. If broken by magic damage, they cause plants and animals within Close range to mutate into alien forms."
+  },
+  {
+   "id": "darkstone",
+   "name": "Darkstone",
+   "rarity": "Uncommon",
+   "text": "If this onyx stone is exposed to magical light, it explodes, dealing 2d6 magic damage to any creature within Very Close range of it that fails an Agility Reaction Roll (14)."
+  },
+  {
+   "id": "demon-toad-bile",
+   "name": "Demon Toad Bile",
+   "rarity": "Uncommon",
+   "text": "When this liquid is exposed to air, start a Countdown (4). When it triggers, the liquid explodes, dealing 2d6 physical damage to any creature within Very Close range."
+  },
+  {
+   "id": "doomsday-potion",
+   "name": "Doomsday Potion",
+   "rarity": "Legendary",
+   "text": "Roll a d12 for each of your Hope Slots in turn. If the slot is marked, roll 2d12 and choose the higher value. If you roll less than 12, cross out the slot. If you roll 12, stop rolling, clear all your HP and Stress, and become Invincible until the end of the scene. While Invincible you’re immune to all damage and your Proficiency is doubled. At the end of the scene, make a death move."
+  },
+  {
+   "id": "dust-of-echoed-silence",
+   "name": "Dust of Echoed Silence",
+   "rarity": "Rare",
+   "text": "When you scatter this dust, the area within Close range of you is silenced for the scene or until the dust is dispersed by strong wind. Creatures within that area can’t speak or cast spells."
+  },
+  {
+   "id": "ebony-thread",
+   "name": "Ebony Thread",
+   "rarity": "Uncommon",
+   "text": "You can unspool this spectral thread up to 500 feet as you travel, creating an ethereal trail behind you. It’s visible only to you, but creatures sensitive to spectral frequencies may be able to detect and follow it."
+  },
+  {
+   "id": "echo-orchid-petal",
+   "name": "Echo Orchid Petal",
+   "rarity": "Uncommon",
+   "text": "Consuming a petal while looking at a creature gives you insight into that creature’s intentions. You have advantage on Reaction Rolls against its actions for the scene. Craft into: Potion of Revealed Paths."
+  },
+  {
+   "id": "flare-tuber",
+   "name": "Flare Tuber",
+   "rarity": "Common",
+   "text": "If you hold one of these roots in your mouth, it provides enough oxygen for you to breathe normally for an hour, but you can’t speak or cast spells."
+  },
+  {
+   "id": "griefroot-powder",
+   "name": "Griefroot Powder",
+   "rarity": "Uncommon",
+   "text": "When you inhale this powder, you add a d8 to your next action roll, but for the scene if you take damage or witness death you must succeed on a Presence Roll (14) or become Stunned. While Stunned, you can’t use reactions and can’t take any other actions until you clear this condition. Craft into: Hero’s Powder."
+  },
+  {
+   "id": "gyre-cap",
+   "name": "Gyre Cap",
+   "rarity": "Uncommon",
+   "text": "Brewed into a tea as a downtime move, these mushrooms give any drinker advantage on Instinct rolls and disadvantage on Presence rolls until their next rest. Craft into: Potion of Spiraling Vision."
+  },
+  {
+   "id": "henrys-sugar",
+   "name": "Henry’s Sugar",
+   "rarity": "Uncommon",
+   "text": "For this scene, you can mark a Stress to see through an object, or see its reverse side.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "heros-powder",
+   "name": "Hero’s Powder",
+   "rarity": "Rare",
+   "text": "When you inhale this powder, you can add a d4 to one action or reaction roll of your choice in the same scene. Each time you witness death before you do so, the die size increases to d6, d8, etc., up to d20."
+  },
+  {
+   "id": "incantors-chalk",
+   "name": "Incantor’s Chalk",
+   "rarity": "Rare",
+   "text": "You can inscribe a spell in your loadout onto a surface. You can then spend a Hope at any time to cast the spell, as if you were at the position of the mark. If the mark has been erased, the spell isn’t cast."
+  },
+  {
+   "id": "liars-bane",
+   "name": "Liar’s Bane",
+   "rarity": "Uncommon",
+   "text": "After you chew these leaves, for the scene you have advantage on rolls to notice traps and see through lies and deceptions, but you must mark a Stress to deceive someone else. Craft into: True Vision Serum"
+  },
+  {
+   "id": "martyrs-grass",
+   "name": "Martyr’s Grass",
+   "rarity": "Uncommon",
+   "text": "As a downtime move, you can plant a sprig of this fragrant herb in the barest soil. It gives everyone within Close range a peaceful slumber, clearing all Stress."
+  },
+  {
+   "id": "mucin-of-slipperiness",
+   "name": "Mucin of Slipperiness",
+   "rarity": "Uncommon",
+   "text": "You can apply this slime to your body as a downtime move. Once coated, until your next rest you have advantage on Reaction Rolls to avoid being Restrained.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Mucin of Slipperiness",
+         "kind": "buff",
+         "until": "rest",
+         "text": "You can apply this slime to your body as a downtime move. Once coated, until your next rest you have advantage on Reaction Rolls to avoid being Restrained.",
+         "modifiers": []
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "needle-key",
+   "name": "Needle Key",
+   "rarity": "Rare",
+   "text": "When you embed this needle in your finger, until your next long rest your Finesse modifier is reduced by 1, but when you press your finger against a lock you can mark a Stress to morph it into a matching key.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "nursewood-sap",
+   "name": "Nursewood Sap",
+   "rarity": "Rare",
+   "text": "Rub onto a creature to clear 1d4 HP, 1d4 Stress, or one condition."
+  },
+  {
+   "id": "pastries-of-warmth",
+   "name": "Pastries of Warmth",
+   "rarity": "Rare",
+   "text": "A basket contains 4 pastries. When you consume a pastry, you don’t take damage or mark Stress from exposure to cold until your next rest."
+  },
+  {
+   "id": "phantom-fern-shoots",
+   "name": "Phantom Fern Shoots",
+   "rarity": "Uncommon",
+   "text": "Eaten raw, these shoots remove the effect of most poisons, but leave you Lightheaded for 1 hour. While Lightheaded, roll a d8 as your disadvantage die. Craft into: Phantom Fern Tea."
+  },
+  {
+   "id": "phantom-fern-tea",
+   "name": "Phantom Fern Tea",
+   "rarity": "Rare",
+   "text": "Remove the effect of most poisons."
+  },
+  {
+   "id": "planar-wood",
+   "name": "Planar Wood",
+   "rarity": "Rare",
+   "text": "When crafting a magic weapon from this infused wood, make a Finesse Roll (15). On a success, the weapon has a bonus to damage rolls of +1 (success with Fear), +2 (success with Hope), or +3 (critical success)."
+  },
+  {
+   "id": "potion-of-revealed-paths",
+   "name": "Potion of Revealed Paths",
+   "rarity": "Rare",
+   "text": "Drinking this potion while looking at a creature allows you to use the Thought Delver spell on them unlimited times during the scene, using Instinct as the spellcast trait if you don’t have one."
+  },
+  {
+   "id": "potion-of-spiraling-vision",
+   "name": "Potion of Spiraling Vision",
+   "rarity": "Rare",
+   "text": "Once per scene until your next rest, when you make a roll with your Duality Dice, you can mark a Stress to postpone the result and roll again, using the postponed result for your next roll. If you fail to use the postponed result in the scene, you permanently lose a Stress slot.",
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "prismatic-water",
+   "name": "Prismatic Water",
+   "rarity": "Legendary",
+   "text": "Drinking this water has unpredictable effects. Roll your Duality Dice. On a roll with Hope, you permanently gain a Hope slot. On a roll with Fear, you lose 2 Hope and cross out a Hope slot. On a critical success, you also gain a +1 bonus to a trait of your choice."
+  },
+  {
+   "id": "radiant-shard",
+   "name": "Radiant Shard",
+   "rarity": "Rare",
+   "text": "When you shatter this shard of planar energy, it releases a burst of light that saturates the area within Far range. Until your next long rest, no spirit can enter this area and any environmental curses are suppressed."
+  },
+  {
+   "id": "seaworthy-charm",
+   "name": "Seaworthy Charm",
+   "rarity": "Rare",
+   "text": "This symbol will transfer itself onto the body of a boat when pressed against its side. For the scene, the boat can’t be capsized and has resistance to all damage."
+  },
+  {
+   "id": "sporemind-tonic",
+   "name": "Sporemind Tonic",
+   "rarity": "Uncommon",
+   "text": "Until your next rest you have advantage on all Instinct rolls, but if you fail such a roll with Fear, you must mark a Stress."
+  },
+  {
+   "id": "storm-in-a-bottle",
+   "name": "Storm in a Bottle",
+   "rarity": "Rare",
+   "text": "When this bottle is opened or broken, all creatures in Close range must succeed on an Agility Reaction Roll (15) or be struck by lightning for 3d10+3 physical damage. Unsecured objects are scattered and broken."
+  },
+  {
+   "id": "tincture-of-fortified-thoughts",
+   "name": "Tincture of Fortified Thoughts",
+   "rarity": "Rare",
+   "text": "You clear 1d4 Stress and have advantage on Reaction Rolls against effects to change your state of mind until your next rest. If you fail such a Reaction Roll, you can mark 2 Stress to succeed instead, ending the tincture’s effect.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "stress": 2
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "toxilily-bulb",
+   "name": "Toxilily Bulb",
+   "rarity": "Uncommon",
+   "text": "This bulb can be broken into 1d4 cloves, each of which can be smeared on a weapon. Until your next rest, you add your Proficiency to the damage rolls for the weapon."
+  },
+  {
+   "id": "trinity-flower-petals",
+   "name": "Trinity Flower Petals",
+   "rarity": "Uncommon",
+   "text": "Brew these petals into a tea that can be drunk by up to three creatures, giving them confidence. Until their next long rest, they are immune to fear-related effects."
+  },
+  {
+   "id": "trinity-flower-seed",
+   "name": "Trinity Flower Seed",
+   "rarity": "Uncommon",
+   "text": "Eating this seed grants the wisdom of the Triple Goddess, giving advantage on Insight Rolls until your next rest."
+  },
+  {
+   "id": "true-vision-serum",
+   "name": "True Vision Serum",
+   "rarity": "Legendary",
+   "text": "For the scene, you can’t be fooled by lies, illusions, or deceptions, can see invisible creatures, and have advantage on rolls to notice physical and magical traps. However, you must mark 2 Stress to attempt to lie and have disadvantage on any rolls to succeed with lying."
+  },
+  {
+   "id": "umbra-lily-petals",
+   "name": "Umbra Lily Petals",
+   "rarity": "Common",
+   "text": "After eating a petal, for this scene you can spend a Hope to snuff out a non-magical or magical light within Close range. Craft into: Umbral Potion.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "umbral-potion",
+   "name": "Umbral Potion",
+   "rarity": "Uncommon",
+   "text": "Until your next long rest you can spend a Hope to snuff out a nonmagical or magical light within Far range.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "vial-of-crystal-waters",
+   "name": "Vial of Crystal Waters",
+   "rarity": "Common",
+   "text": "Drink these waters to switch out a domain card in your vault without spending the Recall Cost."
+  },
+  {
+   "id": "votive-bloom-nectar",
+   "name": "Votive Bloom Nectar",
+   "rarity": "Common",
+   "text": "You clear 1d4 Stress, but the next time you mark a Stress you must succeed on an Insight Reaction Roll (15) or fall down in prayer and become temporarily Vulnerable. Craft into: Tincture of Fortified Thoughts."
+  },
+  {
+   "id": "wardstone-charm",
+   "name": "Wardstone Charm",
+   "rarity": "Uncommon",
+   "text": "While wearing this pendant, you can automatically succeed on one Reaction Roll against a fear-based effect, or crush it pre-emptively to create a region of calm, giving creatures within Close range advantage on such Reaction Rolls for the scene. In either case the charm disintegrates to dust after use."
+  },
+  {
+   "id": "wine-of-discourse",
+   "name": "Wine of Discourse",
+   "rarity": "Common",
+   "text": "When one or more creatures share a conversation while sharing this bottle of wine, each one gains a +1 bonus to Presence and Knowledge Rolls until the bottle is finished."
+  },
+  {
+   "id": "witherroot-ichor",
+   "name": "Witherroot Ichor",
+   "rarity": "Uncommon",
+   "text": "Mark 1d4 HP and permanently lose 1 HP slot. The next spell you cast this scene that deals damage marks the same number of additional HP on one of its targets. Craft into: Witherroot Tonic"
+  },
+  {
+   "id": "witherroot-tonic",
+   "name": "Witherroot Tonic",
+   "rarity": "Rare",
+   "text": "The next spell you cast this scene that deals damage marks an additional 1d4 HP on one of its targets."
+  },
+  {
+   "id": "yifang-sands",
+   "name": "Yifang Sands",
+   "rarity": "Rare",
+   "text": "When this black powder catches fire or experiences a strong concussive force, it ignites and explodes, dealing 3d10 magic damage to any creature within Close range. Creatures outside Very Close range can halve the damage with a successful Agility Reaction Roll (16)."
+  },
+  {
+   "id": "elixir-of-eternal-hope",
+   "name": "Elixir of Eternal Hope",
+   "rarity": "Rare",
+   "text": "Once a character drinks this elixir, any time they begin their spotlight with zero Hope, they gain a Hope. This lasts until the end of the scene. They may end the effects early to gain 2 Hope."
+  },
+  {
+   "id": "life-force-beacon",
+   "name": "Life Force Beacon",
+   "rarity": "Uncommon",
+   "text": "Spend a Hope to activate this orb. For the scene, it radiates life force as if it were a living creature. Any spirits attracted to life force must mark a Stress to attack anything other than the orb within Far range of it.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "scaffold-web",
+   "name": "Scaffold Web",
+   "rarity": "Rare",
+   "text": "When a structure within Very Close range of you is collapsing you can make an Agility Reaction Roll (14) to deploy this fast-acting membrane and prevent it. The GM can spend a Fear to break it again."
+  },
+  {
+   "id": "warding-candle",
+   "name": "Warding Candle",
+   "rarity": "Common",
+   "text": "You can light this candle to fill an area within Close range with a halo of light. A creature outside the halo can’t enter it if they have ill intent toward a creature within it. The candle burns for an hour."
+  },
+  {
+   "id": "iridian-dust",
+   "name": "Iridian Dust",
+   "rarity": "Common",
+   "text": "This multicolored powder sticks to everything and prevents creatures covered in it from becoming Hidden."
+  },
+  {
+   "id": "verglasian-seed",
+   "name": "Verglasian Seed",
+   "rarity": "Common",
+   "text": "You can use this ice shard to instantly freeze an area of water up to Close range."
+  },
+  {
+   "id": "cupbearers-bezoar",
+   "name": "Cupbearer’s Bezoar",
+   "rarity": "Common",
+   "text": "You can swallow this bezoar to become immune to poisons until your next long rest."
+  },
+  {
+   "id": "mossmantle-potion",
+   "name": "Mossmantle Potion",
+   "rarity": "Common",
+   "text": "You can drink this tea to perfectly blend into natural environments until your next rest."
+  },
+  {
+   "id": "lyrebird-lozenge",
+   "name": "Lyrebird Lozenge",
+   "rarity": "Common",
+   "text": "You can dissolve this lozenge in your mouth to perfectly mimic any voice you’ve heard until the end of the scene."
+  },
+  {
+   "id": "vial-of-featherfall",
+   "name": "Vial of Featherfall",
+   "rarity": "Common",
+   "text": "You can drink this potion to ignore damage from falling for the next 10 minutes."
+  },
+  {
+   "id": "chimeric-saliva",
+   "name": "Chimeric Saliva",
+   "rarity": "Common",
+   "text": "You can apply this saliva to a weapon that deals physical damage to change its damage type to magic until your next rest."
+  },
+  {
+   "id": "packet-of-space-dust",
+   "name": "Packet of Space Dust",
+   "rarity": "Common",
+   "text": "This dust causes anything it covers to become lighter than air. One packet contains enough dust to cover the contents of a picnic basket, and the effects last for an hour."
+  },
+  {
+   "id": "pipeweed",
+   "name": "Pipeweed",
+   "rarity": "Common",
+   "text": "When you choose the Clear Stress downtime move during a short rest, you can smoke this non-intoxicating leaf to clear an additional Stress. Any other PCs who chose the Clear Stress downtime move also gain this benefit."
+  },
+  {
+   "id": "deathseers-powder",
+   "name": "Deathseer’s Powder",
+   "rarity": "Common",
+   "text": "You can sprinkle this powder over a recently deceased corpse to conjure a spectral reprise of their final minute of life."
+  },
+  {
+   "id": "slayers-salt",
+   "name": "Slayer’s Salt",
+   "rarity": "Common",
+   "text": "You can spread this salt in a line along windowsills or thresholds to create a magical barrier that undead creatures can’t cross until the line is broken."
+  },
+  {
+   "id": "yakamel-milk",
+   "name": "Yakamel Milk",
+   "rarity": "Common",
+   "text": "After consuming this milk, the next time you clear 1 or more Hit Points, you clear an additional Hit Point."
+  },
+  {
+   "id": "glowmoss-mushroom",
+   "name": "Glowmoss Mushroom",
+   "rarity": "Common",
+   "text": "You can break this mushroom into pieces, causing it to glow bright blue until your next long rest."
+  },
+  {
+   "id": "red-ooze-oil",
+   "name": "Red Ooze Oil",
+   "rarity": "Common",
+   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Ignites the target. While Ignited, the target takes 1d4 magic damage when they take the spotlight."
+  },
+  {
+   "id": "instant-camp",
+   "name": "Instant Camp",
+   "rarity": "Uncommon",
+   "text": "You can unfold this small mechanical box into a camping tent large enough to safely house six people. The tent collapses at the end of your next long rest."
+  },
+  {
+   "id": "bundle-of-spiderlegs",
+   "name": "Bundle of Spiderlegs",
+   "rarity": "Uncommon",
+   "text": "You can eat these spiderlegs to walk on walls until your next rest."
+  },
+  {
+   "id": "ciscan-fog-bottle",
+   "name": "Ciscan Fog Bottle",
+   "rarity": "Uncommon",
+   "text": "You can break this jar to fill the area within Close range with magical mist. A creature who enters the mist clears a Stress and becomes Hidden."
+  },
+  {
+   "id": "snapthorn-seed",
+   "name": "Snapthorn Seed",
+   "rarity": "Uncommon",
+   "text": "You can throw this seed at a point you can see. It explodes into a tangle of binding vines that temporarily Restrains all creatures within Close range of that point."
+  },
+  {
+   "id": "sprite-bottle",
+   "name": "Sprite Bottle",
+   "rarity": "Uncommon",
+   "text": "When you mark your last Hit Point, this bottle shatters to release the Sprite inside. The Sprite clears all your Hit Points before fading from the Mortal Realm."
+  },
+  {
+   "id": "gravity-bomb",
+   "name": "Gravity Bomb",
+   "rarity": "Uncommon",
+   "text": "You can throw this peach-sized mechanical orb at a point within Far range. It implodes and pulls all creatures and objects within Close range of that point into Melee range with it."
+  },
+  {
+   "id": "gossip-flower",
+   "name": "Gossip Flower",
+   "rarity": "Uncommon",
+   "text": "You can plant this seed in soil. It instantly grows into a small flower that records everything it hears for up to one week. When plucked, the flower recites what it recorded in real time, then withers."
+  },
+  {
+   "id": "displacement-token",
+   "name": "Displacement Token",
+   "rarity": "Uncommon",
+   "text": "You can swallow this token to conjure two illusions of yourself that you can control. Each illusion lasts until it takes damage or until your next rest."
+  },
+  {
+   "id": "night-hags-dust",
+   "name": "Night Hag’s Dust",
+   "rarity": "Uncommon",
+   "text": "You can blow this dust in an adversary’s face to prevent them from clearing Stress until your next long rest."
+  },
+  {
+   "id": "self-sewing-thread",
+   "name": "Self-Sewing Thread",
+   "rarity": "Uncommon",
+   "text": "You can use this thread to clear either a Hit Point or 2 Armor Slots."
+  },
+  {
+   "id": "stonemasons-fortune",
+   "name": "Stonemason’s Fortune",
+   "rarity": "Uncommon",
+   "text": "When you throw this gray brick on the ground, it immediately grows into a 6-foot-tall, 10-foot-wide, and 2-foot-deep wall of solid stone."
+  },
+  {
+   "id": "mnemonic-potion",
+   "name": "Mnemonic Potion",
+   "rarity": "Uncommon",
+   "text": "You can drink this potion to Utilize an Experience without spending a Hope."
+  },
+  {
+   "id": "salamander-salve",
+   "name": "Salamander Salve",
+   "rarity": "Uncommon",
+   "text": "You can apply this salve to your skin to make yourself immune to heat until your next rest."
+  },
+  {
+   "id": "green-ooze-oil",
+   "name": "Green Ooze Oil",
+   "rarity": "Uncommon",
+   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Corrodes the target. While Corroded, the target gains a −2 penalty to their damage thresholds."
+  },
+  {
+   "id": "sunlight-orb",
+   "name": "Sunlight Orb",
+   "rarity": "Uncommon",
+   "text": "You can shatter this orb to make the area within Very Far range appear as though it’s sunlit daytime for the next 24 hours."
+  },
+  {
+   "id": "moonlight-orb",
+   "name": "Moonlight Orb",
+   "rarity": "Uncommon",
+   "text": "You can shatter this orb to make the area within Very Far range appear as though it’s moonlit nighttime for the next 24 hours."
+  },
+  {
+   "id": "midas-flask",
+   "name": "Midas Flask",
+   "rarity": "Rare",
+   "text": "You can pour this small flask of alchemical liquid over a mundane item to instantly transmute it into a handful of gold."
+  },
+  {
+   "id": "staff-of-reversal",
+   "name": "Staff of Reversal",
+   "rarity": "Rare",
+   "text": "You can break this staff against the ground to reverse one magical transformation or effect within Far range."
+  },
+  {
+   "id": "berserkers-brew",
+   "name": "Berserker’s Brew",
+   "rarity": "Rare",
+   "text": "When you drink this dram of liquid, you gain a bonus to your Strength and a penalty to your Finesse and Knowledge equal to your Instinct (minimum 1). This effect lasts until you make a death move or until your next rest."
+  },
+  {
+   "id": "emberite-shard",
+   "name": "Emberite Shard",
+   "rarity": "Rare",
+   "text": "Choose a point within Far range. All targets within Close range of that point must succeed on a Reaction Roll (16) or take 3d6 magic damage and become temporarily Ablaze. While Ablaze, a creature must roll a d4 whenever they make an action roll. On a result of 1, they mark a Hit Point. On a result of 4, they clear the Ablaze condition."
+  },
+  {
+   "id": "arcticite-shard",
+   "name": "Arcticite Shard",
+   "rarity": "Rare",
+   "text": "Choose a point within Far range. All targets within Close range of that point must succeed on a Reaction Roll (16) or take 3d6 magic damage and become temporarily Restrained by ice."
+  },
+  {
+   "id": "fulgurite-shard",
+   "name": "Fulgurite Shard",
+   "rarity": "Rare",
+   "text": "Choose a point within Far range. All targets within Close range of that point must succeed on a Reaction Roll (16) or take 3d6 magic damage and mark 1d4 Stress as lightning crackles through the area."
+  },
+  {
+   "id": "demiurges-draught",
+   "name": "Demiurge’s Draught",
+   "rarity": "Rare",
+   "text": "You can drink this draught to gain a +1 bonus to your Proficiency for your next successful attack roll."
+  },
+  {
+   "id": "cockerel-claw-tea",
+   "name": "Cockerel Claw Tea",
+   "rarity": "Rare",
+   "text": "You can drink this tea to refresh your features as if you had taken a long rest."
+  },
+  {
+   "id": "potion-of-vigilance",
+   "name": "Potion of Vigilance",
+   "rarity": "Rare",
+   "text": "You can drink this potion to gain a +1 bonus to your Evasion until you mark a Hit Point."
+  },
+  {
+   "id": "cacophonous-concoction",
+   "name": "Cacophonous Concoction",
+   "rarity": "Rare",
+   "text": "When you drink this potion, anything you say or do in the next hour becomes impossible for a witness to recount. Any attempts they make to communicate what they saw, heard, or otherwise sensed comes out garbled or nonsensical."
+  },
+  {
+   "id": "nightmare-mead",
+   "name": "Nightmare Mead",
+   "rarity": "Rare",
+   "text": "You can drink this potion to discover the deepest fear of the next person you make eye contact with. When you do, the GM gains a Fear."
+  },
+  {
+   "id": "stake-of-abjuration",
+   "name": "Stake of Abjuration",
+   "rarity": "Rare",
+   "text": "You can hammer this stake into the ground and make a proclamation. Until your next rest, a creature within Far range of the stake who transgresses that proclamation must mark a Stress. The stake lasts until your next rest, then it shatters."
+  },
+  {
+   "id": "psychopomps-shroud",
+   "name": "Psychopomp’s Shroud",
+   "rarity": "Rare",
+   "text": "You can place this shroud over the corpse of a recently deceased creature. The creature’s spirit enters the shroud and becomes your spectral assistant until the next sunrise, when they pass through the veil of death and take the shroud with them."
+  },
+  {
+   "id": "phial-of-deep-ink",
+   "name": "Phial of Deep Ink",
+   "rarity": "Rare",
+   "text": "You can drink this bottle of ink to transform into a cephalopod of roughly your size for the next hour. You gain rubbery skin, soft bones, the ability to breathe underwater, and new limbs until you have eight total."
+  },
+  {
+   "id": "mesmers-tonic",
+   "name": "Mesmer’s Tonic",
+   "rarity": "Rare",
+   "text": "When you drink this tonic, the only thing you can hear until your next rest are the surface thoughts of creatures within Very Close range."
+  },
+  {
+   "id": "invisibility-potion",
+   "name": "Invisibility Potion",
+   "rarity": "Legendary",
+   "text": "You are Hidden until you deal damage to another creature or until your next rest."
+  },
+  {
+   "id": "formoid-serum",
+   "name": "Formoid Serum",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to become a swarm of 16 million ants until the end of the scene. You keep and have access to all equipment, loot, and features."
+  },
+  {
+   "id": "steelskin-salve",
+   "name": "Steelskin Salve",
+   "rarity": "Legendary",
+   "text": "You can apply this salve to your skin to gain a bonus to your damage thresholds equal to your tier until the end of the scene."
+  },
+  {
+   "id": "godlings-pomelo",
+   "name": "Godling’s Pomelo",
+   "rarity": "Legendary",
+   "text": "You can eat this citrus fruit to clear all Hit Points and Stress."
+  },
+  {
+   "id": "snakeskin-spirit",
+   "name": "Snakeskin Spirit",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to slough off your outer layer of skin and heal a scar."
+  },
+  {
+   "id": "magic-users-malison",
+   "name": "Magic-User’s Malison",
+   "rarity": "Legendary",
+   "text": "When you release this spellcaster’s trapped soul, you can cast one spell from a card in your vault as if it were in your loadout. This doesn’t work for permanently vaulted cards."
+  },
+  {
+   "id": "quintessential-severant",
+   "name": "Quintessential Severant",
+   "rarity": "Legendary",
+   "text": "You can use this magic blade to cut one magical or metaphysical bond, such as an enchantment, contract, magical tether, or divine oath. When you do, the blade shatters."
+  },
+  {
+   "id": "mask-of-the-echoed-self",
+   "name": "Mask of the Echoed Self",
+   "rarity": "Legendary",
+   "text": "You can wear this mask during your next level up to swap the values of any of your traits. When you do, the mask becomes your permanent face."
+  },
+  {
+   "id": "necroprancers-bell",
+   "name": "Necroprancer’s Bell",
+   "rarity": "Legendary",
+   "text": "You can break this rusted, clapperless bell against the ground to summon a skeletal steed that climbs out of the earth and serves you until the next sunrise."
+  },
+  {
+   "id": "drakemantle",
+   "name": "Drakemantle",
+   "rarity": "Legendary",
+   "text": "You can use this enchanted ancient dragon hide to gain draconic characteristics until the end of the scene, when the hide falls aways in tatters. Until then, you can fly and gain a +5 bonus to your damage thresholds and a +1 bonus to your Proficiency."
+  },
+  {
+   "id": "gamblers-fallacy",
+   "name": "Gambler’s Fallacy",
+   "rarity": "Legendary",
+   "text": "You can spend any number of handfuls of gold by placing them into this slotted ceramic jar shaped like a pig. When you throw the jar at a point within Far range, it explodes and deals 1d20 magic damage for each handful of gold spent to all creatures within Close range of that point. All gold within the jar is destroyed."
+  },
+  {
+   "id": "lionheart-tonic",
+   "name": "Lionheart Tonic",
+   "rarity": "Legendary",
+   "text": "You can drink this tonic to gain a +1 bonus to your Proficiency until you roll with Fear."
+  },
+  {
+   "id": "tears-of-the-undying-hero",
+   "name": "Tears of the Undying Hero",
+   "rarity": "Legendary",
+   "text": "When you drink this potion, death can’t touch you until your next long rest. When you would mark your last Hit Point, instead of making a death move, you make one final action roll before falling into a dreamless slumber until an ally chooses the Tend to Wounds downtime move to clear your Hit Points."
+  },
+  {
+   "id": "featherstep-potion",
+   "name": "Featherstep Potion",
+   "rarity": "Legendary",
+   "text": "You can drink this potion to sprout small wings from your ankles that give you a bonus to your Evasion equal to your tier until your next rest."
+  },
+  {
+   "id": "chanting-candle",
+   "name": "Chanting Candle",
+   "rarity": "Uncommon",
+   "text": "When you spend a Hope or mark a Stress while making a roll or activating a feature regarding the use of fire magic, you can burn out the candle instead.\n\nOtherwise: if you light up the candle, creatures within Close range have advantage on rolls to perform music or influence someone else’s behavior until the end of the scene, then the candle is consumed."
+  }
+ ]
+}

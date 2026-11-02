@@ -1,0 +1,989 @@
+Format: Daggerheart Armor TXT v1
+
+Name: Gambeson Armor
+Tier: 1
+Thresholds: 5/11
+Score: 3
+Feature: Flexible: +1 to Evasion
+Excluded From Loot: false
+
+---
+
+Name: Leather Armor
+Tier: 1
+Thresholds: 6/13
+Score: 3
+Feature: \0
+Excluded From Loot: false
+
+---
+
+Name: Chainmail Armor
+Tier: 1
+Thresholds: 7/15
+Score: 4
+Feature: Heavy: −1 to Evasion
+Excluded From Loot: false
+
+---
+
+Name: Full Plate Armor
+Tier: 1
+Thresholds: 8/17
+Score: 4
+Feature: Very Heavy: −2 to Evasion; −1 to Agility
+Excluded From Loot: false
+
+---
+
+Name: Improved Gambeson Armor
+Tier: 2
+Thresholds: 7/16
+Score: 4
+Feature: Flexible: +1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Improved Leather Armor
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: \0
+Excluded From Loot: true
+
+---
+
+Name: Improved Chainmail Armor
+Tier: 2
+Thresholds: 11/24
+Score: 5
+Feature: Heavy: −1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Improved Full Plate Armor
+Tier: 2
+Thresholds: 13/28
+Score: 5
+Feature: Very Heavy: −2 to Evasion; −1 to Agility
+Excluded From Loot: true
+
+---
+
+Name: Elundrian Chain Armor
+Tier: 2
+Thresholds: 9/21
+Score: 4
+Feature: Warded: You reduce incoming magic damage by your Armor Score before applying it to your damage thresholds.
+Excluded From Loot: false
+
+---
+
+Name: Harrowbone Armor
+Tier: 2
+Thresholds: 9/21
+Score: 4
+Feature: Resilient: Before you mark your last Armor Slot\, roll a d6. On a result of 6\, reduce the severity by one threshold without marking an Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Irontree Breastplate Armor
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Reinforced: When you mark your last Armor Slot\, increase your damage thresholds by +2 until you clear at least 1 Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Runetan Floating Armor
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Shifting: When you are targeted for an attack\, you can mark an Armor Slot to give the attack roll against you disadvantage.
+Excluded From Loot: false
+
+---
+
+Name: Tyris Soft Armor
+Tier: 2
+Thresholds: 8/18
+Score: 5
+Feature: Quiet: You gain a +2 bonus to rolls you make to move silently.
+Excluded From Loot: false
+
+---
+
+Name: Rosewild Armor
+Tier: 2
+Thresholds: 11/23
+Score: 5
+Feature: Hopeful: When you would spend a Hope\, you can mark an Armor Slot instead.
+Excluded From Loot: false
+
+---
+
+Name: Advanced Gambeson Armor
+Tier: 3
+Thresholds: 9/23
+Score: 5
+Feature: Flexible: +1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Advanced Leather Armor
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: \0
+Excluded From Loot: true
+
+---
+
+Name: Advanced Chainmail Armor
+Tier: 3
+Thresholds: 13/31
+Score: 6
+Feature: Heavy: −1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Advanced Full Plate Armor
+Tier: 3
+Thresholds: 15/35
+Score: 6
+Feature: Very Heavy: −2 to Evasion; −1 to Agility
+Excluded From Loot: true
+
+---
+
+Name: Bellamoi Fine Armor
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Gilded: +1 to Presence
+Excluded From Loot: false
+
+---
+
+Name: Dragonscale Armor
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Impenetrable: Once per short rest\, when you would mark your last Hit Point\, you can instead mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Spiked Plate Armor
+Tier: 3
+Thresholds: 10/25
+Score: 5
+Feature: Sharp: On a successful attack against a target within Melee range\, add a d4 to the damage roll.
+Excluded From Loot: false
+
+---
+
+Name: Bladefare Armor
+Tier: 3
+Thresholds: 16/39
+Score: 6
+Feature: Physical: You can’t mark an Armor Slot to reduce magic damage.
+Excluded From Loot: false
+
+---
+
+Name: Monett’s Cloak
+Tier: 3
+Thresholds: 16/39
+Score: 6
+Feature: Magic: You can’t mark an Armor Slot to reduce physical damage.
+Excluded From Loot: false
+
+---
+
+Name: Runes of Fortification
+Tier: 3
+Thresholds: 17/43
+Score: 6
+Feature: Painful: Each time you mark an Armor Slot\, you must mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Legendary Gambeson Armor
+Tier: 4
+Thresholds: 11/32
+Score: 6
+Feature: Flexible: +1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Legendary Leather Armor
+Tier: 4
+Thresholds: 13/36
+Score: 6
+Feature: \0
+Excluded From Loot: true
+
+---
+
+Name: Legendary Chainmail Armor
+Tier: 4
+Thresholds: 15/40
+Score: 7
+Feature: Heavy: −1 to Evasion
+Excluded From Loot: true
+
+---
+
+Name: Legendary Full Plate Armor
+Tier: 4
+Thresholds: 17/44
+Score: 7
+Feature: Very Heavy: −2 to Evasion; −1 to Agility
+Excluded From Loot: true
+
+---
+
+Name: Dunamis Silkchain
+Tier: 4
+Thresholds: 13/36
+Score: 7
+Feature: Timeslowing: Mark an Armor Slot to roll a d4 and add its result as a bonus to your Evasion against an incoming attack.
+Excluded From Loot: false
+
+---
+
+Name: Channeling Armor
+Tier: 4
+Thresholds: 13/36
+Score: 5
+Feature: Channeling: +1 to Spellcast Rolls
+Excluded From Loot: false
+
+---
+
+Name: Emberwoven Armor
+Tier: 4
+Thresholds: 13/36
+Score: 6
+Feature: Burning: When an adversary attacks you within Melee range\, they mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Full Fortified Armor
+Tier: 4
+Thresholds: 15/40
+Score: 4
+Feature: Fortified: When you mark an Armor Slot\, you reduce the severity of an attack by two thresholds instead of one.
+Excluded From Loot: false
+
+---
+
+Name: Veritas Opal Armor
+Tier: 4
+Thresholds: 13/36
+Score: 6
+Feature: Truthseeking: This armor glows when another creature within Close range tells a lie.
+Excluded From Loot: false
+
+---
+
+Name: Savior Chainmail
+Tier: 4
+Thresholds: 18/48
+Score: 8
+Feature: Difficult: −1 to all character traits and Evasion
+Excluded From Loot: false
+
+---
+
+Name: Sparkleweave
+Tier: 2
+Thresholds: 8/18
+Score: 4
+Feature: Capacitor: Once per scene\, reduce magic damage taken by 1d8. The next time you deal magic damage\, add the last result.
+Excluded From Loot: false
+
+---
+
+Name: Robes of the Warmage
+Tier: 2
+Thresholds: 8/17
+Score: 2
+Feature: Conduit: Requires spellcasting trait; the armor's score and thresholds increase by a number equal to your spellcasting trait.
+Excluded From Loot: false
+
+---
+
+Name: Fairy-Silk Robes
+Tier: 2
+Thresholds: 8/18
+Score: 5
+Feature: Trickster's Step: When you fail an Agility Reaction Roll you can mark an Armor Slot to reroll it with advantage.
+Excluded From Loot: false
+
+---
+
+Name: Runebinders Plate
+Tier: 3
+Thresholds: 11/24
+Score: 6
+Feature: Integrated Wards: You can mark an armor slot to reduce direct damage.
+Excluded From Loot: false
+
+---
+
+Name: Brightsuit of the Ebon Star
+Tier: 3
+Thresholds: 13/29
+Score: 6
+Feature: Shared Protection: -1 Evasion; If another person within Close range who is also wearing a Brightsuit takes damage\, you can mark any number of Armor Slots to reduce their damage taken.
+Excluded From Loot: false
+
+---
+
+Name: Terrorscale Armor
+Tier: 2
+Thresholds: 7/18
+Score: 4
+Feature: Terrifying: When you successfully make an attack in Melee Range\, mark a stress to force the target to move up to Close distance directly away from you. If they cannot flee in this way at all\, they must instead mark a stress.
+Excluded From Loot: false
+
+---
+
+Name: Voidweight Harness
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Gravitic: When an adversary within Close range fails an attack against you\, you may mark a Stress to pull them into Melee range.
+Excluded From Loot: false
+
+---
+
+Name: Resonant Aegis
+Tier: 4
+Thresholds: 15/40
+Score: 7
+Feature: Echoing Plate: When you mark an Armor Slot\, choose another creature in Melee range. They mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Slipphase Carapace
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Phasebound: Once per scene\, when you would take damage\, you may mark two Armor Slots to instead take no damage\, vanish and reappear at a point you can see within Close range.
+Excluded From Loot: false
+
+---
+
+Name: Stonebound Mail
+Tier: 2
+Thresholds: 9/20
+Score: 5
+Feature: Anchored: If an effect would forcibly move you\, you may mark an Armor Slot to ignore it.
+Excluded From Loot: false
+
+---
+
+Name: Spellglass Mantle
+Tier: 4
+Thresholds: 13/36
+Score: 7
+Feature: Mirrorwoven: Requires a Spellcasting trait; When you are hit with a magical attack\, you may mark as many Armor Slots as you need to mitigate all damage of the attack. You may then mark an additional Armor Slot to reflect the spell back towards the attacker by making a Spellcast roll against their difficulty.
+Excluded From Loot: false
+
+---
+
+Name: Closefold Vestment
+Tier: 3
+Thresholds: 9/24
+Score: 4
+Feature: Blinkstep Lattice: When you mark an Armor Slot to reduce incoming damage\, you may immediately vanish and reposition to a point you can see within Close range.
+Excluded From Loot: false
+
+---
+
+Name: Burdenward Shell
+Tier: 2
+Thresholds: 8/19
+Score: 5
+Feature: Stress Sink: When you would mark a Stress\, you may mark an Armor Slot instead.
+Excluded From Loot: false
+
+---
+
+Name: Defiant Bulwark
+Tier: 3
+Thresholds: 13/30
+Score: 4
+Feature: Last Stand: When all your Armor Slots are marked\, gain +1 to all rolls until you clear at least one Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Reservoir Plate
+Tier: 4
+Thresholds: 15/35
+Score: 6
+Feature: Overflowing: If you would clear Armor Slots beyond your maximum\, gain 1 Hope instead.
+Excluded From Loot: false
+
+---
+
+Name: Barbed Embrace
+Tier: 2
+Thresholds: 10/19
+Score: 4
+Feature: Spiked Interior: When someone grapples or restrains you in Melee Range\, they must immediately mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Grudgeplate
+Tier: 2
+Thresholds: 10/22
+Score: 5
+Feature: Punishing Weight: When you succeed on a Melee attack after marking an Armor Slot this scene\, add +2 to the damage roll.
+Excluded From Loot: false
+
+---
+
+Name: Dreadclatter Harness
+Tier: 2
+Thresholds: 11/23
+Score: 5
+Feature: Rattleclad: Your movement is loud and intimidating. Gain +2 to rolls made to threaten or intimidate. -2 to rolls made to stay hidden or unnoticed.
+Excluded From Loot: false
+
+---
+
+Name: Dormant Sigil Armor
+Tier: 3
+Thresholds: 14/29
+Score: 5
+Feature: Runesleep: If you rest without any marked Armor Slots\, clear 1 Stress.
+Excluded From Loot: false
+
+---
+
+Name: Voracious Wardplate
+Tier: 4
+Thresholds: 15/35
+Score: 7
+Feature: Hungry Sigils: You may mark any number of Armor Slots to reduce magic damage. When you reduce magic damage to zero\, you must roll your duality dice. On a result with Fear\, you mark two HP as the armor struggles to contain the magic.
+Excluded From Loot: false
+
+---
+
+Name: Vowkeeper’s Panoply
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Oathbound: Choose a vow when you don the armor. While pursuing it\, gain +2 Evasion. Break it and immediately lose this bonus and mark all Armor Slots.
+Excluded From Loot: false
+
+---
+
+Name: Threadveil Mantle
+Tier: 2
+Thresholds: 8/16
+Score: 4
+Feature: Silken Guard: When you mark an Armor Slot due to a ranged attack\, you may immediately move up to Close range.
+Excluded From Loot: false
+
+---
+
+Name: Prismhide Armor
+Tier: 3
+Thresholds: 14/29
+Score: 5
+Feature: Glasslight: When you mark Armor Slots to reduce an attack to no damage\, the attacker must mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Failsafe Brigandine
+Tier: 2
+Thresholds: 8/18
+Score: 5
+Feature: Brace Point: When you fail a Strength\, Agility or Finesse Reaction Roll\, you may mark an Armor Slot to reroll it.
+Excluded From Loot: false
+
+---
+
+Name: Patchwork Bastion
+Tier: 2
+Thresholds: 11/23
+Score: 5
+Feature: Field Repairs: At the end of a rest\, if you have at least 1 marked Armor Slot\, clear 1 additional Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Gravemark Harness
+Tier: 3
+Thresholds: 12/28
+Score: 4
+Feature: Crushing Weight: When you move from at least Very Close Range into Melee range and land an attack\, then the target of the attack must mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Briarforged Armor
+Tier: 3
+Thresholds: 11/27
+Score: 6
+Feature: Thornmail: If you take physical damage from an attack in Melee Range\, you may mark an Armor Slot to deal 1 damage to the attacker\, instead of marking an Armor Slot to reduce the damage.
+Excluded From Loot: false
+
+---
+
+Name: Shieldwall Panoply
+Tier: 2
+Thresholds: 11/24
+Score: 5
+Feature: Bulwark Frame: -1 Evasion; Allies directly behind you gain +1 Evasion against ranged attacks.
+Excluded From Loot: false
+
+---
+
+Name: Colossus Frame
+Tier: 3
+Thresholds: 14/33
+Score: 5
+Feature: Juggernaut: -1 Evasion; -1 Agility; If you are restrained\, you can mark an Armor Slot to break free.
+Excluded From Loot: false
+
+---
+
+Name: Endure-All Bulwark
+Tier: 4
+Thresholds: 15/39
+Score: 7
+Feature: Last Bastion: When you mark your final Armor Slot\, gain resistance to all damage until the end of the scene.
+Excluded From Loot: false
+
+---
+
+Name: Ruinwake Aegis
+Tier: 3
+Thresholds: 13/29
+Score: 5
+Feature: Cataclysm Plate: Once per rest\, when you mark an Armor Slot\, all targets in Melee Range must mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Love Guard
+Tier: 2
+Thresholds: 8/16
+Score: 4
+Feature: Helper: The first time you spend Hope to help an ally in a scene\, you and the ally gain +1 Evasion until the end of that scene.
+Excluded From Loot: false
+
+---
+
+Name: Brightnerv Vest
+Tier: 2
+Thresholds: 7/20
+Score: 5
+Feature: Flicker of Courage: When you mark an Armor Slot to avoid all damage from an attack\, you may gain 1 Hope. If you do\, the GM gains 1 Fear.
+Excluded From Loot: false
+
+---
+
+Name: Bannerbound Mail
+Tier: 2
+Thresholds: 9/20
+Score: 5
+Feature: Steady the Line: When an ally within Close range spends Hope\, you may mark an Armor Slot to gain 1 Hope yourself.
+Excluded From Loot: false
+
+---
+
+Name: Heartsteel Armor
+Tier: 3
+Thresholds: 12/27
+Score: 5
+Feature: Tempered Spirit: If you begin a scene with more Hope than the GM has Fear\, gain +1 Armor Score and +1 Evasion for that scene.
+Excluded From Loot: false
+
+---
+
+Name: Gravefaith Harness
+Tier: 3
+Thresholds: 11/28
+Score: 5
+Feature: Grim Confidence: Once per scene when you mark an Armor Slot\, you may gain 1 Hope. If you do\, the next attack against you has advantage.
+Excluded From Loot: false
+
+---
+
+Name: Candescent Robes
+Tier: 2
+Thresholds: 6/16
+Score: 3
+Feature: Last Light Engine: When you spend your final Hope\, immediately clear 1 Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Blacksignal Harness
+Tier: 3
+Thresholds: 16/39
+Score: 6
+Feature: Beacon of Despair: When you have marked at least half of your Armor Slots\, all enemies gain advantage on their attacks against you.
+Excluded From Loot: false
+
+---
+
+Name: Mantle of the Pathfinder
+Tier: 3
+Thresholds: 10/26
+Score: 5
+Feature: Practical: +1 to Instinct
+Excluded From Loot: false
+
+---
+
+Name: Robes of the Lorekeeper
+Tier: 3
+Thresholds: 9/25
+Score: 5
+Feature: Hidden Notes: +1 to Knowledge
+Excluded From Loot: false
+
+---
+
+Name: Bladebarrier Mantle
+Tier: 4
+Thresholds: 13/36
+Score: 7
+Feature: Steelwoven: Requires a Spellcasting trait; When you are hit with a physical attack\, you may mark as many Armor Slots as you need to mitigate all damage of the attack. You may then mark an additional Armor Slot to reflect the attack back towards the attacker by making a Spellcast roll against their difficulty.
+Excluded From Loot: false
+
+---
+
+Name: Mage Robes
+Tier: 1
+Thresholds: 4/10
+Score: 2
+Feature: Enchanted: Gain a bonus to your damage thresholds equal to your Spellcast trait.
+Excluded From Loot: false
+
+---
+
+Name: Brigandine Armor
+Tier: 1
+Thresholds: 6/12
+Score: 3
+Feature: Lined: Mark a Stress to negate Minor damage.
+Excluded From Loot: false
+
+---
+
+Name: Scale Mail Armor
+Tier: 1
+Thresholds: 7/14
+Score: 3
+Feature: Cumbersome: −1 to Finesse
+Excluded From Loot: false
+
+---
+
+Name: Banded Armor
+Tier: 1
+Thresholds: 8/16
+Score: 4
+Feature: Bulky: −1 to Evasion; when you take Severe damage\, you must mark a Stress.
+Excluded From Loot: false
+
+---
+
+Name: Improved Mage Robes
+Tier: 2
+Thresholds: 6/15
+Score: 3
+Feature: Enchanted: Gain a bonus to your damage thresholds equal to your Spellcast trait.
+Excluded From Loot: true
+
+---
+
+Name: Improved Brigandine Armor
+Tier: 2
+Thresholds: 9/19
+Score: 4
+Feature: Lined: Mark a Stress to negate Minor damage.
+Excluded From Loot: true
+
+---
+
+Name: Improved Scale Mail Armor
+Tier: 2
+Thresholds: 11/23
+Score: 4
+Feature: Cumbersome: −1 to Finesse
+Excluded From Loot: true
+
+---
+
+Name: Improved Banded Armor
+Tier: 2
+Thresholds: 13/27
+Score: 5
+Feature: Bulky: −1 to Evasion; when you take Severe damage\, you must mark a Stress.
+Excluded From Loot: true
+
+---
+
+Name: Enchanter’s Robes
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Mnemonic: Once per scene\, you can recall a domain card from your vault without paying its Recall Cost.
+Excluded From Loot: false
+
+---
+
+Name: Hawkguard’s Mantle
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Gliding: You can glide up to Far range and are immune to damage from falling.
+Excluded From Loot: false
+
+---
+
+Name: Spidersilk Tunic
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Wall-Crawling: +1 Evasion; you can walk on walls as easily as on the ground.
+Excluded From Loot: false
+
+---
+
+Name: Stormthread Habit
+Tier: 2
+Thresholds: 9/20
+Score: 4
+Feature: Absorbing: Once per scene when you take magic damage\, you can clear an Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Wyrdwood Splint Armor
+Tier: 2
+Thresholds: 10/21
+Score: 5
+Feature: Quick-Striding: You can’t be Restrained and can move up to Far range as part of an action roll.
+Excluded From Loot: false
+
+---
+
+Name: Trollhide Cuirass
+Tier: 2
+Thresholds: 11/23
+Score: 5
+Feature: Self-Healing: When you take a rest\, clear an Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Gilded Sunplate
+Tier: 2
+Thresholds: 12/26
+Score: 5
+Feature: Resplendent: Once per scene when you spend Hope\, you can clear an Armor Slot.
+Excluded From Loot: false
+
+---
+
+Name: Advanced Mage Robes
+Tier: 3
+Thresholds: 8/22
+Score: 4
+Feature: Enchanted: Gain a bonus to your damage thresholds equal to your Spellcast trait.
+Excluded From Loot: true
+
+---
+
+Name: Advanced Brigandine Armor
+Tier: 3
+Thresholds: 11/26
+Score: 5
+Feature: Lined: Mark a Stress to negate Minor damage.
+Excluded From Loot: true
+
+---
+
+Name: Advanced Scale Mail Armor
+Tier: 3
+Thresholds: 13/30
+Score: 5
+Feature: Cumbersome: −1 to Finesse
+Excluded From Loot: true
+
+---
+
+Name: Advanced Banded Armor
+Tier: 3
+Thresholds: 15/34
+Score: 6
+Feature: Bulky: −1 to Evasion; when you take Severe damage\, you must mark a Stress.
+Excluded From Loot: true
+
+---
+
+Name: Granminster’s Finery
+Tier: 3
+Thresholds: 11/27
+Score: 2
+Feature: Magnificent: Gain a bonus to your Armor Score equal to your Presence.
+Excluded From Loot: false
+
+---
+
+Name: Astral Raiment
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Stellar: Mark a Stress to gain advantage on a Spellcast roll.
+Excluded From Loot: false
+
+---
+
+Name: Cloverweave Cloak
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Fortune-Favored: Once per scene\, you can change a failure with Hope into a success with Fear.
+Excluded From Loot: false
+
+---
+
+Name: Skywarden’s Lamellar
+Tier: 3
+Thresholds: 11/27
+Score: 5
+Feature: Vigilant: +2 to Evasion
+Excluded From Loot: false
+
+---
+
+Name: Bloodstone Plate Armor
+Tier: 3
+Thresholds: 13/35
+Score: 6
+Feature: Bloodthirsty: When you critically succeed on a weapon attack within Melee range\, clear a Hit Point.
+Excluded From Loot: false
+
+---
+
+Name: Deep-Forged Coral Armor
+Tier: 3
+Thresholds: 13/35
+Score: 6
+Feature: Aquatic: You can breathe underwater and gain advantage on Agility Rolls while submerged.
+Excluded From Loot: false
+
+---
+
+Name: Legendary Mage Robes
+Tier: 4
+Thresholds: 10/31
+Score: 5
+Feature: Enchanted: Gain a bonus to your damage thresholds equal to your Spellcast trait.
+Excluded From Loot: true
+
+---
+
+Name: Legendary Brigandine Armor
+Tier: 4
+Thresholds: 13/35
+Score: 6
+Feature: Lined: Mark a Stress to negate Minor damage.
+Excluded From Loot: true
+
+---
+
+Name: Legendary Scale Mail Armor
+Tier: 4
+Thresholds: 15/39
+Score: 6
+Feature: Cumbersome: −1 to Finesse
+Excluded From Loot: true
+
+---
+
+Name: Legendary Banded Armor
+Tier: 4
+Thresholds: 17/43
+Score: 7
+Feature: Bulky: −1 to Evasion; when you take Severe damage\, you must mark a Stress.
+Excluded From Loot: true
+
+---
+
+Name: Darkweave Shroud
+Tier: 4
+Thresholds: 13/36
+Score: 5
+Feature: Ghostwalker: Once per rest\, mark a Stress to move up to Close range through solid objects.
+Excluded From Loot: false
+
+---
+
+Name: Godbound Laminar
+Tier: 4
+Thresholds: 13/36
+Score: 6
+Feature: Divine: When you mark an Armor Slot\, gain a Hope.
+Excluded From Loot: false
+
+---
+
+Name: Circle-Forged Dreadplate
+Tier: 4
+Thresholds: 14/38
+Score: 6
+Feature: Accursed: When you mark any number of Hit Points from an attack\, roll a d4. On a result of 4\, the attacker must mark an equal number of Stress.
+Excluded From Loot: false
+
+---
+
+Name: Rune-Forged Exosuit
+Tier: 4
+Thresholds: 12/39
+Score: 7
+Feature: Attuned: The maximum number of domain cards in your loadout is reduced by one\, but you gain a bonus to your damage thresholds equal to your tier.
+Excluded From Loot: false
+
+---
+
+Name: Hallowed Heroplate
+Tier: 4
+Thresholds: 13/35
+Score: 7
+Feature: Blessed: Once per long rest\, you can spend any number of Hope before you make the Risk It All death move. You gain a bonus to the result of your Hope Die equal to the number of Hope spent.
+Excluded From Loot: false
+
+---
+
+Name: Resonant Harness
+Tier: 4
+Thresholds: 15/40
+Score: 7
+Feature: Vitreous: When you would take Severe or greater damage\, you can mark 2 Armor Slots to negate that damage. If you do\, you gain a −5 penalty to your damage thresholds until you choose to repair your armor as a downtime move.
+Excluded From Loot: false

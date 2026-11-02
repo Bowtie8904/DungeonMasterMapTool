@@ -1,0 +1,7555 @@
+{
+ "format": "dmmap-daggerheart",
+ "version": 1,
+ "category": "weapons",
+ "label": "Weapons",
+ "entries": [
+  {
+   "id": "broadsword",
+   "name": "Broadsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "longsword",
+   "name": "Longsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "battleaxe",
+   "name": "Battleaxe",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "greatsword",
+   "name": "Greatsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Massive",
+    "text": "−1 to Evasion; on a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "mace",
+   "name": "Mace",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "warhammer",
+   "name": "Warhammer",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "dagger",
+   "name": "Dagger",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "quarterstaff",
+   "name": "Quarterstaff",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "cutlass",
+   "name": "Cutlass",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "rapier",
+   "name": "Rapier",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "halberd",
+   "name": "Halberd",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "spear",
+   "name": "Spear",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "shortbow",
+   "name": "Shortbow",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "crossbow",
+   "name": "Crossbow",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "longbow",
+   "name": "Longbow",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "arcane-gauntlets",
+   "name": "Arcane Gauntlets",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "hallowed-axe",
+   "name": "Hallowed Axe",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "glowing-rings",
+   "name": "Glowing Rings",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 2,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "hand-runes",
+   "name": "Hand Runes",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "returning-blade",
+   "name": "Returning Blade",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Returning",
+    "text": "When this weapon is thrown within its range, it appears in your hand immediately after the attack."
+   },
+   "starter": true
+  },
+  {
+   "id": "shortstaff",
+   "name": "Shortstaff",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "dualstaff",
+   "name": "Dualstaff",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "scepter",
+   "name": "Scepter",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Presence, Melee, d8."
+   },
+   "starter": true
+  },
+  {
+   "id": "wand",
+   "name": "Wand",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 1,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "greatstaff",
+   "name": "Greatstaff",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "starter": true
+  },
+  {
+   "id": "improved-broadsword",
+   "name": "Improved Broadsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-longsword",
+   "name": "Improved Longsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-battleaxe",
+   "name": "Improved Battleaxe",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-greatsword",
+   "name": "Improved Greatsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Massive",
+    "text": "−1 to Evasion; on a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-mace",
+   "name": "Improved Mace",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-warhammer",
+   "name": "Improved Warhammer",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-dagger",
+   "name": "Improved Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-quarterstaff",
+   "name": "Improved Quarterstaff",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-cutlass",
+   "name": "Improved Cutlass",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-rapier",
+   "name": "Improved Rapier",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-halberd",
+   "name": "Improved Halberd",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-spear",
+   "name": "Improved Spear",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-shortbow",
+   "name": "Improved Shortbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-crossbow",
+   "name": "Improved Crossbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-longbow",
+   "name": "Improved Longbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "gilded-falchion",
+   "name": "Gilded Falchion",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "knuckle-blades",
+   "name": "Knuckle Blades",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Brutal",
+    "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   }
+  },
+  {
+   "id": "urok-broadsword",
+   "name": "Urok Broadsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Deadly",
+    "text": "When you deal Severe damage, the target must mark an additional HP."
+   }
+  },
+  {
+   "id": "bladed-whip",
+   "name": "Bladed Whip",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "steelforged-halberd",
+   "name": "Steelforged Halberd",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Scary",
+    "text": "On a successful attack, the target must mark a Stress."
+   }
+  },
+  {
+   "id": "war-scythe",
+   "name": "War Scythe",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "blunderbuss",
+   "name": "Blunderbuss",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "greatbow",
+   "name": "Greatbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "finehair-bow",
+   "name": "Finehair Bow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-arcane-gauntlets",
+   "name": "Improved Arcane Gauntlets",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-hallowed-axe",
+   "name": "Improved Hallowed Axe",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-glowing-rings",
+   "name": "Improved Glowing Rings",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-hand-runes",
+   "name": "Improved Hand Runes",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-returning-blade",
+   "name": "Improved Returning Blade",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Returning",
+    "text": "When this weapon is thrown within its range, it appears in your hand immediately after the attack."
+   }
+  },
+  {
+   "id": "improved-shortstaff",
+   "name": "Improved Shortstaff",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-dualstaff",
+   "name": "Improved Dualstaff",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-scepter",
+   "name": "Improved Scepter",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Presence, Melee, d8+3."
+   }
+  },
+  {
+   "id": "improved-wand",
+   "name": "Improved Wand",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-greatstaff",
+   "name": "Improved Greatstaff",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "ego-blade",
+   "name": "Ego Blade",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Pompous",
+    "text": "You must have a Presence of 0 or lower to use this weapon."
+   }
+  },
+  {
+   "id": "casting-sword",
+   "name": "Casting Sword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Knowledge, Far, d6+3."
+   }
+  },
+  {
+   "id": "devouring-dagger",
+   "name": "Devouring Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Scary",
+    "text": "On a successful attack, the target must mark a Stress."
+   }
+  },
+  {
+   "id": "hammer-of-exota",
+   "name": "Hammer of Exota",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Eruptive",
+    "text": "On a successful attack against a target within Melee range, all other adversaries within Very Close range must succeed on a reaction roll (14) or take half damage."
+   }
+  },
+  {
+   "id": "yutari-bloodbow",
+   "name": "Yutari Bloodbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Brutal",
+    "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   }
+  },
+  {
+   "id": "elder-bow",
+   "name": "Elder Bow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "scepter-of-elias",
+   "name": "Scepter of Elias",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Invigorating",
+    "text": "On a successful attack, roll a d4. On a result of 4, clear a Stress."
+   }
+  },
+  {
+   "id": "wand-of-enthrallment",
+   "name": "Wand of Enthrallment",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Persuasive",
+    "text": "Before you make a Presence Roll, you can mark a Stress to gain a +2 bonus to the result."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Persuasive",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "keepers-staff",
+   "name": "Keeper’s Staff",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-broadsword",
+   "name": "Advanced Broadsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-longsword",
+   "name": "Advanced Longsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-battleaxe",
+   "name": "Advanced Battleaxe",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-greatsword",
+   "name": "Advanced Greatsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Massive",
+    "text": "−1 to Evasion; on a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-mace",
+   "name": "Advanced Mace",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-warhammer",
+   "name": "Advanced Warhammer",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-dagger",
+   "name": "Advanced Dagger",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-quarterstaff",
+   "name": "Advanced Quarterstaff",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-cutlass",
+   "name": "Advanced Cutlass",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-rapier",
+   "name": "Advanced Rapier",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-halberd",
+   "name": "Advanced Halberd",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 8,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-spear",
+   "name": "Advanced Spear",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-shortbow",
+   "name": "Advanced Shortbow",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-crossbow",
+   "name": "Advanced Crossbow",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-longbow",
+   "name": "Advanced Longbow",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "flickerfly-blade",
+   "name": "Flickerfly Blade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Sharpwing",
+    "text": "Gain a bonus to your damage rolls equal to your Agility."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "damage",
+      "value": "@agility"
+     }
+    ]
+   }
+  },
+  {
+   "id": "bravesword",
+   "name": "Bravesword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Brave",
+    "text": "−1 to Evasion; +3 to Severe damage threshold"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     },
+     {
+      "stat": "severeThreshold",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "id": "hammer-of-wrath",
+   "name": "Hammer of Wrath",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Devastating",
+    "text": "Before you make an attack roll, you can mark a Stress to use a d20 as your damage die."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Devastating",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "labrys-axe",
+   "name": "Labrys Axe",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+1 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "meridian-cutlass",
+   "name": "Meridian Cutlass",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Dueling",
+    "text": "When there are no other creatures within Close range of the target, gain advantage on your attack roll against them."
+   }
+  },
+  {
+   "id": "retractable-saber",
+   "name": "Retractable Saber",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Retractable",
+    "text": "The blade can be hidden in the hilt to avoid detection."
+   }
+  },
+  {
+   "id": "double-flail",
+   "name": "Double Flail",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 8,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "talon-blades",
+   "name": "Talon Blades",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Brutal",
+    "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   }
+  },
+  {
+   "id": "black-powder-revolver",
+   "name": "Black Powder Revolver",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 8,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "spiked-bow",
+   "name": "Spiked Bow",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Agility, Melee, d10+5."
+   }
+  },
+  {
+   "id": "advanced-arcane-gauntlets",
+   "name": "Advanced Arcane Gauntlets",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-hallowed-axe",
+   "name": "Advanced Hallowed Axe",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-glowing-rings",
+   "name": "Advanced Glowing Rings",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 8,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-hand-runes",
+   "name": "Advanced Hand Runes",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-returning-blade",
+   "name": "Advanced Returning Blade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Returning",
+    "text": "When this weapon is thrown within its range, it appears in your hand immediately after the attack."
+   }
+  },
+  {
+   "id": "advanced-shortstaff",
+   "name": "Advanced Shortstaff",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-dualstaff",
+   "name": "Advanced Dualstaff",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-scepter",
+   "name": "Advanced Scepter",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Presence, Melee, d8+4."
+   }
+  },
+  {
+   "id": "advanced-wand",
+   "name": "Advanced Wand",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-greatstaff",
+   "name": "Advanced Greatstaff",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "axe-of-fortunis",
+   "name": "Axe of Fortunis",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 8,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Lucky",
+    "text": "On a failed attack, you can mark a Stress to reroll your attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Lucky",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "blessed-anlace",
+   "name": "Blessed Anlace",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Healing",
+    "text": "During downtime, automatically clear a Hit Point."
+   }
+  },
+  {
+   "id": "ghostblade",
+   "name": "Ghostblade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Otherworldly",
+    "text": "On a successful attack, you can deal physical or magic damage."
+   }
+  },
+  {
+   "id": "runes-of-ruination",
+   "name": "Runes of Ruination",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d20",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Painful",
+    "text": "Each time you make a successful attack, you must mark a Stress."
+   }
+  },
+  {
+   "id": "widogast-pendant",
+   "name": "Widogast Pendant",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Timebending",
+    "text": "You choose the target of your attack after making your attack roll."
+   }
+  },
+  {
+   "id": "gilded-bow",
+   "name": "Gilded Bow",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Self-Correcting",
+    "text": "When you roll a 1 on a damage die, it deals 6 damage instead."
+   }
+  },
+  {
+   "id": "firestaff",
+   "name": "Firestaff",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Burning",
+    "text": "When you roll a 6 on a damage die, the target must mark a Stress."
+   }
+  },
+  {
+   "id": "mage-orb",
+   "name": "Mage Orb",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "ilmaris-rifle",
+   "name": "Ilmari’s Rifle",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "legendary-broadsword",
+   "name": "Legendary Broadsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-longsword",
+   "name": "Legendary Longsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-battleaxe",
+   "name": "Legendary Battleaxe",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-greatsword",
+   "name": "Legendary Greatsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Massive",
+    "text": "−1 to Evasion; on a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-mace",
+   "name": "Legendary Mace",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-warhammer",
+   "name": "Legendary Warhammer",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-dagger",
+   "name": "Legendary Dagger",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-quarterstaff",
+   "name": "Legendary Quarterstaff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-cutlass",
+   "name": "Legendary Cutlass",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-rapier",
+   "name": "Legendary Rapier",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-halberd",
+   "name": "Legendary Halberd",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-spear",
+   "name": "Legendary Spear",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-shortbow",
+   "name": "Legendary Shortbow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-crossbow",
+   "name": "Legendary Crossbow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-longbow",
+   "name": "Legendary Longbow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "dual-ended-sword",
+   "name": "Dual-Ended Sword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "impact-gauntlet",
+   "name": "Impact Gauntlet",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Concussive",
+    "text": "On a successful attack, you can spend a Hope to knock the target back to Far range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Concussive",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "sledge-axe",
+   "name": "Sledge Axe",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 13,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Destructive",
+    "text": "−1 to Agility; on a successful attack, all adversaries within Very Close range must mark a Stress."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Agility",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "curved-dagger",
+   "name": "Curved Dagger",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Serrated",
+    "text": "When you roll a 1 on a damage die, it deals 8 damage instead."
+   }
+  },
+  {
+   "id": "extended-polearm",
+   "name": "Extended Polearm",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Long",
+    "text": "This weapon’s attack targets all adversaries in a line within range."
+   }
+  },
+  {
+   "id": "swinging-ropeblade",
+   "name": "Swinging Ropeblade",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Grappling",
+    "text": "On a successful attack, you can spend a Hope to Restrain the target or pull them into Melee range with you."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Grappling",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "ricochet-axes",
+   "name": "Ricochet Axes",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Bouncing",
+    "text": "Mark 1 or more Stress to hit that many targets in range of the attack."
+   }
+  },
+  {
+   "id": "aantari-bow",
+   "name": "Aantari Bow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "hand-cannon",
+   "name": "Hand Cannon",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "legendary-arcane-gauntlets",
+   "name": "Legendary Arcane Gauntlets",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-hallowed-axe",
+   "name": "Legendary Hallowed Axe",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-glowing-rings",
+   "name": "Legendary Glowing Rings",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 11,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-hand-runes",
+   "name": "Legendary Hand Runes",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-returning-blade",
+   "name": "Legendary Returning Blade",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Returning",
+    "text": "When this weapon is thrown within its range, it appears in your hand immediately after the attack."
+   }
+  },
+  {
+   "id": "legendary-shortstaff",
+   "name": "Legendary Shortstaff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-dualstaff",
+   "name": "Legendary Dualstaff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-scepter",
+   "name": "Legendary Scepter",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Presence, Melee, d8+6."
+   }
+  },
+  {
+   "id": "legendary-wand",
+   "name": "Legendary Wand",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-greatstaff",
+   "name": "Legendary Greatstaff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "sword-of-light-flame",
+   "name": "Sword of Light & Flame",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 11,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Hot",
+    "text": "This weapon cuts through solid material."
+   }
+  },
+  {
+   "id": "siphoning-gauntlets",
+   "name": "Siphoning Gauntlets",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Lifestealing",
+    "text": "On a successful attack, roll a d6. On a result of 6, clear a Hit Point or clear a Stress."
+   }
+  },
+  {
+   "id": "midas-scythe",
+   "name": "Midas Scythe",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Greedy",
+    "text": "Spend a handful of gold to gain a +1 bonus to your Proficiency on a damage roll."
+   }
+  },
+  {
+   "id": "floating-bladeshards",
+   "name": "Floating Bladeshards",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Powerful",
+    "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   }
+  },
+  {
+   "id": "bloodstaff",
+   "name": "Bloodstaff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d20",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Painful",
+    "text": "Each time you make a successful attack, you must mark a Stress."
+   }
+  },
+  {
+   "id": "thistlebow",
+   "name": "Thistlebow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 13,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "wand-of-essek",
+   "name": "Wand of Essek",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 13,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Timebending",
+    "text": "You can choose the target of your attack after making your attack roll."
+   }
+  },
+  {
+   "id": "magus-revolver",
+   "name": "Magus Revolver",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 13,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "fusion-gloves",
+   "name": "Fusion Gloves",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Bonded",
+    "text": "Gain a bonus to your damage rolls equal to your level."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "damage",
+      "value": "@level"
+     }
+    ]
+   }
+  },
+  {
+   "id": "light-frame-wheelchair",
+   "name": "Light-Frame Wheelchair",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "improved-light-frame-wheelchair",
+   "name": "Improved Light-Frame Wheelchair",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-light-frame-wheelchair",
+   "name": "Advanced Light-Frame Wheelchair",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-light-frame-wheelchair",
+   "name": "Legendary Light-Frame Wheelchair",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "heavy-frame-wheelchair",
+   "name": "Heavy-Frame Wheelchair",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "improved-heavy-frame-wheelchair",
+   "name": "Improved Heavy-Frame Wheelchair",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-heavy-frame-wheelchair",
+   "name": "Advanced Heavy-Frame Wheelchair",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-heavy-frame-wheelchair",
+   "name": "Legendary Heavy-Frame Wheelchair",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d12",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Heavy",
+    "text": "−1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "arcane-frame-wheelchair",
+   "name": "Arcane-Frame Wheelchair",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Spellcast",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "improved-arcane-frame-wheelchair",
+   "name": "Improved Arcane-Frame Wheelchair",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Spellcast",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-arcane-frame-wheelchair",
+   "name": "Advanced Arcane-Frame Wheelchair",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Spellcast",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-arcane-frame-wheelchair",
+   "name": "Legendary Arcane-Frame Wheelchair",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Spellcast",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reliable",
+    "text": "+1 to attack rolls"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "shortsword",
+   "name": "Shortsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+2 to primary weapon damage to targets within Melee range"
+   },
+   "starter": true
+  },
+  {
+   "id": "round-shield",
+   "name": "Round Shield",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+1 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "tower-shield",
+   "name": "Tower Shield",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Barrier",
+    "text": "+2 to Armor Score; −1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 2
+     },
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "small-dagger",
+   "name": "Small Dagger",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+2 to primary weapon damage to targets within Melee range"
+   },
+   "starter": true
+  },
+  {
+   "id": "whip",
+   "name": "Whip",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Startling",
+    "text": "Mark a Stress to crack the whip and force all adversaries within Melee range back to Close range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Startling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   },
+   "starter": true
+  },
+  {
+   "id": "grappler",
+   "name": "Grappler",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Hooked",
+    "text": "On a successful attack, you can pull the target into Melee range."
+   },
+   "starter": true
+  },
+  {
+   "id": "hand-crossbow",
+   "name": "Hand Crossbow",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "starter": true
+  },
+  {
+   "id": "improved-shortsword",
+   "name": "Improved Shortsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+3 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "improved-round-shield",
+   "name": "Improved Round Shield",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+2 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-tower-shield",
+   "name": "Improved Tower Shield",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Barrier",
+    "text": "+3 to Armor Score; −1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 3
+     },
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-small-dagger",
+   "name": "Improved Small Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+3 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "improved-whip",
+   "name": "Improved Whip",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Startling",
+    "text": "Mark a Stress to crack the whip and force all adversaries within Melee range back to Close range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Startling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-grappler",
+   "name": "Improved Grappler",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Hooked",
+    "text": "On a successful attack, you can pull the target into Melee range."
+   }
+  },
+  {
+   "id": "improved-hand-crossbow",
+   "name": "Improved Hand Crossbow",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "spiked-shield",
+   "name": "Spiked Shield",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Double Duty",
+    "text": "+1 to Armor Score; +1 to primary weapon damage within Melee range"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "parrying-dagger",
+   "name": "Parrying Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Parry",
+    "text": "When you are attacked, roll this weapon’s damage dice. If any of the attacker’s damage dice rolled the same value as your dice, the matching results are discarded from the attacker’s damage dice before the damage you take is totaled."
+   }
+  },
+  {
+   "id": "returning-axe",
+   "name": "Returning Axe",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Returning",
+    "text": "When this weapon is thrown within its range, it appears in your hand immediately after the attack."
+   }
+  },
+  {
+   "id": "advanced-shortsword",
+   "name": "Advanced Shortsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+4 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "advanced-round-shield",
+   "name": "Advanced Round Shield",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+3 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-tower-shield",
+   "name": "Advanced Tower Shield",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Barrier",
+    "text": "+4 to Armor Score; −1 to Evasion"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 4
+     },
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-small-dagger",
+   "name": "Advanced Small Dagger",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+4 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "advanced-whip",
+   "name": "Advanced Whip",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Startling",
+    "text": "Mark a Stress to crack the whip and force all adversaries within Melee range back to Close range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Startling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-grappler",
+   "name": "Advanced Grappler",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Hooked",
+    "text": "On a successful attack, you can pull the target into Melee range."
+   }
+  },
+  {
+   "id": "advanced-hand-crossbow",
+   "name": "Advanced Hand Crossbow",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "buckler",
+   "name": "Buckler",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Deflecting",
+    "text": "When you are attacked, you can mark an Armor Slot to gain a bonus to your Evasion equal to your available Armor Slots against the attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Deflecting",
+      "cost": {
+       "armor": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "powered-gauntlet",
+   "name": "Powered Gauntlet",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Charged",
+    "text": "Mark a Stress to gain a +1 bonus to your Proficiency on a primary weapon attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Charged",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "hand-sling",
+   "name": "Hand Sling",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Finesse, Close, d8+4."
+   }
+  },
+  {
+   "id": "legendary-shortsword",
+   "name": "Legendary Shortsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+5 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "legendary-round-shield",
+   "name": "Legendary Round Shield",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+4 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-tower-shield",
+   "name": "Legendary Tower Shield",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Barrier",
+    "text": "+5 to Armor Score; −1 to Evasion."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 5
+     },
+     {
+      "stat": "evasion",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-small-dagger",
+   "name": "Legendary Small Dagger",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+5 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "legendary-whip",
+   "name": "Legendary Whip",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Startling",
+    "text": "Mark a Stress to crack the whip and force all adversaries within Melee range back to Close range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Startling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-grappler",
+   "name": "Legendary Grappler",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Hooked",
+    "text": "On a successful attack, you can pull the target into Melee range."
+   }
+  },
+  {
+   "id": "legendary-hand-crossbow",
+   "name": "Legendary Hand Crossbow",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "braveshield",
+   "name": "Braveshield",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Sheltering",
+    "text": "When you mark an Armor Slot, it reduces damage for you and all allies within Melee range of you who took the same damage."
+   }
+  },
+  {
+   "id": "knuckle-claws",
+   "name": "Knuckle Claws",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 8,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Doubled Up",
+    "text": "When you make an attack with your primary weapon, you can deal damage to another target within Melee range."
+   }
+  },
+  {
+   "id": "primer-shard",
+   "name": "Primer Shard",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Locked On",
+    "text": "On a successful attack, your next attack against the same target with your primary weapon automatically succeeds."
+   }
+  },
+  {
+   "id": "leviathan-harpoon",
+   "name": "Leviathan Harpoon",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Tethered",
+    "text": "On a successful attack, the target is temporarily Tethered to you. While Tethered, whenever the target moves away from you, you can remain at the same range from it. If you don’t, or if you move away from the target, it clears the condition."
+   }
+  },
+  {
+   "id": "seekers-bow",
+   "name": "Seeker’s Bow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Echo",
+    "text": "You can fire a spectral arrow that deals no damage, but on a hit moves the target to where it was before it was last spotlighted. The next time it is spotlighted it must repeat its actions from the previous time. If it can’t do this, it marks a Stress."
+   }
+  },
+  {
+   "id": "arcane-scalpel",
+   "name": "Arcane Scalpel",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Incorporeal",
+    "text": "The scalpel deals its wounds magically to the target at a distance as direct damage."
+   }
+  },
+  {
+   "id": "bug-hunters-aegis",
+   "name": "Bug Hunter’s Aegis",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Swatter",
+    "text": "+1 to Armor Score; mark a Stress to knock a flying creature smaller than you within Melee range to the ground."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ],
+    "actions": [
+     {
+      "id": "use",
+      "label": "Swatter",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "manacle-bolas",
+   "name": "Manacle Bolas",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Restraining",
+    "text": "When you hit a target you can spend a Hope to temporarily Restrain it."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Restraining",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "staff-of-the-whispering-archive",
+   "name": "Staff of the Whispering Archive",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Watchful",
+    "text": "You can cast the Floating Eye spell once per long rest. When you do so, for that scene you have disadvantage on Reaction Rolls against mind reading or clairvoyance."
+   },
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "longRest"
+    },
+    "actions": [
+     {
+      "id": "use",
+      "label": "Watchful"
+     }
+    ]
+   }
+  },
+  {
+   "id": "claws-of-yifang",
+   "name": "Claws of Yifang",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Channeling",
+    "text": "When you take magic damage, you can mark a Stress to halve it and store the remaining damage in the Claws until your next rest. The stored damage is added to your next damage roll with the Claws."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Channeling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "devils-smithing-hammer",
+   "name": "Devil’s Smithing Hammer",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Deforming",
+    "text": "When you hit a creature wearing metal armor, you can mark a Stress to deform it. The target gains a stacking -2 penalty to damage thresholds until the end of the scene."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Deforming",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "life-wand",
+   "name": "Life Wand",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Life-Linked",
+    "text": "+2 to Spellcast Rolls against undead creatures; succeed on a Spellcast Roll to temporarily Stun an undead. While Stunned, they can’t use reactions and can’t take any other actions."
+   }
+  },
+  {
+   "id": "snowblade",
+   "name": "Snowblade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Freezing",
+    "text": "On a successful attack, the target is temporarily Restrained. If you take damage from fire, the Snowblade loses this feature until your next rest."
+   }
+  },
+  {
+   "id": "spiders-sting",
+   "name": "Spider’s Sting",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Webslinger",
+    "text": "You can temporarily Restrain a target within Close range by succeeding on a Finesse Roll against them."
+   }
+  },
+  {
+   "id": "katana",
+   "name": "Katana",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "brass-knuckles",
+   "name": "Brass Knuckles",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "scimitar",
+   "name": "Scimitar",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "twisted-dagger",
+   "name": "Twisted Dagger",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "whipsword",
+   "name": "Whipsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Finesse, Melee, d10."
+   }
+  },
+  {
+   "id": "rope-dart",
+   "name": "Rope Dart",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 1,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "brightsword",
+   "name": "Brightsword",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "shadowblade",
+   "name": "Shadowblade",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Otherworldly",
+    "text": "On a successful attack, you can deal physical or magic damage."
+   }
+  },
+  {
+   "id": "enchanted-chakram",
+   "name": "Enchanted Chakram",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 1,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Ricochet",
+    "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Ricochet",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "casting-dagger",
+   "name": "Casting Dagger",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Instinct, Melee, d8."
+   }
+  },
+  {
+   "id": "runelock-pistol",
+   "name": "Runelock Pistol",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "arcane-rifle",
+   "name": "Arcane Rifle",
+   "tier": 1,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Aimed",
+    "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Aimed",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-katana",
+   "name": "Improved Katana",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-brass-knuckles",
+   "name": "Improved Brass Knuckles",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-scimitar",
+   "name": "Improved Scimitar",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "improved-twisted-dagger",
+   "name": "Improved Twisted Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "improved-whipsword",
+   "name": "Improved Whipsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+3."
+   }
+  },
+  {
+   "id": "improved-rope-dart",
+   "name": "Improved Rope Dart",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "war-pick",
+   "name": "War Pick",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Deadly",
+    "text": "When you deal Severe damage, the target must mark an additional HP."
+   }
+  },
+  {
+   "id": "cane-sword",
+   "name": "Cane Sword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Retractable",
+    "text": "The blade can be hidden in the cane to avoid detection."
+   }
+  },
+  {
+   "id": "bladed-fan",
+   "name": "Bladed Fan",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Parry",
+    "text": "When you are attacked, roll this weapon’s damage dice. If any of the attacker’s damage dice rolled the same value as your dice, the matching results are discarded from the attacker’s damage dice before the damage you take is totaled."
+   }
+  },
+  {
+   "id": "cyrurgiens-scalpel",
+   "name": "Cyrurgien’s Scalpel",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Scary",
+    "text": "On a successful attack, the target must mark a Stress."
+   }
+  },
+  {
+   "id": "lance",
+   "name": "Lance",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Cumbersome",
+    "text": "−1 to Finesse"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "javelins",
+   "name": "Javelins",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Stockpiled",
+    "text": "You can throw this weapon at a target within Far range by making an attack roll using Agility without having to retrieve it, as you always have another one on hand."
+   }
+  },
+  {
+   "id": "improved-brightsword",
+   "name": "Improved Brightsword",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "improved-shadowblade",
+   "name": "Improved Shadowblade",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Otherworldly",
+    "text": "On a successful attack, you can deal physical or magic damage."
+   }
+  },
+  {
+   "id": "improved-enchanted-chakram",
+   "name": "Improved Enchanted Chakram",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Ricochet",
+    "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Ricochet",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-casting-dagger",
+   "name": "Improved Casting Dagger",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+3."
+   }
+  },
+  {
+   "id": "improved-runelock-pistol",
+   "name": "Improved Runelock Pistol",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "improved-arcane-rifle",
+   "name": "Improved Arcane Rifle",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Aimed",
+    "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Aimed",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "enchanted-shillelagh",
+   "name": "Enchanted Shillelagh",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+1 to your Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "displacement-razor",
+   "name": "Displacement Razor",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Omnipresent",
+    "text": "You can make attacks against targets within Very Far range, but must do so with disadvantage."
+   }
+  },
+  {
+   "id": "spellbound-bangles",
+   "name": "Spellbound Bangles",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "fury-gem",
+   "name": "Fury Gem",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Burning",
+    "text": "When you roll the maximum result on a damage die, the target must mark a Stress."
+   }
+  },
+  {
+   "id": "enchanted-lute",
+   "name": "Enchanted Lute",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 3,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Invigorating",
+    "text": "On a successful attack, roll a d4. On a result of 4, clear a Stress."
+   }
+  },
+  {
+   "id": "splintershaft-bow",
+   "name": "Splintershaft Bow",
+   "tier": 2,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Volleyed",
+    "text": "Spend a Hope to target a group of creatures within range. Targets you succeed against take half damage."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Volleyed",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-katana",
+   "name": "Advanced Katana",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-brass-knuckles",
+   "name": "Advanced Brass Knuckles",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-scimitar",
+   "name": "Advanced Scimitar",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "advanced-twisted-dagger",
+   "name": "Advanced Twisted Dagger",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "advanced-whipsword",
+   "name": "Advanced Whipsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+6."
+   }
+  },
+  {
+   "id": "advanced-rope-dart",
+   "name": "Advanced Rope Dart",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "blitz-hammer",
+   "name": "Blitz Hammer",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Accelerator",
+    "text": "Once per scene, mark a Stress to move to Far range then make an attack. Gain a +1 bonus to your Proficiency on this attack."
+   },
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
+    "actions": [
+     {
+      "id": "use",
+      "label": "Accelerator"
+     }
+    ]
+   }
+  },
+  {
+   "id": "platinum-estoc",
+   "name": "Platinum Estoc",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "soldiers-pike",
+   "name": "Soldier’s Pike",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Braced",
+    "text": "When an adversary within this weapon’s range deals damage to you, you can mark 2 Stress to force them to mark a Hit Point."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Braced",
+      "cost": {
+       "stress": 2
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "chained-scythe",
+   "name": "Chained Scythe",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "singing-sword",
+   "name": "Singing Sword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Bolstering",
+    "text": "When you critically succeed on an attack, all PCs within Close range gain a Hope."
+   }
+  },
+  {
+   "id": "bladed-star",
+   "name": "Bladed Star",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 7,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Rebounding",
+    "text": "When you throw this weapon, it returns to your hand. On a failed attack, you can reroll your attack with disadvantage."
+   }
+  },
+  {
+   "id": "advanced-brightsword",
+   "name": "Advanced Brightsword",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "advanced-shadowblade",
+   "name": "Advanced Shadowblade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Otherworldly",
+    "text": "On a successful attack, you can deal physical or magic damage."
+   }
+  },
+  {
+   "id": "advanced-enchanted-chakram",
+   "name": "Advanced Enchanted Chakram",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Ricochet",
+    "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Ricochet",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-casting-dagger",
+   "name": "Advanced Casting Dagger",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+6."
+   }
+  },
+  {
+   "id": "advanced-runelock-pistol",
+   "name": "Advanced Runelock Pistol",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "advanced-arcane-rifle",
+   "name": "Advanced Arcane Rifle",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Aimed",
+    "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Aimed",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "rocket-maul",
+   "name": "Rocket Maul",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Concussive",
+    "text": "On a successful attack, you can spend a Hope to knock the target back to Far range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Concussive",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "crystal-spear",
+   "name": "Crystal Spear",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "arc-wand",
+   "name": "Arc Wand",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Bouncing",
+    "text": "Mark any number of Stress to target that many additional creatures in range of the attack."
+   }
+  },
+  {
+   "id": "rime-scepter",
+   "name": "Rime Scepter",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Freezing",
+    "text": "When an attack from this weapon causes a target to mark 2 or more HP, they become temporarily Restrained."
+   }
+  },
+  {
+   "id": "gunblade",
+   "name": "Gunblade",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Agility, Melee, d8+6 phy."
+   }
+  },
+  {
+   "id": "staff-of-augma",
+   "name": "Staff of Augma",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Catalytic",
+    "text": "On a successful attack, you can mark a Stress to give an ally within Close range a +3 bonus to their next attack roll."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Catalytic",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-katana",
+   "name": "Legendary Katana",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-brass-knuckles",
+   "name": "Legendary Brass Knuckles",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-scimitar",
+   "name": "Legendary Scimitar",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   }
+  },
+  {
+   "id": "legendary-twisted-dagger",
+   "name": "Legendary Twisted Dagger",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Piercing",
+    "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
+   }
+  },
+  {
+   "id": "legendary-whipsword",
+   "name": "Legendary Whipsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+9."
+   }
+  },
+  {
+   "id": "legendary-rope-dart",
+   "name": "Legendary Rope Dart",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "severed-dragon-claw",
+   "name": "Severed Dragon Claw",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Destructive",
+    "text": "−1 to Agility; on a successful attack, all adversaries within Very Close range must mark a Stress."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Agility",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "infinite-staff",
+   "name": "Infinite Staff",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Extending",
+    "text": "You can increase the range of this weapon up to Very Far. You gain a −1 penalty to attack rolls for each step you increase the range by (such as Melee to Very Close, Very Close to Close, or Close to Far)."
+   }
+  },
+  {
+   "id": "bec-de-corbin",
+   "name": "Bec de Corbin",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Devastating",
+    "text": "Before you make an attack roll, you can mark a Stress to use a d20 as your damage die."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Devastating",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "black-powder-serpentine",
+   "name": "Black Powder Serpentine",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 12,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Incendiary",
+    "text": "−1 to Agility; on a successful attack, all creatures within Very Close range of the target must mark a Hit Point."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Agility",
+      "value": -1
+     }
+    ]
+   }
+  },
+  {
+   "id": "clockwork-crossbow",
+   "name": "Clockwork Crossbow",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 11,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Quick",
+    "text": "When you make an attack, you can mark a Stress to target another creature within range."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Quick",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "arquebus",
+   "name": "Arquebus",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "physical"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "legendary-brightsword",
+   "name": "Legendary Brightsword",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   }
+  },
+  {
+   "id": "legendary-shadowblade",
+   "name": "Legendary Shadowblade",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Otherworldly",
+    "text": "On a successful attack, you can deal physical or magic damage."
+   }
+  },
+  {
+   "id": "legendary-enchanted-chakram",
+   "name": "Legendary Enchanted Chakram",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Ricochet",
+    "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Ricochet",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-casting-dagger",
+   "name": "Legendary Casting Dagger",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+9."
+   }
+  },
+  {
+   "id": "legendary-runelock-pistol",
+   "name": "Legendary Runelock Pistol",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Reloading",
+    "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   }
+  },
+  {
+   "id": "legendary-arcane-rifle",
+   "name": "Legendary Arcane Rifle",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Very Far",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 12,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Aimed",
+    "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Aimed",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "starmetal-blade",
+   "name": "Starmetal Blade",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Serrated",
+    "text": "When you roll a 1 on a damage die, it deals 8 damage instead."
+   }
+  },
+  {
+   "id": "adders-fang",
+   "name": "Adder’s Fang",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Venomous",
+    "text": "When you deal Major or greater damage with this weapon, the target becomes temporarily Vulnerable."
+   }
+  },
+  {
+   "id": "demons-edge",
+   "name": "Demon’s Edge",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 10,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Disturbing",
+    "text": "When you defeat a creature with this weapon, all adversaries within Close range must mark a Stress."
+   }
+  },
+  {
+   "id": "storm-gods-greataxe",
+   "name": "Storm God’s Greataxe",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Strength",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Bouncing",
+    "text": "Mark any number of Stress to target that many additional creatures in range of the attack."
+   }
+  },
+  {
+   "id": "ethereal-zweih-nder",
+   "name": "Ethereal Zweihänder",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d10",
+     "bonus": 9,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Ethereal",
+    "text": "You must mark a Stress to conjure this weapon. It lasts until the end of the scene."
+   }
+  },
+  {
+   "id": "gravity-arbalest",
+   "name": "Gravity Arbalest",
+   "tier": 4,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Knowledge",
+    "range": "Far",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Magnetic",
+    "text": "When you make an attack with this weapon, you can spend a Hope to force all adversaries within Very Close range of the target to make a Reaction Roll (16). Creatures who fail must mark a Stress and are pulled into Melee range of the target."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Magnetic",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "hatchet",
+   "name": "Hatchet",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Follow-Up",
+    "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Follow-Up",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "offhand-brass-knuckles",
+   "name": "Offhand Brass Knuckles",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+2 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "throwing-knives",
+   "name": "Throwing Knives",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Stockpiled",
+    "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   }
+  },
+  {
+   "id": "fighting-cloak",
+   "name": "Fighting Cloak",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Padded",
+    "text": "+2 to damage thresholds"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "thresholds",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "id": "rune-shield",
+   "name": "Rune Shield",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+1 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "focus-runes",
+   "name": "Focus Runes",
+   "tier": 1,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Focused",
+    "text": "+1 to primary weapon damage to targets within Very Close range"
+   }
+  },
+  {
+   "id": "improved-hatchet",
+   "name": "Improved Hatchet",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Follow-Up",
+    "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Follow-Up",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-offhand-brass-knuckles",
+   "name": "Improved Offhand Brass Knuckles",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+3 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "improved-throwing-knives",
+   "name": "Improved Throwing Knives",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Stockpiled",
+    "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   }
+  },
+  {
+   "id": "improved-fighting-cloak",
+   "name": "Improved Fighting Cloak",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 2,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Padded",
+    "text": "+3 to damage thresholds"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "thresholds",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-rune-shield",
+   "name": "Improved Rune Shield",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 2,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+2 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "id": "improved-focus-runes",
+   "name": "Improved Focus Runes",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 2,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Focused",
+    "text": "+1 to primary weapon damage to targets within Very Close range"
+   }
+  },
+  {
+   "id": "collapsible-baton",
+   "name": "Collapsible Baton",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Nonlethal",
+    "text": "When a target would mark any number of Hit Points from an attack with this weapon, they mark an equal number of Stress instead."
+   }
+  },
+  {
+   "id": "eldritch-vambrace",
+   "name": "Eldritch Vambrace",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Deflecting",
+    "text": "When you are attacked, you can mark an Armor Slot to gain a bonus to your Evasion equal to your Armor Score against the attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Deflecting",
+      "cost": {
+       "armor": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "segmented-staff",
+   "name": "Segmented Staff",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Double Duty",
+    "text": "+1 to Armor Score; +1 to primary weapon damage within Melee range"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "razor-wire",
+   "name": "Razor Wire",
+   "tier": 2,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 3,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Entangling",
+    "text": "On a successful attack with your primary weapon against a target within Very Close range, you can spend a Hope to make the target temporarily Vulnerable."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Entangling",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-hatchet",
+   "name": "Advanced Hatchet",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Follow-Up",
+    "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Follow-Up",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-offhand-brass-knuckles",
+   "name": "Advanced Offhand Brass Knuckles",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+4 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "advanced-throwing-knives",
+   "name": "Advanced Throwing Knives",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Stockpiled",
+    "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   }
+  },
+  {
+   "id": "advanced-fighting-cloak",
+   "name": "Advanced Fighting Cloak",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Padded",
+    "text": "+4 to damage thresholds"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "thresholds",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-rune-shield",
+   "name": "Advanced Rune Shield",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+3 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "id": "advanced-focus-runes",
+   "name": "Advanced Focus Runes",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 4,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Focused",
+    "text": "+1 to primary weapon damage to targets within Very Close range"
+   }
+  },
+  {
+   "id": "tinkers-hammer",
+   "name": "Tinker’s Hammer",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 4,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Trusty",
+    "text": "+1 to attack rolls made with your primary weapon"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "attack",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "id": "vorpal-shard",
+   "name": "Vorpal Shard",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 0,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Targeted",
+    "text": "When you fail a weapon attack, you can spend a Hope to succeed on your next weapon attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Targeted",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "soul-chain",
+   "name": "Soul Chain",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 5,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Draining",
+    "text": "On a successful attack, you can spend a Hope to force the target to mark a Stress. If they do, you clear a Stress."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Draining",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "war-dart",
+   "name": "War Dart",
+   "tier": 3,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 5,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Versatile",
+    "text": "This weapon can also be used with these statistics—Agility, Melee, d8+5."
+   }
+  },
+  {
+   "id": "legendary-hatchet",
+   "name": "Legendary Hatchet",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Agility",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Follow-Up",
+    "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Follow-Up",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-offhand-brass-knuckles",
+   "name": "Legendary Offhand Brass Knuckles",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Strength",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Paired",
+    "text": "+5 to primary weapon damage to targets within Melee range"
+   }
+  },
+  {
+   "id": "legendary-throwing-knives",
+   "name": "Legendary Throwing Knives",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Stockpiled",
+    "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   }
+  },
+  {
+   "id": "legendary-fighting-cloak",
+   "name": "Legendary Fighting Cloak",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Padded",
+    "text": "+5 to damage thresholds"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "thresholds",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-rune-shield",
+   "name": "Legendary Rune Shield",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Protective",
+    "text": "+4 to Armor Score"
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "armorScore",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "id": "legendary-focus-runes",
+   "name": "Legendary Focus Runes",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Very Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Focused",
+    "text": "+1 to primary weapon damage to targets within Very Close range"
+   }
+  },
+  {
+   "id": "void-needle",
+   "name": "Void Needle",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Finesse",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "physical"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Inverted",
+    "text": "When you roll a weapon attack with Fear, you gain a Hope."
+   }
+  },
+  {
+   "id": "echo-blade",
+   "name": "Echo Blade",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Presence",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d4",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Doubled Up",
+    "text": "When you succeed on an attack with your primary weapon, you can deal damage to another target within Melee range."
+   }
+  },
+  {
+   "id": "m-bius-orb",
+   "name": "Möbius Orb",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Knowledge",
+    "range": "Melee",
+    "damage": {
+     "dice": "1d8",
+     "bonus": 6,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Recursive",
+    "text": "When you roll the maximum value on a damage die, roll an additional damage die and add the result to the total damage. This feature can trigger repeatedly."
+   }
+  },
+  {
+   "id": "blackblood-tendril",
+   "name": "Blackblood Tendril",
+   "tier": 4,
+   "weapon": {
+    "slot": "secondary",
+    "trait": "Instinct",
+    "range": "Close",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 8,
+     "type": "magic"
+    },
+    "burden": "One-Handed"
+   },
+   "feature": {
+    "name": "Poisonous",
+    "text": "When a target marks any number of Hit Points from an attack you rolled with Fear, they mark an equal number of Stress."
+   }
+  },
+  {
+   "id": "staff-of-the-dance-master",
+   "name": "Staff of the Dance Master",
+   "tier": 3,
+   "weapon": {
+    "slot": "primary",
+    "trait": "Presence",
+    "range": "Far",
+    "damage": {
+     "dice": "1d6",
+     "bonus": 7,
+     "type": "magic"
+    },
+    "burden": "Two-Handed"
+   },
+   "feature": {
+    "name": "Make Them Dance",
+    "text": "Mark a Stress and make a Presence Roll. Every creature that can hear you and that you succeed against marks a Stress, moves in a random direction within Close range, and is Dancing until you stop holding the beat with the staff or you move. While Dancing, creatures make an Instinct Reaction Roll when moving, going in a random direction on a failure."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Make Them Dance",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

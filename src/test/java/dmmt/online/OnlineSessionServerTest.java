@@ -43,6 +43,57 @@ class OnlineSessionServerTest {
     private final List<String> moves = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<String> drawings = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean drawingSupported;
+    private volatile Path compendiumDir;
+
+    @Test
+    void compendiumRequiresLoginAndServesCategoryFiles() throws Exception {
+        Path dir = temp.resolve("dh");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.writeString(dir.resolve("armor.json"),
+                "{\"format\":\"dmmap-daggerheart\",\"category\":\"armor\",\"label\":\"Armor\",\"entries\":[{\"id\":\"a\"}]}");
+        compendiumDir = dir;
+        String base = "http://localhost:" + port + "/api/compendium";
+        assertEquals(401, http.send(HttpRequest.newBuilder(URI.create(base)).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        String cookie = cookie();
+        HttpResponse<String> index = http.send(HttpRequest.newBuilder(URI.create(base)).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, index.statusCode());
+        assertTrue(index.body().contains("armor"));
+        HttpResponse<String> armor = http.send(
+                HttpRequest.newBuilder(URI.create(base + "/armor")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, armor.statusCode());
+        assertEquals("a", MAPPER.readTree(armor.body()).path("entries").get(0).path("id").asText());
+        assertEquals(404, http.send(HttpRequest.newBuilder(URI.create(base + "/..%2Fx")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals(404, http.send(HttpRequest.newBuilder(URI.create(base + "/missing")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+    @Test
+    void sheetsAreStoredPerActorForTheirOwnerOnly() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("mine").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("other").name("Orc").ownerId("someone-else").build());
+        String cookie = cookie();
+        String base = "http://localhost:" + port + "/api/sheet/";
+        JsonNode first = MAPPER.readTree(http.send(HttpRequest.newBuilder(URI.create(base + "mine")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString()).body());
+        assertTrue(first.path("sheet").isNull());
+        HttpResponse<String> put = http.send(HttpRequest.newBuilder(URI.create(base + "mine")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"name\":\"Mara\",\"level\":2}")).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, put.statusCode());
+        JsonNode again = MAPPER.readTree(http.send(HttpRequest.newBuilder(URI.create(base + "mine")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString()).body());
+        assertEquals(2, again.path("sheet").path("level").asInt());
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(base + "other")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString("{}")).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals(400, http.send(HttpRequest.newBuilder(URI.create(base + "mine")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString("[1]")).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals(413, http.send(HttpRequest.newBuilder(URI.create(base + "mine")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"x\":\"" + "a".repeat(OnlineSessionServer.MAX_SHEET_BYTES) + "\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
     private volatile OnlineSessionServer.MoveResult drawingResult = OnlineSessionServer.MoveResult.accepted();
 
     @BeforeEach
@@ -59,6 +110,11 @@ class OnlineSessionServerTest {
         OnlineSessionServer.Config config = new OnlineSessionServer.Config(port, "Game", 4, 65536, 50, 100, 3, 60);
         server = new OnlineSessionServer(config, campaign, store, new AssetRegistry(temp.resolve("cache"), 2048, store),
                 new OnlineSessionServer.Host() {
+                    @Override
+                    public Path compendiumDirectory() {
+                        return compendiumDir;
+                    }
+
                     @Override
                     public boolean supportsDrawing() {
                         return drawingSupported;

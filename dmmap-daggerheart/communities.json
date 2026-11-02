@@ -1,0 +1,248 @@
+{
+ "format": "dmmap-daggerheart",
+ "version": 1,
+ "category": "communities",
+ "label": "Communities",
+ "entries": [
+  {
+   "id": "duneborne",
+   "name": "Duneborne",
+   "text": "Being part of a duneborne community means you’ve made a home among the shifting sands and arid climate of the desert.",
+   "features": [
+    {
+     "name": "Oasis",
+     "text": "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result."
+    }
+   ]
+  },
+  {
+   "id": "freeborne",
+   "name": "Freeborne",
+   "text": "Being part of a freeborne community means you’re from a collective that once lived under tyrannical rule but is now liberated.",
+   "features": [
+    {
+     "name": "Unbound",
+     "text": "Once per session when you roll with **Fear**, you can change it into a roll with Hope instead.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Unbound"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "frostborne",
+   "name": "Frostborne",
+   "text": "Being part of a frostborne community means you come from a place of snow and ice.",
+   "features": [
+    {
+     "name": "Hardy",
+     "text": "When you take a rest, you clear a Hit Point."
+    }
+   ]
+  },
+  {
+   "id": "hearthborne",
+   "name": "Hearthborne",
+   "text": "Being part of a hearthborne community means you come from humble origins, having lived in a modest village or quaint countryside.",
+   "features": [
+    {
+     "name": "Close-Knit",
+     "text": "Once per long rest, you can **spend any number of Hope** to grant an ally within Far range an equal number of Hope.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Close-Knit"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "highborne",
+   "name": "Highborne",
+   "text": "Being part of a highborne community means you’re accustomed to a life of elegance, opulence, and prestige within the upper echelons of society.",
+   "features": [
+    {
+     "name": "Privilege",
+     "text": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
+    }
+   ]
+  },
+  {
+   "id": "loreborne",
+   "name": "Loreborne",
+   "text": "Being part of a loreborne community means you’re from a society that favors strong academic or political prowess.",
+   "features": [
+    {
+     "name": "Well-Read",
+     "text": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
+    }
+   ]
+  },
+  {
+   "id": "orderborne",
+   "name": "Orderborne",
+   "text": "Being part of an orderborne community means you’re from a collective that focuses on discipline or faith, and you uphold a set of principles that reflect your experience there.",
+   "features": [
+    {
+     "name": "Dedicated",
+     "text": "Record three sayings or values your upbringing instilled in you. Once per rest, when you describe how you’re embodying one of these principles through your current action, you can roll a d20 as your Hope Die.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Dedicated"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "reborne",
+   "name": "Reborne",
+   "text": "You were once a member of a different community that you’re no longer part of.",
+   "features": [
+    {
+     "name": "Found Family",
+     "text": "Once per rest, you can **spend a Hope** to use an ally’s Experience as if it were your own. When you do so, describe how your time with that ally prepared you for this moment.\nWhen you join a new community or rediscover your old one, you can permanently trade this card for that one instead.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Found Family",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ridgeborne",
+   "name": "Ridgeborne",
+   "text": "Being part of a ridgeborne community means you’ve called the rocky peaks and sharp cliffs of the mountainside home.",
+   "features": [
+    {
+     "name": "Steady",
+     "text": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
+    }
+   ]
+  },
+  {
+   "id": "seaborne",
+   "name": "Seaborne",
+   "text": "Being part of a seaborne community means you lived on or near a large body of water.",
+   "features": [
+    {
+     "name": "Know the Tide",
+     "text": "You can sense the ebb and flow of life. When you roll with Fear, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session, clear all unspent tokens."
+    }
+   ]
+  },
+  {
+   "id": "slyborne",
+   "name": "Slyborne",
+   "text": "Being part of a slyborne community means you come from a group that operates outside the law, including all manner of criminals, grifters, and con artists.",
+   "features": [
+    {
+     "name": "Scoundrel",
+     "text": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
+    }
+   ]
+  },
+  {
+   "id": "underborne",
+   "name": "Underborne",
+   "text": "Being part of an underborne community means you’re from a subterranean society.",
+   "features": [
+    {
+     "name": "Low-Light Living",
+     "text": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
+    }
+   ]
+  },
+  {
+   "id": "wanderborne",
+   "name": "Wanderborne",
+   "text": "Being part of a wanderborne community means you’ve lived as a nomad, forgoing a permanent home and experiencing a wide variety of cultures.",
+   "features": [
+    {
+     "name": "Nomadic Pack",
+     "text": "Add a Nomadic Pack to your inventory. Once per session, you can **spend aHope** to reach into this pack and pull out a mundane item that’s useful to your situation. Work with the GM to figure out what item you take out.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Nomadic Pack"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warborne",
+   "name": "Warborne",
+   "text": "Being part of a warborne community means you come from a place that is, or was, ravaged by war.",
+   "features": [
+    {
+     "name": "Brave Face",
+     "text": "Once per session when you would be forced to **mark a Stress**, you can **spend a Hope** instead.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Brave Face"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wildborne",
+   "name": "Wildborne",
+   "text": "Being part of a wildborne community means you lived deep within the forest.",
+   "features": [
+    {
+     "name": "Lightfoot",
+     "text": "Your movement is naturally silent. You have advantage on rolls to move without being heard."
+    }
+   ]
+  }
+ ]
+}

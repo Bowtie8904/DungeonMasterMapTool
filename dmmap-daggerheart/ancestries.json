@@ -1,0 +1,722 @@
+{
+ "format": "dmmap-daggerheart",
+ "version": 1,
+ "category": "ancestries",
+ "label": "Ancestries",
+ "entries": [
+  {
+   "id": "aetheris",
+   "name": "Aetheris",
+   "text": "Aetheris are humanoids most easily recognized by their wings and sacred markings.",
+   "features": [
+    {
+     "name": "Hallowed Aura",
+     "text": "Once per long rest when an ally within Close range rolls with **Fear**, you can change it into a **roll with Hope** instead.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Hallowed Aura"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Celestial Wings",
+     "text": "You have wings that allow you to fly. Once per scene while flying, you can **spend a Hope** instead of marking an Armor Slot.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "scene"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Celestial Wings"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "clank",
+   "name": "Clank",
+   "text": "Clanks are sentient mechanical beings built from a variety of materials, including metal, wood, and stone.",
+   "features": [
+    {
+     "name": "Purposeful Design",
+     "text": "Decide who made you and for what purpose. At character creation, choose one of your Experiences that best aligns with this purpose and gain a permanent +1 bonus to it."
+    },
+    {
+     "name": "Efficient",
+     "text": "When you take a short rest, you can choose a long rest move instead of a short rest move."
+    }
+   ]
+  },
+  {
+   "id": "drakona",
+   "name": "Drakona",
+   "text": "Drakona resemble wingless dragons in humanoid form and possess a powerful elemental breath.",
+   "features": [
+    {
+     "name": "Scales",
+     "text": "Your scales act as natural protection. When you would take Severe damage, you can **mark a Stress** to mark 1 fewer Hit Points.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Scales",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Elemental Breath",
+     "text": "Choose an element for your breath (such as electricity, fire, or ice). You can use this breath against a target or group of targets within Very Close range, treating it as an Instinct weapon that deals **d8** magic damage using your Proficiency."
+    }
+   ]
+  },
+  {
+   "id": "dwarf",
+   "name": "Dwarf",
+   "text": "Dwarves are most easily recognized as short humanoids with square frames, dense musculature, and thick hair.",
+   "features": [
+    {
+     "name": "Thick Skin",
+     "text": "When you take Minor damage, you can **mark 2 Stress** instead of marking a Hit Point."
+    },
+    {
+     "name": "Increased Fortitude",
+     "text": "**Spend 3 Hope** to halve incoming physical damage.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Increased Fortitude",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "earthkin",
+   "name": "Earthkin",
+   "text": "Earthkin are humanoids whose bodies are made of flesh and earth.",
+   "features": [
+    {
+     "name": "Stoneskin",
+     "text": "Gain a permanent **+1** bonus to your Armor Score and damage thresholds at character creation."
+    },
+    {
+     "name": "Immovable",
+     "text": "While you’re touching the ground, you can’t be lifted or moved against your will."
+    }
+   ]
+  },
+  {
+   "id": "elf",
+   "name": "Elf",
+   "text": "Elves are typically tall humanoids with pointed ears and acutely attuned senses.",
+   "features": [
+    {
+     "name": "Quick Reactions",
+     "text": "**Mark a Stress** to gain advantage on a reaction roll.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Quick Reactions",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Celestial Trance",
+     "text": "During a rest, you can drop into a trance to choose an additional downtime move."
+    }
+   ]
+  },
+  {
+   "id": "emberkin",
+   "name": "Emberkin",
+   "text": "Emberkin are humanoids whose bodies are made of flesh and fire.",
+   "features": [
+    {
+     "name": "Fireproof",
+     "text": "You are immune to damage from magical or mundane flame."
+    },
+    {
+     "name": "Ignition",
+     "text": "**Mark a Stress** to wreathe your primary weapon in flame until the end of the scene. While the weapon is ablaze, it gives off a bright light, and you gain a **1d6** bonus to damage rolls with that weapon.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Ignition",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "faerie",
+   "name": "Faerie",
+   "text": "Faeries are winged humanoid creatures with insectile features.",
+   "features": [
+    {
+     "name": "Luckbender",
+     "text": "Once per session, after you or a willing ally within Close range makes an action roll, you can **spend 3 Hope** to reroll the Duality Dice.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Luckbender",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Wings",
+     "text": "You can fly. While flying, you can **mark a Stress** after an adversary makes an attack against you to gain a +2 bonus to your Evasion against that attack.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Wings",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "faun",
+   "name": "Faun",
+   "text": "Fauns resemble humanoid goats with curving horns, square pupils, and cloven hooves.",
+   "features": [
+    {
+     "name": "Caprine Leap",
+     "text": "You can leap anywhere within Close range as though you were using normal movement, allowing you to vault obstacles, jump across gaps, or scale barriers with ease."
+    },
+    {
+     "name": "Kick",
+     "text": "When you succeed on an attack against a target within Melee range, you can **mark aStress** to kick yourself off them, dealing an extra **2d6** damage and knocking back either yourself or the target to Very Close range."
+    }
+   ]
+  },
+  {
+   "id": "firbolg",
+   "name": "Firbolg",
+   "text": "Firbolgs are bovine humanoids typically recognized by their broad noses and long, drooping ears.",
+   "features": [
+    {
+     "name": "Charge",
+     "text": "When you succeed on an Agility Roll to move from Far or Very Far range into Melee range with one or more targets, you can **mark a Stress** to deal **1d12** physical damage to all targets within Melee range.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Charge",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Unshakable",
+     "text": "When you would mark a Stress, roll a **d6**. On a result of 6, don’t mark it."
+    }
+   ]
+  },
+  {
+   "id": "fungril",
+   "name": "Fungril",
+   "text": "Fungril resemble humanoid mushrooms.",
+   "features": [
+    {
+     "name": "Fungril Network",
+     "text": "Make an **Instinct Roll** (**12**) to use your mycelial array to speak with others of your ancestry. On a success, you can communicate across any distance."
+    },
+    {
+     "name": "Death Connection",
+     "text": "While touching a corpse that died recently, you can **mark a Stress** to extract one memory from the corpse related to a specific emotion or sensation of your choice.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Death Connection",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "galapa",
+   "name": "Galapa",
+   "text": "Galapa resemble anthropomorphic turtles with large, domed shells into which they can retract.",
+   "features": [
+    {
+     "name": "Shell",
+     "text": "Gain a bonus to your damage thresholds equal to your Proficiency."
+    },
+    {
+     "name": "Retract",
+     "text": "**Mark a Stress** to retract into your shell. While in your shell, you have resistance to physical damage, you have disadvantage on action rolls, and you can’t move.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Retract",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "giant",
+   "name": "Giant",
+   "text": "Giants are towering humanoids with broad shoulders, long arms, and one to three eyes.",
+   "features": [
+    {
+     "name": "Endurance",
+     "text": "Gain an additional Hit Point slot at character creation."
+    },
+    {
+     "name": "Reach",
+     "text": "Treat any weapon, ability, spell, or other feature that has a Melee range as though it has a Very Close range instead."
+    }
+   ]
+  },
+  {
+   "id": "gnome",
+   "name": "Gnome",
+   "text": "Gnomes are typically small humanoids with conical heads and the ability to teleport short distances.",
+   "features": [
+    {
+     "name": "Nimble Fingers",
+     "text": "When you make a Finesse Roll, you can **spend 2 Hope** to reroll your Hope Die.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Nimble Fingers",
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Flicker Step",
+     "text": "Once per scene, you can teleport to another point you can see within Far range.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "scene"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Flicker Step"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "goblin",
+   "name": "Goblin",
+   "text": "Goblins are small humanoids easily recognizable by their large eyes and massive membranous ears.",
+   "features": [
+    {
+     "name": "Surefooted",
+     "text": "You ignore disadvantage on Agility Rolls."
+    },
+    {
+     "name": "Danger Sense",
+     "text": "Once per rest, **mark a Stress** to force an adversary to reroll an attack against you or an ally within Very Close range.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Danger Sense"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "halfling",
+   "name": "Halfling",
+   "text": "Halflings are small humanoids with large hairy feet and prominent rounded ears.",
+   "features": [
+    {
+     "name": "Luckbringer",
+     "text": "At the start of each session, everyone in your party gains a Hope."
+    },
+    {
+     "name": "Internal Compass",
+     "text": "When you roll a 1 on your Hope Die, you can reroll it."
+    }
+   ]
+  },
+  {
+   "id": "human",
+   "name": "Human",
+   "text": "Humans are most easily recognized by their dexterous hands, rounded ears, and bodies built for endurance.",
+   "features": [
+    {
+     "name": "High Stamina",
+     "text": "Gain an additional Stress slot at character creation."
+    },
+    {
+     "name": "Adaptability",
+     "text": "When you fail a roll that utilized one of your Experiences, you can **mark a Stress** to reroll.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Adaptability",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "infernis",
+   "name": "Infernis",
+   "text": "Infernis are humanoids who possess sharp canine teeth, pointed ears, and horns. They are the descendants of demons from the Circles Below.",
+   "features": [
+    {
+     "name": "Fearless",
+     "text": "When you roll with Fear, you can **mark 2 Stress** to change it into a roll with Hope instead.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Fearless",
+        "cost": {
+         "stress": 2
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Dread Visage",
+     "text": "You have advantage on rolls to intimidate hostile creatures."
+    }
+   ]
+  },
+  {
+   "id": "katari",
+   "name": "Katari",
+   "text": "Katari are feline humanoids with retractable claws, vertically slit pupils, and high, triangular ears.",
+   "features": [
+    {
+     "name": "Feline Instincts",
+     "text": "When you make an Agility Roll, you can **spend 2 Hope** to reroll your Hope Die.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Feline Instincts",
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Retracting Claws",
+     "text": "Make an **Agility Roll** to scratch a target within Melee range. On a success, they become temporarily *Vulnerable*."
+    }
+   ]
+  },
+  {
+   "id": "orc",
+   "name": "Orc",
+   "text": "Orcs are humanoids most easily recognized by their square features and boar-like tusks that protrude from their lower jaw.",
+   "features": [
+    {
+     "name": "Sturdy",
+     "text": "When you have 1 Hit Point remaining, attacks against you have disadvantage."
+    },
+    {
+     "name": "Tusks",
+     "text": "When you succeed on an attack against a target within Melee range, you can **spend a Hope** to gore the target with your tusks, dealing an extra **1d6** damage.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Tusks",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ribbet",
+   "name": "Ribbet",
+   "text": "Ribbets resemble anthropomorphic frogs with protruding eyes and webbed hands and feet.",
+   "features": [
+    {
+     "name": "Amphibious",
+     "text": "You can breathe and move naturally underwater."
+    },
+    {
+     "name": "Long Tongue",
+     "text": "You can use your long tongue to grab onto things within Close range. **Mark a Stress** to use your tongue as a Finesse Close weapon that deals **d12** physical damage using your Proficiency.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Long Tongue",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "simiah",
+   "name": "Simiah",
+   "text": "Simiah resemble anthropomorphic monkeys and apes with long limbs and prehensile feet.",
+   "features": [
+    {
+     "name": "Natural Climber",
+     "text": "You have advantage on Agility Rolls that involve balancing and climbing."
+    },
+    {
+     "name": "Nimble",
+     "text": "Gain a permanent +1 bonus to your Evasion at character creation."
+    }
+   ]
+  },
+  {
+   "id": "skykin",
+   "name": "Skykin",
+   "text": "Skykin are humanoids whose bodies are made of flesh and air.",
+   "features": [
+    {
+     "name": "Gale Force",
+     "text": "**Mark a Stress** to conjure a gust of wind that carries you or a Very Close ally up to Very Far range. Additionally, you can always control the speed at which you fall.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Gale Force",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Eye of the Storm",
+     "text": "**Spend 2 Hope** to grant you or an ally within Melee range a **+1** bonus to Evasion until you take Severe damage or you use this feature again.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Eye of the Storm",
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "tidekin",
+   "name": "Tidekin",
+   "text": "Tidekin are humanoids whose bodies are made of flesh and water.",
+   "features": [
+    {
+     "name": "Amphibious",
+     "text": "You can breathe and move naturally underwater."
+    },
+    {
+     "name": "Lifespring",
+     "text": "Once per rest when you have access to a small amount of water, you can **mark a Stress** to clear a Hit Point on yourself or an ally within Very Close range.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Lifespring",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ursusfolk",
+   "name": "Ursusfolk",
+   "text": "Ursir resemble anthropomorphic bears and most of them are deeply connected to nature.",
+   "features": [
+    {
+     "name": "Iron Skin",
+     "text": "Your whole Body act as natural protection. When you would take Major damage, you can **mark a Stress** to mark 1 fewer Hit Points.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Iron Skin",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Hunter's Nose",
+     "text": "Your nose is highly specialized. You have **advantage on Instinct Rolls** that involve smelling."
+    }
+   ]
+  },
+  {
+   "id": "centaur",
+   "name": "Centaur",
+   "text": "Centaurs have the upper body of a humanoid, and the lower body of a large horse.",
+   "features": [
+    {
+     "name": "Charge",
+     "text": "When you succeed on an Agility Roll to move from Far or Very Far range into Melee range with one or more targets, you can **mark a Stress** to deal 1d12 physical damage to all targets within Melee range.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Charge",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Kick",
+     "text": "When you succeed on an attack against a target within Melee range, you can **mark a Stress** to kick using your hooves, dealing an extra 2d6 damage and knocking back either yourself or the target to Very Close range.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Kick",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "birdfolk",
+   "name": "Birdfolk",
+   "text": "Avians resemble antropomorphic birds with strong wings and incredibly acute sight.",
+   "features": [
+    {
+     "name": "Hawkeye",
+     "text": "When you make an Attack Roll at Close range or further distance, you can **spend 2 Hope** to reroll your Hope Die.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Hawkeye",
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Sprint Flight",
+     "text": "You can fly. While flying, you can **mark a Stress** to move from Far distance as part of your action without making an Agility Roll.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Sprint Flight",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

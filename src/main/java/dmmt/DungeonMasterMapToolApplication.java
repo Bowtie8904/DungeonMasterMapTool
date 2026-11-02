@@ -10582,6 +10582,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 applySectionVisibility();
             }
         });
+        onlineController.setCompendiumDirectory(() -> AppSettings.resolveConfiguredFolder(preferences.getFile(),
+                Tuning.ONLINE_DAGGERHEART_DIR.get(), "dmmap-daggerheart"));
         onlinePanel = new dmmt.ui.OnlinePlayPanel(onlineController, new dmmt.ui.OnlinePlayPanel.Actions() {
             @Override public void placeActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
                 placeCampaignActor(campaign, actor);

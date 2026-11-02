@@ -1,4 +1,5 @@
 import { SessionInfo } from './protocol';
+import type { CharacterSheet } from './daggerheart/data';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public retryAfterSeconds?: number) {
@@ -55,6 +56,8 @@ export interface SheetData {
   id?: string;
   name?: string;
   artwork?: string;
+  /** The stored character sheet; null until the player has created one. */
+  sheet?: Partial<CharacterSheet> | null;
   [key: string]: unknown;
 }
 
@@ -62,4 +65,14 @@ export async function getSheet(actorId: string): Promise<SheetData> {
   const res = await fetch(`/api/sheet/${encodeURIComponent(actorId)}`, { credentials: 'same-origin' });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as SheetData;
+}
+
+export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise<void> {
+  const res = await fetch(`/api/sheet/${encodeURIComponent(actorId)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sheet),
+  });
+  if (!res.ok) throw await readError(res);
 }

@@ -74,6 +74,17 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         this.app = app;
     }
 
+    private java.util.function.Supplier<Path> compendiumDirectory = () -> null;
+
+    public void setCompendiumDirectory(java.util.function.Supplier<Path> supplier) {
+        this.compendiumDirectory = supplier;
+    }
+
+    @Override
+    public Path compendiumDirectory() {
+        return compendiumDirectory.get();
+    }
+
     public CampaignStore store() {
         return store;
     }

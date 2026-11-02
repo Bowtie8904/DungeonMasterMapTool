@@ -1,0 +1,119 @@
+Format: Daggerheart Communities TXT v2
+
+Name: Duneborne
+Short Description: Being part of a duneborne community means you’ve made a home among the shifting sands and arid climate of the desert. 
+Feature Count: 1
+Feature 1 Name: Oasis
+Feature 1 Description: During a short rest\, you or an ally can reroll a die used for a downtime move and take the higher result.
+
+---
+
+Name: Freeborne
+Short Description: Being part of a freeborne community means you’re from a collective that once lived under tyrannical rule but is now liberated.
+Feature Count: 1
+Feature 1 Name: Unbound
+Feature 1 Description: Once per session when you roll with <strong>Fear</strong>\, you can change it into a roll with <strong><strong>Hope</strong></strong> instead.
+
+---
+
+Name: Frostborne
+Short Description: Being part of a frostborne community means you come from a place of snow and ice. 
+Feature Count: 1
+Feature 1 Name: Hardy
+Feature 1 Description: When you take a rest\, you clear a Hit Point.
+
+---
+
+Name: Hearthborne
+Short Description: Being part of a hearthborne community means you come from humble origins\, having lived in a modest village or quaint countryside. 
+Feature Count: 1
+Feature 1 Name: Close-Knit
+Feature 1 Description: Once per long rest\, you can <strong>spend any number of Hope</strong> to grant an ally within Far range an equal number of Hope.
+
+---
+
+Name: Highborne
+Short Description: Being part of a highborne community means you’re accustomed to a life of elegance\, opulence\, and prestige within the upper echelons of society.
+Feature Count: 1
+Feature 1 Name: Privilege
+Feature 1 Description: You have advantage on rolls to consort with nobles\, negotiate prices\, or leverage your reputation to get what you want.
+
+---
+
+Name: Loreborne
+Short Description: Being part of a loreborne community means you’re from a society that favors strong academic or political prowess. 
+Feature Count: 1
+Feature 1 Name: Well-Read
+Feature 1 Description: You have advantage on rolls that involve the history\, culture\, or politics of a prominent person or place.
+
+---
+
+Name: Orderborne
+Short Description: Being part of an orderborne community means you’re from a collective that focuses on discipline or faith\, and you uphold a set of principles that reflect your experience there.
+Feature Count: 1
+Feature 1 Name: Dedicated
+Feature 1 Description: Record three sayings or values your upbringing instilled in you. Once per rest\, when you describe how you’re embodying one of these principles through your current action\, you can roll a <strong><strong>d20</strong></strong> as your Hope Die.
+
+---
+
+Name: Reborne
+Short Description: You were once a member of a different community that you’re no longer part of.
+Feature Count: 1
+Feature 1 Name: Found Family
+Feature 1 Description: Once per rest\, you can <strong>spend a Hope</strong> to use an ally’s Experience as if it were your own. When you do so\, describe how your time with that ally prepared you for this moment.\n<p class="Body-anc">When you join a new community or rediscover your old one\, you can permanently trade this card for that one instead.</p>
+
+---
+
+Name: Ridgeborne
+Short Description: Being part of a ridgeborne community means you’ve called the rocky peaks and sharp cliffs of the mountainside home. 
+Feature Count: 1
+Feature 1 Name: Steady
+Feature 1 Description: You have advantage on rolls to traverse dangerous cliffs and ledges\, navigate harsh environments\, and use your survival knowledge.
+
+---
+
+Name: Seaborne
+Short Description: Being part of a seaborne community means you lived on or near a large body of water.
+Feature Count: 1
+Feature 1 Name: Know the Tide
+Feature 1 Description: You can sense the ebb and flow of life. When you roll with Fear\, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll\, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session\, clear all unspent tokens.
+
+---
+
+Name: Slyborne
+Short Description: Being part of a slyborne community means you come from a group that operates outside the law\, including all manner of criminals\, grifters\, and con artists.
+Feature Count: 1
+Feature 1 Name: Scoundrel
+Feature 1 Description: You have advantage on rolls to negotiate with criminals\, detect lies\, or find a safe place to hide.
+
+---
+
+Name: Underborne
+Short Description: Being part of an underborne community means you’re from a subterranean society.
+Feature Count: 1
+Feature 1 Name: Low-Light Living
+Feature 1 Description: When you’re in an area with low light or heavy shadow\, you have advantage on rolls to hide\, investigate\, or perceive details within that area.
+
+---
+
+Name: Wanderborne
+Short Description: Being part of a wanderborne community means you’ve lived as a nomad\, forgoing a permanent home and experiencing a wide variety of cultures.
+Feature Count: 1
+Feature 1 Name: Nomadic Pack
+Feature 1 Description: Add a Nomadic Pack to your inventory. Once per session\, you can <strong>spend a</strong> <strong>Hope</strong> to reach into this pack and pull out a mundane item that’s useful to your situation. Work with the GM to figure out what item you take out.
+
+---
+
+Name: Warborne
+Short Description: Being part of a warborne community means you come from a place that is\, or was\, ravaged by war.
+Feature Count: 1
+Feature 1 Name: Brave Face
+Feature 1 Description: Once per session when you would be forced to <strong>mark a Stress</strong>\, you can <strong>spend a Hope</strong> instead.
+
+---
+
+Name: Wildborne
+Short Description: Being part of a wildborne community means you lived deep within the forest.
+Feature Count: 1
+Feature 1 Name: Lightfoot
+Feature 1 Description: Your movement is naturally silent. You have advantage on rolls to move without being heard.

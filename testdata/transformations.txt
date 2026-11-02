@@ -1,0 +1,59 @@
+Format: Daggerheart Transformations TXT v2
+
+Name: Demigod
+Short Description: Demigods are mortal creatures whose veins flow with the blood of the gods.
+Feature Count: 2
+Feature 1 Name: Gifted
+Feature 1 Description: You gain a +1 bonus to action\, reaction\, and damage rolls.
+Feature 2 Name: Weight of Divinity
+Feature 2 Description: When you fail a roll\, you must mark a Stress or the GM gains a Fear.
+
+---
+
+Name: Ghost
+Short Description: Ghosts are the spirits of the once-living who are bound to the Mortal Realm.
+Feature Count: 2
+Feature 1 Name: Unfinished Business
+Feature 1 Description: Work with your GM to decide what purpose or desire keeps you bound to the Mortal Realm. When you fulfill it\, you cross through the veil of death.
+Feature 2 Name: Ephemeral
+Feature 2 Description: Your body wavers in and out of being corporeal. You are resistant to physical damage\, take double magic damage\, and can <strong>mark 2 Stress</strong> to momentarily pass through a solid object.
+
+---
+
+Name: Reanimated
+Short Description: Reanimated are corpses who have been brought back to life.
+Feature Count: 2
+Feature 1 Name: Corpse
+Feature 1 Description: During a rest\, you can clear Hit Points only if you have access to remains from a recently deceased creature. Describe how you use these materials to maintain your corpse.
+Feature 2 Name: Won’t Stay Dead
+Feature 2 Description: When you choose the Risk It All death move and fail\, you can <strong>permanently mark a Hit Point</strong> to succeed instead. When you do\, you still use the Hope Die’s value to clear Hit Points and Stress. When you permanently mark your last Hit Point\, you pass through the veil of death.
+
+---
+
+Name: Shapeshifter
+Short Description: Shapeshifters are creatures who can change their physical form.
+Feature Count: 2
+Feature 1 Name: Change Shape
+Feature 1 Description: During a rest\, you can use a downtime move to swap your current ancestry with another. When you do\, describe how your appearance changes.
+Feature 2 Name: Only Skin Deep
+Feature 2 Description: You gain the benefit of only one of your chosen ancestry’s features\, which you select when you choose the ancestry. You can use a downtime move to choose a different feature from that ancestry.
+
+---
+
+Name: Vampire
+Short Description: Vampires are undead creatures with sharp fangs who feed on the blood of the living.
+Feature Count: 2
+Feature 1 Name: Fangs
+Feature 1 Description: Make an attack using a trait of your choice to bite a target within Melee range. On a success\, deal <strong>d6</strong> physical damage using your Proficiency.
+Feature 2 Name: Feed
+Feature 2 Description: On a successful “Fangs” attack against a creature that can bleed\, you can <strong>mark a Stress</strong> to feed. Place a number of tokens on this card equal to the number of Hit Points the target marks. You can hold up to 6 tokens at a time. Before you make an action roll\, you can spend a token to make your Fear Die a <strong>d20</strong>. When you take a long rest\, remove a token. While there are no tokens on this card\, you make action and reaction rolls with disadvantage.
+
+---
+
+Name: Werewolf
+Short Description: Werewolves are creatures who transform into large supernatural wolves.
+Feature Count: 2
+Feature 1 Name: Wolf Form
+Feature 1 Description: When you mark 1 or more Hit Points\, you can <strong>mark a Stress</strong> to enter your Wolf Form. While in this form\, you gain a <strong>1d10</strong> bonus to attack and damage rolls. When you roll with Hope while in Wolf Form\, you must mark a Stress. Your Wolf Form lasts until you go into your “Howling Rampage” or take a rest.
+Feature 2 Name: Howling Rampage
+Feature 2 Description: When you mark your last Stress while in Wolf Form\, you go into a rampage. Roll a number of <strong>d20</strong>s equal to your tier and deal that much physical damage to all creatures within Very Close range\, then drop out of Wolf Form.

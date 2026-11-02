@@ -3,8 +3,13 @@ import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
-import { OUTCOME_LABEL, dualityResult, dualitySucceeds, mockCharacter, signed } from './daggerheart/data';
+import { OUTCOME_LABEL, dualityResult, dualitySucceeds, signed } from './daggerheart/data';
+import { autosave, loadCharacter } from './daggerheart/persist';
 import { SheetWindow } from './daggerheart/window';
+import { SheetBus } from './daggerheart/view';
+import { addToSheet } from './daggerheart/compendium';
+import { CompendiumPanel } from './compendium';
+import type { CharacterSheet } from './daggerheart/data';
 import { MapTool } from './tools';
 import { MapView, MoveCommit } from './render';
 import { el } from './login';
@@ -15,7 +20,7 @@ import { Store } from './store';
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
 type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: RollMessage };
-type SidebarSection = 'chat' | 'actors' | 'settings';
+type SidebarSection = 'chat' | 'actors' | 'compendium' | 'settings';
 type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?: Overlay };
 
 export class App {
@@ -68,6 +73,22 @@ export class App {
   private log: LogEntry[] = [];
   private logEl = el('div', { class: 'log' });
   private actorsEl = el('div', { class: 'actors' });
+  private sheetHandles = new Map<string, { character: CharacterSheet; bus: SheetBus }>();
+  private myActors: Actor[] = [];
+  private compendium = new CompendiumPanel({
+    actors: () => this.myActors.map((a) => ({ id: a.id, name: a.name })),
+    add: async (id, category, entry) => {
+      const actor = this.myActors.find((a) => a.id === id);
+      if (!actor) return null;
+      let handle;
+      try { handle = await this.ensureSheet(actor); } catch { return null; }
+      const where = addToSheet(handle.character, category, entry);
+      if (where) handle.bus.notify();
+      return where ? `${actor.name}'s ${where}` : null;
+    },
+    toast: (t) => this.toast(t),
+    dragStart: () => { for (const a of this.myActors) this.openSheet(a); },
+  });
   private banner = el(
     'div',
     { class: 'banner hidden', role: 'status' },
@@ -250,9 +271,13 @@ export class App {
     rail.setAttribute('aria-label', 'Sidebar sections');
     this.sections.set('chat', this.buildChat());
     this.sections.set('actors', this.actorsEl);
+    this.sections.set('compendium', this.compendium.element);
     this.sections.set('settings', this.buildSettings());
-    for (const [id, label] of [['chat', 'Chat & dice'], ['actors', 'My actors'], ['settings', 'Settings']] as const) {
-      const button = iconButton(id, label, () => this.showSection(this.section === id ? null : id));
+    for (const [id, label] of [['chat', 'Chat & dice'], ['actors', 'My actors'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
+      const button = iconButton(id, label, () => {
+        this.showSection(this.section === id ? null : id);
+        if (id === 'compendium' && this.section === id) void this.compendium.open();
+      });
       button.setAttribute('aria-controls', 'player-sidebar');
       this.sectionButtons.set(id, button);
       rail.append(button);
@@ -743,34 +768,66 @@ export class App {
     return el('div', { class: 'entry roll' }, ...parts);
   }
 
-  private openSheet(a: Actor, toggle = false): void {
-    let win = this.sheetWindows.get(a.id);
-    if (!win) {
-      const character = mockCharacter();
-      character.name = a.name;
-      win = new SheetWindow(
-        {
-          character,
-          artwork: a.artwork,
-          onRoll: (r) => {
-            const sent = this.conn.send({ type: 'roll', expression: r.expression, label: r.label, kind: r.kind, difficulty: r.difficulty });
-            if (!sent) this.toast('Not connected. Your roll was not sent.');
-            return sent;
+  private sheetLoads = new Map<string, Promise<{ character: CharacterSheet; bus: SheetBus }>>();
+
+  private ensureSheet(a: Actor): Promise<{ character: CharacterSheet; bus: SheetBus }> {
+    let load = this.sheetLoads.get(a.id);
+    if (!load) {
+      load = loadCharacter(a.id, a.name).then((character) => {
+        const bus = new SheetBus();
+        const changed = autosave(a.id, character, (m) => this.toast(m));
+        this.sheetHandles.set(a.id, { character, bus });
+        const win = new SheetWindow(
+          {
+            character,
+            bus,
+            onChange: changed,
+            onLog: (text) => { this.conn.send({ type: 'chat', text, whisper: false }); },
+            artwork: a.artwork,
+            onRoll: (r) => {
+              const sent = this.conn.send({ type: 'roll', expression: r.expression, label: r.label, kind: r.kind, difficulty: r.difficulty });
+              if (!sent) this.toast('Not connected. Your roll was not sent.');
+              return sent;
+            },
           },
-        },
-        a.name,
-        () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'),
-        () => this.sheetButton?.setAttribute('aria-pressed', String([...this.sheetWindows.values()].some((w) => w.isOpen))),
-      );
-      this.sheetWindows.set(a.id, win);
-      this.stageEl.append(win.element);
+          a.name,
+          () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'),
+          () => this.sheetButton?.setAttribute('aria-pressed', String([...this.sheetWindows.values()].some((w) => w.isOpen))),
+          (payload) => this.dropOnSheet(a, payload),
+        );
+        this.sheetWindows.set(a.id, win);
+        this.stageEl.append(win.element);
+        return { character, bus };
+      });
+      load.catch(() => this.sheetLoads.delete(a.id));
+      this.sheetLoads.set(a.id, load);
     }
-    if (toggle) win.toggle();
-    else win.setOpen(true);
+    return load;
+  }
+
+  private openSheet(a: Actor, toggle = false, show = true): void {
+    this.ensureSheet(a).then(() => {
+      const win = this.sheetWindows.get(a.id)!;
+      if (toggle) win.toggle();
+      else if (show) win.setOpen(true);
+    }).catch((e: Error) => this.toast(`Cannot load the character sheet: ${e.message}`));
+  }
+
+  private dropOnSheet(a: Actor, payload: string): void {
+    try {
+      const { category, entry } = JSON.parse(payload);
+      const handle = this.sheetHandles.get(a.id);
+      const where = handle ? addToSheet(handle.character, category, entry) : null;
+      if (where) handle!.bus.notify();
+      this.toast(where ? ` + ' added to .' + ` : 'This entry cannot be added to a sheet.');
+    } catch {
+      this.toast('Could not read the dropped entry.');
+    }
   }
 
   private renderActors(s: GameState): void {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
+    this.myActors = mine;
     this.firstActor = mine[0];
     this.sheetButton?.classList.toggle('hidden', mine.length === 0);
     this.actorsEl.replaceChildren(
@@ -814,3 +871,5 @@ export class App {
     this.overlay.classList.remove('hidden');
   }
 }
+
+

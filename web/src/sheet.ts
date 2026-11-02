@@ -2,7 +2,8 @@ import { getSheet } from './api';
 import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
-import { mockCharacter } from './daggerheart/data';
+import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
+import { autosave } from './daggerheart/persist';
 import { renderSheetView } from './daggerheart/view';
 
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
@@ -10,16 +11,20 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let unauthorized = false;
   let shown = false;
   let allowed = false;
-  const character = mockCharacter();
+  let character: CharacterSheet | undefined;
+  let changed: () => void = () => {};
   const refresh = () => {
     const actor = store.state?.actors.find((a) => a.id === actorId);
-    if (shown || !allowed || !actor) return;
+    if (shown || !allowed || !actor || !character) return;
     shown = true;
-    character.name = actor.name;
+    const sheet = character;
     document.title = `${actor.name} - Daggerheart`;
+    changed = autosave(actorId, sheet, (m) => { document.title = m; });
     const view = renderSheetView({
-      character,
+      character: sheet,
       artwork: actor.artwork,
+      onChange: () => changed(),
+      onLog: (text) => { conn.send({ type: 'chat', text, whisper: false }); },
       onRoll: (r) => conn.send({ type: 'roll', expression: r.expression, label: r.label, kind: r.kind, difficulty: r.difficulty }),
     });
     view.classList.add('dh-popout');
@@ -52,7 +57,9 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   );
   conn.start();
   try {
-    await getSheet(actorId);
+    const res = await getSheet(actorId);
+    const name = store.state?.actors.find((a) => a.id === actorId)?.name ?? res.name ?? 'Character';
+    character = res.sheet ? normalizeSheet(res.sheet, name) : emptyCharacter(name);
     allowed = true;
     if (!unauthorized) refresh();
   } catch (e) {

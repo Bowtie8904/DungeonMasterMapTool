@@ -272,6 +272,8 @@ public final class Tuning {
             "Let players' browsers play the DM's music and sound effects during an online session (the DM can toggle it per session).");
     public static final Setting<String> ONLINE_CAMPAIGNS_DIR = text(ONLINE, "online.campaignsDirectory", "", false,
             "Folder holding the Online Play campaigns. Empty uses a dmmap-campaigns folder beside the settings file.");
+    public static final Setting<String> ONLINE_DAGGERHEART_DIR = text(ONLINE, "online.daggerheartDirectory", "", false,
+            "Folder with the Daggerheart compendium JSON files served to players. Empty uses a dmmap-daggerheart folder beside the settings file.");
     public static final Setting<String> ONLINE_PAUSE_KEY = text(ONLINE, "online.pauseKey", "SPACE", false,
             "Key that pauses and resumes a running online session (JavaFX KeyCode name such as SPACE or F9; empty disables). Ignored while typing.");
     public static final Setting<Integer> ONLINE_MAX_IMAGE_EDGE = integer(ONLINE, "online.maxImageEdge", 4096, 512, 16384, false,

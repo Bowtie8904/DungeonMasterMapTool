@@ -246,6 +246,14 @@ Folder holding campaigns: players (password hashes), actors, actor folders, artw
 
 **Keywords:** online, campaign, storage, folder, dmmap-campaigns.
 
+### `online.daggerheartDirectory`
+
+**Default:** empty (a `dmmap-daggerheart` folder beside the settings file). **Applies:** Live (read on every compendium request).
+
+Folder with the Daggerheart compendium JSON files (classes, ancestries, armor, weapons, domain cards, consumables, ...) that players browse in the Compendium tab of the online client and that drive sheet automation. Every `*.json` file in the folder becomes a compendium category, so homebrew files can be added next to the shipped ones; the format is described in `docs/DAGGERHEART_DATA.md`. Relative paths resolve against the folder of the settings file.
+
+**Keywords:** online, daggerheart, compendium, armor, weapons, domain cards, homebrew, dmmap-daggerheart.
+
 ### `online.pauseKey`
 
 **Default:** `SPACE`. **Applies:** Live.

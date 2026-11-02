@@ -64,6 +64,9 @@ public final class OnlineSessionServer {
 
         default void measurementsChanged() { }
 
+        /** Folder with the Daggerheart compendium JSON files (docs/DAGGERHEART_DATA.md); null disables it. */
+        default java.nio.file.Path compendiumDirectory() { return null; }
+
         default CompletableFuture<MoveResult> editDrawing(String playerId, JsonNode command) {
             return CompletableFuture.completedFuture(MoveResult.rejected("Drawing is unavailable on this host"));
         }
@@ -175,6 +178,9 @@ public final class OnlineSessionServer {
         javalin.post("/api/login", this::handleLogin);
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/sheet/{id}", this::handleSheet);
+        javalin.put("/api/sheet/{id}", this::handleSheetSave);
+        javalin.get("/api/compendium", this::handleCompendiumIndex);
+        javalin.get("/api/compendium/{category}", this::handleCompendiumCategory);
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
         javalin.get("/a/{name}", this::handleAsset);
         javalin.get("/t/{key}/{level}/{tile}", this::handleTile);
@@ -637,6 +643,59 @@ public final class OnlineSessionServer {
         return playerId;
     }
 
+    private static final java.util.regex.Pattern COMPENDIUM_NAME = java.util.regex.Pattern.compile("[a-z0-9-]{1,64}");
+
+    private void handleCompendiumIndex(Context ctx) {
+        if (requirePlayer(ctx) == null) {
+            return;
+        }
+        ArrayNode categories = MAPPER.createArrayNode();
+        java.nio.file.Path dir = host.compendiumDirectory();
+        if (dir != null && java.nio.file.Files.isDirectory(dir)) {
+            try (var files = java.nio.file.Files.list(dir)) {
+                files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().forEach(p -> {
+                    String name = p.getFileName().toString();
+                    name = name.substring(0, name.length() - 5);
+                    if (!COMPENDIUM_NAME.matcher(name).matches()) {
+                        return;
+                    }
+                    try {
+                        JsonNode doc = MAPPER.readTree(p.toFile());
+                        ObjectNode c = categories.addObject();
+                        c.put("category", name);
+                        c.put("label", doc.path("label").asText(name));
+                        c.put("count", doc.path("entries").size());
+                    } catch (IOException ignored) {
+                        // a malformed homebrew file is skipped
+                    }
+                });
+            } catch (IOException ignored) {
+                // unreadable folder: report no categories
+            }
+        }
+        ObjectNode body = MAPPER.createObjectNode();
+        body.set("categories", categories);
+        json(ctx, 200, body);
+    }
+
+    private void handleCompendiumCategory(Context ctx) {
+        if (requirePlayer(ctx) == null) {
+            return;
+        }
+        String name = ctx.pathParam("category");
+        java.nio.file.Path dir = host.compendiumDirectory();
+        java.nio.file.Path file = dir == null || !COMPENDIUM_NAME.matcher(name).matches() ? null : dir.resolve(name + ".json");
+        if (file == null || !java.nio.file.Files.isRegularFile(file)) {
+            json(ctx, 404, errorBody("Unknown compendium category"));
+            return;
+        }
+        try {
+            ctx.status(200).contentType("application/json").result(java.nio.file.Files.readAllBytes(file));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Compendium unavailable"));
+        }
+    }
+
     private void handleSheet(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) {
@@ -649,13 +708,49 @@ public final class OnlineSessionServer {
             return;
         }
         ObjectNode body = MAPPER.createObjectNode();
-        body.put("mock", true);
         body.put("actorId", actor.getId());
         body.put("name", actor.getName());
-        body.put("note", "Placeholder sheet. Nothing here is saved.");
-        ObjectNode stats = body.putObject("stats");
-        stats.put("Level", 1).put("HP", 10).put("AC", 12).put("Speed", 30);
+        try {
+            String stored = store.loadSheet(c.getId(), actor.getId());
+            if (stored == null) {
+                body.putNull("sheet");
+            } else {
+                body.set("sheet", MAPPER.readTree(stored));
+            }
+        } catch (IOException e) {
+            body.putNull("sheet");
+        }
         json(ctx, 200, body);
+    }
+
+    static final int MAX_SHEET_BYTES = 512 * 1024;
+
+    private void handleSheetSave(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) {
+            return;
+        }
+        Campaign c = campaign;
+        Campaign.Actor actor = c == null ? null : c.actor(ctx.pathParam("id"));
+        if (actor == null || !playerId.equals(actor.getOwnerId())) {
+            json(ctx, 403, errorBody("Not your actor"));
+            return;
+        }
+        byte[] bytes = ctx.bodyAsBytes();
+        if (bytes.length > MAX_SHEET_BYTES) {
+            json(ctx, 413, errorBody("Sheet is too large"));
+            return;
+        }
+        try {
+            if (!MAPPER.readTree(bytes).isObject()) {
+                json(ctx, 400, errorBody("Sheet must be a JSON object"));
+                return;
+            }
+            store.saveSheet(c.getId(), actor.getId(), new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            json(ctx, 200, MAPPER.createObjectNode().put("saved", true));
+        } catch (IOException e) {
+            json(ctx, 400, errorBody("Invalid sheet"));
+        }
     }
 
     private void handleArtwork(Context ctx) {

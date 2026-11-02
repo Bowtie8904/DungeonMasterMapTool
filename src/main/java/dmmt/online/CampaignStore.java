@@ -226,6 +226,29 @@ public final class CampaignStore {
         return dir(campaignId).resolve("artwork").resolve(hash + ".png");
     }
 
+    // ---- character sheets ----
+
+    private Path sheetFile(String campaignId, String actorId) {
+        if (!safeId(actorId)) {
+            throw new IllegalArgumentException("Invalid actor id");
+        }
+        return dir(campaignId).resolve("sheets").resolve(actorId + ".json");
+    }
+
+    /** Stored sheet JSON of an actor, or {@code null} when it was never saved. */
+    public synchronized String loadSheet(String campaignId, String actorId) throws IOException {
+        Path file = sheetFile(campaignId, actorId);
+        return Files.isRegularFile(file) ? Files.readString(file, java.nio.charset.StandardCharsets.UTF_8) : null;
+    }
+
+    public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
+        Path file = sheetFile(campaignId, actorId);
+        Files.createDirectories(file.getParent());
+        Path temp = file.resolveSibling(actorId + ".json.tmp");
+        Files.writeString(temp, json, java.nio.charset.StandardCharsets.UTF_8);
+        Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+    }
+
     public static String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));

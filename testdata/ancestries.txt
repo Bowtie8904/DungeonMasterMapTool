@@ -1,0 +1,269 @@
+Format: Daggerheart Ancestries TXT v2
+
+Name: Aetheris
+Short Description: Aetheris are humanoids most easily recognized by their wings and sacred markings. 
+Feature Count: 2
+Feature 1 Name: Hallowed Aura
+Feature 1 Description: Once per long rest when an ally within Close range rolls with <strong>Fear</strong>\, you can change it into a <strong>roll with Hope</strong> instead.
+Feature 2 Name: Celestial Wings
+Feature 2 Description: You have wings that allow you to fly. Once per scene while flying\, you can <strong>spend a Hope</strong> instead of marking an Armor Slot.
+
+---
+
+Name: Clank
+Short Description: Clanks are sentient mechanical beings built from a variety of materials\, including metal\, wood\, and stone.
+Feature Count: 2
+Feature 1 Name: Purposeful Design
+Feature 1 Description: Decide who made you and for what purpose. At character creation\, choose one of your Experiences that best aligns with this purpose and gain a permanent +1 bonus to it.
+Feature 2 Name: Efficient
+Feature 2 Description: When you take a short rest\, you can choose a long rest move instead of a short rest move.
+
+---
+
+Name: Drakona
+Short Description: Drakona resemble wingless dragons in humanoid form and possess a powerful elemental breath. 
+Feature Count: 2
+Feature 1 Name: Scales
+Feature 1 Description: Your scales act as natural protection. When you would take Severe damage\, you can <strong>mark a </strong><strong>Stress</strong> to mark 1 fewer Hit Points.
+Feature 2 Name: Elemental Breath
+Feature 2 Description: Choose an element for your breath (such as electricity\, fire\, or ice). You can use this breath against a target or group of targets within Very Close range\, treating it as an Instinct weapon that deals <strong>d8</strong> magic damage using your Proficiency.
+
+---
+
+Name: Dwarf
+Short Description: Dwarves are most easily recognized as short humanoids with square frames\, dense musculature\, and thick hair.
+Feature Count: 2
+Feature 1 Name: Thick Skin
+Feature 1 Description: When you take Minor damage\, you can <strong>mark 2 </strong><strong>Stress</strong> instead of marking a Hit Point.
+Feature 2 Name: Increased Fortitude
+Feature 2 Description: <strong>Spend 3 </strong><strong>Hope</strong> to halve incoming physical damage.
+
+---
+
+Name: Earthkin
+Short Description: Earthkin are humanoids whose bodies are made of flesh and earth. 
+Feature Count: 2
+Feature 1 Name: Stoneskin
+Feature 1 Description: Gain a permanent <strong>+1</strong> bonus to your Armor Score and damage thresholds at character creation.
+Feature 2 Name: Immovable
+Feature 2 Description: While you’re touching the ground\, you can’t be lifted or moved against your will.
+
+---
+
+Name: Elf
+Short Description: Elves are typically tall humanoids with pointed ears and acutely attuned senses.
+Feature Count: 2
+Feature 1 Name: Quick Reactions
+Feature 1 Description: <strong>Mark a </strong><strong>Stress</strong> to gain advantage on a reaction roll.
+Feature 2 Name: Celestial Trance
+Feature 2 Description: During a rest\, you can drop into a trance to choose an additional downtime move.
+
+---
+
+Name: Emberkin
+Short Description: Emberkin are humanoids whose bodies are made of flesh and fire.
+Feature Count: 2
+Feature 1 Name: Fireproof
+Feature 1 Description: You are immune to damage from magical or mundane flame.
+Feature 2 Name: Ignition
+Feature 2 Description: <strong>Mark a Stress</strong> to wreathe your primary weapon in flame until the end of the scene. While the weapon is ablaze\, it gives off a bright light\, and you gain a <strong>1d6</strong> bonus to damage rolls with that weapon.
+
+---
+
+Name: Faerie
+Short Description: Faeries are winged humanoid creatures with insectile features.
+Feature Count: 2
+Feature 1 Name: Luckbender
+Feature 1 Description: Once per session\, after you or a willing ally within Close range makes an action roll\, you can <strong>spend 3 </strong><strong>Hope</strong> to reroll the Duality Dice.
+Feature 2 Name: Wings
+Feature 2 Description: You can fly. While flying\, you can <strong>mark a </strong><strong>Stress</strong> after an adversary makes an attack against you to gain a +2 bonus to your Evasion against that attack.
+
+---
+
+Name: Faun
+Short Description: Fauns resemble humanoid goats with curving horns\, square pupils\, and cloven hooves.
+Feature Count: 2
+Feature 1 Name: Caprine Leap
+Feature 1 Description: You can leap anywhere within Close range as though you were using normal movement\, allowing you to vault obstacles\, jump across gaps\, or scale barriers with ease.
+Feature 2 Name: Kick
+Feature 2 Description: When you succeed on an attack against a target within Melee range\, you can <strong>mark a</strong> <strong>Stress</strong> to kick yourself off them\, dealing an extra <strong>2d6</strong> damage and knocking back either yourself or the target to Very Close range.
+
+---
+
+Name: Firbolg
+Short Description: Firbolgs are bovine humanoids typically recognized by their broad noses and long\, drooping ears. 
+Feature Count: 2
+Feature 1 Name: Charge
+Feature 1 Description: When you succeed on an Agility Roll to move from Far or Very Far range into Melee range with one or more targets\, you can <strong>mark a </strong><strong>Stress</strong> to deal <strong>1d12</strong> physical damage to all targets within Melee range.
+Feature 2 Name: Unshakable
+Feature 2 Description: When you would mark a Stress\, roll a <strong>d6</strong>. On a result of 6\, don’t mark it.
+
+---
+
+Name: Fungril
+Short Description: Fungril resemble humanoid mushrooms.
+Feature Count: 2
+Feature 1 Name: Fungril Network
+Feature 1 Description: Make an <strong>Instinct</strong><strong> Roll</strong> (<strong>12</strong>) to use your mycelial array to speak with others of your ancestry. On a success\, you can communicate across any distance.
+Feature 2 Name: Death Connection
+Feature 2 Description: While touching a corpse that died recently\, you can <strong>mark a </strong><strong>Stress</strong> to extract one memory from the corpse related to a specific emotion or sensation of your choice.
+
+---
+
+Name: Galapa
+Short Description: Galapa resemble anthropomorphic turtles with large\, domed shells into which they can retract.
+Feature Count: 2
+Feature 1 Name: Shell
+Feature 1 Description: Gain a bonus to your damage thresholds equal to your Proficiency.
+Feature 2 Name: Retract
+Feature 2 Description: <strong>Mark a </strong><strong>Stress</strong> to retract into your shell. While in your shell\, you have resistance to physical damage\, you have disadvantage on action rolls\, and you can’t move.
+
+---
+
+Name: Giant
+Short Description: Giants are towering humanoids with broad shoulders\, long arms\, and one to three eyes.
+Feature Count: 2
+Feature 1 Name: Endurance
+Feature 1 Description: Gain an additional Hit Point slot at character creation.
+Feature 2 Name: Reach
+Feature 2 Description: Treat any weapon\, ability\, spell\, or other feature that has a Melee range as though it has a Very Close range instead.
+
+---
+
+Name: Gnome
+Short Description: Gnomes are typically small humanoids with conical heads and the ability to teleport short distances. 
+Feature Count: 2
+Feature 1 Name: Nimble Fingers
+Feature 1 Description: When you make a Finesse Roll\, you can <strong>spend 2 Hope</strong> to reroll your Hope Die.
+Feature 2 Name: Flicker Step
+Feature 2 Description: Once per scene\, you can teleport to another point you can see within Far range.
+
+---
+
+Name: Goblin
+Short Description: Goblins are small humanoids easily recognizable by their large eyes and massive membranous ears.
+Feature Count: 2
+Feature 1 Name: Surefooted
+Feature 1 Description: You ignore disadvantage on Agility Rolls.
+Feature 2 Name: Danger Sense
+Feature 2 Description: Once per rest\, <strong>mark a </strong><strong>Stress</strong> to force an adversary to reroll an attack against you or an ally within Very Close range.
+
+---
+
+Name: Halfling
+Short Description: Halflings are small humanoids with large hairy feet and prominent rounded ears.
+Feature Count: 2
+Feature 1 Name: Luckbringer
+Feature 1 Description: At the start of each session\, everyone in your party gains a Hope.
+Feature 2 Name: Internal Compass
+Feature 2 Description: When you roll a 1 on your Hope Die\, you can reroll it.
+
+---
+
+Name: Human
+Short Description: Humans are most easily recognized by their dexterous hands\, rounded ears\, and bodies built for endurance.
+Feature Count: 2
+Feature 1 Name: High Stamina
+Feature 1 Description: Gain an additional Stress slot at character creation.
+Feature 2 Name: Adaptability
+Feature 2 Description: When you fail a roll that utilized one of your Experiences\, you can <strong>mark a Stress</strong> to reroll.
+
+---
+
+Name: Infernis
+Short Description: Infernis are humanoids who possess sharp canine teeth\, pointed ears\, and horns. They are the descendants of demons from the Circles Below.
+Feature Count: 2
+Feature 1 Name: Fearless
+Feature 1 Description: When you roll with Fear\, you can <strong>mark 2&nbsp;</strong><strong>Stress</strong> to change it into a roll with Hope instead.
+Feature 2 Name: Dread Visage
+Feature 2 Description: You have advantage on rolls to intimidate hostile creatures.
+
+---
+
+Name: Katari
+Short Description: Katari are feline humanoids with retractable claws\, vertically slit pupils\, and high\, triangular ears. 
+Feature Count: 2
+Feature 1 Name: Feline Instincts
+Feature 1 Description: When you make an Agility Roll\, you can <strong>spend 2 </strong><strong>Hope</strong> to reroll your Hope Die.
+Feature 2 Name: Retracting Claws
+Feature 2 Description: Make an <strong>Agility Roll</strong> to scratch a target within Melee range. On a success\, they become temporarily <em>Vulnerable</em>.
+
+---
+
+Name: Orc
+Short Description: Orcs are humanoids most easily recognized by their square features and boar-like tusks that protrude from their lower jaw.
+Feature Count: 2
+Feature 1 Name: Sturdy
+Feature 1 Description: When you have 1 Hit Point remaining\, attacks against you have disadvantage.
+Feature 2 Name: Tusks
+Feature 2 Description: When you succeed on an attack against a target within Melee range\, you can <strong>spend a </strong><strong>Hope</strong> to gore the target with your tusks\, dealing an extra <strong>1d6</strong> damage.
+
+---
+
+Name: Ribbet
+Short Description: Ribbets resemble anthropomorphic frogs with protruding eyes and webbed hands and feet.
+Feature Count: 2
+Feature 1 Name: Amphibious
+Feature 1 Description: You can breathe and move naturally underwater.
+Feature 2 Name: Long Tongue
+Feature 2 Description: You can use your long tongue to grab onto things within Close range. <strong>Mark a </strong><strong>Stress</strong> to use your tongue as a Finesse Close weapon that deals <strong>d12</strong> physical damage using your Proficiency.
+
+---
+
+Name: Simiah
+Short Description: Simiah resemble anthropomorphic monkeys and apes with long limbs and prehensile feet.
+Feature Count: 2
+Feature 1 Name: Natural Climber
+Feature 1 Description: You have advantage on Agility Rolls that involve balancing and climbing.
+Feature 2 Name: Nimble
+Feature 2 Description: Gain a permanent +1 bonus to your Evasion at character creation.
+
+---
+
+Name: Skykin
+Short Description: Skykin are humanoids whose bodies are made of flesh and air. 
+Feature Count: 2
+Feature 1 Name: Gale Force
+Feature 1 Description: <strong>Mark a Stress</strong> to conjure a gust of wind that carries you or a Very Close ally up to Very Far range. Additionally\, you can always control the speed at which you fall.
+Feature 2 Name: Eye of the Storm
+Feature 2 Description: <strong>Spend 2 Hope</strong> to grant you or an ally within Melee range a <strong>+1</strong> bonus to Evasion until you take Severe damage or you use this feature again.
+
+---
+
+Name: Tidekin
+Short Description: Tidekin are humanoids whose bodies are made of flesh and water.
+Feature Count: 2
+Feature 1 Name: Amphibious
+Feature 1 Description: You can breathe and move naturally underwater.
+Feature 2 Name: Lifespring
+Feature 2 Description: Once per rest when you have access to a small amount of water\, you can <strong>mark a Stress</strong> to clear a Hit Point on yourself or an ally within Very Close range.
+
+---
+
+Name: Ursusfolk
+Short Description: Ursir resemble anthropomorphic bears and most of them are deeply connected to nature.
+Feature Count: 2
+Feature 1 Name: Iron Skin
+Feature 1 Description: Your whole Body act as natural protection. When you would take Major damage\, you can <strong>mark a Stress</strong> to mark 1 fewer Hit Points.
+Feature 2 Name: Hunter's Nose
+Feature 2 Description: Your nose is highly specialized. You have <strong>advantage on Instinct Rolls</strong> that involve smelling.
+
+---
+
+Name: Centaur
+Short Description: Centaurs have the upper body of a humanoid\, and the lower body of a large horse.
+Feature Count: 2
+Feature 1 Name: Charge
+Feature 1 Description: When you succeed on an Agility Roll to move from Far or Very Far range into Melee range with one or more targets\, you can <strong>mark a Stress</strong> to deal 1d12 physical damage to all targets within Melee range.
+Feature 2 Name: Kick
+Feature 2 Description: When you succeed on an attack against a target within Melee range\, you can <strong>mark a Stress</strong> to kick using your hooves\, dealing an extra 2d6 damage and knocking back either yourself or the target to Very Close range.
+
+---
+
+Name: Birdfolk
+Short Description: Avians resemble antropomorphic birds with strong wings and incredibly acute sight.
+Feature Count: 2
+Feature 1 Name: Hawkeye
+Feature 1 Description: When you make an Attack Roll at Close range or further distance\, you can <strong>spend 2 Hope</strong> to reroll your Hope Die.
+Feature 2 Name: Sprint Flight
+Feature 2 Description: You can fly. While flying\, you can <strong>mark a Stress</strong> to move from Far distance as part of your action without making an Agility Roll.

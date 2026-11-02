@@ -41,7 +41,29 @@ Nothing starts until you click **Start online session**, so offline play and the
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
   Trait tiles use highlighted teal borders to stand out from the other character stats.
-  The sheet currently shows a mock character held in memory only; real data import and persistence come later.
+  Sheets are saved on the host per actor (`<campaign>/sheets/<actorId>.json`, debounced autosave) and reload on
+  the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
+- **Daggerheart Character Mancer and level-up guide**: a new actor's sheet only shows a "Start the Character Mancer"
+  prompt. The wizard shows one small choice per step (class, subclass, ancestry, community, an optional transformation,
+  traits, primary weapon, secondary weapon, armor, supplies,
+  background, Experiences, domain cards, connections, identity, review) with Back/Next and a progress bar, and builds
+  the full sheet from the compendium. The sheet's **Level up** button starts a second wizard (tier-milestone Experience,
+  two advancement points, per-advancement details, new domain card, optional card swap). All choices are remembered
+  in the sheet (`mancer.choices`, `levelUps`); The advancement slot counts per tier are an
+  editable table (`ADVANCEMENT_RULES` in `web/src/daggerheart/rules.ts`). **Transformations** (Hope & Fear, from
+  `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
+  "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
+  shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header names any multiclass.
+- **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
+  holds the converted Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
+  transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
+  section of the sidebar (below Actors) and can drag armor, weapons, potions and items onto an open sheet (or use the Add
+  button) to put them in the matching tab. Entries with
+  automation act on the sheet: armor sets evasion, thresholds and armor slots, features and potions get action
+  buttons (spend a resource, heal, gain Hope), and buffs/debuffs appear in the sheet's new **Effects** tab - e.g. a
+  Control Potion adds +1 to the next Finesse roll and is then removed. Short/Long rest buttons expire effects and
+  reset uses. Entries without automation stay readable text. Regenerate the files with
+  `python tools/daggerheart/convert.py`.
   The account becomes available when its last tab disconnects, on logout or when you kick the player.
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
@@ -1066,3 +1088,4 @@ category, music file and sound effect**, addressed by the entry's library id
 (`/api/controls/audio/category/<id>`, `/api/controls/audio/track/<id>`, `/api/controls/audio/effect/<id>`), so renaming never breaks a configured
 button and a stream deck can switch the whole ambience with one press. `GET /api/controls` lists every endpoint
 with its current name.
+
