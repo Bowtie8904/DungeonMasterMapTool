@@ -1803,7 +1803,7 @@ public class CanvasMapRenderer {
         boolean indoorDarkness = preset == TimeOfDayPreset.NIGHT || PerformanceMode.indoorDarkness();
         double nightDarkness = TimeOfDayPreset.NIGHT.darkness(project.getLighting().ambientBrightnessFor("NIGHT"))
                 * (playerMode ? 1.0 : Tuning.DM_DARKNESS_FACTOR.get());
-        List<DmProject.LightSource> lights = project.getLighting().getLights();
+        List<DmProject.LightSource> lights = project.effectiveLights();
         int fps = animationFps;
         long now = (long) (Math.floor(System.currentTimeMillis() * fps / 1000.0) * 1000.0 / fps);
         double zoom = camera.getZoom();
@@ -2092,7 +2092,7 @@ public class CanvasMapRenderer {
                 : 0;
         double zoom = camera.getZoom();
         List<BrightCoreLight> lightKeys = new java.util.ArrayList<>();
-        for (DmProject.LightSource light : project.getLighting().getLights()) {
+        for (DmProject.LightSource light : project.effectiveLights()) {
             boolean active = light.isEnabled()
                     && lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
                     && lightRangeTouchesScreen(light, width, height, camera);
@@ -2112,7 +2112,7 @@ public class CanvasMapRenderer {
         }
         gc.clearRect(0, 0, width, height);
         boolean drawn = false;
-        for (DmProject.LightSource light : project.getLighting().getLights()) {
+        for (DmProject.LightSource light : project.effectiveLights()) {
             if (!light.isEnabled() || !lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
                     || !lightRangeTouchesScreen(light, width, height, camera)) {
                 continue;

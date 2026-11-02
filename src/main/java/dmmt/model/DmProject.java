@@ -108,6 +108,38 @@ public class DmProject {
         private double rotationDeg;
         private boolean playerVisible;
         private boolean nameVisible;
+        /** Optional light attached to this instance only (not part of the token definition); {@code null} when absent. */
+        private LightSource light;
+
+        /** The attached light always sits at the token center, so it follows every move, rotation and undo. */
+        public LightSource getLight() {
+            if (light != null) {
+                light.setX(x);
+                light.setY(y);
+            }
+            return light;
+        }
+    }
+
+    /** Lights placed on the map plus the lights attached to tokens, in that order. */
+    public List<LightSource> effectiveLights() {
+        List<LightSource> free = lighting.getLights();
+        if (tokens == null || tokens.stream().noneMatch(t -> t.getLight() != null)) {
+            return free;
+        }
+        List<LightSource> all = new ArrayList<>(free);
+        for (TokenInstance token : tokens) {
+            LightSource attached = token.getLight();
+            if (attached != null) {
+                all.add(attached);
+            }
+        }
+        return all;
+    }
+
+    /** Id of the light attached to the given token instance. */
+    public static String tokenLightId(String tokenId) {
+        return "token-light-" + tokenId;
     }
 
     @Builder.Default

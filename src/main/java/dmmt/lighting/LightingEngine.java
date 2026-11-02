@@ -45,7 +45,7 @@ public class LightingEngine {
         FogMask mask = before.getFog().getMask();
         lastMaskCellSize = mask == null ? Double.NaN : mask.getCellSize();
         markPersistentRevealsApplied(before);
-        for (var light : before.getLighting().getLights()) {
+        for (var light : before.effectiveLights()) {
             if (light.getRevealMode() != DmProject.RevealMode.PERSISTENT || !before.getFog().isEnabled()) {
                 lastPersistentKey.remove(light.getId());
             }
@@ -94,7 +94,7 @@ public class LightingEngine {
         boolean fogEnabled = project.getFog().isEnabled();
         StringBuilder liveKey = new StringBuilder();
 
-        for (DmProject.LightSource light : project.getLighting().getLights()) {
+        for (DmProject.LightSource light : project.effectiveLights()) {
             if (light.getId() == null) {
                 continue;
             }
@@ -145,7 +145,7 @@ public class LightingEngine {
             return;
         }
         refreshGeometry(project);
-        for (DmProject.LightSource light : project.getLighting().getLights()) {
+        for (DmProject.LightSource light : project.effectiveLights()) {
             if (light.getId() != null && light.isEnabled()) {
                 lastPersistentKey.put(light.getId(), visibility(light).key);
             }
@@ -187,7 +187,7 @@ public class LightingEngine {
     private void rebuildLiveReveal(DmProject project, FogMask mask) {
         BitSet next = new BitSet();
         if (mask != null) {
-            for (DmProject.LightSource light : project.getLighting().getLights()) {
+            for (DmProject.LightSource light : project.effectiveLights()) {
                 if (light.getId() == null || !light.isEnabled() || light.getRevealMode() != DmProject.RevealMode.WHILE_LIT) {
                     continue;
                 }

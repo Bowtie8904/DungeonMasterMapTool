@@ -1360,6 +1360,7 @@ having to know the control's units. An explicit amount overrides it.
 - Library image/crop, shape, border, name and color edits propagate to every map using that token; placed positions, sizes, rotation, visibility and name-tag flags remain independent. Maps retain self-contained token definitions so deleting the library entry or exporting/importing elsewhere preserves the full state. Imported map tokens need not enter the token browser.
 - Reusable definitions and nested logical folders live in `dmmap-tokens/tokens.json` beside the settings file. Deleting tokens or folders permanently removes their library metadata and PNG assets not shared by remaining entries, including obsolete artwork. Maps retain their own last-saved copies; deletion does not first update unopened maps. While a token remains in the library, opening, saving or exporting a map resolves its latest definition. Common raster imports include PNG, JPEG, GIF, BMP, WebP and TIFF; unreadable formats report an explicit error.
 - Token browser controls must be hideable through Settings and reachable through the local control API. Document the workflow in README and any new settings in `docs/SETTINGS.md`.
+- **Token lights:** a placed token instance (never a library definition, so it is not pulled in with the template) can carry its own light. The token context menu offers **Add light (torch)** (default: the Torch light preset) and, once present, a **Light** submenu with the same options as a map light's menu (Light on, Fog reveal, Range, Brightness, Flicker, Color, Blocked by walls) except **Remove light**; switching it off disables it. The light is stored on the instance (`TokenInstance.light`, id `token-light-<tokenId>`), always sits at the token center and follows moves, rotation and map rotation. It is lit/fog-revealed like any light via `DmProject.effectiveLights()`, but has no separate light glyph or selection. Adding/changing it is undoable; it is copied, pasted (with a fresh id), persisted and exported with the token. Adds optional token JSON, so remote compatibility version is 4.
 - Editor Ctrl+V pastes a clipboard image without stealing ordinary text paste. Crop centers may reach the source image edges, exposing transparent space outside the source. Hidden instances use the standard crossed-out-eye badge. Token artwork is shaded by lighting; DM badges and labels remain legible above lighting.
 - Token originals and crops are PNG files referenced by relative paths, in the library's `images` folder and each map's `assets\tokens` folder, rather than Base64 in persisted JSON. Existing embedded images remain readable and migrate on save. Content-addressed assets preserve frozen snapshots and export includes the latest linked assets without changing the source map.
 - Runtime definitions reference immutable file-backed artwork rather than retaining Base64 originals. Originals are decoded only in the editor; rendered crops load lazily into a byte-budgeted cache. Session-owned artwork snapshots survive library cleanup and map relocation and are removed at shutdown. Token artwork has independent retained DM/player canvases below lighting, so token movement does not invalidate the map background. Preserve hidden/player/freeze behavior, legacy saves, shared library updates and export portability.
@@ -1513,6 +1514,8 @@ having to know the control's units. An explicit amount overrides it.
   contents recursively within the cache quota while rejecting symlinks, escapes and malformed files.
   Remote compatibility version 2 carries bounded authenticated failure details in operation replies
   and workspace-wait statuses; both PCs must update for this diagnostic contract.
+  Version 4 adds the optional per-token `light` object to token instances in snapshots and edits;
+  strict remote decoding rejects it on older peers, so both PCs must update.
 - Keep a persistent banner/status indicator: "Remote control - <session> on <host>", connection status,
   current transfer/error status and Disconnect. A shows "Hosting - <client>" with revoke/stop access.
 - In remote mode, normal Save/Open/library actions target A. Import pickers and drag/drop read B's
@@ -1945,6 +1948,7 @@ history. Explicit Save exposes a persistence completion future for subsequent ma
 
 ## 9) Change Log
 
+- **Token lights (3.38):** per-instance light on placed tokens via the token context menu (default torch), with the map light options except removal; remote compatibility version 4.
 - **Application logging (3.40):** consistent dmmt.log.Log logging with console + rotating file output in a `logs` folder, configurable level, replacing ad-hoc `System.err` prints.
 - **LAN remote workspace control (3.39):** opt-in Session menu, pinned TLS pairing/approval, one-client
   authority, locally rendered DM replica, shared settings/history, host-backed map/token/audio libraries

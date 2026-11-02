@@ -399,6 +399,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private double fogCurrentWorldY;
     private FogMask.Snapshot fogBeforeSnapshot;
     private FogMask.Snapshot lightDragFogBefore;
+    private FogMask.Snapshot tokenDragFogBefore;
     private BitSet roomBarrier;
     private long roomBarrierSignature;
     private RoomFillService.Result roomPreview;
@@ -3340,6 +3341,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 clearSingleSelection();
                 selectedTokenId = token.getId();
                 tokenDragBefore = cloneToken(token);
+                tokenDragFogBefore = token.getLight() == null ? null : snapshotFog();
                 tokenPressX = world.x();
                 tokenPressY = world.y();
                 draggingToken = !handle && !rotationHandle;
@@ -4268,7 +4270,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         return candidate.getOverlays().stream().anyMatch(o -> animated && OverlayTextures.isMoving(o.getTexture())
                 || flicker && o.isEmitsLight() && OverlayTextures.lightFlicker(o.getTexture()) > 0)
-                || flicker && candidate.getLighting().getLights().stream().anyMatch(l -> l.isEnabled()
+                || flicker && candidate.effectiveLights().stream().anyMatch(l -> l.isEnabled()
                 && l.getFlicker() != null && l.getFlicker().isEnabled() && l.getFlicker().getStrength() > 0);
     }
 
@@ -8523,6 +8525,9 @@ public class DungeonMasterMapToolApplication extends Application {
         for (DmProject.TokenInstance source : content.tokens) {
             var copy = cloneToken(source);
             copy.setId(UUID.randomUUID().toString());
+            if (copy.getLight() != null) {
+                copy.getLight().setId(DmProject.tokenLightId(copy.getId()));
+            }
             copy.setX(copy.getX() + dx);
             copy.setY(copy.getY() + dy);
             tokens.add(copy);
@@ -8761,7 +8766,8 @@ public class DungeonMasterMapToolApplication extends Application {
         return DmProject.TokenInstance.builder().id(token.getId()).definitionId(token.getDefinitionId())
                 .x(token.getX()).y(token.getY()).sizeTiles(token.getSizeTiles())
                 .rotationDeg(token.getRotationDeg())
-                .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible()).build();
+                .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible())
+                .light(token.getLight() == null ? null : cloneLight(token.getLight())).build();
     }
 
     private void applyTokenState(String id, DmProject.TokenInstance state) {
@@ -8844,6 +8850,12 @@ public class DungeonMasterMapToolApplication extends Application {
         return distance(x, y, point.getX(), point.getY()) <= 10 / Math.max(.01, zoom);
     }
 
+    /** True when moving these group keys can change persistent light reveals (free lights or tokens with a light). */
+    private boolean movesFogLight(java.util.Collection<String> keys) {
+        return keys.stream().anyMatch(key -> key.startsWith("light:")
+                || key.startsWith("token:") && findToken(keyId(key)) != null && findToken(keyId(key)).getLight() != null);
+    }
+
     private void finishTokenDrag() {
         if (tokenDragBefore != null) {
             DmProject.TokenInstance current = findToken(tokenDragBefore.getId());
@@ -8852,11 +8864,18 @@ public class DungeonMasterMapToolApplication extends Application {
                 var after = cloneToken(current);
                 LOG.info("Token '{}': {}", tokenName(current),
                         rotatingToken ? "rotated" : resizingToken ? "resized" : "moved");
-                recordHistory(rotatingToken ? "Rotate token" : resizingToken ? "Resize token" : "Move token",
-                        () -> applyTokenState(after.getId(), after), () -> applyTokenState(before.getId(), before));
+                String label = rotatingToken ? "Rotate token" : resizingToken ? "Resize token" : "Move token";
+                Runnable redo = () -> applyTokenState(after.getId(), after);
+                Runnable undo = () -> applyTokenState(before.getId(), before);
+                if (tokenDragFogBefore != null) {
+                    recordWithFog(label, tokenDragFogBefore, redo, undo);
+                } else {
+                    recordHistory(label, redo, undo);
+                }
             }
         }
         tokenDragBefore = null;
+        tokenDragFogBefore = null;
         draggingToken = false;
         resizingToken = false;
         rotatingToken = false;
@@ -8881,9 +8900,34 @@ public class DungeonMasterMapToolApplication extends Application {
                 }).ifPresent(value -> changeToken(id, "Resize token", t -> t.setSizeTiles(Double.parseDouble(value)))));
         MenuItem remove = new MenuItem("Remove token from map");
         remove.setOnAction(e -> removeToken(id));
+        java.util.List<MenuItem> items = new java.util.ArrayList<>(java.util.List.of(visible, name, size));
+        DmProject.LightSource attached = token.getLight();
+        if (attached == null) {
+            MenuItem addLight = new MenuItem("Add light (torch)");
+            addLight.setOnAction(e -> addTokenLight(id));
+            items.add(addLight);
+        } else {
+            Menu lightMenu = new Menu("Light");
+            lightMenu.getItems().addAll(lightMenuItems(attached, false));
+            items.add(lightMenu);
+        }
+        items.add(new SeparatorMenuItem());
+        items.add(remove);
         hideLightMenu();
-        activeLightMenu = new ContextMenu(visible, name, size, new SeparatorMenuItem(), remove);
+        activeLightMenu = new ContextMenu(items.toArray(new MenuItem[0]));
         activeLightMenu.show(dmCanvas, screenX, screenY);
+    }
+
+    private void addTokenLight(String id) {
+        DmProject.TokenInstance token = findToken(id);
+        if (token == null || token.getLight() != null) return;
+        DmProject.LightSource light = presetLight(DmProject.tokenLightId(id), token.getX(), token.getY(), LightPreset.TORCH);
+        DmProject.TokenInstance before = cloneToken(token);
+        DmProject.TokenInstance after = cloneToken(token);
+        after.setLight(light);
+        LOG.info("Token '{}': added light", tokenName(token));
+        executeWithFogHistory("Add token light", () -> applyTokenState(id, after), () -> applyTokenState(id, before));
+        status("Added a torch to the token. Right-click it to change the light.");
     }
 
     private void drawTokenSelection(GraphicsContext gc) {
@@ -9021,7 +9065,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 groupPressX = worldX;
                 groupPressY = worldY;
                 groupStartPositions = captureGroupPositions();
-                groupFogBefore = groupKeys.stream().anyMatch(k -> k.startsWith("light:")) ? snapshotFog() : null;
+                groupFogBefore = movesFogLight(groupKeys) ? snapshotFog() : null;
                 return true;
             }
             clearGroup();
@@ -9214,7 +9258,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (nudgeStartPositions == null) {
             nudgeStartPositions = capturePositions(keys);
-            nudgeFogBefore = keys.stream().anyMatch(key -> key.startsWith("light:")) ? snapshotFog() : null;
+            nudgeFogBefore = movesFogLight(keys) ? snapshotFog() : null;
         }
         nudgeArrowKeys.add(code);
         double step = project.getMap().getGrid().getPixelsPerCell() * (event.isShiftDown() ? 1.0 : 0.1);
@@ -9437,8 +9481,21 @@ public class DungeonMasterMapToolApplication extends Application {
     // ---- Light context menu ----
 
     private void showLightContextMenu(DmProject.LightSource light, double screenX, double screenY) {
-        String id = light.getId();
         ContextMenu menu = new ContextMenu();
+        menu.getItems().addAll(lightMenuItems(light, true));
+        hideLightMenu();
+        activeLightMenu = menu;
+        menu.setOnHidden(e -> {
+            if (activeLightMenu == menu) {
+                activeLightMenu = null;
+            }
+        });
+        menu.show(dmCanvas, screenX, screenY);
+    }
+
+    /** The shared light options; token lights omit removal because they are switched off instead. */
+    private java.util.List<MenuItem> lightMenuItems(DmProject.LightSource light, boolean withRemove) {
+        String id = light.getId();
 
         CheckMenuItem power = new CheckMenuItem("Light on");
         power.setSelected(light.isEnabled());
@@ -9526,18 +9583,14 @@ public class DungeonMasterMapToolApplication extends Application {
         shadows.setSelected(light.isCastsShadows());
         shadows.setOnAction(e -> updateLight(id, "Toggle light wall blocking", l -> l.setCastsShadows(shadows.isSelected())));
 
-        MenuItem remove = new MenuItem("Remove light");
-        remove.setOnAction(e -> removeLight(id));
-
-        menu.getItems().addAll(power, new SeparatorMenuItem(), revealMenu, rangeMenu, brightnessMenu, flickerMenu, colorMenu, shadows, new SeparatorMenuItem(), remove);
-        hideLightMenu();
-        activeLightMenu = menu;
-        menu.setOnHidden(e -> {
-            if (activeLightMenu == menu) {
-                activeLightMenu = null;
-            }
-        });
-        menu.show(dmCanvas, screenX, screenY);
+        java.util.List<MenuItem> items = new java.util.ArrayList<>(java.util.List.of(power, new SeparatorMenuItem(), revealMenu, rangeMenu, brightnessMenu, flickerMenu, colorMenu, shadows));
+        if (withRemove) {
+            MenuItem remove = new MenuItem("Remove light");
+            remove.setOnAction(e -> removeLight(id));
+            items.add(new SeparatorMenuItem());
+            items.add(remove);
+        }
+        return items;
     }
 
     private void showOverlayContextMenu(DmProject.OverlayShape shape, double screenX, double screenY) {
@@ -9572,7 +9625,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void updateLight(String id, String label, Consumer<DmProject.LightSource> mutator) {
-        DmProject.LightSource light = findLightById(id);
+        DmProject.LightSource light = findAnyLightById(id);
         if (light == null) {
             return;
         }
@@ -9584,7 +9637,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private void applyLightState(DmProject.LightSource state) {
-        DmProject.LightSource light = findLightById(state.getId());
+        DmProject.LightSource light = findAnyLightById(state.getId());
         if (light == null) {
             return;
         }
@@ -10000,9 +10053,9 @@ public class DungeonMasterMapToolApplication extends Application {
         }
     }
 
-    private void addLightAt(double x, double y, LightPreset preset) {
-        DmProject.LightSource light = DmProject.LightSource.builder()
-                .id("light-" + UUID.randomUUID())
+    private DmProject.LightSource presetLight(String id, double x, double y, LightPreset preset) {
+        return DmProject.LightSource.builder()
+                .id(id)
                 .x(x)
                 .y(y)
                 .range(project.getMap().getGrid().getPixelsPerCell() * preset.rangeTiles())
@@ -10010,6 +10063,10 @@ public class DungeonMasterMapToolApplication extends Application {
                 .flicker(DmProject.Flicker.builder().enabled(preset.flicker())
                         .strength(preset.flickerStrength()).speed(preset.flickerSpeed()).build())
                 .build();
+    }
+
+    private void addLightAt(double x, double y, LightPreset preset) {
+        DmProject.LightSource light = presetLight("light-" + UUID.randomUUID(), x, y, preset);
         executeWithFogHistory(
                 "Add light",
                 () -> {
@@ -11691,6 +11748,14 @@ public class DungeonMasterMapToolApplication extends Application {
         return project.getLighting().getLights().stream().filter(l -> id.equals(l.getId())).findFirst().orElse(null);
     }
 
+    private DmProject.LightSource findAnyLightById(String id) {
+        DmProject.LightSource free = findLightById(id);
+        if (free != null || id == null) {
+            return free;
+        }
+        return project.effectiveLights().stream().filter(l -> id.equals(l.getId())).findFirst().orElse(null);
+    }
+
     private DmProject.LightSource pickNearestLight(double x, double y, double maxDistance) {
         DmProject.LightSource nearest = null;
         double best = maxDistance;
@@ -11739,7 +11804,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 .build();
     }
 
-    private DmProject.LightSource cloneLight(DmProject.LightSource source) {
+    private static DmProject.LightSource cloneLight(DmProject.LightSource source) {
         return DmProject.LightSource.builder()
                 .id(source.getId())
                 .x(source.getX())
