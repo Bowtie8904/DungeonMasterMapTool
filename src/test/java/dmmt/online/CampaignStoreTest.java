@@ -19,6 +19,34 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void deletingHistoryPersistsAndDoesNotDeleteReusedLegacyIds() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Chat");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "older session");
+        var second = mapper.createObjectNode().put("id", 1).put("ts", 20).put("text", "newer session");
+        store.appendHistoryChecked(campaign.getId(), first);
+        store.appendHistoryChecked(campaign.getId(), second);
+        store.deleteHistoryEntry(campaign.getId(), 1, 20);
+        assertEquals(List.of(first), new CampaignStore(dir).historyTail(campaign.getId(), 100));
+        org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
+                () -> store.deleteHistoryEntry(campaign.getId(), 1, 20));
+        assertEquals(List.of(first), store.historyTail(campaign.getId(), 100));
+    }
+
+    @Test
+    void damagedHistoryReportsDeletionFailureWithoutChangingTheFile() throws Exception {
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Chat");
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        String original = "{\"id\":1,\"ts\":10}\nnot json\n";
+        Files.writeString(history, original);
+        org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
+                () -> store.deleteHistoryEntry(campaign.getId(), 1, 10));
+        assertEquals(original, Files.readString(history));
+    }
+
+    @Test
     void interruptedTransferReplaysBothSheetsBeforeReadsAndSaves() throws Exception {
         CampaignStore store = new CampaignStore(dir);
         Campaign campaign = store.create("Transfer");

@@ -1715,9 +1715,10 @@
         {
          "op": "effect",
          "effect": {
-          "name": "Insomniac's Periapt",
+          "name": "Attack and Damage +2",
           "kind": "buff",
           "until": "rest",
+          "text": "If you clear no HP or Stress during a rest, gain +2 to attack and damage rolls until the next rest.",
           "modifiers": [
            {
             "roll": "attack",

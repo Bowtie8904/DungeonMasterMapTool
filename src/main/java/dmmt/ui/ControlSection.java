@@ -28,6 +28,7 @@ public class ControlSection extends VBox {
 
         VBox body = new VBox(content);
         body.getStyleClass().add("section-body");
+        VBox.setVgrow(body, javafx.scene.layout.Priority.ALWAYS);
         getChildren().addAll(header, body);
 
         railButton = Icons.toggle(ikon, title);

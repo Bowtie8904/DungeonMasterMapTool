@@ -69,7 +69,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   - `clear` (`hp`, `stress`, `armor` or a custom id; `amount` number, dice string, supported formula or `all`)
   - `gain` (`hope` or custom ids), `mark` (`hp`, `stress`, `armor` or custom ids), with numeric/dice/formula amounts
   - `effect` (`{name, kind: buff|debuff, until: manual|rest|shortRest|longRest|scene|session, text, modifiers}`) adds
-    an entry to the Effects tab.
+    an entry to the Effects tab. `name` is the concise effect label shown in action reports and the tab, not the
+    item/card/feature that granted it; the granting source is tracked separately. Use `text` for the effect details.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.

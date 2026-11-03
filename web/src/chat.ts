@@ -4,6 +4,7 @@ import { OUTCOME_LABEL, dualityResult, dualitySucceeds, signed } from './daggerh
 import { renderSharedCard, type SharedCard } from './shared-cards';
 import { parseRestReport } from './daggerheart/rest-summary';
 import { parseDamageReport } from './daggerheart/damage-summary';
+import { parseActionReport } from './daggerheart/action-summary';
 import { rich } from './daggerheart/rich';
 
 export type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: RollMessage };
@@ -54,10 +55,11 @@ export function rollDetails(m: RollMessage): RollDetail[] {
 }
 
 function rollContent(m: RollMessage): HTMLElement {
+  const secret = m.secret === true;
   const details = rollDetails(m);
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
-  const kept = keptRolls(m.expression, values);
-  const duality = m.kind === 'duality' && values.length >= 2;
+  const kept = secret ? values.map(() => true) : keptRolls(m.expression, values);
+  const duality = !secret && m.kind === 'duality' && values.length >= 2;
   const dice = el('div', { class: 'roll-dice' });
   let index = 0;
   for (const detail of details) {
@@ -67,19 +69,21 @@ function rollContent(m: RollMessage): HTMLElement {
       if (duality && n > 1) continue;
       const name = duality ? (n === 0 ? 'Hope' : 'Fear') : `d${sides}`;
       const discarded = kept[n] === false;
-      const tile = el('span', { class: `roll-die${discarded ? ' discarded' : ''}${duality ? (n === 0 ? ' hope' : ' fear') : ''}`, title: `${detail.label}: ${value}${discarded ? ' (discarded)' : ''}` },
-        el('span', { class: 'roll-die-name' }, name), el('strong', {}, String(value)));
-      tile.setAttribute('aria-label', `${name}: ${value}${discarded ? ' (discarded)' : ''}`);
+      const shown = secret ? '?' : String(value);
+      const tile = el('span', { class: `roll-die${discarded ? ' discarded' : ''}${duality ? (n === 0 ? ' hope' : ' fear') : ''}${secret ? ' secret' : ''}`, title: secret ? `${name}: secret` : `${detail.label}: ${value}${discarded ? ' (discarded)' : ''}` },
+        el('span', { class: 'roll-die-name' }, name), el('strong', {}, shown));
+      tile.setAttribute('aria-label', `${name}: ${secret ? 'secret' : value}${discarded ? ' (discarded)' : ''}`);
       dice.append(tile);
     }
   }
   const modifier = m.total - (duality ? values[0] + values[1] : values.reduce((n, v, i) => n + (kept[i] ? v : 0), 0));
   const equation = el('div', { class: 'roll-equation' }, dice,
-    el('span', { class: `roll-modifier${modifier < 0 ? ' negative' : ''}`, title: duality ? 'Combined modifiers, including bonus dice' : 'Combined modifiers' }, signed(modifier)),
+    ...(secret ? [] : [el('span', { class: `roll-modifier${modifier < 0 ? ' negative' : ''}`, title: duality ? 'Combined modifiers, including bonus dice' : 'Combined modifiers' }, signed(modifier))]),
     el('span', { class: 'roll-equals' }, '='),
-    el('div', { class: 'roll-total' }, el('span', {}, 'TOTAL'), el('strong', {}, String(m.total))));
+    el('div', { class: 'roll-total' }, el('span', {}, 'TOTAL'), el('strong', {}, secret ? '?' : String(m.total))));
   const body = el('div', { class: 'roll-body' },
-    el('div', { class: 'roll-title' }, m.label ?? (duality ? 'Duality roll' : 'Dice roll')), equation);
+    el('div', { class: 'roll-title' }, m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')), equation);
+  if (secret) return body;
   if (duality) {
     const r = dualityResult(values, m.total);
     const badges = el('div', { class: 'roll-outcomes' }, el('span', { class: `roll-outcome ${r.outcome}` }, OUTCOME_LABEL[r.outcome]));
@@ -118,7 +122,8 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     el('time', { dateTime: new Date(m.ts).toISOString(), title: new Date(m.ts).toLocaleString() }, time));
   const report = e.kind === 'chat' && !m.toId && !e.m.sharedCard ? parseRestReport(e.m.text) : null;
   const damage = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !report ? parseDamageReport(e.m.text) : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
+  const action = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !report && !damage ? parseActionReport(e.m.text) : null;
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));
@@ -142,6 +147,19 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
           ' damage'),
         el('span', { class: `damage-severity${damage.severity === 'Negated' ? ' negated' : ''}` }, damage.severity))));
     if (damage.lines.length) card.append(el('ul', { class: 'damage-lines' }, ...damage.lines.map((l) => el('li', {}, l))));
+    return card;
+  }
+  if (action) {
+    card.append(el('div', { class: 'action-banner' }, el('strong', {}, 'Action used')),
+      el('div', { class: 'action-title' }, action.title),
+      el('ul', { class: 'action-lines' }, ...action.lines.map((l) => el('li', {}, l))));
+    if (m.rollSource) {
+      card.append(el('details', { class: 'roll-source' },
+        el('summary', {}, `Source: ${m.rollSource.name}`),
+        el('div', { class: 'roll-source-content' },
+          el('div', { class: 'shared-source' }, m.rollSource.source),
+          el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
+    }
     return card;
   }
   card.append(e.kind === 'roll' ? rollContent(e.m) : e.m.sharedCard

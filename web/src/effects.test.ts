@@ -6,15 +6,21 @@ import type { ActiveEffect } from './daggerheart/engine';
 describe('effectSource', () => {
   const effect = (over: Partial<ActiveEffect> = {}): ActiveEffect => ({ id: 'e1', name: 'Fury', kind: 'buff', source: "Patron's Fury", ...over });
 
-  it('returns the full feature that started the effect', () => {
+  it('shows the action source and effect details', () => {
     const c = emptyCharacter('A');
     c.features.push({ source: 'Subclass', name: "Patron's Fury", text: 'Full feature text.' });
-    expect(effectSource(c, effect())).toEqual({ title: "Patron's Fury", text: 'Full feature text.' });
+    expect(effectSource(c, effect({ text: 'Patron dice add to damage.' }))).toEqual({
+      title: "From Patron's Fury",
+      text: 'Patron dice add to damage.\n\nFull feature text.',
+    });
   });
 
   it('falls back to the effect text, then null', () => {
     const c = emptyCharacter('A');
-    expect(effectSource(c, effect({ text: 'Own text' }))).toEqual({ title: 'Fury', text: 'Own text' });
-    expect(effectSource(c, effect())).toBeNull();
+    expect(effectSource(c, effect({ source: 'Control Potion - Drink', text: 'Next Finesse Roll +1.' }))).toEqual({
+      title: 'From Control Potion - Drink',
+      text: 'Next Finesse Roll +1.',
+    });
+    expect(effectSource(c, effect({ source: undefined }))).toBeNull();
   });
 });

@@ -69,7 +69,7 @@ public final class AppSettings {
         addControls(controls, "session", "browser|DM Link tab");
         addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
                 "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link",
-                "fearDown|Fear counter minus", "fearUp|Fear counter plus");
+                "fearDown|Fear counter minus", "fearUp|Fear counter plus", "chat|Chat tab (shown while hosting)");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
                 "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");

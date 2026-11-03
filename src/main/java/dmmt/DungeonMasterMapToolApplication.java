@@ -338,6 +338,10 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox imageUnlockBanner;
     private HBox onlinePausedBanner;
     private dmmt.ui.FearOverlay fearOverlay;
+    private dmmt.ui.ChatPanel chatPanel;
+    private Runnable flyoutRelayout;
+    private ControlSection chatSection;
+    private boolean chatHosted;
     private Label onlinePausedHint;
     private ToggleButton playerWindowToggle;
     private ToggleButton playerGridToggle;
@@ -649,6 +653,9 @@ public class DungeonMasterMapToolApplication extends Application {
             if (onlineController != null) onlineController.adjustFear(delta);
         });
         center.getChildren().add(fearOverlay);
+        fearOverlay.onReservedHeightChanged(() -> {
+            if (flyoutRelayout != null) flyoutRelayout.run();
+        });
         center.getChildren().add(createBrushSizeLabel());
         remoteTransferOverlay = new dmmt.ui.RemoteTransferOverlay();
         center.getChildren().add(remoteTransferOverlay);
@@ -1675,7 +1682,40 @@ public class DungeonMasterMapToolApplication extends Application {
             audioControls.setApiControlsChangedHandler(this::registerAudioApiControls);
         }
 
+        chatPanel = new dmmt.ui.ChatPanel(new dmmt.ui.ChatPanel.Backend() {
+            @Override public List<com.fasterxml.jackson.databind.JsonNode> history() {
+                return onlineController == null || !onlineController.running() ? List.of() : onlineController.chatHistory(200);
+            }
+            @Override public void send(String text, String toPlayerId) {
+                if (onlineController != null) onlineController.sendChat(text, toPlayerId);
+            }
+            @Override public String roll(String expression, String toPlayerId, boolean secret) {
+                return onlineController == null ? "Not hosting." : onlineController.rollDice(expression, toPlayerId, secret);
+            }
+            @Override public String delete(long id, long timestamp) {
+                return onlineController == null ? "Not hosting." : onlineController.deleteChatMessage(id, timestamp);
+            }
+            @Override public int remaining(com.fasterxml.jackson.databind.JsonNode sharedCard) {
+                return onlineController == null ? 0 : onlineController.cardRemaining(sharedCard);
+            }
+            @Override public List<dmmt.ui.ChatPanel.Recipient> recipients() {
+                if (onlineController == null) return List.of();
+                return onlineController.roster().stream().filter(r -> r.connections() > 0)
+                        .map(r -> new dmmt.ui.ChatPanel.Recipient(r.playerId(), r.playerName())).toList();
+            }
+        });
+        chatSection = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", chatPanel);
+        var chatIcon = Icons.icon(MaterialDesignC.CHAT_OUTLINE);
+        var unreadDot = new javafx.scene.shape.Circle(4);
+        unreadDot.getStyleClass().add("chat-unread-dot");
+        unreadDot.setMouseTransparent(true);
+        unreadDot.visibleProperty().bind(chatPanel.unreadProperty());
+        StackPane chatGraphic = new StackPane(chatIcon, unreadDot);
+        StackPane.setAlignment(unreadDot, Pos.TOP_RIGHT);
+        chatSection.railButton().setGraphic(chatGraphic);
+
         List<ControlSection> sectionList = List.of(
+                chatSection,
                 new ControlSection("Tools", MaterialDesignC.CURSOR_DEFAULT, "tools", toolsRow),
                 new ControlSection("Fog of war", MaterialDesignW.WEATHER_FOG, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new ControlSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
@@ -1698,14 +1738,21 @@ public class DungeonMasterMapToolApplication extends Application {
         flyout.setMaxWidth(268);
         flyout.setVisible(false);
         flyout.setManaged(false);
+        boolean[] chatShown = {false};
         ScrollPane scroll = new ScrollPane(flyout) {
             @Override
             protected double computePrefHeight(double width) {
                 var in = getInsets();
+                if (chatShown[0] && mapCenter != null) {
+                    double reserved = fearOverlay == null ? 14 : fearOverlay.reservedHeight();
+                    return Math.max(260, mapCenter.getHeight() - 10 - reserved);
+                }
                 double inner = width < 0 ? getPrefWidth() - in.getLeft() - in.getRight() : width - in.getLeft() - in.getRight();
                 return Math.ceil(flyout.prefHeight(Math.max(0, inner)) + in.getTop() + in.getBottom()) + 2;
             }
         };
+        flyoutRelayout = scroll::requestLayout;
+        if (mapCenter != null) mapCenter.heightProperty().addListener((o, a, b) -> scroll.requestLayout());
         scroll.getStyleClass().add("dm-flyout-scroll");
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
@@ -1732,6 +1779,19 @@ public class DungeonMasterMapToolApplication extends Application {
                 flyout.getChildren().add(dmSections.get((String) newToggle.getUserData()));
             }
             boolean open = newToggle != null;
+            boolean chatOpen = open && "chat".equals(newToggle.getUserData());
+            double width = chatOpen ? 400 : 268;
+            flyout.setPrefWidth(width);
+            flyout.setMaxWidth(width);
+            scroll.setPrefWidth(width);
+            scroll.setMaxWidth(width);
+            chatShown[0] = chatOpen;
+            scroll.setFitToHeight(chatOpen);
+            if (chatOpen) {
+                VBox.setVgrow(dmSections.get("chat"), javafx.scene.layout.Priority.ALWAYS);
+            }
+            scroll.requestLayout();
+            if (chatOpen) chatPanel.markRead();
             scroll.setVisible(open);
             scroll.setManaged(open);
             flyout.setVisible(open);
@@ -2107,7 +2167,10 @@ public class DungeonMasterMapToolApplication extends Application {
             if (!visible && onlineToggle.isSelected()) mapBrowserToggle.setSelected(true);
         }
         dmSections.forEach((id, section) -> {
-            boolean show = !hidden.contains(id);
+            boolean show = "chat".equals(id)
+                    ? onlineController != null && onlineController.running() && onlineController.campaign() != null
+                            && !preferences.hiddenControls().contains("online.chat")
+                    : !hidden.contains(id);
             section.railButton().setVisible(show);
             section.railButton().setManaged(show);
             if (!show) {
@@ -2875,6 +2938,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("tokens.browser", tokenBrowserToggle);
         dmControlVisibility.register("session.browser", sessionToggle);
         dmControlVisibility.register("online.browser", onlineToggle);
+        dmControlVisibility.register("online.chat", chatSection.railButton());
         onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
@@ -5885,6 +5949,11 @@ public class DungeonMasterMapToolApplication extends Application {
         boolean hosted = onlineController != null && onlineController.running() && onlineController.campaign() != null;
         fearOverlay.setHosted(hosted);
         if (hosted) fearOverlay.setFear(onlineController.fear());
+        if (chatPanel != null && hosted != chatHosted) {
+            chatHosted = hosted;
+            if (hosted) chatPanel.reload();
+            else chatPanel.clear();
+        }
     }
 
     /** The configured online pause key, or {@code null} when disabled or invalid. */
@@ -10612,6 +10681,12 @@ public class DungeonMasterMapToolApplication extends Application {
             }
         });
         onlineScroll = onlinePanel;
+        onlineController.addChatListener(message -> {
+            if (chatPanel != null) chatPanel.onMessage(message);
+        });
+        onlineController.addCardStockListener(actorId -> {
+            if (chatPanel != null) chatPanel.refreshStock(actorId);
+        });
     }
 
     private static boolean isForeignActorToken(DmProject.TokenInstance token, dmmt.online.Campaign campaign) {

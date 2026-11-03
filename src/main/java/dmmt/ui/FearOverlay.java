@@ -28,6 +28,18 @@ public final class FearOverlay extends StackPane {
     private final Circle[] tokens = new Circle[Campaign.MAX_FEAR];
     private final Button down;
     private final Button up;
+    private final HBox card;
+
+    /** Height from the bottom of the view that the counter occupies, including its margin. */
+    public double reservedHeight() {
+        return isVisible() ? card.getHeight() + 14 + 8 : 14;
+    }
+
+    /** Runs the action whenever the space taken by the counter may have changed. */
+    public void onReservedHeightChanged(Runnable action) {
+        card.heightProperty().addListener((o, a, b) -> action.run());
+        visibleProperty().addListener((o, a, b) -> action.run());
+    }
 
     public FearOverlay(IntConsumer adjust) {
         down = Icons.button(MaterialDesignM.MINUS, "Remove one Fear", () -> adjust.accept(-1));
@@ -49,6 +61,7 @@ public final class FearOverlay extends StackPane {
         HBox card = new HBox(8, down, body, up);
         card.setAlignment(Pos.CENTER);
         card.getStyleClass().add("fear-overlay");
+        this.card = card;
         card.setMaxSize(HBox.USE_PREF_SIZE, HBox.USE_PREF_SIZE);
         getChildren().add(card);
         setAlignment(Pos.BOTTOM_RIGHT);

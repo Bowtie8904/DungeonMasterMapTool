@@ -199,9 +199,9 @@ def pool(rid, label, maximum=None, initial=0):
     return r
 
 
-def effect_action(label, mods, until='rest', cost=None, aid='use'):
+def effect_action(label, mods, until='rest', cost=None, aid='use', effect_name=None, effect_text=None):
     return action(aid, label, [{'op': 'effect', 'effect': {
-        'name': label, 'kind': 'buff', 'until': until, 'text': label,
+        'name': effect_name or label, 'kind': 'buff', 'until': until, 'text': effect_text or effect_name or label,
         'modifiers': mods}}], cost)
 
 
@@ -623,18 +623,36 @@ CURATED_CONSUMABLES = {
         'actions': [action('drink', 'Drink: clear Stress', [step('clear', 'stress', '1d4')])],
         'manual': ['After drinking, mark 2 Stress manually to turn a failed mental reaction into a success '
                    'and end the effect; this does not consume another tincture.']},
-    'Steelskin Salve': {'actions': [effect_action('Steelskin Salve', [{'stat': 'thresholds', 'value': '@tier'}], 'scene')]},
-    'Featherstep Potion': {'actions': [effect_action('Featherstep Potion', [{'stat': 'evasion', 'value': '@tier'}])]},
+    'Mucin of Slipperiness': {'actions': [effect_action(
+        'Use', [], 'rest', effect_name='Restraint Resistance',
+        effect_text='Advantage on Reaction Rolls to avoid being Restrained until your next rest.')]},
+    'Steelskin Salve': {'actions': [effect_action(
+        'Steelskin Salve', [{'stat': 'thresholds', 'value': '@tier'}], 'scene',
+        effect_name='Damage Thresholds +Tier', effect_text='Your damage thresholds increase by your tier.')]},
+    'Featherstep Potion': {'actions': [effect_action(
+        'Featherstep Potion', [{'stat': 'evasion', 'value': '@tier'}],
+        effect_name='Evasion +Tier', effect_text='Your Evasion increases by your tier.')]},
     'Drakemantle': {'actions': [effect_action('Drakemantle', [
-        {'stat': 'thresholds', 'value': 5}, {'stat': 'proficiency', 'value': 1}], 'scene')]},
-    'Potion of Vigilance': {'actions': [effect_action('Potion of Vigilance', [{'stat': 'evasion', 'value': 1}], 'manual')],
+        {'stat': 'thresholds', 'value': 5}, {'stat': 'proficiency', 'value': 1}], 'scene',
+        effect_name='Damage Thresholds +5, Proficiency +1',
+        effect_text='Your damage thresholds increase by 5 and your Proficiency increases by 1.')]},
+    'Potion of Vigilance': {'actions': [effect_action(
+        'Potion of Vigilance', [{'stat': 'evasion', 'value': 1}], 'manual',
+        effect_name='Evasion +1', effect_text='Your Evasion increases by 1.')],
                             'manual': ['Remove the effect when you mark a Hit Point.']},
-    'Lionheart Tonic': {'actions': [effect_action('Lionheart Tonic', [{'stat': 'proficiency', 'value': 1}], 'manual')],
+    'Lionheart Tonic': {'actions': [effect_action(
+        'Lionheart Tonic', [{'stat': 'proficiency', 'value': 1}], 'manual',
+        effect_name='Proficiency +1', effect_text='Your Proficiency increases by 1.')],
                         'manual': ['Remove the effect when you roll with Fear.']},
-    'Demiurge’s Draught': {'actions': [effect_action('Demiurge’s Draught', [{'stat': 'proficiency', 'value': 1}], 'manual')],
+    'Demiurge’s Draught': {'actions': [effect_action(
+        'Demiurge’s Draught', [{'stat': 'proficiency', 'value': 1}], 'manual',
+        effect_name='Proficiency +1', effect_text='Your Proficiency increases by 1.')],
                           'manual': ['Remove the effect after your next successful attack roll.']},
     'Needle Key': {
-        'actions': [effect_action('Needle Key', [{'stat': 'trait.Finesse', 'value': -1}], 'longRest', aid='embed')],
+        'actions': [effect_action(
+            'Needle Key', [{'stat': 'trait.Finesse', 'value': -1}], 'longRest', aid='embed',
+            effect_name='Finesse -1 (Needle Key)',
+            effect_text='Your Finesse modifier is reduced by 1 while the key is embedded.')],
         'manual': ['Once embedded, mark a Stress manually when pressing into a lock to morph a key; '
                    'this does not consume another Needle Key.']},
     'Griefroot Powder': {'rollOptions': [option('powder', 'Griefroot Powder', 'action', dice='1d8', consumeItem=True,
@@ -643,7 +661,7 @@ CURATED_CONSUMABLES = {
         'cloves', 'Toxilily clove', 'damage', value='@proficiency', consumeItem=True,
         description='Smear on a weapon: adds your Proficiency to its damage until your next rest. One bulb gives 1d4 cloves; '
                     'only the first use consumes the bulb.',
-        effect={'name': 'Toxilily Bulb', 'kind': 'buff', 'until': 'rest',
+        effect={'name': 'Coated Weapon Damage +Proficiency', 'kind': 'buff', 'until': 'rest',
                 'text': 'Proficiency is added to the coated weapon\'s damage rolls.'})]},
 }
 for _name, _die in [('Grindletooth Venom', '1d6'), ('Improved Grindletooth Venom', '1d8'),
@@ -911,8 +929,8 @@ def classes():
 
 # ------------------------------------------------------------------ consumables / items
 
-def potion_effect(name, mods, until, text):
-    return {'name': name, 'kind': 'buff', 'until': until, 'text': text, 'modifiers': mods}
+def potion_effect(name, mods, until, text, effect_name=None):
+    return {'name': effect_name or name, 'kind': 'buff', 'until': until, 'text': text, 'modifiers': mods}
 
 
 def hp_stress_action(text):
@@ -930,13 +948,14 @@ def consumable_auto(name, text):
     if m:
         return {'actions': [{'id': 'use', 'label': 'Drink', 'steps': [{'op': 'effect', 'effect': potion_effect(
             name, [{'roll': 'trait:' + m.group(1), 'value': 1, 'consume': True}], 'manual',
-            'Next %s Roll gets +1.' % m.group(1))}]}],
+            'Next %s Roll gets +1.' % m.group(1), 'Next %s Roll +1' % m.group(1))}]}],
                 'rollOptions': [option('potion', 'Drink', 'trait:' + m.group(1), value=1, consumeItem=True,
                                        description='Drink it as part of this roll.')]}
     m = re.match(r'^You gain a \+1 bonus to your (\w+) until your next rest\.$', t)
     if m:
         return {'actions': [{'id': 'use', 'label': 'Drink', 'steps': [{'op': 'effect', 'effect': potion_effect(
-            name, [{'stat': 'trait.' + m.group(1), 'value': 1}], 'rest', '+1 %s until your next rest.' % m.group(1))}]}]}
+            name, [{'stat': 'trait.' + m.group(1), 'value': 1}], 'rest',
+            '+1 %s until your next rest.' % m.group(1), '+1 %s Until Rest' % m.group(1))}]}]}
     a = hp_stress_action(t)
     if a:
         return {'actions': [a]}
@@ -944,7 +963,8 @@ def consumable_auto(name, text):
     if m:
         return {'actions': [{'id': 'use', 'label': 'Apply', 'steps': [{'op': 'effect', 'effect': potion_effect(
             name, [{'roll': 'damage', 'dice': m.group(1), 'consume': True}], 'manual',
-            'Add a %s to your next damage roll with the coated weapon.' % m.group(1))}]}]}
+            'Add a %s to your next damage roll with the coated weapon.' % m.group(1),
+            'Next Coated Weapon Damage +%s' % m.group(1))}]}]}
     m = re.match(r'^You can eat these paired leaves to immediately gain (\d+) Hope\.$', t)
     if m:
         return {'actions': [{'id': 'use', 'label': 'Eat', 'steps': [{'op': 'gain', 'resource': 'hope', 'amount': int(m.group(1))}]}]}
@@ -958,17 +978,20 @@ def consumable_auto(name, text):
     if t.startswith('You can drink this potion to halve your size'):
         return {'actions': [{'id': 'use', 'label': 'Drink', 'steps': [{'op': 'effect', 'effect': potion_effect(
             name, [{'stat': 'trait.Agility', 'value': 2}, {'stat': 'proficiency', 'value': -1}], 'rest',
-            'Halved size: +2 Agility, -1 Proficiency until you drop the form or rest.')}]}]}
+            'Halved size: +2 Agility, -1 Proficiency until you drop the form or rest.',
+            'Shrunken Form')}]}]}
     if t.startswith('You can drink this potion to double your size'):
         return {'actions': [{'id': 'use', 'label': 'Drink', 'steps': [{'op': 'effect', 'effect': potion_effect(
             name, [{'stat': 'trait.Strength', 'value': 2}, {'stat': 'proficiency', 'value': 1}], 'rest',
-            'Doubled size: +2 Strength, +1 Proficiency until you drop the form or rest.')}]}]}
+            'Doubled size: +2 Strength, +1 Proficiency until you drop the form or rest.',
+            'Giant Form')}]}]}
     if t.startswith('You gain magic wings') or t.startswith('For this scene, you have advantage on all Instinct rolls'):
         return None
     m = re.match(r'^After drinking this potion, the next successful attack you make critically succeeds\.$', t)
     if m:
         return {'actions': [{'id': 'use', 'label': 'Drink', 'steps': [{'op': 'effect', 'effect': potion_effect(
-            name, [], 'manual', 'Your next successful attack critically succeeds.')}]}]}
+            name, [], 'manual', 'Your next successful attack critically succeeds.',
+            'Next Successful Attack: Critical')}]}]}
     m = re.search(r'\buntil your next rest\b', t)
     if m and re.match(r'^(When you|You can|After you)', t) and 'advantage' in t:
         return {'actions': [{'id': 'use', 'label': 'Use', 'steps': [{'op': 'effect', 'effect': potion_effect(

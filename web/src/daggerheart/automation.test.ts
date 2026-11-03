@@ -122,7 +122,7 @@ describe('configurable character automation', () => {
   it('lists inventory and drunk potions in the roll options and consumes them on roll', () => {
     const c = warlock();
     c.inventory = [{ name: 'Stride Potion', type: 'consumable', qty: 2, automation: {
-      actions: [{ id: 'use', label: 'Drink', steps: [{ op: 'effect', effect: { name: 'Stride Potion', kind: 'buff', until: 'manual', modifiers: [{ roll: 'trait:Agility', value: 1, consume: true }] } }] }],
+      actions: [{ id: 'use', label: 'Drink', steps: [{ op: 'effect', effect: { name: 'Next Agility Roll +1', kind: 'buff', until: 'manual', modifiers: [{ roll: 'trait:Agility', value: 1, consume: true }] } }] }],
       rollOptions: [{ id: 'potion', label: 'Drink', roll: 'trait:Agility', value: 1, consumeItem: true }],
     } }] as never;
     expect(availableRollOptions(c, ['trait:Strength'])).toHaveLength(0);
@@ -148,7 +148,7 @@ describe('configurable character automation', () => {
     const c = warlock();
     c.level = 1;
     c.inventory = [{ name: 'Toxilily Bulb', type: 'consumable', qty: 1, automation: {
-      rollOptions: [{ id: 'cloves', label: 'clove', roll: 'damage', value: '@proficiency', consumeItem: true, effect: { name: 'Toxilily Bulb', kind: 'buff', until: 'rest' } }],
+      rollOptions: [{ id: 'cloves', label: 'clove', roll: 'damage', value: '@proficiency', consumeItem: true, effect: { name: 'Coated Weapon Damage +Proficiency', kind: 'buff', until: 'rest' } }],
     } }] as never;
     commitRollOptions(c, availableRollOptions(c, ['damage']));
     expect(c.inventory[0].qty).toBe(0);

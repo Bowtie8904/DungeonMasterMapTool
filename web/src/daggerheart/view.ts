@@ -6,7 +6,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, criticalBonus, damageContributions, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  rollOptionDice, runAction, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, syncDerived, traitContributions, traitTotal, usesLeft,
+  rollOptionDice, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, syncDerived, traitContributions, traitTotal, usesLeft,
 } from './engine';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
@@ -17,6 +17,7 @@ import { MAX_LEVEL } from './rules';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
+import { formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
 
@@ -271,10 +272,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         });
         if (!sent) { opts.onLog?.('Not connected. The roll was not sent and nothing was spent.'); return; }
       }
-      const message = runAction(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`);
-      if (message === null) return;
+      const title = label === action.label ? label : `${label} - ${action.label}`;
+      const effects = runActionDetailed(c, key, a, action, title);
+      if (effects === null) return;
       hooks.after?.();
-      opts.onLog?.(`${c.name}: ${message}`, rollSourceFor(c, key));
+      opts.onLog?.(formatActionReport({ title, character: c.name, lines: effects.length ? effects : ['used'] }), rollSourceFor(c, key));
       render();
     });
     return b;

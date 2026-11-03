@@ -18,7 +18,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Stride Potion",
+         "name": "Next Agility Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Agility Roll gets +1.",
@@ -60,7 +60,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Bolster Potion",
+         "name": "Next Strength Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Strength Roll gets +1.",
@@ -102,7 +102,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Control Potion",
+         "name": "Next Finesse Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Finesse Roll gets +1.",
@@ -144,7 +144,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Attune Potion",
+         "name": "Next Instinct Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Instinct Roll gets +1.",
@@ -186,7 +186,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Charm Potion",
+         "name": "Next Presence Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Presence Roll gets +1.",
@@ -228,7 +228,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Enlighten Potion",
+         "name": "Next Knowledge Roll +1",
          "kind": "buff",
          "until": "manual",
          "text": "Next Knowledge Roll gets +1.",
@@ -519,7 +519,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Stride Potion",
+         "name": "+1 Agility Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Agility until your next rest.",
@@ -550,7 +550,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Bolster Potion",
+         "name": "+1 Strength Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Strength until your next rest.",
@@ -581,7 +581,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Control Potion",
+         "name": "+1 Finesse Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Finesse until your next rest.",
@@ -612,7 +612,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Attune Potion",
+         "name": "+1 Instinct Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Instinct until your next rest.",
@@ -643,7 +643,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Charm Potion",
+         "name": "+1 Presence Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Presence until your next rest.",
@@ -674,7 +674,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Major Enlighten Potion",
+         "name": "+1 Knowledge Until Rest",
          "kind": "buff",
          "until": "rest",
          "text": "+1 Knowledge until your next rest.",
@@ -711,7 +711,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Homet’s Secret Potion",
+         "name": "Next Successful Attack: Critical",
          "kind": "buff",
          "until": "manual",
          "text": "Your next successful attack critically succeeds.",
@@ -947,7 +947,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Shrinking Potion",
+         "name": "Shrunken Form",
          "kind": "buff",
          "until": "rest",
          "text": "Halved size: +2 Agility, -1 Proficiency until you drop the form or rest.",
@@ -982,7 +982,7 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Growing Potion",
+         "name": "Giant Form",
          "kind": "buff",
          "until": "rest",
          "text": "Doubled size: +2 Strength, +1 Proficiency until you drop the form or rest.",
@@ -1343,10 +1343,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Mucin of Slipperiness",
+         "name": "Restraint Resistance",
          "kind": "buff",
          "until": "rest",
-         "text": "You can apply this slime to your body as a downtime move. Once coated, until your next rest you have advantage on Reaction Rolls to avoid being Restrained.",
+         "text": "Advantage on Reaction Rolls to avoid being Restrained until your next rest.",
          "modifiers": []
         }
        }
@@ -1370,10 +1370,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Needle Key",
+         "name": "Finesse -1 (Needle Key)",
          "kind": "buff",
          "until": "longRest",
-         "text": "Needle Key",
+         "text": "Your Finesse modifier is reduced by 1 while the key is embedded.",
          "modifiers": [
           {
            "stat": "trait.Finesse",
@@ -1540,7 +1540,7 @@
       "description": "Smear on a weapon: adds your Proficiency to its damage until your next rest. One bulb gives 1d4 cloves; only the first use consumes the bulb.",
       "consumeItem": true,
       "effect": {
-       "name": "Toxilily Bulb",
+       "name": "Coated Weapon Damage +Proficiency",
        "kind": "buff",
        "until": "rest",
        "text": "Proficiency is added to the coated weapon's damage rolls."
@@ -1988,10 +1988,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Demiurge’s Draught",
+         "name": "Proficiency +1",
          "kind": "buff",
          "until": "manual",
-         "text": "Demiurge’s Draught",
+         "text": "Your Proficiency increases by 1.",
          "modifiers": [
           {
            "stat": "proficiency",
@@ -2025,10 +2025,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Potion of Vigilance",
+         "name": "Evasion +1",
          "kind": "buff",
          "until": "manual",
-         "text": "Potion of Vigilance",
+         "text": "Your Evasion increases by 1.",
          "modifiers": [
           {
            "stat": "evasion",
@@ -2104,10 +2104,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Steelskin Salve",
+         "name": "Damage Thresholds +Tier",
          "kind": "buff",
          "until": "scene",
-         "text": "Steelskin Salve",
+         "text": "Your damage thresholds increase by your tier.",
          "modifiers": [
           {
            "stat": "thresholds",
@@ -2191,10 +2191,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Drakemantle",
+         "name": "Damage Thresholds +5, Proficiency +1",
          "kind": "buff",
          "until": "scene",
-         "text": "Drakemantle",
+         "text": "Your damage thresholds increase by 5 and your Proficiency increases by 1.",
          "modifiers": [
           {
            "stat": "thresholds",
@@ -2232,10 +2232,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Lionheart Tonic",
+         "name": "Proficiency +1",
          "kind": "buff",
          "until": "manual",
-         "text": "Lionheart Tonic",
+         "text": "Your Proficiency increases by 1.",
          "modifiers": [
           {
            "stat": "proficiency",
@@ -2278,10 +2278,10 @@
        {
         "op": "effect",
         "effect": {
-         "name": "Featherstep Potion",
+         "name": "Evasion +Tier",
          "kind": "buff",
          "until": "rest",
-         "text": "Featherstep Potion",
+         "text": "Your Evasion increases by your tier.",
          "modifiers": [
           {
            "stat": "evasion",

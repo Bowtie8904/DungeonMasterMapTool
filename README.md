@@ -87,9 +87,11 @@ Nothing starts until you click **Start online session**, so offline play and the
     subtle add icon, choosing the receiving character when they own several) to put them in the matching tab. Entries with
   automation act on the sheet: armor sets evasion, thresholds and armor slots, features and potions get action
   buttons (spend a resource, heal, gain Hope), and buffs/debuffs appear in the sheet's new **Effects** tab - e.g. a
-  Control Potion adds +1 to the next Finesse roll and is then removed. Rest-only moves and benefits have no standalone
-  action buttons; use them only in a confirmed rest. Downtime timing, additional moves, passive benefits and roll
-  tables are configured in compendium automation (`tools/daggerheart/rest-automation.json` for exported content).
+  Control Potion's action report says it gained **Next Finesse Roll +1**, then that effect is removed after the roll.
+  The report keeps the potion name as the action source so the item and its effect are distinct. Rest-only moves and
+  benefits have no standalone action buttons; use them only in a confirmed rest. Downtime timing, additional moves,
+  passive benefits and roll tables are configured in compendium automation (`tools/daggerheart/rest-automation.json`
+  for exported content).
   A subtle shield button on the **Thresholds** vital opens a damage dialog, styled like the roll windows. Enter the
   incoming damage and type, then tick an Armor Slot or any armor, card, feature or item mitigation available to the
   character (for example Scales, Shrug It Off or Ring of Resistance). A live preview shows the HP to mark: Minor 1,
@@ -105,7 +107,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   class, domain cards and items (Clank Efficient and Recovery allow one long move in a short rest, Warlock tribute, Forager,
   Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, Oasis, ...) are listed as
   checkboxes you can untick if you don't use them. Confirming rests, expires effects, resets uses and posts a styled
-    rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Entries without automation stay readable text. Regenerate the files with
+    rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Using an item or feature (e.g. drinking a potion) posts a distinct "Action used" card instead of a plain message. Entries without automation stay readable text. Regenerate the files with
   `python tools/daggerheart/convert.py`.
   Your own roll cards in the chat carry buttons: **Damage** on attack rolls (same dialog as the sheet) and feature
   buttons such as Wizard Strange Patterns, Ranger's Focus / Hawkeye rerolls, Fearless or Patron's Boon, and spell
@@ -146,6 +148,11 @@ Nothing starts until you click **Start online session**, so offline play and the
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
+  The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
+  `online.chat`), with an unread dot, recipient dropdown and `/roll`. The **secret roll** button (or `/secret 2d6`)
+  shows players only `?` instead of numbers while dice type and count stay visible; the DM sees the real result.
+  Only the DM has a subtle trash icon on chat cards to delete messages and rolls for everyone, including
+  saved history. Players cannot delete messages. Deleting a transfer offer also prevents further claims.
 - **Share to chat:** subtle chat icons on sheet features, domain cards and equipment post formatted descriptions
   without cast/roll/use/equip actions. You can also drag weapons, armor, items and consumables from the sheet
   onto Chat. These links never let anyone take the item. Use the separate **Transfer** icon on carried,

@@ -47,6 +47,112 @@ class OnlineSessionServerTest {
     private volatile boolean drawingSupported;
     private volatile Path compendiumDir;
 
+    @Test
+    void onlyHostCanDeleteMessagesAndDeletionPersistsInSnapshots() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        inbox.next("snapshot");
+        try {
+            ws.sendText("{\"type\":\"chat\",\"text\":\"remove me\"}", true).join();
+            JsonNode message = inbox.next("chat");
+            long id = message.path("id").asLong();
+            long ts = message.path("ts").asLong();
+            ws.sendText("{\"type\":\"chatDeleted\",\"id\":" + id + ",\"ts\":" + ts + "}", true).join();
+            assertEquals("Unknown message", inbox.next("error").path("message").asText());
+            assertEquals(1, server.dmHistory(100).size(), "A forged player deletion does not change history");
+            assertEquals(null, server.dmDeleteMessage(id, ts));
+            JsonNode deleted = inbox.next("chatDeleted");
+            assertEquals(id, deleted.path("id").asLong());
+            assertEquals(ts, deleted.path("ts").asLong());
+            assertEquals(deleted, dmMessages.getLast());
+            assertTrue(server.dmHistory(100).isEmpty());
+            assertTrue(new CampaignStore(store.root()).historyTail(campaign.getId(), 100).isEmpty());
+            assertNotNull(server.dmDeleteMessage(id, ts), "Deleting a missing message reports an error");
+            Inbox late = new Inbox();
+            WebSocket later = connect(cookie, late);
+            try {
+                assertTrue(late.next("snapshot").path("state").path("chatTail").isEmpty());
+            } finally { later.abort(); }
+            assertEquals(null, server.dmRoll("1d6", null, true));
+            JsonNode roll = inbox.next("roll");
+            assertEquals(null, server.dmDeleteMessage(roll.path("id").asLong(), roll.path("ts").asLong()));
+            inbox.next("chatDeleted");
+            assertTrue(server.dmHistory(100).isEmpty(), "Rolls can also be deleted");
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void whisperDeletionOnlyReachesItsAudienceAndCannotTargetPlayerPrivateChat() throws Exception {
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        server.publish(state("m1", 0), "m1/l1");
+        Inbox aliceInbox = new Inbox();
+        Inbox bobInbox = new Inbox();
+        WebSocket alice = connect(cookie(), aliceInbox);
+        WebSocket bobSocket = connect(playerCookie(bob), bobInbox);
+        aliceInbox.next("snapshot");
+        bobInbox.next("snapshot");
+        try {
+            server.dmChat("private DM message", playerId());
+            JsonNode whisper = aliceInbox.next("chat");
+            assertEquals(null, server.dmDeleteMessage(whisper.path("id").asLong(), whisper.path("ts").asLong()));
+            aliceInbox.next("chatDeleted");
+            server.dmChat("barrier", null);
+            while (true) {
+                JsonNode seen = bobInbox.messages.poll(5, TimeUnit.SECONDS);
+                assertNotNull(seen, "Public barrier arrives after the private deletion");
+                assertFalse("chatDeleted".equals(seen.path("type").asText()));
+                assertTrue(seen.path("id").asLong() != whisper.path("id").asLong());
+                if ("barrier".equals(seen.path("text").asText())) break;
+            }
+            alice.sendText("{\"type\":\"chat\",\"text\":\"private player message\",\"toId\":\"" + bob.getId() + "\"}", true).join();
+            JsonNode privateChat = bobInbox.next("chat");
+            assertNotNull(server.dmDeleteMessage(privateChat.path("id").asLong(), privateChat.path("ts").asLong()));
+            assertTrue(store.historyTail(campaign.getId(), 100).contains(privateChat));
+        } finally { alice.abort(); bobSocket.abort(); }
+    }
+
+    @Test
+    void failedDeletionKeepsMessagesAndDeletingSharedOffersRevokesCachedAccess() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Rook").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "source", "{\"inventory\":[{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":2}]}");
+        store.saveSheet(campaign.getId(), "target", "{\"inventory\":[]}");
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        inbox.next("snapshot");
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item").put("offerQuantity", 2);
+            request.set("item", MAPPER.readTree("{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":2}"));
+            var posted = cardHttp(cookie, "", request);
+            assertEquals(200, posted.statusCode());
+            String cardId = MAPPER.readTree(posted.body()).path("cardId").asText();
+            JsonNode message = inbox.next("chat");
+            long id = message.path("id").asLong();
+            long ts = message.path("ts").asLong();
+            Path history = store.root().resolve(campaign.getId()).resolve("history.jsonl");
+            java.nio.file.Files.writeString(history, "invalid\n", java.nio.file.StandardOpenOption.APPEND);
+            String error = server.dmDeleteMessage(id, ts);
+            assertNotNull(error);
+            assertTrue(error.startsWith("Could not delete chat message:"));
+            assertTrue(server.dmHistory(100).contains(message));
+            assertEquals("chat", dmMessages.getLast().path("type").asText(), "No deletion notification on failure");
+            assertEquals(200, cardHttp(cookie, "/" + cardId, null).statusCode());
+            java.nio.file.Files.writeString(history, message + "\n");
+            assertEquals(null, server.dmDeleteMessage(id, ts));
+            inbox.next("chatDeleted");
+            assertEquals(404, cardHttp(cookie, "/" + cardId, null).statusCode());
+            assertEquals(409, cardHttp(cookie, "/" + cardId + "/grab",
+                    MAPPER.createObjectNode().put("actorId", "target")).statusCode());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
+        } finally { ws.abort(); }
+    }
+
     private HttpResponse<String> cardHttp(String cookie, String path, JsonNode body) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/chat-cards" + path))
                 .header("Cookie", cookie).header("Content-Type", "application/json");
@@ -538,6 +644,37 @@ class OnlineSessionServerTest {
         assertEquals(1, availablePlayers().size());
         assertThrows(Exception.class, () -> connect(cookie, new Inbox()));
         assertEquals(200, login("secret").statusCode());
+    }
+
+    @Test
+    void secretDmRollsAreMaskedForPlayersButKeptForTheDm() throws Exception {
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        connect(cookie, inbox);
+        inbox.next("hello");
+        assertEquals(null, server.dmRoll("2d6+3", null, true));
+        JsonNode seen = inbox.next("roll");
+        assertTrue(seen.path("secret").asBoolean());
+        assertFalse(seen.has("secretReal"));
+        assertEquals("2d6", seen.path("expression").asText());
+        assertEquals(0, seen.path("total").asInt());
+        assertEquals(2, seen.path("rolls").size());
+        seen.path("rolls").forEach(r -> assertEquals(0, r.asInt()));
+
+        JsonNode own = server.dmHistory(10).get(server.dmHistory(10).size() - 1);
+        assertEquals("2d6+3", own.path("secretReal").path("expression").asText());
+        assertTrue(own.path("secretReal").path("total").asInt() >= 5);
+
+        assertEquals(null, server.dmRoll("1d20", null, false));
+        JsonNode open = inbox.next("roll");
+        assertFalse(open.path("secret").asBoolean());
+        assertTrue(open.path("total").asInt() >= 1);
+    }
+
+    @Test
+    void maskExpressionKeepsOnlyDiceTerms() {
+        assertEquals("2d6+1d8kh1", OnlineSessionServer.maskExpression("2d6+4+1d8kh1"));
+        assertEquals("?", OnlineSessionServer.maskExpression("5"));
     }
 
     @Test

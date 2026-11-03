@@ -68,6 +68,10 @@ The host accepts only descriptive strings (name/source up to 240 characters, tex
 context and persists it with the message, using the same whisper visibility as the roll/chat.
 This is descriptive client-supplied context, not an authoritative mechanics contribution.
 Older hosts/clients/history simply omit the optional disclosure; compatibility versions remain unchanged.
+Host-only chat moderation sends additive `chatDeleted {id,ts}` events to the original message audience.
+Browsers remove the entry without marking chat unread; no player delete UI or command exists.
+Removal is persisted on the host before notification, including revoking shared-card access.
+Older clients ignore the event and converge on their next snapshot; Online and DM Link versions are unchanged.
 `shared-cards.ts` renders description-only feature/domain/equipment cards, with no sheet automation controls.
 On the sheet, loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
 They retain their existing editable values, limits and autosave behavior. Domain-card action groups have no enclosing border or panel padding; individual buttons retain their normal styling.

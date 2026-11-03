@@ -16,22 +16,28 @@ export interface EffectSource {
   text: string;
 }
 
-/** The feature, card, item or weapon/armor feature that started the effect; falls back to the effect's own text. */
+/** The action that started the effect, with its description when available. */
 export function effectSource(c: CharacterSheet, e: ActiveEffect): EffectSource | null {
   const name = e.source?.trim().toLowerCase();
+  let sourceText: string | undefined;
   if (name) {
     const same = (n: string) => n.trim().toLowerCase() === name;
     const feature = [...c.features, ...c.heritage].find((f) => same(f.name));
-    if (feature?.text) return { title: feature.name, text: feature.text };
+    if (feature?.text) sourceText = feature.text;
     const card = c.loadout.find((d) => same(d.name));
-    if (card?.text) return { title: card.name, text: card.text };
+    if (card?.text) sourceText = card.text;
     for (const gear of [...c.activeWeapons, ...(c.activeArmor ? [c.activeArmor] : [])]) {
-      if (gear.feature?.text && (same(gear.feature.name) || same(gear.name))) return { title: gear.feature.name, text: gear.feature.text };
+      if (gear.feature?.text && (same(gear.feature.name) || same(gear.name))) sourceText = gear.feature.text;
     }
     const item = c.inventory.find((i) => same(i.name));
-    if (item?.note) return { title: item.name, text: item.note };
+    if (item?.note) sourceText = item.note;
   }
-  return e.text ? { title: e.name, text: e.text } : null;
+  const text = [e.text, sourceText].filter((value): value is string => !!value?.trim());
+  if (!e.source?.trim() && !text.length) return null;
+  return {
+    title: e.source?.trim() ? `From ${e.source.trim()}` : e.name,
+    text: [...new Set(text)].join('\n\n'),
+  };
 }
 
 export function renderEffects(
@@ -61,7 +67,9 @@ export function renderEffects(
       if (open) {
         const src = effectSource(g.character, e);
         row.append(el('div', { class: 'effect-source' },
-          ...(src ? [el('div', { class: 'effect-source-title' }, src.title), rich(src.text)] : [el('span', { class: 'muted' }, 'No description.')])));
+          ...(src ? [el('div', { class: 'effect-source-title' }, src.title),
+            ...(src.text ? [rich(src.text)] : [el('span', { class: 'muted' }, 'No description.')])]
+            : [el('span', { class: 'muted' }, 'No description.')])));
       }
       return row;
     });

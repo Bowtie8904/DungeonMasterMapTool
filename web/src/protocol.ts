@@ -231,6 +231,7 @@ export interface RollMessage {
   difficulty?: number;
   breakdown?: RollDetail[];
   rollSource?: RollSource;
+  secret?: boolean;
   /** Hints echoed from the roller's sheet; only the roller's client acts on them. */
   ref?: string;
   actorId?: string;
@@ -318,6 +319,7 @@ export type ServerMessage =
   | { type: 'ping'; id: number }
   | { type: 'pause'; paused: boolean }
   | ({ type: 'chat' } & ChatMessage)
+  | { type: 'chatDeleted'; id: number; ts: number }
   | ({ type: 'roll' } & RollMessage)
   | AudioMessage
   | { type: 'kicked'; reason?: string }

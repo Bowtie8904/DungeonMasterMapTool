@@ -35,11 +35,13 @@ describe('daggerheart data', () => {
     const potion: Automation = {
       actions: [{
         id: 'drink', label: 'Drink',
-        steps: [{ op: 'effect', effect: { name: 'Control Potion', kind: 'buff', until: 'rest', modifiers: [{ roll: 'trait:Finesse', value: 1, consume: true }] } }],
+        steps: [{ op: 'effect', effect: { name: 'Next Finesse Roll +1', kind: 'buff', until: 'rest', modifiers: [{ roll: 'trait:Finesse', value: 1, consume: true }] } }],
       }],
     };
-    expect(runAction(c, 'item:cp', potion, potion.actions![0], 'Control Potion')).not.toBeNull();
+    expect(runAction(c, 'item:cp', potion, potion.actions![0], 'Control Potion')).toContain('gained Next Finesse Roll +1');
     expect(c.effects).toHaveLength(1);
+    expect(c.effects[0].source).toBe('Control Potion');
+    expect(c.effects[0].name).toBe('Next Finesse Roll +1');
     expect(rollBonus(c, ['trait:Agility']).value).toBe(0);
     const bonus = rollBonus(c, ['attack', 'trait:Finesse']);
     expect(bonus.value).toBe(1);

@@ -782,6 +782,13 @@ export class App {
       case 'chat':
         this.addLog({ kind: 'chat', m: msg });
         break;
+      case 'chatDeleted':
+        this.log = this.log.filter(entry => entry.m.id !== msg.id || entry.m.ts !== msg.ts);
+        if (this.store.state?.chatTail) {
+          this.store.state.chatTail = this.store.state.chatTail.filter(entry => entry.id !== msg.id || entry.ts !== msg.ts);
+        }
+        this.renderLog();
+        break;
       case 'cardStock':
         this.refreshCardStock(msg.actorId);
         break;

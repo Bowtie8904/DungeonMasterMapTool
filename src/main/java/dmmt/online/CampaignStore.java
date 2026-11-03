@@ -188,6 +188,31 @@ public final class CampaignStore {
         return result;
     }
 
+    /** Rewrites history before publishing a deletion; failures leave the original file in place. */
+    public synchronized void deleteHistoryEntry(String campaignId, long id, long timestamp) throws IOException {
+        Path file = dir(campaignId).resolve("history.jsonl");
+        List<String> kept = new ArrayList<>();
+        boolean found = false;
+        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            JsonNode entry = MAPPER.readTree(line);
+            if (entry != null && entry.path("id").asLong(-1) == id && entry.path("ts").asLong() == timestamp) {
+                found = true;
+            } else {
+                kept.add(line);
+            }
+        }
+        if (!found) {
+            throw new IOException("Chat message no longer exists.");
+        }
+        Path temp = Files.createTempFile(file.getParent(), "history-", ".tmp");
+        try {
+            Files.write(temp, kept, StandardCharsets.UTF_8);
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     // ---- artwork ----
 
     /** Validates, downsizes and re-encodes an uploaded image as PNG; returns its sha256 hex name. */

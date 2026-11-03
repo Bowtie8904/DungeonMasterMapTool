@@ -1431,3 +1431,88 @@
     -fx-stroke: #d3bfff;
     -fx-effect: dropshadow(gaussian, #8e5cf0, 8, 0.3, 0, 0);
 }
+
+/* DM chat window (flyout of the DM controls): DM palette, browser-identical card content. */
+.dm-chat .chat-scroll, .dm-chat .chat-scroll > .viewport { -fx-background-color: transparent; }
+.dm-chat .chat-scroll { -fx-background-insets: 0; -fx-padding: 0; }
+.chat-unread-dot { -fx-fill: #e8a33d; -fx-stroke: #1a1c21; -fx-stroke-width: 1; }
+.chat-jump { -fx-font-size: 11px; -fx-background-color: #2b3646; -fx-text-fill: -dm-text; -fx-background-radius: 14; -fx-border-color: #52667d; -fx-border-radius: 14; -fx-padding: 4 12; -fx-cursor: hand; }
+.chat-status { -fx-text-fill: -dm-danger; -fx-font-size: 11px; }
+.chat-entry { -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #222a36, #191f29 70%); -fx-background-radius: 12; -fx-border-color: #303947; -fx-border-radius: 12; }
+.chat-entry.chat-roll { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 100% 0%, radius 55%, #ad81301a, transparent), linear-gradient(from 0% 0% to 100% 100%, #222a36, #191f29 70%); -fx-border-color: #66573b; }
+.chat-entry.chat-whisper { -fx-border-color: #785488; }
+.chat-entry.chat-rest { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #2f8f6a22, transparent), linear-gradient(to bottom right, #1f2b29, #181f24); -fx-border-color: #3f6b57 #3f6b57 #3f6b57 #4fb58a; -fx-border-width: 1 1 1 4; }
+.chat-entry.chat-damage { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #c0393f26, transparent), linear-gradient(to bottom right, #2b2025, #1b1a21); -fx-border-color: #6e3b3f #6e3b3f #6e3b3f #d9545c; -fx-border-width: 1 1 1 4; }
+.chat-header { -fx-padding: 11 12 11 12; -fx-background-color: #ffffff03; -fx-border-color: transparent transparent #ffffff08 transparent; }
+.chat-avatar { -fx-background-color: linear-gradient(to bottom, #475a73, #2c3a4d); -fx-background-radius: 8; -fx-text-fill: -dm-text; -fx-font-weight: bold; -fx-font-size: 11px; }
+.chat-whisper .chat-avatar { -fx-background-color: #563760; }
+.chat-sender { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: -dm-text; }
+.chat-whisper .chat-sender, .chat-whisper .chat-text { -fx-text-fill: #edccf4; }
+.chat-time { -fx-font-size: 10px; -fx-text-fill: #9da9b9; }
+.chat-delete.icon-button { -fx-background-color: transparent; -fx-padding: 3; -fx-opacity: 0.4; }
+.chat-delete.icon-button:hover, .chat-delete.icon-button:focused { -fx-opacity: 1; -fx-background-color: #ffffff10; }
+.chat-delete .ikonli-font-icon { -fx-icon-size: 14px; -fx-icon-color: #9da9b9; }
+.chat-delete:hover .ikonli-font-icon, .chat-delete:focused .ikonli-font-icon { -fx-icon-color: -dm-danger; }
+.chat-whisper-label { -fx-background-color: #482852; -fx-border-color: #9255a0; -fx-border-radius: 6; -fx-background-radius: 6; -fx-text-fill: #edbdf5; -fx-font-size: 10px; -fx-padding: 1 6; }
+.chat-text { -fx-padding: 12; -fx-text-fill: -dm-text; }
+.chat-die { -fx-background-color: linear-gradient(to bottom, #3e5068, #263241); -fx-border-color: #52667d; -fx-border-radius: 8; -fx-background-radius: 8; }
+.chat-die-name { -fx-font-size: 9px; -fx-text-fill: #aab6c6; }
+.chat-die-value { -fx-font-size: 23px; -fx-font-weight: bold; -fx-text-fill: white; }
+.chat-die-hope { -fx-background-color: #755728; }
+.chat-die-hope .chat-die-value, .chat-die-hope .chat-die-name { -fx-text-fill: #ffda84; }
+.chat-die-fear { -fx-background-color: #574079; }
+.chat-die-fear .chat-die-value, .chat-die-fear .chat-die-name { -fx-text-fill: #e0d0ff; }
+.chat-die-discarded { -fx-opacity: 0.45; }
+.chat-die-secret .chat-die-value { -fx-text-fill: #d8c6f5; }
+.chat-roll-title { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #e6c97d; }
+.chat-roll-modifier, .chat-roll-modifier-negative { -fx-text-fill: #b7d1bb; -fx-font-size: 17px; }
+.chat-roll-modifier-negative { -fx-text-fill: #f2a4a4; }
+.chat-roll-equals { -fx-text-fill: #9da9b9; -fx-font-size: 17px; }
+.chat-total-caption { -fx-font-size: 9px; -fx-text-fill: #9da9b9; }
+.chat-total-value { -fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #ffe2a0; }
+.chat-secret-note { -fx-text-fill: #d8c6f5; -fx-font-size: 11px; -fx-font-style: italic; }
+.chat-outcome { -fx-background-radius: 10; -fx-padding: 2 8; -fx-font-size: 11px; -fx-font-weight: bold; }
+.chat-outcome-hope { -fx-background-color: #755728; -fx-text-fill: #ffda84; }
+.chat-outcome-fear { -fx-background-color: #574079; -fx-text-fill: #e0d0ff; }
+.chat-outcome-crit, .chat-outcome-success { -fx-background-color: #2b4a36; -fx-text-fill: #a6ddb2; }
+.chat-outcome-failure { -fx-background-color: #5a2f2f; -fx-text-fill: #f2a4a4; }
+.chat-disclosure { -fx-border-color: #ffffff12 transparent transparent transparent; -fx-padding: 8 0 0 0; }
+.chat-roll-breakdown { -fx-padding: 8 14 12 14; }
+.chat-summary { -fx-text-fill: #a6b2c3; -fx-font-size: 11px; -fx-padding: 2 0 4 0; -fx-cursor: hand; }
+.chat-summary:hover { -fx-text-fill: #d0ad66; }
+.chat-roll-formula { -fx-font-family: "Consolas", monospace; -fx-font-size: 11px; -fx-text-fill: #b8c5d6; -fx-background-color: #00000033; -fx-background-radius: 5; -fx-padding: 6 8; }
+.chat-detail-row { -fx-padding: 7 0; -fx-border-color: transparent transparent #ffffff08 transparent; }
+.chat-detail-label, .chat-detail-value { -fx-text-fill: #c5cfdd; -fx-font-size: 11px; }
+.chat-detail-value { -fx-text-fill: #d8e6d9; -fx-font-weight: bold; -fx-font-size: 12px; }
+.chat-detail-small { -fx-text-fill: #929fb1; -fx-font-size: 10px; }
+.chat-detail-note-row { -fx-padding: 2 0 2 9; -fx-border-color: transparent transparent transparent #ffffff12; -fx-border-width: 0 0 0 2; }
+.chat-detail-note { -fx-text-fill: #a6b2c3; -fx-font-size: 10px; }
+.chat-detail-negative { -fx-text-fill: #f2a4a4; -fx-font-weight: bold; -fx-font-size: 12px; }
+.chat-detail-total { -fx-border-color: transparent; }
+.chat-detail-total .label { -fx-text-fill: #f5d490; -fx-font-weight: bold; -fx-font-size: 12px; }
+.chat-roll-source { -fx-padding: 0 14 12 14; }
+.chat-source-name, .chat-shared-name { -fx-font-weight: bold; -fx-font-size: 15px; -fx-text-fill: -dm-text; }
+.chat-source-text, .chat-shared-description { -fx-text-fill: #c4ccd8; }
+.chat-shared-card { -fx-background-color: #10172188; -fx-background-radius: 8; -fx-border-color: #53677c66; -fx-border-radius: 8; -fx-padding: 12; }
+.chat-transfer-offer { -fx-border-color: #5da89b88 #5da89b88 #5da89b88 #5da89b; -fx-border-width: 1 1 1 3; }
+.chat-transfer-offer .chat-shared-source { -fx-text-fill: #8bc7ba; -fx-font-weight: bold; }
+.chat-shared-domain { -fx-background-color: linear-gradient(to bottom right, #39294066, #10172188); -fx-border-color: #9c7bc077; }
+.chat-shared-source, .chat-shared-offered { -fx-text-fill: #9da9b9; -fx-font-size: 10px; }
+.chat-shared-stock { -fx-border-color: #ffffff0c transparent transparent transparent; -fx-padding: 6 0 0 0; }
+.chat-shared-remaining { -fx-font-size: 11px; -fx-text-fill: #a6b2c3; }
+.chat-badge { -fx-background-color: #53677c33; -fx-background-radius: 4; -fx-padding: 2 6; -fx-font-size: 10px; -fx-text-fill: #b7c8db; }
+.chat-rest-banner { -fx-text-fill: #7fd8b0; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
+.chat-damage-banner { -fx-text-fill: #f29a9f; -fx-font-weight: bold; }
+.chat-entry.chat-action { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #4a78d426, transparent), linear-gradient(to bottom right, #1f2735, #181d27); -fx-border-color: #4a5f86 #4a5f86 #4a5f86 #6c9cf0; -fx-border-width: 1 1 1 4; }
+.chat-action-banner { -fx-text-fill: #9fc0f7; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
+.chat-action-title { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
+.chat-rest-subtitle { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
+.chat-bullets { -fx-padding: 6 12 10 12; }
+.chat-bullet { -fx-text-fill: #c4ccd8; }
+.chat-damage-tag { -fx-background-color: #6e3b3f; -fx-background-radius: 8; -fx-padding: 1 7; -fx-font-size: 10px; -fx-text-fill: #f29a9f; }
+.chat-damage-hp { -fx-background-color: #6e3b3f; -fx-background-radius: 8; -fx-padding: 6 10; }
+.chat-damage-hp-none { -fx-background-color: #2b4a36; -fx-background-radius: 8; -fx-padding: 6 10; }
+.chat-damage-hp-value { -fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #f29a9f; }
+.chat-damage-hp-caption { -fx-font-size: 9px; -fx-text-fill: #9da9b9; }
+.chat-damage-name { -fx-font-weight: bold; }
+.chat-damage-amount, .chat-damage-severity, .chat-damage-severity-negated { -fx-text-fill: #c4ccd8; -fx-font-size: 11px; }

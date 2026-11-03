@@ -77,8 +77,11 @@ public final class OnlineSessionServer {
 
         void campaignChanged(Campaign campaign);
 
-        /** A chat or roll message that reached the DM (public or whispered to the DM). */
+        /** A chat, roll or deletion event that reached the DM (public or whispered to/from the DM). */
         void dmMessage(JsonNode message);
+
+        /** The stock of transfer offers made by this actor may have changed; may run on a server thread. */
+        default void cardStockChanged(String actorId) { }
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -146,6 +149,8 @@ public final class OnlineSessionServer {
         this.config = config;
         this.campaign = campaign;
         this.store = store;
+        this.chatId = Math.max(System.currentTimeMillis(), store.historyTail(campaign.getId(), Integer.MAX_VALUE)
+                .stream().mapToLong(m -> m.path("id").asLong()).max().orElse(0));
         this.assets = assets;
         this.host = host;
         this.limiter = new LoginRateLimiter(config.loginMaxFailures(), config.loginLockoutSeconds() * 1000L);
@@ -397,7 +402,7 @@ public final class OnlineSessionServer {
             for (JsonNode entry : store.historyTail(c.getId(), 50)) {
                 String to = entry.path("toId").asText("");
                 if (to.isEmpty() || client.playerId.equals(to) || client.playerId.equals(entry.path("fromId").asText())) {
-                    tail.add(entry);
+                    tail.add(playerView(entry));
                 }
             }
         }
@@ -513,6 +518,22 @@ public final class OnlineSessionServer {
         publishRoster();
     }
 
+    /** Recent chat the DM may see: public messages and whispers to or from the DM, with secret rolls unmasked. */
+    public List<JsonNode> dmHistory(int limit) {
+        Campaign c = campaign;
+        List<JsonNode> result = new ArrayList<>();
+        if (c == null) {
+            return result;
+        }
+        for (JsonNode entry : store.historyTail(c.getId(), limit)) {
+            String to = entry.path("toId").asText("");
+            if (to.isEmpty() || "dm".equals(to) || "dm".equals(entry.path("fromId").asText())) {
+                result.add(entry);
+            }
+        }
+        return result;
+    }
+
     /** DM chat message, public or whispered to one player. */
     public void dmChat(String text, String toPlayerId) {
         if (text == null || text.isBlank()) {
@@ -520,6 +541,109 @@ public final class OnlineSessionServer {
         }
         ObjectNode message = chatMessage("dm", "DM", toPlayerId, clip(text));
         deliver(message, toPlayerId);
+    }
+
+    /** Host-only moderation; deliberately not exposed through any player HTTP or socket command. */
+    public synchronized String dmDeleteMessage(long id, long timestamp) {
+        Campaign c = campaign;
+        if (c == null) {
+            return "No online session is running.";
+        }
+        JsonNode entry = dmHistory(Integer.MAX_VALUE).stream()
+                .filter(m -> m.path("id").asLong(-1) == id && m.path("ts").asLong() == timestamp)
+                .findFirst().orElse(null);
+        if (entry == null) {
+            return "Chat message no longer exists or is not visible to the DM.";
+        }
+        try {
+            store.deleteHistoryEntry(c.getId(), id, timestamp);
+        } catch (IOException e) {
+            return "Could not delete chat message: " + e.getMessage();
+        }
+        sharedCards.values().removeIf(m -> m.path("id").asLong(-1) == id && m.path("ts").asLong() == timestamp);
+        ObjectNode deleted = MAPPER.createObjectNode().put("type", "chatDeleted").put("id", id).put("ts", timestamp);
+        String to = entry.path("toId").asText("");
+        String from = entry.path("fromId").asText("");
+        for (Client client : clients.values()) {
+            if (to.isEmpty() || to.equals(client.playerId) || from.equals(client.playerId)) {
+                sendTo(client.ctx, deleted.toString());
+            }
+        }
+        host.dmMessage(deleted);
+        return null;
+    }
+
+    /**
+     * DM dice roll, public or whispered. A secret roll is shown to players with the dice but no numbers: the
+     * message carries {@code secret:true}, zeroed dice and total, and an expression without modifiers. The real
+     * values live in {@code secretReal}, which is persisted for the DM but never sent to a player.
+     *
+     * @return an error message, or {@code null} when the roll was made
+     */
+    public String dmRoll(String expression, String toPlayerId, boolean secret) {
+        DiceRoller.Result result;
+        try {
+            result = DiceRoller.roll(expression, config.maxDice(), diceRandom);
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
+        String to = toPlayerId == null || toPlayerId.isEmpty() ? null : toPlayerId;
+        if (to != null && clients.values().stream().noneMatch(client -> to.equals(client.playerId))) {
+            return "Whisper recipient is offline. Choose another recipient.";
+        }
+        ObjectNode out = MAPPER.createObjectNode();
+        synchronized (this) {
+            out.put("id", ++chatId);
+        }
+        out.put("type", "roll").put("ts", System.currentTimeMillis());
+        out.put("fromId", "dm").put("from", "DM");
+        putRecipient(out, to);
+        ArrayNode rolls = MAPPER.createArrayNode();
+        result.rolls().forEach(rolls::add);
+        if (secret) {
+            out.put("secret", true);
+            out.put("expression", maskExpression(result.expression()));
+            ArrayNode hidden = out.putArray("rolls");
+            result.rolls().forEach(v -> hidden.add(0));
+            out.put("total", 0);
+            ObjectNode real = out.putObject("secretReal");
+            real.put("expression", result.expression());
+            real.set("rolls", rolls);
+            real.put("total", result.total());
+        } else {
+            out.put("expression", result.expression());
+            out.set("rolls", rolls);
+            out.put("total", result.total());
+        }
+        deliver(out, to);
+        return null;
+    }
+
+    private static final java.util.regex.Pattern DICE_TERM =
+            java.util.regex.Pattern.compile("([+-]?)(\\d*d\\d+(?:kh\\d+)?)");
+
+    /** Keeps only the dice terms of an expression, so a secret roll does not leak its modifiers. */
+    static String maskExpression(String expression) {
+        StringBuilder out = new StringBuilder();
+        java.util.regex.Matcher matcher = DICE_TERM.matcher(expression);
+        while (matcher.find()) {
+            if (out.isEmpty()) {
+                out.append("-".equals(matcher.group(1)) ? "-" : "").append(matcher.group(2));
+            } else {
+                out.append("-".equals(matcher.group(1)) ? "-" : "+").append(matcher.group(2));
+            }
+        }
+        return out.isEmpty() ? "?" : out.toString();
+    }
+
+    /** The message as players may see it: without the DM-only real values of a secret roll. */
+    static JsonNode playerView(JsonNode message) {
+        if (message.has("secretReal") && message instanceof ObjectNode node) {
+            ObjectNode copy = node.deepCopy();
+            copy.remove("secretReal");
+            return copy;
+        }
+        return message;
     }
 
     // ---- HTTP ----
@@ -952,6 +1076,18 @@ public final class OnlineSessionServer {
 
     private void stockChanged(String actorId) {
         broadcast(MAPPER.createObjectNode().put("type", "cardStock").put("actorId", actorId).toString());
+        host.cardStockChanged(actorId);
+    }
+
+    /** Units of a shared transfer offer that can still be grabbed; 0 when the source is gone. */
+    public synchronized int cardRemaining(JsonNode sharedCard) {
+        String actorId = sharedCard.path("actorId").asText();
+        try {
+            return campaign == null || campaign.actor(actorId) == null ? 0
+                    : ChatCards.remaining(storedSheet(actorId), sharedCard);
+        } catch (IOException e) {
+            return 0;
+        }
     }
 
     private void handleArtwork(Context ctx) {
@@ -1425,12 +1561,12 @@ public final class OnlineSessionServer {
         deliver(message, toId, true);
     }
 
-    private void deliver(ObjectNode message, String toId, boolean persist) {
+    private synchronized void deliver(ObjectNode message, String toId, boolean persist) {
         Campaign c = campaign;
         if (c != null && persist) {
             store.appendHistory(c.getId(), message);
         }
-        String json = message.toString();
+        String json = playerView(message).toString();
         String fromId = message.path("fromId").asText();
         if (toId == null || toId.isEmpty()) {
             broadcast(json);

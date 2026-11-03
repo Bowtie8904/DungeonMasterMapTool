@@ -120,6 +120,13 @@ try {
   app.showSection(null);
   app.handle({ type: 'snapshot', seq: 2, state: { ...defaultState(), chatTail: [message(45)] } });
   assert(!chat.classList.contains('has-unread'), 'history snapshots do not create unread notifications');
+  app.handle({ type: 'chatDeleted', id: 45, ts: app.log[0].m.ts + 1 });
+  assert(app.log.length === 1, 'deletion matches timestamp as well as legacy reused id');
+  app.handle({ type: 'chatDeleted', id: 45, ts: app.log[0].m.ts });
+  assert(app.log.length === 0 && !document.querySelector('.entry'), 'DM deletion removes the rendered chat entry');
+  assert(app.store.state.chatTail.length === 0, 'DM deletion removes cached snapshot history');
+  assert(!chat.classList.contains('has-unread'), 'DM deletion never marks closed chat unread');
+  assert(!document.querySelector('.chat-delete'), 'players have no delete control');
   result.textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
 } catch (error) {
   result.textContent = `FAIL: ${error.stack}`;

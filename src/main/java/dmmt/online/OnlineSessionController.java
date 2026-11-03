@@ -59,6 +59,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     private final App app;
     private final OnlineStateBuilder builder = new OnlineStateBuilder();
     private final Deque<JsonNode> chatTail = new ArrayDeque<>();
+    private final java.util.List<java.util.function.Consumer<JsonNode>> chatListeners = new java.util.ArrayList<>();
+    private final java.util.List<java.util.function.Consumer<String>> stockListeners = new java.util.ArrayList<>();
     private OnlineSessionServer server;
     private AssetRegistry assets;
     private Campaign campaign;
@@ -335,12 +337,75 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     @Override
     public void dmMessage(JsonNode message) {
         Platform.runLater(() -> {
-            chatTail.addLast(message);
+            if ("chatDeleted".equals(message.path("type").asText())) {
+                chatTail.removeIf(m -> m.path("id").asLong() == message.path("id").asLong()
+                        && m.path("ts").asLong() == message.path("ts").asLong());
+            } else {
+                chatTail.addLast(OnlineSessionServer.playerView(message));
+            }
             while (chatTail.size() > 50) {
                 chatTail.removeFirst();
             }
+            for (java.util.function.Consumer<JsonNode> listener : java.util.List.copyOf(chatListeners)) {
+                listener.accept(message);
+            }
             app.changed();
         });
+    }
+
+    /** Chat/roll and deletion events for the DM, on the JavaFX thread. Secret rolls keep their real values. */
+    public void addChatListener(java.util.function.Consumer<JsonNode> listener) {
+        chatListeners.add(listener);
+    }
+
+    @Override
+    public void cardStockChanged(String actorId) {
+        Platform.runLater(() -> {
+            for (java.util.function.Consumer<String> listener : java.util.List.copyOf(stockListeners)) {
+                listener.accept(actorId);
+            }
+        });
+    }
+
+    /** Listener for changed transfer-offer stock of an actor; called on the JavaFX thread. */
+    public void addCardStockListener(java.util.function.Consumer<String> listener) {
+        stockListeners.add(listener);
+    }
+
+    /** Units of a shared transfer offer still available; 0 when no session runs. */
+    public int cardRemaining(JsonNode sharedCard) {
+        OnlineSessionServer current = server;
+        return current == null ? 0 : current.cardRemaining(sharedCard);
+    }
+
+    /** Chat the DM may see (public and DM whispers) from the campaign history; empty when no session runs. */
+    public java.util.List<JsonNode> chatHistory(int limit) {
+        OnlineSessionServer current = server;
+        return current == null ? java.util.List.of() : current.dmHistory(limit);
+    }
+
+    /** Sends a DM message, public or whispered to {@code toPlayerId}. */
+    public void sendChat(String text, String toPlayerId) {
+        OnlineSessionServer current = server;
+        if (current != null) {
+            current.dmChat(text, toPlayerId);
+        }
+    }
+
+    /** Rolls dice as the DM; returns an error message or {@code null}. */
+    public String rollDice(String expression, String toPlayerId, boolean secret) {
+        OnlineSessionServer current = server;
+        return current == null ? "No online session is running." : current.dmRoll(expression, toPlayerId, secret);
+    }
+
+    public String deleteChatMessage(long id, long timestamp) {
+        OnlineSessionServer current = server;
+        return current == null ? "No online session is running." : current.dmDeleteMessage(id, timestamp);
+    }
+
+    public java.util.List<OnlineSessionServer.RosterEntry> roster() {
+        OnlineSessionServer current = server;
+        return current == null ? java.util.List.of() : current.roster();
     }
 
     public java.util.List<JsonNode> recentMessages() {

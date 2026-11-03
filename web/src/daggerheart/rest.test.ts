@@ -270,9 +270,9 @@ describe('daggerheart rests', () => {
     resolveRest(c, 'short', [{ move: recipe!.id }, { move: mucin!.id }]);
     expect(c.stress.on).toBe(1);
     expect(c.inventory.find((i) => i.name === 'Mucin of Slipperiness')!.qty).toBe(0);
-    expect(c.effects.some((e) => e.name === 'Mucin of Slipperiness')).toBe(true);
+    expect(c.effects.some((e) => e.name === 'Restraint Resistance' && e.source === 'Mucin of Slipperiness: Use')).toBe(true);
     resolveRest(c, 'short', []);
-    expect(c.effects.some((e) => e.name === 'Mucin of Slipperiness')).toBe(false);
+    expect(c.effects.some((e) => e.name === 'Restraint Resistance')).toBe(false);
   });
 
   it("adds Insomniac's Periapt only when nothing was cleared", () => {
@@ -280,6 +280,6 @@ describe('daggerheart rests', () => {
     c.hp.on = 0; c.stress.on = 0;
     c.inventory.push({ name: "Insomniac's Periapt", type: 'gear', qty: 1, automation: rules('items', 'Insomniac\u2019s Periapt') });
     resolveRest(c, 'short', []);
-    expect(c.effects.map((e) => e.name)).toContain("Insomniac's Periapt");
+    expect(c.effects.map((e) => e.name)).toContain('Attack and Damage +2');
   });
 });

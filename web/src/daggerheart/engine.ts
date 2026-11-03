@@ -560,6 +560,12 @@ export const rollLocal: DiceRoll = (expression) => {
 
 /** Runs an action: pays costs, counts the use, executes steps. Returns a chat-friendly summary. */
 export function runAction(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  const result = runActionDetailed(c, key, a, action, label, roll, context);
+  return result && `${label}: ${result.join(', ') || 'used'}`;
+}
+
+/** Like {@link runAction}, but returns the individual effects (empty when nothing visible happened). */
+export function runActionDetailed(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal, context: 'sheet' | 'rest' = 'sheet'): string[] | null {
   if (actionBlocker(c, key, a, action, context)) return null;
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const log: string[] = [];
@@ -605,7 +611,7 @@ export function runAction(c: CharacterSheet, key: string, a: Automation, action:
       log.push(`${step.effect.kind === 'debuff' ? 'afflicted by' : 'gained'} ${step.effect.name}`);
     }
   }
-  return `${label}: ${log.join(', ') || 'used'}`;
+  return log;
 }
 
 /** Parses a weapon damage string like "d8+1" or "1d10+2" against the proficiency (dice count). */

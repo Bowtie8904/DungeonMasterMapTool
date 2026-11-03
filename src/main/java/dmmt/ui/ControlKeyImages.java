@@ -109,6 +109,7 @@ public final class ControlKeyImages {
         Ikon specific = switch (id) {
             case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
+            case "online.chat" -> MaterialDesignC.CHAT_OUTLINE;
             case "weather.lightningInterval" -> MaterialDesignW.WEATHER_LIGHTNING;
             case "weather.indoors" -> org.kordamp.ikonli.materialdesign2.MaterialDesignH.HOME_OUTLINE;
             case "fog.brushSize", "effects.brushSize" -> MaterialDesignF.FORMAT_PAINT;

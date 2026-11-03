@@ -35,6 +35,22 @@ class CatalogAuditTest(unittest.TestCase):
     def sources(self):
         return [s for entries in self.data.values() for e in entries for s in [e] + e.get('features', [])]
 
+    def active_effects(self, category, name):
+        found = []
+
+        def visit(value):
+            if isinstance(value, dict):
+                if value.get('kind') in ('buff', 'debuff') and 'name' in value:
+                    found.append(value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(self.entry(category, name).get('automation', {}))
+        return found
+
     def test_all_export_entries_are_preserved(self):
         self.assertEqual({k: len(v) for k, v in self.data.items()}, {
             'classes': 101, 'ancestries': 27, 'communities': 15, 'transformations': 6,
@@ -258,11 +274,50 @@ class CatalogAuditTest(unittest.TestCase):
         self.assertEqual(opt['effect']['until'], 'rest')
 
     def test_next_roll_potions_are_offered_in_the_roll_dialog(self):
-        for name, trait in [('Stride Potion', 'Agility'), ('Bolster Potion', 'Strength'), ('Control Potion', 'Finesse')]:
+        for name, trait in [('Stride Potion', 'Agility'), ('Bolster Potion', 'Strength'), ('Control Potion', 'Finesse'),
+                            ('Attune Potion', 'Instinct'), ('Charm Potion', 'Presence'),
+                            ('Enlighten Potion', 'Knowledge')]:
             auto = self.entry('consumables', name)['automation']
             opt, = auto['rollOptions']
             self.assertEqual((opt['roll'], opt['value'], opt['consumeItem']), ('trait:' + trait, 1, True), name)
             self.assertTrue(auto['actions'][0]['steps'][0]['effect']['modifiers'][0]['consume'], name)
+            self.assertEqual(auto['actions'][0]['steps'][0]['effect']['name'], 'Next %s Roll +1' % trait)
+
+    def test_consumable_and_item_effects_are_named_for_their_benefit(self):
+        expected = {
+            'consumables': {
+                'Stride Potion': 'Next Agility Roll +1',
+                'Bolster Potion': 'Next Strength Roll +1',
+                'Control Potion': 'Next Finesse Roll +1',
+                'Attune Potion': 'Next Instinct Roll +1',
+                'Charm Potion': 'Next Presence Roll +1',
+                'Enlighten Potion': 'Next Knowledge Roll +1',
+                'Major Stride Potion': '+1 Agility Until Rest',
+                'Major Bolster Potion': '+1 Strength Until Rest',
+                'Major Control Potion': '+1 Finesse Until Rest',
+                'Major Attune Potion': '+1 Instinct Until Rest',
+                'Major Charm Potion': '+1 Presence Until Rest',
+                'Major Enlighten Potion': '+1 Knowledge Until Rest',
+                'Homet’s Secret Potion': 'Next Successful Attack: Critical',
+                'Shrinking Potion': 'Shrunken Form',
+                'Growing Potion': 'Giant Form',
+                'Mucin of Slipperiness': 'Restraint Resistance',
+                'Needle Key': 'Finesse -1 (Needle Key)',
+                'Toxilily Bulb': 'Coated Weapon Damage +Proficiency',
+                'Demiurge’s Draught': 'Proficiency +1',
+                'Potion of Vigilance': 'Evasion +1',
+                'Steelskin Salve': 'Damage Thresholds +Tier',
+                'Drakemantle': 'Damage Thresholds +5, Proficiency +1',
+                'Lionheart Tonic': 'Proficiency +1',
+                'Featherstep Potion': 'Evasion +Tier',
+            },
+            'items': {'Insomniac’s Periapt': 'Attack and Damage +2'},
+        }
+        for category, entries in expected.items():
+            for source, effect_name in entries.items():
+                effects = self.active_effects(category, source)
+                self.assertEqual([effect['name'] for effect in effects], [effect_name], source)
+                self.assertNotEqual(effect_name, source, source)
 
     def test_powerful_only_modifies_its_source_weapon_damage(self):
         powerful = [e for e in self.data['weapons'] if e.get('feature', {}).get('name') in ('Powerful', 'Massive')]
