@@ -46,7 +46,7 @@ class ChatCardsTest {
     }
 
     @Test
-    void identicalEquipmentAcrossActiveAndCarriedSlotsSharesStockAndArrivesUnequipped() throws Exception {
+    void onlyUnequippedStockCanTransferAndItArrivesUnequipped() throws Exception {
         ObjectNode source = sheet("""
                 {"activeWeapons":[{"name":"Dagger","damage":"d8"}],"carriedWeapons":[{"name":"Dagger","damage":"d8"}],
                  "activeArmor":{"name":"Leather","score":3},"carriedArmor":[]}
@@ -54,16 +54,37 @@ class ChatCardsTest {
         ObjectNode target = sheet("{}");
         var weapon = source.path("activeWeapons").get(0).deepCopy();
         var armor = source.get("activeArmor").deepCopy();
-        assertEquals(2, ChatCards.available(source, "weapon", weapon));
+        assertEquals(1, ChatCards.available(source, "weapon", weapon));
         ChatCards.transfer(source, target, "weapon", weapon);
         assertEquals(1, source.path("activeWeapons").size());
-        ChatCards.transfer(source, target, "weapon", weapon);
-        assertEquals(0, source.path("activeWeapons").size());
-        assertEquals(2, target.path("carriedWeapons").size());
-        ChatCards.transfer(source, target, "armor", armor);
-        assertFalse(source.has("activeArmor"));
-        assertEquals(armor, target.path("carriedArmor").get(0));
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.transfer(source, target, "weapon", weapon));
+        assertEquals(1, source.path("activeWeapons").size());
+        assertEquals(1, target.path("carriedWeapons").size());
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.transfer(source, target, "armor", armor));
+        assertEquals(armor, source.get("activeArmor"));
         assertFalse(target.has("activeArmor"));
+    }
+
+    @Test
+    void bulkTransfersAreAllOrNothingAndOffersKeepTheirOwnBudget() throws Exception {
+        ObjectNode source = sheet("{\"inventory\":[{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":4}]}");
+        ObjectNode target = sheet("{\"inventory\":[{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":3}]}");
+        var item = source.path("inventory").get(0).deepCopy();
+        ObjectNode before = source.deepCopy();
+        ObjectNode targetBefore = target.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.transfer(source, target, "item", item, 3));
+        assertEquals(before, source);
+        assertEquals(targetBefore, target);
+        ChatCards.transfer(source, target, "item", item, 2);
+        assertEquals(2, ChatCards.available(source, "item", item));
+        assertEquals(5, target.path("inventory").get(0).path("qty").asInt());
+        ObjectNode card = sheet("{\"cardId\":\"offer\",\"category\":\"item\",\"offerQuantity\":2}");
+        card.set("item", item);
+        assertEquals(2, ChatCards.remaining(source, card));
+        source.putObject("transferClaims").put("offer", 2);
+        assertEquals(0, ChatCards.remaining(source, card));
+        card.remove("offerQuantity");
+        assertEquals(0, ChatCards.remaining(before, card), "Legacy links never grant transfer permission");
     }
 
     @Test

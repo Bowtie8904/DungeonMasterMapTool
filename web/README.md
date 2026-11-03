@@ -18,6 +18,15 @@ Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `
 Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view without reducing player ambient darkness;
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
 Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).
+Optional chat identities are stored on the host in `campaign.json` as `players[].chatIdentity`
+(empty or missing = account name, maximum 60 characters), not in browser storage.
+Settings sends `chatIdentity {identity}` only with `hello.chatIdentity:true`; older hosts
+disable the form. Browsers and pop-out sheets never send identity edits on reconnect.
+The host saves edits before broadcasting the updated roster, reporting save failures without changing the identity.
+The host resolves all future
+message/roll/card sender and whisper-recipient names, sharing the identity across that player's sockets.
+Roster entries add `chatIdentity` without changing `playerName`, displayed as `username (identity)`.
+These additions do not change Online protocol or DM Link compatibility versions.
 
 Daggerheart testing actors are created only by the desktop DM (Actors tree context menu) and may be used freely
 by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately
@@ -31,7 +40,7 @@ advancement and capacity rules; the host also rejects testing-only fields, free 
 multiclasses/loadout capacity on normal sheets. Missing actor markers default to false. These fields are additive;
 Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
 
-The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Compendium/Settings rail.
+The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Settings rail plus a Compendium button that opens a floating window.
 Settings is anchored at the bottom; character sheets open from Actors. Chat's recipient dropdown targets Everyone,
 Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
 Messages use separate sender/timestamp cards. Roll cards have styled dice, a summed modifier, a large total and
@@ -44,6 +53,13 @@ Proficiency buffs; these are context, not additional terms in the total. Weapon 
 are separate breakdown rows.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Expanded cards and the reader's scroll position survive new messages.
+Chat's rail icon gets an accessible unread dot for live entries received while another section is open or
+the sidebar is collapsed; opening Chat clears it. Snapshots do not mark history unread. Chat follows new
+entries and delayed card resizes (including sender-only roll action buttons) only while at the bottom.
+Queued programmatic scroll events cannot disable following just because content grew without the scroll
+position changing. Chat retains older-message scroll positions across
+panel switches; **Jump to latest** resumes following. `checks/chat-attention.html` exercises these behaviors
+and identity settings in a real browser, using local state without a host.
 Feature/action results, equipment rolls and Spellcast rolls also carry an optional
 `rollSource: {name, text, source}` description snapshot. A separate, initially collapsed **Source** disclosure
 shows formatted rules without sheet actions or grab controls. Spellcast titles identify their card or individual
@@ -59,8 +75,19 @@ Sheet chat icons and inventory-to-chat drags require `hello.chatCards:true`. Pos
 `POST /api/chat-cards {actorId,category,item,toId?}`; the host resolves the entry from the owner's saved sheet,
 adds `sharedCard` to an ordinary chat message and keeps a text fallback for older clients. Inventory drags wait
 for source autosave (including across same-origin pop-out windows using BroadcastChannel).
-`GET /api/chat-cards/{cardId}` returns live stock; `POST /api/chat-cards/{cardId}/grab {actorId}` transfers one unit
-to an owned receiving character, respecting consumable caps. Only recipients of the original message may grab.
+Links (including historical links) are description-only and cannot be grabbed. Explicit offers require
+`hello.transferOffers:true` and add a positive integer `offerQuantity` to the post request and shared card.
+Only carried, unequipped equipment and loot may be offered. Multi-unit offers prompt for quantity, default all. Emptied stacks are removed from the source sheet.
+New clients refuse inventory sharing with older hosts whose links were claimable; older clients can post safe
+links and claim one from explicit offers on new hosts. No compatibility-version bump is needed.
+`GET /api/chat-cards/{cardId}` returns the lesser of the offer's unclaimed budget and current unequipped stock.
+`POST /api/chat-cards/{cardId}/grab {actorId,all?:boolean}` transfers one unit, or the entire remaining offer
+with `all:true`, atomically to an owned receiving character, respecting consumable caps. Only original
+message recipients may grab. Offer quantities are not reservations; duplicate offers share live stock.
+Host-only `transferClaims` counters live on the source sheet and are persisted in the same transfer transaction
+as both inventories; sheet PUTs cannot change or delete them. Restarting cannot replenish an exhausted offer.
+Equipment/loot controls use compact trailing action groups. Search filters name/description in place and retains
+queries across rerenders. Loot descriptions clamp to two rendered lines with overflow-aware accessible expansion.
 `cardStock {actorId}` invalidates availability; owner-only `sheetInventory {actorId,inventory}` updates open sheets.
 Transfers increment the persisted `inventoryRevision`; stale PUTs receive 409 and refresh inventory without
 overwriting pending non-inventory edits. Legacy saves still work before transfers; after a transfer they must

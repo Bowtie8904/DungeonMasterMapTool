@@ -82,8 +82,9 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the converted Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
-  section of the sidebar (below Actors) and can drag armor, weapons, potions and items onto an open sheet (or use the Add
-  button) to put them in the matching tab. Entries with
+    window (rail button below Actors): category navigation on the left, searchable and filterable tables with
+    expandable rows on the right. They can drag armor, weapons, potions and items onto an open sheet (or click the
+    subtle add icon, choosing the receiving character when they own several) to put them in the matching tab. Entries with
   automation act on the sheet: armor sets evasion, thresholds and armor slots, features and potions get action
   buttons (spend a resource, heal, gain Hope), and buffs/debuffs appear in the sheet's new **Effects** tab - e.g. a
   Control Potion adds +1 to the next Finesse roll and is then removed. Rest-only moves and benefits have no standalone
@@ -147,15 +148,27 @@ Nothing starts until you click **Start online session**, so offline play and the
   conditional features without automation are not claimed as applied bonuses.
 - **Share to chat:** subtle chat icons on sheet features, domain cards and equipment post formatted descriptions
   without cast/roll/use/equip actions. You can also drag weapons, armor, items and consumables from the sheet
-  onto Chat. The small grab button transfers one unit into an owned character's carried equipment or inventory;
-  choose the receiving character if you own several. Posting leaves inventory unchanged; grabbing reduces the
-  source quantity, respects consumable limits and disables grabbing when none remain. Duplicate posts share
-  the same live stock. Transfers update open sheets/pop-outs and are saved by the host.
+  onto Chat. These links never let anyone take the item. Use the separate **Transfer** icon on carried,
+  unequipped equipment or loot to post a clearly labeled transfer offer. For multiple units, choose a quantity
+  (defaults to all available). Offers show how much remains and subtle **Grab one** / **Grab all** buttons;
+  choose the receiving character if you own several. Offering does not remove or reserve stock. Claims are
+  limited to the offered quantity and live unequipped stock; a full recipient inventory rejects the transfer
+  without moving anything. Transfers update open sheets/pop-outs and are saved by the host.
+- **Equipment and loot:** row actions are grouped at the right edge: chat, transfer and delete icons on the first line, with the blue-outlined action button (Equip, Use, Drink…) on a second line to save width (delete removes carried equipment or loot). Items whose quantity reaches 0
+  (use or action) are removed; the − stepper may rest at 0 so accidental clicks lose nothing. Grabbed transfers remove emptied source stacks. Active gear keeps its chat icon in the card's top-right corner.
+  Search carried equipment or loot by name and description (all search words must match).
+  Loot descriptions are limited to two lines; use **Show more** / **Show less** to expand them inside the row.
 - **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
-  tool options fly out over the map. The right vertical icon rail switches between Chat, My actors, Compendium and
-  Settings (at the bottom). Open character sheets from My actors, not a separate navigation shortcut.
+  tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
+    Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.
   Click the selected section again to collapse it to just its icons. Settings contains your audio
-  controls and logout. The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
+  controls, an optional **Chat identity**, and logout. Chat identities are saved in the campaign per player
+  on the host (shared across browsers/devices), used for future chat messages, rolls and shared cards, and shown as `username (identity)`
+  in the bottom-left roster; leave the identity empty to use your account name (maximum 60 characters).
+  A small dot on the Chat icon marks new messages received while Chat is closed; opening Chat clears it.
+  New messages scroll to the bottom, including your own roll's action buttons as they load, unless you are
+  reading older messages. **Jump to latest** returns to the bottom.
+  The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
   (not to you); `--` means a sample is not available yet.
 - **Active effects overlay:** below the left tools, a subtle fixed-width list shows each of your actors' active
   effects, grouped by character name. Each row has the effect name and a remove (x) button; click a name to expand the

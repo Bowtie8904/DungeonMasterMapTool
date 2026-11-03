@@ -3952,7 +3952,7 @@
       "resources": [
        {
         "id": "strange-pattern",
-        "label": "Strange Patterns number (1-12, 0 = none)",
+        "label": "Strange Patterns number",
         "initial": 0,
         "max": 12
        }

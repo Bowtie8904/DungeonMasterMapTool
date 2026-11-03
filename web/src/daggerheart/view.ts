@@ -56,7 +56,7 @@ export interface SheetViewOptions {
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource) => void;
   actorId?: string;
-  onShare?: (entry: SharedEntry) => void;
+  onShare?: (entry: SharedEntry, offerQuantity?: number) => void;
   onPrepareShare?: () => Promise<void>;
   bus?: SheetBus;
   /** Called after anything on the sheet may have changed (the host debounces and saves). */
@@ -116,6 +116,18 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const c = opts.character;
   let page: Page = 'char';
   const root = el('div', { class: 'dh' });
+  const inventoryQuery = { equipment: '', loot: '' };
+  const expandedDescriptions = new Set<string>();
+  const descriptionObserver = new ResizeObserver(() => measureDescriptions());
+  descriptionObserver.observe(root);
+  function measureDescriptions(): void {
+    root.querySelectorAll<HTMLElement>('.loot-description').forEach(wrap => {
+      const text = wrap.querySelector<HTMLElement>('.loot-description-text')!;
+      const toggle = wrap.querySelector<HTMLButtonElement>('button')!;
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.hidden = !expanded && text.scrollHeight <= text.clientHeight + 1;
+    });
+  }
   let sourceTooltip: HTMLElement | undefined;
   const hideSourceTooltip = () => {
     sourceTooltip?.remove();
@@ -126,14 +138,29 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (e.key === 'Escape') hideSourceTooltip();
   });
 
-  function share(node: HTMLElement, entry: SharedEntry): HTMLElement {
+  function share(node: HTMLElement, entry: SharedEntry, offer = false, canOffer = offer): HTMLElement {
+    const header = (node.classList.contains('slot') ? node.querySelector('.top') : node.querySelector('.inventory-controls')) ?? (entry.category === 'feature'
+      ? node.querySelector('.src') ?? node
+      : node.querySelector('td, .ft, .top, .hd') ?? node);
+    if (offer) {
+      const remove = iconButton('delete', `Delete ${entry.item.name}`, () => {
+        const list = (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor) as unknown[];
+        const index = list.indexOf(entry.item);
+        if (index >= 0) list.splice(index, 1);
+        render();
+      });
+      remove.classList.add('share-icon', 'delete-item');
+      header.append(remove);
+    }
     if (!opts.onShare) return node;
     const button = iconButton('chat', `Post ${entry.item.name} to chat`, () => opts.onShare!(entry));
     button.classList.add('share-icon');
-    const header = entry.category === 'feature'
-      ? node.querySelector('.src') ?? node
-      : node.querySelector('td, .ft, .top, .hd') ?? node;
-    header.append(button);
+    header.insertBefore(button, header.querySelector('.delete-item'));
+    if (canOffer) {
+      const transfer = iconButton('transfer', `Offer ${entry.item.name} for transfer`, () => offerEntry(entry));
+      transfer.classList.add('share-icon');
+      header.insertBefore(transfer, header.querySelector('.delete-item'));
+    }
     if (transferable(entry) && opts.actorId && opts.onPrepareShare) {
       node.draggable = true;
       node.classList.add('inventory-draggable');
@@ -145,6 +172,37 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       });
     }
     return node;
+  }
+
+  function offerEntry(entry: SharedEntry): void {
+    const identity = (item: SharedEntry['item']) => JSON.stringify(
+      Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'qty')),
+      (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value,
+    );
+    const stock = entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor;
+    const available = stock.filter(item => identity(item) === identity(entry.item))
+      .reduce((n, item) => n + ('qty' in item ? item.qty : 1), 0);
+    if (available <= 1) { opts.onShare?.(entry, 1); return; }
+    const dialog = el('dialog', { class: 'inventory-picker' });
+    const input = el('input', { type: 'number', min: '1', max: String(available), step: '1', value: String(available), required: true, ariaLabel: 'Quantity to offer' });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const submit = el('button', { type: 'submit', class: 'primary' }, 'Offer transfer');
+    const form = el('form', {}, el('h3', {}, `Offer ${entry.item.name}`),
+      el('label', {}, `Quantity (up to ${available})`, input), el('div', { class: 'row' }, cancel, submit));
+    cancel.addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      opts.onShare?.(entry, input.valueAsNumber);
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.showModal();
+    input.focus();
+    input.select();
   }
 
   const sendRoll = (source: string, weapon?: string, rollSource?: RollSource) => (r: RollRequest): boolean => {
@@ -186,7 +244,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
     if (!actions.length && !(key.startsWith('item:') && a?.resources?.length)) return null;
-    const row = el('div', { class: 'row actions', style: 'margin-top:6px;gap:6px;flex-wrap:wrap;align-items:center' });
+    const row = el('div', { class: 'row actions' });
     if (key.startsWith('item:')) {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolInput(r)));
     }
@@ -237,6 +295,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (p) p.scrollTop = scroll;
     const sidebar = root.querySelector('.sheet-sidebar');
     if (sidebar) sidebar.scrollTop = sidebarScroll;
+    requestAnimationFrame(measureDescriptions);
   };
 
   const launchMancer = () => { void openMancer(root, c, () => render()); };
@@ -506,12 +565,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     dmg.addEventListener('click', () => openWeaponDamage(w));
     const unequip = el('button', { class: 'small', type: 'button' }, 'Unequip');
     unequip.addEventListener('click', () => { c.activeWeapons.splice(c.activeWeapons.indexOf(w), 1); c.carriedWeapons.push(w); render(); });
+    const actions = actionRow(`weapon:${w.name}`, w.automation, w.feature?.name ?? w.name);
     return share(el(
       'div', { class: 'slot' },
       el('div', { class: 'top' }, el('span', { class: 'cat' }, w.slot), el('span', { class: 'nm' }, w.name)),
       weaponBadges(w),
-      ...(w.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, w.feature.name), rich(w.feature.text), ...(actionRow(`weapon:${w.name}`, w.automation, w.feature.name) ? [actionRow(`weapon:${w.name}`, w.automation, w.feature.name)!] : []))] : []),
-      el('div', { class: 'row', style: 'margin-top:6px;gap:6px' }, attack, dmg, el('span', { class: 'grow' }), unequip),
+      ...(w.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, w.feature.name), rich(w.feature.text))] : []),
+      el('div', { class: 'inventory-controls' }, attack, dmg, ...(actions ? [actions] : []), unequip),
     ), { category: 'weapon', item: w });
   }
 
@@ -531,7 +591,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const a = c.activeArmor;
       const un = el('button', { class: 'small', type: 'button' }, 'Unequip');
       un.addEventListener('click', () => { c.carriedArmor.push(a); c.activeArmor = undefined; render(); });
-      armorBody.push(share(el('div', { class: 'slot' }, el('div', { class: 'top' }, el('span', { class: 'nm' }, a.name), un), armorBadges(a), ...(a.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, a.feature.name), rich(a.feature.text), ...(actionRow(`armor:${a.name}`, a.automation, a.feature.name) ? [actionRow(`armor:${a.name}`, a.automation, a.feature.name)!] : []))] : [])), { category: 'armor', item: a }));
+      const actions = actionRow(`armor:${a.name}`, a.automation, a.feature?.name ?? a.name);
+      armorBody.push(share(el('div', { class: 'slot' }, el('div', { class: 'top' }, el('span', { class: 'nm' }, a.name)), armorBadges(a), ...(a.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, a.feature.name), rich(a.feature.text))] : []),
+        el('div', { class: 'inventory-controls' }, ...(actions ? [actions] : []), un)), { category: 'armor', item: a }));
     } else {
       armorBody.push(el('div', { class: 'slot empty' }, 'No armor equipped'));
     }
@@ -539,13 +601,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const rows: HTMLElement[] = [];
     const equipBtn = (fn: () => void) => { const b = el('button', { class: 'small', type: 'button' }, 'Equip'); b.addEventListener('click', fn); return b; };
     for (const w of c.carriedWeapons) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, w.name), weaponBadges(w)), featureCell(w.feature), el('td', {}, equipBtn(() => equipWeapon(w)))), { category: 'weapon', item: w }));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, w.name), weaponBadges(w)), featureCell(w.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipWeapon(w))))), { category: 'weapon', item: w }, true));
     }
     for (const a of c.carriedArmor) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, a.name), armorBadges(a)), featureCell(a.feature), el('td', {}, equipBtn(() => equipArmor(a)))), { category: 'armor', item: a }));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, a.name), armorBadges(a)), featureCell(a.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipArmor(a))))), { category: 'armor', item: a }, true));
     }
-    const table = el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Name'), el('th', {}, 'Feature'), el('th', {}))), el('tbody', {}, ...rows));
-    return el('div', {}, el('div', { class: 'eq-top' }, weapons, card('Active armor', null, ...armorBody)), el('div', { class: 'card', style: 'margin-top:14px' }, el('h3', {}, 'Carried, not equipped'), rows.length ? table : el('span', { class: 'muted' }, 'Nothing carried')));
+    const table = el('table', { class: 't inventory-table equipment-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Name'), el('th', {}, 'Feature'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows));
+    const entries = [...c.carriedWeapons, ...c.carriedArmor];
+    const search = inventorySearch('equipment', rows.map((node, i) => ({ node, text: `${entries[i].name} ${entries[i].feature?.name ?? ''} ${entries[i].feature?.text ?? ''}` })));
+    return el('div', {}, el('div', { class: 'eq-top' }, weapons, card('Active armor', null, ...armorBody)), el('div', { class: 'card', style: 'margin-top:14px' }, el('h3', {}, 'Carried, not equipped', search.input), rows.length ? table : el('span', { class: 'muted' }, 'Nothing carried'), search.none));
   }
 
   function featureCell(f?: { name: string; text: string }): HTMLElement {
@@ -578,12 +642,17 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const b = el('button', { type: 'button' }, d < 0 ? '-' : '+');
       b.addEventListener('click', () => {
         item.qty = Math.max(0, Math.min(item.type === 'consumable' ? 5 : 99, item.qty + d));
-        val.textContent = String(item.qty);
+        render();
       });
       return b;
     };
     out.append(step(-1), val, step(1));
     return out;
+  }
+
+  // Only using an item up removes it; the stepper may rest at 0 so accidental clicks lose nothing.
+  function dropIfEmpty(item: InventoryItem): void {
+    if (item.qty <= 0) c.inventory = c.inventory.filter(i => i !== item);
   }
 
   function lootPage(): HTMLElement {
@@ -599,25 +668,65 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     );
     const rows = c.inventory.map((i) => {
       const use = i.use ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
+      if (use) use.disabled = i.qty <= 0;
       use?.addEventListener('click', () => {
-        if (i.qty > 0) { i.qty--; rollDamage(i.name + (i.note ? ` (${i.note})` : ''), i.use!, rollSourceFor(c, `item:${i.name}`)); render(); }
+        if (i.qty > 0) { i.qty--; dropIfEmpty(i); rollDamage(i.name + (i.note ? ` (${i.note})` : ''), i.use!, rollSourceFor(c, `item:${i.name}`)); render(); }
       });
       const key = `item:${i.name}`;
       const consumable = i.type === 'consumable';
       const actions = actionRow(key, i.automation, i.name, {
         extraBlock: () => (i.qty <= 0 ? 'None left' : null),
-        after: () => { if (consumable) i.qty = Math.max(0, i.qty - 1); },
+        after: () => { if (consumable) { i.qty = Math.max(0, i.qty - 1); dropIfEmpty(i); } },
       });
-      return share(el('tr', {}, el('td', {}, i.name, ...(i.note ? [el('div', { class: 'muted' }, i.note)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', {}, ...(use ? [use] : []), ...(actions ? [actions] : []))), { category: 'item', item: i });
+      return share(el('tr', {}, el('td', {}, el('b', {}, i.name), ...(i.note ? [lootDescription(i)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, ...(use ? [use] : []), ...(actions ? [actions] : [])))), { category: 'item', item: i }, true, i.qty > 0);
     });
+    const search = inventorySearch('loot', rows.map((node, i) => ({ node, text: `${c.inventory[i].name} ${c.inventory[i].note ?? ''}` })));
     return el(
       'div', {}, gold,
       el(
-        'div', { class: 'card', style: 'margin-top:14px' }, el('h3', {}, 'Inventory'),
-        el('table', { class: 't' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Type'), el('th', {}, 'Qty'), el('th', {}))), el('tbody', {}, ...rows)),
+        'div', { class: 'card', style: 'margin-top:14px' }, el('h3', {}, 'Inventory', search.input),
+        el('table', { class: 't inventory-table loot-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Type'), el('th', {}, 'Qty'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows)),
+        search.none,
         el('p', { class: 'muted', style: 'font-size:11.5px;margin:6px 0 0' }, 'Consumables are single-use; at most 5 of each. Loot stays until sold, discarded or lost.'),
       ),
     );
+  }
+
+  function lootDescription(item: InventoryItem): HTMLElement {
+    const key = `${item.name}\n${item.note}`;
+    const text = el('div', { class: 'loot-description-text muted' }, item.note ?? '');
+    const toggle = el('button', { type: 'button', class: 'description-toggle' });
+    const wrap = el('div', { class: 'loot-description' }, text, toggle);
+    const paint = () => {
+      const expanded = expandedDescriptions.has(key);
+      text.classList.toggle('expanded', expanded);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', `${expanded ? 'Show less' : 'Show more'} of ${item.name}'s description`);
+      toggle.textContent = expanded ? 'Show less' : 'Show more';
+    };
+    toggle.addEventListener('click', () => {
+      if (expandedDescriptions.has(key)) expandedDescriptions.delete(key);
+      else expandedDescriptions.add(key);
+      paint();
+      measureDescriptions();
+    });
+    paint();
+    toggle.hidden = !expandedDescriptions.has(key);
+    return wrap;
+  }
+
+  function inventorySearch(key: 'equipment' | 'loot', rows: Array<{ node: HTMLElement; text: string }>): { input: HTMLInputElement; none: HTMLElement } {
+    const input = el('input', { type: 'search', class: 'inventory-search', placeholder: 'Search name, description', value: inventoryQuery[key], ariaLabel: key === 'loot' ? 'Search inventory' : 'Search carried equipment' });
+    const none = el('p', { class: 'muted' }, 'No items match the search.');
+    const apply = () => {
+      inventoryQuery[key] = input.value;
+      rows.forEach(({ node, text }) => { node.hidden = !textMatches(text, input.value); });
+      none.hidden = !input.value.trim() || rows.some(({ node }) => !node.hidden);
+      requestAnimationFrame(measureDescriptions);
+    };
+    input.addEventListener('input', apply);
+    apply();
+    return { input, none };
   }
 
   /** A grimoire spell: its own text, Spellcast roll and automation buttons, independent of the other spells. */
@@ -725,8 +834,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const cardQuery = { loadout: '', vault: '' };
 
   function cardMatches(d: DomainCard, q: string): boolean {
+    return textMatches(`${d.name} ${d.domain} ${d.type} ${d.text}`, q);
+  }
+
+  function textMatches(text: string, q: string): boolean {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const hay = `${d.name} ${d.domain} ${d.type} ${d.text}`.toLowerCase();
+    const hay = text.toLowerCase();
     return words.every((w) => hay.includes(w));
   }
 

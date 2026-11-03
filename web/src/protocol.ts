@@ -297,7 +297,9 @@ export interface Hello {
   measurementTools?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;
+  transferOffers?: boolean;
   keptDice?: boolean;
+  chatIdentity?: boolean;
 }
 
 import type { AudioMessage } from './audio';
@@ -306,7 +308,7 @@ export type ServerMessage =
   | Hello
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }
-  | { type: 'roster'; players: Array<{ playerId: string; playerName: string; connections: number; pingMs: number }> }
+  | { type: 'roster'; players: Array<{ playerId: string; playerName: string; chatIdentity?: string; connections: number; pingMs: number }> }
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }
   | { type: 'delta'; seq: number; ops: DeltaOp[] }

@@ -217,7 +217,7 @@ def trigger(tid, label, on, when=None, description=None, **extra):
 
 CURATED_FEATURES = {
     'Strange Patterns': {
-        'resources': [pool('strange-pattern', 'Strange Patterns number (1-12, 0 = none)', 12)],
+        'resources': [pool('strange-pattern', 'Strange Patterns number', 12)],
         'rollTriggers': [
             trigger('hope', 'Strange Patterns: gain a Hope', 'duality', 'dieMatches', matchResource='strange-pattern',
                     steps=[step('gain', 'hope', 1)], description='A Duality Die matches your chosen number.'),
@@ -511,7 +511,8 @@ for _name, _rid, _label in [('Invisibility', 'invisibility', 'Invisibility'),
                     action('end', 'Effect ends: clear tokens', [step('clear', _rid, 'all')])],
         'manual': ['Check casting prerequisites and end the effect after the last token’s action. '
                    'Clear existing tokens before casting again; target effects are manual.']}
-
+
+
 
 def spell_damage(name, label, dice, when=None, fixed=False, extra_dice=None, cost=None, steps=None, uses=None, tid='damage'):
     dmg = {'dice': dice}

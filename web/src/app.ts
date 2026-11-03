@@ -5,14 +5,15 @@ import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } fr
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyInventory, autosave, loadCharacter, type SheetSave } from './daggerheart/persist';
-import { INVENTORY_DRAG, postCard, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
-import { SheetWindow } from './daggerheart/window';
+import { INVENTORY_DRAG, postCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
+import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
 import { renderEffects } from './effects';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
+import { pickActor } from './actor-picker';
 import type { CharacterSheet } from './daggerheart/data';
 import { MapTool } from './tools';
 import { MapView, MoveCommit } from './render';
@@ -23,7 +24,7 @@ import { Store } from './store';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
-type SidebarSection = 'chat' | 'actors' | 'compendium' | 'settings';
+type SidebarSection = 'chat' | 'actors' | 'settings';
 type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?: Overlay };
 type SheetHandle = { character: CharacterSheet; bus: SheetBus; save: SheetSave };
 
@@ -34,6 +35,7 @@ export class App {
   private playerId = '';
   private playerWhispers = false;
   private chatCards = false;
+  private transferOffers = false;
   private drawingHistory: DrawingEdit[] = [];
   private pendingDrawings = new Map<string, { inverse: DrawingEdit; undo: boolean; after?: Overlay; record: boolean }>();
   private historyMap = '';
@@ -80,6 +82,16 @@ export class App {
   private pendingMoves = new Map<string, MoveCommit>();
   private log: LogEntry[] = [];
   private logEl = el('div', { class: 'log' });
+  private logContent = el('div', { class: 'log-content' });
+  private followChat = true;
+  private chatScrollTop = 0;
+  private chatResize?: ResizeObserver;
+  private latestButton = el('button', { type: 'button', class: 'chat-latest hidden' }, 'Jump to latest');
+  private identityInput = el('input', { type: 'text', id: 'chat-identity', maxLength: 60, disabled: true, placeholder: 'Use account name' });
+  private identitySave = el('button', { type: 'submit', disabled: true }, 'Save identity');
+  private identityHint = el('p', { class: 'tool-hint' });
+  private currentIdentity: string | null = null;
+  private identitySupported = false;
   private chatRecipient = el('select', { id: 'chat-recipient' },
     el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
@@ -99,6 +111,11 @@ export class App {
     toast: (t) => this.toast(t),
     dragStart: () => { for (const a of this.myActors) this.openSheet(a); },
   });
+  private compendiumWindow = new ToolWindow('Compendium', this.compendium.element, (open) => {
+    this.compendiumButton?.setAttribute('aria-pressed', String(open));
+    if (open) void this.compendium.open();
+  }, 'cmp-win');
+  private compendiumButton?: HTMLButtonElement;
   private banner = el(
     'div',
     { class: 'banner hidden', role: 'status' },
@@ -135,7 +152,7 @@ export class App {
     const left = this.buildTools();
     const heading = el('div', { class: 'map-heading' }, this.titleEl, this.mapTitle, this.statusEl);
     this.rosterEl.setAttribute('aria-label', 'Connected players and ping to host');
-    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, right, this.banner, this.toastEl);
+    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
@@ -184,6 +201,22 @@ export class App {
   }
 
   private buildSettings(): HTMLElement {
+    const identityForm = el('form', { class: 'chat-identity-form' },
+      el('label', { class: 'vol', htmlFor: 'chat-identity' }, 'Chat identity', this.identityInput),
+      this.identityHint, this.identitySave);
+    identityForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const identity = this.identityInput.value.trim();
+      if (identity.length > 60 || /[\u0000-\u001f\u007f-\u009f]/.test(identity)) {
+        this.toast('Chat identity must be at most 60 characters without control characters.');
+        return;
+      }
+      if (!this.identitySupported || !this.conn.send({ type: 'chatIdentity', identity })) {
+        this.toast('Not connected to a host supporting chat identities. Your identity was not saved.');
+        return;
+      }
+      this.identityInput.value = identity;
+    });
     const slider = (title: string, get: () => number, set: (v: number) => void) => {
       const s = el('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(get()), title });
       s.addEventListener('input', () => {
@@ -232,7 +265,7 @@ export class App {
         out.disabled = false;
       }
     });
-    return el('div', { class: 'settings-section' }, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
+    return el('div', { class: 'settings-section' }, identityForm, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
       el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'), out);
   }
 
@@ -244,6 +277,15 @@ export class App {
   }
 
   private buildChat(): HTMLElement {
+    this.logEl.append(this.logContent);
+    this.logEl.addEventListener('scroll', () => this.captureChatScroll());
+    this.latestButton.addEventListener('click', () => {
+      this.followChat = true;
+      this.restoreChatScroll();
+    });
+    this.chatResize = new ResizeObserver(() => this.restoreChatScroll());
+    this.chatResize.observe(this.logEl);
+    this.chatResize.observe(this.logContent);
     this.chatRecipient.setAttribute('aria-label', 'Message recipient');
     const input = el('input', { type: 'text', placeholder: 'Message, /roll or /r 2d6+3', maxLength: 500 });
     const send = el('button', { class: 'primary' }, 'Send');
@@ -271,7 +313,7 @@ export class App {
     const section = el(
       'div',
       { class: 'chat-section' },
-      this.logEl,
+      el('div', { class: 'chat-history' }, this.logEl, this.latestButton),
       el('div', { class: 'composer' },
       el('label', { class: 'recipient' }, 'To', this.chatRecipient),
       el('div', { class: 'row' }, input, send)),
@@ -299,38 +341,27 @@ export class App {
     return section;
   }
 
-  private async shareEntry(actorId: string, entry: SharedEntry): Promise<void> {
+  private async shareEntry(actorId: string, entry: SharedEntry, offerQuantity?: number): Promise<void> {
     if (!this.chatCards) throw new Error('This host does not support shared chat cards. Update the host to share cards.');
+    if (transferable(entry) && !this.transferOffers) throw new Error('Update the host to support safe inventory links and transfer offers.');
     if (!this.conn.isOpen) throw new Error('Not connected. Your card was not posted.');
     if (this.chatRecipient.selectedOptions[0]?.disabled) throw new Error('That player is offline. Choose a recipient before sharing.');
     const handle = this.sheetHandles.get(actorId);
     if (handle) await handle.save.flush();
-    await postCard(actorId, entry, this.chatRecipient.value || undefined);
+    await postCard(actorId, entry, this.chatRecipient.value || undefined, offerQuantity);
     this.showSection('chat');
   }
 
-  private async grabCard(card: SharedCard): Promise<void> {
+  private async grabCard(card: SharedCard, all: boolean): Promise<void> {
     const actors = this.myActors.filter(a => a.id !== card.actorId);
     if (!actors.length) throw new Error('You need a different owned character to receive this item.');
-    const actor = actors.length === 1 ? actors[0] : await new Promise<Actor | null>((resolve) => {
-      const dialog = el('dialog', { class: 'inventory-picker' });
-      const select = el('select', {}, ...actors.map(a => el('option', { value: a.id }, a.name)));
-      select.setAttribute('aria-label', 'Receiving character');
-      const cancel = el('button', { type: 'button' }, 'Cancel');
-      const grab = el('button', { type: 'button', class: 'primary' }, 'Grab one');
-      let selected: Actor | null = null;
-      cancel.addEventListener('click', () => dialog.close());
-      grab.addEventListener('click', () => { selected = actors.find(a => a.id === select.value)!; dialog.close(); });
-      dialog.addEventListener('close', () => { dialog.remove(); resolve(selected); }, { once: true });
-      dialog.append(el('h3', {}, `Receive ${card.item.name}`), select, el('div', { class: 'row' }, cancel, grab));
-      document.body.append(dialog);
-      dialog.showModal();
-    });
+    const picked = await pickActor(actors, `Receive ${card.item.name}`, all ? 'Grab all' : 'Grab one');
+    const actor = picked ? actors.find(a => a.id === picked.id) : null;
     if (!actor) return;
     const handle = await this.ensureSheet(actor);
     await handle.save.flush();
     try {
-      await cardRequest(`/${encodeURIComponent(card.cardId)}/grab`, { actorId: actor.id });
+      await cardRequest(`/${encodeURIComponent(card.cardId)}/grab`, { actorId: actor.id, all });
       await handle.save.refresh();
       handle.bus.notify();
       this.toast(`${card.item.name} transferred to ${actor.name}.`);
@@ -351,13 +382,16 @@ export class App {
     rail.setAttribute('aria-label', 'Sidebar sections');
     this.sections.set('chat', this.buildChat());
     this.sections.set('actors', this.actorsEl);
-    this.sections.set('compendium', this.compendium.element);
     this.sections.set('settings', this.buildSettings());
     for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
-      const button = iconButton(id, label, () => {
-        this.showSection(this.section === id ? null : id);
-        if (id === 'compendium' && this.section === id) void this.compendium.open();
-      });
+      if (id === 'compendium') {
+        const button = iconButton(id, label, () => this.compendiumWindow.toggle());
+        button.setAttribute('aria-pressed', 'false');
+        this.compendiumButton = button;
+        rail.append(button);
+        continue;
+      }
+      const button = iconButton(id, label, () => this.showSection(this.section === id ? null : id));
       button.setAttribute('aria-controls', 'player-sidebar');
       this.sectionButtons.set(id, button);
       rail.append(button);
@@ -373,6 +407,7 @@ export class App {
   }
 
   private showSection(section: SidebarSection | null): void {
+    if (this.section === 'chat' && this.logEl.clientHeight) this.chatScrollTop = this.logEl.scrollTop;
     this.section = section;
     this.sidebar.classList.toggle('hidden', section === null);
     this.stageEl.classList.toggle('sidebar-open', section !== null);
@@ -382,6 +417,34 @@ export class App {
       this.sections.get(id)!.classList.toggle('hidden', id !== section);
       if (id === section) this.sectionTitle.textContent = button.title;
     }
+    if (section === 'chat') {
+      this.setChatUnread(false);
+      this.restoreChatScroll();
+    }
+  }
+
+  private setChatUnread(unread: boolean): void {
+    const button = this.sectionButtons.get('chat');
+    button?.classList.toggle('has-unread', unread);
+    button?.setAttribute('aria-label', unread ? 'Chat (new messages)' : 'Chat');
+  }
+
+  private updateLatestButton(): void {
+    this.latestButton.classList.toggle('hidden', this.followChat);
+  }
+
+  private captureChatScroll(): void {
+    if (this.section !== 'chat' || !this.logEl.clientHeight || this.logEl.scrollTop === this.chatScrollTop) return;
+    this.followChat = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight <= 8;
+    this.chatScrollTop = this.logEl.scrollTop;
+    this.updateLatestButton();
+  }
+
+  private restoreChatScroll(): void {
+    if (this.section !== 'chat' || !this.logEl.clientHeight) return;
+    this.logEl.scrollTop = this.followChat ? this.logEl.scrollHeight : this.chatScrollTop;
+    this.chatScrollTop = this.logEl.scrollTop;
+    this.updateLatestButton();
   }
 
   private buildTools(): HTMLElement {
@@ -608,6 +671,7 @@ export class App {
   }
 
   private dispose(): void {
+    this.chatResize?.disconnect();
     if (this.colorTimer !== null) clearTimeout(this.colorTimer);
     this.conn.stop();
     this.view.destroy();
@@ -628,8 +692,16 @@ export class App {
     switch (msg.type) {
       case 'hello':
         this.playerId = msg.playerId;
+        this.currentIdentity = null;
+        this.identitySupported = msg.chatIdentity === true;
+        this.identityInput.disabled = this.identitySave.disabled = !this.identitySupported;
+        this.identityInput.value = '';
+        this.identityHint.textContent = this.identitySupported
+          ? 'Saved in the campaign for your account. Leave empty to use your account name.'
+          : 'This host does not support chat identities. Update the host to enable them.';
         this.playerWhispers = msg.playerWhispers === true;
         this.chatCards = msg.chatCards === true;
+        this.transferOffers = msg.transferOffers === true;
         for (const handle of this.sheetHandles.values()) {
           void handle.save.refresh().then(() => handle.bus.notify()).catch((e: Error) => this.toast(e.message));
         }
@@ -646,10 +718,18 @@ export class App {
         this.setPaused(msg.paused);
         break;
       case 'roster':
+        {
+          const own = msg.players.find(p => p.playerId === this.playerId);
+          if (own && this.currentIdentity !== (own.chatIdentity ?? '')) {
+            this.currentIdentity = own.chatIdentity ?? '';
+            this.identityInput.value = this.currentIdentity;
+          }
+        }
         this.updateRecipients(msg.players);
         this.rosterEl.replaceChildren(el('div', { class: 'roster-heading' }, 'CONNECTED / PING TO HOST'),
           el('div', { class: 'player-row' }, 'Dungeon Master', el('span', {}, 'Host')),
-          ...msg.players.map(p => el('div', { class: 'player-row' }, `${p.playerName}${p.playerId === this.playerId ? ' (you)' : ''}`,
+          ...msg.players.map(p => el('div', { class: 'player-row' },
+            el('span', { class: 'player-name' }, `${p.playerName}${p.chatIdentity ? ` (${p.chatIdentity})` : ''}${p.playerId === this.playerId ? ' (you)' : ''}`),
             el('span', {}, p.pingMs < 0 ? '--' : `${p.pingMs} ms`))));
         break;
       case 'measurements':
@@ -865,6 +945,7 @@ export class App {
   }
 
   private addLog(e: LogEntry): void {
+    if (this.section !== 'chat') this.setChatUnread(true);
     this.log.push(e);
     if (this.log.length > 300) this.log.shift();
     this.renderLog();
@@ -887,21 +968,26 @@ export class App {
   }
 
   private renderLog(): void {
-    const follow = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight < 48;
-    const scroll = this.logEl.scrollTop;
+    this.captureChatScroll();
+    const anchor = Array.from(this.logContent.children).find(child =>
+      child.getBoundingClientRect().bottom > this.logEl.getBoundingClientRect().top);
+    const anchorTop = anchor?.getBoundingClientRect().top;
     const cards = this.log.map((e) => {
       let card = this.logCards.get(e);
       if (!card) {
-        card = renderLogEntry(e, this.playerId, (card) => this.grabCard(card), (message) => this.toast(message), (m) => this.rollActions(m));
+        card = renderLogEntry(e, this.playerId, (card, all) => this.grabCard(card, all), (message) => this.toast(message), (m) => this.rollActions(m));
         this.logCards.set(e, card);
         card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
       }
       return card;
     });
     const keep = new Set<Element>(cards);
-    for (const child of Array.from(this.logEl.children)) if (!keep.has(child)) child.remove();
-    for (const card of cards) if (card.parentElement !== this.logEl) this.logEl.append(card);
-    this.logEl.scrollTop = follow ? this.logEl.scrollHeight : scroll;
+    for (const child of Array.from(this.logContent.children)) if (!keep.has(child)) child.remove();
+    for (const card of cards) if (card.parentElement !== this.logContent) this.logContent.append(card);
+    if (!this.followChat && anchor?.isConnected && anchorTop !== undefined && this.section === 'chat') {
+      this.chatScrollTop = this.logEl.scrollTop + anchor.getBoundingClientRect().top - anchorTop;
+    }
+    this.restoreChatScroll();
   }
 
   private updateRecipients(players: Array<{ playerId: string; playerName: string }>): void {
@@ -940,7 +1026,7 @@ export class App {
             bus,
             onChange: () => { changed(); this.scheduleEffects(); },
             actorId: a.id,
-            onShare: (entry) => { void this.shareEntry(a.id, entry).catch((e: Error) => this.toast(e.message)); },
+            onShare: (entry, quantity) => { void this.shareEntry(a.id, entry, quantity).catch((e: Error) => this.toast(e.message)); },
             onPrepareShare: () => changed.flush(),
             onLog: (text, rollSource) => { this.conn.send({ type: 'chat', text, rollSource, whisper: false }); },
             artwork: a.artwork,
@@ -980,7 +1066,7 @@ export class App {
       const handle = this.sheetHandles.get(a.id);
       const where = handle ? addToSheet(handle.character, category, entry) : null;
       if (where) handle!.bus.notify();
-      this.toast(where ? ` + ' added to .' + ` : 'This entry cannot be added to a sheet.');
+      this.toast(where ? `${entry.name} added to ${a.name}'s ${where}.` : 'This entry cannot be added to a sheet.');
     } catch {
       this.toast('Could not read the dropped entry.');
     }

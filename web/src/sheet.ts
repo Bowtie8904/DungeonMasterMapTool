@@ -7,7 +7,7 @@ import { applyInventory, autosave, type SheetSave } from './daggerheart/persist'
 import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
 import { setGmFear } from './daggerheart/engine';
-import { postCard } from './shared-cards';
+import { postCard, transferable } from './shared-cards';
 
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
   const store = new Store();
@@ -17,6 +17,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let character: CharacterSheet | undefined;
   let changed: SheetSave | undefined;
   let chatCards = false;
+  let transferOffers = false;
   let rulesWarning = '';
   const bus = new SheetBus();
   const report = (message: string) => {
@@ -41,12 +42,13 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       bus,
       actorId,
       onPrepareShare: () => changed!.flush(),
-      onShare: (entry) => {
+      onShare: (entry, quantity) => {
         const share = async () => {
           if (!chatCards) throw new Error('This host does not support shared chat cards. Update the host to share cards.');
+          if (transferable(entry) && !transferOffers) throw new Error('Update the host to support safe inventory links and transfer offers.');
           if (!conn.isOpen) throw new Error('Not connected. Your card was not posted.');
           await changed!.flush();
-          await postCard(actorId, entry);
+          await postCard(actorId, entry, undefined, quantity);
         };
         void share().catch((e: Error) => report(e.message));
       },
@@ -72,6 +74,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onMessage: (m) => {
         if (m.type === 'hello') {
           chatCards = m.chatCards === true;
+          transferOffers = m.transferOffers === true;
           if (changed) void changed.refresh().catch((e: Error) => report(e.message));
           return;
         }

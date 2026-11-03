@@ -1,7 +1,6 @@
 import { cardRequest } from './api';
 import type { Armor, DomainCard, Feature, InventoryItem, Weapon } from './daggerheart/data';
 import { rich } from './daggerheart/rich';
-import { iconButton } from './icons';
 import { el } from './login';
 import { drawingId } from './tools';
 
@@ -11,15 +10,15 @@ export type SharedEntry =
   | { category: 'weapon'; item: Weapon }
   | { category: 'armor'; item: Armor }
   | { category: 'item'; item: InventoryItem };
-export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number };
+export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number; offerQuantity?: number };
 export const INVENTORY_DRAG = 'application/x-dmmt-inventory';
 
 export function transferable(entry: SharedEntry): boolean {
   return entry.category === 'weapon' || entry.category === 'armor' || entry.category === 'item';
 }
 
-export async function postCard(actorId: string, entry: SharedEntry, toId?: string): Promise<void> {
-  await cardRequest('', { actorId, ...entry, toId });
+export async function postCard(actorId: string, entry: SharedEntry, toId?: string, offerQuantity?: number): Promise<void> {
+  await cardRequest('', { actorId, ...entry, toId, offerQuantity });
 }
 
 // Drag data is fixed synchronously; the receiver waits for the source window's save before posting.
@@ -62,7 +61,7 @@ export async function waitForInventoryDrag(token: string): Promise<void> {
   if (error) throw new Error(error);
 }
 
-export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard) => Promise<void>,
+export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
                                  onError?: (message: string) => void): HTMLElement {
   const body = el('div', { class: 'shared-description' });
   const badges: string[] = [];
@@ -90,27 +89,34 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard) =
       if (card.item.note) body.append(rich(card.item.note));
       break;
   }
-  const root = el('section', { class: `shared-card shared-${card.category}` },
-    el('div', { class: 'shared-source' }, card.actorName),
+  const offer = transferable(card) && (card.offerQuantity ?? 0) > 0;
+  const root = el('section', { class: `shared-card shared-${card.category}${offer ? ' transfer-offer' : ''}` },
+    el('div', { class: 'shared-source' }, offer ? `Transfer offer from ${card.actorName}` : card.actorName),
     el('h3', {}, card.item.name),
     el('div', { class: 'shared-badges' }, ...badges.map(text => el('span', {}, text))), body);
-  if (transferable(card)) {
+  if (offer) {
+    root.append(el('div', { class: 'shared-offered' }, `${card.offerQuantity} offered`));
     const count = el('span', { class: 'muted' }, `${card.available} remaining`);
     let busy = false;
     let known = true;
-    const paint = () => { grab.disabled = busy || !known || !onGrab || card.available <= 0; };
-    const grab = iconButton('grab', 'Grab one into your inventory', () => {
-      busy = true;
-      paint();
-      void onGrab!(card).catch(e => onError?.((e as Error).message)).finally(async () => {
-        await refresh();
-        busy = false;
+    const buttons: HTMLButtonElement[] = [];
+    const paint = () => { buttons.forEach(b => { b.disabled = busy || !known || !onGrab || card.available <= 0; }); };
+    for (const all of [false, true]) {
+      const grab = el('button', { type: 'button', class: 'inventory-action', title: `Transfer ${all ? 'all remaining units' : 'one unit'} into your inventory` }, all ? 'Grab all' : 'Grab one');
+      grab.addEventListener('click', () => {
+        if (!onGrab || busy) return;
+        busy = true;
         paint();
+        void onGrab(card, all).catch(e => onError?.((e as Error).message)).finally(async () => {
+          await refresh();
+          busy = false;
+          paint();
+        });
       });
-    });
-    grab.classList.add('share-icon');
-    grab.disabled = !onGrab || card.available <= 0;
-    root.append(el('div', { class: 'shared-stock' }, count, grab));
+      buttons.push(grab);
+    }
+    paint();
+    root.append(el('div', { class: 'shared-stock' }, count, ...buttons));
     let request = 0;
     const refresh = async () => {
       const current = ++request;

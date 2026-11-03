@@ -46,8 +46,26 @@ final class ChatCards {
 
     static int available(JsonNode sheet, String category, JsonNode item) {
         ObjectNode key = identity(item);
-        return entries(sheet, category).stream().filter(e -> identity(e).equals(key))
+        if (!transferable(category))
+            return 0;
+        String field = switch (category) {
+            case "weapon" -> "carriedWeapons";
+            case "armor" -> "carriedArmor";
+            default -> "inventory";
+        };
+        List<JsonNode> stock = new ArrayList<>();
+        sheet.path(field).forEach(stock::add);
+        return stock.stream().filter(e -> identity(e).equals(key))
                                        .mapToInt(e -> "item".equals(category) ? Math.max(0, e.path("qty").asInt()) : 1).sum();
+    }
+
+    static int remaining(JsonNode sheet, JsonNode card) {
+        int offered = card.path("offerQuantity").asInt(0);
+        if (offered <= 0)
+            return 0;
+        int claimed = sheet.path("transferClaims").path(card.path("cardId").asText()).asInt(0);
+        return Math.min(Math.max(0, offered - claimed),
+                        available(sheet, card.path("category").asText(), card.path("item")));
     }
 
     static ObjectNode resolve(JsonNode sheet, String category, JsonNode item) {
@@ -58,7 +76,11 @@ final class ChatCards {
     }
 
     static void transfer(ObjectNode source, ObjectNode target, String category, JsonNode item) {
-        if (!transferable(category) || available(source, category, item) <= 0) {
+        transfer(source, target, category, item, 1);
+    }
+
+    static void transfer(ObjectNode source, ObjectNode target, String category, JsonNode item, int quantity) {
+        if (!transferable(category) || quantity <= 0 || available(source, category, item) < quantity) {
             throw new IllegalArgumentException("There is no more to grab.");
         }
         ObjectNode key = identity(item);
@@ -75,48 +97,54 @@ final class ChatCards {
             int held = entries(target, category).stream()
                     .filter(e -> e.path("name").equals(key.path("name")) && e.path("type").equals(key.path("type")))
                     .mapToInt(e -> Math.max(0, e.path("qty").asInt())).sum();
-            if (held >= cap) {
-                throw new IllegalArgumentException("Receiving character already has the maximum quantity (" + cap + ").");
+            if (quantity > cap - held) {
+                throw new IllegalArgumentException("Not enough room: receiving character has " + held
+                        + " of " + cap + " allowed; the transfer needs room for " + quantity + ".");
             }
         }
         List<String> fields = switch (category) {
-            case "weapon" -> List.of("carriedWeapons", "activeWeapons");
+            case "weapon" -> List.of("carriedWeapons");
             case "armor" -> List.of("carriedArmor");
             default -> List.of("inventory");
         };
-        boolean removed = false;
+        int left = quantity;
         for (String field : fields) {
             if (!(source.path(field) instanceof ArrayNode array))
                 continue;
-            for (int i = 0; i < array.size(); i++) {
+            for (int i = 0; i < array.size() && left > 0; i++) {
                 JsonNode entry = array.get(i);
                 if (!identity(entry).equals(key))
                     continue;
                 if ("item".equals(category)) {
                     if (entry.path("qty").asInt() <= 0)
                         continue;
-                    ((ObjectNode)entry).put("qty", entry.path("qty").asInt() - 1);
+                    int take = Math.min(left, entry.path("qty").asInt());
+                    int remaining = entry.path("qty").asInt() - take;
+                    left -= take;
+                    if (remaining <= 0)
+                        array.remove(i--);
+                    else
+                        ((ObjectNode)entry).put("qty", remaining);
                 }
-                else
-                    array.remove(i);
-                removed = true;
-                break;
+                else {
+                    array.remove(i--);
+                    left--;
+                }
             }
-            if (removed)
+            if (left == 0)
                 break;
         }
-        if (!removed && "armor".equals(category))
-            source.remove("activeArmor");
         ArrayNode array = target.withArray(destination);
         if ("item".equals(category)) {
             for (JsonNode entry : array) {
                 if (identity(entry).equals(key)) {
-                    ((ObjectNode)entry).put("qty", Math.max(0, entry.path("qty").asInt()) + 1);
+                    ((ObjectNode)entry).put("qty", Math.max(0, entry.path("qty").asInt()) + quantity);
                     return;
                 }
             }
-            key.put("qty", 1);
+            key.put("qty", quantity);
         }
-        array.add(key);
+        for (int i = 0; i < ("item".equals(category) ? 1 : quantity); i++)
+            array.add(key.deepCopy());
     }
 }

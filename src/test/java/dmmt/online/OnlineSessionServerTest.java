@@ -67,15 +67,21 @@ class OnlineSessionServerTest {
         String cookie = cookie();
         Inbox inbox = new Inbox();
         WebSocket ws = connect(cookie, inbox);
-        assertTrue(inbox.next("hello").path("chatCards").asBoolean());
+        JsonNode hello = inbox.next("hello");
+        assertTrue(hello.path("chatCards").asBoolean());
+        assertTrue(hello.path("transferOffers").asBoolean());
         inbox.next("snapshot");
+        inbox.next("roster");
         try {
-            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item");
+            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"Mara's player\"}", true).join();
+            assertEquals("Mara's player", inbox.next("roster").path("players").get(0).path("chatIdentity").asText());
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item").put("offerQuantity", 2);
             request.set("item", original.path("inventory").get(0));
             HttpResponse<String> post = cardHttp(cookie, "", request);
             assertEquals(200, post.statusCode(), post.body());
             String id = MAPPER.readTree(post.body()).path("cardId").asText();
             JsonNode message = inbox.next("chat");
+            assertEquals("Mara's player", message.path("from").asText());
             assertTrue(message.path("text").asText().contains("Clear **HP**"));
             assertEquals("Potion", message.path("sharedCard").path("item").path("name").asText());
             assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
@@ -100,7 +106,7 @@ class OnlineSessionServerTest {
             assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + duplicateId, null).body()).path("available").asInt());
             JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
             JsonNode target = MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
-            assertEquals(0, source.path("inventory").get(0).path("qty").asInt());
+            assertEquals(0, source.path("inventory").size(), "Emptied stacks are removed");
             assertEquals(2, target.path("inventory").get(0).path("qty").asInt());
             assertEquals(2, source.path("inventoryRevision").asInt());
             assertEquals("sheetInventory", inbox.next("sheetInventory").path("type").asText());
@@ -168,7 +174,7 @@ class OnlineSessionServerTest {
             assertEquals(409, cardHttp(bobCookie, "/" + featureId + "/grab",
                     MAPPER.createObjectNode().put("actorId", "target")).statusCode());
             assertEquals(source, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")));
-            request.put("category", "item").set("item", source.path("inventory").get(0));
+            request.put("category", "item").put("offerQuantity", 1).set("item", source.path("inventory").get(0));
             var item = cardHttp(aliceCookie, "", request);
             assertEquals(200, item.statusCode());
             String itemId = MAPPER.readTree(item.body()).path("cardId").asText();
@@ -176,9 +182,90 @@ class OnlineSessionServerTest {
                     MAPPER.createObjectNode().put("actorId", "source")).statusCode(), "Receiving actor must be owned");
             assertEquals(200, cardHttp(bobCookie, "/" + itemId + "/grab",
                     MAPPER.createObjectNode().put("actorId", "target")).statusCode());
-            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").size());
             assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("qty").asInt());
         } finally { alice.abort(); bobSocket.abort(); }
+    }
+
+    @Test
+    void linksCannotBeGrabbedAndOfferBudgetsSurviveReloadAndForgedSaves() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Rook").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "source", """
+                {"inventory":[{"name":"Potion","type":"consumable","qty":5}],
+                 "activeWeapons":[{"name":"Sword"}],"carriedWeapons":[],
+                 "activeArmor":{"name":"Leather"},"carriedArmor":[]}
+                """);
+        store.saveSheet(campaign.getId(), "target", "{\"inventory\":[]}");
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item");
+        request.set("item", MAPPER.readTree("{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":5}"));
+        var link = cardHttp(cookie, "", request);
+        assertEquals(200, link.statusCode());
+        String linkId = MAPPER.readTree(link.body()).path("cardId").asText();
+        ObjectNode grab = MAPPER.createObjectNode().put("actorId", "target");
+        assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + linkId, null).body()).path("available").asInt());
+        assertEquals(409, cardHttp(cookie, "/" + linkId + "/grab", grab).statusCode());
+        for (String invalid : List.of("0", "-1", "6", "1.5", "\"2\"")) {
+            request.set("offerQuantity", MAPPER.readTree(invalid));
+            assertEquals(400, cardHttp(cookie, "", request).statusCode());
+        }
+        request.put("offerQuantity", 2);
+        var offer = cardHttp(cookie, "", request);
+        assertEquals(200, offer.statusCode(), offer.body());
+        String id = MAPPER.readTree(offer.body()).path("cardId").asText();
+        assertEquals(200, cardHttp(cookie, "/" + id + "/grab", grab).statusCode());
+        assertEquals(1, MAPPER.readTree(cardHttp(cookie, "/" + id, null).body()).path("available").asInt());
+        assertEquals(200, cardHttp(cookie, "/" + id + "/grab", grab.put("all", true)).statusCode());
+        assertEquals(409, cardHttp(cookie, "/" + id + "/grab", grab).statusCode());
+        ObjectNode source = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
+        assertEquals(3, source.path("inventory").get(0).path("qty").asInt(), "Only offered quantity moves");
+        source.putObject("transferClaims").put(id, 0);
+        var saved = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/source"))
+                        .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(source.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("transferClaims").path(id).asInt());
+        // A new server has neither card cache nor an in-memory claim count.
+        server.stop();
+        store = new CampaignStore(temp.resolve("campaigns"));
+        server = new OnlineSessionServer(new OnlineSessionServer.Config(port, "Game", 4, 65536, 50, 100, 3, 60),
+                campaign, store, new AssetRegistry(temp.resolve("cache"), 2048, store), new OnlineSessionServer.Host() {
+                    @Override
+                    public CompletableFuture<OnlineSessionServer.MoveResult> moveToken(String playerId, String tokenId, double x, double y) {
+                        return CompletableFuture.completedFuture(OnlineSessionServer.MoveResult.accepted());
+                    }
+                    @Override
+                    public void rosterChanged() {}
+                    @Override
+                    public void campaignChanged(Campaign c) {}
+                    @Override
+                    public void dmMessage(JsonNode message) {}
+                });
+        server.start();
+        server.publish(state("m1", 0), "m1/l1");
+        cookie = cookie();
+        assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + id, null).body()).path("available").asInt());
+        assertEquals(409, cardHttp(cookie, "/" + id + "/grab", grab).statusCode());
+        request.put("offerQuantity", 3);
+        var bulk = cardHttp(cookie, "", request);
+        assertEquals(200, bulk.statusCode(), bulk.body());
+        String bulkId = MAPPER.readTree(bulk.body()).path("cardId").asText();
+        store.saveSheet(campaign.getId(), "target", "{\"inventory\":[{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":4}]}");
+        assertEquals(409, cardHttp(cookie, "/" + bulkId + "/grab", grab).statusCode(), "Grab all fails atomically if the cap would be exceeded");
+        assertEquals(3, MAPPER.readTree(cardHttp(cookie, "/" + bulkId, null).body()).path("available").asInt());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("qty").asInt());
+        store.saveSheet(campaign.getId(), "target", "{\"inventory\":[{\"name\":\"Potion\",\"type\":\"consumable\",\"qty\":2}]}");
+        var grabbed = cardHttp(cookie, "/" + bulkId + "/grab", grab);
+        assertEquals(200, grabbed.statusCode(), grabbed.body());
+        assertEquals(3, MAPPER.readTree(grabbed.body()).path("quantity").asInt());
+        assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + bulkId, null).body()).path("available").asInt());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("qty").asInt());
+        request.put("category", "weapon").put("offerQuantity", 1).set("item", source.path("activeWeapons").get(0));
+        assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active weapons cannot be offered");
+        request.put("category", "armor").set("item", source.path("activeArmor"));
+        assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active armor cannot be offered");
     }
 
     @Test
@@ -940,6 +1027,65 @@ class OnlineSessionServerTest {
         server.dmMeasurement(server.measurements().getFirst(), true);
         assertTrue(server.measurements().isEmpty());
         alice.abort(); other.abort();
+    }
+
+    @Test
+    void chatIdentityIsValidatedAndSharedWithoutChangingAccountNamesOrCompatibility() throws Exception {
+        String cookie = cookie();
+        Inbox first = new Inbox();
+        WebSocket ws = connect(cookie, first);
+        JsonNode hello = first.next("hello");
+        assertTrue(hello.path("chatIdentity").asBoolean());
+        assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
+        String accountName = hello.path("playerName").asText();
+        first.next("roster");
+        Inbox second = new Inbox();
+        WebSocket other = connect(cookie, second);
+        second.next("hello");
+        second.next("roster");
+        first.next("roster");
+        try {
+            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"  Rook  \"}", true).join();
+            JsonNode roster = second.next("roster").path("players").get(0);
+            first.next("roster");
+            assertEquals("Rook", roster.path("chatIdentity").asText());
+            Campaign loaded = store.load(campaign.getId());
+            assertEquals("Rook", loaded.player(playerId()).getChatIdentity());
+            server.setCampaign(loaded);
+            assertEquals(accountName, roster.path("playerName").asText());
+            assertEquals(2, roster.path("connections").asInt());
+            other.sendText("{\"type\":\"chat\",\"text\":\"hello\"}", true).join();
+            assertEquals("Rook", first.next("chat").path("from").asText());
+            other.sendText("{\"type\":\"roll\",\"expression\":\"1d6\"}", true).join();
+            assertEquals("Rook", first.next("roll").path("from").asText());
+            server.dmChat("private", playerId());
+            assertEquals("Rook", first.next("chat").path("to").asText());
+            for (String invalid : List.of("x".repeat(61), "bad\nname")) {
+                ws.sendText(MAPPER.createObjectNode().put("type", "chatIdentity").put("identity", invalid).toString(), true).join();
+                assertTrue(first.next("error").path("message").asText().contains("Chat identity"));
+                assertEquals("Rook", server.roster().getFirst().chatIdentity());
+            }
+            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":123}", true).join();
+            assertTrue(first.next("error").path("message").asText().contains("must be text"));
+            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"\"}", true).join();
+            first.next("roster");
+            other.sendText("{\"type\":\"chat\",\"text\":\"account name again\"}", true).join();
+            assertEquals(accountName, first.next("chat").path("from").asText());
+            assertEquals("", store.load(campaign.getId()).player(playerId()).getChatIdentity());
+            java.nio.file.Path blockedSave = temp.resolve("campaigns").resolve(campaign.getId()).resolve("campaign.json.tmp");
+            java.nio.file.Files.createDirectory(blockedSave);
+            try {
+                ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"Unsaved\"}", true).join();
+                assertTrue(first.next("error").path("message").asText().contains("Could not save chat identity"));
+                assertEquals("", server.roster().getFirst().chatIdentity());
+                assertEquals("", store.load(campaign.getId()).player(playerId()).getChatIdentity());
+            } finally {
+                java.nio.file.Files.delete(blockedSave);
+            }
+        } finally {
+            ws.abort();
+            other.abort();
+        }
     }
 
     @Test

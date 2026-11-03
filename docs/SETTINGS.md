@@ -5,6 +5,15 @@ exact key (for example `fog.revealSeconds`) or with a word describing what you w
 *zoom*, *tooltip*, *torch*, *cache*, *click*, *frame rate*). Every entry ends with a **Keywords** line that lists
 common synonyms to make searching easier.
 
+## Online Play browser preferences
+
+The player's browser **Settings > Chat identity** sets an optional name for future chat messages, rolls
+and shared cards. It is trimmed, limited to 60 characters without control characters, and defaults to empty
+(use the account name). It is saved on the host in the campaign's `campaign.json` as
+`players[].chatIdentity`, not in browser storage or `dmmt-settings.ini`. The identity follows the player
+across browsers/devices and host restarts; the bottom-left overlay shows `username (identity)`. Clearing the field
+and saving restores the account name. Older hosts disable this setting with an update hint.
+
 ## Remote-session settings ownership
 
 Open the **Session** tab in the left sidebar to explicitly host or connect; neither opening setup nor

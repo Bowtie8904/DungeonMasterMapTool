@@ -84,11 +84,12 @@ class CampaignStoreTest {
     void olderCampaignFilesWithoutSystemOrFoldersStillLoad() throws IOException {
         Path folder = Files.createDirectories(dir.resolve("old"));
         Files.writeString(folder.resolve("campaign.json"), """
-                {"id":"old","name":"Legacy","players":[],"actors":[{"id":"a1","name":"Rook"}]}
+                {"id":"old","name":"Legacy","players":[{"id":"p1","name":"Alice"}],"actors":[{"id":"a1","name":"Rook"}]}
                 """, StandardCharsets.UTF_8);
         CampaignStore store = new CampaignStore(dir);
 
         Campaign loaded = store.load("old");
+        assertEquals("", loaded.player("p1").getChatIdentity());
         assertNotNull(loaded.getActorFolders());
         assertTrue(loaded.getActorFolders().isEmpty());
         assertNull(loaded.getActors().getFirst().getFolder());

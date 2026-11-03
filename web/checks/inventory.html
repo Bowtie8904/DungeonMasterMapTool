@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Inventory regression</title></head>
+<body><main id="sheet" style="width:1100px;height:900px;display:flex"></main><div id="chat"></div><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { mockCharacter } from '../src/daggerheart/data.ts';
+import { renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
+import { renderSharedCard } from '../src/shared-cards.ts';
+
+const checks = [];
+const assert = (ok, name) => { if (!ok) throw Error(name); checks.push(name); };
+const frame = () => new Promise(resolve => setTimeout(resolve, 100));
+const result = document.getElementById('result');
+try {
+  const c = mockCharacter();
+  c.carriedWeapons = structuredClone(c.activeWeapons);
+  const long = 'A finely detailed adventuring tool with a long description. '.repeat(20);
+  c.inventory = [
+    { name: 'Torch', type: 'gear', note: long, qty: 3 },
+    { name: 'Potion', type: 'consumable', note: 'Clear HP.', qty: 2,
+      automation: { actions: [{ id: 'drink', label: 'Drink', steps: [{ op: 'clear', resource: 'hp', amount: 1 }] }] } },
+    { name: 'Empty', type: 'gear', note: 'Nothing left.', qty: 1 },
+  ];
+  const sent = [];
+  const bus = new SheetBus();
+  const host = document.getElementById('sheet');
+  host.append(renderSheetView({ character: c, bus, onRoll: () => true,
+    actorId: 'source', onPrepareShare: async () => {}, onShare: (entry, quantity) => sent.push({ entry, quantity }) }));
+  const tab = name => [...host.querySelectorAll('[role=tab]')].find(b => b.textContent.startsWith(name)).click();
+  tab('Equipment');
+  assert(!host.querySelector('.eq-top [aria-label^="Offer "]'), 'active equipment has no transfer controls');
+  const carried = host.querySelector('.equipment-table tbody tr');
+  assert(carried.querySelectorAll('td:last-child [aria-label]').length === 3, 'equipment chat, transfer and delete controls are trailing');
+  assert(!carried.querySelector('td:first-child button'), 'equipment names have no scattered controls');
+  const equip = [...carried.querySelectorAll('.inventory-controls button')].find(b => b.textContent === 'Equip');
+  assert(carried.querySelector('.delete-item').getBoundingClientRect().bottom <= equip.getBoundingClientRect().top, 'equip sits below the icon row');
+  tab('Loot');
+  await frame();
+  const rows = () => [...host.querySelectorAll('.loot-table tbody tr')];
+  assert(rows()[0].querySelectorAll('td:last-child [aria-label]').length === 3, 'loot chat, transfer and delete controls are trailing');
+  assert(rows()[2].querySelector('[aria-label^="Offer "]'), 'stocked loot can be offered');
+  const text = rows()[0].querySelector('.loot-description-text');
+  const toggle = rows()[0].querySelector('.description-toggle');
+  assert(text.clientHeight <= parseFloat(getComputedStyle(text).lineHeight) * 2 + 1, 'loot description is at most two rendered lines');
+  assert(!toggle.hidden, 'overflowing descriptions have expansion controls');
+  assert(rows()[1].querySelector('.description-toggle').hidden, 'short descriptions have no unnecessary controls');
+  toggle.click();
+  assert(toggle.getAttribute('aria-expanded') === 'true' && text.clientHeight > 100, 'description expands within the row');
+  toggle.click();
+  assert(toggle.getAttribute('aria-expanded') === 'false', 'description collapses');
+  let search = host.querySelector('[aria-label="Search inventory"]');
+  search.value = 'TORCH detailed';
+  search.dispatchEvent(new Event('input'));
+  assert(!rows()[0].hidden && rows()[1].hidden, 'search matches name and description case-insensitively with every word');
+  bus.notify();
+  await frame();
+  search = host.querySelector('[aria-label="Search inventory"]');
+  assert(search.value === 'TORCH detailed' && rows()[1].hidden, 'search survives sheet updates');
+  search.value = '';
+  search.dispatchEvent(new Event('input'));
+  rows()[0].querySelector('[aria-label^="Post "]').click();
+  assert(sent.at(-1).quantity === undefined, 'chat links do not create offers');
+  rows()[0].querySelector('[aria-label^="Offer "]').click();
+  let dialog = document.querySelector('dialog');
+  let quantity = dialog.querySelector('input');
+  assert(quantity.value === '3', 'offer quantity defaults to all available');
+  quantity.value = '4';
+  dialog.querySelector('form').requestSubmit();
+  assert(dialog.open && sent.length === 1, 'out-of-stock quantity cannot be submitted');
+  quantity.value = '2';
+  dialog.querySelector('form').requestSubmit();
+  await frame();
+  assert(sent.at(-1).quantity === 2 && !dialog.open, 'chosen offer quantity is passed to the sender');
+  rows()[0].querySelector('[aria-label^="Offer "]').click();
+  dialog = document.querySelector('dialog[open]');
+  dialog.querySelector('button[type=button]').click();
+  await frame();
+  assert(sent.length === 2, 'cancelling an offer posts nothing');
+  host.style.width = '750px';
+  await frame();
+  assert(!rows()[0].querySelector('.description-toggle').hidden, 'overflow remains expandable after resizing');
+  const badge = rows()[1].querySelector('.tag');
+  assert(badge.getBoundingClientRect().right <= badge.parentElement.getBoundingClientRect().right, 'consumable type badges fit without breaking across lines');
+  rows()[2].querySelector('[aria-label^="Offer "]').click();
+  assert(sent.at(-1).quantity === 1 && !document.querySelector('dialog[open]'), 'single-unit offers need no quantity dialog');
+  rows()[2].querySelector('.qty button:first-child').click();
+  await frame();
+  assert(rows().length === 3 && c.inventory.some(i => i.name === 'Empty' && i.qty === 0), 'stepping down to zero keeps the item');
+  const drink = [...rows()[1].querySelectorAll('.inventory-controls button')].find(b => b.textContent === 'Drink');
+  const trash = rows()[1].querySelector('.delete-item');
+  assert(trash.getBoundingClientRect().bottom <= drink.getBoundingClientRect().top && rows()[1].querySelector('[aria-label^="Post "]').getBoundingClientRect().top === trash.getBoundingClientRect().top, 'icons share the first row; actions sit on a second row');
+  drink.click();
+  await frame();
+  assert(c.inventory.find(i => i.name === 'Potion').qty === 1, 'using one leaves the rest');
+  const again = [...rows()[1].querySelectorAll('.inventory-controls button')].find(b => b.textContent === 'Drink');
+  assert(again, 'Drink remains: ' + rows()[1].querySelector('.inventory-controls').outerHTML.slice(0, 300));
+  again.click();
+  await frame();
+  assert(rows().length === 2 && !c.inventory.some(i => i.name === 'Potion'), 'using the last unit removes the item');
+  const dropped = c.inventory.find(i => i.name === 'Empty');
+  rows()[1].querySelector('.delete-item').click();
+  await frame();
+  assert(rows().length === 1 && !c.inventory.includes(dropped), 'delete removes loot');
+  tab('Equipment');
+  await frame();
+  assert(host.querySelector('.slot .top .share-icon[aria-label^="Post "]'), 'active gear chat icon stays in the top-right header');
+  host.querySelector('.equipment-table .delete-item').click();
+  await frame();
+  assert(c.carriedWeapons.length === 0, 'delete removes unequipped equipment');
+
+  const item = c.inventory[0];
+  const card = { category: 'item', item, cardId: 'offer', actorId: 'source', actorName: 'Mara', available: 2 };
+  const chat = document.getElementById('chat');
+  chat.append(renderSharedCard(card));
+  assert(!chat.querySelector('button'), 'historical and new plain links have no grab controls');
+  const grabbed = [];
+  window.fetch = async () => new Response(JSON.stringify({ available: 0 }), { status: 200 });
+  const offer = renderSharedCard({ ...card, offerQuantity: 2 }, async (_, all) => { grabbed.push(all); });
+  chat.append(offer);
+  assert(offer.textContent.includes('Transfer offer from Mara') && offer.textContent.includes('2 remaining'), 'offers identify the character and remaining quantity');
+  offer.querySelectorAll('button')[1].click();
+  await frame();
+  assert(grabbed[0] === true, 'Grab all sends an explicit bulk claim');
+  assert([...offer.querySelectorAll('button')].every(b => b.disabled) && offer.textContent.includes('0 remaining'), 'exhausted offer stays readable with both controls disabled');
+  result.textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack}`;
+}
+</script>
+</body>
+</html>

@@ -1,12 +1,11 @@
 import { el } from './login';
 import { DRAG_TYPE } from './daggerheart/window';
+import { pickActor } from './actor-picker';
 import {
-  ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, describeAutomation, fetchCompendiumCategory, fetchCompendiumIndex,
+  ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, fetchCompendiumCategory, fetchCompendiumIndex,
   matchesSearch,
 } from './daggerheart/compendium';
 export type { CompendiumEntry };
-
-const MAX_RESULTS = 80;
 
 /** Appends text with **bold** and *italic* markers as DOM nodes (never as HTML). */
 export function inlineText(parent: HTMLElement, text: string): void {
@@ -49,20 +48,136 @@ export interface CompendiumHost {
   dragStart?: () => void;
 }
 
-/** Sidebar panel: searchable, read-only browser over the host's Daggerheart compendium. */
+interface Column {
+  label: string;
+  value: (e: CompendiumEntry) => string;
+  /** Long text that wraps over several lines. */
+  wide?: boolean;
+  numeric?: boolean;
+}
+
+interface Filter {
+  label: string;
+  /** One or several values the entry can be found under. */
+  value: (e: CompendiumEntry) => string | string[] | undefined;
+}
+
+interface Layout {
+  columns: Column[];
+  filters: Filter[];
+}
+
+const damage = (e: CompendiumEntry): string => {
+  const d = e.weapon?.damage;
+  if (!d) return '';
+  return `${d.dice}${d.bonus ? (d.bonus > 0 ? `+${d.bonus}` : `${d.bonus}`) : ''} ${d.type}`;
+};
+const featureText = (e: CompendiumEntry): string => e.feature ? `${e.feature.name}: ${e.feature.text}` : '';
+const featureNames = (e: CompendiumEntry): string => (e.features ?? []).map((f) => f.name).join(', ');
+const tier = (e: CompendiumEntry): string | undefined => e.tier ? `Tier ${e.tier}` : undefined;
+const starter = (e: CompendiumEntry): string | undefined => e.starter ? 'Starter gear' : undefined;
+const plain = (text: string | undefined): string => (text ?? '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
+const kindOf = (e: CompendiumEntry): string => e.kind === 'subclass' ? 'Subclass' : 'Class';
+
+const LAYOUTS: Record<string, Layout> = {
+  armor: {
+    columns: [
+      { label: 'Tier', value: (e) => String(e.tier ?? ''), numeric: true },
+      { label: 'Score', value: (e) => String(e.armor?.score ?? ''), numeric: true },
+      { label: 'Thresholds', value: (e) => e.armor ? `${e.armor.major} / ${e.armor.severe}` : '' },
+      { label: 'Feature', value: (e) => plain(featureText(e)), wide: true },
+    ],
+    filters: [{ label: 'Tier', value: tier }, { label: 'Gear', value: starter }],
+  },
+  weapons: {
+    columns: [
+      { label: 'Tier', value: (e) => String(e.tier ?? ''), numeric: true },
+      { label: 'Slot', value: (e) => e.weapon?.slot ?? '' },
+      { label: 'Trait', value: (e) => e.weapon?.trait ?? '' },
+      { label: 'Range', value: (e) => e.weapon?.range ?? '' },
+      { label: 'Damage', value: damage },
+      { label: 'Burden', value: (e) => e.weapon?.burden ?? '' },
+      { label: 'Feature', value: (e) => plain(featureText(e)), wide: true },
+    ],
+    filters: [
+      { label: 'Tier', value: tier }, { label: 'Slot', value: (e) => e.weapon?.slot }, { label: 'Trait', value: (e) => e.weapon?.trait },
+      { label: 'Range', value: (e) => e.weapon?.range }, { label: 'Damage type', value: (e) => e.weapon?.damage.type },
+      { label: 'Burden', value: (e) => e.weapon?.burden }, { label: 'Gear', value: starter },
+    ],
+  },
+  'domain-cards': {
+    columns: [
+      { label: 'Domain', value: (e) => e.domain ?? '' },
+      { label: 'Level', value: (e) => String(e.level ?? ''), numeric: true },
+      { label: 'Type', value: (e) => e.cardType ?? '' },
+      { label: 'Recall', value: (e) => e.recall === undefined ? '' : String(e.recall), numeric: true },
+      { label: 'Text', value: (e) => plain(e.text), wide: true },
+    ],
+    filters: [
+      { label: 'Domain', value: (e) => e.domain }, { label: 'Level', value: (e) => e.level === undefined ? undefined : `Level ${e.level}` },
+      { label: 'Type', value: (e) => e.cardType },
+    ],
+  },
+  consumables: {
+    columns: [{ label: 'Rarity', value: (e) => e.rarity ?? '' }, { label: 'Description', value: (e) => plain(e.text), wide: true }],
+    filters: [{ label: 'Rarity', value: (e) => e.rarity }],
+  },
+  items: {
+    columns: [{ label: 'Rarity', value: (e) => e.rarity ?? '' }, { label: 'Description', value: (e) => plain(e.text), wide: true }],
+    filters: [{ label: 'Rarity', value: (e) => e.rarity }],
+  },
+  classes: {
+    columns: [
+      { label: 'Type', value: kindOf },
+      { label: 'Class', value: (e) => e.parent ?? '' },
+      { label: 'Stage', value: (e) => e.stage ?? '' },
+      { label: 'Domains', value: (e) => (e.domains ?? []).join(' & ') },
+      { label: 'Spellcast', value: (e) => e.spellcastTrait ?? '' },
+      { label: 'HP / Evasion', value: (e) => e.startingHp === undefined ? '' : `${e.startingHp} / ${e.startingEvasion ?? ''}` },
+      { label: 'Features', value: featureNames, wide: true },
+    ],
+    filters: [
+      { label: 'Type', value: kindOf }, { label: 'Class', value: (e) => e.kind === 'subclass' ? e.parent : e.name },
+      { label: 'Stage', value: (e) => e.stage }, { label: 'Domain', value: (e) => e.domains },
+      { label: 'Spellcast trait', value: (e) => e.spellcastTrait },
+    ],
+  },
+};
+const HERITAGE: Layout = {
+  columns: [{ label: 'Description', value: (e) => plain(e.text), wide: true }, { label: 'Features', value: featureNames, wide: true }],
+  filters: [],
+};
+const GENERIC: Layout = { columns: [{ label: 'Description', value: (e) => plain(e.text || featureText(e)), wide: true }], filters: [] };
+
+function layoutFor(category: string, entries: CompendiumEntry[]): Layout {
+  return LAYOUTS[category] ?? (entries.some((e) => e.features?.length) ? HERITAGE : GENERIC);
+}
+
+const valuesOf = (f: Filter, e: CompendiumEntry): string[] => {
+  const v = f.value(e);
+  return v === undefined ? [] : Array.isArray(v) ? v : [v];
+};
+
+function optionsOf(entries: CompendiumEntry[], f: Filter): string[] {
+  const seen = new Set<string>();
+  for (const e of entries) for (const v of valuesOf(f, e)) if (v) seen.add(v);
+  return [...seen].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+/** Window content: category navigation on the left, a searchable and filterable table on the right. */
 export class CompendiumPanel {
   readonly element = el('div', { class: 'compendium' });
   private index: CompendiumIndexItem[] | null = null;
   private files = new Map<string, CompendiumFile>();
   private category = '';
-  private query = '';
-  private selected: CompendiumEntry | null = null;
+  private queries = new Map<string, string>();
+  private filterValues = new Map<string, Map<string, string>>();
   private loading = false;
   private error = '';
 
   constructor(private readonly host: CompendiumHost) {}
 
-  /** Called when the section becomes visible; loads the category list once. */
+  /** Called when the window becomes visible; loads the category list once. */
   async open(): Promise<void> {
     if (this.index || this.loading) return;
     this.loading = true;
@@ -85,7 +200,6 @@ export class CompendiumPanel {
 
   private async select(category: string): Promise<void> {
     this.category = category;
-    this.selected = null;
     this.error = '';
     try { await this.load(category); } catch (e) { this.error = (e as Error).message; }
     this.render();
@@ -93,66 +207,121 @@ export class CompendiumPanel {
 
   private render(): void {
     this.element.replaceChildren();
-    if (this.loading) { this.element.append(el('p', { class: 'muted' }, 'Loading compendium...')); return; }
+    if (this.loading) { this.element.append(el('p', { class: 'muted cmp-note' }, 'Loading compendium...')); return; }
     if (!this.index?.length) {
-      this.element.append(el('p', { class: this.error ? 'error' : 'muted' }, this.error || 'The DM has no compendium data configured.'));
+      this.element.append(el('p', { class: `${this.error ? 'error' : 'muted'} cmp-note` }, this.error || 'The DM has no compendium data configured.'));
       return;
     }
-    if (this.selected) { this.element.append(this.detail(this.selected)); return; }
-
-    const search = el('input', { type: 'search', placeholder: 'Search name, domain, text...', value: this.query });
-    search.setAttribute('aria-label', 'Search compendium');
-    search.addEventListener('input', () => { this.query = search.value; this.renderList(list); });
-    const chips = el('div', { class: 'cmp-chips' });
+    const nav = el('nav', { class: 'cmp-nav' });
+    nav.setAttribute('aria-label', 'Compendium categories');
     for (const item of this.index) {
-      const b = el('button', { type: 'button', class: `cmp-chip${item.category === this.category ? ' active' : ''}` }, `${item.label} (${item.count})`);
+      const b = el('button', { type: 'button', class: `cmp-cat${item.category === this.category ? ' active' : ''}` },
+        el('span', {}, item.label), el('span', { class: 'cmp-count' }, String(item.count)));
+      if (item.category === this.category) b.setAttribute('aria-current', 'true');
       b.addEventListener('click', () => { void this.select(item.category); });
-      chips.append(b);
+      nav.append(b);
     }
-    const list = el('div', { class: 'cmp-list' });
-    this.element.append(search, chips, ...(this.error ? [el('p', { class: 'error' }, this.error)] : []), list);
-    this.renderList(list);
+    const main = el('div', { class: 'cmp-main' });
+    this.element.append(nav, main);
+    this.renderMain(main);
   }
 
-  private renderList(list: HTMLElement): void {
-    list.replaceChildren();
+  private renderMain(main: HTMLElement): void {
+    if (this.error) main.append(el('p', { class: 'error cmp-note' }, this.error));
     const file = this.files.get(this.category);
     if (!file) return;
-    const hits = file.entries.filter((e) => matchesSearch(e, this.query));
-    for (const e of hits.slice(0, MAX_RESULTS)) {
-      const row = el('button', { type: 'button', class: 'cmp-row' }, el('span', { class: 'nm' }, e.name), el('span', { class: 'muted' }, this.summary(e)));
-      row.addEventListener('click', () => { this.selected = e; this.render(); });
-      if (ADDABLE[this.category]) {
-        row.draggable = true;
-        row.title = 'Drag onto your sheet to add';
-        row.addEventListener('dragstart', (ev) => {
-          ev.dataTransfer?.setData(DRAG_TYPE, JSON.stringify({ category: this.category, entry: e }));
-          if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
-          this.host.dragStart?.();
-        });
-      }
-      list.append(row);
+    const layout = layoutFor(this.category, file.entries);
+    const values = this.filterValues.get(this.category) ?? new Map<string, string>();
+    this.filterValues.set(this.category, values);
+
+    const result = el('div', { class: 'cmp-table-wrap' });
+    const search = el('input', { type: 'search', placeholder: `Search ${file.label.toLowerCase()}...`, value: this.queries.get(this.category) ?? '' });
+    search.setAttribute('aria-label', 'Search compendium');
+    search.addEventListener('input', () => { this.queries.set(this.category, search.value); this.renderTable(result, file, layout); });
+    const bar = el('div', { class: 'cmp-toolbar' }, search);
+    for (const f of layout.filters) {
+      const options = optionsOf(file.entries, f);
+      if (options.length < 2) continue;
+      const select = el('select', {}, el('option', { value: '' }, `${f.label}: all`), ...options.map((o) => el('option', { value: o }, o)));
+      select.setAttribute('aria-label', f.label);
+      select.value = values.get(f.label) ?? '';
+      select.addEventListener('change', () => { values.set(f.label, select.value); this.renderTable(result, file, layout); });
+      bar.append(select);
     }
-    if (!hits.length) list.append(el('p', { class: 'muted' }, 'Nothing found.'));
-    else if (hits.length > MAX_RESULTS) list.append(el('p', { class: 'muted' }, `Showing ${MAX_RESULTS} of ${hits.length}. Refine the search to see more.`));
+    main.append(bar, result);
+    this.renderTable(result, file, layout);
   }
 
-  private summary(e: CompendiumEntry): string {
-    const bits: string[] = [];
-    if (e.domain) bits.push(`${e.domain} ${e.level ?? ''}`.trim());
-    if (e.cardType) bits.push(e.cardType);
-    if (e.tier) bits.push(`T${e.tier}`);
-    if (e.rarity) bits.push(e.rarity);
-    if (e.armor) bits.push(`Score ${e.armor.score}`);
-    if (e.weapon) bits.push(`${e.weapon.trait} ${e.weapon.range}`);
-    if (e.kind === 'subclass') bits.push(`${e.parent ?? ''} ${e.stage ?? ''}`.trim());
-    return bits.join(' - ');
+  private matches(e: CompendiumEntry, layout: Layout): boolean {
+    const values = this.filterValues.get(this.category);
+    for (const f of layout.filters) {
+      const wanted = values?.get(f.label);
+      if (wanted && !valuesOf(f, e).includes(wanted)) return false;
+    }
+    return matchesSearch(e, this.queries.get(this.category) ?? '');
+  }
+
+  private renderTable(wrap: HTMLElement, file: CompendiumFile, layout: Layout): void {
+    wrap.replaceChildren();
+    const hits = file.entries.filter((e) => this.matches(e, layout));
+    const addable = !!ADDABLE[this.category];
+    const head = el('tr', {}, el('th', { class: 'cmp-expander' }), el('th', {}, 'Name'),
+      ...layout.columns.map((c) => el('th', { class: c.wide ? 'wide' : c.numeric ? 'num' : '' }, c.label)),
+      ...(addable ? [el('th', { class: 'cmp-actions' })] : []));
+    const body = el('tbody', {});
+    for (const e of hits) this.appendRow(body, e, layout, addable);
+    const table = el('table', { class: 'cmp-table' }, el('thead', {}, head), body);
+    wrap.append(el('div', { class: 'cmp-summary muted' }, `${hits.length} of ${file.entries.length} entries`), table);
+    if (!hits.length) wrap.append(el('p', { class: 'muted cmp-note' }, 'Nothing found.'));
+  }
+
+  private appendRow(body: HTMLElement, e: CompendiumEntry, layout: Layout, addable: boolean): void {
+    const toggle = el('button', { type: 'button', class: 'cmp-toggle', title: 'Show details' }, '\u25B8');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', `Details of ${e.name}`);
+    const row = el('tr', { class: 'cmp-row' }, el('td', { class: 'cmp-expander' }, toggle), el('td', { class: 'nm' }, e.name),
+      ...layout.columns.map((c) => el('td', { class: c.wide ? 'wide' : c.numeric ? 'num' : '' }, c.wide ? el('div', { class: 'clamp' }, c.value(e)) : c.value(e))));
+    if (addable) {
+      const label = ADDABLE[this.category];
+      const add = el('button', { type: 'button', class: 'cmp-add-icon', title: label }, '\uFF0B');
+      add.setAttribute('aria-label', `${label}: ${e.name}`);
+      add.addEventListener('click', (ev) => { ev.stopPropagation(); void this.addEntry(e); });
+      row.append(el('td', { class: 'cmp-actions' }, ...(this.host.actors().length ? [add] : [])));
+      row.draggable = true;
+      row.addEventListener('dragstart', (ev) => {
+        ev.dataTransfer?.setData(DRAG_TYPE, JSON.stringify({ category: this.category, entry: e }));
+        if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
+        this.host.dragStart?.();
+      });
+    }
+    let detail: HTMLElement | null = null;
+    const flip = () => {
+      if (detail) {
+        detail.remove();
+        detail = null;
+      } else {
+        detail = el('tr', { class: 'cmp-detail-row' }, el('td', { colSpan: layout.columns.length + (addable ? 3 : 2) }, this.detail(e)));
+        row.after(detail);
+      }
+      const open = !!detail;
+      row.classList.toggle('open', open);
+      toggle.textContent = open ? '\u25BE' : '\u25B8';
+      toggle.title = open ? 'Hide details' : 'Show details';
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    row.addEventListener('click', flip);
+    body.append(row);
+  }
+
+  private async addEntry(e: CompendiumEntry): Promise<void> {
+    const actor = await pickActor(this.host.actors(), `Add ${e.name} to`, 'Add');
+    if (!actor) return;
+    const where = await this.host.add(actor.id, this.category, e);
+    this.host.toast(where ? `${e.name} added to ${where}.` : 'This entry cannot be added to a sheet.');
   }
 
   private detail(e: CompendiumEntry): HTMLElement {
-    const back = el('button', { type: 'button', class: 'small' }, '\u2190 Back');
-    back.addEventListener('click', () => { this.selected = null; this.render(); });
-    const box = el('div', { class: 'cmp-detail' }, back, el('h3', {}, e.name));
+    const box = el('div', { class: 'cmp-detail' });
     const badges = el('div', { class: 'badges' });
     const tag = (t: string) => badges.append(el('span', { class: 'tag' }, t));
     if (e.tier) tag(`Tier ${e.tier}`);
@@ -164,7 +333,7 @@ export class CompendiumPanel {
     if (e.weapon) {
       const w = e.weapon;
       tag(`${w.slot} - ${w.burden}`); tag(`${w.trait} - ${w.range}`);
-      tag(`${w.damage.dice}${w.damage.bonus ? (w.damage.bonus > 0 ? `+${w.damage.bonus}` : w.damage.bonus) : ''} ${w.damage.type}`);
+      tag(damage(e));
     }
     if (e.kind === 'class') {
       if (e.domains?.length) tag(e.domains.join(' & '));
@@ -181,27 +350,8 @@ export class CompendiumPanel {
     if (e.feature) box.append(el('div', { class: 'feat' }, el('div', { class: 'ft' }, e.feature.name), markdownBlock(e.feature.text)));
     for (const f of e.features ?? []) {
       const card = el('div', { class: 'feat' }, el('div', { class: 'ft' }, f.name), markdownBlock(f.text));
-      const auto = describeAutomation(f.automation);
-      if (auto.length) card.append(el('div', { class: 'muted cmp-auto' }, `Automated: ${auto.join('; ')}`));
       box.append(card);
-    }
-    const auto = describeAutomation(e.automation);
-    if (auto.length) box.append(el('div', { class: 'muted cmp-auto' }, `Automated on your sheet: ${auto.join('; ')}`));
-
-    const label = ADDABLE[this.category];
-    const actors = this.host.actors();
-    if (label && actors.length) {
-      const pick = el('select', {}, ...actors.map((a) => el('option', { value: a.id }, a.name)));
-      pick.setAttribute('aria-label', 'Actor');
-      const add = el('button', { type: 'button', class: 'primary small' }, label);
-      add.addEventListener('click', () => {
-      void Promise.resolve(this.host.add(pick.value, this.category, e)).then((where) => {
-        this.host.toast(where ? `${e.name} added to ${where}.` : 'This entry cannot be added to a sheet.');
-      });
-      });
-      box.append(el('div', { class: 'row cmp-add' }, ...(actors.length > 1 ? [pick] : []), add));
     }
     return box;
   }
 }
-

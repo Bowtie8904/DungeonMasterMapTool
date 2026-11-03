@@ -105,7 +105,7 @@ function rollContent(m: RollMessage): HTMLElement {
   return body;
 }
 
-export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: SharedCard) => Promise<void>,
+export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
                                onError?: (message: string) => void,
                                rollActions?: (m: RollMessage) => HTMLElement | null): HTMLElement {
   const m = e.m;
