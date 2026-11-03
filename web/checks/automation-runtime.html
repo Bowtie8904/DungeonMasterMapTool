@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Automation runtime check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { rollBonus, syncDerived } from '../src/daggerheart/engine.ts';
+import { openRollDialog, renderSheetView } from '../src/daggerheart/view.ts';
+const result = document.querySelector('#result');
+try {
+  const c = emptyCharacter('Runtime check');
+  c.mancer.done = true;
+  c.className = 'Warlock';
+  c.level = 5;
+  c.features = [{ source:'Class feature - Warlock', name:'Favor', text:'',
+    automation:{ resources:[{id:'favor',label:'Favor',initial:3}],
+      rollOptions:[{id:'patron',label:'Patron Die',roll:'action',dice:'1d6',diceByLevel:{5:'1d8'},cost:{favor:1}}] } }];
+  c.inventory = [{name:'Charging Quiver',type:'gear',qty:1,automation:{rollOptions:[
+    {id:'arrows',label:'Arrows',roll:'damage',value:'@tier'},
+    {id:'charge',label:'Charge',roll:'damage',dice:'1d4',cost:{hope:1,stress:1},uses:{max:1,per:'rest'}}
+  ]}}];
+  const weapon = {name:'Advanced Greatstaff',slot:'Primary',damageType:'magic',trait:'Knowledge',range:'Very Far',
+    damage:'1d6+6',hands:2,tier:3,feature:{name:'Powerful',text:''},automation:{damage:{extraDice:1,dropLowest:1}}};
+  c.activeWeapons.push(weapon);
+  syncDerived(c);
+  const host = document.querySelector('#host');
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const dialog = () => document.querySelector('.dh-rolldlg');
+  const button = (text) => [...dialog().querySelectorAll('button')].find((b) => b.textContent === text);
+  const selectAll = () => dialog().querySelectorAll('input[type=checkbox]').forEach((input) => { input.checked=true; input.dispatchEvent(new Event('change')); });
+  let sent;
+  let accept = false;
+  const open = (w = weapon, supports = true) => openRollDialog(host,c,'Runtime damage',[],rollBonus(c,w?['damage']:['action']),
+    (request) => {sent=request;return accept;},()=>{},w?['damage']:['action'],w,()=>supports);
+  open();
+  selectAll();
+  assert(c.hope.on===2 && c.stress.on===0,'Selection spent resources');
+  button('Cancel').click();
+  assert(!dialog() && c.hope.on===2,'Cancel spent resources');
+  open();
+  selectAll();
+  button('Roll to chat').click();
+  assert(dialog() && c.hope.on===2 && c.stress.on===0,'Failed send spent resources');
+  assert(dialog().querySelector('[role=alert]').textContent.includes('not sent'),'Missing failure message');
+  accept=true;
+  button('Roll to chat').click();
+  assert(!dialog() && c.hope.on===1 && c.stress.on===1,'Successful send did not commit costs');
+  assert(sent.expression==='2d6kh1+6+3+1d4','Wrong damage expression: '+sent.expression);
+  assert(sent.contributions.some((s)=>s.label.includes('Quiver')),'Missing named bonus');
+  open();
+  assert(dialog().querySelectorAll('input[type=checkbox]')[1].disabled,'Independent use limit not enforced');
+  button('Cancel').click();
+  open(weapon,false);
+  assert(button('Roll to chat').disabled,'Old host accepted kept dice');
+  button('Cancel').click();
+  c.experiences.push({name:'Experienced',mod:2});
+  c.inventory[0].automation.rollOptions.push({id:'help',label:'Help',roll:'action',value:1,cost:{hope:1}});
+  open(null);
+  selectAll();
+  const experience = dialog().querySelectorAll('select')[1];
+  experience.value='0';
+  experience.dispatchEvent(new Event('change'));
+  assert(button('Roll to chat').disabled,'Combined bonus and Experience costs were not checked');
+  experience.value='';
+  experience.dispatchEvent(new Event('change'));
+  button('Roll to chat').click();
+  assert(c.resources.favor===2 && sent.expression.includes('1d8'),'Patron Die/Favor not applied');
+  host.append(renderSheetView({character:c,onRoll:()=>true}));
+  const favor = host.querySelector('input[aria-label=Favor]');
+  assert(favor && favor.value==='2','Custom resource UI missing');
+  favor.value='4';
+  favor.dispatchEvent(new Event('change'));
+  assert(c.resources.favor===4,'Custom resource UI not editable');
+  result.textContent='PASS: cancel, failed/successful send, costs, uses, Powerful, old host, Patron Die, Favor UI';
+} catch (error) {
+  result.textContent='FAIL: '+error.stack;
+}
+</script></body></html>

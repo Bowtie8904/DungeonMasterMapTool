@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Character sheet layout check</title></head>
+<body><main id="host" style="position:relative"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { SheetWindow } from '../src/daggerheart/window.ts';
+import { SheetBus, renderSheetView } from '../src/daggerheart/view.ts';
+import { applyLevelUp } from '../src/daggerheart/rules.ts';
+
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const host = document.querySelector('#host');
+  const character = emptyCharacter('Layout check');
+  character.mancer.done = true;
+  character.hp.slots = 6;
+  character.features.push({
+    source: 'Class feature', name: 'Class resource', text: '',
+    automation: { resources: [{ id: 'classResource', label: 'Class resource', initial: 1 }] },
+  });
+  character.experiences.push({ name: 'Layout Experience', mod: 2 });
+  const bus = new SheetBus();
+  const win = new SheetWindow({ character, bus, onRoll: () => true }, character.name, () => {}, () => {});
+  host.append(win.element);
+  win.setOpen(true);
+  for (const [width, height] of [[1440, 1080], [1024, 768], [760, 600]]) {
+    host.style.width = `${width}px`;
+    host.style.height = `${height}px`;
+    const bounds = win.element.getBoundingClientRect();
+    assert(Math.abs(bounds.height - (height - 60)) < 1, 'Default height does not use available space');
+    const traits = [...win.element.querySelectorAll('.trait')].map((node) => node.getBoundingClientRect());
+    const stats = [...win.element.querySelectorAll('.v-left > .vital')].map((node) => node.getBoundingClientRect());
+    assert(bounds.width === Math.min(900, width - 200), 'Sheet does not use its default width');
+    assert(traits.length === 6 && traits.every((r) => r.left === traits[0].left), 'Traits are not in one column');
+    assert(traits.every((r, i) => i === 0 || r.top >= traits[i - 1].bottom), 'Vertical traits overlap');
+    const sidebar = win.element.querySelector('.sheet-sidebar');
+    const main = win.element.querySelector('.sheet-main');
+    const vitals = win.element.querySelector('.vitals');
+    const portrait = win.element.querySelector('.portrait').getBoundingClientRect();
+    const vitalsRow = win.element.querySelector('.header-vitals-row');
+    assert(vitalsRow.parentElement === win.element.querySelector('.ident-profile'), 'Vitals are not grouped under the portrait and character info');
+    assert(vitalsRow.getBoundingClientRect().top >= portrait.bottom, 'Vitals do not start below the image');
+    assert(vitals.getBoundingClientRect().right <= win.element.querySelector('.ident-right').getBoundingClientRect().left, 'Vitals extend under the right-side vertical header');
+    for (const stat of win.element.querySelectorAll('.vital.has-src')) {
+      const before = [vitals.scrollWidth, vitals.scrollHeight];
+      stat.focus();
+      const tooltip = win.element.querySelector('.dh > .stat-tooltip');
+      assert(tooltip && tooltip.id === stat.getAttribute('aria-describedby'), 'Stat tooltip is not an accessible sheet overlay');
+      assert(!vitals.contains(tooltip), 'Stat tooltip is inside the scrolling vitals');
+      assert(vitals.scrollWidth === before[0] && vitals.scrollHeight === before[1], 'Stat tooltip creates a scrollbar');
+      const rect = tooltip.getBoundingClientRect();
+      const sheet = win.element.querySelector('.dh').getBoundingClientRect();
+      assert(rect.left >= sheet.left && rect.right <= sheet.right + 1 && rect.top >= sheet.top && rect.bottom <= sheet.bottom + 1, 'Stat tooltip extends outside the sheet');
+      const tabBounds = win.element.querySelector('.tabs').getBoundingClientRect();
+      const y = Math.max(rect.top, tabBounds.top) + 1;
+      const x = Math.max(rect.left, tabBounds.left) + 1;
+      if (y < Math.min(rect.bottom, tabBounds.bottom) && x < Math.min(rect.right, tabBounds.right)) {
+        tooltip.style.pointerEvents = 'auto';
+        assert(tooltip.contains(document.elementFromPoint(x, y)), 'Tabs cover the stat tooltip');
+        tooltip.style.pointerEvents = '';
+      }
+      stat.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      assert(!tooltip.isConnected, 'Escape does not dismiss the tooltip');
+      stat.blur();
+      stat.dispatchEvent(new MouseEvent('mouseenter'));
+      assert(tooltip.isConnected, 'Hover does not show the tooltip');
+      vitals.dispatchEvent(new Event('scroll'));
+      assert(!tooltip.isConnected, 'Scrolling does not dismiss the tooltip');
+      stat.dispatchEvent(new MouseEvent('mouseleave'));
+    }
+    const headerVitals = [...win.element.querySelectorAll('.ident-right .vital')];
+    const resource = headerVitals.find((vital) => vital.querySelector('.lbl').textContent === 'Class resource');
+    assert(resource && resource.parentElement.classList.contains('ident-right'), 'Additional class resources left the vertical header column');
+    assert(resource.getBoundingClientRect().top >= headerVitals[1].getBoundingClientRect().bottom, 'Additional class resource is not below Hope and Proficiency');
+    assert(getComputedStyle(win.element.querySelector('.v-e .big')).textAlign === 'center', 'Evasion number is not centered');
+    assert(sidebar.getBoundingClientRect().right <= main.getBoundingClientRect().left, 'Sidebar is not left of the main sheet');
+    assert(!sidebar.querySelector('.exp'), 'Experiences still appear in the sidebar');
+    for (const tile of win.element.querySelectorAll('.trait')) {
+      const mark = tile.querySelector('.trait-mark');
+      const bounds = tile.getBoundingClientRect();
+      const ring = mark.getBoundingClientRect();
+      assert(ring.width === 8 && ring.height === 8, 'Trait mark is not the larger visible size');
+      assert(ring.left >= bounds.left + 1 && ring.top >= bounds.top + 1 && ring.right <= bounds.right - 1 && ring.bottom <= bounds.bottom - 1, 'Trait mark extends outside the card border');
+      assert(ring.left - bounds.left <= 6 && ring.top - bounds.top <= 6, 'Trait mark is not in the top-left corner');
+      const name = tile.querySelector('.nm').getBoundingClientRect();
+      assert(ring.right <= name.left || ring.left >= name.right || ring.bottom <= name.top || ring.top >= name.bottom, `Trait mark overlaps ${tile.querySelector('.nm').textContent} at width ${width} (ring right ${ring.right}, name left ${name.left}, tile width ${bounds.width})`);
+      assert(getComputedStyle(tile).paddingTop === '6px' && getComputedStyle(tile).paddingBottom === '6px', 'Trait mark increased tile padding');
+      const contentHeight = [...tile.querySelectorAll('.th, .md, .vb')].reduce((sum, node) => sum + node.getBoundingClientRect().height, 0);
+      assert(Math.abs(bounds.height - contentHeight - 14) < 1, 'Trait mark increased tile height');
+      assert(getComputedStyle(mark).borderRadius === '50%', 'Trait mark is not circular');
+      assert(!tile.querySelector('input') && mark.tabIndex === -1, 'Trait mark is editable');
+      mark.click();
+      assert(!character.traits.some((t) => t.marked), 'Clicking a trait mark changed it');
+      assert(!document.querySelector('.dh-rolldlg'), 'Clicking a trait mark opened a roll');
+    }
+    assert(stats.length === 5, 'Missing character stats');
+    for (const kind of ['armor', 'hp', 'stress']) {
+      const slots = [...win.element.querySelectorAll(`[data-kind=${kind}] .pip`)].map((node) => node.getBoundingClientRect());
+      assert(slots.length === 12 && slots.slice(0, 6).every((r) => r.top === slots[0].top)
+        && slots.slice(6).every((r) => r.top === slots[6].top)
+        && slots[6].top > slots[0].top, `${kind} slots do not fit two rows of six`);
+    }
+    for (const kind of ['armor', 'hp', 'stress']) {
+      for (const pip of win.element.querySelectorAll(`[data-kind=${kind}] .pip`)) {
+        const size = pip.getBoundingClientRect();
+        assert(size.width === 14 && size.height === 14, `${kind} slot does not match the shared 14 px size`);
+      }
+    }
+    assert(stats.every((r) => r.top === stats[0].top), 'Vital cards are not in one horizontal row');
+    for (const kind of ['armor', 'hp', 'stress']) {
+      const vital = win.element.querySelector(`[data-kind=${kind}]`).closest('.vital');
+      assert(vital.getBoundingClientRect().width === 114, `${kind} card is not compact like Armor`);
+    }
+    for (const node of win.element.querySelectorAll('.trait, .v-left > .vital')) {
+      assert(node.scrollWidth <= node.clientWidth + 1, `Overflow in ${node.textContent}`);
+    }
+    assert(win.element.querySelector('.pages').clientHeight > 0, 'No room remains for scrollable tab content');
+    const features = [...win.element.querySelectorAll('.char-cols > div')].map((node) => node.getBoundingClientRect());
+    assert(features.length === 2, 'Missing feature columns');
+    assert(win.element.querySelector('.char-cols > div:first-child h3').textContent === 'Class & subclass features', 'Class features are not on the left');
+    assert(win.element.querySelector('.char-cols > div:last-child h3').textContent.startsWith('Heritage features'), 'Heritage features are not on the right');
+    if (bounds.width > 850) assert(features[0].top === features[1].top && features[0].right <= features[1].left, 'Features are not side by side');
+    sidebar.scrollTop = 100;
+    const scroll = sidebar.scrollTop;
+    for (const tab of ['Domain Cards', 'Equipment', 'Loot', 'Background', 'Effects', 'Character']) {
+      [...win.element.querySelectorAll('[role=tab]')].find((b) => b.textContent.startsWith(tab)).click();
+      const side = win.element.querySelector('.sheet-sidebar');
+      assert(side.querySelectorAll('.trait').length === 6 && !side.querySelector('.exp'), `Trait-only sidebar missing on ${tab}`);
+      const experience = win.element.querySelector('.pages .exp');
+      assert(!!experience === (tab === 'Background'), `Experiences visibility wrong on ${tab}`);
+      if (experience) assert(experience.textContent.includes('Layout Experience') && experience.textContent.includes('+2'), 'Background Experience name or modifier missing');
+      assert(side.scrollTop === scroll, `Sidebar scroll lost on ${tab}`);
+      assert(!!win.element.querySelector('.vitals'), `Permanent vitals missing on ${tab}`);
+      assert(win.element.querySelector('.sheet-main').scrollWidth <= win.element.querySelector('.sheet-main').clientWidth + 1, `Main sheet overflows on ${tab}`);
+    }
+  }
+  const data = { classes: [], ancestries: [], communities: [], transformations: [], cards: [], weapons: [], armor: [], items: [], consumables: [] };
+  applyLevelUp(data, character, { level: 2, advancements: [{ type: 'traits', traits: ['Agility', 'Strength'] }] });
+  bus.notify();
+  assert(win.element.querySelectorAll('.trait-mark.marked').length === 2, 'Level-up did not mark raised traits');
+  const marked = win.element.querySelector('.trait-mark.marked');
+  assert(getComputedStyle(marked, '::after').content === '""', 'Marked trait has no dot');
+  const dot = getComputedStyle(marked, '::after');
+  assert(dot.position === 'absolute' && dot.left === '50%' && dot.top === '50%' && dot.transform !== 'none', 'Marked trait dot is not centered inside its ring');
+  marked.click();
+  assert(character.traits.filter((t) => t.marked).length === 2, 'Clicking a marked trait cleared it');
+  assert(!document.querySelector('.dh-rolldlg'), 'Clicking a marked trait opened a roll');
+  applyLevelUp(data, character, { level: 5, advancements: [] });
+  bus.notify();
+  assert(!win.element.querySelector('.trait-mark.marked'), 'Level-up did not clear trait marks');
+  const trait = win.element.querySelector('.trait');
+  trait.click();
+  assert(document.querySelector('.dh-rolldlg'), 'Trait no longer opens a roll dialog');
+  const hp = win.element.querySelector('[data-kind=hp] .pip:not(.locked)');
+  hp.click();
+  assert(character.hp.on === 1, 'HP pips no longer update the sheet');
+  document.querySelector('.dh-rolldlg .acts button').click();
+  character.loadout.push({
+    name: 'Token card', domain: 'Grace', level: 1, type: 'Spell', recall: 1,
+    text: 'Make a Spellcast Roll.', spellcast: 'Presence',
+    automation: {
+      resources: [{ id: 'layoutTokens', label: 'Token card tokens', initial: 2, max: 3 }],
+      actions: [
+        { id: 'gain', label: 'Gain token', steps: [{ op: 'gain', resource: 'layoutTokens', amount: 1 }] },
+        { id: 'spend', label: 'Spend token', cost: { layoutTokens: 1 } },
+        { id: 'clear', label: 'Clear tokens', steps: [{ op: 'clear', resource: 'layoutTokens', amount: 'all' }] },
+      ],
+    },
+  });
+  bus.notify();
+  [...win.element.querySelectorAll('[role=tab]')].find((b) => b.textContent === 'Domain Cards').click();
+  const card = () => win.element.querySelector('.dcard:not(.empty)');
+  const counter = () => card().querySelector('.hd .card-resource input');
+  assert(counter()?.value === '2', 'Initial card tokens are missing from the header');
+  assert(counter().parentElement.textContent === 'Tokens' && counter().getAttribute('aria-label') === 'Tokens', 'Card token label includes the full resource name');
+  const header = [...card().querySelector('.hd').children];
+  assert(header.indexOf(card().querySelector('.dm')) < header.indexOf(counter().parentElement)
+    && header.indexOf(counter().parentElement) < header.indexOf(card().querySelector('.rc')), 'Tokens are not between domain and recall cost');
+  assert(!card().querySelector('.act input'), 'Tokens are duplicated below the card');
+  const actionGroup = card().querySelector('.act .actions');
+  assert(actionGroup.querySelectorAll('button').length === 3, 'Expected three grouped domain actions');
+  assert(getComputedStyle(actionGroup).borderTopWidth === '0px', 'Domain action group still has an enclosing border');
+  assert(getComputedStyle(actionGroup).paddingTop === '0px', 'Domain action group still has panel padding');
+  for (const b of card().querySelectorAll('.act button.primary')) {
+    assert(getComputedStyle(b).borderTopWidth === '1px', 'Individual domain button lost its normal border');
+  }
+  counter().value = '8';
+  counter().dispatchEvent(new Event('change', { bubbles: true }));
+  assert(character.resources.layoutTokens === 3 && counter().value === '3', 'Header token editing ignores its cap');
+  counter().value = '1';
+  counter().dispatchEvent(new Event('change', { bubbles: true }));
+  [...card().querySelectorAll('.act button')].find((b) => b.textContent === 'Gain token').click();
+  assert(counter().value === '2', 'Automation does not refresh header tokens');
+  card().querySelector('.card-menu-btn').click();
+  card().querySelector('[role=menuitem]').click();
+  assert(!counter() && character.resources.layoutTokens === 2, 'Vault move lost tokens or exposed inactive controls');
+  [...card().querySelectorAll('.act button')].find((b) => b.textContent.startsWith('Recall to loadout')).click();
+  assert(counter().value === '2', 'Recall did not preserve tokens');
+  const popout = renderSheetView({ character, onRoll: () => true });
+  popout.classList.add('dh-popout');
+  document.body.append(popout);
+  assert(popout.querySelector('.sheet-sidebar .trait') && !popout.querySelector('.sheet-sidebar .exp'), 'Pop-out trait-only sidebar missing');
+  assert(popout.querySelector('.sheet-sidebar').getBoundingClientRect().right <= popout.querySelector('.sheet-main').getBoundingClientRect().left, 'Pop-out sidebar is not beside the main sheet');
+  [...popout.querySelectorAll('[role=tab]')].find((b) => b.textContent === 'Equipment').click();
+  assert(popout.querySelectorAll('.sheet-sidebar .trait').length === 6, 'Pop-out tab hides traits');
+  [...popout.querySelectorAll('[role=tab]')].find((b) => b.textContent === 'Background').click();
+  assert(popout.querySelector('.pages .exp')?.textContent.includes('Layout Experience'), 'Pop-out Background Experiences missing');
+  popout.remove();
+  result.textContent = 'PASS: wider sheet, persistent trait-only sidebar, Background Experiences, independent sidebar scroll, class/heritage columns, pop-out layout, compact stats, no overflow, read-only marks, trait rolls and domain token controls';
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+}
+</script></body></html>

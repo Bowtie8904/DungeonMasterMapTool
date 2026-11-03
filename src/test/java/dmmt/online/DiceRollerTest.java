@@ -9,6 +9,85 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void keepsHighestWithoutReorderingOrOmittingDiscardedDice() {
+        var result = DiceRoller.roll("/roll 4D6KH3 + 6", 4, faces(4, 1, 6, 3));
+        assertEquals("4d6kh3+6", result.expression());
+        assertEquals(List.of(4, 1, 6, 3), result.rolls());
+        assertEquals(19, result.total());
+    }
+
+    @Test
+    void discardsExactlyTheRequiredNumberOfTiedMinima() {
+        var result = DiceRoller.roll("4d6kh2", 4, faces(2, 6, 2, 2));
+        assertEquals(List.of(2, 6, 2, 2), result.rolls());
+        assertEquals(8, result.total());
+        assertEquals(9, DiceRoller.roll("3d6kh3", 3, faces(1, 3, 5)).total());
+        assertEquals(5, DiceRoller.roll("d6kh1", 1, faces(5)).total());
+    }
+
+    @Test
+    void keepsGroupsIndependentAndAppliesNegativeSignAfterSelection() {
+        var result = DiceRoller.roll("3d6kh2-3d8kh1+d4+2", 7, faces(1, 6, 4, 8, 2, 5, 3));
+        assertEquals(List.of(1, 6, 4, -8, -2, -5, 3), result.rolls());
+        assertEquals(7, result.total());
+        assertEquals(-10, DiceRoller.roll("-3d6kh2", 3, faces(1, 6, 4)).total());
+    }
+
+    @Test
+    void breakdownUsesKeptSumsAndPreservesAllSourceDice() {
+        var result = DiceRoller.roll("4d6kh3+6-3d8kh1+2d12", 9, faces(4, 1, 6, 3, 8, 2, 5, 7, 9));
+        var details = DiceRoller.breakdown(result, List.of(
+                new DiceRoller.Contribution("Powerful weapon", "4d6kh3"),
+                new DiceRoller.Contribution("Weapon modifier", "6"),
+                new DiceRoller.Contribution("Penalty", "-3d8kh1"),
+                new DiceRoller.Contribution("Hope", "d12"),
+                new DiceRoller.Contribution("Fear", "d12")
+        ), 9);
+        assertEquals(List.of(13, 6, -8, 7, 9), details.stream().map(DiceRoller.Detail::total).toList());
+        assertEquals(result.total(), details.stream().mapToInt(DiceRoller.Detail::total).sum());
+        assertEquals(result.rolls(), details.stream().flatMap(d -> d.rolls().stream()).toList());
+    }
+
+    @Test
+    void rejectsBreakdownsThatChangeKeptGroupsEvenWithIdenticalRawDice() {
+        var result = DiceRoller.roll("4d6kh3+6", 4, faces(4, 1, 6, 3));
+        for (String expression : List.of("4d6+6", "4d6kh2+6", "2d6kh1+2d6+6", "2d6+2d6kh1+6")) {
+            assertThrows(IllegalArgumentException.class, () -> DiceRoller.breakdown(result,
+                    List.of(new DiceRoller.Contribution("False weapon", expression)), 4), expression);
+        }
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.breakdown(result, List.of(
+                new DiceRoller.Contribution("Split", "d6"),
+                new DiceRoller.Contribution("Split", "3d6kh2+6")), 4));
+        var ordinary = DiceRoller.roll("4d6+6", 4, faces(4, 1, 6, 3));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.breakdown(ordinary,
+                List.of(new DiceRoller.Contribution("False keep", "4d6kh3+6")), 4));
+    }
+
+    @Test
+    void rejectsInvalidKeepCountsAndCountsDiscardedDiceAgainstLimit() {
+        for (String expression : List.of("4d6kh0", "4d6kh5", "4d6kh", "4d6kh-1", "4d6kh1.5",
+                "0d6kh0", "4d6kh1000000", "4d6kl3", "4d6kh3kh2", "1kh1", "d6kh2",
+                "4d6kh1+1d4", "5d6kh1", "999999d6kh1")) {
+            assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll(expression, 4, faces()), expression);
+        }
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll("d6kh1", 0, faces()));
+    }
+
+    private static Random faces(int... values) {
+        return new Random() {
+            private int index;
+
+            @Override
+            public int nextInt(int bound) {
+                assertTrue(index < values.length, "Unexpected extra die");
+                int value = values[index++];
+                assertTrue(value >= 1 && value <= bound, "Face outside die range");
+                return value - 1;
+            }
+        };
+    }
+
+    @Test
     void resolvesEveryContributionFromTheOriginalSignedDice() {
         var result = DiceRoller.roll("2d12-1d6+3+1d4", 20, new Random(42));
         var details = DiceRoller.breakdown(result, List.of(

@@ -139,7 +139,22 @@
     {
      "name": "Courage",
      "text": "When you fail a roll with Fear, you gain a Hope.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "gain",
+        "label": "Failed roll with Fear: gain Hope",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "name": "Battle Ritual",
@@ -153,7 +168,19 @@
       "actions": [
        {
         "id": "use",
-        "label": "Battle Ritual"
+        "label": "Perform battle ritual",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         },
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 2
+         }
+        ]
        }
       ]
      }
@@ -175,7 +202,31 @@
     {
      "name": "Martial Preparation",
      "text": "You’re an inspirational warrior to all who travel with you. Your party gains access to the Martial Preparation downtime move. To use this move during a rest, describe how you instruct and train with your party. You and each ally who chooses this downtime move gain a **d6** Slayer Die. A PC with a Slayer Die can spend it to roll the die and add the result to an attack or damage roll of their choice.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "resources": [
+       {
+        "id": "slayer-dice",
+        "label": "Slayer Dice",
+        "initial": 0,
+        "max": "@proficiency"
+       }
+      ],
+      "actions": [
+       {
+        "id": "train",
+        "label": "gain a d6 Slayer Die",
+        "timing": "downtime",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "slayer-dice",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
     }
    ]
   },
@@ -228,7 +279,75 @@
     {
      "name": "Slayer",
      "text": "You gain a pool of dice called Slayer Dice. On a roll with Hope, you can place a **d6** on this card instead of gaining a Hope, adding the die to the pool. You can store a number of Slayer Dice equal to your Proficiency. When you make an attack roll or damage roll, you can spend any number of these Slayer Dice, rolling them and adding their result to the roll. At the end of each session, clear any unspent Slayer Dice on this card and gain a Hope per die cleared.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "resources": [
+       {
+        "id": "slayer-dice",
+        "label": "Slayer Dice",
+        "initial": 0,
+        "max": "@proficiency"
+       }
+      ],
+      "actions": [
+       {
+        "id": "store",
+        "label": "Roll with Hope: store Slayer Die instead (do not gain Hope)",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "slayer-dice",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "replace",
+        "label": "Roll with Hope: replace gained Hope with Slayer Die",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "slayer-dice",
+          "amount": 1
+         }
+        ],
+        "cost": {
+         "hope": 1
+        }
+       },
+       {
+        "id": "clear",
+        "label": "Clear unspent Slayer Dice",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "slayer-dice",
+          "amount": "all"
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "slayer-attack",
+        "label": "Slayer Die",
+        "roll": "attack",
+        "dice": "1d6",
+        "cost": {
+         "slayer-dice": 1
+        }
+       },
+       {
+        "id": "slayer-damage",
+        "label": "Slayer Die",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "slayer-dice": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -268,19 +387,7 @@
     {
      "name": "Devout",
      "text": "When you roll your Prayer Dice, you can roll an additional die and discard the lowest result. Additionally, you can use your “Sparing Touch” feature twice instead of once per long rest.",
-     "type": "subclass",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Devout"
-       }
-      ]
-     }
+     "type": "subclass"
     }
    ]
   },
@@ -411,7 +518,29 @@
     {
      "name": "Elementalist",
      "text": "Choose one of the following elements at character creation: air, earth, fire, lightning, water.\nYou can shape this element into harmless effects. Additionally, **spend a Hope** and describe how your control over this element helps an action roll you’re about to make, then either gain a +2 bonus to the roll or a +3 bonus to the roll’s damage.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "elemental-action",
+        "label": "Elemental aid: action",
+        "roll": "action",
+        "value": 2,
+        "cost": {
+         "hope": 1
+        }
+       },
+       {
+        "id": "elemental-damage",
+        "label": "Elemental aid: damage",
+        "roll": "damage",
+        "value": 3,
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -703,12 +832,31 @@
     {
      "name": "Rugged",
      "text": "Gain a permanent +3 bonus to your Severe damage threshold.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "severeThreshold",
+        "value": 3
+       }
+      ]
+     }
     },
     {
      "name": "Overwhelm",
      "text": "When you succeed on an attack against a target, you can ** spend a Hope **to throw the target within Close range or to force them to mark a Stress.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Overwhelm",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -736,7 +884,19 @@
       "actions": [
        {
         "id": "use",
-        "label": "Limit Breaker"
+        "label": "Perform athletic feat",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         },
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ]
        }
       ]
      }
@@ -899,7 +1059,15 @@
     {
      "name": "Fleeting Shadow",
      "text": "Gain a permanent +1 bonus to your Evasion. You can use your “Shadow Stepper” feature to move within Very Far range.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "evasion",
+        "value": 1
+       }
+      ]
+     }
     },
     {
      "name": "Vanishing Act",
@@ -940,7 +1108,18 @@
     {
      "name": "Adrenaline",
      "text": "While you’re *Vulnerable*, add your level to your damage rolls.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "adrenaline",
+        "label": "Adrenaline",
+        "roll": "damage",
+        "value": "@level",
+        "description": "Only while Vulnerable."
+       }
+      ]
+     }
     }
    ]
   },
@@ -998,13 +1177,23 @@
      "text": "When the GM gains a Fear from a Duality Dice roll, you can **mark a Stress** to gain a Hope.",
      "type": "subclass",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Shadowed Grit",
+        "id": "hope",
+        "label": "Shadowed Grit: gain a Hope",
+        "on": "duality",
+        "when": "fear",
+        "description": "The GM gained a Fear from this roll.",
         "cost": {
          "stress": 1
-        }
+        },
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
        }
       ]
      }
@@ -1058,7 +1247,20 @@
     {
      "name": "Spectral Form",
      "text": "You have another death move option: Spectral Form. When you choose this option, you clear a Hit Point, your body becomes spectral, you have resistance to physical damage, and you can pass through objects. This form ends if you clear any more Hit Points. It also ends if you mark your last Hit Point, which forces you to take a different death move. You’re shunted to the nearest open space if you’re inside an object when the form ends.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "mitigation": [
+       {
+        "id": "spectral",
+        "label": "Spectral Form",
+        "description": "While in spectral form you have resistance to physical damage.",
+        "when": {
+         "type": "physical"
+        },
+        "halve": true
+       }
+      ]
+     }
     }
    ]
   },
@@ -1255,7 +1457,22 @@
       "actions": [
        {
         "id": "use",
-        "label": "Dark Aegis"
+        "label": "Prevent damage (manual)",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "aegis",
+        "label": "Dark Aegis",
+        "description": "Spend a Favor to mark no Hit Points.",
+        "replaceHp": true,
+        "cost": {
+         "favor": 1
+        },
+        "uses": "source"
        }
       ]
      }
@@ -1263,7 +1480,25 @@
     {
      "name": "Draining Bane",
      "text": "When an adversary targets you or an ally within Very Close range with an attack, you can **spend a Favor** to *Drain* them. When you do, they must mark a Stress, and you can clear a Stress. While *Drained*, the target uses a **d12** instead of a d20 for attack rolls (including for advantage or disadvantage) until they fail a roll.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "drain",
+        "label": "Drain attacker; clear own Stress",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -1283,7 +1518,18 @@
     {
      "name": "Harrowing Invocation",
      "text": "When an adversary targets you or an ally within Very Close range with an attack, you can **spend a Favor** to give them disadvantage on the roll. If the adversary fails the roll, they must also mark a Stress.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Harrowing Invocation",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Damage Sink",
@@ -1297,7 +1543,22 @@
       "actions": [
        {
         "id": "use",
-        "label": "Damage Sink"
+        "label": "Halve incoming damage (manual)",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "sink",
+        "label": "Damage Sink",
+        "description": "Spend a Favor to halve the incoming damage.",
+        "halve": true,
+        "cost": {
+         "favor": 1
+        },
+        "uses": "source"
        }
       ]
      }
@@ -1320,7 +1581,35 @@
     {
      "name": "Patron’s Mantle",
      "text": "**Spend a Favor** to cloak yourself in a terrifying aspect of your Patron that lasts until you take Severe damage or the scene ends. While this effect is active, you gain a bonus to your damage thresholds equal to your tier and have advantage on action rolls to intimidate a target.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Patron’s Mantle",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Patron’s Mantle",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Patron’s Mantle",
+           "modifiers": [
+            {
+             "stat": "thresholds",
+             "value": "@tier"
+            }
+           ]
+          }
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Deathless Embrace",
@@ -1357,7 +1646,18 @@
     {
      "name": "Fearsome Attack",
      "text": "**Spend a Favor** to reroll any number of your damage dice. You can continue spending Favor to use this feature on the same damage roll.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Reroll damage dice (manual)",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Otherworldly Ire",
@@ -1394,7 +1694,18 @@
     {
      "name": "Menacing Reach",
      "text": "**Spend a Favor** to increase the range of your primary weapon by one step (such as Melee to Very Close or Very Close to Close) to a maximum of Very Far range. This effect ends when you make a successful attack with that weapon.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Increase weapon range (manual)",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Diminish My Foes",
@@ -1419,7 +1730,52 @@
     {
      "name": "Patron’s Fury",
      "text": "** Spend a Favor **to imbue your attacks with your Patron’s power until you deal Severe damage or the scene ends. When you roll damage while this effect is active, you also roll a number of Patron Dice equal to your tier and add their total to the damage dealt.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "patrons-fury",
+        "label": "Patron’s Fury",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "favor": 1
+        },
+        "description": "Tier-scaled Patron Dice; lasts until you deal Severe damage or the scene ends.",
+        "diceByLevel": {
+         "2": "2d6",
+         "5": "3d8",
+         "8": "4d8"
+        },
+        "effect": {
+         "name": "Patron’s Fury",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Patron Dice are added to your damage rolls."
+        }
+       }
+      ],
+      "actions": [
+       {
+        "id": "activate",
+        "label": "Patron’s Fury",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Patron’s Fury",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Patron Dice are added to your damage rolls."
+          }
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Deadly Vengeance",
@@ -1496,13 +1852,45 @@
      "text": "**Mark a Stress** to place **1d4+1** tokens on this card. When you make a successful weapon attack, you can spend a token to afflict the target with a poison. You know these poisons:",
      "type": "subclass",
      "automation": {
+      "resources": [
+       {
+        "id": "poison",
+        "label": "Poison tokens",
+        "initial": 0
+       }
+      ],
       "actions": [
        {
-        "id": "use",
-        "label": "Toxic Concoctions",
+        "id": "brew",
+        "label": "Brew toxic concoctions",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "poison",
+          "amount": "1d4+1"
+         }
+        ],
         "cost": {
          "stress": 1
         }
+       },
+       {
+        "id": "poison",
+        "label": "Afflict with poison (manual)",
+        "cost": {
+         "poison": 1
+        }
+       },
+       {
+        "id": "clear",
+        "label": "Long rest: clear poison",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "poison",
+          "amount": "all"
+         }
+        ]
        }
       ]
      }
@@ -1510,7 +1898,21 @@
     {
      "name": "Ghost Petal",
      "text": "- The target becomes temporarily *Vulnerable*.\n\n- ***Grave Spore:*** The target must also mark a Stress.\n\n- ***Leech Weed:*** You deal an extra **1d6** damage on this attack.\n\nWhen you take a long rest, clear all unspent tokens.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "leech-weed",
+        "label": "Leech Weed",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "poison": 1
+        },
+        "description": "Successful weapon attack; choose Leech Weed poison."
+       }
+      ]
+     }
     }
    ]
   },
@@ -1686,7 +2088,12 @@
     {
      "name": "Prepared",
      "text": "Take an additional domain card of your level or lower from a domain you have access to.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "domainCards": 1
+      }
+     }
     },
     {
      "name": "Adept",
@@ -1736,12 +2143,28 @@
     {
      "name": "Battlemage",
      "text": "You’ve focused your studies on becoming an unconquerable force on the battlefield. Gain an additional Hit Point slot.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "hp": 1
+      }
+     }
     },
     {
      "name": "Face Your Fear",
      "text": "When you succeed with Fear on an attack roll, you deal an extra **1d10** magic damage.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "fear",
+        "label": "Face Your Fear",
+        "roll": "damage",
+        "dice": "1d10",
+        "description": "Successful attack with Fear; upgrades to 2d10/3d10 are manual."
+       }
+      ]
+     }
     }
    ]
   },
@@ -1796,7 +2219,15 @@
     {
      "name": "Undaunted",
      "text": "Gain a permanent +3 bonus to your damage thresholds.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 3
+       }
+      ]
+     }
     },
     {
      "name": "Loyal Protector",
@@ -1831,7 +2262,15 @@
     {
      "name": "Unrelenting",
      "text": "Gain a permanent +2 bonus to your damage thresholds.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 2
+       }
+      ]
+     }
     },
     {
      "name": "Partners-in-Arms",
@@ -1866,12 +2305,34 @@
     {
      "name": "Unwavering",
      "text": "Gain a permanent +1 bonus to your damage thresholds.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 1
+       }
+      ]
+     }
     },
     {
      "name": "Iron Will",
      "text": "When you take physical damage, you can **mark an additional Armor Slot** to reduce the severity.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "mitigation": [
+       {
+        "id": "iron-will",
+        "label": "Iron Will",
+        "description": "Mark an additional Armor Slot to reduce severity further.",
+        "when": {
+         "type": "physical",
+         "armor": true
+        },
+        "armorSlots": 1
+       }
+      ]
+     }
     }
    ]
   },
@@ -1891,19 +2352,7 @@
     {
      "name": "Reliable Backup",
      "text": "You can use your “Contacts Everywhere” feature three times per session. The following options are added to the list of benefits you can choose from when you use that feature:\n\n- When you mark 1 or more Hit Points, they can rush out to shield you, reducing the Hit Points marked by 1.\n\n- When you make a Presence Roll in conversation, they back you up. You can roll a **d20** as your Hope Die.",
-     "type": "subclass",
-     "automation": {
-      "uses": {
-       "max": 3,
-       "per": "session"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Reliable Backup"
-       }
-      ]
-     }
+     "type": "subclass"
     }
    ]
   },
@@ -1975,19 +2424,7 @@
     {
      "name": "Virtuoso",
      "text": "You are among the greatest of your craft and your skill is boundless. You can perform each of your “Gifted Performer” feature’s songs twice instead of once per long rest.",
-     "type": "subclass",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Virtuoso"
-       }
-      ]
-     }
+     "type": "subclass"
     }
    ]
   },
@@ -2112,7 +2549,12 @@
     {
      "name": "At Ease",
      "text": "Gain an additional Stress slot.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "stress": 1
+      }
+     }
     },
     {
      "name": "Revenge",
@@ -2460,7 +2902,15 @@
     {
      "name": "Ascendant",
      "text": "Gain a permanent +4 bonus to your Severe damage threshold.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "severeThreshold",
+        "value": 4
+       }
+      ]
+     }
     },
     {
      "name": "Power of the Gods",
@@ -2505,7 +2955,30 @@
     {
      "name": "Wings of Light",
      "text": "You can fly. While flying, you can do the following:\n\n- **Mark a Stress** to pick up and carry another willing creature approximately your size or smaller.\n\n- **Spend a Hope** to deal an extra **1d8** damage on a successful attack.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "wings",
+        "label": "Wings of Light",
+        "roll": "damage",
+        "dice": "1d8",
+        "cost": {
+         "hope": 1
+        },
+        "description": "Successful attack while flying; Power of the Gods upgrades this manually."
+       }
+      ],
+      "actions": [
+       {
+        "id": "carry",
+        "label": "Carry willing creature while flying",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -2596,13 +3069,16 @@
      "text": "After you make an action roll to impress, persuade, or offend someone, you can **spend a Hope** to add a **d4** to the roll.",
      "type": "subclass",
      "automation": {
-      "actions": [
+      "rollOptions": [
        {
-        "id": "use",
+        "id": "poet",
         "label": "Heart of a Poet",
+        "roll": "action",
+        "dice": "1d4",
         "cost": {
          "hope": 1
-        }
+        },
+        "description": "Only to impress, persuade, or offend someone."
        }
       ]
      }
@@ -2642,10 +3118,50 @@
      "text": "**Spend a Hope** and make an attack against a target. On a success, deal your attack’s normal damage and temporarily make the attack’s target your *Focus*. Until this feature ends or you make a different creature your *Focus*, you gain the following benefits against your *Focus*:\n\n- You know precisely what direction they are in.\n\n- When you deal damage to them, they must mark a Stress.\n\n- When you fail an attack against them, you can end your Ranger’s Focus feature to reroll your Duality Dice.",
      "type": "class",
      "automation": {
+      "rollOptions": [
+       {
+        "id": "rangers-focus",
+        "label": "Ranger’s Focus",
+        "roll": "attack",
+        "cost": {
+         "hope": 1
+        },
+        "description": "Spend a Hope on this attack; on a success the target becomes your Focus.",
+        "effect": {
+         "name": "Ranger’s Focus",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Your attacks against your Focus can be rerolled once by ending this feature."
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "reroll",
+        "label": "Ranger’s Focus: reroll (ends the feature)",
+        "on": "attack",
+        "when": "failure",
+        "description": "Reroll a failed attack against your Focus.",
+        "reroll": "duality",
+        "requiresEffect": "Ranger’s Focus",
+        "endEffect": "Ranger’s Focus"
+       }
+      ],
       "actions": [
        {
-        "id": "use",
+        "id": "activate",
         "label": "Ranger’s Focus",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Ranger’s Focus",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Your attacks against your Focus can be rerolled once by ending this feature."
+          }
+         }
+        ],
         "cost": {
          "hope": 1
         }
@@ -2672,10 +3188,39 @@
      "text": "**Spend 3 Hope** to gain a +1 bonus to your attack rolls until your next rest.",
      "type": "hope",
      "automation": {
+      "rollOptions": [
+       {
+        "id": "no-mercy",
+        "label": "No Mercy",
+        "roll": "attack",
+        "value": 1,
+        "cost": {
+         "hope": 3
+        },
+        "description": "+1 to attack rolls until your next rest.",
+        "effect": {
+         "name": "No Mercy",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 bonus to attack rolls."
+        }
+       }
+      ],
       "actions": [
        {
-        "id": "use",
+        "id": "activate",
         "label": "No Mercy",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "No Mercy",
+           "kind": "buff",
+           "until": "rest",
+           "text": "+1 bonus to attack rolls."
+          }
+         }
+        ],
         "cost": {
          "hope": 3
         }
@@ -2691,7 +3236,18 @@
     {
      "name": "Combat Training",
      "text": "You ignore burden when equipping weapons. When you deal physical damage, you gain a bonus to your damage roll equal to your level.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "training",
+        "label": "Combat Training",
+        "roll": "damage",
+        "value": "@level",
+        "description": "Physical damage only; ignoring weapon burden is manual."
+       }
+      ]
+     }
     }
    ]
   },
@@ -2807,7 +3363,14 @@
       "actions": [
        {
         "id": "use",
-        "label": "Deadly Determination",
+        "label": "Clear 2 Stress",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         }
+        ],
         "cost": {
          "hope": 3
         }
@@ -3133,6 +3696,23 @@
        {
         "id": "use",
         "label": "Rogue’s Dodge",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Rogue’s Dodge",
+           "kind": "buff",
+           "until": "rest",
+           "text": "Rogue’s Dodge",
+           "modifiers": [
+            {
+             "stat": "evasion",
+             "value": 2
+            }
+           ]
+          }
+         }
+        ],
         "cost": {
          "hope": 3
         }
@@ -3148,7 +3728,23 @@
     {
      "name": "Sneak Attack",
      "text": "When you succeed on an attack while *Cloaked* or while an ally is within Melee range of your target, add a number of **d6s** equal to your tier to your damage roll.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "sneak",
+        "label": "Sneak Attack",
+        "roll": "damage",
+        "dice": "1d6",
+        "description": "Successful attack while Cloaked or an ally is in Melee of target.",
+        "diceByLevel": {
+         "2": "2d6",
+         "5": "3d6",
+         "8": "4d6"
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -3172,7 +3768,14 @@
       "actions": [
        {
         "id": "use",
-        "label": "Frontline Tank",
+        "label": "Clear 2 Armor Slots",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "armor",
+          "amount": 2
+         }
+        ],
         "cost": {
          "hope": 3
         }
@@ -3216,13 +3819,17 @@
      "text": "When you fail a roll, you can **spend 3 Hope** to reroll with advantage.",
      "type": "hope",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Patron’s Boon",
+        "id": "reroll",
+        "label": "Patron’s Boon: reroll with advantage",
+        "on": "duality",
+        "when": "failure",
         "cost": {
          "hope": 3
-        }
+        },
+        "reroll": "duality",
+        "advantage": true
        }
       ]
      }
@@ -3230,12 +3837,77 @@
     {
      "name": "Patron’s Pact",
      "text": "You have committed yourself to a supernatural entity—such as a god, fae, or demon—in exchange for power. Write their name on your character sheet, then work with your GM to determine their sphere of influence (such as Nature, Chaos, Wisdom, Mischief, Love, War, Justice, or Death). Before making an action roll that relates to your patron’s sphere of influence, you can **spend a Favor **to call upon their aid, rolling your Patron Die and adding its result to the total. Your Patron Die starts at a **d6** and increases to a **d8** at level 5.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "patron-die",
+        "label": "Patron Die",
+        "roll": "action",
+        "dice": "1d6",
+        "cost": {
+         "favor": 1
+        },
+        "description": "Only an action related to your patron’s sphere of influence.",
+        "diceByLevel": {
+         "5": "1d8"
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Favor",
      "text": "You start with 3 Favor. You can use a downtime move to show tribute to your patron. Describe how and gain Favor equal to your Spellcast trait. Additionally, when you succeed on an action roll with Hope, you can choose to gain a Favor instead of a Hope.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "resources": [
+       {
+        "id": "favor",
+        "label": "Favor",
+        "initial": 3
+       }
+      ],
+      "actions": [
+       {
+        "id": "tribute",
+        "label": "Downtime tribute",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "favor",
+          "amount": "@spellcast"
+         }
+        ],
+        "timing": "downtime"
+       },
+       {
+        "id": "gain-favor",
+        "label": "Successful Hope roll: gain Favor instead (do not gain Hope)",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "favor",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "hope-to-favor",
+        "label": "Successful Hope roll: replace gained Hope with Favor",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "favor",
+          "amount": 1
+         }
+        ],
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -3275,7 +3947,49 @@
     {
      "name": "Strange Patterns",
      "text": "Choose a number between 1 and 12. When you roll that number on a Duality Die, gain a Hope or clear a Stress. You can change this number when you take a long rest.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "resources": [
+       {
+        "id": "strange-pattern",
+        "label": "Strange Patterns number (1-12, 0 = none)",
+        "initial": 0,
+        "max": 12
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "hope",
+        "label": "Strange Patterns: gain a Hope",
+        "on": "duality",
+        "when": "dieMatches",
+        "description": "A Duality Die matches your chosen number.",
+        "matchResource": "strange-pattern",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "stress",
+        "label": "Strange Patterns: clear a Stress",
+        "on": "duality",
+        "when": "dieMatches",
+        "description": "A Duality Die matches your chosen number.",
+        "matchResource": "strange-pattern",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
     }
    ]
   }

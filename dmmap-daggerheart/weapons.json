@@ -92,7 +92,11 @@
       "stat": "evasion",
       "value": -1
      }
-    ]
+    ],
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    },
    "starter": true
   },
@@ -514,6 +518,12 @@
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
    },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
+   },
    "starter": true
   },
   {
@@ -601,7 +611,11 @@
       "stat": "evasion",
       "value": -1
      }
-    ]
+    ],
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -849,6 +863,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -1008,6 +1028,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -1208,6 +1234,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -1328,6 +1360,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -1370,10 +1408,12 @@
     "text": "Before you make a Presence Roll, you can mark a Stress to gain a +2 bonus to the result."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "persuasive",
       "label": "Persuasive",
+      "roll": "trait:Presence",
+      "value": 2,
       "cost": {
        "stress": 1
       }
@@ -1494,7 +1534,11 @@
       "stat": "evasion",
       "value": -1
      }
-    ]
+    ],
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -1901,6 +1945,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -2133,6 +2183,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -2184,6 +2240,24 @@
    "feature": {
     "name": "Healing",
     "text": "During downtime, automatically clear a Hit Point."
+   },
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "recovery",
+       "label": "clear 1 HP",
+       "defaultOn": true,
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "hp",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    }
    }
   },
   {
@@ -2304,6 +2378,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -2411,7 +2491,11 @@
       "stat": "evasion",
       "value": -1
      }
-    ]
+    ],
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -3040,6 +3124,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -3120,6 +3210,12 @@
    "feature": {
     "name": "Powerful",
     "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 1,
+     "dropLowest": 1
+    }
    }
   },
   {
@@ -3608,6 +3704,18 @@
     "name": "Paired",
     "text": "+2 to primary weapon damage to targets within Melee range"
    },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 2,
+      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
+   },
    "starter": true
   },
   {
@@ -3690,6 +3798,18 @@
    "feature": {
     "name": "Paired",
     "text": "+2 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 2,
+      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    },
    "starter": true
   },
@@ -3781,6 +3901,18 @@
    "feature": {
     "name": "Paired",
     "text": "+3 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 3,
+      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -3861,6 +3993,18 @@
    "feature": {
     "name": "Paired",
     "text": "+3 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 3,
+      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -3955,6 +4099,16 @@
       "stat": "armorScore",
       "value": 1
      }
+    ],
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Double Duty",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to Armor Score; +1 to primary weapon damage within Melee range",
+      "weapon": "primary"
+     }
     ]
    }
   },
@@ -4016,6 +4170,18 @@
    "feature": {
     "name": "Paired",
     "text": "+4 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 4,
+      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -4096,6 +4262,18 @@
    "feature": {
     "name": "Paired",
     "text": "+4 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 4,
+      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -4265,6 +4443,18 @@
    "feature": {
     "name": "Paired",
     "text": "+5 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 5,
+      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -4345,6 +4535,18 @@
    "feature": {
     "name": "Paired",
     "text": "+5 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 5,
+      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -4658,6 +4860,20 @@
      {
       "id": "use",
       "label": "Channeling",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "channeling",
+      "label": "Channeling",
+      "description": "Mark a Stress for resistance to magic damage.",
+      "when": {
+       "type": "magic"
+      },
+      "halve": true,
       "cost": {
        "stress": 1
       }
@@ -6681,6 +6897,18 @@
    "feature": {
     "name": "Paired",
     "text": "+2 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 2,
+      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -6777,6 +7005,18 @@
    "feature": {
     "name": "Focused",
     "text": "+1 to primary weapon damage to targets within Very Close range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Focused",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -6828,6 +7068,18 @@
    "feature": {
     "name": "Paired",
     "text": "+3 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 3,
+      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -6924,6 +7176,18 @@
    "feature": {
     "name": "Focused",
     "text": "+1 to primary weapon damage to targets within Very Close range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Focused",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -7001,6 +7265,16 @@
      {
       "stat": "armorScore",
       "value": 1
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Double Duty",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to Armor Score; +1 to primary weapon damage within Melee range",
+      "weapon": "primary"
      }
     ]
    }
@@ -7085,6 +7359,18 @@
    "feature": {
     "name": "Paired",
     "text": "+4 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 4,
+      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -7181,6 +7467,18 @@
    "feature": {
     "name": "Focused",
     "text": "+1 to primary weapon damage to targets within Very Close range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Focused",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -7203,10 +7501,13 @@
     "text": "+1 to attack rolls made with your primary weapon"
    },
    "automation": {
-    "modifiers": [
+    "rollOptions": [
      {
+      "id": "trusty",
+      "label": "Trusty",
       "roll": "attack",
-      "value": 1
+      "value": 1,
+      "description": "Only attacks made with your primary weapon."
      }
     ]
    }
@@ -7342,6 +7643,18 @@
    "feature": {
     "name": "Paired",
     "text": "+5 to primary weapon damage to targets within Melee range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Paired",
+      "roll": "damage",
+      "value": 5,
+      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {
@@ -7438,6 +7751,18 @@
    "feature": {
     "name": "Focused",
     "text": "+1 to primary weapon damage to targets within Very Close range"
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "primary-damage",
+      "label": "Focused",
+      "roll": "damage",
+      "value": 1,
+      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "weapon": "primary"
+     }
+    ]
    }
   },
   {

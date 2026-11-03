@@ -31,6 +31,18 @@ Nothing starts until you click **Start online session**, so offline play and the
     owner, artwork, rename, remove, place at view centre and folder management; drag actors and folders into
     folders, or **drag an actor straight onto the map** to place it there (like the token browser).
   - **Connected:** connected players with their open tabs and ping; right-click to kick.
+- **Roll context:** feature actions and Spellcast rolls have a subtle, collapsed **Source** section in chat.
+  Expand it to read the feature, card or individual grimoire spell without opening the sheet.
+  Spellcast titles name their source; descriptions stay with history, follow-up spell damage and rerolls.
+- **Testing characters (Daggerheart):** right-click the Actors tree or a folder and choose **New testing
+  character**, then assign its **Owner** as usual. The assigned player (including a player account used by the DM)
+  opens its sheet and uses **Edit testing build** to freely switch level, class/subclass, subclass stage,
+  multiclasses, ancestry/mixed ancestry, community and transformation. Features, domains, spellcasting and
+  class/card resources update automatically; all domain cards in the available domains, at every level, are
+  active together, with no five-card limit. New testers start at level 10 with mastery features and starter gear.
+  Equipment and notes survive build changes; obsolete features, resources and their effects are removed.
+  Testing characters are visibly marked and permanently testing-only: players cannot enable testing on normal
+  actors, and normal character creation, advancement and loadout limits still apply.
 - **Actor tokens** are stored in the map file; older builds still open such maps. Actor tokens of other campaigns
   are flagged in the Actors tab and can be removed there (never automatic).
 - Share the invite link; players pick their name and enter their password (failed logins are rate limited).
@@ -40,9 +52,22 @@ Nothing starts until you click **Start online session**, so offline play and the
   button per actor. The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
-  Trait tiles use highlighted teal borders to stand out from the other character stats.
+  All six traits stack vertically in a persistent left sidebar, visible on every tab. Experiences are in Background.
+  The Character tab places class/subclass features in the left column and heritage features in the right;
+  these columns stack when the sheet is narrow. Evasion, Armor, Thresholds, HP and Stress remain in a compact main-area row.
+  Narrow Evasion and Armor cards leave room for single-line HP and Stress tracks at the default sheet width.
+  Armor, HP and Stress slots are equally sized squares; tracks wrap instead of shrinking slots.
+  The Armor container reserves space for two rows of six slots, leaving the remaining width to HP and Stress.
+  Trait tiles use highlighted teal borders to stand out from the other character stats. A read-only ring in each
+  tile's top-left corner shows a dot when marked without increasing the tile height; only level-ups mark or clear traits, not manual clicks. Short rest,
+  long rest and death-move controls are in the header to the right of the portrait, between the character details and vitals row. The resizable sheet
+  defaults to 900 px wide (clamped to available space) and nearly the full viewport height, leaving 30 px above and below.
+  The sidebar scrolls independently from the tab content; floating and pop-out sheets use the same layout.
+  Hover or focus Evasion, Armor or Thresholds to see their sources in an overlay above the tabs, without adding scrollbars.
   Sheets are saved on the host per actor (`<campaign>/sheets/<actorId>.json`, debounced autosave) and reload on
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
+  Domain-card counters labeled "Tokens" sit in each loadout card's header between its domain and recall cost;
+  domain-card action groups have no enclosing border, while individual buttons retain their normal styling.
 - **Daggerheart Character Mancer and level-up guide**: a new actor's sheet only shows a "Start the Character Mancer"
   prompt. The wizard shows one small choice per step (class, subclass, ancestry, community, an optional transformation,
   traits, primary weapon, secondary weapon, armor, supplies,
@@ -61,15 +86,56 @@ Nothing starts until you click **Start online session**, so offline play and the
   button) to put them in the matching tab. Entries with
   automation act on the sheet: armor sets evasion, thresholds and armor slots, features and potions get action
   buttons (spend a resource, heal, gain Hope), and buffs/debuffs appear in the sheet's new **Effects** tab - e.g. a
-  Control Potion adds +1 to the next Finesse roll and is then removed. Short/Long rest buttons expire effects and
-  reset uses. Entries without automation stay readable text. Regenerate the files with
+  Control Potion adds +1 to the next Finesse roll and is then removed. Rest-only moves and benefits have no standalone
+  action buttons; use them only in a confirmed rest. Downtime timing, additional moves, passive benefits and roll
+  tables are configured in compendium automation (`tools/daggerheart/rest-automation.json` for exported content).
+  A subtle shield button on the **Thresholds** vital opens a damage dialog, styled like the roll windows. Enter the
+  incoming damage and type, then tick an Armor Slot or any armor, card, feature or item mitigation available to the
+  character (for example Scales, Shrug It Off or Ring of Resistance). A live preview shows the HP to mark: Minor 1,
+  Major 2, Severe 3, and 4 for damage of at least twice the Severe threshold. **Apply** marks HP and Armor Slots,
+  pays Hope/Stress/HP costs, counts limited uses, consumes items and posts a damage report card to the chat. Mitigations are
+  configured in `tools/daggerheart/damage-automation.json`.
+  Forager and Potioncraft Kit add choices, not extra slots; explicit grants such as Celestial Trance and
+  Potion of Stability still increase the number of moves. These rules use metadata,
+  not runtime name/label exceptions. Other actions on the same feature or item remain available.
+  The Short/Long rest buttons open a **downtime
+  dialog**: pick up to two different moves (a move can't be chosen twice; Tend to Wounds, Clear Stress, Repair Armor, Prepare alone/with others; long rests
+  offer the "all" versions and Work on a Project), plus extra moves and move types granted by your ancestry, community,
+  class, domain cards and items (Clank Efficient and Recovery allow one long move in a short rest, Warlock tribute, Forager,
+  Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, Oasis, ...) are listed as
+  checkboxes you can untick if you don't use them. Confirming rests, expires effects, resets uses and posts a styled
+    rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Entries without automation stay readable text. Regenerate the files with
   `python tools/daggerheart/convert.py`.
+  Your own roll cards in the chat carry buttons: **Damage** on attack rolls (same dialog as the sheet) and feature
+  buttons such as Wizard Strange Patterns, Ranger's Focus / Hawkeye rerolls, Fearless or Patron's Boon, and spell
+  Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
+  offer a Spellcast button when they ask for one; token cards (Umbral Veil, Flight, ...) track tokens; I See It Coming
+  rolls its d4 into the chat. The roll window uses Advantage / Normal / Disadvantage buttons.
+  Custom resource pools such as Warlock **Favor** are configurable and appear on the sheet, with gain/spend actions
+  and a selectable, level-scaled Patron Die. Creation grants can add HP, Stress, Evasion, domain-card choices and
+  eligible domains, including mixed-ancestry feature selection. Attack/action and damage dialogs offer multiple
+  optional bonuses together (for example **Charging Quiver** on arrow damage), show their conditions and costs,
+  and reject unaffordable combinations including an Experience's Hope cost. Costs and limited uses are consumed
+  only after a successful send; canceling or disconnecting spends nothing.
+  **Powerful** weapons such as the Advanced Greatstaff roll an extra weapon damage die and discard the lowest
+  on the host; chat marks discarded dice and preserves the correct breakdown. Older hosts are identified by an
+  additive capability flag and show an update-required message rather than silently rolling incorrect damage.
+  Existing sheets refresh copied automation from the current host compendium when opened, without resetting
+  resources or rebuilding creation/level-up choices. Full narrative effects, targeting and conditional outcomes
+  still require player/GM adjudication. Patron's Fury and No Mercy have a feature button that pays the cost and
+  starts the effect, and also a roll-dialog option: ticking it in the dialog does the same (the cost is shown next
+  to the option); while the effect is active the option is pre-ticked and free. Roll-dialog options also list
+  consumables: a "+1 to your next Agility roll" potion in the inventory appears unticked (ticking it uses up one
+  potion when the roll is sent), and a potion you already drank appears pre-ticked and is spent by that roll.
+  See the format reference for the complete catalog audit and configuration examples.
   The account becomes available when its last tab disconnects, on logout or when you kick the player.
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
   **Press Space** in the DM view (setting `online.pauseKey`; local API `online.pause`) to pause or resume: movement
   is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
-  block anything else. Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
+  block anything else. While a campaign is hosted, the **Fear counter** (per campaign, 0-12) appears as a small
+  overlay at the bottom right of the DM view with −/+ buttons (local API `online.fearDown`/`online.fearUp`) and
+  permanently as up to 12 tokens at the bottom right of every browser. Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
   Chat messages appear as individual sender-headed cards. Roll cards show styled dice, a combined bonus and a
@@ -91,6 +157,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   Click the selected section again to collapse it to just its icons. Settings contains your audio
   controls and logout. The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
   (not to you); `--` means a sample is not available yet.
+- **Active effects overlay:** below the left tools, a subtle fixed-width list shows each of your actors' active
+  effects, grouped by character name. Each row has the effect name and a remove (x) button; click a name to expand the
+  full source (for example the whole Patron's Fury feature) and click again to collapse.
 - **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
   Right-drag pans while keeping the active tool;
   left-drag on empty space box-selects your drawings, controlled actors/tokens and measurements. Drag a selected

@@ -33,6 +33,16 @@
        }
       ]
      }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Agility",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
+     }
     ]
    }
   },
@@ -64,6 +74,16 @@
         }
        }
       ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Strength",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
      }
     ]
    }
@@ -97,6 +117,16 @@
        }
       ]
      }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Finesse",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
+     }
     ]
    }
   },
@@ -128,6 +158,16 @@
         }
        }
       ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Instinct",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
      }
     ]
    }
@@ -161,6 +201,16 @@
        }
       ]
      }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Presence",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
+     }
     ]
    }
   },
@@ -192,6 +242,16 @@
         }
        }
       ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "potion",
+      "label": "Drink",
+      "roll": "trait:Knowledge",
+      "value": 1,
+      "description": "Drink it as part of this roll.",
+      "consumeItem": true
      }
     ]
    }
@@ -244,28 +304,14 @@
    "rarity": "Common",
    "text": "You can apply this venom to a weapon that deals physical damage to add a d6 to your next damage roll with that weapon.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Apply",
-      "steps": [
-       {
-        "op": "effect",
-        "effect": {
-         "name": "Grindletooth Venom",
-         "kind": "buff",
-         "until": "manual",
-         "text": "Add a d6 to your next damage roll with the coated weapon.",
-         "modifiers": [
-          {
-           "roll": "damage",
-           "dice": "d6",
-           "consume": true
-          }
-         ]
-        }
-       }
-      ]
+      "id": "coating",
+      "label": "Grindletooth Venom",
+      "roll": "damage",
+      "dice": "1d6",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
      }
     ]
    }
@@ -307,7 +353,20 @@
    "id": "potion-of-stability",
    "name": "Potion of Stability",
    "rarity": "Uncommon",
-   "text": "You can drink this potion to choose one additional downtime move."
+   "text": "You can drink this potion to choose one additional downtime move.",
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "drink",
+       "label": "drink for +1 downtime move (uses 1)",
+       "defaultOn": false,
+       "extraMoves": 1,
+       "consumeItem": true
+      }
+     ]
+    }
+   }
   },
   {
    "id": "improved-grindletooth-venom",
@@ -315,28 +374,14 @@
    "rarity": "Uncommon",
    "text": "You can apply this venom to a weapon that deals physical damage to add a d8 to your next damage roll with that weapon.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Apply",
-      "steps": [
-       {
-        "op": "effect",
-        "effect": {
-         "name": "Improved Grindletooth Venom",
-         "kind": "buff",
-         "until": "manual",
-         "text": "Add a d8 to your next damage roll with the coated weapon.",
-         "modifiers": [
-          {
-           "roll": "damage",
-           "dice": "d8",
-           "consume": true
-          }
-         ]
-        }
-       }
-      ]
+      "id": "coating",
+      "label": "Improved Grindletooth Venom",
+      "roll": "damage",
+      "dice": "1d8",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
      }
     ]
    }
@@ -684,28 +729,14 @@
    "rarity": "Uncommon",
    "text": "You can apply this saliva to a weapon that deals physical damage to add a d12 to your next damage roll with that weapon.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Apply",
-      "steps": [
-       {
-        "op": "effect",
-        "effect": {
-         "name": "Redthorn Saliva",
-         "kind": "buff",
-         "until": "manual",
-         "text": "Add a d12 to your next damage roll with the coated weapon.",
-         "modifiers": [
-          {
-           "roll": "damage",
-           "dice": "d12",
-           "consume": true
-          }
-         ]
-        }
-       }
-      ]
+      "id": "coating",
+      "label": "Redthorn Saliva",
+      "roll": "damage",
+      "dice": "1d12",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
      }
     ]
    }
@@ -722,28 +753,14 @@
    "rarity": "Uncommon",
    "text": "You can apply this dust to a weapon that deals magic damage to add a d12 to your next damage roll with that weapon.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Apply",
-      "steps": [
-       {
-        "op": "effect",
-        "effect": {
-         "name": "Mythic Dust",
-         "kind": "buff",
-         "until": "manual",
-         "text": "Add a d12 to your next damage roll with the coated weapon.",
-         "modifiers": [
-          {
-           "roll": "damage",
-           "dice": "d12",
-           "consume": true
-          }
-         ]
-        }
-       }
-      ]
+      "id": "coating",
+      "label": "Mythic Dust",
+      "roll": "damage",
+      "dice": "1d12",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
      }
     ]
    }
@@ -996,7 +1013,33 @@
    "id": "sweet-moss",
    "name": "Sweet Moss",
    "rarity": "Legendary",
-   "text": "You can consume this moss during a rest to clear 1d10 HP or 1d10 Stress."
+   "text": "You can consume this moss during a rest to clear 1d10 HP or 1d10 Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "hp",
+      "label": "During rest: clear HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d10"
+       }
+      ]
+     },
+     {
+      "id": "stress",
+      "label": "During rest: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d10"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "blinding-orb",
@@ -1023,6 +1066,18 @@
       "cost": {
        "hope": 1
       }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "mirror",
+      "label": "Mirror of Marigold",
+      "description": "Spend a Hope to ignore the damage; the mirror is consumed.",
+      "negate": true,
+      "cost": {
+       "hope": 1
+      },
+      "consumeItem": true
      }
     ]
    }
@@ -1055,7 +1110,16 @@
    "id": "arcane-stuffing",
    "name": "Arcane Stuffing",
    "rarity": "Uncommon",
-   "text": "When you stuff a dead creature with this magic-infused sawdust as a downtime move, it becomes an animate servant, as if by the Book of Exota “Create Construct” feature."
+   "text": "When you stuff a dead creature with this magic-infused sawdust as a downtime move, it becomes an animate servant, as if by the Book of Exota “Create Construct” feature.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "archivists-rot",
@@ -1186,13 +1250,34 @@
    "id": "griefroot-powder",
    "name": "Griefroot Powder",
    "rarity": "Uncommon",
-   "text": "When you inhale this powder, you add a d8 to your next action roll, but for the scene if you take damage or witness death you must succeed on a Presence Roll (14) or become Stunned. While Stunned, you can’t use reactions and can’t take any other actions until you clear this condition. Craft into: Hero’s Powder."
+   "text": "When you inhale this powder, you add a d8 to your next action roll, but for the scene if you take damage or witness death you must succeed on a Presence Roll (14) or become Stunned. While Stunned, you can’t use reactions and can’t take any other actions until you clear this condition. Craft into: Hero’s Powder.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "powder",
+      "label": "Griefroot Powder",
+      "roll": "action",
+      "dice": "1d8",
+      "description": "Inhale before this action. Resolve scene-long stun reaction checks manually.",
+      "consumeItem": true
+     }
+    ]
+   }
   },
   {
    "id": "gyre-cap",
    "name": "Gyre Cap",
    "rarity": "Uncommon",
-   "text": "Brewed into a tea as a downtime move, these mushrooms give any drinker advantage on Instinct rolls and disadvantage on Presence rolls until their next rest. Craft into: Potion of Spiraling Vision."
+   "text": "Brewed into a tea as a downtime move, these mushrooms give any drinker advantage on Instinct rolls and disadvantage on Presence rolls until their next rest. Craft into: Potion of Spiraling Vision.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "henrys-sugar",
@@ -1233,7 +1318,16 @@
    "id": "martyrs-grass",
    "name": "Martyr’s Grass",
    "rarity": "Uncommon",
-   "text": "As a downtime move, you can plant a sprig of this fragrant herb in the barest soil. It gives everyone within Close range a peaceful slumber, clearing all Stress."
+   "text": "As a downtime move, you can plant a sprig of this fragrant herb in the barest soil. It gives everyone within Close range a peaceful slumber, clearing all Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "mucin-of-slipperiness",
@@ -1256,7 +1350,8 @@
          "modifiers": []
         }
        }
-      ]
+      ],
+      "timing": "downtime"
      }
     ]
    }
@@ -1269,11 +1364,25 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Use",
-      "cost": {
-       "stress": 1
-      }
+      "id": "embed",
+      "label": "Needle Key",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Needle Key",
+         "kind": "buff",
+         "until": "longRest",
+         "text": "Needle Key",
+         "modifiers": [
+          {
+           "stat": "trait.Finesse",
+           "value": -1
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -1282,7 +1391,37 @@
    "id": "nursewood-sap",
    "name": "Nursewood Sap",
    "rarity": "Rare",
-   "text": "Rub onto a creature to clear 1d4 HP, 1d4 Stress, or one condition."
+   "text": "Rub onto a creature to clear 1d4 HP, 1d4 Stress, or one condition.",
+   "automation": {
+    "actions": [
+     {
+      "id": "hp",
+      "label": "Apply to self: clear HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d4"
+       }
+      ]
+     },
+     {
+      "id": "stress",
+      "label": "Apply to self: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4"
+       }
+      ]
+     },
+     {
+      "id": "other",
+      "label": "Apply: other creature or condition (manual)"
+     }
+    ]
+   }
   },
   {
    "id": "pastries-of-warmth",
@@ -1373,11 +1512,15 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Use",
-      "cost": {
-       "stress": 2
-      }
+      "id": "drink",
+      "label": "Drink: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4"
+       }
+      ]
      }
     ]
    }
@@ -1386,7 +1529,25 @@
    "id": "toxilily-bulb",
    "name": "Toxilily Bulb",
    "rarity": "Uncommon",
-   "text": "This bulb can be broken into 1d4 cloves, each of which can be smeared on a weapon. Until your next rest, you add your Proficiency to the damage rolls for the weapon."
+   "text": "This bulb can be broken into 1d4 cloves, each of which can be smeared on a weapon. Until your next rest, you add your Proficiency to the damage rolls for the weapon.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "cloves",
+      "label": "Toxilily clove",
+      "roll": "damage",
+      "value": "@proficiency",
+      "description": "Smear on a weapon: adds your Proficiency to its damage until your next rest. One bulb gives 1d4 cloves; only the first use consumes the bulb.",
+      "consumeItem": true,
+      "effect": {
+       "name": "Toxilily Bulb",
+       "kind": "buff",
+       "until": "rest",
+       "text": "Proficiency is added to the coated weapon's damage rolls."
+      }
+     }
+    ]
+   }
   },
   {
    "id": "trinity-flower-petals",
@@ -1450,7 +1611,22 @@
    "id": "votive-bloom-nectar",
    "name": "Votive Bloom Nectar",
    "rarity": "Common",
-   "text": "You clear 1d4 Stress, but the next time you mark a Stress you must succeed on an Insight Reaction Roll (15) or fall down in prayer and become temporarily Vulnerable. Craft into: Tincture of Fortified Thoughts."
+   "text": "You clear 1d4 Stress, but the next time you mark a Stress you must succeed on an Insight Reaction Roll (15) or fall down in prayer and become temporarily Vulnerable. Craft into: Tincture of Fortified Thoughts.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "1d4"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "wardstone-charm",
@@ -1569,7 +1745,22 @@
    "id": "pipeweed",
    "name": "Pipeweed",
    "rarity": "Common",
-   "text": "When you choose the Clear Stress downtime move during a short rest, you can smoke this non-intoxicating leaf to clear an additional Stress. Any other PCs who chose the Clear Stress downtime move also gain this benefit."
+   "text": "When you choose the Clear Stress downtime move during a short rest, you can smoke this non-intoxicating leaf to clear an additional Stress. Any other PCs who chose the Clear Stress downtime move also gain this benefit.",
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "smoke",
+       "label": "Clear Stress clears 1 more Stress (uses 1)",
+       "defaultOn": false,
+       "rest": "short",
+       "move": "stress",
+       "bonus": 1,
+       "consumeItem": true
+      }
+     ]
+    }
+   }
   },
   {
    "id": "deathseers-powder",
@@ -1599,7 +1790,19 @@
    "id": "red-ooze-oil",
    "name": "Red Ooze Oil",
    "rarity": "Common",
-   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Ignites the target. While Ignited, the target takes 1d4 magic damage when they take the spotlight."
+   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Ignites the target. While Ignited, the target takes 1d4 magic damage when they take the spotlight.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "coating",
+      "label": "Red Ooze Oil",
+      "roll": "damage",
+      "dice": "1d8",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
+     }
+    ]
+   }
   },
   {
    "id": "instant-camp",
@@ -1659,7 +1862,33 @@
    "id": "self-sewing-thread",
    "name": "Self-Sewing Thread",
    "rarity": "Uncommon",
-   "text": "You can use this thread to clear either a Hit Point or 2 Armor Slots."
+   "text": "You can use this thread to clear either a Hit Point or 2 Armor Slots.",
+   "automation": {
+    "actions": [
+     {
+      "id": "hp",
+      "label": "Clear HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "armor",
+      "label": "Clear Armor Slots",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "armor",
+        "amount": 2
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "stonemasons-fortune",
@@ -1683,7 +1912,19 @@
    "id": "green-ooze-oil",
    "name": "Green Ooze Oil",
    "rarity": "Uncommon",
-   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Corrodes the target. While Corroded, the target gains a −2 penalty to their damage thresholds."
+   "text": "You can coat your weapon in this oil. The next successful attack you make with this weapon deals an extra 1d8 magic damage and temporarily Corrodes the target. While Corroded, the target gains a −2 penalty to their damage thresholds.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "coating",
+      "label": "Green Ooze Oil",
+      "roll": "damage",
+      "dice": "1d8",
+      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
+      "consumeItem": true
+     }
+    ]
+   }
   },
   {
    "id": "sunlight-orb",
@@ -1737,7 +1978,32 @@
    "id": "demiurges-draught",
    "name": "Demiurge’s Draught",
    "rarity": "Rare",
-   "text": "You can drink this draught to gain a +1 bonus to your Proficiency for your next successful attack roll."
+   "text": "You can drink this draught to gain a +1 bonus to your Proficiency for your next successful attack roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Demiurge’s Draught",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Demiurge’s Draught",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Demiurge’s Draught",
+         "modifiers": [
+          {
+           "stat": "proficiency",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "cockerel-claw-tea",
@@ -1749,7 +2015,32 @@
    "id": "potion-of-vigilance",
    "name": "Potion of Vigilance",
    "rarity": "Rare",
-   "text": "You can drink this potion to gain a +1 bonus to your Evasion until you mark a Hit Point."
+   "text": "You can drink this potion to gain a +1 bonus to your Evasion until you mark a Hit Point.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Potion of Vigilance",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Potion of Vigilance",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Potion of Vigilance",
+         "modifiers": [
+          {
+           "stat": "evasion",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "cacophonous-concoction",
@@ -1803,13 +2094,58 @@
    "id": "steelskin-salve",
    "name": "Steelskin Salve",
    "rarity": "Legendary",
-   "text": "You can apply this salve to your skin to gain a bonus to your damage thresholds equal to your tier until the end of the scene."
+   "text": "You can apply this salve to your skin to gain a bonus to your damage thresholds equal to your tier until the end of the scene.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Steelskin Salve",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Steelskin Salve",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Steelskin Salve",
+         "modifiers": [
+          {
+           "stat": "thresholds",
+           "value": "@tier"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "godlings-pomelo",
    "name": "Godling’s Pomelo",
    "rarity": "Legendary",
-   "text": "You can eat this citrus fruit to clear all Hit Points and Stress."
+   "text": "You can eat this citrus fruit to clear all Hit Points and Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "eat",
+      "label": "Eat",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "all"
+       },
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": "all"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "snakeskin-spirit",
@@ -1845,7 +2181,36 @@
    "id": "drakemantle",
    "name": "Drakemantle",
    "rarity": "Legendary",
-   "text": "You can use this enchanted ancient dragon hide to gain draconic characteristics until the end of the scene, when the hide falls aways in tatters. Until then, you can fly and gain a +5 bonus to your damage thresholds and a +1 bonus to your Proficiency."
+   "text": "You can use this enchanted ancient dragon hide to gain draconic characteristics until the end of the scene, when the hide falls aways in tatters. Until then, you can fly and gain a +5 bonus to your damage thresholds and a +1 bonus to your Proficiency.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drakemantle",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Drakemantle",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Drakemantle",
+         "modifiers": [
+          {
+           "stat": "thresholds",
+           "value": 5
+          },
+          {
+           "stat": "proficiency",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "gamblers-fallacy",
@@ -1857,19 +2222,78 @@
    "id": "lionheart-tonic",
    "name": "Lionheart Tonic",
    "rarity": "Legendary",
-   "text": "You can drink this tonic to gain a +1 bonus to your Proficiency until you roll with Fear."
+   "text": "You can drink this tonic to gain a +1 bonus to your Proficiency until you roll with Fear.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Lionheart Tonic",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Lionheart Tonic",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Lionheart Tonic",
+         "modifiers": [
+          {
+           "stat": "proficiency",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "tears-of-the-undying-hero",
    "name": "Tears of the Undying Hero",
    "rarity": "Legendary",
-   "text": "When you drink this potion, death can’t touch you until your next long rest. When you would mark your last Hit Point, instead of making a death move, you make one final action roll before falling into a dreamless slumber until an ally chooses the Tend to Wounds downtime move to clear your Hit Points."
+   "text": "When you drink this potion, death can’t touch you until your next long rest. When you would mark your last Hit Point, instead of making a death move, you make one final action roll before falling into a dreamless slumber until an ally chooses the Tend to Wounds downtime move to clear your Hit Points.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "featherstep-potion",
    "name": "Featherstep Potion",
    "rarity": "Legendary",
-   "text": "You can drink this potion to sprout small wings from your ankles that give you a bonus to your Evasion equal to your tier until your next rest."
+   "text": "You can drink this potion to sprout small wings from your ankles that give you a bonus to your Evasion equal to your tier until your next rest.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Featherstep Potion",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Featherstep Potion",
+         "kind": "buff",
+         "until": "rest",
+         "text": "Featherstep Potion",
+         "modifiers": [
+          {
+           "stat": "evasion",
+           "value": "@tier"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "chanting-candle",

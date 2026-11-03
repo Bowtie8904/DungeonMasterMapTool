@@ -159,6 +159,9 @@ public final class OnlineStateBuilder {
                     .put("above", dmmt.render.OverlayTextures.defaultAboveTokens(kind));
         }
         state.put("penWidthCells", dmmt.service.Tuning.PEN_WIDTH_CELLS.get());
+        if (campaign != null) {
+            state.put("fear", campaign.getFear());
+        }
         ArrayNode overlays = state.putArray("overlays");
         for (DmProject.OverlayShape shape : project.getOverlays()) {
             if (!shape.isPlayerVisible()) {
@@ -280,6 +283,7 @@ public final class OnlineStateBuilder {
         node.put("id", actor.getId());
         node.put("name", actor.getName());
         node.put("ownerId", actor.getOwnerId() == null ? "" : actor.getOwnerId());
+        node.put("testingCharacter", actor.isTestingCharacter());
         String art = artworkUrl(actor, campaign, assets);
         if (art != null) {
             node.put("artwork", art);

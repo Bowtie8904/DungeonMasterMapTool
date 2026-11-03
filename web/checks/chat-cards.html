@@ -3,13 +3,17 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Chat card visual check</title></head>
 <body>
 <main style="display:flex;flex-wrap:wrap;gap:24px;padding:24px;align-items:flex-start" id="cards"></main>
+<pre id="result">RUNNING</pre>
 <script type="module">
 import '../src/style.css';
 import { renderLogEntry } from '../src/chat.ts';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
 const common = { ts: Date.now(), fromId: 'mira', from: 'Mira Ashvale' };
 const roll = {
   ...common, id: 2, kind: 'duality', label: 'Attack - Shortbow (Agility)',
   expression: '2d12+1d6+4', rolls: [9, 4, 3], total: 20, difficulty: 15,
+  rollSource: { name: 'Shortbow', source: 'Agility - Far - d6 physical', text: '**Accurate:** Add +1 to attack rolls.' },
   breakdown: [
     { label: 'Hope die', expression: '1d12', rolls: [9], total: 9 },
     { label: 'Fear die', expression: '1d12', rolls: [4], total: 4 },
@@ -29,7 +33,70 @@ for (const expanded of [false, true]) {
     renderLogEntry({ kind: 'roll', m: { ...common, id: 3, expression: '2d6+3', rolls: [5, 6], total: 14, label: 'Shortbow damage' } }, 'mira'),
     renderLogEntry({ kind: 'chat', m: { ...common, id: 4, from: 'Gamemaster', fromId: 'dm', toId: 'mira', to: 'Mira', text: 'You notice a second set of eyes behind the creature.' } }, 'mira'));
   column.querySelector('details').open = expanded;
+  column.querySelector('.roll-source').open = expanded;
   document.getElementById('cards').append(column);
+}
+try {
+  const source = { name: 'Arcane Bolt', source: 'Book of Magic - Codex', text: 'Make a **Spellcast Roll**.\n- Deal magic damage.\n<script>unsafe</scr' + 'ipt>' };
+  const card = renderLogEntry({ kind: 'roll', m: { ...roll, id: 5, label: 'Spellcast (Knowledge) - Arcane Bolt', rollSource: source } }, 'mira');
+  const assert = (ok, message) => { if (!ok) throw new Error(message); };
+  const disclosure = card.querySelector('.roll-source');
+  assert(disclosure && !disclosure.open, 'Source must start collapsed');
+  assert(disclosure.querySelector('summary').textContent === 'Source: Arcane Bolt', 'Missing source label');
+  assert(disclosure.querySelector('b').textContent === 'Spellcast Roll', 'Missing formatted description');
+  assert(!disclosure.querySelector('button, input, script'), 'Descriptions must not contain actions or HTML');
+  disclosure.querySelector('summary').click();
+  assert(disclosure.open && !card.querySelector('.roll-breakdown').open, 'Source must expand independently');
+  document.getElementById('cards').append(card);
+  const action = renderLogEntry({ kind: 'chat', m: { ...common, id: 6, text: 'Rolled 1d4 [3]', rollSource: source } }, 'mira');
+  assert(action.querySelector('.roll-source'), 'Local action results need context');
+  const legacy = renderLogEntry({ kind: 'roll', m: { ...roll, rollSource: undefined } }, 'mira');
+  assert(!legacy.querySelector('.roll-source'), 'Legacy rolls must not invent a source');
+  const c = emptyCharacter('Context check');
+  c.mancer.done = true;
+  c.features = [{ name: 'Deflect', source: 'Class', text: 'Deflect rules', automation: { actions: [
+    { id: 'deflect', label: 'Deflect', sendRoll: { base: 'evasion', dice: '1d6', label: 'Deflect roll' } },
+    { id: 'recover', label: 'Recover', steps: [{ op: 'gain', resource: 'hope', amount: '1d4' }] },
+  ] } }];
+  c.loadout = [
+    { name: 'Bolt', domain: 'Codex', level: 1, type: 'Spell', recall: 0, spellcast: 'Knowledge', text: 'Make a Spellcast Roll.' },
+    { name: 'Book', domain: 'Codex', level: 1, type: 'Grimoire', recall: 0, spellcast: 'Knowledge', text: 'Whole book',
+      spells: [{ name: 'Shield', text: 'Make a Spellcast Roll to protect an ally.' }] },
+  ];
+  let sent, logged;
+  const bus = new SheetBus();
+  const sheet = renderSheetView({ character: c, bus, actorId: 'actor',
+    onRoll: (request) => { sent = request; return true; },
+    onLog: (text, rollSource) => { logged = rollSource; },
+  });
+  document.body.append(sheet);
+  const click = (root, text) => {
+    const b = [...root.querySelectorAll('button')].find((b) => b.textContent === text);
+    assert(b, 'Missing button: ' + text);
+    b.click();
+  };
+  click(sheet, 'Deflect');
+  assert(sent.rollSource.text === 'Deflect rules', 'Feature roll lost its description');
+  click(sheet, 'Recover');
+  assert(logged.name === 'Deflect', 'Local action roll lost its feature');
+  click(sheet, 'Domain Cards');
+  const spells = [...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Spellcast roll');
+  assert(spells.length === 2, 'Missing Spellcast buttons');
+  spells[0].click();
+  click(document.querySelector('.dh-rolldlg'), 'Roll to chat');
+  assert(sent.label.includes('Bolt') && sent.rollSource.name === 'Bolt', 'Spellcast lost its source');
+  // Sending refreshes the sheet, so locate the second button again.
+  [...sheet.querySelectorAll('button')].filter((b) => b.textContent === 'Spellcast roll')[1].click();
+  click(document.querySelector('.dh-rolldlg'), 'Roll to chat');
+  assert(sent.rollSource.name === 'Shield' && sent.rollSource.source.includes('Book'), 'Grimoire lost its individual spell');
+  assert(!sent.rollSource.text.includes('Whole book'), 'Grimoire showed unrelated spells');
+  bus.spellDamage('Shield', { dice: '1d6', fixed: true }, false, () => {}, sent.rollSource);
+  click(document.querySelector('.dh-rolldlg'), 'Roll to chat');
+  assert(sent.rollSource.name === 'Shield', 'Follow-up spell damage lost source context');
+  sheet.remove();
+  document.getElementById('result').textContent = 'PASS: collapsed source, independent expansion, formatted safe descriptions, feature/local action rolls, Spellcast, grimoire, spell damage, legacy rolls';
+} catch (error) {
+  document.getElementById('result').textContent = 'FAIL: ' + error.stack;
 }
 </script>
 </body>

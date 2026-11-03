@@ -165,6 +165,30 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    /** Fear tokens the GM holds in the hosted campaign; 0 when no session runs. */
+    public int fear() {
+        return running() && campaign != null ? campaign.getFear() : 0;
+    }
+
+    /** Changes the hosted campaign's Fear by {@code delta} (clamped), saves it and shows it to the players. */
+    public void adjustFear(int delta) {
+        if (!running() || campaign == null) {
+            return;
+        }
+        int before = campaign.getFear();
+        campaign.setFear(before + delta);
+        if (campaign.getFear() == before) {
+            return;
+        }
+        try {
+            store.save(campaign);
+        } catch (IOException ex) {
+            app.status("Online Play: could not save the Fear count: " + ex.getMessage());
+        }
+        publishNow();
+        app.changed();
+    }
+
     public boolean audioStreaming() {
         return audioStreaming;
     }

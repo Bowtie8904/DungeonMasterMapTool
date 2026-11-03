@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rollDetails } from './chat';
+import { keptRolls, rollDetails } from './chat';
 import type { RollMessage } from './protocol';
 
 const message: RollMessage = {
@@ -8,6 +8,12 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('shows discarded dice without counting them, including ties and signed mixed pools', () => {
+    expect(keptRolls('4d6kh3+1d8-3d4kh2+6', [2, 6, 2, 4, 8, -1, -3, -4])).toEqual([true, true, false, true, true, false, true, true]);
+    const details = rollDetails({ ...message, kind: undefined, expression: '4d6kh3+6', rolls: [2, 6, 2, 4], total: 18 });
+    expect(details.map((d) => d.total)).toEqual([12, 6]);
+    expect(details.flatMap((d) => d.rolls)).toEqual([2, 6, 2, 4]);
+  });
   it('uses the host-resolved sources without recomputing from a changed sheet', () => {
     const breakdown = [
       { label: 'Agility', expression: '2', rolls: [], total: 2 },

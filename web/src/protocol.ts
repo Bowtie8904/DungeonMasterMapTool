@@ -183,6 +183,7 @@ export interface Actor {
   name: string;
   ownerId: string;
   artwork?: string;
+  testingCharacter?: boolean;
 }
 
 export interface ChatMessage {
@@ -194,6 +195,14 @@ export interface ChatMessage {
   to?: string;
   text: string;
   sharedCard?: import('./shared-cards').SharedCard;
+  rollSource?: RollSource;
+}
+
+/** Description at roll time, independent of mechanics and the current sheet. */
+export interface RollSource {
+  name: string;
+  text: string;
+  source: string;
 }
 
 export interface RollContribution {
@@ -221,11 +230,20 @@ export interface RollMessage {
   kind?: string;
   difficulty?: number;
   breakdown?: RollDetail[];
+  rollSource?: RollSource;
+  /** Hints echoed from the roller's sheet; only the roller's client acts on them. */
+  ref?: string;
+  actorId?: string;
+  /** Comma separated roll targets, for example "attack,trait:Agility,action" or "damage". */
+  source?: string;
+  weapon?: string;
 }
 
 export interface GameState {
   effectTextures?: EffectTexture[];
   penWidthCells?: number;
+  /** Fear tokens the GM holds (0-12); absent when the host predates the Fear counter. */
+  fear?: number;
   mapId: string;
   levelId: string;
   mapName?: string;
@@ -279,6 +297,7 @@ export interface Hello {
   measurementTools?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;
+  keptDice?: boolean;
 }
 
 import type { AudioMessage } from './audio';

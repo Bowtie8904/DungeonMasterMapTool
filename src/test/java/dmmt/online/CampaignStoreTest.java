@@ -43,6 +43,7 @@ class CampaignStoreTest {
         Campaign campaign = store.create("  Frosthaven  ", "Daggerheart");
         campaign.getActorFolders().add("Heroes/Party");
         campaign.getActors().add(Campaign.Actor.builder().name("Mara").folder("Heroes/Party").build());
+        campaign.getActors().getFirst().setTestingCharacter(true);
         store.save(campaign);
 
         Campaign loaded = store.load(campaign.getId());
@@ -50,11 +51,26 @@ class CampaignStoreTest {
         assertEquals("Daggerheart", loaded.getSystem());
         assertEquals(List.of("Heroes/Party"), loaded.getActorFolders());
         assertEquals("Heroes/Party", loaded.getActors().getFirst().getFolder());
+        assertTrue(loaded.getActors().getFirst().isTestingCharacter());
 
         List<CampaignStore.Summary> summaries = store.list();
         assertEquals(1, summaries.size());
         assertEquals("Daggerheart", summaries.getFirst().system());
         assertEquals(1, summaries.getFirst().actors());
+    }
+
+    @Test
+    void fearIsClampedAndPersisted() throws IOException {
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Fear", null);
+        assertEquals(0, campaign.getFear());
+        campaign.setFear(99);
+        assertEquals(Campaign.MAX_FEAR, campaign.getFear());
+        campaign.setFear(-3);
+        assertEquals(0, campaign.getFear());
+        campaign.setFear(7);
+        store.save(campaign);
+        assertEquals(7, store.load(campaign.getId()).getFear());
     }
 
     @Test
@@ -76,6 +92,7 @@ class CampaignStoreTest {
         assertNotNull(loaded.getActorFolders());
         assertTrue(loaded.getActorFolders().isEmpty());
         assertNull(loaded.getActors().getFirst().getFolder());
+        org.junit.jupiter.api.Assertions.assertFalse(loaded.getActors().getFirst().isTestingCharacter());
         assertEquals(Campaign.DEFAULT_SYSTEM, store.list().getFirst().system());
     }
 }

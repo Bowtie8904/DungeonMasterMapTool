@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Testing character check</title>
+<link rel="stylesheet" href="../src/daggerheart/sheet.css"></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { renderSheetView } from '../src/daggerheart/view.ts';
+import { applyTestingBuild, defaultTestingBuild } from '../src/daggerheart/testing.ts';
+
+const result = document.querySelector('#result');
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const data = {
+  classes: ['Ranger', 'Warlock'].flatMap((name, i) => [
+    { id: name, name, kind: 'class', domains: [i ? 'Dread' : 'Sage'], startingHp: 6, startingEvasion: 10,
+      features: [{ name: `${name} pool`, text: '', automation: { resources: [{ id: `${name}Pool`, label: `${name} pool`, initial: 4 }] } }] },
+    ...['foundation', 'specialization', 'mastery'].map((stage) => ({
+      id: `${name}-${stage}`, name: `${name}: Test`, kind: 'subclass', parent: name, stage,
+      spellcastTrait: i ? 'Presence' : 'Instinct', features: [{ name: `${name} ${stage}`, text: '' }],
+    })),
+  ]),
+  ancestries: [{ id: 'human', name: 'Human', features: [{ name: 'First heritage', text: '' }, { name: 'Second heritage', text: '' }] }],
+  communities: [{ id: 'wild', name: 'Wildborne', features: [{ name: 'Wild heritage', text: '' }] }],
+  transformations: [], weapons: [], armor: [], consumables: [],
+  cards: ['Sage', 'Dread'].flatMap((domain) => Array.from({ length: 10 }, (_, i) => ({
+    id: `${domain}-${i}`, name: `${domain} ${i + 1}`, domain, level: i + 1, cardType: 'Spell', text: '',
+  }))),
+};
+const categories = { classes: data.classes, ancestries: data.ancestries, communities: data.communities,
+  transformations: [], weapons: [], armor: [], consumables: [], 'domain-cards': data.cards };
+const originalFetch = window.fetch;
+window.fetch = async (url, options) => typeof url === 'string' && url.startsWith('/api/compendium/')
+  ? new Response(JSON.stringify({ entries: categories[url.slice('/api/compendium/'.length)] }), { status: 200 })
+  : originalFetch(url, options);
+const waitFor = async (find) => {
+  for (let i = 0; i < 100; i++) {
+    const found = find();
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for testing editor');
+};
+const button = (parent, text) => [...parent.querySelectorAll('button')].find((b) => b.textContent === text);
+try {
+  const host = document.querySelector('#host');
+  const normal = emptyCharacter('Normal');
+  normal.mancer.done = true;
+  const normalView = renderSheetView({ character: normal, onRoll: () => true });
+  assert(!button(normalView, 'Edit testing build'), 'Normal actor exposed testing controls');
+  const c = Object.assign(emptyCharacter('Testing hero'), { testingCharacter: true });
+  applyTestingBuild(data, c, defaultTestingBuild(data));
+  const view = renderSheetView({ character: c, onRoll: () => true });
+  host.append(view);
+  assert(view.textContent.includes('TESTING CHARACTER'), 'Testing badge missing');
+  button(view, 'Domain Cards').click();
+  assert(view.querySelectorAll('.dcard').length === 10, 'Not all testing cards rendered');
+  assert(!view.textContent.includes('Move to vault') && !view.textContent.includes('Recall to loadout'), 'Testing cards can be deactivated');
+  button(view, 'Edit testing build').click();
+  let editor = await waitFor(() => document.querySelector('.dh-wiz select'));
+  let dialog = editor.closest('[role=dialog]');
+  let level = dialog.querySelector('input[aria-label="Testing level"]');
+  level.value = '0';
+  level.dispatchEvent(new Event('input'));
+  assert(button(dialog, 'Apply testing build').disabled, 'Invalid testing level accepted');
+  button(dialog, 'Cancel').click();
+  assert(c.level === 10 && c.className === 'Ranger', 'Cancel changed the sheet');
+  button(view, 'Edit testing build').click();
+  editor = await waitFor(() => document.querySelector('.dh-wiz select'));
+  dialog = editor.closest('[role=dialog]');
+  const primary = dialog.querySelector('select[aria-label="Primary class"]');
+  primary.value = 'Warlock';
+  primary.dispatchEvent(new Event('change'));
+  button(dialog, 'Add multiclass').click();
+  assert(!button(dialog, 'Apply testing build').disabled, 'Valid testing multiclass rejected');
+  button(dialog, 'Apply testing build').click();
+  assert(!document.querySelector('.dh-wiz'), 'Editor did not close');
+  assert(c.className === 'Warlock' && c.testingBuild.multiclasses.length === 1, 'Testing class changes not applied');
+  assert(c.loadout.length === 20 && c.vault.length === 0, 'Multiclass domains not activated');
+  assert(c.resources.WarlockPool === 4 && c.resources.RangerPool === 4, 'Class resources not updated');
+  assert(view.querySelectorAll('.dcard').length === 20, 'Sheet did not re-render all cards');
+  assert(view.textContent.includes('20 active - no limit'), 'Testing capacity label missing');
+  result.textContent = 'PASS: normal gating, badge, all active cards, no vault, invalid level, cancel, class/multiclass editor, resources and sheet refresh';
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+} finally {
+  window.fetch = originalFetch;
+}
+</script></body></html>

@@ -5,7 +5,7 @@ export type ApplyResult = 'ok' | 'stale' | 'gap';
 const SET_PATHS = new Set([
   'images', 'walls', 'doors', 'lights', 'lighting', 'weather', 'dmFog', 'fogGrid', 'fogMemory',
   'paused', 'visionTiles', 'mapName', 'actors', 'grid', 'overlays', 'texts', 'view', 'pings', 'indoor',
-  'effectTextures', 'penWidthCells',
+  'effectTextures', 'penWidthCells', 'fear',
 ]);
 
 /** Holds the replicated game state and applies snapshots and deltas. */

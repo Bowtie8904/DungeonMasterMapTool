@@ -8,6 +8,9 @@ import { applyInventory, autosave, loadCharacter, type SheetSave } from './dagge
 import { INVENTORY_DRAG, postCard, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
+import { renderEffects } from './effects';
+import { setGmFear } from './daggerheart/engine';
+import { rollButtons } from './daggerheart/rollbuttons';
 import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import type { CharacterSheet } from './daggerheart/data';
@@ -45,6 +48,8 @@ export class App {
   private measuringOptions = el('div', { class: 'tool-options hidden' });
   private toolTitle = el('h2', {}, 'Drawing');
   private rosterEl = el('aside', { class: 'players-overlay' });
+  private effectsEl = el('aside', { class: 'effects-overlay' });
+  private expandedEffects = new Set<string>();
   private mapTitle = el('span', { class: 'map-name' });
   private textureSelect = el('select', { id: 'effect-texture' });
   private colorInput = el('input', { type: 'color', id: 'drawing-color', value: '#55aa33' });
@@ -106,6 +111,7 @@ export class App {
     ),
   );
   private statusEl = el('span', { class: 'status' }, 'connecting');
+  private fearEl = el('aside', { class: 'fear-overlay hidden', role: 'status' });
   private titleEl = el('span', { class: 'title' });
   private toastEl = el('div', { class: 'toast hidden' });
   private overlay = el('div', { class: 'overlay hidden' });
@@ -129,7 +135,7 @@ export class App {
     const left = this.buildTools();
     const heading = el('div', { class: 'map-heading' }, this.titleEl, this.mapTitle, this.statusEl);
     this.rosterEl.setAttribute('aria-label', 'Connected players and ping to host');
-    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, right, this.banner, this.toastEl);
+    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, right, this.banner, this.toastEl);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
@@ -369,6 +375,7 @@ export class App {
   private showSection(section: SidebarSection | null): void {
     this.section = section;
     this.sidebar.classList.toggle('hidden', section === null);
+    this.stageEl.classList.toggle('sidebar-open', section !== null);
     for (const [id, button] of this.sectionButtons) {
       button.setAttribute('aria-pressed', String(id === section));
       button.setAttribute('aria-expanded', String(id === section));
@@ -489,7 +496,29 @@ export class App {
     this.flyout.append(el('header', { class: 'panel-heading' }, this.toolTitle, iconButton('close', 'Close tool options', () => this.closeTools())),
       this.drawingOptions, this.measuringOptions);
     const selected = el('div', { class: 'selection-controls' }, this.selectionHint, this.deleteButton);
-    return el('div', { class: 'left-tools' }, rail, selected);
+    this.effectsEl.setAttribute('aria-label', 'Active effects');
+    return el('div', { class: 'left-tools' }, rail, selected, this.effectsEl);
+  }
+
+  private effectsTimer: number | null = null;
+
+  private scheduleEffects(): void {
+    if (this.effectsTimer !== null) return;
+    this.effectsTimer = window.setTimeout(() => { this.effectsTimer = null; this.renderEffectsOverlay(); }, 0);
+  }
+
+  private renderEffectsOverlay(): void {
+    const groups = this.myActors.flatMap((a) => {
+      const handle = this.sheetHandles.get(a.id);
+      return handle ? [{ actorId: a.id, name: a.name, character: handle.character }] : [];
+    });
+    renderEffects(this.effectsEl, groups, this.expandedEffects, (group, effect) => {
+      const list = group.character.effects;
+      const i = list.indexOf(effect);
+      if (i >= 0) list.splice(i, 1);
+      this.sheetHandles.get(group.actorId)?.save();
+      this.sheetHandles.get(group.actorId)?.bus.notify();
+    }, () => this.renderEffectsOverlay());
   }
 
   private updateDrawingMode(mode: string): void {
@@ -696,6 +725,22 @@ export class App {
     }
   }
 
+  /** Up to 12 filled/empty tokens; hidden when the host does not send a Fear count. */
+  private renderFear(fear: number | undefined): void {
+    if (fear === undefined) {
+      this.fearEl.classList.add('hidden');
+      return;
+    }
+    const value = Math.max(0, Math.min(12, Math.floor(fear)));
+    this.fearEl.classList.remove('hidden');
+    this.fearEl.setAttribute('aria-label', `GM Fear: ${value} of 12`);
+    const tokens = Array.from({ length: 12 }, (_, i) => el('span', { class: i < value ? 'fear-token filled' : 'fear-token' }));
+    this.fearEl.replaceChildren(
+      el('div', { class: 'fear-heading' }, el('span', {}, 'FEAR'), el('strong', {}, String(value))),
+      el('div', { class: 'fear-tokens' }, ...tokens),
+    );
+  }
+
   private setPaused(p: boolean): void {
     this.view.paused = p;
     if (this.store.state) this.store.state.paused = p;
@@ -713,7 +758,9 @@ export class App {
       this.pendingDrawings.clear();
     }
     this.view.setState(s);
+    setGmFear(s.fear);
     this.setPaused(s.paused);
+    if (full || this.store.changed.has('fear')) this.renderFear(s.fear);
     if (full || this.store.changed.has('dmFog') || this.store.changed.has('fogGrid') || this.store.changed.has('fogMemory')) {
       void this.loadFog(s);
     }
@@ -825,13 +872,27 @@ export class App {
 
   private logCards = new WeakMap<LogEntry, HTMLElement>();
 
+  private rollActions(m: RollMessage): HTMLElement | null {
+    const actor = this.myActors.find((a) => a.id === m.actorId);
+    if (!actor) return null;
+    return rollButtons(m, {
+      sheet: async () => {
+        await this.ensureSheet(actor);
+        return this.sheetHandles.get(actor.id);
+      },
+      send: (roll) => this.conn.send({ type: 'roll', ...roll }),
+      log: (text, rollSource) => { this.conn.send({ type: 'chat', text, rollSource, whisper: false }); },
+      toast: (message) => this.toast(message),
+    });
+  }
+
   private renderLog(): void {
     const follow = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight < 48;
     const scroll = this.logEl.scrollTop;
     const cards = this.log.map((e) => {
       let card = this.logCards.get(e);
       if (!card) {
-        card = renderLogEntry(e, this.playerId, (card) => this.grabCard(card), (message) => this.toast(message));
+        card = renderLogEntry(e, this.playerId, (card) => this.grabCard(card), (message) => this.toast(message), (m) => this.rollActions(m));
         this.logCards.set(e, card);
         card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
       }
@@ -865,10 +926,11 @@ export class App {
   private ensureSheet(a: Actor): Promise<SheetHandle> {
     let load = this.sheetLoads.get(a.id);
     if (!load) {
-      load = loadCharacter(a.id, a.name).then((character) => {
+      load = loadCharacter(a.id, a.name, (message) => this.toast(message)).then((character) => {
         const bus = new SheetBus();
         const changed = autosave(a.id, character, (m) => this.toast(m));
         this.sheetHandles.set(a.id, { character, bus, save: changed });
+        bus.subscribe(() => this.scheduleEffects());
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
           if ((event as CustomEvent<string>).detail === a.id) bus.notify();
         });
@@ -876,12 +938,13 @@ export class App {
           {
             character,
             bus,
-            onChange: changed,
+            onChange: () => { changed(); this.scheduleEffects(); },
             actorId: a.id,
             onShare: (entry) => { void this.shareEntry(a.id, entry).catch((e: Error) => this.toast(e.message)); },
             onPrepareShare: () => changed.flush(),
-            onLog: (text) => { this.conn.send({ type: 'chat', text, whisper: false }); },
+            onLog: (text, rollSource) => { this.conn.send({ type: 'chat', text, rollSource, whisper: false }); },
             artwork: a.artwork,
+            supportsKeptDice: () => this.conn.keptDice,
             onRoll: (r) => {
               const sent = this.conn.send({ type: 'roll', ...r });
               if (!sent) this.toast('Not connected. Your roll was not sent.');
@@ -926,6 +989,8 @@ export class App {
   private renderActors(s: GameState): void {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
     this.myActors = mine;
+    for (const a of mine) void this.ensureSheet(a).then(() => this.scheduleEffects()).catch(() => { /* reported when the sheet is opened */ });
+    this.scheduleEffects();
     this.actorsEl.replaceChildren(
       ...(mine.length === 0 ? [el('p', { class: 'muted' }, 'No actors assigned to you.')] : []),
       ...mine.map((a) => {
@@ -952,7 +1017,7 @@ export class App {
         const pop = el('button', {}, 'Pop out sheet');
         pop.addEventListener('click', () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'));
         const find = s.tokens.find((t) => t.actorId === a.id);
-        const name = el('span', { class: 'name' }, a.name);
+        const name = el('span', { class: 'name' }, a.name, ...(a.testingCharacter ? [' (TESTING)'] : []));
         if (find) {
           name.classList.add('link');
           name.addEventListener('click', () => this.view.focus(find));

@@ -68,7 +68,8 @@ public final class AppSettings {
         List<SidebarControl> controls = new ArrayList<>();
         addControls(controls, "session", "browser|DM Link tab");
         addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
-                "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link");
+                "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link",
+                "fearDown|Fear counter minus", "fearUp|Fear counter plus");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
                 "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");

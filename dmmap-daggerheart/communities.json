@@ -11,7 +11,20 @@
    "features": [
     {
      "name": "Oasis",
-     "text": "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result."
+     "text": "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result.",
+     "automation": {
+      "rest": {
+       "passives": [
+        {
+         "id": "reroll",
+         "label": "reroll downtime dice and keep the higher",
+         "defaultOn": true,
+         "rest": "short",
+         "reroll": true
+        }
+       ]
+      }
+     }
     }
    ]
   },
@@ -28,10 +41,20 @@
        "max": 1,
        "per": "session"
       },
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Unbound"
+        "id": "hope",
+        "label": "Unbound: change Fear into Hope",
+        "on": "duality",
+        "when": "fear",
+        "description": "The GM does not gain Fear.",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
        }
       ]
      }
@@ -45,7 +68,25 @@
    "features": [
     {
      "name": "Hardy",
-     "text": "When you take a rest, you clear a Hit Point."
+     "text": "When you take a rest, you clear a Hit Point.",
+     "automation": {
+      "rest": {
+       "passives": [
+        {
+         "id": "recovery",
+         "label": "clear 1 HP",
+         "defaultOn": true,
+         "steps": [
+          {
+           "op": "clear",
+           "resource": "hp",
+           "amount": 1
+          }
+         ]
+        }
+       ]
+      }
+     }
     }
    ]
   },
@@ -161,7 +202,52 @@
    "features": [
     {
      "name": "Know the Tide",
-     "text": "You can sense the ebb and flow of life. When you roll with Fear, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session, clear all unspent tokens."
+     "text": "You can sense the ebb and flow of life. When you roll with Fear, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session, clear all unspent tokens.",
+     "automation": {
+      "resources": [
+       {
+        "id": "tide",
+        "label": "Tide",
+        "initial": 0,
+        "max": "@level"
+       }
+      ],
+      "actions": [
+       {
+        "id": "gain",
+        "label": "Roll with Fear: store Tide",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "tide",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "clear",
+        "label": "End session: clear Tide",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "tide",
+          "amount": "all"
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "tide",
+        "label": "Spend Tide token",
+        "roll": "action",
+        "value": 1,
+        "cost": {
+         "tide": 1
+        }
+       }
+      ]
+     }
     }
    ]
   },

@@ -59,6 +59,7 @@ export async function uploadArtwork(actorId: string, file: File): Promise<void> 
 }
 
 export interface SheetData {
+  testingCharacter?: boolean;
   id?: string;
   name?: string;
   artwork?: string;

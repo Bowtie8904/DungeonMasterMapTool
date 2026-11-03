@@ -84,7 +84,7 @@ public final class OnlineSessionServer {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final List<String> DIFF_CATEGORIES = List.of("images", "walls", "doors", "lights", "lighting",
             "weather", "dmFog", "fogGrid", "actors", "grid", "overlays", "texts", "view", "pings", "indoor",
-            "effectTextures", "penWidthCells");
+            "effectTextures", "penWidthCells", "fear");
     private static final int MAX_FOG_BYTES = 4 * 1024 * 1024;
     private static final int MAX_CHAT_CHARS = 1000;
 
@@ -729,6 +729,7 @@ public final class OnlineSessionServer {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("actorId", actor.getId());
         body.put("name", actor.getName());
+        body.put("testingCharacter", actor.isTestingCharacter());
         try {
             String stored = store.loadSheet(c.getId(), actor.getId());
             if (stored == null) {
@@ -772,6 +773,11 @@ public final class OnlineSessionServer {
                 ObjectNode conflict = errorBody("Inventory changed in chat. Refresh inventory before saving.");
                 conflict.set("sheet", previous);
                 json(ctx, 409, conflict);
+                return;
+            }
+            String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
+            if (problem != null) {
+                json(ctx, 403, errorBody(problem));
                 return;
             }
             store.saveSheet(c.getId(), actor.getId(), new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
@@ -1072,6 +1078,7 @@ public final class OnlineSessionServer {
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
+            hello.put("keptDice", true);
             sendTo(ctx, hello.toString());
             if (audioJson != null) {
                 sendTo(ctx, audioJson);
@@ -1196,7 +1203,10 @@ public final class OnlineSessionServer {
         }
         try {
             String to = chatRecipient(msg);
-            deliver(chatMessage(client.playerId, client.playerName, to, text), to);
+            ObjectNode out = chatMessage(client.playerId, client.playerName, to, text);
+            ObjectNode rollSource = rollSource(msg);
+            if (rollSource != null) out.set("rollSource", rollSource);
+            deliver(out, to);
         } catch (IllegalArgumentException e) {
             sendTo(client.ctx, error(e.getMessage()));
         }
@@ -1228,11 +1238,13 @@ public final class OnlineSessionServer {
 
     private void onRoll(Client client, JsonNode msg) {
         DiceRoller.Result result;
+        ObjectNode rollSource;
         List<DiceRoller.Detail> breakdown = null;
         List<ArrayNode> breakdownNotes = new ArrayList<>();
         String to;
         try {
             to = chatRecipient(msg);
+            rollSource = rollSource(msg);
             result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
             if (msg.has("contributions")) {
                 JsonNode sources = msg.path("contributions");
@@ -1280,6 +1292,7 @@ public final class OnlineSessionServer {
         ArrayNode rolls = out.putArray("rolls");
         result.rolls().forEach(rolls::add);
         out.put("total", result.total());
+        if (rollSource != null) out.set("rollSource", rollSource);
         if (breakdown != null) {
             ArrayNode details = MAPPER.valueToTree(breakdown);
             for (int i = 0; i < breakdownNotes.size(); i++) {
@@ -1293,6 +1306,13 @@ public final class OnlineSessionServer {
         if (!label.isEmpty()) {
             out.put("label", label.length() > 80 ? label.substring(0, 80) : label);
         }
+        // Opaque hints that let the roller's own client attach buttons (Damage, rerolls) to the chat card.
+        for (String hint : new String[]{"ref", "actorId", "source", "weapon"}) {
+            String value = msg.path(hint).asText("").strip();
+            if (!value.isEmpty()) {
+                out.put(hint, value.length() > 80 ? value.substring(0, 80) : value);
+            }
+        }
         if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^2d12(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
             if (msg.path("difficulty").isInt()) {
@@ -1300,6 +1320,23 @@ public final class OnlineSessionServer {
             }
         }
         deliver(out, to);
+    }
+
+    private ObjectNode rollSource(JsonNode msg) {
+        if (!msg.has("rollSource")) return null;
+        JsonNode source = msg.path("rollSource");
+        if (!source.isObject()) throw new IllegalArgumentException("Invalid roll source description");
+        ObjectNode out = MAPPER.createObjectNode();
+        for (String field : new String[]{"name", "text", "source"}) {
+            JsonNode value = source.path(field);
+            int limit = "text".equals(field) ? 16_000 : 240;
+            if (!value.isTextual() || value.asText().length() > limit
+                    || ("name".equals(field) && value.asText().isBlank())) {
+                throw new IllegalArgumentException("Invalid roll source " + field + " (maximum " + limit + " characters)");
+            }
+            out.put(field, value.asText());
+        }
+        return out;
     }
 
     private ObjectNode chatMessage(String fromId, String from, String toId, String text) {

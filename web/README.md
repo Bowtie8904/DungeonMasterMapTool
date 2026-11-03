@@ -19,6 +19,18 @@ Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
 Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).
 
+Daggerheart testing actors are created only by the desktop DM (Actors tree context menu) and may be used freely
+by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately
+from saved sheet data; players cannot promote ordinary actors through PUT. Marked sheets show a testing badge
+and **Edit testing build** instead of normal level-up. `daggerheart/testing.ts` rebuilds class/subclass stages,
+unrestricted multiclasses, heritage, domains, all-level active domain cards and custom resource definitions from
+the compendium, preserving equipment, personal data and retained resource values. `testingBuild` persists the
+selected build and is reapplied on load; removed-source effects, usage and pools are discarded. Test cards cannot
+be vaulted, and adding an accessible compendium card is duplicate-safe. Normal sheets retain their creation,
+advancement and capacity rules; the host also rejects testing-only fields, free identity changes and excess
+multiclasses/loadout capacity on normal sheets. Missing actor markers default to false. These fields are additive;
+Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
+
 The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Compendium/Settings rail.
 Settings is anchored at the bottom; character sheets open from Actors. Chat's recipient dropdown targets Everyone,
 Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
@@ -32,7 +44,17 @@ Proficiency buffs; these are context, not additional terms in the total. Weapon 
 are separate breakdown rows.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Expanded cards and the reader's scroll position survive new messages.
+Feature/action results, equipment rolls and Spellcast rolls also carry an optional
+`rollSource: {name, text, source}` description snapshot. A separate, initially collapsed **Source** disclosure
+shows formatted rules without sheet actions or grab controls. Spellcast titles identify their card or individual
+grimoire spell; follow-up spell damage and rerolls retain source context. Both embedded and pop-out sheets send it.
+The host accepts only descriptive strings (name/source up to 240 characters, text up to 16,000), rejects malformed
+context and persists it with the message, using the same whisper visibility as the roll/chat.
+This is descriptive client-supplied context, not an authoritative mechanics contribution.
+Older hosts/clients/history simply omit the optional disclosure; compatibility versions remain unchanged.
 `shared-cards.ts` renders description-only feature/domain/equipment cards, with no sheet automation controls.
+On the sheet, loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
+They retain their existing editable values, limits and autosave behavior. Domain-card action groups have no enclosing border or panel padding; individual buttons retain their normal styling.
 Sheet chat icons and inventory-to-chat drags require `hello.chatCards:true`. Posting uses
 `POST /api/chat-cards {actorId,category,item,toId?}`; the host resolves the entry from the owner's saved sheet,
 adds `sharedCard` to an ordinary chat message and keeps a text fallback for older clients. Inventory drags wait
@@ -66,6 +88,18 @@ internal seams at overlaps. The edge is cached independently of texture animatio
 run `npm run dev`, then open `http://localhost:5173/checks/player-layout.html` (adjust the port if necessary).
 It exercises actual layout controls and canvas gestures with local test state, without a running Java host.
 The page reports PASS/FAIL; it is not included in the production bundle.
-`checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side.
+`checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,
+and checks safe, independent source disclosures and source propagation from feature/local action rolls,
+Spellcast, individual grimoire spells and follow-up spell damage.
+`checks/sheet-layout.html` checks the vertical trait sidebar on every tab and Experiences in Background,
+two-column class/heritage features, compact stats, wider viewport-height floating sheet, pop-out layout,
+independent sidebar scrolling, overflow and trait roll interaction at several window sizes without a Java host.
+Trait marks are read-only circle-and-dot indicators in each tile's top-left corner, separate from the name,
+using an 8 px ring and 3 px dot fully inside the border without increasing the compact tile height.
+Only level-up rules mark traits or clear their marks.
+Armor, HP and Stress slots share a fixed 14 px square size and wrap when needed; the layout check verifies all three tracks.
+Armor reserves 114 px for two rows of six slots; HP and Stress share the remaining flexible width.
 `checks/shared-cards.html` checks description-only cards, share icons, live stock, actor selection,
 inventory-to-chat dropping and the cross-window save handshake in a real browser, without a Java host.
+`checks/testing-character.html` checks testing-only controls, active cards, cancel/validation, class/multiclass
+editing, resource updates and sheet refresh in a real browser using local compendium fixtures.

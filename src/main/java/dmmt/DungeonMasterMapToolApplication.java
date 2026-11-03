@@ -337,6 +337,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private ToggleButton imageLockToggle;
     private HBox imageUnlockBanner;
     private HBox onlinePausedBanner;
+    private dmmt.ui.FearOverlay fearOverlay;
     private Label onlinePausedHint;
     private ToggleButton playerWindowToggle;
     private ToggleButton playerGridToggle;
@@ -644,6 +645,10 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane.setAlignment(levelSwitcher, Pos.TOP_LEFT);
         StackPane.setMargin(levelSwitcher, new Insets(10));
         center.getChildren().addAll(chip, topBanners, levelSwitcher, controls);
+        fearOverlay = new dmmt.ui.FearOverlay(delta -> {
+            if (onlineController != null) onlineController.adjustFear(delta);
+        });
+        center.getChildren().add(fearOverlay);
         center.getChildren().add(createBrushSizeLabel());
         remoteTransferOverlay = new dmmt.ui.RemoteTransferOverlay();
         center.getChildren().add(remoteTransferOverlay);
@@ -2871,6 +2876,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("session.browser", sessionToggle);
         dmControlVisibility.register("online.browser", onlineToggle);
         onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
+        fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         applySectionVisibility();
         return librarySidebar;
@@ -5871,6 +5877,14 @@ public class DungeonMasterMapToolApplication extends Application {
         onlinePausedBanner.setVisible(paused);
         KeyCode key = onlinePauseKey();
         onlinePausedHint.setText(key == null ? "" : "(" + key.getName() + ")");
+    }
+
+    /** Shows the GM's Fear count only while a campaign is actively hosted. */
+    private void updateFearOverlay() {
+        if (fearOverlay == null) return;
+        boolean hosted = onlineController != null && onlineController.running() && onlineController.campaign() != null;
+        fearOverlay.setHosted(hosted);
+        if (hosted) fearOverlay.setFear(onlineController.fear());
     }
 
     /** The configured online pause key, or {@code null} when disabled or invalid. */
@@ -10579,6 +10593,7 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override public void changed() {
                 if (onlinePanel != null) onlinePanel.refresh();
                 updateOnlinePausedBanner();
+                updateFearOverlay();
                 applySectionVisibility();
             }
         });

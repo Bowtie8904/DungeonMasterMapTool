@@ -11,7 +11,19 @@
    "features": [
     {
      "name": "Gifted",
-     "text": "You gain a +1 bonus to action, reaction, and damage rolls."
+     "text": "You gain a +1 bonus to action, reaction, and damage rolls.",
+     "automation": {
+      "modifiers": [
+       {
+        "roll": "action",
+        "value": 1
+       },
+       {
+        "roll": "damage",
+        "value": 1
+       }
+      ]
+     }
     },
     {
      "name": "Weight of Divinity",
@@ -56,11 +68,29 @@
    "features": [
     {
      "name": "Change Shape",
-     "text": "During a rest, you can use a downtime move to swap your current ancestry with another. When you do, describe how your appearance changes."
+     "text": "During a rest, you can use a downtime move to swap your current ancestry with another. When you do, describe how your appearance changes.",
+     "automation": {
+      "actions": [
+       {
+        "id": "downtime-narrative",
+        "label": "Narrative downtime move",
+        "timing": "downtime"
+       }
+      ]
+     }
     },
     {
      "name": "Only Skin Deep",
-     "text": "You gain the benefit of only one of your chosen ancestry’s features, which you select when you choose the ancestry. You can use a downtime move to choose a different feature from that ancestry."
+     "text": "You gain the benefit of only one of your chosen ancestry’s features, which you select when you choose the ancestry. You can use a downtime move to choose a different feature from that ancestry.",
+     "automation": {
+      "actions": [
+       {
+        "id": "downtime-narrative",
+        "label": "Narrative downtime move",
+        "timing": "downtime"
+       }
+      ]
+     }
     }
    ]
   },

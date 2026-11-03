@@ -4,7 +4,9 @@ import { el, showLogin } from './login';
 import { Store } from './store';
 import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
 import { applyInventory, autosave, type SheetSave } from './daggerheart/persist';
+import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
+import { setGmFear } from './daggerheart/engine';
 import { postCard } from './shared-cards';
 
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
@@ -15,6 +17,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let character: CharacterSheet | undefined;
   let changed: SheetSave | undefined;
   let chatCards = false;
+  let rulesWarning = '';
   const bus = new SheetBus();
   const report = (message: string) => {
     let error = root.querySelector<HTMLElement>('.sheet-error');
@@ -47,11 +50,13 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         };
         void share().catch((e: Error) => report(e.message));
       },
-      onLog: (text) => { conn.send({ type: 'chat', text, whisper: false }); },
+      onLog: (text, rollSource) => { conn.send({ type: 'chat', text, rollSource, whisper: false }); },
       onRoll: (r) => conn.send({ type: 'roll', ...r }),
+      supportsKeptDice: () => conn.keptDice,
     });
     view.classList.add('dh-popout');
     root.replaceChildren(view);
+    if (rulesWarning) report(rulesWarning);
   };
   root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'muted' }, 'Loading sheet...')));
 
@@ -82,6 +87,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'error' }, 'You were removed from the session.')));
           return;
         } else return;
+        setGmFear(store.state?.fear);
         if (!unauthorized) refresh();
       },
     },
@@ -92,6 +98,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     const res = await getSheet(actorId);
     const name = store.state?.actors.find((a) => a.id === actorId)?.name ?? res.name ?? 'Character';
     character = res.sheet ? normalizeSheet(res.sheet, name) : emptyCharacter(name);
+    if (res.sheet) {
+      try { await refreshCharacterAutomation(character); }
+      catch (e) { rulesWarning = `Could not refresh compendium rules; using saved rules: ${(e as Error).message}`; }
+    }
     allowed = true;
     if (!unauthorized) refresh();
   } catch (e) {

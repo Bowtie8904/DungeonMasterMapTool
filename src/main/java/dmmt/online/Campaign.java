@@ -21,6 +21,9 @@ public class Campaign {
     /** Game systems offered when creating a campaign. */
     public static final List<String> SYSTEMS = List.of(DEFAULT_SYSTEM);
 
+    /** Most Fear tokens the GM can hold; the browser overlay and DM overlay both show at most this many. */
+    public static final int MAX_FEAR = 12;
+
     @Builder.Default
     private int schemaVersion = 1;
     @Builder.Default
@@ -39,6 +42,13 @@ public class Campaign {
     /** Individual regular tokens (companions, summons) a player may move besides their actors. */
     @Builder.Default
     private List<TokenLink> controlledTokens = new ArrayList<>();
+
+    /** Fear tokens the GM currently holds, 0 to {@link #MAX_FEAR}; missing in older files means 0. */
+    private int fear;
+
+    public void setFear(int fear) {
+        this.fear = Math.max(0, Math.min(MAX_FEAR, fear));
+    }
 
     @Data
     @Builder
@@ -63,6 +73,8 @@ public class Campaign {
         private String id = UUID.randomUUID().toString();
         private String name;
         private String ownerId;
+        /** DM-created testing actor; never granted by browser sheet data. */
+        private boolean testingCharacter;
         /** sha256 hex of the re-encoded PNG in {@code artwork/}; {@code null} when none. */
         private String artwork;
         /** Folder path ("a/b") in the DM's actor tree; empty or {@code null} for the root. */

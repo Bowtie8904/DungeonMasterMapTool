@@ -32,6 +32,8 @@ export interface Weapon {
   tier: number;
   feature?: { name: string; text: string };
   automation?: Automation;
+  /** Spell damage with a fixed dice count instead of Proficiency dice. */
+  fixedDice?: boolean;
 }
 
 export interface Armor {
@@ -58,6 +60,13 @@ export interface InventoryItem {
   automation?: Automation;
 }
 
+/** One spell of a grimoire. It is an independent feature with its own rules and action buttons. */
+export interface Spell {
+  name: string;
+  text: string;
+  automation?: Automation;
+}
+
 export interface DomainCard {
   level: number;
   domain: string;
@@ -67,6 +76,8 @@ export interface DomainCard {
   recall: number;
   spellcast?: TraitName;
   automation?: Automation;
+  /** Grimoires only: the individual spells that make up `text` */
+  spells?: Spell[];
 }
 
 export interface Feature {
@@ -137,6 +148,9 @@ export interface LevelUpRecord {
 }
 
 export interface CharacterSheet {
+  /** Authoritative marker supplied by the actor's host, not a player toggle. */
+  testingCharacter?: boolean;
+  testingBuild?: TestingBuild;
   /** Host-owned transfer generation; stale inventory saves are rejected. */
   inventoryRevision?: number;
   /** Character Mancer state; absent for sheets that were never created with it */
@@ -155,10 +169,14 @@ export interface CharacterSheet {
   level: number;
   /** Base Evasion from the class; armor and effects are added by derivedStats */
   evasion: number;
+  /** Consecutive short rests since the last long rest (a party must take a long rest after three) */
+  shortRestsInRow?: number;
   /** Active buffs and debuffs (Effects tab) */
   effects: ActiveEffect[];
   /** Limited-use counters keyed by source (features, cards, items) */
   usage: Record<string, { used: number; per: NonNullable<Automation['uses']>['per'] }>;
+  /** Current custom spendable pools. Definitions live on active automation sources. */
+  resources?: Record<string, number>;
   armorTrack: Track;
   hp: Track;
   stress: Track;
@@ -196,7 +214,22 @@ export const TRAIT_ORDER: TraitName[] = ['Agility', 'Strength', 'Finesse', 'Inst
 
 /** The class, domain and subclass of every multiclass advancement taken so far. */
 export function multiclassesOf(c: CharacterSheet): Array<{ className: string; domain: string; subclass: string }> {
+  if (c.testingCharacter) return c.testingBuild?.multiclasses ?? [];
   return (c.levelUps ?? []).flatMap((l) => l.advancements).flatMap((a) => (a.type === 'multiclass' && a.multiclass?.className ? [a.multiclass] : []));
+}
+
+export type TestingStage = 'foundation' | 'specialization' | 'mastery';
+
+export interface TestingBuild {
+  className: string;
+  subclass: string;
+  stage: TestingStage;
+  level: number;
+  ancestry: string;
+  ancestry2?: string;
+  community: string;
+  transformation?: string;
+  multiclasses: Array<{ className: string; subclass: string; stage: TestingStage; domain: string }>;
 }
 
 export function tierOf(level: number): number {

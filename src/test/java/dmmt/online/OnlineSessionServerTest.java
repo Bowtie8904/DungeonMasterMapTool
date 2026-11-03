@@ -15,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -205,6 +206,41 @@ class OnlineSessionServerTest {
         assertEquals(404, http.send(HttpRequest.newBuilder(URI.create(base + "/missing")).header("Cookie", cookie).build(),
                 HttpResponse.BodyHandlers.ofString()).statusCode());
     }
+    @Test
+    void testingCharactersAreDmMarkedAndUsableOnlyByTheirAssignedOwner() throws Exception {
+        Campaign.Actor tester = Campaign.Actor.builder().id("tester").name("Testing hero")
+                .testingCharacter(true).ownerId(playerId()).build();
+        campaign.getActors().add(tester);
+        campaign.getActors().add(Campaign.Actor.builder().id("normal").name("Normal").ownerId(playerId()).build());
+        String cookie = cookie();
+        String base = "http://localhost:" + port + "/api/sheet/";
+        var read = http.send(HttpRequest.newBuilder(URI.create(base + "tester")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertTrue(MAPPER.readTree(read.body()).path("testingCharacter").asBoolean());
+        ObjectNode sheet = MAPPER.createObjectNode().put("testingCharacter", true).put("className", "Warrior");
+        sheet.putObject("testingBuild").put("className", "Warrior");
+        for (int i = 0; i < 30; i++) sheet.withArray("loadout").addObject().put("name", "Card " + i);
+        var save = http.send(HttpRequest.newBuilder(URI.create(base + "tester")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, save.statusCode(), save.body());
+        assertEquals(30, MAPPER.readTree(store.loadSheet(campaign.getId(), "tester")).path("loadout").size());
+        var forged = http.send(HttpRequest.newBuilder(URI.create(base + "normal")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, forged.statusCode());
+        sheet.put("testingCharacter", false);
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(base + "normal")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        sheet.remove("testingBuild");
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(base + "normal")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        tester.setOwnerId("another-player");
+        assertEquals(404, http.send(HttpRequest.newBuilder(URI.create(base + "tester")).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(base + "tester")).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertTrue(tester.isTestingCharacter());
+    }
+
     @Test
     void sheetsAreStoredPerActorForTheirOwnerOnly() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("mine").name("Mara").ownerId(playerId()).build());
@@ -594,6 +630,44 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void keptDiceCapabilityAllowsDamageAndPreservesStrictDualityShape() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        assertTrue(inbox.next("hello").path("keptDice").asBoolean());
+        inbox.next("snapshot");
+        try {
+            ws.sendText("""
+                    {"type":"roll","expression":"4d6kh3+6","label":"Powerful damage","contributions":[
+                      {"label":"Powerful weapon","expression":"4d6kh3"},
+                      {"label":"Weapon modifier","expression":"6"}]}
+                    """, true).join();
+            JsonNode result = inbox.next("roll");
+            assertEquals(4, result.path("rolls").size());
+            List<Integer> values = new ArrayList<>();
+            result.path("rolls").forEach(value -> values.add(value.asInt()));
+            int keptSum = values.stream().mapToInt(Integer::intValue).sum()
+                    - values.stream().mapToInt(Integer::intValue).min().orElseThrow();
+            assertEquals(keptSum + 6, result.path("total").asInt());
+            assertEquals(result.path("rolls"), result.path("breakdown").get(0).path("rolls"));
+            assertEquals(keptSum, result.path("breakdown").get(0).path("total").asInt());
+            assertEquals(6, result.path("breakdown").get(1).path("total").asInt());
+            assertEquals(result, store.historyTail(campaign.getId(), 1).getFirst());
+            for (String expression : List.of("3d12kh2", "2d12+2d6kh1", "2d12kh2")) {
+                ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("expression", expression)
+                        .put("kind", "duality").put("difficulty", 12).toString(), true).join();
+                JsonNode notDuality = inbox.next("roll");
+                assertFalse(notDuality.has("kind"));
+                assertFalse(notDuality.has("difficulty"));
+            }
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"4d6kh5\"}", true).join();
+            assertTrue(inbox.next("error").path("message").asText().contains("Invalid dice"));
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
     void chatAndRollsAreBroadcastAndPersisted() throws Exception {
         server.publish(state("m1", 0), "m1/l1");
         Inbox inbox = new Inbox();
@@ -635,6 +709,71 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void rollSourceDescriptionsPersistReplayAndRejectInvalidFields() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        Inbox inbox = new Inbox();
+        String cookie = cookie();
+        WebSocket ws = connect(cookie, inbox);
+        inbox.next("snapshot");
+        try {
+            ObjectNode source = MAPPER.createObjectNode().put("name", "Arcane Bolt")
+                    .put("text", "Make a **Spellcast Roll**.").put("source", "Codex - Level 1 Spell");
+            source.putObject("automation").put("untrusted", true);
+            ObjectNode request = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d12+2")
+                    .put("kind", "duality").put("label", "Spellcast (Knowledge) - Arcane Bolt");
+            request.set("rollSource", source);
+            ws.sendText(request.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            source.remove("automation");
+            assertEquals(source, roll.path("rollSource"));
+            assertEquals(2, roll.path("rolls").size());
+            assertEquals(roll, store.historyTail(campaign.getId(), 1).getFirst());
+
+            request.put("type", "chat").put("text", "Feature: rolled 1d4 [3]");
+            ws.sendText(request.toString(), true).join();
+            assertEquals(source, inbox.next("chat").path("rollSource"));
+            Inbox late = new Inbox();
+            WebSocket second = connect(cookie, late);
+            try {
+                JsonNode tail = late.next("snapshot").path("state").path("chatTail");
+                assertEquals(2, tail.size());
+                for (JsonNode entry : tail) assertEquals(source, entry.path("rollSource"));
+            } finally { second.abort(); }
+
+            for (String type : List.of("roll", "chat")) {
+                request.put("type", type);
+                for (JsonNode invalid : List.of(MAPPER.readTree("[]"),
+                        source.deepCopy().put("name", ""),
+                        source.deepCopy().put("name", "n".repeat(241)),
+                        source.deepCopy().put("text", "x".repeat(16_001)),
+                        source.deepCopy().put("source", 1))) {
+                    request.set("rollSource", invalid);
+                    ws.sendText(request.toString(), true).join();
+                    assertTrue(inbox.next("error").path("message").asText().contains("roll source"));
+                }
+            }
+            assertEquals(2, store.historyTail(campaign.getId(), 20).size());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void rollsEchoRollButtonHints() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        inbox.next("snapshot");
+        ws.sendText("{\"type\":\"roll\",\"expression\":\"2d6\",\"ref\":\"r1\",\"actorId\":\"a1\",\"source\":\"attack,trait:Agility\",\"weapon\":\"Sword\"}", true).join();
+        JsonNode roll = inbox.next("roll");
+        assertEquals("r1", roll.path("ref").asText());
+        assertEquals("a1", roll.path("actorId").asText());
+        assertEquals("attack,trait:Agility", roll.path("source").asText());
+        assertEquals("Sword", roll.path("weapon").asText());
+        ws.sendText("{\"type\":\"roll\",\"expression\":\"2d6\"}", true).join();
+        assertFalse(inbox.next("roll").has("ref"));
+        ws.abort();
+    }
+
+    @Test
     void playerWhispersAndRollsReachOnlySenderAndRecipientIncludingTheirOtherTabs() throws Exception {
         server.publish(state("m1", 0), "m1/l1");
         Campaign.Player bob = Campaign.Player.builder().name("Bob")
@@ -665,9 +804,12 @@ class OnlineSessionServerTest {
             assertEquals("Bob", chat.path("to").asText());
             assertEquals(chat, senderTab.next("chat"));
             assertEquals(chat, recipient.next("chat"));
+            ObjectNode source = MAPPER.createObjectNode().put("name", "Private feature")
+                    .put("text", "Private rules").put("source", "Class");
             alice.sendText(MAPPER.createObjectNode().put("type", "roll").put("expression", "1d20")
-                    .put("toId", bob.getId()).toString(), true).join();
+                    .put("toId", bob.getId()).set("rollSource", source).toString(), true).join();
             JsonNode roll = sender.next("roll");
+            assertEquals(source, roll.path("rollSource"));
             assertEquals(bob.getId(), roll.path("toId").asText());
             assertEquals("Bob", roll.path("to").asText());
             assertEquals(roll, recipient.next("roll"));

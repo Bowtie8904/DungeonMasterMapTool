@@ -324,6 +324,7 @@ public final class OnlinePlayPanel extends VBox {
         actorTree.setCellFactory(t -> new ActorCell());
         actorTree.setContextMenu(menu(
                 item("New actor…", MaterialDesignP.PLUS, () -> addActor("")),
+                item("New testing character…", MaterialDesignP.PLUS, () -> addActor("", true)),
                 item("New folder…", MaterialDesignF.FOLDER_PLUS_OUTLINE, () -> addFolder(""))));
         actorTree.setOnKeyPressed(e -> {
             TreeItem<ActorItem> selected = actorTree.getSelectionModel().getSelectedItem();
@@ -778,6 +779,7 @@ public final class OnlinePlayPanel extends VBox {
 
     private ContextMenu folderMenu(String folder) {
         return menu(item("New actor here…", MaterialDesignP.PLUS, () -> addActor(folder)),
+                item("New testing character here…", MaterialDesignP.PLUS, () -> addActor(folder, true)),
                 item("New folder…", MaterialDesignF.FOLDER_PLUS_OUTLINE, () -> addFolder(folder)),
                 new SeparatorMenuItem(),
                 item("Rename…", MaterialDesignR.RENAME_BOX, () -> renameFolder(folder)),
@@ -789,10 +791,16 @@ public final class OnlinePlayPanel extends VBox {
     }
 
     private void addActor(String folder) {
+        addActor(folder, false);
+    }
+
+    private void addActor(String folder, boolean testing) {
         if (current == null) return;
-        Dialogs.askText(window(), "New actor", folder.isEmpty() ? "Add an actor" : "Add an actor to " + folder,
+        Dialogs.askText(window(), testing ? "New testing character" : "New actor",
+                testing ? "Testing only: unrestricted character, never a normal actor" : folder.isEmpty() ? "Add an actor" : "Add an actor to " + folder,
                 MaterialDesignP.PLUS, "Add actor", "", required("a name")).ifPresent(name -> {
-            Campaign.Actor actor = Campaign.Actor.builder().name(name).folder(folder.isEmpty() ? null : folder).build();
+            Campaign.Actor actor = Campaign.Actor.builder().name(name).testingCharacter(testing)
+                    .folder(folder.isEmpty() ? null : folder).build();
             current.getActors().add(actor);
             if (!folder.isEmpty()) expandedFolders.add(folder);
             persist();
@@ -1032,7 +1040,7 @@ public final class OnlinePlayPanel extends VBox {
             setText(null);
             name.setText(actor.getName());
             Campaign.Player owner = current == null ? null : current.player(actor.getOwnerId());
-            detail.setText(owner == null ? "Unassigned" : owner.getName());
+            detail.setText((actor.isTestingCharacter() ? "TESTING - " : "") + (owner == null ? "Unassigned" : owner.getName()));
             drawThumb(actor);
             setGraphic(actorBox);
             setContextMenu(actorMenu(actor));

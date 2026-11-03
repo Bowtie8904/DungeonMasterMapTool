@@ -180,6 +180,19 @@
    "feature": {
     "name": "Warded",
     "text": "You reduce incoming magic damage by your Armor Score before applying it to your damage thresholds."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "warded",
+      "label": "Warded",
+      "passive": true,
+      "when": {
+       "type": "magic"
+      },
+      "reduce": "@armorScore"
+     }
+    ]
    }
   },
   {
@@ -194,6 +207,23 @@
    "feature": {
     "name": "Resilient",
     "text": "Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "resilient",
+      "label": "Resilient",
+      "passive": true,
+      "when": {
+       "lastArmor": true
+      },
+      "roll": {
+       "sides": 6,
+       "success": 6
+      },
+      "saveArmor": 1
+     }
+    ]
    }
   },
   {
@@ -208,6 +238,19 @@
    "feature": {
     "name": "Reinforced",
     "text": "When you mark your last Armor Slot, increase your damage thresholds by +2 until you clear at least 1 Armor Slot."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "reinforced",
+      "label": "Reinforced",
+      "passive": true,
+      "when": {
+       "armorFull": true
+      },
+      "thresholds": 2
+     }
+    ]
    }
   },
   {
@@ -247,6 +290,16 @@
    "feature": {
     "name": "Quiet",
     "text": "You gain a +2 bonus to rolls you make to move silently."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "quiet",
+      "label": "Move silently",
+      "roll": "action",
+      "value": 2
+     }
+    ]
    }
   },
   {
@@ -388,6 +441,21 @@
       "id": "use",
       "label": "Impenetrable"
      }
+    ],
+    "mitigation": [
+     {
+      "id": "impenetrable",
+      "label": "Impenetrable",
+      "description": "Mark a Stress instead of marking your last Hit Point.",
+      "when": {
+       "lastHp": true
+      },
+      "replaceHp": true,
+      "cost": {
+       "stress": 1
+      },
+      "uses": "source"
+     }
     ]
    }
   },
@@ -403,6 +471,17 @@
    "feature": {
     "name": "Sharp",
     "text": "On a successful attack against a target within Melee range, add a d4 to the damage roll."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "sharp",
+      "label": "Sharp",
+      "roll": "damage",
+      "dice": "1d4",
+      "description": "Successful attack against a target within Melee range."
+     }
+    ]
    }
   },
   {
@@ -417,6 +496,19 @@
    "feature": {
     "name": "Physical",
     "text": "You can’t mark an Armor Slot to reduce magic damage."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "physical",
+      "label": "Physical: no Armor Slots against magic damage",
+      "passive": true,
+      "when": {
+       "type": "magic"
+      },
+      "armorBlocked": true
+     }
+    ]
    }
   },
   {
@@ -431,6 +523,19 @@
    "feature": {
     "name": "Magic",
     "text": "You can’t mark an Armor Slot to reduce physical damage."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "magic",
+      "label": "Magic: no Armor Slots against physical damage",
+      "passive": true,
+      "when": {
+       "type": "physical"
+      },
+      "armorBlocked": true
+     }
+    ]
    }
   },
   {
@@ -445,6 +550,18 @@
    "feature": {
     "name": "Painful",
     "text": "Each time you mark an Armor Slot, you must mark a Stress."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "painful",
+      "label": "Painful",
+      "passive": true,
+      "armorCost": {
+       "stress": 1
+      }
+     }
+    ]
    }
   },
   {
@@ -600,6 +717,16 @@
    "feature": {
     "name": "Fortified",
     "text": "When you mark an Armor Slot, you reduce the severity of an attack by two thresholds instead of one."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "fortified",
+      "label": "Fortified",
+      "passive": true,
+      "armorSeverity": 1
+     }
+    ]
    }
   },
   {
@@ -842,6 +969,18 @@
       "id": "use",
       "label": "Phasebound"
      }
+    ],
+    "mitigation": [
+     {
+      "id": "phase",
+      "label": "Phasebound",
+      "description": "Mark 2 Armor Slots to take no damage.",
+      "negate": true,
+      "cost": {
+       "armor": 2
+      },
+      "uses": "source"
+     }
     ]
    }
   },
@@ -882,6 +1021,19 @@
    "feature": {
     "name": "Mirrorwoven",
     "text": "Requires a Spellcasting trait; When you are hit with a magical attack, you may mark as many Armor Slots as you need to mitigate all damage of the attack. You may then mark an additional Armor Slot to reflect the spell back towards the attacker by making a Spellcast roll against their difficulty."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "mirror",
+      "label": "Mirrorwoven",
+      "passive": true,
+      "when": {
+       "type": "magic"
+      },
+      "armorSlots": "any"
+     }
+    ]
    }
   },
   {
@@ -966,6 +1118,17 @@
    "feature": {
     "name": "Punishing Weight",
     "text": "When you succeed on a Melee attack after marking an Armor Slot this scene, add +2 to the damage roll."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "grudge",
+      "label": "Punishing Weight",
+      "roll": "damage",
+      "value": 2,
+      "description": "Successful Melee attack after marking Armor this scene."
+     }
+    ]
    }
   },
   {
@@ -1008,6 +1171,20 @@
    "feature": {
     "name": "Hungry Sigils",
     "text": "You may mark any number of Armor Slots to reduce magic damage. When you reduce magic damage to zero, you must roll your duality dice. On a result with Fear, you mark two HP as the armor struggles to contain the magic."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "sigils",
+      "label": "Hungry Sigils",
+      "description": "Against magic damage you can mark any number of Armor Slots; resolve the Fear roll by hand.",
+      "passive": true,
+      "when": {
+       "type": "magic"
+      },
+      "armorSlots": "any"
+     }
+    ]
    }
   },
   {
@@ -1089,6 +1266,25 @@
    "feature": {
     "name": "Field Repairs",
     "text": "At the end of a rest, if you have at least 1 marked Armor Slot, clear 1 additional Armor Slot."
+   },
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "recovery",
+       "label": "clear 1 more Armor Slot if any is marked",
+       "defaultOn": true,
+       "condition": "armorMarked",
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "armor",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    }
    }
   },
   {
@@ -1199,6 +1395,16 @@
    "feature": {
     "name": "Last Bastion",
     "text": "When you mark your final Armor Slot, gain resistance to all damage until the end of the scene."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "bastion",
+      "label": "Last Bastion",
+      "description": "After marking your final Armor Slot this scene, resistance to all damage.",
+      "halve": true
+     }
+    ]
    }
   },
   {
@@ -1404,6 +1610,19 @@
    "feature": {
     "name": "Steelwoven",
     "text": "Requires a Spellcasting trait; When you are hit with a physical attack, you may mark as many Armor Slots as you need to mitigate all damage of the attack. You may then mark an additional Armor Slot to reflect the attack back towards the attacker by making a Spellcast roll against their difficulty."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "steel",
+      "label": "Steelwoven",
+      "passive": true,
+      "when": {
+       "type": "physical"
+      },
+      "armorSlots": "any"
+     }
+    ]
    }
   },
   {
@@ -1702,6 +1921,24 @@
    "feature": {
     "name": "Self-Healing",
     "text": "When you take a rest, clear an Armor Slot."
+   },
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "recovery",
+       "label": "clear 1 Armor Slot",
+       "defaultOn": true,
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "armor",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    }
    }
   },
   {
@@ -2159,6 +2396,28 @@
      {
       "id": "use",
       "label": "Vitreous",
+      "cost": {
+       "armor": 2
+      }
+     },
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "vitreous",
+      "label": "Vitreous",
+      "description": "Mark 2 Armor Slots to take no damage; your thresholds drop by 5 until repaired.",
+      "when": {
+       "severity": [
+        "severe",
+        "massive"
+       ]
+      },
+      "negate": true,
       "cost": {
        "armor": 2
       }

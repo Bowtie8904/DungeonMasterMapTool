@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryConflict, getSheet, saveSheet } from '../api';
-import { applyInventory, autosave } from './persist';
+import { applyInventory, autosave, updateCharacterAutomation } from './persist';
 import { mockCharacter } from './data';
+import type { CompendiumFile } from './compendium';
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -11,6 +12,30 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('adds missing rest metadata to saved gear without overwriting GM rules', () => {
+    const c = mockCharacter();
+    c.inventory = [{ name: 'Custom recipe', type: 'gear', qty: 1, automation: {
+      actions: [{ id: 'craft', label: 'GM label', cost: { stress: 2 } }],
+      modifiers: [{ stat: 'evasion', value: 3 }],
+    } }];
+    const files: CompendiumFile[] = [{
+      format: 'dmmap-daggerheart', version: 1, label: 'Items', category: 'items', entries: [{ id: 'recipe', name: 'Custom recipe', automation: {
+        actions: [{ id: 'craft', label: 'Craft', timing: 'downtime', cost: { stress: 1 } }],
+        rest: { extraMoves: 1 },
+      } }],
+    }];
+    updateCharacterAutomation(c, files);
+    const a = c.inventory[0].automation!;
+    expect(a.actions![0]).toEqual({ id: 'craft', label: 'GM label', cost: { stress: 2 }, timing: 'downtime' });
+    expect(a.modifiers).toEqual([{ stat: 'evasion', value: 3 }]);
+    expect(a.rest).toEqual({ extraMoves: 1 });
+    a.rest = { extraMoves: 2 };
+    a.actions![0].timing = 'action';
+    updateCharacterAutomation(c, files);
+    expect(a.rest).toEqual({ extraMoves: 2 });
+    expect(a.actions![0].timing).toBe('action');
+  });
+
   it('updates only inventory and ignores older or duplicate generations', () => {
     const c = mockCharacter();
     c.notes = 'Unsaved notes';

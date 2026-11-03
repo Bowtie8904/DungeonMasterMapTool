@@ -29,14 +29,19 @@
      "name": "Celestial Wings",
      "text": "You have wings that allow you to fly. Once per scene while flying, you can **spend a Hope** instead of marking an Armor Slot.",
      "automation": {
-      "uses": {
-       "max": 1,
-       "per": "scene"
-      },
-      "actions": [
+      "mitigation": [
        {
-        "id": "use",
-        "label": "Celestial Wings"
+        "id": "wings",
+        "label": "Spend Hope instead of an Armor Slot",
+        "description": "Once per scene while flying, instead of marking an Armor Slot.",
+        "severity": 1,
+        "cost": {
+         "hope": 1
+        },
+        "uses": {
+         "max": 1,
+         "per": "scene"
+        }
        }
       ]
      }
@@ -54,7 +59,12 @@
     },
     {
      "name": "Efficient",
-     "text": "When you take a short rest, you can choose a long rest move instead of a short rest move."
+     "text": "When you take a short rest, you can choose a long rest move instead of a short rest move.",
+     "automation": {
+      "rest": {
+       "longMovesInShort": true
+      }
+     }
     }
    ]
   },
@@ -75,6 +85,22 @@
          "stress": 1
         }
        }
+      ],
+      "mitigation": [
+       {
+        "id": "scales",
+        "label": "Scales",
+        "when": {
+         "severity": [
+          "severe",
+          "massive"
+         ]
+        },
+        "hp": -1,
+        "cost": {
+         "stress": 1
+        }
+       }
       ]
      }
     },
@@ -91,7 +117,25 @@
    "features": [
     {
      "name": "Thick Skin",
-     "text": "When you take Minor damage, you can **mark 2 Stress** instead of marking a Hit Point."
+     "text": "When you take Minor damage, you can **mark 2 Stress** instead of marking a Hit Point.",
+     "automation": {
+      "mitigation": [
+       {
+        "id": "thick-skin",
+        "label": "Thick Skin",
+        "description": "Mark 2 Stress instead of marking a Hit Point.",
+        "when": {
+         "severity": [
+          "minor"
+         ]
+        },
+        "replaceHp": true,
+        "cost": {
+         "stress": 2
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Increased Fortitude",
@@ -101,6 +145,20 @@
        {
         "id": "use",
         "label": "Increased Fortitude",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "fortitude",
+        "label": "Increased Fortitude",
+        "description": "Resistance to incoming physical damage.",
+        "when": {
+         "type": "physical"
+        },
+        "halve": true,
         "cost": {
          "hope": 3
         }
@@ -117,7 +175,19 @@
    "features": [
     {
      "name": "Stoneskin",
-     "text": "Gain a permanent **+1** bonus to your Armor Score and damage thresholds at character creation."
+     "text": "Gain a permanent **+1** bonus to your Armor Score and damage thresholds at character creation.",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "armorScore",
+        "value": 1
+       },
+       {
+        "stat": "thresholds",
+        "value": 1
+       }
+      ]
+     }
     },
     {
      "name": "Immovable",
@@ -147,7 +217,12 @@
     },
     {
      "name": "Celestial Trance",
-     "text": "During a rest, you can drop into a trance to choose an additional downtime move."
+     "text": "During a rest, you can drop into a trance to choose an additional downtime move.",
+     "automation": {
+      "rest": {
+       "extraMoves": 1
+      }
+     }
     }
    ]
   },
@@ -190,13 +265,15 @@
        "max": 1,
        "per": "session"
       },
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Luckbender",
+        "id": "reroll",
+        "label": "Luckbender: reroll Duality Dice",
+        "on": "duality",
         "cost": {
          "hope": 3
-        }
+        },
+        "reroll": "duality"
        }
       ]
      }
@@ -229,7 +306,21 @@
     },
     {
      "name": "Kick",
-     "text": "When you succeed on an attack against a target within Melee range, you can **mark aStress** to kick yourself off them, dealing an extra **2d6** damage and knocking back either yourself or the target to Very Close range."
+     "text": "When you succeed on an attack against a target within Melee range, you can **mark aStress** to kick yourself off them, dealing an extra **2d6** damage and knocking back either yourself or the target to Very Close range.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "kick",
+        "label": "Kick",
+        "roll": "damage",
+        "dice": "2d6",
+        "cost": {
+         "stress": 1
+        },
+        "description": "Successful Melee attack; resolve knockback manually."
+       }
+      ]
+     }
     }
    ]
   },
@@ -292,7 +383,15 @@
    "features": [
     {
      "name": "Shell",
-     "text": "Gain a bonus to your damage thresholds equal to your Proficiency."
+     "text": "Gain a bonus to your damage thresholds equal to your Proficiency.",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": "@proficiency"
+       }
+      ]
+     }
     },
     {
      "name": "Retract",
@@ -306,6 +405,17 @@
          "stress": 1
         }
        }
+      ],
+      "mitigation": [
+       {
+        "id": "retracted",
+        "label": "Retracted",
+        "description": "While retracted into your shell you have resistance to physical damage.",
+        "when": {
+         "type": "physical"
+        },
+        "halve": true
+       }
       ]
      }
     }
@@ -318,7 +428,12 @@
    "features": [
     {
      "name": "Endurance",
-     "text": "Gain an additional Hit Point slot at character creation."
+     "text": "Gain an additional Hit Point slot at character creation.",
+     "automation": {
+      "creation": {
+       "hp": 1
+      }
+     }
     },
     {
      "name": "Reach",
@@ -335,13 +450,15 @@
      "name": "Nimble Fingers",
      "text": "When you make a Finesse Roll, you can **spend 2 Hope** to reroll your Hope Die.",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Nimble Fingers",
+        "id": "reroll",
+        "label": "Nimble Fingers: reroll Hope Die",
+        "on": "trait:Finesse",
         "cost": {
          "hope": 2
-        }
+        },
+        "reroll": "hope"
        }
       ]
      }
@@ -402,7 +519,19 @@
     },
     {
      "name": "Internal Compass",
-     "text": "When you roll a 1 on your Hope Die, you can reroll it."
+     "text": "When you roll a 1 on your Hope Die, you can reroll it.",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "reroll",
+        "label": "Internal Compass: reroll Hope Die",
+        "on": "duality",
+        "when": "hopeDie",
+        "die": 1,
+        "reroll": "hope"
+       }
+      ]
+     }
     }
    ]
   },
@@ -413,19 +542,28 @@
    "features": [
     {
      "name": "High Stamina",
-     "text": "Gain an additional Stress slot at character creation."
+     "text": "Gain an additional Stress slot at character creation.",
+     "automation": {
+      "creation": {
+       "stress": 1
+      }
+     }
     },
     {
      "name": "Adaptability",
      "text": "When you fail a roll that utilized one of your Experiences, you can **mark a Stress** to reroll.",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Adaptability",
+        "id": "reroll",
+        "label": "Adaptability: reroll",
+        "on": "duality",
+        "when": "failure",
+        "description": "Only when the failed roll used one of your Experiences.",
         "cost": {
          "stress": 1
-        }
+        },
+        "reroll": "duality"
        }
       ]
      }
@@ -441,13 +579,23 @@
      "name": "Fearless",
      "text": "When you roll with Fear, you can **mark 2 Stress** to change it into a roll with Hope instead.",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Fearless",
+        "id": "hope",
+        "label": "Fearless: change Fear into Hope",
+        "on": "duality",
+        "when": "fear",
+        "description": "The GM does not gain Fear.",
         "cost": {
          "stress": 2
-        }
+        },
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
        }
       ]
      }
@@ -467,13 +615,15 @@
      "name": "Feline Instincts",
      "text": "When you make an Agility Roll, you can **spend 2 Hope** to reroll your Hope Die.",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Feline Instincts",
+        "id": "reroll",
+        "label": "Feline Instincts: reroll Hope Die",
+        "on": "trait:Agility",
         "cost": {
          "hope": 2
-        }
+        },
+        "reroll": "hope"
        }
       ]
      }
@@ -497,13 +647,16 @@
      "name": "Tusks",
      "text": "When you succeed on an attack against a target within Melee range, you can **spend a Hope** to gore the target with your tusks, dealing an extra **1d6** damage.",
      "automation": {
-      "actions": [
+      "rollOptions": [
        {
-        "id": "use",
+        "id": "tusks",
         "label": "Tusks",
+        "roll": "damage",
+        "dice": "1d6",
         "cost": {
          "hope": 1
-        }
+        },
+        "description": "Successful attack against a target within Melee range."
        }
       ]
      }
@@ -547,7 +700,12 @@
     },
     {
      "name": "Nimble",
-     "text": "Gain a permanent +1 bonus to your Evasion at character creation."
+     "text": "Gain a permanent +1 bonus to your Evasion at character creation.",
+     "automation": {
+      "creation": {
+       "evasion": 1
+      }
+     }
     }
    ]
   },
@@ -635,6 +793,21 @@
          "stress": 1
         }
        }
+      ],
+      "mitigation": [
+       {
+        "id": "iron-skin",
+        "label": "Iron Skin",
+        "when": {
+         "severity": [
+          "major"
+         ]
+        },
+        "hp": -1,
+        "cost": {
+         "stress": 1
+        }
+       }
       ]
      }
     },
@@ -668,13 +841,16 @@
      "name": "Kick",
      "text": "When you succeed on an attack against a target within Melee range, you can **mark a Stress** to kick using your hooves, dealing an extra 2d6 damage and knocking back either yourself or the target to Very Close range.",
      "automation": {
-      "actions": [
+      "rollOptions": [
        {
-        "id": "use",
+        "id": "kick",
         "label": "Kick",
+        "roll": "damage",
+        "dice": "2d6",
         "cost": {
          "stress": 1
-        }
+        },
+        "description": "Successful Melee attack; resolve knockback manually."
        }
       ]
      }
@@ -690,13 +866,16 @@
      "name": "Hawkeye",
      "text": "When you make an Attack Roll at Close range or further distance, you can **spend 2 Hope** to reroll your Hope Die.",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
-        "id": "use",
-        "label": "Hawkeye",
+        "id": "reroll",
+        "label": "Hawkeye: reroll Hope Die",
+        "on": "attack",
+        "description": "Attack Roll at Close range or further.",
         "cost": {
          "hope": 2
-        }
+        },
+        "reroll": "hope"
        }
       ]
      }

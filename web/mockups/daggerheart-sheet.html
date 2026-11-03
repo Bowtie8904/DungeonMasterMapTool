@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daggerheart character sheet - mock-up</title>
+<!--
+  Static mock-up of the Daggerheart character sheet for Online Play (plan.md 3.41.7a).
+  Open this file directly in a browser. Nothing is saved; all values are sample data.
+  Rules content follows the Daggerheart SRD 1.0 (Darrington Press Community Gaming License).
+  - Default view: browser map view with the sheet as a draggable window (pop-out / minimise / close).
+  - "Pop out" opens the same sheet chrome-less in its own browser window (this file + #popout).
+-->
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0f1216; --panel: #171b21; --panel2: #1f252d; --border: #2a313b; --text: #e3e8ef; --muted: #8b95a3;
+  --accent: #4fc3f7; --hope: #f5b942; --fear: #b388ff; --hp: #ef5350; --stress: #ab7df0; --armor: #78909c; --ok: #66bb6a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+button, select, input, textarea { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font: inherit; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: #1f6f93; border-color: #2c8fba; }
+button.small { padding: 2px 7px; font-size: 12px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.muted { color: var(--muted); }
+.hidden { display: none !important; }
+
+/* ---------- map stage (stand-in for the real browser map view) ---------- */
+#stage { position: fixed; inset: 0; background:
+  radial-gradient(circle at 40% 55%, #2d3a2c 0, #1d2620 55%, #12161a 100%); }
+#stage::before { content: ''; position: absolute; inset: 0;
+  background-image: linear-gradient(#ffffff10 1px, transparent 1px), linear-gradient(90deg, #ffffff10 1px, transparent 1px);
+  background-size: 56px 56px; }
+.token { position: absolute; width: 56px; height: 56px; border-radius: 50%; border: 3px solid #fff8; display: grid; place-items: center; font-weight: 700; box-shadow: 0 4px 12px #0008; }
+.map-heading { position: absolute; top: 16px; left: 0; right: 0; text-align: center; pointer-events: none; text-shadow: 0 1px 5px #000; }
+.map-heading small { display: block; font-size: 11px; color: var(--muted); }
+.rail { position: absolute; display: flex; flex-direction: column; gap: 7px; padding: 8px; background: #171b21f2; border: 1px solid var(--border); border-radius: 9px; }
+.rail button { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; font-size: 16px; }
+.rail button[aria-pressed='true'] { background: #d3d9df; color: #14181e; border-color: #e3e8ef; }
+#left-rail { left: 20px; top: 20px; }
+#right-rail { right: 0; top: 0; bottom: 0; border-radius: 0; border-width: 0 0 0 1px; }
+.mock-note { position: absolute; left: 20px; bottom: 16px; max-width: 420px; font-size: 12px; color: var(--muted); background: #171b21e8; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+
+/* ---------- sheet window ---------- */
+.win { position: absolute; left: 110px; top: 70px; width: min(900px, calc(100vw - 200px)); height: min(740px, calc(100vh - 110px));
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 50px #000a; z-index: 5; min-width: 560px; min-height: 360px; resize: both; overflow: hidden; }
+.win-title { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; background: #1b2027; flex-shrink: 0; }
+.win-title h2 { margin: 0; font-size: 14px; flex: 1; font-weight: 600; }
+.win-title button { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; font-size: 15px; }
+.win-title button:hover { background: var(--panel2); }
+.win.minimised { height: auto !important; min-height: 0; resize: none; }
+.win.minimised .win-body { display: none; }
+.win-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+body.popout #stage > :not(.win) { display: none; }
+body.popout #stage { background: var(--bg); }
+body.popout #stage::before { display: none; }
+body.popout .win { position: fixed; inset: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; resize: none; min-width: 0; }
+body.popout .win-title { display: none; }
+
+/* ---------- sheet ---------- */
+.sheet { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.mock-banner { background: #5d4300; color: #ffe08a; font-size: 11px; text-align: center; padding: 2px 8px; flex-shrink: 0; }
+.ident { display: flex; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--border); align-items: flex-start; flex-shrink: 0; }
+.portrait { width: 170px; height: 170px; border-radius: 10px; background: linear-gradient(135deg, #3d6b4f, #1f3a2c); border: 2px solid var(--border); display: grid; place-items: center; font-size: 64px; font-weight: 700; flex-shrink: 0; cursor: pointer; }
+.ident-main { flex: 1; min-width: 0; }
+.lvl-row { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.ident-main .name { font-size: 20px; font-weight: 700; margin: 0; }
+.ident-main .sub { color: var(--muted); font-size: 12.5px; }
+.ident-main .sub b { color: var(--text); font-weight: 600; }
+.level-box { text-align: center; border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px; background: var(--panel2); }
+.level-box .v { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.level-box .l { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.ident-right { display: flex; flex-direction: column; gap: 6px; width: 230px; flex-shrink: 0; align-items: stretch; }
+.ident-right .lvl-row { justify-content: flex-end; }
+.vitals[hidden] { display: none; }
+.vitals { display: grid; grid-template-columns: minmax(280px, 1.15fr) minmax(300px, 1fr); gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #14181e; flex-shrink: 0; }
+.v-left { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr 1fr; gap: 8px; }
+.v-e { grid-column: span 1; } .v-a { grid-column: span 2; } .v-th { grid-column: span 3; }
+.v-hp, .v-st { grid-column: span 3; }
+.v-tr { }
+.vital { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+.vital .lbl { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vital .big { font-size: 22px; font-weight: 700; line-height: 1.15; }
+.hint { font-size: 11px; color: var(--muted); }
+.pips { display: flex; flex-wrap: nowrap; gap: 3px; margin-top: 4px; }
+.pip { flex: 0 1 14px; min-width: 8px; aspect-ratio: 1; height: auto; border-radius: 3px; border: 2px solid var(--c, var(--muted)); background: transparent; padding: 0; cursor: pointer; }
+.pips[data-kind="armor"] { display: grid; grid-template-columns: repeat(6, minmax(8px, 14px)); gap: 3px; }
+.pip.round { border-radius: 50%; }
+.pip.on { background: var(--c); }
+.pip.locked { border-style: dashed; opacity: .3; cursor: not-allowed; }
+.pip:hover:not(.locked) { filter: brightness(1.3); }
+.thresholds { display: flex; align-items: center; justify-content: space-between; gap: 2px; margin-top: 1px; }
+.thr { text-align: center; min-width: 0; }
+.thr .t { font-size: 8px; }
+.thr .n { font-size: 16px; font-weight: 700; line-height: 1.1; }
+.thr .t { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.thr-sep { color: var(--muted); font-size: 11px; }
+
+.tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: center; }
+.tab { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 14px; color: var(--muted); }
+.tab[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs .spacer { flex: 1; }
+.pages { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.page { display: none; }
+.page.active { display: block; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.card { background: var(--panel2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+.card + .card { margin-top: 14px; }
+.card h3 { margin: 0 0 8px; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card h3 .right { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.traits { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 6px; }
+.trait { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 3px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 0; }
+.trait:hover { border-color: var(--accent); }
+.trait .nm { font-weight: 600; font-size: 13px; }
+.trait .th { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.trait .th input { accent-color: var(--accent); padding: 0; margin: 0; width: 12px; height: 12px; flex-shrink: 0; }
+.trait .md { font-size: 24px; font-weight: 700; line-height: 1.15; }
+.trait .vb { font-size: 9.5px; letter-spacing: -.01em; color: var(--muted); opacity: .75; line-height: 1.25; min-height: 2.5em; }
+.trait .spell { font-size: 12px; color: #d8c8ff; }
+
+.list { display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; }
+.row .grow, .grow { flex: 1; min-width: 0; }
+.row .mod { font-weight: 700; min-width: 2.4em; text-align: center; }
+.feat { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; }
+.feat + .feat { margin-top: 6px; }
+.feat .ft { font-weight: 600; }
+.feat .src { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); }
+.feat p { margin: 2px 0 0; color: #c3cbd6; font-size: 12.5px; }
+.feat.locked { opacity: .45; border-style: dashed; }
+.feat.hope { border-color: #6b5320; } .feat.hope .src { color: var(--hope); }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.t th { text-align: left; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 2px 6px; }
+table.t td { padding: 5px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+.tag { display: inline-block; border-radius: 9px; padding: 0 7px; font-size: 11px; background: #2b3440; color: #c9d3df; margin: 0 3px 2px 0; }
+.tag.magic { background: #3b2d6b; } .tag.phys { background: #4a3a24; }
+.slot { border: 1px solid var(--border); border-radius: 9px; background: var(--panel); padding: 9px 11px; }
+.slot + .slot { margin-top: 8px; }
+.slot.empty { border-style: dashed; color: var(--muted); }
+.slot .top { display: flex; align-items: center; gap: 8px; }
+.slot .nm { font-weight: 700; font-size: 15px; flex: 1; }
+.slot .stats { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0; }
+.stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+.stat b { color: var(--text); }
+.cat { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.hands { display: flex; gap: 4px; align-items: center; }
+.hand { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); }
+.hand.on { background: var(--accent); }
+
+.eq-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.eq-top .card + .card { margin-top: 0; }
+.goldbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: linear-gradient(100deg, #3a2c0c 0%, #1f1a10 55%, var(--panel2) 100%); border: 1px solid #8a6a1e; box-shadow: inset 0 0 18px rgba(245,185,66,.12), 0 0 0 1px rgba(245,185,66,.08); }
+.goldbar .cat { color: var(--hope); font-weight: 700; letter-spacing: .12em; }
+.goldbar .coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe9a6, #f5b942 55%, #a8741a); box-shadow: 0 0 8px rgba(245,185,66,.6); font-size: 0; flex-shrink: 0; }
+.goldbar input { text-align: center; color: var(--hope); font-weight: 700; font-size: 16px; border-color: #8a6a1e; background: #17130a; }
+.goldbar .qty button { border-color: #8a6a1e; color: var(--hope); }
+.badges { margin-top: 3px; }
+.exp { align-items: flex-start; }
+.exp .mod { color: var(--hope); font-weight: 700; }
+.char-cols { grid-template-columns: minmax(190px, .55fr) 1.6fr; }
+.goldbar input { text-align: center; }
+.gold { display: grid; gap: 8px; }
+.gold-row { display: flex; align-items: center; gap: 8px; }
+.gold-row .nm { width: 70px; font-size: 12.5px; }
+.gold-row .pips { margin: 0; flex: 1; }
+.gold-ctl { display: flex; gap: 3px; }
+.qty { display: inline-flex; align-items: center; gap: 4px; }
+.qty button { width: 22px; height: 22px; padding: 0; line-height: 1; }
+.qty.cap { color: var(--hope); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.dcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.dcard .hd { display: flex; align-items: center; gap: 8px; }
+.dcard .lv { width: 24px; height: 24px; border-radius: 6px; background: #2b3440; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.dcard .dm { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); flex: 1; }
+.dcard .rc { font-size: 12px; color: var(--stress); font-weight: 700; }
+.dcard .ty { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.dcard .nm { font-weight: 700; font-size: 15px; }
+.dcard p { margin: 0; font-size: 12.5px; color: #c3cbd6; }
+.dcard .act { display: flex; gap: 6px; margin-top: 4px; }
+.dcard.empty { border-style: dashed; color: var(--muted); align-items: center; justify-content: center; min-height: 110px; }
+
+textarea { width: 100%; min-height: 70px; resize: vertical; }
+.field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.qa { display: flex; flex-direction: column; gap: 8px; }
+.qa .q { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+
+/* ---------- roll popup + chat toast ---------- */
+.rolldlg-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; }
+.rolldlg-backdrop[hidden], .toast[hidden] { display: none; }
+.rolldlg { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 300px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.rolldlg h4 { margin: 0; font-size: 15px; }
+.rolldlg label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rolldlg input[type=number] { width: 70px; }
+.rolldlg .acts { display: flex; justify-content: flex-end; gap: 8px; }
+.toast { position: fixed; right: 80px; bottom: 24px; max-width: 420px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.6); z-index: 60; }
+.toast small { display: block; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+.toast .total { font-size: 20px; font-weight: 700; }
+.die { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border-radius: 6px; font-weight: 700; margin: 0 2px; padding: 0 4px; }
+.die.hope { background: #5a4310; color: var(--hope); border: 1px solid var(--hope); }
+.die.fear { background: #3b2d6b; color: #d8c8ff; border: 1px solid var(--fear); }
+.die.misc { background: #2b3440; border: 1px solid var(--border); }
+.outcome.hope { color: var(--hope); } .outcome.fear { color: #d8c8ff; } .outcome.crit { color: var(--ok); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="map-heading"><small>Map</small>The Sunken Chapel - Level 1</div>
+  <div class="token" style="left:46%;top:44%;background:#3d6b4f">MA</div>
+  <div class="token" style="left:52%;top:50%;background:#7a3b3b">G</div>
+  <div class="token" style="left:41%;top:52%;background:#3b567a">TH</div>
+  <div class="rail" id="left-rail">
+    <button title="Navigate" aria-pressed="true">&#10022;</button>
+    <button title="Draw">&#9998;</button>
+    <button title="Measure">&#8596;</button>
+  </div>
+  <div class="rail" id="right-rail">
+    <button title="Chat">&#128172;</button>
+    <button title="Actors">&#9823;</button>
+    <button id="rail-sheet" title="Character sheet" aria-pressed="true">&#128196;</button>
+    <button title="Settings">&#9881;</button>
+  </div>
+  <div class="mock-note">
+    Mock-up: drag the title bar, resize from the lower-right corner, minimise, close (re-open with the sheet button in the right rail) or press
+    <b>Pop out</b> (top-right of the window) to see the chrome-less browser-window version. Pips, tabs, traits and rolls are clickable; nothing is saved.
+  </div>
+
+  <section class="win" id="win" aria-label="Character sheet">
+    <div class="win-title" id="win-title">
+      <span>&#128196;</span>
+      <h2>Mira Ashvale - Level 3 Ranger</h2>
+      <button id="btn-pop" title="Pop out to a new browser window">&#10697;</button>
+      <button id="btn-min" title="Minimise">&#8211;</button>
+      <button id="btn-close" title="Close">&#10005;</button>
+    </div>
+    <div class="win-body">
+      <div class="sheet">
+        <div class="mock-banner">MOCK-UP - sample data, nothing is saved. Daggerheart SRD 1.0 (Darrington Press Community Gaming License)</div>
+
+        <!-- ===== Identity ===== -->
+        <header class="ident">
+          <div class="portrait" title="Character image (click to change)">M</div>
+          <div class="ident-main">
+            <p class="name">Mira Ashvale <span class="muted" style="font-size:13px;font-weight:400">(she/her)</span></p>
+            <div class="sub"><b>Ranger</b> - Subclass: <b>Wayfinder</b> (Foundation)</div>
+            <div class="sub">Domains: <b>Bone</b> &amp; <b>Sage</b></div>
+            <div class="sub">Heritage: <b>Human</b> ancestry, <b>Wildborne</b> community</div>
+            <div class="sub">Played by <b>Lukas</b></div>
+          </div>
+          <div class="ident-right">
+            <div class="lvl-row">
+              <div class="level-box"><div class="v">3</div><div class="l">Level</div></div>
+              <div class="level-box"><div class="v">2</div><div class="l">Tier</div></div>
+              <button class="primary small" title="Opens the level-up flow: tier achievements, two advancements, thresholds +1, new domain card">Level up</button>
+            </div>
+            <div class="vital">
+              <div class="lbl"><span>Hope</span></div>
+              <div class="pips" data-kind="hope" data-slots="6" data-total="6" data-on="4" data-round="1" style="--c:var(--hope)"></div>
+            </div>
+            <div class="vital">
+              <div class="lbl"><span>Proficiency</span></div>
+              <div class="pips" data-kind="prof" data-slots="6" data-total="6" data-on="2" data-round="1" style="--c:var(--accent)"></div>
+            </div>
+          </div>
+        </header>
+
+        <!-- ===== Tabs ===== -->
+        <nav class="tabs" role="tablist">
+          <button class="tab" role="tab" aria-selected="true" data-page="p-char">Character</button>
+          <button class="tab" role="tab" aria-selected="false" data-page="p-equip">Equipment</button>
+          <button class="tab" role="tab" aria-selected="false" data-page="p-loot">Loot</button>
+          <button class="tab" role="tab" aria-selected="false" data-page="p-cards">Domain Cards</button>
+          <button class="tab" role="tab" aria-selected="false" data-page="p-bg">Background</button>
+          <span class="spacer"></span>
+          <button class="small" title="Short rest: 2 downtime moves each; refreshes per-rest features">Short rest</button>
+          <button class="small" style="margin-left:6px" title="Long rest: 2 downtime moves each; refreshes per-long-rest features">Long rest</button>
+          <button class="small" style="margin-left:6px" title="Offered when the last HP is marked">Death move&hellip;</button>
+        </nav>
+
+        <!-- ===== Vitals and traits (Character tab only) ===== -->
+        <section class="vitals" id="vitals" aria-label="Vitals">
+          <div class="v-left">
+            <div class="vital v-e"><div class="lbl"><span>Evasion</span></div><div class="big">13</div></div>
+            <div class="vital v-a">
+              <div class="lbl"><span>Armor</span></div>
+              <div class="pips" data-kind="armor" data-slots="3" data-total="12" data-on="1" style="--c:var(--armor)"></div>
+            </div>
+            <div class="vital v-th">
+              <div class="lbl"><span>Thresholds</span></div>
+              <div class="thresholds">
+                <div class="thr"><div class="n">&lt; 8</div><div class="t">Minor</div></div><span class="thr-sep">|</span>
+                <div class="thr"><div class="n">8</div><div class="t">Major</div></div><span class="thr-sep">|</span>
+                <div class="thr"><div class="n">14</div><div class="t">Severe</div></div>
+              </div>
+            </div>
+            <div class="vital v-hp">
+              <div class="lbl"><span>HP</span></div>
+              <div class="pips" data-kind="hp" data-slots="6" data-total="12" data-on="2" style="--c:var(--hp)"></div>
+            </div>
+            <div class="vital v-st">
+              <div class="lbl"><span>Stress</span></div>
+              <div class="pips" data-kind="stress" data-slots="6" data-total="12" data-on="1" style="--c:var(--stress)"></div>
+            </div>
+          </div>
+
+          <div class="traits v-tr" title="Click a trait to roll it. The checkbox marks it (marked traits cannot be raised again this tier).">
+            <div class="trait" data-roll="Agility" data-mod="2"><div class="th"><input type="checkbox"><span class="nm">Agility</span></div><span class="md">+2</span><span class="vb">Sprint, Leap, Maneuver</span></div>
+            <div class="trait" data-roll="Strength" data-mod="-1"><div class="th"><input type="checkbox"><span class="nm">Strength</span></div><span class="md">-1</span><span class="vb">Lift, Smash, Grapple</span></div>
+            <div class="trait" data-roll="Finesse" data-mod="1"><div class="th"><input type="checkbox" checked><span class="nm">Finesse</span></div><span class="md">+1</span><span class="vb">Control, Hide, Tinker</span></div>
+            <div class="trait" data-roll="Instinct" data-mod="1"><div class="th"><input type="checkbox" checked><span class="nm">Instinct</span><span class="spell" title="Subclass Spellcast trait">&#10022;</span></div><span class="md">+1</span><span class="vb">Perceive, Sense, Navigate</span></div>
+            <div class="trait" data-roll="Presence" data-mod="0"><div class="th"><input type="checkbox"><span class="nm">Presence</span></div><span class="md">+0</span><span class="vb">Charm, Perform, Deceive</span></div>
+            <div class="trait" data-roll="Knowledge" data-mod="0"><div class="th"><input type="checkbox"><span class="nm">Knowledge</span></div><span class="md">+0</span><span class="vb">Recall, Analyze, Comprehend</span></div>
+          </div>
+
+        </section>
+
+        <div class="pages">
+          <!-- ======================= CHARACTER ======================= -->
+          <div class="page active" id="p-char">
+            <div class="cols char-cols">
+              <div>
+                <div class="card">
+                  <h3>Experiences <span class="right"><button class="small">+ Add</button></span></h3>
+                  <div class="list">
+                    <div class="row exp"><span class="grow">Raised by Wolves</span><span class="mod">+2</span></div>
+                    <div class="row exp"><span class="grow">Pathfinder</span><span class="mod">+2</span></div>
+                    <div class="row exp"><span class="grow">Fast Learner, always the first to pick up a new trick on the trail</span><span class="mod">+2</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="card">
+                  <h3>Class &amp; subclass features</h3>
+                  <div class="feat"><div class="src">Class feature - Ranger</div><div class="ft">Class feature name</div><p>Feature text comes from the class data.</p></div>
+                  <div class="feat hope"><div class="src">Hope feature - spend 3 Hope</div><div class="ft">Class Hope feature <button class="small" style="float:right">Use (3 Hope)</button></div><p>Class Hope feature text comes from the class data.</p></div>
+                  <div class="feat"><div class="src">Subclass foundation - Wayfinder</div><div class="ft">Foundation feature (Spellcast: Instinct)</div><p>Foundation feature text and Spellcast trait come from the subclass card.</p></div>
+                </div>
+                <div class="card">
+                  <h3>Heritage features</h3>
+                  <div class="feat"><div class="src">Ancestry - Human (first)</div><div class="ft">Ancestry feature one</div><p>Text from the ancestry card (mixed ancestry: first feature of one ancestry, second of another).</p></div>
+                  <div class="feat"><div class="src">Ancestry - Human (second)</div><div class="ft">Ancestry feature two</div><p>Ancestry feature text.</p></div>
+                  <div class="feat"><div class="src">Community - Wildborne</div><div class="ft">Community feature</div><p>Community feature text from the community card.</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ======================= EQUIPMENT & ITEMS ======================= -->
+          <div class="page" id="p-equip">
+            <div class="eq-top">
+                <div class="card">
+                  <h3>Active weapons <span class="right hands" title="Max burden is 2 hands"><span class="muted">Hands</span><span class="hand on"></span><span class="hand on"></span><span class="muted">2 / 2</span></span></h3>
+
+                  <div class="slot">
+                    <div class="top"><span class="cat">Primary</span><span class="nm">Shortbow</span></div>
+                    <div class="badges"><span class="tag phys">phys</span><span class="tag">Agi</span><span class="tag">Far</span><span class="tag">2d6+3</span><span class="tag">2H</span><span class="tag">T1</span></div>
+                    <div class="row" style="margin-top:6px;gap:6px">
+                      <button class="primary small" data-roll="Attack - Shortbow (Agility)" data-mod="2">Attack +2</button>
+                      <button class="small" data-dmg="2d6+3" data-label="Shortbow damage">Damage</button>
+                      <span class="grow"></span>
+                      <button class="small">Swap</button><button class="small">Unequip</button>
+                    </div>
+                  </div>
+
+                  <div class="slot empty">
+                    <div class="top"><span class="cat">Secondary</span><span class="nm" style="font-weight:400">Empty</span><button class="small">Equip&hellip;</button></div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>Active armor</h3>
+                  <div class="slot">
+                    <div class="top"><span class="nm">Gambeson Armor</span><button class="small">Swap</button><button class="small">Unequip</button></div>
+                    <div class="badges"><span class="tag">Score 3</span><span class="tag">T1</span></div>
+                    <div class="feat" style="margin-top:6px"><div class="ft">Flexible</div><p>+1 to Evasion.</p></div>
+                  </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:14px">
+                  <h3>Carried, not equipped <span class="right"><button class="small">+ Add weapon / armor</button></span></h3>
+                  <table class="t">
+                    <thead><tr><th>Name</th><th>Feature</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td><b>Dagger</b><div class="badges"><span class="tag phys">phys</span><span class="tag">Secondary</span><span class="tag">Fin</span><span class="tag">Melee</span><span class="tag">d8+1</span><span class="tag">1H</span><span class="tag">T1</span></div></td><td class="muted">-</td><td><button class="small">Equip</button></td></tr>
+                      <tr><td><b>Leather Armor</b><div class="badges"><span class="tag">Score 3</span><span class="tag">T1</span></div></td><td><b>Flexible</b> <span class="muted">+1 to Evasion</span></td><td><button class="small">Equip</button></td></tr>
+                      <tr><td><b>Hunting Knife</b><div class="badges"><span class="tag phys">phys</span><span class="tag">Primary</span><span class="tag">Agi</span><span class="tag">Melee</span><span class="tag">d8+2</span><span class="tag">1H</span><span class="tag">T1</span></div></td><td><b>Quick</b> <span class="muted">Mark Stress to target another creature in range</span></td><td><button class="small">Equip</button></td></tr>
+                    </tbody>
+                  </table>
+            </div>
+          </div>
+
+          <!-- ======================= LOOT ======================= -->
+          <div class="page" id="p-loot">
+            <div class="card goldbar">
+              <span class="coin">&#9679;</span><span class="cat">Gold</span>
+              <span class="qty"><button>-</button><input type="number" value="12" min="0" aria-label="Gold coins" style="width:64px"><button>+</button></span>
+              <span class="muted" style="font-size:11.5px">coins (10 coins = 1 handful, 10 handfuls = 1 bag, 10 bags = 1 chest)</span>
+            </div>
+
+            <div class="card" style="margin-top:14px">
+                  <h3>Inventory <span class="right"><button class="small">+ Add item</button></span></h3>
+                  <table class="t">
+                    <thead><tr><th>Item</th><th>Type</th><th>Qty</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>Torch<div class="muted">Starting kit</div></td><td><span class="tag">gear</span></td><td><span class="qty"><button>-</button>1<button>+</button></span></td><td></td></tr>
+                      <tr><td>50 feet of rope</td><td><span class="tag">gear</span></td><td><span class="qty"><button>-</button>1<button>+</button></span></td><td></td></tr>
+                      <tr><td>Basic supplies</td><td><span class="tag">gear</span></td><td><span class="qty"><button>-</button>1<button>+</button></span></td><td></td></tr>
+                      <tr><td>Minor Health Potion<div class="muted">Clear 1d4 HP</div></td><td><span class="tag">consumable</span></td><td><span class="qty"><button>-</button>2<button>+</button></span></td><td><button class="small" data-dmg="1d4" data-label="Minor Health Potion (clear HP)">Use</button></td></tr>
+                      <tr><td>Minor Stamina Potion<div class="muted">Clear 1d4 Stress</div></td><td><span class="tag">consumable</span></td><td><span class="qty cap"><button>-</button>5<button>+</button>max</span></td><td><button class="small" data-dmg="1d4" data-label="Minor Stamina Potion (clear Stress)">Use</button></td></tr>
+                      <tr><td>Class item<div class="muted">Listed on the class character guide</div></td><td><span class="tag">class item</span></td><td><span class="qty"><button>-</button>1<button>+</button></span></td><td></td></tr>
+                      <tr><td>Silver Locket<div class="muted">Loot - Uncommon</div></td><td><span class="tag">loot</span></td><td><span class="qty"><button>-</button>1<button>+</button></span></td><td></td></tr>
+                    </tbody>
+                  </table>
+                  <p class="muted" style="font-size:11.5px;margin:6px 0 0">Consumables are single-use; at most 5 of each. Loot stays until sold, discarded or lost. Rarity: common, uncommon, rare, legendary.</p>
+                </div>
+          </div>
+
+          <!-- ======================= DOMAIN CARDS ======================= -->
+          <div class="page" id="p-cards">
+            <div class="card">
+              <h3>Loadout <span class="right muted">3 / 5 active - recalling a vault card costs its Recall Cost in Stress (free during a rest or on level-up)</span></h3>
+              <div class="cards">
+                <div class="dcard"><div class="hd"><span class="lv">1</span><span class="dm">Bone</span><span class="rc">&#9889; 1</span></div><span class="ty">Ability</span><span class="nm">Sample Bone Ability</span><p>Card feature text appears here from the domain card data.</p><div class="act"><button class="small">Move to vault</button></div></div>
+                <div class="dcard"><div class="hd"><span class="lv">1</span><span class="dm">Sage</span><span class="rc">&#9889; 1</span></div><span class="ty">Spell</span><span class="nm">Sample Sage Spell</span><p>Card feature text. Spells can start a Spellcast roll (Instinct +1).</p><div class="act"><button class="small primary" data-roll="Spellcast (Instinct)" data-mod="1">Spellcast roll</button><button class="small">Move to vault</button></div></div>
+                <div class="dcard"><div class="hd"><span class="lv">3</span><span class="dm">Bone</span><span class="rc">&#9889; 2</span></div><span class="ty">Ability</span><span class="nm">Sample Level 3 Card</span><p>Card feature text. Usage limits (per rest, per long rest) can be ticked here.</p><div class="pips" data-kind="use" data-slots="2" data-total="2" data-on="0" style="--c:var(--accent)"></div><div class="act"><button class="small">Move to vault</button></div></div>
+                <div class="dcard empty">Empty loadout slot</div>
+                <div class="dcard empty">Empty loadout slot</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Vault <span class="right muted">Inactive cards - no effect on play</span></h3>
+              <div class="cards">
+                <div class="dcard"><div class="hd"><span class="lv">2</span><span class="dm">Sage</span><span class="rc">&#9889; 1</span></div><span class="ty">Spell</span><span class="nm">Sample Vault Card</span><p>Card feature text.</p><div class="act"><button class="small">Recall to loadout (mark 1 Stress)</button></div></div>
+              </div>
+            </div>
+            <p class="muted" style="font-size:12px">Subclass, ancestry and community cards are always active and do not count towards loadout or vault (see the Character tab).</p>
+          </div>
+
+          <!-- ======================= BACKGROUND ======================= -->
+          <div class="page" id="p-bg">
+            <div class="cols">
+              <div>
+                <div class="card">
+                  <h3>Character description</h3>
+                  <div class="fields">
+                    <label class="field">Name<input value="Mira Ashvale"></label>
+                    <label class="field">Pronouns<input value="she/her"></label>
+                    <label class="field">Age<input value="29"></label>
+                    <label class="field">Height<input value="5'7&quot;"></label>
+                    <label class="field">Eyes<input value="Grey"></label>
+                    <label class="field">Hair<input value="Black, braided"></label>
+                    <label class="field">Skin<input value="Tanned"></label>
+                    <label class="field">Attire<input value="Green travel cloak"></label>
+                  </div>
+                  <label class="field" style="margin-top:8px">Other details<textarea>Scar across the left hand, carries a wolf-tooth charm.</textarea></label>
+                </div>
+                <div class="card">
+                  <h3>Notes</h3>
+                  <textarea style="min-height:120px" placeholder="Free notes"></textarea>
+                </div>
+              </div>
+              <div>
+                <div class="card">
+                  <h3>Background questions <span class="right muted">From the class guide - editable</span></h3>
+                  <div class="qa">
+                    <label class="q">Question 1<textarea></textarea></label>
+                    <label class="q">Question 2<textarea></textarea></label>
+                    <label class="q">Question 3<textarea></textarea></label>
+                  </div>
+                </div>
+                <div class="card">
+                  <h3>Connections <span class="right muted">Relationships with other PCs</span></h3>
+                  <div class="qa">
+                    <label class="q">Connection question 1<textarea></textarea></label>
+                    <label class="q">Connection question 2<textarea></textarea></label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Roll popup: opens when a roll is triggered, result is posted to the chat -->
+<div class="rolldlg-backdrop" id="rolldlg" hidden>
+  <div class="rolldlg" role="dialog" aria-modal="true" aria-labelledby="rd-title">
+    <h4 id="rd-title">Roll</h4>
+    <div class="muted" id="rd-sub">Duality roll: <span class="die hope">Hope d12</span><span class="die fear">Fear d12</span> + modifier</div>
+    <label>Roll with
+      <select id="adv"><option value="0">Normal</option><option value="1">Advantage (+d6)</option><option value="-1">Disadvantage (-d6)</option></select>
+    </label>
+    <label>Experience (spend 1 Hope, +2)
+      <select id="expsel"><option value="">None</option><option>Raised by Wolves</option><option>Pathfinder</option><option>Fast Learner, always the first to pick up a new trick on the trail</option></select>
+    </label>
+    <label>Difficulty <input type="number" id="diff" placeholder="-" min="0"></label>
+    <div class="acts"><button id="rd-cancel">Cancel</button><button class="primary" id="rd-roll">Roll to chat</button></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const popout = location.hash === '#popout';
+  document.body.classList.toggle('popout', popout);
+  if (popout) document.title = 'Mira Ashvale - Daggerheart';
+
+  /* pips: slots = usable, total = shown, on = marked; the rest are locked (unlocked by advancements) */
+  $$('.pips').forEach((p) => {
+    const slots = +p.dataset.slots, total = +p.dataset.total, kind = p.dataset.kind;
+    let on = +p.dataset.on;
+    const round = p.dataset.round === '1';
+    const btns = [];
+    for (let i = 0; i < total; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pip' + (round ? ' round' : '') + (i >= slots ? ' locked' : '');
+      b.setAttribute('aria-label', kind + ' ' + (i + 1));
+      if (i >= slots) b.title = 'Locked - gained through advancement';
+      b.addEventListener('click', () => {
+        if (i >= slots) return;
+        on = (on === i + 1) ? i : i + 1;
+        paint();
+      });
+      btns.push(b); p.appendChild(b);
+    }
+    function paint() {
+      btns.forEach((b, i) => b.classList.toggle('on', i < on));
+    }
+    paint();
+  });
+
+  $$('.tab').forEach((t) => t.addEventListener('click', () => {
+    $$('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+    $$('.page').forEach((pg) => pg.classList.toggle('active', pg.id === t.dataset.page));
+    $('#vitals').hidden = t.dataset.page !== 'p-char';
+  }));
+
+  const d = (n) => 1 + Math.floor(Math.random() * n);
+  const die = (cls, v) => '<span class="die ' + cls + '">' + v + '</span>';
+  const sign = (n) => (n >= 0 ? '+' : '') + n;
+  let toastTimer = null;
+  function post(html) {
+    const t = $('#toast');
+    t.innerHTML = '<small>Posted to chat</small>' + html;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
+  }
+  function dualityRoll(label, mod, adv, diffV) {
+    const hope = d(12), fear = d(12);
+    const extra = adv ? d(6) : 0;
+    const total = hope + fear + mod + adv * extra;
+    const crit = hope === fear;
+    const outcome = crit ? ['crit', 'Critical success'] : hope > fear ? ['hope', 'With Hope'] : ['fear', 'With Fear'];
+    let verdict = '';
+    if (diffV !== '') verdict = ' vs ' + diffV + ': <b>' + (crit || total >= +diffV ? 'success' : 'failure') + '</b>';
+    post('<b>' + label + '</b> ' + die('hope', hope) + die('fear', fear) + (adv ? die('misc', (adv > 0 ? '+' : '-') + extra) : '') +
+      ' ' + sign(mod) + ' = <span class="total">' + total + '</span> <span class="outcome ' + outcome[0] + '">' + outcome[1] + '</span>' + verdict);
+  }
+  function plainRoll(label, expr) {
+    const m = /^(\d+)d(\d+)([+-]\d+)?$/.exec(expr);
+    const n = +m[1], s = +m[2], k = m[3] ? +m[3] : 0;
+    const rolls = Array.from({ length: n }, () => d(s));
+    const total = rolls.reduce((a, b) => a + b, 0) + k;
+    post('<b>' + label + '</b> ' + rolls.map((r) => die('misc', r)).join('') + (k ? ' ' + sign(k) : '') + ' = <span class="total">' + total + '</span>');
+  }
+  const dlg = $('#rolldlg');
+  let pending = null;
+  function openRoll(label, mod) {
+    pending = { label, mod };
+    $('#rd-title').textContent = label + ' (' + sign(mod) + ')';
+    $('#adv').value = '0';
+    $('#diff').value = '';
+    $('#expsel').value = '';
+    dlg.hidden = false;
+    $('#rd-roll').focus();
+  }
+  $('#rd-cancel').addEventListener('click', () => { dlg.hidden = true; });
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dlg.hidden = true; });
+  $('#rd-roll').addEventListener('click', () => {
+    dlg.hidden = true;
+    const exp = $('#expsel').value;
+    dualityRoll(pending.label + (exp ? ' + ' + exp.split(',')[0] : ''), pending.mod + (exp ? 2 : 0), +$('#adv').value, $('#diff').value);
+  });
+  $$('[data-roll]').forEach((b) => b.addEventListener('click', (e) => {
+    if (e.target.matches('input')) return;
+    openRoll(b.dataset.roll, +b.dataset.mod);
+  }));
+  $$('[data-dmg]').forEach((b) => b.addEventListener('click', () => plainRoll(b.dataset.label, b.dataset.dmg)));
+
+  const win = $('#win');
+  const railBtn = $('#rail-sheet');
+  function setOpen(open) {
+    win.classList.toggle('hidden', !open);
+    railBtn.setAttribute('aria-pressed', String(open));
+  }
+  $('#btn-close').addEventListener('click', () => setOpen(false));
+  $('#btn-min').addEventListener('click', () => win.classList.toggle('minimised'));
+  railBtn.addEventListener('click', () => setOpen(win.classList.contains('hidden')));
+  $('#btn-pop').addEventListener('click', () => {
+    window.open(location.pathname + '#popout', 'dh-sheet-mira', 'popup,width=760,height=900');
+    setOpen(false);
+  });
+
+  let drag = null;
+  const title = $('#win-title');
+  title.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    drag = { x: e.clientX - win.offsetLeft, y: e.clientY - win.offsetTop };
+    title.setPointerCapture(e.pointerId);
+  });
+  title.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    win.style.left = Math.max(0, Math.min(innerWidth - 120, e.clientX - drag.x)) + 'px';
+    win.style.top = Math.max(0, Math.min(innerHeight - 40, e.clientY - drag.y)) + 'px';
+  });
+  title.addEventListener('pointerup', () => { drag = null; });
+})();
+</script>
+</body>
+</html>

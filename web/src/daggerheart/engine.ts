@@ -3,8 +3,9 @@
 
 import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
 import type { RollContribution } from '../protocol';
+import type { MitigationOption } from './damage';
 
-export type Resource = 'hp' | 'stress' | 'hope' | 'armor';
+export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
 
 /** Value of a modifier: a number or an expression such as "@spellcast", "@tier" or "-@level". */
@@ -18,6 +19,8 @@ export interface Modifier {
   value?: ModValue;
   /** Dice added to the roll (damage rolls), e.g. "d6" */
   dice?: string;
+  /** Level-scaled replacement for dice, e.g. {"2": "2d6", "5": "3d8"} */
+  diceByLevel?: Record<string, string>;
   /** Removed once it has been applied to a matching roll */
   consume?: boolean;
 }
@@ -40,14 +43,94 @@ export interface Step {
 export interface ActionDef {
   id: string;
   label: string;
-  cost?: Partial<Record<Resource, number>>;
+  timing?: 'action' | 'downtime' | 'rest';
+  downtime?: {
+    rest?: RestKind;
+    consumeItem?: boolean;
+    table?: { expression: string; outcomes: string[]; repeat?: string };
+  };
+  cost?: Partial<Record<Resource, ModValue>>;
   steps?: Step[];
+  /** Own use limit of this action, counted separately from the card's other actions. */
+  uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
+  /** Sends a plain roll to the chat, for example the d4 of I See It Coming added to the Evasion against one attack. */
+  sendRoll?: { dice: string; base?: 'evasion'; label: string };
+}
+
+export interface ResourceDef {
+  id: string;
+  label: string;
+  initial: ModValue;
+  max?: ModValue;
+}
+
+export interface RollOption extends ActionDef {
+  roll: string;
+  value?: ModValue;
+  dice?: string;
+  diceByLevel?: Record<string, string>;
+  description?: string;
+  uses?: Automation['uses'];
+  consumeItem?: boolean;
+  /** Effect started by the first roll that selects this option; while it is active the option is pre-selected and free. */
+  effect?: EffectDef;
+  weapon?: 'source' | 'primary' | 'secondary' | 'any';
+}
+
+/** A button a feature offers on a finished roll in the chat. */
+export interface RollTrigger extends ActionDef {
+  on: string;
+  when?: 'always' | 'fear' | 'hope' | 'failure' | 'hopeDie' | 'dieMatches';
+  die?: number;
+  matchResource?: string;
+  reroll?: 'hope' | 'duality';
+  advantage?: boolean;
+  /** Offered only while an effect with this name is active. */
+  requiresEffect?: string;
+  /** Removes the effect with this name when the button is used. */
+  endEffect?: string;
+  /** Opens the damage dialog for a spell: Proficiency dice of the given die unless fixed. */
+  damage?: { dice: string; fixed?: boolean; extraDice?: number };
+  description?: string;
 }
 
 export interface Automation {
+  rest?: {
+    extraMoves?: number;
+    longMovesInShort?: boolean;
+    passives?: RestBenefit[];
+    modifiers?: RestMoveModifier[];
+  };
+  rollTriggers?: RollTrigger[];
   modifiers?: Modifier[];
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   actions?: ActionDef[];
+  resources?: ResourceDef[];
+  creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[] };
+  rollOptions?: RollOption[];
+  damage?: { extraDice: number; dropLowest: number };
+  /** Options offered in the incoming-damage dialog (see damage.ts). */
+  mitigation?: MitigationOption[];
+}
+
+export interface RestBenefit extends ActionDef {
+  defaultOn: boolean;
+  rest?: RestKind;
+  extraMoves?: number;
+  reroll?: boolean;
+  consumeItem?: boolean;
+  move?: string;
+  bonus?: number;
+  condition?: 'noRecovery' | 'armorMarked';
+}
+
+export interface RestMoveModifier {
+  move: string;
+  rest?: RestKind;
+  target?: 'ally';
+  bonus?: number;
+  steps?: Step[];
+  note?: string;
 }
 
 export interface ActiveEffect extends EffectDef {
@@ -66,13 +149,33 @@ export function automationSources(c: CharacterSheet): Automation[] {
   c.features.forEach((f) => add(f.automation));
   c.heritage.forEach((f) => add(f.automation));
   c.loadout.forEach((d) => add(d.automation));
+  c.inventory.filter((i) => i.qty > 0).forEach((i) => add(i.automation));
   return out;
+}
+
+export function resourceDefinitions(c: CharacterSheet): ResourceDef[] {
+  return [...new Map(automationSources(c).flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
+}
+
+export function syncResources(c: CharacterSheet): void {
+  c.resources ??= {};
+  for (const r of resourceDefinitions(c)) {
+    const max = r.max === undefined ? Infinity : Math.max(0, evalValue(r.max, c));
+    const value = c.resources[r.id] ?? evalValue(r.initial, c);
+    c.resources[r.id] = Math.max(0, Math.min(max, value));
+  }
 }
 
 function allModifiers(c: CharacterSheet): Modifier[] {
   const mods = automationSources(c).flatMap((a) => a.modifiers ?? []);
   for (const e of c.effects) mods.push(...(e.modifiers ?? []));
   return mods;
+}
+
+let gmFear = 0;
+/** The GM's current Fear count (0-12), supplied by the host; `@fear` values read it. */
+export function setGmFear(n: number | undefined): void {
+  gmFear = Math.max(0, Math.floor(n ?? 0));
 }
 
 export function evalValue(value: ModValue | undefined, c: CharacterSheet): number {
@@ -84,6 +187,8 @@ export function evalValue(value: ModValue | undefined, c: CharacterSheet): numbe
   const key = m[2].toLowerCase();
   let n = 0;
   if (key === 'tier') n = tierOf(c.level);
+  else if (key === 'fear') n = gmFear;
+  else if (key.startsWith('cards_')) n = [...c.loadout, ...c.vault].filter((d) => d.domain.toLowerCase() === key.slice(6)).length;
   else if (key === 'level') n = c.level;
   else if (key === 'proficiency') n = c.proficiency.on;
   else if (key === 'spellcast') n = c.traits.find((t) => t.spellcast)?.mod ?? 0;
@@ -126,13 +231,14 @@ export function derivedStats(c: CharacterSheet): DerivedStats {
 export interface StatSource { label: string; value: number }
 
 /** Named sources of passive modifiers (equipped gear, features, loadout cards and active effects). */
-function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automation; mods?: Modifier[] }> {
+function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automation; mods?: Modifier[]; weapon?: CharacterSheet['activeWeapons'][number] }> {
   return [
     ...(c.activeArmor ? [{ name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
-    ...c.activeWeapons.map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation })),
+    ...c.activeWeapons.map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
     ...c.features.map((f) => ({ name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ name: f.name, auto: f.automation })),
     ...c.loadout.map((d) => ({ name: d.name, auto: d.automation })),
+    ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ name: i.name, auto: i.automation })),
     ...c.effects.map((e) => ({ name: e.name, mods: e.modifiers })),
   ];
 }
@@ -167,6 +273,7 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
+  syncResources(c);
   const d = derivedStats(c);
   c.armorTrack.slots = Math.min(c.armorTrack.total, d.armorSlots);
   c.armorTrack.on = Math.min(c.armorTrack.on, c.armorTrack.slots);
@@ -183,20 +290,125 @@ export interface RollBonus {
 }
 
 /** Collects roll modifiers matching any of the targets (for example ['attack', 'trait:Finesse']). */
-export function rollBonus(c: CharacterSheet, targets: string[]): RollBonus {
+export function rollBonus(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number], withConsumables = true): RollBonus {
   const out: RollBonus = { value: 0, dice: [], applied: [], names: [], contributions: [] };
   const take = (m: Modifier, name: string, effect?: ActiveEffect) => {
     if (!m.roll || !targets.includes(m.roll)) return;
+    if (m.consume && !withConsumables) return;
     const v = evalValue(m.value, c);
     out.value += v;
-    if (m.dice) out.dice.push(m.dice);
-    out.names.push(`${name} ${m.dice ? `+${m.dice}` : v >= 0 ? `+${v}` : v}`);
-    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${m.dice ? `+${m.dice.startsWith('d') ? `1${m.dice}` : m.dice}` : ''}` });
+    const level = Object.keys(m.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
+    const dice = level === undefined ? m.dice : m.diceByLevel![String(level)];
+    if (dice) out.dice.push(dice);
+    out.names.push(`${name} ${dice ? `+${dice}` : v >= 0 ? `+${v}` : v}`);
+    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}` });
     if (effect && m.consume) out.applied.push({ effect, modifier: m });
   };
   for (const e of c.effects) for (const m of e.modifiers ?? []) take(m, e.name, e);
-  for (const s of namedSources(c)) for (const m of s.auto?.modifiers ?? []) take(m, s.name);
+  for (const s of namedSources(c)) {
+    if (weapon && s.weapon && s.weapon !== weapon) continue;
+    for (const m of s.auto?.modifiers ?? []) take(m, s.name);
+  }
   return out;
+}
+
+export interface AvailableRollOption {
+  key: string;
+  source: string;
+  automation: Automation;
+  option: RollOption;
+  item?: CharacterSheet['inventory'][number];
+  /** The option's own effect is already running, so using it again is free. */
+  active?: boolean;
+  /** A prepared single-use bonus (for example a drunk potion): ticked by default, removed once the roll was sent. */
+  prepared?: { effect: ActiveEffect; modifier: Modifier };
+}
+
+/** Optional effects are selected by the player, never inferred from situational prose. */
+export function availableRollOptions(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number]): AvailableRollOption[] {
+  const sources: Array<{ key: string; name: string; auto?: Automation; item?: CharacterSheet['inventory'][number]; weapon?: CharacterSheet['activeWeapons'][number] }> = [
+    ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
+    ...c.activeWeapons.map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
+    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
+    ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
+  ];
+  const prepared: AvailableRollOption[] = c.effects.flatMap((e) => (e.modifiers ?? []).flatMap((modifier, i) => {
+    if (!modifier.consume || !modifier.roll || !targets.includes(modifier.roll)) return [];
+    const option: RollOption = { id: `prepared:${e.id}:${i}`, label: 'prepared', roll: modifier.roll, value: modifier.value, dice: modifier.dice, diceByLevel: modifier.diceByLevel };
+    return [{ key: `effect:${e.id}:${i}`, source: e.name, automation: {}, option, active: true, prepared: { effect: e, modifier } }];
+  }));
+  return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
+    .filter((o) => targets.includes(o.roll))
+    .filter((o) => !s.weapon || o.weapon === 'any' || (o.weapon === 'primary' || o.weapon === 'secondary'
+      ? weapon?.slot.toLowerCase() === o.weapon
+      : !weapon || weapon === s.weapon))
+    .map((option) => ({
+      key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
+      source: s.name, automation: option.uses ? { ...s.auto!, uses: option.uses } : s.auto!, option,
+      item: s.item,
+      active: !!option.effect && c.effects.some((e) => e.name === option.effect!.name),
+    })))];
+}
+
+export function rollOptionDice(c: CharacterSheet, option: RollOption): string | undefined {
+  const level = Object.keys(option.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
+  return level === undefined ? option.dice : option.diceByLevel![String(level)];
+}
+
+export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: AvailableRollOption[]): RollBonus {
+  const out = { ...base, dice: [...base.dice], names: [...base.names], contributions: [...base.contributions] };
+  for (const { source, option } of selected) {
+    const value = evalValue(option.value, c);
+    const dice = rollOptionDice(c, option);
+    const label = `${source} - ${option.label}`.slice(0, 120);
+    out.value += value;
+    if (dice) out.dice.push(dice);
+    out.names.push(label);
+    out.contributions.push({ label, expression: `${value}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}` });
+  }
+  return out;
+}
+
+export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOption[], experience = false): string | null {
+  const cost: Record<string, number> = experience ? { hope: 1 } : {};
+  const uses = new Map<string, number>();
+  const items = new Map<CharacterSheet['inventory'][number], number>();
+  for (const s of selected) {
+    if (s.active) continue;
+    const block = actionBlocker(c, s.key, s.automation, s.option);
+    if (block) return block;
+    if (s.item && (!c.inventory.includes(s.item) || s.item.qty <= 0)) return `${s.source}: none left`;
+    if (s.option.consumeItem && s.item) items.set(s.item, (items.get(s.item) ?? 0) + 1);
+    if (s.automation.uses) {
+      const count = (uses.get(s.key) ?? 0) + 1;
+      uses.set(s.key, count);
+      if (count > usesLeft(c, s.key, s.automation)!) return `${s.source}: not enough uses left`;
+    }
+    for (const [res, value] of Object.entries(s.option.cost ?? {})) cost[res] = (cost[res] ?? 0) + evalValue(value, c);
+  }
+  for (const [item, count] of items) if (item.qty < count) return `${item.name}: not enough inventory`;
+  return costBlocker(c, cost);
+}
+
+/** Commit only after the send succeeded and the entire selection was checked together. */
+export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false): void {
+  const blocker = selectionBlocker(c, selected, experience);
+  if (blocker) throw new Error(blocker);
+  if (experience) c.hope.on--;
+  for (const s of selected) {
+    if (s.prepared) {
+      const { effect, modifier } = s.prepared;
+      effect.modifiers = (effect.modifiers ?? []).filter((m) => m !== modifier);
+      if (!effect.modifiers.length && c.effects.includes(effect)) c.effects.splice(c.effects.indexOf(effect), 1);
+      continue;
+    }
+    if (s.active) continue;
+    const steps = s.option.effect ? [...(s.option.steps ?? []), { op: 'effect' as const, effect: s.option.effect }] : s.option.steps;
+    runAction(c, s.key, s.automation, { ...s.option, steps }, s.source);
+    if (s.option.consumeItem && s.item) s.item.qty--;
+  }
 }
 
 export function traitContributions(c: CharacterSheet, name: TraitName): RollContribution[] {
@@ -208,8 +420,8 @@ export function traitContributions(c: CharacterSheet, name: TraitName): RollCont
 
 export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number], bonus: RollBonus): RollContribution[] {
   const proficiency = derivedStats(c).proficiency;
-  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] });
-  const parts = /^(\d+d\d+)([+-]\d+)?$/i.exec(base);
+  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] }, weapon.automation?.damage, weapon.fixedDice);
+  const parts = /^(\d+d\d+(?:kh\d+)?)([+-]\d+)?$/i.exec(base);
   const sources = statSources(c, 'proficiency');
   const raw = c.proficiency.on + sources.reduce((n, s) => n + s.value, 0);
   const diceCount = (n: number) => `${n >= 0 ? '+' : ''}${n} ${Math.abs(n) === 1 ? 'die' : 'dice'}`;
@@ -217,6 +429,7 @@ export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['a
     { label: 'Base Proficiency', impact: `${c.proficiency.on} dice` },
     ...sources.map((s) => ({ label: s.label.slice(0, 120), impact: diceCount(s.value) })),
     ...(raw < 1 ? [{ label: 'Minimum Proficiency', impact: diceCount(1 - raw) }] : []),
+    ...(weapon.automation?.damage ? [{ label: weapon.feature?.name ?? weapon.name, impact: `Roll ${weapon.automation.damage.extraDice} extra; discard ${weapon.automation.damage.dropLowest} lowest` }] : []),
   ];
   return [
     { label: `${weapon.name} damage (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, ...(parts ? { notes } : {}) },
@@ -268,29 +481,66 @@ export function usesLeft(c: CharacterSheet, key: string, a: Automation): number 
   return Math.max(0, a.uses.max - (c.usage[key]?.used ?? 0));
 }
 
-export function costText(cost?: ActionDef['cost']): string {
+export function costText(cost?: ActionDef['cost'], c?: CharacterSheet): string {
   if (!cost) return '';
   const parts: string[] = [];
-  if (cost.hope) parts.push(`${cost.hope} Hope`);
-  if (cost.stress) parts.push(`${cost.stress} Stress`);
-  if (cost.armor) parts.push(`${cost.armor} Armor Slot`);
-  if (cost.hp) parts.push(`${cost.hp} HP`);
+  const labels: Record<string, string> = { hope: 'Hope', stress: 'Stress', armor: 'Armor Slot', hp: 'HP' };
+  for (const [res, value] of Object.entries(cost)) {
+    if (value === undefined) continue;
+    const n = c ? evalValue(value, c) : value;
+    if (n) parts.push(`${n} ${labels[res] ?? (c && resourceDefinitions(c).find((r) => r.id === res)?.label) ?? res}`);
+  }
   return parts.join(', ');
 }
 
 function track(c: CharacterSheet, r: Resource) {
-  return r === 'hp' ? c.hp : r === 'stress' ? c.stress : r === 'hope' ? c.hope : c.armorTrack;
+  return r === 'hp' ? c.hp : r === 'stress' ? c.stress : r === 'hope' ? c.hope : r === 'armor' ? c.armorTrack : undefined;
+}
+
+function costBlocker(c: CharacterSheet, cost: ActionDef['cost']): string | null {
+  syncResources(c);
+  for (const [res, value] of Object.entries(cost ?? {})) {
+    const n = evalValue(value, c);
+    if (!Number.isFinite(n) || n < 0) return `Invalid ${res} cost`;
+    const t = track(c, res);
+    if (t) {
+      if (res === 'hope' ? t.on < n : t.on + n > t.slots) return res === 'hope' ? 'Not enough Hope' : `Not enough free ${res === 'armor' ? 'Armor Slots' : res.toUpperCase()}`;
+    } else {
+      const def = resourceDefinitions(c).find((r) => r.id === res);
+      if (!def) return `Resource unavailable: ${res}`;
+      if ((c.resources?.[res] ?? 0) < n) return `Not enough ${def.label}`;
+    }
+  }
+  return null;
+}
+
+function payCost(c: CharacterSheet, cost: ActionDef['cost']): void {
+  for (const [res, value] of Object.entries(cost ?? {})) {
+    const n = evalValue(value, c);
+    const t = track(c, res);
+    if (t) t.on += res === 'hope' ? -n : n;
+    else c.resources![res] -= n;
+  }
+}
+
+export function isRestOnlyAction(action: ActionDef): boolean {
+  return action.timing === 'downtime' || action.timing === 'rest';
+}
+
+export function sheetActions(a: Automation | undefined): ActionDef[] {
+  return (a?.actions ?? []).filter((action) => !isRestOnlyAction(action));
 }
 
 /** Returns why the action cannot be used, or null when it can. */
-export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef): string | null {
+export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (context !== 'rest' && isRestOnlyAction(action)) return 'Choose this move in the rest dialog';
+  if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return 'No uses left until a rest';
-  for (const [res, n] of Object.entries(action.cost ?? {}) as Array<[Resource, number]>) {
-    const t = track(c, res);
-    if (res === 'hope' ? t.on < n : t.on + n > t.slots) return res === 'hope' ? 'Not enough Hope' : `Not enough free ${res === 'armor' ? 'Armor Slots' : res.toUpperCase()}`;
+  for (const step of action.steps ?? []) {
+    if (step.resource && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
   }
-  return null;
+  return costBlocker(c, action.cost);
 }
 
 export type DiceRoll = (expression: string) => number;
@@ -309,15 +559,12 @@ export const rollLocal: DiceRoll = (expression) => {
 };
 
 /** Runs an action: pays costs, counts the use, executes steps. Returns a chat-friendly summary. */
-export function runAction(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal): string | null {
-  if (actionBlocker(c, key, a, action)) return null;
+export function runAction(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (actionBlocker(c, key, a, action, context)) return null;
+  if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const log: string[] = [];
-  for (const [res, n] of Object.entries(action.cost ?? {}) as Array<[Resource, number]>) {
-    const t = track(c, res);
-    if (res === 'hope') t.on -= n;
-    else t.on += n;
-  }
-  const cost = costText(action.cost);
+  payCost(c, action.cost);
+  const cost = costText(action.cost, c);
   if (cost) log.push(`spent ${cost}`);
   if (a.uses) {
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
@@ -326,18 +573,31 @@ export function runAction(c: CharacterSheet, key: string, a: Automation, action:
   }
   for (const step of action.steps ?? []) {
     const t = step.resource ? track(c, step.resource) : null;
+    const amount = (fallback: number) => typeof step.amount === 'number' ? step.amount
+      : step.amount && /\d*d\d+/i.test(step.amount)
+        ? roll(step.amount.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c))))
+        : step.amount ? evalValue(step.amount, c) : fallback;
+    if (step.resource && !t) {
+      const def = resourceDefinitions(c).find((r) => r.id === step.resource)!;
+      const before = c.resources![def.id];
+      const n = Math.max(0, step.amount === 'all' ? before : amount(1));
+      const max = def.max === undefined ? Infinity : Math.max(0, evalValue(def.max, c));
+      c.resources![def.id] = step.op === 'gain' ? Math.min(max, before + n) : Math.max(0, before - n);
+      log.push(`${step.op === 'gain' ? 'gained' : 'spent'} ${Math.abs(c.resources![def.id] - before)} ${def.label}`);
+      continue;
+    }
     if (step.op === 'clear' && t && step.resource) {
-      const n = step.amount === 'all' ? t.on : typeof step.amount === 'number' ? step.amount : roll(String(step.amount));
-      const cleared = Math.min(t.on, n);
+      const n = step.amount === 'all' ? t.on : amount(1);
+      const cleared = Math.min(t.on, Math.max(0, n));
       t.on -= cleared;
-      log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : 'Stress'}${typeof step.amount === 'string' && step.amount !== 'all' ? ` (${step.amount})` : ''}`);
+      log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : 'Stress'}${typeof step.amount === 'string' && step.amount !== 'all' ? ` (${step.amount})` : ''}`);
     } else if (step.op === 'gain' && t && step.resource) {
-      const n = typeof step.amount === 'number' ? step.amount : roll(String(step.amount ?? 1));
+      const n = Math.max(0, amount(1));
       const before = t.on;
       t.on = Math.min(t.slots, t.on + n);
       log.push(`gained ${t.on - before} ${step.resource === 'hope' ? 'Hope' : step.resource}`);
     } else if (step.op === 'mark' && t && step.resource) {
-      const n = typeof step.amount === 'number' ? step.amount : 1;
+      const n = Math.max(0, amount(1));
       t.on = Math.min(t.slots, t.on + n);
       log.push(`marked ${n} ${step.resource}`);
     } else if (step.op === 'effect' && step.effect) {
@@ -349,14 +609,70 @@ export function runAction(c: CharacterSheet, key: string, a: Automation, action:
 }
 
 /** Parses a weapon damage string like "d8+1" or "1d10+2" against the proficiency (dice count). */
-export function damageExpression(damage: string, proficiency: number, extra: RollBonus): string {
+export function damageExpression(damage: string, proficiency: number, extra: RollBonus, pool?: Automation['damage'], fixed = false): string {
   const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(damage.replace(/\s/g, ''));
-  let e = m ? `${proficiency}d${m[2]}${m[3] ?? ''}` : damage;
+  const count = fixed && m ? Number(m[1] || 1) : proficiency + (pool?.extraDice ?? 0);
+  const keep = count - (pool?.dropLowest ?? 0);
+  let e = m ? `${count}d${m[2]}${pool?.dropLowest ? `kh${keep}` : ''}${m[3] ?? ''}` : damage;
   if (extra.value) e += extra.value > 0 ? `+${extra.value}` : `${extra.value}`;
   for (const d of extra.dice) e += `+${d.startsWith('d') ? `1${d}` : d}`;
   return e;
 }
 
+/** Extra damage of a critical hit: the maximum result of the (kept) damage dice, never the modifiers. */
+export function criticalBonus(expression: string): number {
+  let sum = 0;
+  for (const m of expression.matchAll(/(?:^|\+)(\d+)d(\d+)(?:kh(\d+))?/gi)) sum += Number(m[3] ?? m[1]) * Number(m[2]);
+  return sum;
+}
+
+/** True when a spell's text asks the player to make a Spellcast Roll (not merely mentions one). */
+export function asksSpellcastRoll(text: string): boolean {
+  return /\b(make|makes|made|roll|rolls|cast)\b[^.]{0,40}spellcast roll/i.test(text);
+}
+
 export function isTrait(name: string): name is TraitName {
   return TRAIT_SET.has(name);
+}
+
+export interface RollContext {
+  /** Comma separated roll targets of the original roll, for example `attack,trait:Agility,action`. */
+  source: string;
+  hope: number;
+  fear: number;
+  total: number;
+}
+
+export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
+
+function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
+  if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
+  // Players never know the difficulty, so any roll may have failed (Hope rolls and criticals included).
+  const failed = true;
+  switch (t.when ?? 'always') {
+    case 'fear': return ctx.fear > ctx.hope;
+    case 'hope': return ctx.hope > ctx.fear;
+    case 'failure': return failed;
+    case 'hopeDie': return ctx.hope === t.die;
+    case 'dieMatches': {
+      const n = t.matchResource ? c.resources?.[t.matchResource] ?? 0 : 0;
+      return n > 0 && (ctx.hope === n || ctx.fear === n);
+    }
+    default: return true;
+  }
+}
+
+/** Buttons the character's features offer on a finished roll. */
+export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): AvailableRollTrigger[] {
+  const sources: Array<{ key: string; name: string; auto?: Automation }> = [
+    ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
+    ...c.activeWeapons.map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation })),
+    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
+    ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
+  ];
+  return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => triggerApplies(c, t, ctx))
+    .map((trigger) => ({ key: s.key, source: s.name, automation: s.auto!, trigger })));
 }

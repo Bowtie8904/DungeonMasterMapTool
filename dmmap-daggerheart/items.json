@@ -8,7 +8,39 @@
    "id": "premium-bedroll",
    "name": "Premium Bedroll",
    "rarity": "Common",
-   "text": "During downtime, you automatically clear a Stress."
+   "text": "During downtime, you automatically clear a Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime",
+      "label": "Downtime: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ],
+      "timing": "rest"
+     }
+    ],
+    "rest": {
+     "passives": [
+      {
+       "id": "recovery",
+       "label": "clear 1 Stress",
+       "defaultOn": true,
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "stress",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    }
+   }
   },
   {
    "id": "piper-whistle",
@@ -20,7 +52,18 @@
    "id": "charging-quiver",
    "name": "Charging Quiver",
    "rarity": "Uncommon",
-   "text": "When you succeed on an attack with an arrow stored in this quiver, gain a bonus to the damage roll equal to your current tier."
+   "text": "When you succeed on an attack with an arrow stored in this quiver, gain a bonus to the damage roll equal to your current tier.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "quiver",
+      "label": "Charging Quiver",
+      "roll": "damage",
+      "value": "@tier",
+      "description": "Only a successful attack with an arrow stored in this quiver."
+     }
+    ]
+   }
   },
   {
    "id": "alistairs-torch",
@@ -99,14 +142,17 @@
    "rarity": "Common",
    "text": "Three times per rest when you succeed on an attack with one of these arrows, you can add your Proficiency to the damage roll.",
    "automation": {
-    "uses": {
-     "max": 3,
-     "per": "rest"
-    },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Use"
+      "id": "piercing",
+      "label": "Piercing Arrows",
+      "roll": "damage",
+      "value": "@proficiency",
+      "description": "Only a successful attack with one of these arrows.",
+      "uses": {
+       "max": 3,
+       "per": "rest"
+      }
      }
     ]
    }
@@ -115,7 +161,24 @@
    "id": "valorstone",
    "name": "Valorstone",
    "rarity": "Common",
-   "text": "You can attach this stone to armor that doesn’t already have a feature. The armor gains the following feature. Resilient: Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot."
+   "text": "You can attach this stone to armor that doesn’t already have a feature. The armor gains the following feature. Resilient: Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "valorstone",
+      "label": "Valorstone",
+      "passive": true,
+      "when": {
+       "lastArmor": true
+      },
+      "roll": {
+       "sides": 6,
+       "success": 6
+      },
+      "saveArmor": 1
+     }
+    ]
+   }
   },
   {
    "id": "skeleton-key",
@@ -133,13 +196,31 @@
    "id": "minor-stamina-potion-recipe",
    "name": "Minor Stamina Potion Recipe",
    "rarity": "Common",
-   "text": "As a downtime move, you can use the bone of a creature to craft a Minor Stamina Potion."
+   "text": "As a downtime move, you can use the bone of a creature to craft a Minor Stamina Potion.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "minor-health-potion-recipe",
    "name": "Minor Health Potion Recipe",
    "rarity": "Common",
-   "text": "As a downtime move, you can use a vial of blood to craft a Minor Health Potion."
+   "text": "As a downtime move, you can use a vial of blood to craft a Minor Health Potion.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "homing-compasses",
@@ -175,7 +256,18 @@
    "id": "lorekeeper",
    "name": "Lorekeeper",
    "rarity": "Uncommon",
-   "text": "You can store the name and details of up to three hostile creatures inside this book. You gain a +1 bonus to action rolls against those creatures."
+   "text": "You can store the name and details of up to three hostile creatures inside this book. You gain a +1 bonus to action rolls against those creatures.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "lorekeeper",
+      "label": "Lorekeeper",
+      "roll": "action",
+      "value": 1,
+      "description": "Only against one of up to three hostile creatures recorded in the book."
+     }
+    ]
+   }
   },
   {
    "id": "vial-of-darksmoke-recipe",
@@ -186,10 +278,11 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Craft a Vial of Darksmoke",
       "cost": {
        "stress": 1
-      }
+      },
+      "timing": "downtime"
      }
     ]
    }
@@ -273,6 +366,15 @@
       "id": "use",
       "label": "Use"
      }
+    ],
+    "mitigation": [
+     {
+      "id": "ring",
+      "label": "Ring of Resistance",
+      "description": "Resistance to the incoming damage.",
+      "halve": true,
+      "uses": "source"
+     }
     ]
    }
   },
@@ -341,6 +443,11 @@
       "cost": {
        "hope": 1
       }
+     },
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
      }
     ]
    }
@@ -390,37 +497,85 @@
    "id": "stride-relic",
    "name": "Stride Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Agility. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Agility. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Agility",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "bolster-relic",
    "name": "Bolster Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Strength. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Strength. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Strength",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "control-relic",
    "name": "Control Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Finesse. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Finesse. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Finesse",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "attune-relic",
    "name": "Attune Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Instinct. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Instinct. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Instinct",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "charm-relic",
    "name": "Charm Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Presence. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Presence. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Presence",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "enlighten-relic",
    "name": "Enlighten Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to your Knowledge. You can only carry one relic."
+   "text": "You gain a +1 bonus to your Knowledge. You can only carry one relic.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "trait.Knowledge",
+      "value": 1
+     }
+    ]
+   }
   },
   {
    "id": "honing-relic",
@@ -450,7 +605,16 @@
    "id": "mythic-dust-recipe",
    "name": "Mythic Dust Recipe",
    "rarity": "Legendary",
-   "text": "As a downtime move, you can use a handful of fine gold dust to craft Mythic Dust."
+   "text": "As a downtime move, you can use a handful of fine gold dust to craft Mythic Dust.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "shard-of-memory",
@@ -458,10 +622,6 @@
    "rarity": "Legendary",
    "text": "Once per long rest, you can spend 2 Hope to recall a domain card from your vault instead of paying its Recall Cost.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
     "actions": [
      {
       "id": "use",
@@ -536,10 +696,6 @@
    "rarity": "Legendary",
    "text": "Once per session, you can spend 5 Hope to lead a Tag Team Roll with three PCs instead of two.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "session"
-    },
     "actions": [
      {
       "id": "use",
@@ -555,7 +711,42 @@
    "id": "alconite-crystal",
    "name": "Alconite Crystal",
    "rarity": "Common",
-   "text": "You can expend the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. You can recharge it as a downtime move by immersing it in salt water."
+   "text": "You can expend the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. You can recharge it as a downtime move by immersing it in salt water.",
+   "automation": {
+    "resources": [
+     {
+      "id": "alconite",
+      "label": "Alconite charge",
+      "initial": 1,
+      "max": 1
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "crystal",
+      "label": "Alconite Crystal",
+      "roll": "spellcast",
+      "dice": "1d4",
+      "cost": {
+       "alconite": 1
+      }
+     }
+    ],
+    "actions": [
+     {
+      "id": "recharge",
+      "label": "Downtime in salt water: recharge",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "alconite",
+        "amount": 1
+       }
+      ],
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "anchoring-hook",
@@ -644,7 +835,16 @@
    "id": "croakroot-pad",
    "name": "Croakroot Pad",
    "rarity": "Rare",
-   "text": "As a downtime move you can meditate on this pad to ask the GM a question about your past or future. Until your next rest you take 1d6 magic damage whenever you make an Insight Roll with Fear."
+   "text": "As a downtime move you can meditate on this pad to ask the GM a question about your past or future. Until your next rest you take 1d6 magic damage whenever you make an Insight Roll with Fear.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "detuner",
@@ -790,7 +990,16 @@
    "id": "quill-of-memory",
    "name": "Quill of Memory",
    "rarity": "Common",
-   "text": "You can write up to a hundred words with this quill as a downtime move. They don’t appear on the page but are etched into your mind. No effect can erase them, and you don’t need to make a roll to recall them."
+   "text": "You can write up to a hundred words with this quill as a downtime move. They don’t appear on the page but are etched into your mind. No effect can erase them, and you don’t need to make a roll to recall them.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "red-nose-of-hope",
@@ -886,7 +1095,24 @@
    "id": "superior-alconite-crystal",
    "name": "Superior Alconite Crystal",
    "rarity": "Uncommon",
-   "text": "You can use the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. If you roll a 4, the energy is expended and it can’t be reused until you recharge it as a downtime move by immersing it in salt water."
+   "text": "You can use the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. If you roll a 4, the energy is expended and it can’t be reused until you recharge it as a downtime move by immersing it in salt water.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "crystal",
+      "label": "Superior Alconite Crystal",
+      "roll": "spellcast",
+      "dice": "1d4"
+     }
+    ],
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "tarrasque-sinew",
@@ -922,7 +1148,16 @@
    "id": "tome-of-ancient-knowledge",
    "name": "Tome of Ancient Knowledge",
    "rarity": "Legendary",
-   "text": "As a downtime project (7) you can read this book to permanently increase your Knowledge modifier by +1. Once you do this, the book’s pages turn blank."
+   "text": "As a downtime project (7) you can read this book to permanently increase your Knowledge modifier by +1. Once you do this, the book’s pages turn blank.",
+   "automation": {
+    "actions": [
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
+     }
+    ]
+   }
   },
   {
    "id": "tortoise-horn",
@@ -1008,6 +1243,11 @@
      {
       "id": "use",
       "label": "Use"
+     },
+     {
+      "id": "downtime-narrative",
+      "label": "Narrative downtime move",
+      "timing": "downtime"
      }
     ]
    }
@@ -1045,7 +1285,30 @@
    "id": "potioncraft-kit",
    "name": "Potioncraft Kit",
    "rarity": "Common",
-   "text": "As an additional downtime move, you may choose to forage for ingredients that can be used in potioncraft. Roll a d4 and add your Instinct. You collect a number of ingredients equal to the result of this roll. For each collected ingredient, roll a d6 to determine its properties when used in a potion. Work with the GM to describe these ingredients and add them to your inventory.\n\n1. Heal: Clear 2 Hit Points (2d8 direct physical damage if inverted);\n2. Soothe: Clear 2 Stress;\n3. Empower: You gain a +2 bonus to your next damage roll;\n4. Enhance: You gain a +1 bonus to your next action or reaction roll\n5. Bolster: Double the effectiveness of all ingredients in the potion;\n6. Invert: All ingredient effects become harmful (Mark a Stress or Hit Point instead of clearing it, receive a -1 penalty to the next Roll instead of a +1 bonus, etc.);\n\nWhen you take the “Work on a Project” downtime move, you may create a potion using gathered ingredients. The number of ingredients you can include in a potion equals your Proficiency, and the project’s Countdown duration is equal to the number of included ingredients. The difficulty is 10 + the number of ingredients.\n\nBy default, a potion must be ingested to take effect. However, you may alter the potion for it to activate on contact or disperse as a gas and affect all creatures within Close range of the impact point. If you do so, double the project’s Countdown."
+   "text": "As an additional downtime move, you may choose to forage for ingredients that can be used in potioncraft. Roll a d4 and add your Instinct. You collect a number of ingredients equal to the result of this roll. For each collected ingredient, roll a d6 to determine its properties when used in a potion. Work with the GM to describe these ingredients and add them to your inventory.\n\n1. Heal: Clear 2 Hit Points (2d8 direct physical damage if inverted);\n2. Soothe: Clear 2 Stress;\n3. Empower: You gain a +2 bonus to your next damage roll;\n4. Enhance: You gain a +1 bonus to your next action or reaction roll\n5. Bolster: Double the effectiveness of all ingredients in the potion;\n6. Invert: All ingredient effects become harmful (Mark a Stress or Hit Point instead of clearing it, receive a -1 penalty to the next Roll instead of a +1 bonus, etc.);\n\nWhen you take the “Work on a Project” downtime move, you may create a potion using gathered ingredients. The number of ingredients you can include in a potion equals your Proficiency, and the project’s Countdown duration is equal to the number of included ingredients. The difficulty is 10 + the number of ingredients.\n\nBy default, a potion must be ingested to take effect. However, you may alter the potion for it to activate on contact or disperse as a gas and affect all creatures within Close range of the impact point. If you do so, double the project’s Countdown.",
+   "automation": {
+    "actions": [
+     {
+      "id": "ingredients",
+      "label": "Forage for ingredients",
+      "timing": "downtime",
+      "downtime": {
+       "table": {
+        "repeat": "1d4+@instinct",
+        "expression": "1d6",
+        "outcomes": [
+         "Heal",
+         "Soothe",
+         "Empower",
+         "Enhance",
+         "Bolster",
+         "Invert"
+        ]
+       }
+      }
+     }
+    ]
+   }
   },
   {
    "id": "alchemy-jug",
@@ -1439,7 +1702,39 @@
    "id": "insomniacs-periapt",
    "name": "Insomniac’s Periapt",
    "rarity": "Rare",
-   "text": "When you take a rest without clearing Hit Points or Stress, you gain a +2 bonus to attack and damage rolls until your next rest."
+   "text": "When you take a rest without clearing Hit Points or Stress, you gain a +2 bonus to attack and damage rolls until your next rest.",
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "vigil",
+       "label": "+2 attack/damage if no HP or Stress was cleared",
+       "defaultOn": true,
+       "condition": "noRecovery",
+       "steps": [
+        {
+         "op": "effect",
+         "effect": {
+          "name": "Insomniac's Periapt",
+          "kind": "buff",
+          "until": "rest",
+          "modifiers": [
+           {
+            "roll": "attack",
+            "value": 2
+           },
+           {
+            "roll": "damage",
+            "value": 2
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   }
   },
   {
    "id": "wildriders-saddle",
@@ -1554,7 +1849,12 @@
    "id": "timekeepers-pendant",
    "name": "Timekeeper’s Pendant",
    "rarity": "Legendary",
-   "text": "You can choose an additional downtime move each rest."
+   "text": "You can choose an additional downtime move each rest.",
+   "automation": {
+    "rest": {
+     "extraMoves": 1
+    }
+   }
   },
   {
    "id": "iron-dagger-pendant",
@@ -1718,13 +2018,16 @@
    "rarity": "Uncommon",
    "text": "Spend a Hope to gain +2 on a roll to use fire, or to influence someone else’s mind. If the effect is from the Codex Domain, roll 1d6. On a result of 4 or higher, you regain the Hope you spent to activate this item.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Use",
+      "id": "carol",
+      "label": "Cursed carol",
+      "roll": "action",
+      "value": 2,
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Only using fire or influencing a mind. For Codex effects roll refund d6 manually (4+ regains Hope)."
      }
     ]
    }

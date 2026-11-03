@@ -82,7 +82,21 @@
    "domain": "Valor",
    "level": 5,
    "recall": 1,
-   "text": "While you’re wearing armor, gain a +1 bonus to your Armor Score.\n\nDuring a rest, when you choose to repair your armor as a downtime move, your allies also clear an Armor Slot."
+   "text": "While you’re wearing armor, gain a +1 bonus to your Armor Score.\n\nDuring a rest, when you choose to repair your armor as a downtime move, your allies also clear an Armor Slot.",
+   "automation": {
+    "rest": {
+     "modifiers": [
+      {
+       "move": "repair",
+       "note": "allies also clear 1 Armor Slot"
+      },
+      {
+       "move": "repair-all",
+       "note": "allies also clear 1 Armor Slot"
+      }
+     ]
+    }
+   }
   },
   {
    "id": "astral-projection",
@@ -212,7 +226,14 @@
     "actions": [
      {
       "id": "use",
-      "label": "Battle-Hardened",
+      "label": "Instead of death move: clear HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ],
       "cost": {
        "hope": 1
       }
@@ -236,7 +257,49 @@
    "domain": "Dread",
    "level": 1,
    "recall": 1,
-   "text": "Make a **Spellcast Roll** against a target within Far range. On a success:\n\n- On a roll with Hope, deal **d6+1** magic damage using your Proficiency. On a roll with Fear, deal **d10+1** magic damage using your Proficiency.\n- The target’s next successful attack deals half damage.\nOn a failure, you must spend a Hope or mark a Stress."
+   "text": "Make a **Spellcast Roll** against a target within Far range. On a success:\n\n- On a roll with Hope, deal **d6+1** magic damage using your Proficiency. On a roll with Fear, deal **d10+1** magic damage using your Proficiency.\n- The target’s next successful attack deals half damage.\nOn a failure, you must spend a Hope or mark a Stress.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "hope-damage",
+      "label": "Blighting Strike: roll d6+1 damage (Hope)",
+      "on": "card:Blighting Strike",
+      "when": "hope",
+      "damage": {
+       "dice": "d6+1"
+      }
+     },
+     {
+      "id": "fear-damage",
+      "label": "Blighting Strike: roll d10+1 damage (Fear)",
+      "on": "card:Blighting Strike",
+      "when": "fear",
+      "damage": {
+       "dice": "d10+1"
+      }
+     },
+     {
+      "id": "fail-hope",
+      "label": "Blighting Strike failed: spend a Hope",
+      "on": "card:Blighting Strike",
+      "cost": {
+       "hope": 1
+      }
+     },
+     {
+      "id": "fail-stress",
+      "label": "Blighting Strike failed: mark a Stress",
+      "on": "card:Blighting Strike",
+      "steps": [
+       {
+        "op": "mark",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "blink-out",
@@ -272,7 +335,35 @@
    "domain": "Blood",
    "level": 1,
    "recall": 1,
-   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **mark a Stress** to deal **d10** magic damage to the target using your Proficiency. On a success with Hope, the target also marks a Stress. On a roll with Fear, **mark a Stress**."
+   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **mark a Stress** to deal **d10** magic damage to the target using your Proficiency. On a success with Hope, the target also marks a Stress. On a roll with Fear, **mark a Stress**.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Blood Spike: mark a Stress, roll d10 damage",
+      "on": "card:Blood Spike",
+      "damage": {
+       "dice": "d10"
+      },
+      "cost": {
+       "stress": 1
+      }
+     },
+     {
+      "id": "fear",
+      "label": "Blood Spike (Fear): mark a Stress",
+      "on": "card:Blood Spike",
+      "when": "fear",
+      "steps": [
+       {
+        "op": "mark",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "blood-touched",
@@ -311,7 +402,18 @@
    "domain": "Valor",
    "level": 2,
    "recall": 1,
-   "text": "You use the full force of your body in a fight. On a successful attack using a weapon with a Melee range, gain a bonus to your damage roll equal to your Strength."
+   "text": "You use the full force of your body in a fight. On a successful attack using a weapon with a Melee range, gain a bonus to your damage roll equal to your Strength.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "basher",
+      "label": "Body Basher",
+      "roll": "damage",
+      "value": "@strength",
+      "description": "Successful attack with a Melee weapon."
+     }
+    ]
+   }
   },
   {
    "id": "bold-presence",
@@ -322,17 +424,21 @@
    "recall": 0,
    "text": "When you make a Presence Roll, you can **spend a Hope** to add your Strength to the roll.\n\nAdditionally, once per rest when you would gain a condition, you can describe how your bold presence aids you in the situation and avoid gaining the condition.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "presence",
       "label": "Bold Presence",
+      "roll": "trait:Presence",
+      "value": "@strength",
       "cost": {
        "hope": 1
       }
+     }
+    ],
+    "actions": [
+     {
+      "id": "avoid",
+      "label": "Once per rest: avoid condition (manual)"
      }
     ]
    }
@@ -344,7 +450,22 @@
    "domain": "Splendor",
    "level": 1,
    "recall": 1,
-   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **spend a Hope** to send a bolt of shimmering light toward them, dealing **d8+2** magic damage using your Proficiency. The target becomes temporarily *Vulnerable* and glows brightly until this condition is cleared."
+   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **spend a Hope** to send a bolt of shimmering light toward them, dealing **d8+2** magic damage using your Proficiency. The target becomes temporarily *Vulnerable* and glows brightly until this condition is cleared.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Bolt Beacon: spend a Hope, roll d8+2 damage",
+      "on": "card:Bolt Beacon",
+      "damage": {
+       "dice": "d8+2"
+      },
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "bone-touched",
@@ -377,7 +498,32 @@
    "domain": "Codex",
    "level": 1,
    "recall": 2,
-   "text": "***Power Push:*** Make a **Spellcast Roll** against a target within Melee range. On a success, they’re knocked back to Far range and take **d10+2** magic damage using your Proficiency.\n\n***Tava’s Armor:*Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again.\n\n***Ice Spike:*** Make a **Spellcast Roll (12)** to summon a large ice spike within Far range. If you use it as a weapon, make the Spellcast Roll against the target’s Difficulty instead. On a success, deal **d6** physical damage using your Proficiency."
+   "text": "***Power Push:*** Make a **Spellcast Roll** against a target within Melee range. On a success, they’re knocked back to Far range and take **d10+2** magic damage using your Proficiency.\n\n***Tava’s Armor:*** **Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again.\n\n***Ice Spike:*** Make a **Spellcast Roll (12)** to summon a large ice spike within Far range. If you use it as a weapon, make the Spellcast Roll against the target’s Difficulty instead. On a success, deal **d6** physical damage using your Proficiency.",
+   "spells": [
+    {
+     "name": "Power Push",
+     "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, they’re knocked back to Far range and take **d10+2** magic damage using your Proficiency."
+    },
+    {
+     "name": "Tava’s Armor",
+     "text": "**Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Tava’s Armor",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Ice Spike",
+     "text": "Make a **Spellcast Roll (12)** to summon a large ice spike within Far range. If you use it as a weapon, make the Spellcast Roll against the target’s Difficulty instead. On a success, deal **d6** physical damage using your Proficiency."
+    }
+   ]
   },
   {
    "id": "book-of-exota",
@@ -386,19 +532,40 @@
    "domain": "Codex",
    "level": 4,
    "recall": 3,
-   "text": "***Repudiate:*** You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided.\n\n***Create Construct:*Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Exota"
+   "text": "***Repudiate:*** You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided.\n\n***Create Construct:*** **Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage.",
+   "spells": [
+    {
+     "name": "Repudiate",
+     "text": "You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Repudiate"
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Create Construct",
+     "text": "**Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Create Construct",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "book-of-grynn",
@@ -407,19 +574,33 @@
    "domain": "Codex",
    "level": 4,
    "recall": 2,
-   "text": "***Arcane Deflection:*** Once per long rest, **spend a **Hope to negate the damage of an attack targeting you or an ally within Very Close range.\n\n***Time Lock:*** Target an object within Far range. That object stops in time and space exactly where it is until your next rest. If a creature tries to move it, make a **Spellcast Roll** against them to maintain this spell.\n\n***Wall of Flame:*** Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Grynn"
+   "text": "***Arcane Deflection:*** Once per long rest, **spend a Hope** to negate the damage of an attack targeting you or an ally within Very Close range.\n\n***Time Lock:*** Target an object within Far range. That object stops in time and space exactly where it is until your next rest. If a creature tries to move it, make a **Spellcast Roll** against them to maintain this spell.\n\n***Wall of Flame:*** Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage.",
+   "spells": [
+    {
+     "name": "Arcane Deflection",
+     "text": "Once per long rest, **spend a Hope** to negate the damage of an attack targeting you or an ally within Very Close range.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Arcane Deflection"
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Time Lock",
+     "text": "Target an object within Far range. That object stops in time and space exactly where it is until your next rest. If a creature tries to move it, make a **Spellcast Roll** against them to maintain this spell."
+    },
+    {
+     "name": "Wall of Flame",
+     "text": "Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage."
+    }
+   ]
   },
   {
    "id": "book-of-homet",
@@ -429,18 +610,40 @@
    "level": 7,
    "recall": 0,
    "text": "***Pass Through:*** Make a **Spellcast Roll (13)**. Once per rest on a success, you and all creatures touching you can pass through a wall or door within Close range. The effect ends once everyone is on the other side.\n\n***Plane Gate:*** Make a **Spellcast Roll (14)**. Once per long rest on a success, open a gateway to a location in another dimension or plane of existence you’ve been to before. This gateway lasts until your next rest.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Homet"
+   "spells": [
+    {
+     "name": "Pass Through",
+     "text": "Make a **Spellcast Roll (13)**. Once per rest on a success, you and all creatures touching you can pass through a wall or door within Close range. The effect ends once everyone is on the other side.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Pass Through"
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Plane Gate",
+     "text": "Make a **Spellcast Roll (14)**. Once per long rest on a success, open a gateway to a location in another dimension or plane of existence you’ve been to before. This gateway lasts until your next rest.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Plane Gate"
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "book-of-illiat",
@@ -449,19 +652,44 @@
    "domain": "Codex",
    "level": 1,
    "recall": 2,
-   "text": "***Slumber:*** Make a **Spellcast Roll** against a target within Very Close range. On a success, they’re *Asleep* until they take damage or the GM spends a **Fear** on their turn to clear this condition.\n\n***Arcane Barrage:*** Once per rest, **spend any number of Hope** and shoot magical projectiles that strike a target of your choice within Close range. Roll a number of **d6s** equal to the Hope spent and deal that much magic damage to the target.\n\n***Telepathy:*Spend a Hope** to open a line of mental communication with one target you can see. This connection lasts until your next rest or you cast Telepathy again.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
+   "text": "***Slumber:*** Make a **Spellcast Roll** against a target within Very Close range. On a success, they’re *Asleep* until they take damage or the GM spends a **Fear** on their turn to clear this condition.\n\n***Arcane Barrage:*** Once per rest, **spend any number of Hope** and shoot magical projectiles that strike a target of your choice within Close range. Roll a number of **d6s** equal to the Hope spent and deal that much magic damage to the target.\n\n***Telepathy:*** **Spend a Hope** to open a line of mental communication with one target you can see. This connection lasts until your next rest or you cast Telepathy again.",
+   "spells": [
+    {
+     "name": "Slumber",
+     "text": "Make a **Spellcast Roll** against a target within Very Close range. On a success, they’re *Asleep* until they take damage or the GM spends a **Fear** on their turn to clear this condition."
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Illiat"
+    {
+     "name": "Arcane Barrage",
+     "text": "Once per rest, **spend any number of Hope** and shoot magical projectiles that strike a target of your choice within Close range. Roll a number of **d6s** equal to the Hope spent and deal that much magic damage to the target.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Arcane Barrage"
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Telepathy",
+     "text": "**Spend a Hope** to open a line of mental communication with one target you can see. This connection lasts until your next rest or you cast Telepathy again.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Telepathy",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "book-of-korvax",
@@ -470,7 +698,43 @@
    "domain": "Codex",
    "level": 3,
    "recall": 2,
-   "text": "***Levitation:*** Make a **Spellcast Roll** to temporarily lift a target you can see up into the air and move them within Close range of their original position.\n\n***Recant:*Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation.\n\n***Rune Circle:*Mark a Stress** to create a temporary magical circle on the ground where you stand. All adversaries within Melee range, or who enter Melee range, take **2d12+4** magic damage and are knocked back to Very Close range."
+   "text": "***Levitation:*** Make a **Spellcast Roll** to temporarily lift a target you can see up into the air and move them within Close range of their original position.\n\n***Recant:*** **Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation.\n\n***Rune Circle:*** **Mark a Stress** to create a temporary magical circle on the ground where you stand. All adversaries within Melee range, or who enter Melee range, take **2d12+4** magic damage and are knocked back to Very Close range.",
+   "spells": [
+    {
+     "name": "Levitation",
+     "text": "Make a **Spellcast Roll** to temporarily lift a target you can see up into the air and move them within Close range of their original position."
+    },
+    {
+     "name": "Recant",
+     "text": "**Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Recant",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Rune Circle",
+     "text": "**Mark a Stress** to create a temporary magical circle on the ground where you stand. All adversaries within Melee range, or who enter Melee range, take **2d12+4** magic damage and are knocked back to Very Close range.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Rune Circle",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "book-of-norai",
@@ -479,7 +743,17 @@
    "domain": "Codex",
    "level": 3,
    "recall": 2,
-   "text": "***Mystic Tether:*** Make a **Spellcast Roll** against a target within Far range. On a success, they’re temporarily *Restrained* and must mark a Stress. If you target a flying creature, this spell grounds and temporarily *Restrains* them.\n\n***Fireball:*** Make a **Spellcast Roll** against a target within Very Far range. On a success, hurl a sphere of fire toward them that explodes on impact. The target and all creatures within Very Close range of them must make a Reaction Roll (13). Targets who fail take** d20+5** magic damage using your Proficiency. Targets who succeed take half damage."
+   "text": "***Mystic Tether:*** Make a **Spellcast Roll** against a target within Far range. On a success, they’re temporarily *Restrained* and must mark a Stress. If you target a flying creature, this spell grounds and temporarily *Restrains* them.\n\n***Fireball:*** Make a **Spellcast Roll** against a target within Very Far range. On a success, hurl a sphere of fire toward them that explodes on impact. The target and all creatures within Very Close range of them must make a Reaction Roll (13). Targets who fail take** d20+5** magic damage using your Proficiency. Targets who succeed take half damage.",
+   "spells": [
+    {
+     "name": "Mystic Tether",
+     "text": "Make a **Spellcast Roll** against a target within Far range. On a success, they’re temporarily *Restrained* and must mark a Stress. If you target a flying creature, this spell grounds and temporarily *Restrains* them."
+    },
+    {
+     "name": "Fireball",
+     "text": "Make a **Spellcast Roll** against a target within Very Far range. On a success, hurl a sphere of fire toward them that explodes on impact. The target and all creatures within Very Close range of them must make a Reaction Roll (13). Targets who fail take** d20+5** magic damage using your Proficiency. Targets who succeed take half damage."
+    }
+   ]
   },
   {
    "id": "book-of-ronin",
@@ -488,19 +762,29 @@
    "domain": "Codex",
    "level": 9,
    "recall": 4,
-   "text": "***Transform:*** Make a **Spellcast Roll (15)**. On a success, transform into an inanimate object no larger than twice your normal size. You can remain in this shape until you take damage.\n\n***Eternal Enervation:** *Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
+   "text": "***Transform:*** Make a **Spellcast Roll (15)**. On a success, transform into an inanimate object no larger than twice your normal size. You can remain in this shape until you take damage.\n\n***Eternal Enervation:*** Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means.",
+   "spells": [
+    {
+     "name": "Transform",
+     "text": "Make a **Spellcast Roll (15)**. On a success, transform into an inanimate object no larger than twice your normal size. You can remain in this shape until you take damage."
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Ronin"
+    {
+     "name": "Eternal Enervation",
+     "text": "Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Eternal Enervation"
+       }
+      ]
      }
-    ]
-   }
+    }
+   ]
   },
   {
    "id": "book-of-sitil",
@@ -509,18 +793,32 @@
    "domain": "Codex",
    "level": 2,
    "recall": 2,
-   "text": "***Adjust Appearance:*** You magically shift your appearance and clothing to avoid recognition.\n\n***Parallela:* Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time.\n\n***Illusion:*** Make a **Spellcast Roll (14)**. On a success, create a temporary visual illusion no larger than you within Close range that lasts for as long as you look at it. It holds up to scrutiny until an observer is within Melee range.",
-   "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Sitil",
-      "cost": {
-       "hope": 2
-      }
+   "text": "***Adjust Appearance:*** You magically shift your appearance and clothing to avoid recognition.\n\n***Parallela:*** **Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time.\n\n***Illusion:*** Make a **Spellcast Roll (14)**. On a success, create a temporary visual illusion no larger than you within Close range that lasts for as long as you look at it. It holds up to scrutiny until an observer is within Melee range.",
+   "spells": [
+    {
+     "name": "Adjust Appearance",
+     "text": "You magically shift your appearance and clothing to avoid recognition."
+    },
+    {
+     "name": "Parallela",
+     "text": "**Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Parallela",
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Illusion",
+     "text": "Make a **Spellcast Roll (14)**. On a success, create a temporary visual illusion no larger than you within Close range that lasts for as long as you look at it. It holds up to scrutiny until an observer is within Melee range."
+    }
+   ]
   },
   {
    "id": "book-of-tyfar",
@@ -529,7 +827,21 @@
    "domain": "Codex",
    "level": 1,
    "recall": 2,
-   "text": "***Wild Flame:*** Make a **Spellcast Roll** against up to three adversaries within Melee range. Targets you succeed against take **2d6** magic damage and must mark a Stress as flames erupt from your hand.\n\n***Magic Hand:*** You conjure a magical hand with the same size and strength as your own within Far range.\n\n***Mysterious Mist:*** Make a **Spellcast Roll (13)** to cast a temporary thick fog that gathers in a stationary area within Very Close range. The fog heavily obscures this area and everything in it."
+   "text": "***Wild Flame:*** Make a **Spellcast Roll** against up to three adversaries within Melee range. Targets you succeed against take **2d6** magic damage and must mark a Stress as flames erupt from your hand.\n\n***Magic Hand:*** You conjure a magical hand with the same size and strength as your own within Far range.\n\n***Mysterious Mist:*** Make a **Spellcast Roll (13)** to cast a temporary thick fog that gathers in a stationary area within Very Close range. The fog heavily obscures this area and everything in it.",
+   "spells": [
+    {
+     "name": "Wild Flame",
+     "text": "Make a **Spellcast Roll** against up to three adversaries within Melee range. Targets you succeed against take **2d6** magic damage and must mark a Stress as flames erupt from your hand."
+    },
+    {
+     "name": "Magic Hand",
+     "text": "You conjure a magical hand with the same size and strength as your own within Far range."
+    },
+    {
+     "name": "Mysterious Mist",
+     "text": "Make a **Spellcast Roll (13)** to cast a temporary thick fog that gathers in a stationary area within Very Close range. The fog heavily obscures this area and everything in it."
+    }
+   ]
   },
   {
    "id": "book-of-vagras",
@@ -539,18 +851,20 @@
    "level": 2,
    "recall": 2,
    "text": "***Runic Lock:*** Make a **Spellcast Roll (15)** on an object you’re touching that can close (such as a lock, chest, or box). Once per rest on a success, you can lock the object so it can only be opened by creatures of your choice. Someone with access to magic and an hour of time to study the spell can break it.\n\n***Arcane Door:*** When you have no adversaries within Melee range, make a **Spellcast Roll (13)**. On a success, **spend a Hope** to create a portal from where you are to a point within Far range you can see. It closes once a creature has passed through it.\n\n***Reveal:*** Make a **Spellcast Roll**. If there is anything magically hidden within Close range the roll would succeed against, it is revealed.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
+   "spells": [
+    {
+     "name": "Runic Lock",
+     "text": "Make a **Spellcast Roll (15)** on an object you’re touching that can close (such as a lock, chest, or box). Once per rest on a success, you can lock the object so it can only be opened by creatures of your choice. Someone with access to magic and an hour of time to study the spell can break it."
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Vagras"
-     }
-    ]
-   }
+    {
+     "name": "Arcane Door",
+     "text": "When you have no adversaries within Melee range, make a **Spellcast Roll (13)**. On a success, **spend a Hope** to create a portal from where you are to a point within Far range you can see. It closes once a creature has passed through it."
+    },
+    {
+     "name": "Reveal",
+     "text": "Make a **Spellcast Roll**. If there is anything magically hidden within Close range the roll would succeed against, it is revealed."
+    }
+   ]
   },
   {
    "id": "book-of-vyola",
@@ -559,19 +873,29 @@
    "domain": "Codex",
    "level": 8,
    "recall": 2,
-   "text": "***Memory Delve:*** Make a **Spellcast Roll** against a target within Far range. On a success, peer into the target’s mind and ask the GM a question. The GM describes any memories the target has pertaining to the answer.\n\n***Shared Clarity:** *Once per long rest, **spend a Hope** to choose two willing creatures. When one of them would mark Stress, they can choose between the two of them who marks it. This spell lasts until their next rest.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
+   "text": "***Memory Delve:*** Make a **Spellcast Roll** against a target within Far range. On a success, peer into the target’s mind and ask the GM a question. The GM describes any memories the target has pertaining to the answer.\n\n***Shared Clarity:*** Once per long rest, **spend a Hope** to choose two willing creatures. When one of them would mark Stress, they can choose between the two of them who marks it. This spell lasts until their next rest.",
+   "spells": [
+    {
+     "name": "Memory Delve",
+     "text": "Make a **Spellcast Roll** against a target within Far range. On a success, peer into the target’s mind and ask the GM a question. The GM describes any memories the target has pertaining to the answer."
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Book of Vyola"
+    {
+     "name": "Shared Clarity",
+     "text": "Once per long rest, **spend a Hope** to choose two willing creatures. When one of them would mark Stress, they can choose between the two of them who marks it. This spell lasts until their next rest.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Shared Clarity"
+       }
+      ]
      }
-    ]
-   }
+    }
+   ]
   },
   {
    "id": "book-of-yarrow",
@@ -580,7 +904,28 @@
    "domain": "Codex",
    "level": 10,
    "recall": 2,
-   "text": "***Timejammer:*** Make a **Spellcast Roll (18)**. On a success, time temporarily slows to a halt for everyone within Far range except for you. It resumes the next time you make an action roll that targets another creature.\n\n***Magic Immunity:*Spend 5 Hope** to become immune to magic damage until your next rest."
+   "text": "***Timejammer:*** Make a **Spellcast Roll (18)**. On a success, time temporarily slows to a halt for everyone within Far range except for you. It resumes the next time you make an action roll that targets another creature.\n\n***Magic Immunity:*** **Spend 5 Hope** to become immune to magic damage until your next rest.",
+   "spells": [
+    {
+     "name": "Timejammer",
+     "text": "Make a **Spellcast Roll (18)**. On a success, time temporarily slows to a halt for everyone within Far range except for you. It resumes the next time you make an action roll that targets another creature."
+    },
+    {
+     "name": "Magic Immunity",
+     "text": "**Spend 5 Hope** to become immune to magic damage until your next rest.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Magic Immunity",
+        "cost": {
+         "hope": 5
+        }
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "boost",
@@ -591,13 +936,16 @@
    "recall": 1,
    "text": "**Mark a Stress** to boost off a willing ally within Close range, fling yourself into the air, and perform an aerial attack against a target within Far range. You have advantage on the attack, add a** d10** to the damage roll, and end your move within Melee range of the target.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "boost",
       "label": "Boost",
+      "roll": "damage",
+      "dice": "1d10",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Aerial attack boosted off a willing ally in Close range; advantage/movement manual."
      }
     ]
    }
@@ -615,6 +963,20 @@
      {
       "id": "use",
       "label": "Brace",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "brace",
+      "label": "Brace",
+      "description": "Mark a Stress to mark an additional Armor Slot.",
+      "when": {
+       "armor": true
+      },
+      "armorSlots": 1,
       "cost": {
        "stress": 1
       }
@@ -736,7 +1098,20 @@
    "domain": "Arcana",
    "level": 2,
    "recall": 1,
-   "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, the target instantly bursts into flames, takes **1d20+3** magic damage, and is temporarily lit *On Fire*.\n\nWhen a creature acts while *On Fire*, they must take an extra **2d6** magic damage if they are still *On Fire* at the end of their action."
+   "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, the target instantly bursts into flames, takes **1d20+3** magic damage, and is temporarily lit *On Fire*.\n\nWhen a creature acts while *On Fire*, they must take an extra **2d6** magic damage if they are still *On Fire* at the end of their action.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Cinder Grasp: roll 1d20+3 damage",
+      "on": "card:Cinder Grasp",
+      "damage": {
+       "dice": "1d20+3",
+       "fixed": true
+      }
+     }
+    ]
+   }
   },
   {
    "id": "cloaking-blast",
@@ -812,13 +1187,26 @@
    "recall": 1,
    "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.\n\n***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Conjure Swarm",
+      "id": "damage",
+      "label": "Fire Flies: spend a Hope, roll 2d8+3 damage",
+      "on": "card:Conjure Swarm",
+      "damage": {
+       "dice": "2d8+3",
+       "fixed": true
+      },
       "cost": {
        "hope": 1
       }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "beetles",
+      "label": "Tekaira Armored Beetles",
+      "description": "While the beetles are conjured; they disperse after this damage unless you spend a Hope.",
+      "severity": 1
      }
     ]
    }
@@ -860,7 +1248,19 @@
    "domain": "Sage",
    "level": 3,
    "recall": 1,
-   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, deal **d6+4** magic damage using your Proficiency. Additionally, **mark 2 or more Stress** to make them permanently *Corroded*. While a target is *Corroded*, they gain a −1 penalty to their Difficulty for every 2 Stress you spent. This condition can stack."
+   "text": "Make a **Spellcast Roll** against a target within Far range. On a success, deal **d6+4** magic damage using your Proficiency. Additionally, **mark 2 or more Stress** to make them permanently *Corroded*. While a target is *Corroded*, they gain a −1 penalty to their Difficulty for every 2 Stress you spent. This condition can stack.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Corrosive Projectile: roll d6+4 damage",
+      "on": "card:Corrosive Projectile",
+      "damage": {
+       "dice": "d6+4"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "counterspell",
@@ -878,7 +1278,24 @@
    "domain": "Blood",
    "level": 10,
    "recall": 1,
-   "text": "When you would mark your last Hit Point, **spend a Hope** to **mark a Stress** instead."
+   "text": "When you would mark your last Hit Point, **spend a Hope** to **mark a Stress** instead.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "adamance",
+      "label": "Crimson Adamance",
+      "description": "Spend a Hope and mark a Stress instead of marking your last Hit Point.",
+      "when": {
+       "lastHp": true
+      },
+      "replaceHp": true,
+      "cost": {
+       "hope": 1,
+       "stress": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "critical-inspiration",
@@ -908,7 +1325,23 @@
    "domain": "Bone",
    "level": 7,
    "recall": 1,
-   "text": "When you make a successful attack with a weapon, gain a bonus to your damage roll equal to either your Finesse or Agility."
+   "text": "When you make a successful attack with a weapon, gain a bonus to your damage roll equal to either your Finesse or Agility.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "finesse",
+      "label": "Cruel Precision: Finesse",
+      "roll": "damage",
+      "value": "@finesse"
+     },
+     {
+      "id": "agility",
+      "label": "Cruel Precision: Agility",
+      "roll": "damage",
+      "value": "@agility"
+     }
+    ]
+   }
   },
   {
    "id": "damnation",
@@ -928,14 +1361,55 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (14)**. Once per long rest on a success, you can summon fiends that surround and move with you. Place 8 tokens on this card. When you deal damage to a target within Very Close range, you can spend any number of tokens to add **1d8** for each token spent to your damage roll. Additionally, when you take damage, you can spend any number of tokens to reduce the damage by **1d8** for each token spent. Each time you spend a token, a fiend acts on your behalf, then disappears.\n\nWhen you take a rest, clear all unspent tokens.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
+    "resources": [
+     {
+      "id": "fiends",
+      "label": "Dark Army fiends",
+      "initial": 0,
+      "max": 8
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Dark Army"
+      "id": "summon",
+      "label": "Successful Spellcast: summon 8 fiends",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "fiends",
+        "amount": 8
+       }
+      ]
+     },
+     {
+      "id": "defend",
+      "label": "Spend fiend: roll 1d8 reduction manually",
+      "cost": {
+       "fiends": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Rest: dismiss fiends",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "fiends",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "fiend",
+      "label": "Dark Army fiend",
+      "roll": "damage",
+      "dice": "1d8",
+      "cost": {
+       "fiends": 1
+      },
+      "description": "Only a target within Very Close range; spend extra fiends/dice manually."
      }
     ]
    }
@@ -1079,7 +1553,19 @@
    "domain": "Arcana",
    "level": 2,
    "recall": 1,
-   "text": "Contaminated Cinder Grasp\n\nMake a Spellcast Roll against a target within Melee range. On a success, give the GM a Fear to have the target instantly burst into eldritch flames, taking d12+3 magic damage using your proficiency and become temporarily *Consumed by Octarine Flame*. If the target takes Severe damage from this attack, they must mark a Stress or gain 1 Contamination Level.\n\n When a creature acts while *Consumed by Octarin*e Flame, they must take an additional 2d6 magic damage and mark a Stress if they are still *Consumed by Octarine Flame* at the end of their action."
+   "text": "Contaminated Cinder Grasp\n\nMake a Spellcast Roll against a target within Melee range. On a success, give the GM a Fear to have the target instantly burst into eldritch flames, taking d12+3 magic damage using your proficiency and become temporarily *Consumed by Octarine Flame*. If the target takes Severe damage from this attack, they must mark a Stress or gain 1 Contamination Level.\n\n When a creature acts while *Consumed by Octarin*e Flame, they must take an additional 2d6 magic damage and mark a Stress if they are still *Consumed by Octarine Flame* at the end of their action.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Delerium Grasp: give the GM a Fear, roll d12+3 damage",
+      "on": "card:Delerium Grasp",
+      "damage": {
+       "dice": "d12+3"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "dire-strike",
@@ -1223,8 +1709,15 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Eldritch Flesh",
+      "id": "clear",
+      "label": "Roll with Fear: clear Armor",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "armor",
+        "amount": 1
+       }
+      ],
       "cost": {
        "hope": 2
       }
@@ -1301,7 +1794,67 @@
    "domain": "Sage",
    "level": 9,
    "recall": 2,
-   "text": "After a long rest, place a number of tokens equal to the number of Sage domain cards in your loadout and vault on this card.\n\nWhen you would make a Spellcast Roll, you can spend any number of tokens after the roll to gain a +1 bonus for each token spent.\n\nWhen you critically succeed on a Spellcast Roll for a Sage domain spell, gain a token.\n\nWhen you take a long rest, clear all unspent tokens."
+   "text": "After a long rest, place a number of tokens equal to the number of Sage domain cards in your loadout and vault on this card.\n\nWhen you would make a Spellcast Roll, you can spend any number of tokens after the roll to gain a +1 bonus for each token spent.\n\nWhen you critically succeed on a Spellcast Roll for a Sage domain spell, gain a token.\n\nWhen you take a long rest, clear all unspent tokens.",
+   "automation": {
+    "resources": [
+     {
+      "id": "fane",
+      "label": "Fane of the Wilds tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "rest",
+      "label": "Long rest: place tokens (Sage cards in loadout and vault)",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "fane",
+        "amount": "all"
+       },
+       {
+        "op": "gain",
+        "resource": "fane",
+        "amount": "@cards_sage"
+       }
+      ]
+     },
+     {
+      "id": "crit",
+      "label": "Critical Sage spell: gain a token",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "fane",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "clear",
+      "label": "Long rest: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "fane",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "fane",
+      "label": "Fane of the Wilds token",
+      "roll": "spellcast",
+      "value": 1,
+      "cost": {
+       "fane": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "ferocity",
@@ -1339,7 +1892,47 @@
    "domain": "Arcana",
    "level": 3,
    "recall": 1,
-   "text": "Make a **Spellcast Roll (15)**. On a success, place a number of tokens equal to your Agility on this card (minimum 1). When you make an action roll while flying, spend a token from this card. After the action that spends the last token is resolved, you descend to the ground directly below you."
+   "text": "Make a **Spellcast Roll (15)**. On a success, place a number of tokens equal to your Agility on this card (minimum 1). When you make an action roll while flying, spend a token from this card. After the action that spends the last token is resolved, you descend to the ground directly below you.",
+   "automation": {
+    "resources": [
+     {
+      "id": "flight",
+      "label": "Flight tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "cast",
+      "label": "Successful cast: place tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "flight",
+        "amount": "@agility"
+       }
+      ]
+     },
+     {
+      "id": "spend",
+      "label": "Action roll while flying: spend token",
+      "cost": {
+       "flight": 1
+      }
+     },
+     {
+      "id": "land",
+      "label": "Land: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "flight",
+        "amount": "all"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "floating-eye",
@@ -1368,7 +1961,29 @@
    "domain": "Sage",
    "level": 6,
    "recall": 1,
-   "text": "As an additional downtime move you can choose, roll a d6 to see what you forage. Work with the GM to describe it and add it to your inventory as a consumable. Your party can carry up to five foraged consumables at a time.\n\n- A unique food (Clear 2 Stress)\n\n- A beautiful relic (Gain 2 Hope)\n\n- An arcane rune (+2 to a Spellcast Roll)\n\n- A healing vial (Clear 2 Hit Points)\n\n- A luck charm (Reroll any die)\n\n- Choose one of the options above."
+   "text": "As an additional downtime move you can choose, roll a d6 to see what you forage. Work with the GM to describe it and add it to your inventory as a consumable. Your party can carry up to five foraged consumables at a time.\n\n- A unique food (Clear 2 Stress)\n\n- A beautiful relic (Gain 2 Hope)\n\n- An arcane rune (+2 to a Spellcast Roll)\n\n- A healing vial (Clear 2 Hit Points)\n\n- A luck charm (Reroll any die)\n\n- Choose one of the options above.",
+   "automation": {
+    "actions": [
+     {
+      "id": "forage",
+      "label": "Forage: roll a d6",
+      "timing": "downtime",
+      "downtime": {
+       "table": {
+        "expression": "1d6",
+        "outcomes": [
+         "A unique food (consumable: clear 2 Stress)",
+         "A beautiful relic (consumable: gain 2 Hope)",
+         "An arcane rune (consumable: +2 to a Spellcast Roll)",
+         "A healing vial (consumable: clear 2 HP)",
+         "A luck charm (consumable: reroll any die)",
+         "Choose one of the options above"
+        ]
+       }
+      }
+     }
+    ]
+   }
   },
   {
    "id": "force-of-nature",
@@ -1399,10 +2014,19 @@
    "recall": 0,
    "text": "Make an attack with your primary weapon against a target within Melee range. On a success, you deal damage and knock them back to Close range. On a success with Hope, add a **d6** to your damage roll.\n\nAdditionally, you can **spend a Hope** to make them temporarily *Vulnerable*.",
    "automation": {
+    "rollOptions": [
+     {
+      "id": "push",
+      "label": "Forceful Push",
+      "roll": "damage",
+      "dice": "1d6",
+      "description": "Primary weapon Melee attack succeeds with Hope; knockback manual."
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Forceful Push",
+      "id": "vulnerable",
+      "label": "Make target Vulnerable (manual)",
       "cost": {
        "hope": 1
       }
@@ -1446,6 +2070,14 @@
       "id": "use",
       "label": "Frenzy"
      }
+    ],
+    "mitigation": [
+     {
+      "id": "frenzied",
+      "label": "Frenzied: can't use Armor Slots",
+      "description": "While Frenzied you can't use Armor Slots.",
+      "armorBlocked": true
+     }
     ]
    }
   },
@@ -1465,7 +2097,27 @@
     "actions": [
      {
       "id": "use",
-      "label": "Full Surge"
+      "label": "Full Surge",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Full Surge",
+         "kind": "buff",
+         "until": "rest",
+         "text": "Full Surge",
+         "modifiers": [
+          {
+           "stat": "traits",
+           "value": 2
+          }
+         ]
+        }
+       }
+      ],
+      "cost": {
+       "stress": 3
+      }
      }
     ]
    }
@@ -1483,6 +2135,22 @@
      {
       "id": "use",
       "label": "Get Back Up",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "get-back-up",
+      "label": "Get Back Up",
+      "when": {
+       "severity": [
+        "severe",
+        "massive"
+       ]
+      },
+      "severity": 1,
       "cost": {
        "stress": 1
       }
@@ -1564,7 +2232,33 @@
    "domain": "Blade",
    "level": 9,
    "recall": 2,
-   "text": "When you critically succeed on a weapon attack, gain an additional Hope or clear an additional Stress.\n\nAdditionally, when you deal enough damage to defeat an enemy, gain a Hope or clear a Stress."
+   "text": "When you critically succeed on a weapon attack, gain an additional Hope or clear an additional Stress.\n\nAdditionally, when you deal enough damage to defeat an enemy, gain a Hope or clear a Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "hope",
+      "label": "Qualifying critical or defeat: gain Hope",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "stress",
+      "label": "Qualifying critical or defeat: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "grace-touched",
@@ -1582,7 +2276,23 @@
    "domain": "Blood",
    "level": 4,
    "recall": 1,
-   "text": "You launch a harpoon of blood at a location or creature within Far range. If the target is a location, make a **Spellcast Roll(13)**. On a success, **mark a Stress** to pull yourself to a position within Melee range of it.\n\nIf the target is a creature, make a **Spellcast Roll** against it. On a success, **mark a Stress** to deal **3d8** magic damage to the target. You then pull the target straight toward yourself or pull yourself straight toward the target, ending within Melee range of each other."
+   "text": "You launch a harpoon of blood at a location or creature within Far range. If the target is a location, make a **Spellcast Roll(13)**. On a success, **mark a Stress** to pull yourself to a position within Melee range of it.\n\nIf the target is a creature, make a **Spellcast Roll** against it. On a success, **mark a Stress** to deal **3d8** magic damage to the target. You then pull the target straight toward yourself or pull yourself straight toward the target, ending within Melee range of each other.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Grisly Harpoon: mark a Stress, roll 3d8 damage",
+      "on": "card:Grisly Harpoon",
+      "damage": {
+       "dice": "3d8",
+       "fixed": true
+      },
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "ground-pound",
@@ -1620,7 +2330,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Healing Field"
+      "label": "Healing Field",
+      "cost": {
+       "hope": 2
+      }
      }
     ]
    }
@@ -1719,6 +2432,14 @@
        "stress": 1
       }
      }
+    ],
+    "mitigation": [
+     {
+      "id": "shield",
+      "label": "I Am Your Shield",
+      "description": "Taking the damage for an ally: you can mark any number of Armor Slots.",
+      "armorSlots": "any"
+     }
     ]
    }
   },
@@ -1734,9 +2455,14 @@
     "actions": [
      {
       "id": "use",
-      "label": "I See It Coming",
+      "label": "Roll d4 against this attack",
       "cost": {
        "stress": 1
+      },
+      "sendRoll": {
+       "dice": "1d4",
+       "base": "evasion",
+       "label": "I See It Coming - Evasion against this attack"
       }
      }
     ]
@@ -1758,7 +2484,47 @@
    "domain": "Grace",
    "level": 1,
    "recall": 1,
-   "text": "Your speech is imbued with power. After a long rest, place a number of tokens on this card equal to your Presence. When you speak with an ally, you can spend a token from this card to give them one benefit from the following options:\n\n- Your ally clears a Stress.\n- Your ally clears a Hit Point.\n- Your ally gains a Hope.\nWhen you take a long rest, clear all unspent tokens."
+   "text": "Your speech is imbued with power. After a long rest, place a number of tokens on this card equal to your Presence. When you speak with an ally, you can spend a token from this card to give them one benefit from the following options:\n\n- Your ally clears a Stress.\n- Your ally clears a Hit Point.\n- Your ally gains a Hope.\nWhen you take a long rest, clear all unspent tokens.",
+   "automation": {
+    "resources": [
+     {
+      "id": "inspiration",
+      "label": "Inspiration tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "clear",
+      "label": "Long rest: clear old tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "inspiration",
+        "amount": "all"
+       }
+      ]
+     },
+     {
+      "id": "prepare",
+      "label": "After long rest: prepare tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "inspiration",
+        "amount": "@presence"
+       }
+      ]
+     },
+     {
+      "id": "give",
+      "label": "Give ally a benefit (manual)",
+      "cost": {
+       "inspiration": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "invigoration",
@@ -1767,19 +2533,7 @@
    "domain": "Splendor",
    "level": 10,
    "recall": 3,
-   "text": "When you or an ally within Close range has used a feature that has an exhaustion limit (such as once per rest or once per session), you can **spend any number of Hope** and roll that many **d6s**. If any roll a 6, the feature can be used again.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Invigoration"
-     }
-    ]
-   }
+   "text": "When you or an ally within Close range has used a feature that has an exhaustion limit (such as once per rest or once per session), you can **spend any number of Hope** and roll that many **d6s**. If any roll a 6, the feature can be used again."
   },
   {
    "id": "invisibility",
@@ -1788,7 +2542,50 @@
    "domain": "Grace",
    "level": 3,
    "recall": 1,
-   "text": "Make a **Spellcast Roll (10)**. On a success, **mark a Stress** and choose yourself or an ally within Melee range to become *Invisible*. An *Invisible* creature can’t be seen except through magical means and attack rolls against them are made with disadvantage. Place a number of tokens on this card equal to your Spellcast trait. When the *Invisible* creature takes an action, spend a token from this card. After the action that spends the last token is resolved, the effect ends.\n\nYou can only hold Invisibility on one creature at a time."
+   "text": "Make a **Spellcast Roll (10)**. On a success, **mark a Stress** and choose yourself or an ally within Melee range to become *Invisible*. An *Invisible* creature can’t be seen except through magical means and attack rolls against them are made with disadvantage. Place a number of tokens on this card equal to your Spellcast trait. When the *Invisible* creature takes an action, spend a token from this card. After the action that spends the last token is resolved, the effect ends.\n\nYou can only hold Invisibility on one creature at a time.",
+   "automation": {
+    "resources": [
+     {
+      "id": "invisibility",
+      "label": "Invisibility tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "cast",
+      "label": "Successful cast: prepare tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "invisibility",
+        "amount": "@spellcast"
+       }
+      ],
+      "cost": {
+       "stress": 1
+      }
+     },
+     {
+      "id": "tick",
+      "label": "Affected creature acts: spend token",
+      "cost": {
+       "invisibility": 1
+      }
+     },
+     {
+      "id": "end",
+      "label": "Effect ends: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "invisibility",
+        "amount": "all"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "invoke-torment",
@@ -2096,12 +2893,35 @@
    "recall": 1,
    "text": "**Spend a Hope** to summon a small nature spirit or forest critter to your side until your next rest, you cast Natural Familiar again, or the familiar is targeted by an attack. If you **spend an additional Hope**, you can summon a familiar that flies. You can communicate with them, make a **Spellcast Roll** to command them to perform simple tasks, and **mark a Stress** to see through their eyes.\n\nWhen you deal damage to an adversary within Melee range of your familiar, you add a **d6** to your damage roll.",
    "automation": {
+    "rollOptions": [
+     {
+      "id": "familiar",
+      "label": "Natural Familiar",
+      "roll": "damage",
+      "dice": "1d6",
+      "description": "Adversary is in Melee of your active familiar."
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Natural Familiar",
+      "id": "summon",
+      "label": "Summon familiar",
       "cost": {
        "hope": 1
+      }
+     },
+     {
+      "id": "flying",
+      "label": "Summon flying familiar",
+      "cost": {
+       "hope": 2
+      }
+     },
+     {
+      "id": "eyes",
+      "label": "See through familiar’s eyes",
+      "cost": {
+       "stress": 1
       }
      }
     ]
@@ -2116,13 +2936,16 @@
    "recall": 0,
    "text": "You can speak the language of the natural world. When you want to speak to the plants and animals around you, make an **Instinct Roll (12)**. On a success, they’ll give you the information they know. On a roll with Fear, their knowledge might be limited or come at a cost.\n\nAdditionally, before you make a Spellcast Roll while within a natural environment, you can **spend a Hope** to gain a +2 bonus to the roll.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "nature",
       "label": "Nature’s Tongue",
+      "roll": "spellcast",
+      "value": 2,
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Only within a natural environment."
      }
     ]
    }
@@ -2136,12 +2959,68 @@
    "recall": 2,
    "text": "When you mark 1 or more Hit Points from an attack, you can **mark a Stress** to place a number of tokens equal to the number of Hit Points you marked on this card. On your next successful attack, gain a +5 bonus to your damage roll for each token on this card, then clear all tokens.",
    "automation": {
+    "resources": [
+     {
+      "id": "upstaged",
+      "label": "Never Upstaged tokens",
+      "initial": 0
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Never Upstaged",
+      "id": "mark",
+      "label": "HP marked from an attack: place tokens (set the count above)",
       "cost": {
        "stress": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "upstaged",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "upstaged-1",
+      "label": "Never Upstaged: 1 token (+5)",
+      "roll": "damage",
+      "value": 5,
+      "cost": {
+       "upstaged": 1
+      }
+     },
+     {
+      "id": "upstaged-2",
+      "label": "Never Upstaged: 2 tokens (+10)",
+      "roll": "damage",
+      "value": 10,
+      "cost": {
+       "upstaged": 2
+      }
+     },
+     {
+      "id": "upstaged-3",
+      "label": "Never Upstaged: 3 tokens (+15)",
+      "roll": "damage",
+      "value": 15,
+      "cost": {
+       "upstaged": 3
+      }
+     },
+     {
+      "id": "upstaged-4",
+      "label": "Never Upstaged: 4 tokens (+20)",
+      "roll": "damage",
+      "value": 20,
+      "cost": {
+       "upstaged": 4
       }
      }
     ]
@@ -2186,13 +3065,22 @@
    "recall": 0,
    "text": "People know who you are and what you’ve done, and they treat you differently because of it. When you leverage your notoriety to get what you want, you can **mark a Stress** before you roll to gain a +10 bonus to the result. Your food and drinks are always free wherever you go, and everything else you buy is reduced in price by one bag of gold (to a minimum of one handful).\n\nThis card doesn’t count against your loadout’s domain card maximum of 5 and can’t be placed in your vault.",
    "automation": {
-    "actions": [
+    "modifiers": [
      {
-      "id": "use",
-      "label": "Notorious",
+      "stat": "loadoutMax",
+      "value": 1
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "notoriety",
+      "label": "Leverage notoriety",
+      "roll": "action",
+      "value": 10,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Only when leveraging your notoriety; prices/vault restriction are manual."
      }
     ]
    }
@@ -2204,7 +3092,20 @@
    "domain": "Bone",
    "level": 3,
    "recall": 1,
-   "text": "Contaminated Brace\n\nWhen you mark an Armor Slot to reduce incoming damage, you can give the GM a Fear to mark any number of additional Armor Slots."
+   "text": "Contaminated Brace\n\nWhen you mark an Armor Slot to reduce incoming damage, you can give the GM a Fear to mark any number of additional Armor Slots.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "octarine",
+      "label": "Octarine Brace",
+      "description": "Give the GM a Fear to mark any number of Armor Slots.",
+      "when": {
+       "armor": true
+      },
+      "armorSlots": "any"
+     }
+    ]
+   }
   },
   {
    "id": "octarine-wall",
@@ -2234,7 +3135,24 @@
    "domain": "Bone",
    "level": 9,
    "recall": 1,
-   "text": "When you have 2 or fewer Hit Points unmarked, you don’t take Minor damage."
+   "text": "When you have 2 or fewer Hit Points unmarked, you don’t take Minor damage.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "brink",
+      "label": "On the Brink",
+      "description": "With 2 or fewer Hit Points unmarked you don't take Minor damage.",
+      "passive": true,
+      "when": {
+       "hpUnmarkedMax": 2,
+       "severity": [
+        "minor"
+       ]
+      },
+      "negate": true
+     }
+    ]
+   }
   },
   {
    "id": "onslaught",
@@ -2393,7 +3311,19 @@
    "domain": "Arcana",
    "level": 4,
    "recall": 2,
-   "text": "Make a **Spellcast Roll** against all targets within Melee range. Targets you succeed against are forced back to Far range and take **d8+3** magic damage using your Spellcast trait."
+   "text": "Make a **Spellcast Roll** against all targets within Melee range. Targets you succeed against are forced back to Far range and take **d8+3** magic damage using your Spellcast trait.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "damage",
+      "label": "Preservation Blast: roll d8+3 damage",
+      "on": "card:Preservation Blast",
+      "damage": {
+       "dice": "d8+3"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "rage-up",
@@ -2424,10 +3354,14 @@
    "recall": 1,
    "text": "**Spend a Hope** to make a **Spellcast Roll** and conjure throwing blades that strike out at all targets within Very Close range. Targets you succeed against take **d8+2** magic damage using your Proficiency.\n\nIf a target you hit is *Vulnerable*, they take an extra **1d8** damage.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Rain of Blades",
+      "id": "damage",
+      "label": "Rain of Blades: spend a Hope, roll d8+2 damage",
+      "on": "card:Rain of Blades",
+      "damage": {
+       "dice": "d8+2"
+      },
       "cost": {
        "hope": 1
       }
@@ -2532,9 +3466,13 @@
       "label": "Recovery",
       "cost": {
        "hope": 1
-      }
+      },
+      "timing": "rest"
      }
-    ]
+    ],
+    "rest": {
+     "longMovesInShort": true
+    }
    }
   },
   {
@@ -2575,6 +3513,17 @@
       "id": "use",
       "label": "Rejuvenation Barrier"
      }
+    ],
+    "mitigation": [
+     {
+      "id": "barrier",
+      "label": "Rejuvenation Barrier",
+      "description": "While inside the barrier you have resistance to physical damage from outside it.",
+      "when": {
+       "type": "physical"
+      },
+      "halve": true
+     }
     ]
    }
   },
@@ -2585,7 +3534,75 @@
    "domain": "Splendor",
    "level": 6,
    "recall": 2,
-   "text": "After a long rest, place a number of tokens equal to your Spellcast trait on this card. Touch a creature and spend any number of tokens to clear 2 Hit Points or 2 Stress for each token spent.\n\nYou can also spend a token from this card when touching a creature to clear the *Vulnerable* condition or heal a physical or magical ailment (the GM might require additional tokens depending on the strength of the ailment).\n\nWhen you take a long rest, clear all unspent tokens."
+   "text": "After a long rest, place a number of tokens equal to your Spellcast trait on this card. Touch a creature and spend any number of tokens to clear 2 Hit Points or 2 Stress for each token spent.\n\nYou can also spend a token from this card when touching a creature to clear the *Vulnerable* condition or heal a physical or magical ailment (the GM might require additional tokens depending on the strength of the ailment).\n\nWhen you take a long rest, clear all unspent tokens.",
+   "automation": {
+    "resources": [
+     {
+      "id": "restoration",
+      "label": "Restoration tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "clear",
+      "label": "Long rest: clear old tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "restoration",
+        "amount": "all"
+       }
+      ]
+     },
+     {
+      "id": "prepare",
+      "label": "After long rest: prepare tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "restoration",
+        "amount": "@spellcast"
+       }
+      ]
+     },
+     {
+      "id": "hp",
+      "label": "Clear 2 own HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 2
+       }
+      ],
+      "cost": {
+       "restoration": 1
+      }
+     },
+     {
+      "id": "stress",
+      "label": "Clear 2 own Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 2
+       }
+      ],
+      "cost": {
+       "restoration": 1
+      }
+     },
+     {
+      "id": "other",
+      "label": "Touch creature: heal or clear condition (manual)",
+      "cost": {
+       "restoration": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "resurrection",
@@ -2612,7 +3629,28 @@
    "domain": "Valor",
    "level": 6,
    "recall": 2,
-   "text": "Gain a bonus to your Severe threshold equal to your Proficiency.\n\nWhen you mark 1 or more Hit Points from an attack, clear a Stress."
+   "text": "Gain a bonus to your Severe threshold equal to your Proficiency.\n\nWhen you mark 1 or more Hit Points from an attack, clear a Stress.",
+   "automation": {
+    "modifiers": [
+     {
+      "stat": "severeThreshold",
+      "value": "@proficiency"
+     }
+    ],
+    "actions": [
+     {
+      "id": "clear",
+      "label": "After attack marks HP: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "rousing-strike",
@@ -2642,7 +3680,22 @@
    "domain": "Arcana",
    "level": 1,
    "recall": 0,
-   "text": "You have a deeply personal trinket that can be infused with protective magic and held as a ward by you or an ally. Describe what it is and why it’s important to you. The ward’s holder can spend a Hope to reduce incoming damage by **1d8**.\n\nIf the Ward Die result is 8, the ward’s power ends after it reduces damage this turn. It can be recharged for free on your next rest."
+   "text": "You have a deeply personal trinket that can be infused with protective magic and held as a ward by you or an ally. Describe what it is and why it’s important to you. The ward’s holder can spend a Hope to reduce incoming damage by **1d8**.\n\nIf the Ward Die result is 8, the ward’s power ends after it reduces damage this turn. It can be recharged for free on your next rest.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "ward",
+      "label": "Rune Ward",
+      "description": "Spend a Hope to reduce damage by 1d8. On an 8 the ward's power ends.",
+      "roll": {
+       "sides": 8
+      },
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "runic-adrenaline",
@@ -2653,10 +3706,30 @@
    "recall": 1,
    "text": "Your practice of blood magic has seeped into your bloodstream, enhancing your vitals in moments of urgency. When you roll with advantage, use a **d8** instead of a d6 as your advantage die if you have 1 or more Hit Points marked.\n\nAfter you make a Strength, an Agility, or a Finesse roll, you can **mark a Hit Point** to roll 1d8 and add it to the result.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "runic-strength",
       "label": "Runic Adrenaline",
+      "roll": "trait:Strength",
+      "dice": "1d8",
+      "cost": {
+       "hp": 1
+      }
+     },
+     {
+      "id": "runic-agility",
+      "label": "Runic Adrenaline",
+      "roll": "trait:Agility",
+      "dice": "1d8",
+      "cost": {
+       "hp": 1
+      }
+     },
+     {
+      "id": "runic-finesse",
+      "label": "Runic Adrenaline",
+      "roll": "trait:Finesse",
+      "dice": "1d8",
       "cost": {
        "hp": 1
       }
@@ -2681,7 +3754,20 @@
        "hope": 2
       }
      }
-    ]
+    ],
+    "rest": {
+     "passives": [
+      {
+       "id": "shelter",
+       "label": "rest inside it (+1 move, spend 2 Hope)",
+       "defaultOn": false,
+       "extraMoves": 1,
+       "cost": {
+        "hope": 2
+       }
+      }
+     ]
+    }
    }
   },
   {
@@ -2730,7 +3816,22 @@
    "domain": "Dread",
    "level": 9,
    "recall": 1,
-   "text": "When an adversary within Close range takes Severe damage, you can clear a Stress."
+   "text": "When an adversary within Close range takes Severe damage, you can clear a Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Nearby adversary takes Severe damage: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "scramble",
@@ -2768,8 +3869,26 @@
     },
     "actions": [
      {
-      "id": "use",
-      "label": "Second Wind"
+      "id": "stress",
+      "label": "Clear 3 Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 3
+       }
+      ]
+     },
+     {
+      "id": "hp",
+      "label": "Clear 1 HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -2892,6 +4011,17 @@
        "stress": 1
       }
      }
+    ],
+    "mitigation": [
+     {
+      "id": "aura",
+      "label": "Shield Aura",
+      "description": "While the aura is on you, marking an Armor Slot reduces severity by an additional threshold.",
+      "when": {
+       "armor": true
+      },
+      "armorSeverity": 1
+     }
     ]
    }
   },
@@ -2910,6 +4040,20 @@
       "label": "Shrug It Off",
       "cost": {
        "stress": 1
+      }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "shrug",
+      "label": "Shrug It Off",
+      "severity": 1,
+      "cost": {
+       "stress": 1
+      },
+      "followUp": {
+       "dice": "1d6",
+       "text": "on 3 or lower, place this card in your vault"
       }
      }
     ]
@@ -2954,14 +4098,33 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Very Close range. Once per long rest on a success, the target takes **d12+4** magic damage using your Proficiency. On a success with Fear, you gain a **+1** bonus to your Proficiency for this attack.\n\nYou clear a number of Hit Points equal to the number of Hit Points the target marked from this attack.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Siphon Essence"
+      "id": "hope-damage",
+      "label": "Siphon Essence: roll d12+4 damage (once per long rest)",
+      "on": "card:Siphon Essence",
+      "when": "hope",
+      "damage": {
+       "dice": "d12+4"
+      },
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      }
+     },
+     {
+      "id": "fear-damage",
+      "label": "Siphon Essence: roll d12+4 damage with +1 Proficiency (Fear)",
+      "on": "card:Siphon Essence",
+      "when": "fear",
+      "damage": {
+       "dice": "d12+4",
+       "extraDice": 1
+      },
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      }
      }
     ]
    }
@@ -2994,7 +4157,26 @@
    "domain": "Grace",
    "level": 4,
    "recall": 1,
-   "text": "During a short rest, when you take the time to comfort another character while using the Tend to Wounds downtime move on them, clear an additional Hit Point on that character. When you do, you also clear 2 Hit Points."
+   "text": "During a short rest, when you take the time to comfort another character while using the Tend to Wounds downtime move on them, clear an additional Hit Point on that character. When you do, you also clear 2 Hit Points.",
+   "automation": {
+    "rest": {
+     "modifiers": [
+      {
+       "move": "tend",
+       "rest": "short",
+       "target": "ally",
+       "bonus": 1,
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "hp",
+         "amount": 2
+        }
+       ]
+      }
+     ]
+    }
+   }
   },
   {
    "id": "specter-of-the-dark",
@@ -3043,7 +4225,41 @@
    "domain": "Midnight",
    "level": 8,
    "recall": 1,
-   "text": "When you take magic damage, place tokens equal to the number of Hit Points you marked on this card. You can store a number of tokens equal to your Spellcast trait.\n\nWhen you make a successful attack against a target, you can spend any number of tokens to add a **d6** for each token spent to your damage roll."
+   "text": "When you take magic damage, place tokens equal to the number of Hit Points you marked on this card. You can store a number of tokens equal to your Spellcast trait.\n\nWhen you make a successful attack against a target, you can spend any number of tokens to add a **d6** for each token spent to your damage roll.",
+   "automation": {
+    "resources": [
+     {
+      "id": "spellcharge",
+      "label": "Spellcharge",
+      "initial": 0,
+      "max": "@spellcast"
+     }
+    ],
+    "actions": [
+     {
+      "id": "gain",
+      "label": "Magic damage: store one token per marked HP",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "spellcharge",
+        "amount": 1
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "charge",
+      "label": "Spellcharge token",
+      "roll": "damage",
+      "dice": "1d6",
+      "cost": {
+       "spellcharge": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "splendor-touched",
@@ -3062,6 +4278,40 @@
      {
       "id": "use",
       "label": "Splendor-Touched"
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "stress",
+      "label": "Splendor-Touched: mark Stress instead",
+      "description": "Mark Stress equal to the Hit Points you would mark instead.",
+      "when": {
+       "min": {
+        "value": "@cards_splendor",
+        "at": 4
+       }
+      },
+      "replaceHp": true,
+      "cost": {
+       "stress": "@hp"
+      },
+      "uses": "source"
+     },
+     {
+      "id": "hope",
+      "label": "Splendor-Touched: spend Hope instead",
+      "description": "Spend Hope equal to the Hit Points you would mark instead.",
+      "when": {
+       "min": {
+        "value": "@cards_splendor",
+        "at": 4
+       }
+      },
+      "replaceHp": true,
+      "cost": {
+       "hope": "@hp"
+      },
+      "uses": "source"
      }
     ]
    }
@@ -3117,7 +4367,58 @@
    "domain": "Bone",
    "level": 2,
    "recall": 1,
-   "text": "After a long rest, place a number of tokens equal to your Knowledge on this card (minimum 1). The first time you move within Close range of an adversary and make an attack against them, you can spend one token to choose one of the following options:\n\n- You make the attack with advantage.\n- You clear a Stress on an ally within Melee range of the adversary.\n- You add a **d8** to your damage roll.\nWhen you take a long rest, clear all unspent tokens."
+   "text": "After a long rest, place a number of tokens equal to your Knowledge on this card (minimum 1). The first time you move within Close range of an adversary and make an attack against them, you can spend one token to choose one of the following options:\n\n- You make the attack with advantage.\n- You clear a Stress on an ally within Melee range of the adversary.\n- You add a **d8** to your damage roll.\nWhen you take a long rest, clear all unspent tokens.",
+   "automation": {
+    "resources": [
+     {
+      "id": "strategic",
+      "label": "Strategic Approach tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "rest",
+      "label": "Long rest: place tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "strategic",
+        "amount": "@knowledge"
+       }
+      ]
+     },
+     {
+      "id": "spend",
+      "label": "Spend token: advantage or clear an ally Stress",
+      "cost": {
+       "strategic": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Long rest: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "strategic",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "strategic-d8",
+      "label": "Strategic Approach: +d8 damage",
+      "roll": "damage",
+      "dice": "1d8",
+      "cost": {
+       "strategic": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "stunning-sunlight",
@@ -3176,7 +4477,33 @@
    "domain": "Bone",
    "level": 10,
    "recall": 2,
-   "text": "When an attack made against you fails, clear a Stress. If you can’t clear a Stress, gain a Hope."
+   "text": "When an attack made against you fails, clear a Stress. If you can’t clear a Stress, gain a Hope.",
+   "automation": {
+    "actions": [
+     {
+      "id": "stress",
+      "label": "Attack fails: clear Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "hope",
+      "label": "Attack fails and no Stress to clear: gain Hope",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "tactician",
@@ -3253,14 +4580,60 @@
    "recall": 1,
    "text": "Once per rest, **spend a Hope** to sprout thorns all over your body. When you do, place a number of tokens equal to your Spellcast trait on this card. When you take damage, you can spend any number of tokens to roll that number of **d6s**. Add the results together and reduce the incoming damage by that amount. If you’re within Melee range of the attacker, deal that amount of damage back to them.\n\nWhen you take a rest, clear all unspent tokens.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
+    "resources": [
+     {
+      "id": "thorns",
+      "label": "Thorn Skin tokens",
+      "initial": 0
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Thorn Skin"
+      "id": "cast",
+      "label": "Once per rest: sprout thorns",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "thorns",
+        "amount": "@spellcast"
+       }
+      ],
+      "cost": {
+       "hope": 1
+      }
+     },
+     {
+      "id": "spend",
+      "label": "Spend token: roll reduction/retaliation manually",
+      "cost": {
+       "thorns": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Rest: clear thorns",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "thorns",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "thorns",
+      "label": "Thorn Skin",
+      "description": "Spend tokens to reduce the damage by a d6 each.",
+      "quantity": true,
+      "roll": {
+       "count": "quantity",
+       "sides": 6
+      },
+      "cost": {
+       "thorns": 1
+      }
      }
     ]
    }
@@ -3303,14 +4676,17 @@
    "recall": 1,
    "text": "Once per rest, you can conjure a thick, twisting stalk within Close range that can be easily climbed. Its height can grow up to Far range.\n\n**Mark a Stress** to use this spell as an attack. Make a **Spellcast Roll** against an adversary or group of adversaries within Close range. The erupting stalk lifts targets you succeed against into the air and drops them, dealing **d8** physical damage using your Proficiency.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Towering Stalk"
+      "id": "damage",
+      "label": "Towering Stalk: mark a Stress, roll d8 damage",
+      "on": "card:Towering Stalk",
+      "damage": {
+       "dice": "d8"
+      },
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -3364,7 +4740,52 @@
    "domain": "Midnight",
    "level": 9,
    "recall": 1,
-   "text": "Choose a target within Far range. When you succeed on an action roll against them that doesn’t result in making a damage roll, place a token on this card. When you deal damage to this target, spend any number of tokens to add a** d12** for each token spent to your damage roll. You can only hold Twilight Toll on one creature at a time.\n\nWhen you choose a new target or take a rest, clear all unspent tokens."
+   "text": "Choose a target within Far range. When you succeed on an action roll against them that doesn’t result in making a damage roll, place a token on this card. When you deal damage to this target, spend any number of tokens to add a** d12** for each token spent to your damage roll. You can only hold Twilight Toll on one creature at a time.\n\nWhen you choose a new target or take a rest, clear all unspent tokens.",
+   "automation": {
+    "resources": [
+     {
+      "id": "twilight",
+      "label": "Twilight Toll tokens",
+      "initial": 0
+     }
+    ],
+    "actions": [
+     {
+      "id": "gain",
+      "label": "Successful non-damaging action against chosen target: gain token",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "twilight",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "clear",
+      "label": "New target or rest: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "twilight",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "toll",
+      "label": "Twilight Toll token",
+      "roll": "damage",
+      "dice": "1d12",
+      "cost": {
+       "twilight": 1
+      },
+      "description": "Only damage to the chosen target; spend extra tokens/dice manually."
+     }
+    ]
+   }
   },
   {
    "id": "umbral-veil",
@@ -3375,17 +4796,49 @@
    "recall": 1,
    "text": "Once per rest, you can **mark a Stress** to encase yourself in shadowy energy. When you do, place a number of tokens on this card equal to the number of Fear in the GM’s pool. After an attack roll is made against you, you can spend any number of tokens to give the result a −1 penalty per token spent.\n\nAt the end of the scene, clear all unspent tokens.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
+    "resources": [
+     {
+      "id": "veil",
+      "label": "Umbral Veil tokens",
+      "initial": 0
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Umbral Veil",
+      "id": "cast",
+      "label": "Encase in shadow (tokens = Fear in the GM pool)",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "veil",
+        "amount": "@fear"
+       }
+      ],
       "cost": {
        "stress": 1
+      },
+      "uses": {
+       "max": 1,
+       "per": "rest"
       }
+     },
+     {
+      "id": "spend",
+      "label": "Spend token: -1 to an attack roll",
+      "cost": {
+       "veil": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Scene ends: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "veil",
+        "amount": "all"
+       }
+      ]
      }
     ]
    }
@@ -3397,7 +4850,22 @@
    "domain": "Valor",
    "level": 10,
    "recall": 4,
-   "text": "When you mark your last Hit Point, instead of making a death move, you can roll a **d6** and clear a number of Hit Points equal to the result. Then place this card in your vault."
+   "text": "When you mark your last Hit Point, instead of making a death move, you can roll a **d6** and clear a number of Hit Points equal to the result. Then place this card in your vault.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "At last HP: clear HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d6"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "uncanny-disguise",
@@ -3408,13 +4876,45 @@
    "recall": 0,
    "text": "When you have a few minutes to prepare, you can **mark a Stress** to don the facade of any humanoid you can picture clearly in your mind. While disguised, you have advantage on Presence Rolls to avoid scrutiny.\n\nPlace a number of tokens equal to your Spellcast trait on this card. When you take an action while disguised, spend a token from this card. After the action that spends the last token is resolved, the disguise drops.",
    "automation": {
+    "resources": [
+     {
+      "id": "disguise",
+      "label": "Disguise tokens",
+      "initial": 0
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Uncanny Disguise",
+      "id": "cast",
+      "label": "Successful cast: prepare tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "disguise",
+        "amount": "@spellcast"
+       }
+      ],
       "cost": {
        "stress": 1
       }
+     },
+     {
+      "id": "tick",
+      "label": "Affected creature acts: spend token",
+      "cost": {
+       "disguise": 1
+      }
+     },
+     {
+      "id": "end",
+      "label": "Effect ends: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "disguise",
+        "amount": "all"
+       }
+      ]
      }
     ]
    }
@@ -3449,13 +4949,57 @@
    "recall": 1,
    "text": "At the beginning of a session, place a number of tokens equal to your Spellcast trait on this card.\n\nMake a **Spellcast Roll** against a target within Far range and spend any number of tokens to channel raw energy from within yourself to unleash against them. On a success, roll a number of** d10s** equal to the tokens you spent and deal that much magic damage to the target. **Mark a Stress** to replenish this card with tokens (up to your Spellcast trait).\n\nAt the end of each session, clear all unspent tokens.",
    "automation": {
+    "resources": [
+     {
+      "id": "chaos",
+      "label": "Unleash Chaos tokens",
+      "initial": 0,
+      "max": "@spellcast"
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Unleash Chaos",
+      "id": "session",
+      "label": "Start session: prepare tokens",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "chaos",
+        "amount": "@spellcast"
+       }
+      ]
+     },
+     {
+      "id": "replenish",
+      "label": "Replenish chaos",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "chaos",
+        "amount": "@spellcast"
+       }
+      ],
       "cost": {
        "stress": 1
       }
+     },
+     {
+      "id": "spend",
+      "label": "Spend token: roll 1d10 spell damage manually",
+      "cost": {
+       "chaos": 1
+      }
+     },
+     {
+      "id": "clear",
+      "label": "End session: clear tokens",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "chaos",
+        "amount": "all"
+       }
+      ]
      }
     ]
    }
@@ -3476,7 +5020,26 @@
    "domain": "Valor",
    "level": 10,
    "recall": 1,
-   "text": "When you would mark an Armor Slot, roll a number of **d6s** equal to your Proficiency. If any roll a 6, reduce the severity by one threshold without marking an Armor Slot."
+   "text": "When you would mark an Armor Slot, roll a number of **d6s** equal to your Proficiency. If any roll a 6, reduce the severity by one threshold without marking an Armor Slot.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "unyielding",
+      "label": "Unyielding Armor",
+      "description": "Roll d6s equal to your Proficiency; on any 6 reduce severity without marking the Armor Slot.",
+      "defaultOn": true,
+      "when": {
+       "armor": true
+      },
+      "roll": {
+       "count": "@proficiency",
+       "sides": 6,
+       "success": 6
+      },
+      "saveArmor": 1
+     }
+    ]
+   }
   },
   {
    "id": "valor-touched",
@@ -3498,8 +5061,29 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Vampiric Strike",
+      "id": "hp",
+      "label": "Clear own HP",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ],
+      "cost": {
+       "hope": 1
+      }
+     },
+     {
+      "id": "stress",
+      "label": "Clear own Stress",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ],
       "cost": {
        "hope": 1
       }
@@ -3565,12 +5149,14 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success, roots and vines reach out from the ground, dealing **1d8+1** physical damage and temporarily *Restraining* the target.\n\nAdditionally on a success, you can **spend a Hope** to temporarily *Restrain* another adversary within Very Close range of your target.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Vicious Entangle",
-      "cost": {
-       "hope": 1
+      "id": "damage",
+      "label": "Vicious Entangle: roll 1d8+1 damage",
+      "on": "card:Vicious Entangle",
+      "damage": {
+       "dice": "1d8+1",
+       "fixed": true
       }
      }
     ]
@@ -3592,6 +5178,14 @@
       "cost": {
        "hp": 1
       }
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "ward",
+      "label": "Vital Ward",
+      "description": "While in the circle, resistance to the chosen damage type.",
+      "halve": true
      }
     ]
    }

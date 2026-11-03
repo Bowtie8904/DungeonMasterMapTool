@@ -1399,3 +1399,35 @@
 .online-paused-banner .ikonli-font-icon {
     -fx-icon-color: #e8a33d;
 }
+
+/* DM-side Fear counter, bottom right of the map while a campaign is hosted. */
+.fear-overlay {
+    -fx-background-color: rgba(18, 20, 26, 0.82);
+    -fx-border-color: #6b4fa3;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 8 10 8 10;
+}
+
+.fear-title {
+    -fx-text-fill: #b79cf0;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.fear-count {
+    -fx-text-fill: -dm-text;
+    -fx-font-size: 11px;
+}
+
+.fear-token {
+    -fx-fill: transparent;
+    -fx-stroke: #6b4fa3;
+    -fx-stroke-width: 1.5;
+}
+
+.fear-token-filled {
+    -fx-fill: #8e5cf0;
+    -fx-stroke: #d3bfff;
+    -fx-effect: dropshadow(gaussian, #8e5cf0, 8, 0.3, 0, 0);
+}
