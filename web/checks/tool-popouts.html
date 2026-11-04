@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Standalone tool pop-out regression</title></head>
+<body><div id="compendium" style="height:40vh"></div><div id="sheet" style="height:40vh"></div><div id="note" style="height:50vh"></div><pre id="result"></pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { startToolPopout, addFromPopout } from '../src/compendium-popout.ts';
+import { CompendiumPanel } from '../src/compendium.ts';
+import { renderSharedCard } from '../src/shared-cards.ts';
+import { startSheet } from '../src/sheet.ts';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { defaultState } from '../src/protocol.ts';
+
+const checks = [];
+const assert = (ok, text) => { if (!ok) throw Error(text); checks.push(text); };
+const wait = async predicate => {
+  for (let i = 0; i < 400; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
+  throw Error('Timed out waiting for pop-out UI');
+};
+const originalFetch = window.fetch;
+const originalSocket = window.WebSocket;
+const originalOpen = window.open;
+const sockets = [];
+const hello = { type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alice', campaignId: 'popout-check', notes: true, compendiumChat: true };
+const state = defaultState();
+state.actors = [{ id: 'mara', name: 'Mara', ownerId: 'alice' }, { id: 'bob', name: 'Bob', ownerId: 'bob' }];
+let savedSheet = emptyCharacter('Mara');
+let sheetWrites = 0;
+const links = [];
+let note = { path: 'group.txt', text: 'Shared campaign plans', revision: '1' };
+const potion = { id: 'potion', name: 'Potion of Testing', text: 'A small bottle.' };
+const response = data => new Response(JSON.stringify(data));
+class Socket {
+  static OPEN = 1;
+  readyState = 1;
+  constructor() {
+    sockets.push(this);
+    setTimeout(() => {
+      this.onopen?.();
+      this.emit(hello);
+      this.emit({ type: 'snapshot', seq: 1, state });
+    }, 0);
+  }
+  emit(data) { this.onmessage?.({ data: JSON.stringify(data) }); }
+  send() {}
+  close() { this.readyState = 3; this.onclose?.(); }
+}
+window.WebSocket = Socket;
+window.fetch = async (url, options) => {
+  if (url === '/api/chat-cards') { links.push(JSON.parse(options.body)); return response({}); }
+  if (url === '/api/compendium') return response({ categories: [
+    { category: 'consumables', label: 'Consumables', count: 1 }, { category: 'classes', label: 'Classes', count: 1 }
+  ] });
+  if (url === '/api/compendium/consumables') return response({ category: 'consumables', label: 'Consumables', entries: [potion] });
+  if (url === '/api/compendium/classes') return response({ category: 'classes', label: 'Classes', entries: [
+    { id: 'bard', name: 'Bard', kind: 'class', features: [{ name: 'Rally', text: 'Gain Hope.' }] }
+  ] });
+  if (url === '/api/sheet/mara') {
+    if (options?.method === 'PUT') { savedSheet = JSON.parse(options.body); sheetWrites++; return response({ ok: true }); }
+    return response({ name: 'Mara', sheet: savedSheet });
+  }
+  if (url === '/api/notes') {
+    if (options?.body) { const draft = JSON.parse(options.body); note = { path: draft.path, text: draft.text, revision: '2' }; return response(note); }
+    return response([{ path: 'group.txt', name: 'Group Notes', shared: true, folder: false }]);
+  }
+  if (url === '/api/notes/content?path=group.txt') return response(note);
+  throw Error(`Unexpected fetch ${url}`);
+};
+try {
+  const weapon = { name: 'Blade', slot: 'Primary', damageType: 'phys', trait: 'Agility', range: 'Melee',
+    damage: 'd8+1', hands: 2, tier: 1, feature: { name: 'Sharp', text: 'Cut deeply.' } };
+  const inventoryCard = renderSharedCard({ cardId: 'inventory', actorId: 'mara', actorName: 'Mara',
+    category: 'weapon', item: weapon, available: 0 });
+  const weaponBadges = Array.from(inventoryCard.querySelectorAll('.shared-badges span'), badge => badge.textContent);
+  const compendiumCard = renderSharedCard({ cardId: 'compendium', actorId: '', actorName: 'Compendium - Weapons',
+    category: 'feature', item: { name: 'Blade', source: 'Weapons', text: '**Sharp**\nCut deeply.' },
+    available: 0, badges: weaponBadges });
+  assert(compendiumCard.querySelector('.shared-source').textContent === 'Compendium - Weapons',
+    'compendium chat heading includes the section');
+  assert(JSON.stringify(Array.from(compendiumCard.querySelectorAll('.shared-badges span'), badge => badge.textContent))
+    === JSON.stringify(weaponBadges), 'compendium weapon detail badges match inventory links exactly');
+  assert(!compendiumCard.querySelector('.shared-badges').textContent.includes('Weapons')
+    && compendiumCard.querySelector('.shared-description b').textContent === 'Sharp'
+    && !compendiumCard.querySelector('button'), 'section badge is replaced while description formatting and non-transfer behavior remain');
+  const legacyCard = renderSharedCard({ cardId: 'legacy', actorId: '', actorName: 'Compendium',
+    category: 'feature', item: { name: 'Legacy', source: 'Classes', text: 'Description' }, available: 0 });
+  assert(legacyCard.querySelector('.shared-badges').textContent === 'Classes',
+    'legacy cards without badge metadata retain their previous design');
+  for (const section of ['Weapons', 'Armor', 'Domain Cards', 'Items', 'Consumables', 'Classes', 'Ancestries', 'Communities', 'Transformations']) {
+    const featureCard = renderSharedCard({ cardId: section, actorId: '', actorName: `Compendium - ${section}`,
+      category: 'feature', item: { name: 'Entry', source: section, text: 'Legacy flattened text' }, available: 0,
+      sections: [{ text: '**Description**' }, { name: 'First feature', text: '*Italic* and **bold**' },
+        { name: 'Second feature', text: '- List item' }] });
+    document.body.append(featureCard);
+    assert(featureCard.querySelectorAll('.shared-feature-block').length === 2
+      && featureCard.querySelector('.shared-feature-block i').textContent === 'Italic'
+      && featureCard.querySelector('.shared-feature-block b').textContent === 'bold'
+      && getComputedStyle(featureCard.querySelector('.shared-feature-block')).borderTopWidth === '1px'
+      && !featureCard.textContent.includes('Legacy flattened text'), `${section} links render bordered features and Markdown without duplicate text`);
+    featureCard.remove();
+  }
+  assert(inventoryCard.querySelector('.shared-feature-name').textContent === 'Sharp',
+    'inventory equipment links also use bordered named features');
+  const cmpRoot = document.getElementById('compendium');
+  startToolPopout(cmpRoot, 'compendium', '');
+  await wait(() => cmpRoot.querySelector('.cmp-table'));
+  assert(cmpRoot.textContent.includes('Potion of Testing') && !cmpRoot.querySelector('canvas'), 'standalone Compendium loads without a map canvas');
+  assert(!cmpRoot.querySelector('[draggable=true]'), 'compendium entries cannot be dragged');
+  const addBounds = cmpRoot.querySelector('.cmp-add-icon').getBoundingClientRect();
+  const linkBounds = cmpRoot.querySelector('[aria-label="Link Potion of Testing in chat"]').getBoundingClientRect();
+  assert(addBounds.width === 32 && addBounds.height === 32 && linkBounds.width === 32 && linkBounds.height === 32
+    && addBounds.top === linkBounds.top && linkBounds.left - addBounds.right === 8,
+    'Add and Link in chat are matching 32px buttons aligned horizontally with an 8px gap');
+  assert(cmpRoot.querySelector('.cmp-add-icon svg'), 'Add uses a clearly visible SVG icon');
+  cmpRoot.querySelector('button[aria-label="Link Potion of Testing in chat"]').click();
+  await wait(() => links.length === 1);
+  assert(links[0].compendium.category === 'consumables' && links[0].compendium.entryId === potion.id
+    && !links[0].actorId && !links[0].offerQuantity, 'chat links reference compendium data without an actor or transfer offer');
+  assert(!cmpRoot.querySelector('.cmp-detail-row'), 'chat action does not expand the row');
+  await wait(() => !cmpRoot.querySelector('button[aria-label="Link Potion of Testing in chat"]').disabled);
+  sockets[0].emit({ ...hello, compendiumChat: false });
+  cmpRoot.querySelector('button[aria-label="Link Potion of Testing in chat"]').click();
+  await wait(() => cmpRoot.textContent.includes('Update the host'));
+  assert(links.length === 1, 'older hosts report unsupported chat links without sending a request');
+  sockets[0].emit(hello);
+  sockets[0].readyState = 3;
+  await wait(() => !cmpRoot.querySelector('button[aria-label="Link Potion of Testing in chat"]').disabled);
+  cmpRoot.querySelector('button[aria-label="Link Potion of Testing in chat"]').click();
+  await wait(() => cmpRoot.textContent.includes('Not connected'));
+  assert(links.length === 1, 'disconnected compendium reports failure without posting');
+  sockets[0].readyState = 1;
+  const noActorLinks = [];
+  const noActorPanel = new CompendiumPanel({
+    actors: () => [], add: () => { throw Error('Must not add inventory when linking'); },
+    link: async (category, entry) => { noActorLinks.push({ category, entry }); }, toast: text => { throw Error(text); },
+  });
+  document.body.append(noActorPanel.element);
+  await noActorPanel.open();
+  assert(!noActorPanel.element.querySelector('.cmp-add-icon')
+    && noActorPanel.element.querySelector('[aria-label="Link Potion of Testing in chat"]'),
+    'players with no actors can still link entries but cannot add');
+  noActorPanel.element.querySelectorAll('.cmp-cat')[1].click();
+  await wait(() => noActorPanel.element.querySelector('[aria-label="Link Bard in chat"]'));
+  noActorPanel.element.querySelector('[aria-label="Link Bard in chat"]').click();
+  await wait(() => noActorLinks.length === 1);
+  assert(noActorLinks[0].category === 'classes' && !noActorPanel.element.querySelector('[draggable=true]'),
+    'non-addable categories have working chat links without drag/drop');
+  noActorPanel.element.querySelector('.cmp-row').click();
+  assert(noActorPanel.element.querySelector('.cmp-detail-row td').colSpan
+    === noActorPanel.element.querySelectorAll('thead th').length, 'non-addable expanded rows span the actions column');
+  noActorPanel.element.remove();
+  await startSheet(document.getElementById('sheet'), 'mara');
+  await wait(() => document.querySelector('#sheet .dh'));
+  const sheet = document.querySelector('#sheet .dh');
+  const openCalls = [];
+  window.open = (...args) => { openCalls.push(args); return window; };
+  const target = await addFromPopout('mara', 'consumables', potion);
+  assert(target?.includes('Mara') && savedSheet.inventory.some(i => i.name === potion.name),
+    'standalone Compendium addition is acknowledged only after the receiving live sheet saves');
+  assert(openCalls[0][1] === 'dmmt-compendium-sheet-mara', 'add uses a named receiving sheet so subsequent additions do not reload it');
+  const before = savedSheet.inventory.find(i => i.name === potion.name).qty;
+  const request = { type: 'dmmt-compendium-add', id: 'dedup-test', actorId: 'mara', category: 'consumables', entry: potion };
+  window.postMessage(request, location.origin);
+  window.postMessage(request, location.origin);
+  await wait(() => savedSheet.inventory.find(i => i.name === potion.name).qty > before);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert(savedSheet.inventory.find(i => i.name === potion.name).qty === before + 1,
+    'repeated request IDs do not duplicate inventory additions');
+  const data = new DataTransfer();
+  data.setData('application/x-dmmt-compendium', JSON.stringify({ category: 'consumables', entry: potion }));
+  const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data });
+  sheet.dispatchEvent(drop);
+  assert(!drop.defaultPrevented && savedSheet.inventory.find(i => i.name === potion.name).qty === before + 1,
+    'standalone character sheets do not accept compendium drops');
+  const noteRoot = document.getElementById('note');
+  const sizeKey = 'dmmt.notes.size.popout-check.alice';
+  localStorage.setItem(sizeKey, '[620,410]');
+  startToolPopout(noteRoot, 'note', 'group.txt');
+  await wait(() => noteRoot.querySelector('textarea'));
+  const textarea = noteRoot.querySelector('textarea');
+  assert(textarea.value === 'Shared campaign plans' && !noteRoot.querySelector('[title="Pop out to a new browser window"]'),
+    'standalone note loads host text without nested pop-out controls');
+  assert(noteRoot.querySelector('.note-popout').offsetWidth === noteRoot.clientWidth, 'standalone editor fills resizable browser content');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert(localStorage.getItem(sizeKey) === '[620,410]', 'standalone note does not overwrite floating editor size memory');
+  textarea.value = 'Updated from standalone note';
+  textarea.dispatchEvent(new Event('input'));
+  noteRoot.querySelector('.note-actions button').click();
+  await wait(() => note.text === 'Updated from standalone note');
+  assert(true, 'standalone note saves to campaign through existing authenticated API');
+  sockets.at(-1).emit({ type: 'kicked', reason: 'Session ended' });
+  assert(noteRoot.textContent.includes('session ended') && textarea.value === note.text, 'session end leaves note text available to copy');
+  document.getElementById('result').textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
+} catch (error) {
+  document.getElementById('result').textContent = `FAIL: ${error.stack}`;
+} finally {
+  window.open = originalOpen;
+  window.fetch = originalFetch;
+  window.WebSocket = originalSocket;
+  for (const socket of sockets) socket.close();
+}
+</script>
+</body>
+</html>

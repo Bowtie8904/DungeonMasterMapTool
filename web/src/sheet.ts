@@ -8,6 +8,7 @@ import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
 import { setGmFear } from './daggerheart/engine';
 import { postCard, transferable } from './shared-cards';
+import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
   const store = new Store();
@@ -20,11 +21,38 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let transferOffers = false;
   let rulesWarning = '';
   const bus = new SheetBus();
+  const additions = new Map<string, Promise<string | null>>();
   const report = (message: string) => {
     let error = root.querySelector<HTMLElement>('.sheet-error');
     if (!error) { error = el('div', { class: 'sheet-error error', role: 'alert' }); root.append(error); }
     error.textContent = message;
   };
+  const receiveEntry = async (category: string, entry: CompendiumEntry): Promise<string | null> => {
+    if (!character || !changed || !allowed || unauthorized) throw new Error('The receiving character sheet is not ready.');
+    const target = addToSheet(character, category, entry);
+    if (target) { bus.notify(); changed(); await changed.flush(); }
+    return target ? `${character.name}'s ${target}` : null;
+  };
+  const receive = (event: MessageEvent<{ type?: string; id?: string; actorId?: string; category?: string; entry?: CompendiumEntry }>) => {
+    const request = event.data;
+    if (event.origin !== location.origin || request?.type !== 'dmmt-compendium-add' || request.actorId !== actorId
+      || typeof request.id !== 'string' || typeof request.category !== 'string'
+      || !request.entry || typeof request.entry.name !== 'string' || !event.source || !changed) return;
+    let operation = additions.get(request.id);
+    if (!operation) {
+      operation = receiveEntry(request.category, request.entry);
+      additions.set(request.id, operation);
+      if (additions.size > 200) additions.delete(additions.keys().next().value!);
+    }
+    const source = event.source;
+    const reply = (target: string | null, error?: string) => {
+      if ('postMessage' in source && 'closed' in source)
+        source.postMessage({ type: 'dmmt-compendium-added', id: request.id, target, error }, event.origin);
+    };
+    void operation.then(target => reply(target), (error: Error) => { report(error.message); reply(null, error.message); });
+  };
+  window.addEventListener('message', receive);
+  window.addEventListener('pagehide', () => window.removeEventListener('message', receive), { once: true });
   const refresh = () => {
     const actor = store.state?.actors.find((a) => a.id === actorId);
     if (shown || !allowed || !actor || !character) return;
@@ -86,6 +114,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         else if (m.type === 'delta') {
           if (store.applyDelta(m.seq, m.ops) === 'gap') conn.send({ type: 'resync', lastSeq: store.lastSeq });
         } else if (m.type === 'kicked') {
+          allowed = false;
           conn.stop();
           root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'error' }, 'You were removed from the session.')));
           return;

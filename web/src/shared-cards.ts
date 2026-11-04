@@ -10,7 +10,7 @@ export type SharedEntry =
   | { category: 'weapon'; item: Weapon }
   | { category: 'armor'; item: Armor }
   | { category: 'item'; item: InventoryItem };
-export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number; offerQuantity?: number };
+export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number; offerQuantity?: number; badges?: string[]; sections?: Array<{ name?: string; text: string }> };
 export const INVENTORY_DRAG = 'application/x-dmmt-inventory';
 
 export function transferable(entry: SharedEntry): boolean {
@@ -19,6 +19,10 @@ export function transferable(entry: SharedEntry): boolean {
 
 export async function postCard(actorId: string, entry: SharedEntry, toId?: string, offerQuantity?: number): Promise<void> {
   await cardRequest('', { actorId, ...entry, toId, offerQuantity });
+}
+
+export async function postCompendiumCard(category: string, entryId: string, toId?: string): Promise<void> {
+  await cardRequest('', { compendium: { category, entryId }, toId });
 }
 
 // Drag data is fixed synchronously; the receiver waits for the source window's save before posting.
@@ -64,6 +68,8 @@ export async function waitForInventoryDrag(token: string): Promise<void> {
 export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
                                  onError?: (message: string) => void): HTMLElement {
   const body = el('div', { class: 'shared-description' });
+  const featureBlock = (name: string, text: string) => el('div', { class: 'shared-feature-block' },
+    el('div', { class: 'shared-feature-name' }, name), rich(text));
   const badges: string[] = [];
   switch (card.category) {
     case 'feature':
@@ -77,23 +83,28 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, a
     case 'weapon':
       badges.push(card.item.slot, card.item.damageType, card.item.trait, card.item.range,
         card.item.damage, `${card.item.hands}H`, `Tier ${card.item.tier}`);
-      if (card.item.feature) body.append(el('strong', {}, card.item.feature.name), rich(card.item.feature.text));
+      if (card.item.feature) body.append(featureBlock(card.item.feature.name, card.item.feature.text));
       break;
     case 'armor':
       badges.push(`Armor score ${card.item.score}`, `Tier ${card.item.tier}`);
       if (card.item.major !== undefined && card.item.severe !== undefined) badges.push(`${card.item.major} / ${card.item.severe}`);
-      if (card.item.feature) body.append(el('strong', {}, card.item.feature.name), rich(card.item.feature.text));
+      if (card.item.feature) body.append(featureBlock(card.item.feature.name, card.item.feature.text));
       break;
     case 'item':
       badges.push(card.item.type);
       if (card.item.note) body.append(rich(card.item.note));
       break;
   }
+  if (card.sections) {
+    body.replaceChildren(...card.sections.map(section =>
+      section.name ? featureBlock(section.name, section.text) : rich(section.text)));
+  }
+  const displayBadges = card.badges ?? badges;
   const offer = transferable(card) && (card.offerQuantity ?? 0) > 0;
   const root = el('section', { class: `shared-card shared-${card.category}${offer ? ' transfer-offer' : ''}` },
     el('div', { class: 'shared-source' }, offer ? `Transfer offer from ${card.actorName}` : card.actorName),
     el('h3', {}, card.item.name),
-    el('div', { class: 'shared-badges' }, ...badges.map(text => el('span', {}, text))), body);
+    el('div', { class: 'shared-badges' }, ...displayBadges.map(text => el('span', {}, text))), body);
   if (offer) {
     root.append(el('div', { class: 'shared-offered' }, `${card.offerQuantity} offered`));
     const count = el('span', { class: 'muted' }, `${card.available} remaining`);

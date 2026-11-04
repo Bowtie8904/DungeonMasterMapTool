@@ -35,7 +35,7 @@ jobs:
             --main-jar DungeonMasterMapTool.jar `
             --main-class dmmt.DungeonMasterMapToolLauncher `
             --icon packaging/icon.ico `
-            --add-modules java.base,java.desktop,java.prefs,java.sql,jdk.jfr,jdk.unsupported,jdk.httpserver `
+            --add-modules java.base,java.desktop,java.net.http,java.prefs,java.sql,jdk.jfr,jdk.jsobject,jdk.unsupported,jdk.httpserver,jdk.xml.dom `
             --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED -Dprism.maxvram=1g" `
             --add-launcher DungeonMasterMapTool-Compatibility=packaging/compatibility-launcher.properties `
             --dest dist

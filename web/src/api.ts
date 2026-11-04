@@ -99,3 +99,15 @@ export async function cardRequest<T>(path: string, body?: unknown): Promise<T> {
   if (!res.ok) throw await readError(res);
   return await res.json() as T;
 }
+
+export async function notesRequest<T>(path = '', body?: unknown): Promise<T> {
+  const res = await fetch(`/api/notes${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!res.ok) throw await readError(res);
+  return await res.json() as T;
+}

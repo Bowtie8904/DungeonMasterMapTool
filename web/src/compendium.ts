@@ -1,9 +1,9 @@
 import { el } from './login';
-import { DRAG_TYPE } from './daggerheart/window';
+import { iconButton } from './icons';
 import { pickActor } from './actor-picker';
 import {
   ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, fetchCompendiumCategory, fetchCompendiumIndex,
-  matchesSearch,
+  matchesSearch, type CompendiumFetch,
 } from './daggerheart/compendium';
 export type { CompendiumEntry };
 
@@ -39,13 +39,13 @@ export function markdownBlock(text: string): HTMLElement {
 }
 
 export interface CompendiumHost {
-  /** Names of the player's actors that can receive entries; empty hides the add button. */
+  /** Characters that can receive entries; empty hides the add button. */
   actors: () => Array<{ id: string; name: string }>;
+  request?: CompendiumFetch;
   /** Puts the entry on the actor's sheet; returns a description of the target or null. */
   add: (actorId: string, category: string, entry: CompendiumEntry) => string | null | Promise<string | null>;
   toast: (text: string) => void;
-  /** A drag from the list started; lets the app reveal the sheet to drop onto. */
-  dragStart?: () => void;
+  link: (category: string, entry: CompendiumEntry) => Promise<void>;
 }
 
 interface Column {
@@ -177,13 +177,15 @@ export class CompendiumPanel {
 
   constructor(private readonly host: CompendiumHost) {}
 
+  refreshActors(): void { this.render(); }
+
   /** Called when the window becomes visible; loads the category list once. */
   async open(): Promise<void> {
     if (this.index || this.loading) return;
     this.loading = true;
     this.render();
     try {
-      this.index = await fetchCompendiumIndex();
+      this.index = await fetchCompendiumIndex(this.host.request);
       this.category = this.index[0]?.category ?? '';
       if (this.category) await this.load(this.category);
     } catch (e) {
@@ -195,7 +197,7 @@ export class CompendiumPanel {
 
   private async load(category: string): Promise<void> {
     if (this.files.has(category)) return;
-    this.files.set(category, await fetchCompendiumCategory(category));
+    this.files.set(category, await fetchCompendiumCategory(category, this.host.request));
   }
 
   private async select(category: string): Promise<void> {
@@ -267,7 +269,7 @@ export class CompendiumPanel {
     const addable = !!ADDABLE[this.category];
     const head = el('tr', {}, el('th', { class: 'cmp-expander' }), el('th', {}, 'Name'),
       ...layout.columns.map((c) => el('th', { class: c.wide ? 'wide' : c.numeric ? 'num' : '' }, c.label)),
-      ...(addable ? [el('th', { class: 'cmp-actions' })] : []));
+      el('th', { class: 'cmp-actions' }, 'Actions'));
     const body = el('tbody', {});
     for (const e of hits) this.appendRow(body, e, layout, addable);
     const table = el('table', { class: 'cmp-table' }, el('thead', {}, head), body);
@@ -281,26 +283,32 @@ export class CompendiumPanel {
     toggle.setAttribute('aria-label', `Details of ${e.name}`);
     const row = el('tr', { class: 'cmp-row' }, el('td', { class: 'cmp-expander' }, toggle), el('td', { class: 'nm' }, e.name),
       ...layout.columns.map((c) => el('td', { class: c.wide ? 'wide' : c.numeric ? 'num' : '' }, c.wide ? el('div', { class: 'clamp' }, c.value(e)) : c.value(e))));
+    const actions = el('div', { class: 'cmp-action-buttons' });
+    const link = iconButton('chat', `Link ${e.name} in chat`, () => {
+      link.disabled = true;
+      void this.host.link(this.category, e)
+        .catch((error: Error) => this.host.toast(error.message))
+        .finally(() => { link.disabled = false; });
+    });
+    link.addEventListener('click', ev => ev.stopPropagation());
+    actions.append(link);
     if (addable) {
       const label = ADDABLE[this.category];
-      const add = el('button', { type: 'button', class: 'cmp-add-icon', title: label }, '\uFF0B');
-      add.setAttribute('aria-label', `${label}: ${e.name}`);
-      add.addEventListener('click', (ev) => { ev.stopPropagation(); void this.addEntry(e); });
-      row.append(el('td', { class: 'cmp-actions' }, ...(this.host.actors().length ? [add] : [])));
-      row.draggable = true;
-      row.addEventListener('dragstart', (ev) => {
-        ev.dataTransfer?.setData(DRAG_TYPE, JSON.stringify({ category: this.category, entry: e }));
-        if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';
-        this.host.dragStart?.();
+      const add = iconButton('add', `${label}: ${e.name}`, () => {
+        void this.addEntry(e).catch((error: Error) => this.host.toast(error.message));
       });
+      add.classList.add('cmp-add-icon');
+      add.addEventListener('click', ev => ev.stopPropagation());
+      if (this.host.actors().length) actions.prepend(add);
     }
+    row.append(el('td', { class: 'cmp-actions' }, actions));
     let detail: HTMLElement | null = null;
     const flip = () => {
       if (detail) {
         detail.remove();
         detail = null;
       } else {
-        detail = el('tr', { class: 'cmp-detail-row' }, el('td', { colSpan: layout.columns.length + (addable ? 3 : 2) }, this.detail(e)));
+        detail = el('tr', { class: 'cmp-detail-row' }, el('td', { colSpan: layout.columns.length + 3 }, this.detail(e)));
         row.after(detail);
       }
       const open = !!detail;

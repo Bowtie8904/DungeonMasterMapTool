@@ -5,7 +5,7 @@ import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } fr
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyInventory, autosave, loadCharacter, type SheetSave } from './daggerheart/persist';
-import { INVENTORY_DRAG, postCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
+import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
 import { renderEffects } from './effects';
@@ -21,10 +21,12 @@ import { el } from './login';
 import { OnlineAudio } from './audio';
 import { markAudioGesture, settings } from './settings';
 import { Store } from './store';
+import { NotesPanel } from './notes';
+import { openPopout } from './popout';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
-type SidebarSection = 'chat' | 'actors' | 'settings';
+type SidebarSection = 'chat' | 'actors' | 'notes' | 'settings';
 type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?: Overlay };
 type SheetHandle = { character: CharacterSheet; bus: SheetBus; save: SheetSave };
 
@@ -35,6 +37,7 @@ export class App {
   private playerId = '';
   private playerWhispers = false;
   private chatCards = false;
+  private compendiumChat = false;
   private transferOffers = false;
   private drawingHistory: DrawingEdit[] = [];
   private pendingDrawings = new Map<string, { inverse: DrawingEdit; undo: boolean; after?: Overlay; record: boolean }>();
@@ -95,6 +98,7 @@ export class App {
   private chatRecipient = el('select', { id: 'chat-recipient' },
     el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
+  private notes = new NotesPanel(element => this.stageEl.append(element), text => this.toast(text));
   private sheetHandles = new Map<string, SheetHandle>();
   private myActors: Actor[] = [];
   private compendium = new CompendiumPanel({
@@ -102,19 +106,27 @@ export class App {
     add: async (id, category, entry) => {
       const actor = this.myActors.find((a) => a.id === id);
       if (!actor) return null;
-      let handle;
-      try { handle = await this.ensureSheet(actor); } catch { return null; }
+      const handle = await this.ensureSheet(actor);
       const where = addToSheet(handle.character, category, entry);
       if (where) handle.bus.notify();
       return where ? `${actor.name}'s ${where}` : null;
     },
     toast: (t) => this.toast(t),
-    dragStart: () => { for (const a of this.myActors) this.openSheet(a); },
+    link: async (category, entry) => {
+      if (!this.compendiumChat) throw new Error('Update the host to support compendium chat links.');
+      if (!this.conn.isOpen) throw new Error('Not connected. Your link was not posted.');
+      if (this.chatRecipient.selectedOptions[0]?.disabled) throw new Error('That player is offline. Choose a recipient before sharing.');
+      await postCompendiumCard(category, entry.id, this.chatRecipient.value || undefined);
+      this.showSection('chat');
+    },
   });
   private compendiumWindow = new ToolWindow('Compendium', this.compendium.element, (open) => {
     this.compendiumButton?.setAttribute('aria-pressed', String(open));
     if (open) void this.compendium.open();
-  }, 'cmp-win');
+  }, 'cmp-win', () => {
+    if (openPopout('/?popout=compendium', 1180, 900)) this.compendiumWindow.setOpen(false);
+    else this.toast('The Compendium pop-out was blocked. Allow pop-ups for this site and try again.');
+  });
   private compendiumButton?: HTMLButtonElement;
   private banner = el(
     'div',
@@ -255,6 +267,7 @@ export class App {
     this.updateSoundUi();
     const out = el('button', { class: 'icon' }, 'Log out');
     out.addEventListener('click', async () => {
+      if (!await this.notes.confirmLeave()) return;
       out.disabled = true;
       try {
         await logout();
@@ -382,8 +395,9 @@ export class App {
     rail.setAttribute('aria-label', 'Sidebar sections');
     this.sections.set('chat', this.buildChat());
     this.sections.set('actors', this.actorsEl);
+    this.sections.set('notes', this.notes.element);
     this.sections.set('settings', this.buildSettings());
-    for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
+    for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['notes', 'Notes'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
       if (id === 'compendium') {
         const button = iconButton(id, label, () => this.compendiumWindow.toggle());
         button.setAttribute('aria-pressed', 'false');
@@ -421,6 +435,7 @@ export class App {
       this.setChatUnread(false);
       this.restoreChatScroll();
     }
+    if (section === 'notes') void this.notes.open();
   }
 
   private setChatUnread(unread: boolean): void {
@@ -671,6 +686,7 @@ export class App {
   }
 
   private dispose(): void {
+    this.notes.dispose();
     this.chatResize?.disconnect();
     if (this.colorTimer !== null) clearTimeout(this.colorTimer);
     this.conn.stop();
@@ -692,6 +708,8 @@ export class App {
     switch (msg.type) {
       case 'hello':
         this.playerId = msg.playerId;
+        this.notes.setSession(msg.notes === true, msg.campaignId ?? '', msg.playerId);
+        if (this.section === 'notes') void this.notes.open();
         this.currentIdentity = null;
         this.identitySupported = msg.chatIdentity === true;
         this.identityInput.disabled = this.identitySave.disabled = !this.identitySupported;
@@ -701,6 +719,7 @@ export class App {
           : 'This host does not support chat identities. Update the host to enable them.';
         this.playerWhispers = msg.playerWhispers === true;
         this.chatCards = msg.chatCards === true;
+        this.compendiumChat = msg.compendiumChat === true;
         this.transferOffers = msg.transferOffers === true;
         for (const handle of this.sheetHandles.values()) {
           void handle.save.refresh().then(() => handle.bus.notify()).catch((e: Error) => this.toast(e.message));
@@ -1047,7 +1066,6 @@ export class App {
           a.name,
           () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'),
           () => {},
-          (payload) => this.dropOnSheet(a, payload),
         );
         this.sheetWindows.set(a.id, win);
         this.stageEl.append(win.element);
@@ -1065,18 +1083,6 @@ export class App {
       if (toggle) win.toggle();
       else if (show) win.setOpen(true);
     }).catch((e: Error) => this.toast(`Cannot load the character sheet: ${e.message}`));
-  }
-
-  private dropOnSheet(a: Actor, payload: string): void {
-    try {
-      const { category, entry } = JSON.parse(payload);
-      const handle = this.sheetHandles.get(a.id);
-      const where = handle ? addToSheet(handle.character, category, entry) : null;
-      if (where) handle!.bus.notify();
-      this.toast(where ? `${entry.name} added to ${a.name}'s ${where}.` : 'This entry cannot be added to a sheet.');
-    } catch {
-      this.toast('Could not read the dropped entry.');
-    }
   }
 
   private renderActors(s: GameState): void {

@@ -105,6 +105,11 @@ export function applyInventory(c: CharacterSheet, incoming: Partial<CharacterShe
   c.carriedWeapons = incoming.carriedWeapons ?? [];
   c.carriedArmor = incoming.carriedArmor ?? [];
   c.activeArmor = incoming.activeArmor;
+  if ((incoming.compendiumRevision ?? 0) > (c.compendiumRevision ?? 0)) {
+    c.compendiumRevision = incoming.compendiumRevision;
+    if (incoming.loadout) c.loadout = incoming.loadout;
+    if (incoming.vault) c.vault = incoming.vault;
+  }
   return true;
 }
 

@@ -1,6 +1,7 @@
 import { el } from './login';
 
 const paths: Record<string, string> = {
+  add: 'M12 5v14M5 12h14',
   navigate: 'M5 3 19 12 12 13 9 20Z',
   draw: 'm10 14 9-11 3 3-11 9M10 14c-6-2-3 6-8 6 6 3 11-2 8-6Z',
   pen: 'm4 15 12-12 5 5L9 20l-6 1ZM14 5l5 5M4 15l5 5',
@@ -14,6 +15,7 @@ const paths: Record<string, string> = {
   transfer: 'M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4',
   grab: 'M8 13V6a2 2 0 0 1 4 0v5-2a2 2 0 0 1 4 0v3a2 2 0 0 1 4 0v4c0 4-2 6-6 6h-1c-2 0-3-1-4-2l-5-6a2 2 0 0 1 3-2l2 2',
   actors: 'M14 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM3 21v-3a7 7 0 0 1 14 0v3M17 4a4 4 0 0 1 0 8M20 21v-4',
+  notes: 'M5 3h10l4 4v14H5ZM14 3v5h5M8 12h8M8 16h8',
   settings: 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',
   close: 'M6 6l12 12M18 6 6 18',
   sheet: 'M6 3h9l3 3v15H6zM9 10h6M9 14h6M9 18h4',

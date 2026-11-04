@@ -153,6 +153,7 @@ export interface CharacterSheet {
   testingBuild?: TestingBuild;
   /** Host-owned transfer generation; stale inventory saves are rejected. */
   inventoryRevision?: number;
+  compendiumRevision?: number;
   /** Character Mancer state; absent for sheets that were never created with it */
   mancer?: { done: boolean; choices?: CreationChoices };
   levelUps?: LevelUpRecord[];

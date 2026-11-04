@@ -15,6 +15,7 @@ import javafx.scene.text.TextAlignment;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignB;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
@@ -110,6 +111,7 @@ public final class ControlKeyImages {
             case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
             case "online.chat" -> MaterialDesignC.CHAT_OUTLINE;
+            case "online.compendium" -> MaterialDesignB.BOOK_OPEN_VARIANT;
             case "weather.lightningInterval" -> MaterialDesignW.WEATHER_LIGHTNING;
             case "weather.indoors" -> org.kordamp.ikonli.materialdesign2.MaterialDesignH.HOME_OUTLINE;
             case "fog.brushSize", "effects.brushSize" -> MaterialDesignF.FORMAT_PAINT;

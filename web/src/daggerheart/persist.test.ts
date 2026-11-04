@@ -12,6 +12,21 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('merges DM domain additions without replacing pending card edits on ordinary inventory updates', () => {
+    const c = mockCharacter();
+    c.notes = 'Pending notes';
+    const card = { name: 'DM card', domain: 'Grace', level: 1, type: 'Spell' as const, text: 'Granted', recall: 0 };
+    const loadout = c.loadout;
+    expect(applyInventory(c, { inventoryRevision: 1, compendiumRevision: 1, loadout, vault: [card] })).toBe(true);
+    expect(c.vault).toEqual([card]);
+    expect(c.compendiumRevision).toBe(1);
+    c.vault = [];
+    expect(applyInventory(c, { inventoryRevision: 2, compendiumRevision: 1, loadout: [], vault: [card] })).toBe(true);
+    expect(c.vault).toEqual([]);
+    expect(c.loadout).toBe(loadout);
+    expect(c.notes).toBe('Pending notes');
+  });
+
   it('adds missing rest metadata to saved gear without overwriting GM rules', () => {
     const c = mockCharacter();
     c.inventory = [{ name: 'Custom recipe', type: 'gear', qty: 1, automation: {

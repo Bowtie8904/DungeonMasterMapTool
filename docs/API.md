@@ -38,6 +38,7 @@ Examples (default port, illustrative LAN IP; use the actual IP from **Copy API U
 | Night | `http://192.168.1.100:7071/api/controls/lighting/night` |
 | Toggle fog | `http://192.168.1.100:7071/api/controls/fog/enabled` |
 | Toggle player freeze | `http://192.168.1.100:7071/api/controls/player/freeze` |
+| Toggle DM compendium (while hosting) | `http://192.168.1.100:7071/api/controls/online/compendium` |
 | Set effect colour to red | `http://192.168.1.100:7071/api/controls/effects/color?value=%23FF0000` |
 | Set effect opacity to 0.5 | `http://192.168.1.100:7071/api/controls/effects/opacity?value=0.5` |
 | Increase effect opacity by 0.1 | `http://192.168.1.100:7071/api/controls/effects/opacity?increment=0.1` |

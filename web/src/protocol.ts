@@ -298,9 +298,11 @@ export interface Hello {
   measurementTools?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;
+  compendiumChat?: boolean;
   transferOffers?: boolean;
   keptDice?: boolean;
   chatIdentity?: boolean;
+  notes?: boolean;
 }
 
 import type { AudioMessage } from './audio';

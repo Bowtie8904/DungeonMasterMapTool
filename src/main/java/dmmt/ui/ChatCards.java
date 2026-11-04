@@ -12,6 +12,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -261,7 +263,7 @@ public final class ChatCards {
         if (source.isObject()) {
             VBox content = new VBox(4, wrapped(source.path("source").asText(), "chat-shared-source"),
                     wrapped(source.path("name").asText(), "chat-source-name"),
-                    wrapped(source.path("text").asText(), "chat-source-text"));
+                    markdown(source.path("text").asText(), "chat-source-text"));
             content.getStyleClass().add("chat-source-content");
             Node details = disclosure("Source: " + source.path("name").asText(), content, "chat-roll-source");
             VBox.setMargin(details, new Insets(0, 14, 12, 14));
@@ -308,6 +310,63 @@ public final class ChatCards {
         label.setMinHeight(Region.USE_PREF_SIZE);
         label.getStyleClass().add(styleClass);
         return label;
+    }
+
+    private static final Pattern MARKDOWN_INLINE = Pattern.compile(
+            "\\*\\*\\*(.+?)\\*\\*\\*|\\*\\*(.+?)\\*\\*(?!\\*)|\\*(.+?)\\*|(?<![\\w])_(.+?)_(?![\\w])");
+
+    static List<MarkdownRun> markdownRuns(String line) {
+        List<MarkdownRun> runs = new ArrayList<>();
+        Matcher matcher = MARKDOWN_INLINE.matcher(line);
+        int last = 0;
+        while (matcher.find()) {
+            if (matcher.start() > last)
+                runs.add(new MarkdownRun(line.substring(last, matcher.start()), false, false));
+            boolean bold = matcher.group(1) != null || matcher.group(2) != null;
+            boolean italic = matcher.group(1) != null || matcher.group(3) != null || matcher.group(4) != null;
+            String content = matcher.group(1) != null ? matcher.group(1) : matcher.group(2) != null ? matcher.group(2)
+                    : matcher.group(3) != null ? matcher.group(3) : matcher.group(4);
+            for (MarkdownRun nested : markdownRuns(content))
+                runs.add(new MarkdownRun(nested.text(), bold || nested.bold(), italic || nested.italic()));
+            last = matcher.end();
+        }
+        if (last < line.length())
+            runs.add(new MarkdownRun(line.substring(last), false, false));
+        return runs;
+    }
+
+    record MarkdownRun(String text, boolean bold, boolean italic) {
+    }
+
+    static VBox markdown(String value, String styleClass) {
+        VBox block = new VBox(3);
+        block.getStyleClass().add(styleClass);
+        for (String line : value.split("\\R", -1)) {
+            if (line.isBlank()) {
+                Region gap = new Region();
+                gap.setMinHeight(4);
+                block.getChildren().add(gap);
+                continue;
+            }
+            TextFlow flow = new TextFlow();
+            flow.setMinHeight(Region.USE_PREF_SIZE);
+            String content = line.replaceFirst("^\\s*[-*] ", "\u2022 ");
+            for (MarkdownRun run : markdownRuns(content)) {
+                Text text = new Text(run.text());
+                text.getStyleClass().add("chat-markdown-text");
+                if (run.bold()) text.getStyleClass().add("chat-markdown-bold");
+                if (run.italic()) text.getStyleClass().add("chat-markdown-italic");
+                flow.getChildren().add(text);
+            }
+            block.getChildren().add(flow);
+        }
+        return block;
+    }
+
+    private static Node featureBlock(String name, String text) {
+        VBox block = new VBox(4, wrapped(name, "chat-feature-name"), markdown(text, "chat-shared-description"));
+        block.getStyleClass().add("chat-feature");
+        return block;
     }
 
     private static Node restBody(RestReport report) {
@@ -414,6 +473,10 @@ public final class ChatCards {
                 body.append(item.path("note").asText());
             }
         }
+        if (card.path("badges").isArray()) {
+            badges.clear();
+            card.path("badges").forEach(badge -> badges.add(badge.asText()));
+        }
         boolean offer = !"feature".equals(category) && !"domain".equals(category)
                 && card.path("offerQuantity").asInt(0) > 0;
         String actor = card.path("actorName").asText();
@@ -432,8 +495,17 @@ public final class ChatCards {
             }
         }
         root.getChildren().addAll(source, name, badgePane);
-        if (!body.isEmpty()) {
-            root.getChildren().add(wrapped(body.toString(), "chat-shared-description"));
+        if (card.path("sections").isArray()) {
+            for (JsonNode section : card.path("sections")) {
+                String title = section.path("name").asText();
+                root.getChildren().add(title.isBlank() ? markdown(section.path("text").asText(), "chat-shared-description")
+                        : featureBlock(title, section.path("text").asText()));
+            }
+        } else if (("weapon".equals(category) || "armor".equals(category)) && item.path("feature").isObject()) {
+            root.getChildren().add(featureBlock(item.path("feature").path("name").asText(),
+                    item.path("feature").path("text").asText()));
+        } else if (!body.isEmpty()) {
+            root.getChildren().add(markdown(body.toString(), "chat-shared-description"));
         }
         if (offer) {
             root.getChildren().add(wrapped(card.path("offerQuantity").asInt() + " offered", "chat-shared-offered"));

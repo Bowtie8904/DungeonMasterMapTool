@@ -11,6 +11,40 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ChatCardsTest {
     @Test
+    void rendersMarkdownAsStyledNativeTextWithListsAndLineBreaks() {
+        var block = ChatCards.markdown("**Bold** and *italic*\n\n- ***Both***", "chat-shared-description");
+        assertEquals(3, block.getChildren().size());
+        var first = (javafx.scene.text.TextFlow) block.getChildren().get(0);
+        var bold = (javafx.scene.text.Text) first.getChildren().get(0);
+        assertEquals("Bold", bold.getText());
+        assertEquals(true, bold.getStyleClass().contains("chat-markdown-bold"));
+        var italic = (javafx.scene.text.Text) first.getChildren().get(2);
+        assertEquals("italic", italic.getText());
+        assertEquals(true, italic.getStyleClass().contains("chat-markdown-italic"));
+        var list = (javafx.scene.text.TextFlow) block.getChildren().get(2);
+        assertEquals("\u2022 ", ((javafx.scene.text.Text) list.getChildren().get(0)).getText());
+        var both = (javafx.scene.text.Text) list.getChildren().get(1);
+        assertEquals("Both", both.getText());
+        assertEquals(true, both.getStyleClass().containsAll(List.of("chat-markdown-bold", "chat-markdown-italic")));
+    }
+
+    @Test
+    void parsesMarkdownWithoutLeakingMarkersAndRetainsNestedEmphasis() {
+        assertEquals(List.of(
+                new ChatCards.MarkdownRun("Bold", true, false),
+                new ChatCards.MarkdownRun(" and ", false, false),
+                new ChatCards.MarkdownRun("italic", false, true),
+                new ChatCards.MarkdownRun(" and ", false, false),
+                new ChatCards.MarkdownRun("both", true, true)),
+                ChatCards.markdownRuns("**Bold** and _italic_ and ***both***"));
+        assertEquals(List.of(new ChatCards.MarkdownRun("Bold ", true, false),
+                        new ChatCards.MarkdownRun("italic", true, true)),
+                ChatCards.markdownRuns("**Bold *italic***"));
+        assertEquals(List.of(new ChatCards.MarkdownRun("unmatched ** and file_name", false, false)),
+                ChatCards.markdownRuns("unmatched ** and file_name"));
+    }
+
+    @Test
     void keepHighestDropsLowestDice() {
         assertArrayEquals(new boolean[]{true, false, true}, ChatCards.keptRolls("3d20kh2", List.of(15, 3, 9)));
     }

@@ -93,10 +93,12 @@ public final class OnlineSessionServer {
 
     private final Config config;
     private final CampaignStore store;
+    private final CampaignNotes notes;
     private final AssetRegistry assets;
     private final Host host;
     private final LoginRateLimiter limiter;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final String dmCompendiumToken = java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID();
     private final Random diceRandom = new Random();
     private final Map<String, String> sessions = new ConcurrentHashMap<>();
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
@@ -149,6 +151,7 @@ public final class OnlineSessionServer {
         this.config = config;
         this.campaign = campaign;
         this.store = store;
+        this.notes = new CampaignNotes(store.root());
         this.chatId = Math.max(System.currentTimeMillis(), store.historyTail(campaign.getId(), Integer.MAX_VALUE)
                 .stream().mapToLong(m -> m.path("id").asLong()).max().orElse(0));
         this.assets = assets;
@@ -190,11 +193,17 @@ public final class OnlineSessionServer {
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
+        javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
+        javalin.get("/api/notes/content", ctx -> handleNotes(ctx, "read"));
+        javalin.post("/api/notes", ctx -> handleNotes(ctx, "edit"));
         javalin.post("/api/chat-cards", this::handleShareCard);
         javalin.get("/api/chat-cards/{id}", this::handleCardStock);
         javalin.post("/api/chat-cards/{id}/grab", this::handleGrabCard);
         javalin.get("/api/compendium", this::handleCompendiumIndex);
         javalin.get("/api/compendium/{category}", this::handleCompendiumCategory);
+        javalin.get("/api/dm/compendium/actors", this::handleDmCompendiumActors);
+        javalin.post("/api/dm/compendium/add", ctx -> handleDmCompendiumAction(ctx, false));
+        javalin.post("/api/dm/compendium/link", ctx -> handleDmCompendiumAction(ctx, true));
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
         javalin.get("/a/{name}", this::handleAsset);
         javalin.get("/t/{key}/{level}/{tile}", this::handleTile);
@@ -276,6 +285,87 @@ public final class OnlineSessionServer {
 
     public int port() {
         return app == null ? config.port() : app.port();
+    }
+
+    /** A local-only capability for the embedded DM window; never include this URL in invite links or snapshots. */
+    public String dmCompendiumUrl() {
+        if (!isRunning()) throw new IllegalStateException("Start hosting a campaign before opening the compendium.");
+        return "http://127.0.0.1:" + port() + "/?dm-compendium=1#" + dmCompendiumToken;
+    }
+
+    private boolean isDmCompendium(Context ctx) {
+        String address = ctx.req().getRemoteAddr();
+        return ("127.0.0.1".equals(address) || "::1".equals(address)
+                || "0:0:0:0:0:0:0:1".equals(address))
+                && ("Bearer " + dmCompendiumToken).equals(ctx.header("Authorization"));
+    }
+
+    private boolean requireDmCompendium(Context ctx) {
+        if (isDmCompendium(ctx)) return true;
+        json(ctx, 403, errorBody("Only the hosting DM can use this compendium control."));
+        return false;
+    }
+
+    private synchronized void handleDmCompendiumActors(Context ctx) {
+        if (!requireDmCompendium(ctx)) return;
+        ArrayNode actors = MAPPER.createArrayNode();
+        for (Campaign.Actor actor : campaign.getActors()) {
+            Campaign.Player owner = campaign.player(actor.getOwnerId());
+            if (owner != null)
+                actors.addObject().put("id", actor.getId()).put("name", actor.getName() + " (" + owner.getName() + ")");
+        }
+        json(ctx, 200, actors);
+    }
+
+    private JsonNode compendiumDocument(String category) throws IOException {
+        java.nio.file.Path dir = host.compendiumDirectory();
+        java.nio.file.Path file = dir == null || !COMPENDIUM_NAME.matcher(category).matches()
+                ? null : dir.resolve(category + ".json");
+        if (file == null || !java.nio.file.Files.isRegularFile(file))
+            throw new IllegalArgumentException("Unknown compendium category.");
+        return MAPPER.readTree(file.toFile());
+    }
+
+    private synchronized void handleDmCompendiumAction(Context ctx, boolean link) {
+        if (!requireDmCompendium(ctx)) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Compendium request is too large."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject())
+                throw new IllegalArgumentException("Invalid compendium request.");
+            String category = request.path("category").asText();
+            JsonNode document = compendiumDocument(category);
+            JsonNode entry = CompendiumEntries.entry(document, request.path("entryId").asText());
+            if (link) {
+                ObjectNode item = ChatCards.compendiumItem(document, entry.path("id").asText());
+                publishSharedCard("dm", "DM", "", "Compendium - " + document.path("label").asText(),
+                        "feature", item, 0, "", true);
+                json(ctx, 200, MAPPER.createObjectNode().put("linked", true));
+            } else {
+                Campaign.Actor actor = campaign.actor(request.path("actorId").asText());
+                if (actor == null || campaign.player(actor.getOwnerId()) == null)
+                    throw new IllegalArgumentException("Choose a player-owned campaign character.");
+                ObjectNode sheet = storedSheet(actor.getId());
+                String target = CompendiumEntries.add(sheet, category, entry);
+                sheet.put("inventoryRevision", sheet.path("inventoryRevision").asLong() + 1);
+                if ("domain-cards".equals(category))
+                    sheet.put("compendiumRevision", sheet.path("compendiumRevision").asLong() + 1);
+                if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+                    throw new IllegalArgumentException("The receiving character sheet is too large.");
+                store.saveSheet(campaign.getId(), actor.getId(), sheet.toString());
+                inventoryChanged(actor, sheet);
+                json(ctx, 200, MAPPER.createObjectNode().put("target", target));
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid compendium request or data."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read the compendium or save the character sheet/chat link."));
+        }
     }
 
     // ---- state publication ----
@@ -685,7 +775,7 @@ public final class OnlineSessionServer {
         }
     }
 
-    private void json(Context ctx, int status, ObjectNode body) {
+    private void json(Context ctx, int status, JsonNode body) {
         ctx.status(status).contentType("application/json").result(body.toString());
     }
 
@@ -789,8 +879,63 @@ public final class OnlineSessionServer {
 
     private static final java.util.regex.Pattern COMPENDIUM_NAME = java.util.regex.Pattern.compile("[a-z0-9-]{1,64}");
 
+    private synchronized void handleNotes(Context ctx, String operation) {
+        String player = requirePlayer(ctx);
+        if (player == null) return;
+        ctx.header("Cache-Control", "no-store");
+        Campaign c = campaign;
+        if (c == null || c.player(player) == null) {
+            json(ctx, 403, errorBody("Campaign player is unavailable."));
+            return;
+        }
+        try {
+            Object result;
+            if ("list".equals(operation)) {
+                result = notes.list(c.getId(), player);
+            } else if ("read".equals(operation)) {
+                result = notes.read(c.getId(), player, ctx.queryParam("path"));
+            } else {
+                if (ctx.bodyAsBytes().length > CampaignNotes.MAX_TEXT_BYTES * 6 + 4096) {
+                    json(ctx, 413, errorBody("Note request is too large."));
+                    return;
+                }
+                JsonNode request = MAPPER.readTree(ctx.body());
+                if (request == null || !request.isObject())
+                    throw new CampaignNotes.Rejected(400, "Invalid note request.");
+                String path = noteString(request, "path");
+                result = switch (noteString(request, "action")) {
+                    case "create" -> {
+                        if (!request.path("folder").isBoolean())
+                            throw new CampaignNotes.Rejected(400, "Specify whether to create a note or folder.");
+                        yield notes.create(c.getId(), player, path, noteString(request, "name"), request.path("folder").asBoolean());
+                    }
+                    case "rename" -> notes.rename(c.getId(), player, path, noteString(request, "name"));
+                    case "delete" -> {
+                        notes.delete(c.getId(), player, path);
+                        yield Map.of("ok", true);
+                    }
+                    case "save" -> notes.save(c.getId(), player, path, noteString(request, "text"), noteString(request, "revision"));
+                    default -> throw new CampaignNotes.Rejected(400, "Unknown notes action.");
+                };
+            }
+            json(ctx, 200, MAPPER.valueToTree(result));
+        } catch (CampaignNotes.Rejected e) {
+            json(ctx, e.status(), errorBody(e.getMessage()));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid note request JSON."));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not access campaign notes. Your changes were not confirmed; reload before retrying."));
+        }
+    }
+
+    private static String noteString(JsonNode request, String field) {
+        if (!request.path(field).isTextual())
+            throw new CampaignNotes.Rejected(400, "Missing or invalid notes field: " + field);
+        return request.path(field).textValue();
+    }
+
     private void handleCompendiumIndex(Context ctx) {
-        if (requirePlayer(ctx) == null) {
+        if (!isDmCompendium(ctx) && requirePlayer(ctx) == null) {
             return;
         }
         ArrayNode categories = MAPPER.createArrayNode();
@@ -823,7 +968,7 @@ public final class OnlineSessionServer {
     }
 
     private void handleCompendiumCategory(Context ctx) {
-        if (requirePlayer(ctx) == null) {
+        if (!isDmCompendium(ctx) && requirePlayer(ctx) == null) {
             return;
         }
         String name = ctx.pathParam("category");
@@ -894,8 +1039,9 @@ public final class OnlineSessionServer {
                 return;
             }
             ObjectNode previous = storedSheet(actor.getId());
-            if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)) {
-                ObjectNode conflict = errorBody("Inventory changed in chat. Refresh inventory before saving.");
+            if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)
+                    || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)) {
+                ObjectNode conflict = errorBody("Inventory or domain cards changed on the host. Refresh the sheet before saving.");
                 conflict.set("sheet", previous);
                 json(ctx, 409, conflict);
                 return;
@@ -948,10 +1094,34 @@ public final class OnlineSessionServer {
             }
             JsonNode request = MAPPER.readTree(ctx.body());
             if (request == null || !request.isObject()) throw new IllegalArgumentException("Invalid shared card request.");
-            Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
-            String category = request.path("category").asText();
-            ObjectNode sheet = storedSheet(actor.getId());
-            ObjectNode item = ChatCards.resolve(sheet, category, request.path("item"));
+            String actorId;
+            String actorName;
+            String category;
+            ObjectNode sheet = null;
+            ObjectNode item;
+            if (request.has("compendium")) {
+                if (request.has("offerQuantity"))
+                    throw new IllegalArgumentException("Compendium links cannot offer inventory for transfer.");
+                JsonNode reference = request.path("compendium");
+                String name = reference.path("category").asText();
+                java.nio.file.Path dir = host.compendiumDirectory();
+                if (dir == null || !COMPENDIUM_NAME.matcher(name).matches())
+                    throw new IllegalArgumentException("Unknown compendium category.");
+                java.nio.file.Path file = dir.resolve(name + ".json");
+                if (!java.nio.file.Files.isRegularFile(file))
+                    throw new IllegalArgumentException("Unknown compendium category.");
+                item = ChatCards.compendiumItem(MAPPER.readTree(file.toFile()), reference.path("entryId").asText());
+                actorId = "";
+                actorName = "Compendium - " + item.path("source").asText();
+                category = "feature";
+            } else {
+                Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
+                actorId = actor.getId();
+                actorName = actor.getName();
+                category = request.path("category").asText();
+                sheet = storedSheet(actorId);
+                item = ChatCards.resolve(sheet, category, request.path("item"));
+            }
             int offerQuantity = 0;
             if (request.has("offerQuantity")) {
                 JsonNode quantity = request.get("offerQuantity");
@@ -961,27 +1131,39 @@ public final class OnlineSessionServer {
                 offerQuantity = quantity.asInt();
             }
             String to = chatRecipient(request);
-            ObjectNode card = MAPPER.createObjectNode().put("cardId", java.util.UUID.randomUUID().toString())
-                                    .put("actorId", actor.getId()).put("actorName", actor.getName()).put("category", category);
-            card.set("item", item);
-            if (offerQuantity > 0)
-                card.put("offerQuantity", offerQuantity);
-            card.put("available", offerQuantity);
-            String description = item.path("text").asText(item.path("note").asText(
-                    item.path("feature").path("text").asText("")));
-            ObjectNode message = chatMessage(playerId, campaign.player(playerId).getName(), to,
-                                             (offerQuantity > 0 ? actor.getName() + " offers " + offerQuantity + " x " : "")
-                                                     + item.path("name").asText() + (description.isBlank() ? "" : "\n" + description));
-            message.set("sharedCard", card);
-            store.appendHistoryChecked(campaign.getId(), message);
-            sharedCards.put(card.path("cardId").asText(), message);
-            deliver(message, to, false);
+            ObjectNode card = publishSharedCard(playerId, campaign.player(playerId).getName(), actorId, actorName,
+                    category, item, offerQuantity, to, request.has("compendium"));
             json(ctx, 200, card);
         } catch (IllegalArgumentException e) {
             json(ctx, 400, errorBody(e.getMessage()));
         } catch (IOException e) {
-            json(ctx, 500, errorBody("Could not read the source sheet or shared card."));
+            json(ctx, 500, errorBody("Could not read the compendium, source sheet or shared card."));
         }
+    }
+
+    private ObjectNode publishSharedCard(String playerId, String playerName, String actorId, String actorName,
+                                         String category, ObjectNode item, int offerQuantity, String to,
+                                         boolean compendium) throws IOException {
+        ObjectNode card = MAPPER.createObjectNode().put("cardId", java.util.UUID.randomUUID().toString())
+                .put("actorId", actorId).put("actorName", actorName).put("category", category);
+        card.set("item", item);
+        if (compendium) {
+            card.set("badges", item.remove("badges"));
+            card.set("sections", item.remove("sections"));
+        }
+        if (offerQuantity > 0)
+            card.put("offerQuantity", offerQuantity);
+        card.put("available", offerQuantity);
+        String description = item.path("text").asText(item.path("note").asText(
+                item.path("feature").path("text").asText("")));
+        ObjectNode message = chatMessage(playerId, playerName, to,
+                (offerQuantity > 0 ? actorName + " offers " + offerQuantity + " x " : "")
+                        + item.path("name").asText() + (description.isBlank() ? "" : "\n" + description));
+        message.set("sharedCard", card);
+        store.appendHistoryChecked(campaign.getId(), message);
+        sharedCards.put(card.path("cardId").asText(), message);
+        deliver(message, to, false);
+        return card;
     }
 
     private JsonNode visibleCard(String playerId, String cardId) {
@@ -1063,7 +1245,8 @@ public final class OnlineSessionServer {
     private void inventoryChanged(Campaign.Actor actor, ObjectNode sheet) {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetInventory").put("actorId", actor.getId());
         ObjectNode inventory = message.putObject("inventory");
-        for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor")) {
+        for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor",
+                "compendiumRevision", "loadout", "vault")) {
             if (sheet.has(field))
                 inventory.set(field, sheet.get(field));
         }
@@ -1238,8 +1421,10 @@ public final class OnlineSessionServer {
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
+            hello.put("compendiumChat", true);
             hello.put("transferOffers", true);
             hello.put("chatIdentity", true);
+            hello.put("notes", true);
             hello.put("keptDice", true);
             sendTo(ctx, hello.toString());
             if (audioJson != null) {

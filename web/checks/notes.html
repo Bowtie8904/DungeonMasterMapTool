@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Campaign notes regression</title></head>
+<body><div id="app"></div><pre id="result" style="position:fixed;bottom:0;left:250px;z-index:200;background:#111;color:#fff"></pre>
+<script type="module">
+import '../src/style.css';
+import { App } from '../src/app.ts';
+
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push(name); };
+const wait = async predicate => {
+  for (let i = 0; i < 200; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 10)); }
+  throw Error('Timed out waiting for UI');
+};
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const realFetch = window.fetch;
+const entries = [{ path: 'group.txt', name: 'Group Notes', shared: true, folder: false }];
+const contents = new Map([['group.txt', { path: 'group.txt', text: 'Campaign plans', revision: '1' }]]);
+const requests = [];
+let failSave = false;
+let revision = 1;
+const response = (data, status = 200) => new Response(JSON.stringify(data), { status });
+window.fetch = async (url, options) => {
+  if (!String(url).startsWith('/api/notes')) return realFetch(url, options);
+  requests.push([url, options]);
+  if (!options?.body) {
+    if (url === '/api/notes') return response(entries);
+    const path = new URL(url, location.origin).searchParams.get('path');
+    return contents.has(path) ? response(contents.get(path)) : response({ error: 'Missing note' }, 404);
+  }
+  const body = JSON.parse(options.body);
+  if (body.action === 'save') {
+    if (failSave) return response({ error: 'Storage unavailable' }, 500);
+    const original = contents.get(body.path);
+    if (original.revision !== body.revision) return response({ error: 'This note changed. Reload before saving.' }, 409);
+    const saved = { path: body.path, text: body.text, revision: String(++revision) };
+    contents.set(body.path, saved); return response(saved);
+  }
+  if (body.action === 'create') {
+    const path = `${body.path}/${body.name}${body.folder ? '' : '.txt'}`;
+    const entry = { path, name: body.name, folder: body.folder, shared: false };
+    entries.push(entry);
+    if (!body.folder) contents.set(path, { path, text: '', revision: String(++revision) });
+    return response(entry);
+  }
+  if (body.action === 'rename') {
+    const entry = entries.find(e => e.path === body.path);
+    const path = `${body.path.slice(0, body.path.lastIndexOf('/') + 1)}${body.name}${entry.folder ? '' : '.txt'}`;
+    const affected = entries.filter(e => e.path === body.path || e.path.startsWith(body.path + '/'));
+    for (const child of affected) {
+      const old = child.path; child.path = path + old.slice(body.path.length);
+      if (contents.has(old)) { const data = contents.get(old); contents.delete(old); contents.set(child.path, { ...data, path: child.path }); }
+    }
+    entry.name = body.name;
+    return response(entry);
+  }
+  if (body.action === 'delete') {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].path === body.path || entries[i].path.startsWith(body.path + '/')) {
+        contents.delete(entries[i].path); entries.splice(i, 1);
+      }
+    }
+    return response({ ok: true });
+  }
+  return response({ error: 'Unknown request' }, 400);
+};
+const button = (parent, text) => [...parent.querySelectorAll('button')].find(b => b.textContent === text);
+const doubleClick = element => element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+const context = element => element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 900, clientY: 200 }));
+const fill = (textarea, text) => { textarea.value = text; textarea.dispatchEvent(new Event('input')); };
+const dialog = async (value, cancel = false) => {
+  await wait(() => document.querySelector('dialog[open]'));
+  const modal = document.querySelector('dialog[open]');
+  if (value !== undefined) modal.querySelector('input').value = value;
+  if (cancel) button(modal, 'Cancel').click();
+  else modal.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await wait(() => !document.querySelector('dialog[open]'));
+};
+let app;
+try {
+  app = new App(document.getElementById('app'), () => {});
+  const hello = { type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alice', campaignId: 'notes-check', paused: false };
+  app.handle(hello);
+  app.showSection('notes');
+  await frame();
+  assert(requests.length === 0 && app.notes.element.textContent.includes('does not support'), 'older hosts disable notes without requests');
+  const labels = [...document.querySelectorAll('.section-rail button')].map(b => b.title);
+  assert(labels.join('|') === 'Chat|My actors|Notes|Compendium|Settings', 'Notes is between Actors and Compendium');
+  app.handle({ ...hello, notes: true });
+  await wait(() => document.querySelector('.note-group'));
+  doubleClick(document.querySelector('.note-group'));
+  await wait(() => document.querySelector('.note-win'));
+  let editor = document.querySelector('.note-win');
+  assert(editor.querySelector('textarea').value === 'Campaign plans', 'double click opens shared text in sheet-style editor');
+  fill(editor.querySelector('textarea'), '<script>not executable<\/script>\nNew plans');
+  button(editor, 'Save').click();
+  await wait(() => button(editor, 'Save').disabled && editor.textContent.includes('Saved'));
+  assert(contents.get('group.txt').text.includes('<script>'), 'saves exact plain text without rendering markup');
+  editor.style.width = '630px'; editor.style.height = '430px';
+  await frame();
+  assert(JSON.parse(localStorage.getItem('dmmt.notes.size.notes-check.alice'))[0] === 630, 'resized editor dimensions are remembered');
+  editor.querySelector('[title="Minimise note"]').click(); await frame();
+  editor.querySelector('[title="Minimise note"]').click(); await frame();
+  assert(editor.offsetHeight === 430, 'minimising does not overwrite remembered editor size');
+  editor.querySelector('[title="Close note"]').click();
+  await wait(() => !document.querySelector('.note-win'));
+  doubleClick(document.querySelector('.note-group'));
+  await wait(() => document.querySelector('.note-win'));
+  editor = document.querySelector('.note-win');
+  assert(editor.offsetWidth === 630 && editor.offsetHeight === 430, 'reopened editor restores dimensions');
+  app.stageEl.style.width = '360px';
+  await frame();
+  assert(editor.getBoundingClientRect().right <= app.stageEl.getBoundingClientRect().right
+    && editor.querySelector('textarea').clientWidth < editor.clientWidth, 'editor stays usable in a narrow viewport');
+  app.stageEl.style.width = '';
+  await frame();
+  fill(editor.querySelector('textarea'), 'Draft saved in flight');
+  button(editor, 'Save').click();
+  fill(editor.querySelector('textarea'), 'New typing during save');
+  await wait(() => editor.querySelector('.note-status').textContent === 'Unsaved changes');
+  assert(contents.get('group.txt').text === 'Draft saved in flight'
+    && editor.querySelector('textarea').value === 'New typing during save', 'typing during a save remains a separate unsaved draft');
+  let leaving = app.notes.confirmLeave();
+  await dialog(undefined, true);
+  assert(!await leaving && editor.isConnected, 'logout can be cancelled without discarding notes');
+  leaving = app.notes.confirmLeave();
+  await dialog();
+  assert(await leaving, 'logout requires explicit draft discard approval');
+  fill(editor.querySelector('textarea'), 'My unsaved draft');
+  contents.set('group.txt', { path: 'group.txt', text: 'Another player saved', revision: String(++revision) });
+  button(editor, 'Save').click();
+  await wait(() => editor.textContent.includes('This note changed'));
+  assert(editor.querySelector('textarea').value === 'My unsaved draft', 'conflicting save preserves draft');
+  button(editor, 'Reload').click();
+  await dialog(undefined, true);
+  assert(editor.querySelector('textarea').value === 'My unsaved draft', 'reload cancellation preserves draft');
+  button(editor, 'Reload').click();
+  await dialog();
+  await wait(() => editor.querySelector('textarea').value === 'Another player saved');
+  assert(button(editor, 'Save').disabled, 'reload accepts current shared text and revision');
+  fill(editor.querySelector('textarea'), 'Draft during failure');
+  failSave = true;
+  button(editor, 'Save').click();
+  await wait(() => editor.textContent.includes('Storage unavailable'));
+  assert(editor.querySelector('textarea').value === 'Draft during failure' && !button(editor, 'Save').disabled, 'failed save keeps editable draft and retry');
+  failSave = false;
+  editor.querySelector('[title="Close note"]').click();
+  await dialog(undefined, true);
+  assert(editor.isConnected, 'closing with unsaved edits can be cancelled');
+  editor.querySelector('[title="Close note"]').click();
+  await dialog();
+  await wait(() => !editor.isConnected);
+  context(document.querySelector('.note-group'));
+  assert(document.querySelector('.notes-context').textContent === 'Open', 'permanent shared note cannot be renamed or deleted');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  button(app.notes.element, 'New folder').click();
+  await dialog('Sessions');
+  await wait(() => entries.some(e => e.path === 'private/Sessions'));
+  await wait(() => [...document.querySelectorAll('.note-row')].some(b => b.textContent.includes('Sessions')));
+  const folder = [...document.querySelectorAll('.note-row')].find(b => b.textContent.includes('Sessions'));
+  folder.click();
+  button(app.notes.element, 'New note').click();
+  await dialog('Clues');
+  await wait(() => document.querySelector('.note-win'));
+  editor = document.querySelector('.note-win');
+  assert(contents.has('private/Sessions/Clues.txt'), 'creates a note inside the selected folder');
+  fill(editor.querySelector('textarea'), 'A retained draft');
+  const note = [...document.querySelectorAll('.note-row')].find(b => b.textContent === 'Clues');
+  context(note); button(document.querySelector('.notes-context'), 'Rename').click();
+  await dialog('Secrets');
+  await wait(() => editor.querySelector('h2').textContent === 'Secrets');
+  assert(editor.querySelector('textarea').value === 'A retained draft', 'renaming keeps open editor draft');
+  const folderAgain = [...document.querySelectorAll('.note-row')].find(b => b.textContent.includes('Sessions'));
+  context(folderAgain); button(document.querySelector('.notes-context'), 'Rename').click();
+  await dialog('Campaign log');
+  await wait(() => contents.has('private/Campaign log/Secrets.txt'));
+  button(editor, 'Save').click();
+  await wait(() => contents.get('private/Campaign log/Secrets.txt').text === 'A retained draft');
+  await wait(() => editor.querySelector('.note-status').textContent === 'Saved');
+  assert(button(editor, 'Save').disabled, 'renaming an ancestor updates the open editor save path');
+  fill(editor.querySelector('textarea'), 'Unsaved before deletion');
+  const renamedFolder = [...document.querySelectorAll('.note-row')].find(b => b.textContent.includes('Campaign log'));
+  context(renamedFolder); button(document.querySelector('.notes-context'), 'Delete').click();
+  await dialog(undefined, true);
+  assert(editor.isConnected && contents.has('private/Campaign log/Secrets.txt'), 'cancelled folder deletion preserves contents and draft');
+  context(renamedFolder); button(document.querySelector('.notes-context'), 'Delete').click();
+  await dialog();
+  await wait(() => !editor.isConnected);
+  assert(!contents.has('private/Campaign log/Secrets.txt') && contents.has('group.txt'), 'confirmed folder deletion closes descendants but preserves Group Notes');
+  doubleClick(document.querySelector('.note-group'));
+  await wait(() => document.querySelector('.note-win'));
+  editor = document.querySelector('.note-win');
+  fill(editor.querySelector('textarea'), 'Draft to pop out');
+  const realOpen = window.open;
+  let destination = '';
+  let closed = false;
+  try {
+    window.open = () => null;
+    editor.querySelector('[title="Pop out to a new browser window"]').click();
+    assert(editor.isConnected && editor.querySelector('textarea').value === 'Draft to pop out'
+      && document.querySelector('.toast').textContent.includes('blocked'), 'blocked note pop-out retains draft and editor');
+    window.open = () => ({ closed: false, location: { replace: url => { destination = url; } }, close: () => { closed = true; } });
+    failSave = true;
+    editor.querySelector('[title="Pop out to a new browser window"]').click();
+    await wait(() => editor.textContent.includes('Storage unavailable'));
+    assert(closed && !destination && editor.isConnected && editor.querySelector('textarea').value === 'Draft to pop out',
+      'failed save cancels note pop-out and preserves draft');
+    failSave = false;
+    closed = false;
+    editor.querySelector('[title="Pop out to a new browser window"]').click();
+    await wait(() => !editor.isConnected);
+    assert(contents.get('group.txt').text === 'Draft to pop out' && destination === '/?popout=note&path=group.txt'
+      && !closed, 'note pop-out saves draft before navigating and closing embedded editor');
+    const compendiumWindow = app.compendiumWindow;
+    compendiumWindow.setOpen(true);
+    destination = '';
+    window.open = url => { destination = url; return { closed: false }; };
+    compendiumWindow.element.querySelector('[title="Pop out to a new browser window"]').click();
+    assert(destination === '/?popout=compendium' && !compendiumWindow.isOpen, 'Compendium title bar pops out and hides embedded window');
+    window.open = () => null;
+    compendiumWindow.setOpen(true);
+    compendiumWindow.element.querySelector('[title="Pop out to a new browser window"]').click();
+    assert(compendiumWindow.isOpen && document.querySelector('.toast').textContent.includes('blocked'),
+      'blocked Compendium pop-out keeps embedded window open');
+  } finally { window.open = realOpen; }
+  document.getElementById('result').textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
+} catch (error) {
+  document.getElementById('result').textContent = `FAIL: ${error.stack}`;
+} finally {
+  app?.dispose();
+  window.fetch = realFetch;
+}
+</script>
+</body>
+</html>

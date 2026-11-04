@@ -58,15 +58,18 @@ export interface CompendiumIndexItem {
   count: number;
 }
 
-export async function fetchCompendiumIndex(): Promise<CompendiumIndexItem[]> {
-  const res = await fetch('/api/compendium', { credentials: 'same-origin' });
+export type CompendiumFetch = (url: string) => Promise<Response>;
+const compendiumFetch: CompendiumFetch = url => fetch(url, { credentials: 'same-origin' });
+
+export async function fetchCompendiumIndex(request: CompendiumFetch = compendiumFetch): Promise<CompendiumIndexItem[]> {
+  const res = await request('/api/compendium');
   if (!res.ok) throw new Error(`Compendium unavailable (${res.status})`);
   const body = (await res.json()) as { categories?: CompendiumIndexItem[] } | CompendiumIndexItem[];
   return Array.isArray(body) ? body : body.categories ?? [];
 }
 
-export async function fetchCompendiumCategory(category: string): Promise<CompendiumFile> {
-  const res = await fetch(`/api/compendium/${encodeURIComponent(category)}`, { credentials: 'same-origin' });
+export async function fetchCompendiumCategory(category: string, request: CompendiumFetch = compendiumFetch): Promise<CompendiumFile> {
+  const res = await request(`/api/compendium/${encodeURIComponent(category)}`);
   if (!res.ok) throw new Error(`Cannot load ${category} (${res.status})`);
   return (await res.json()) as CompendiumFile;
 }

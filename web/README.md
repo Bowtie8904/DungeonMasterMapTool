@@ -40,7 +40,66 @@ advancement and capacity rules; the host also rejects testing-only fields, free 
 multiclasses/loadout capacity on normal sheets. Missing actor markers default to false. These fields are additive;
 Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
 
-The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Settings rail plus a Compendium button that opens a floating window.
+The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
+The desktop DM embeds the same `CompendiumPanel` and styles in a JavaFX WebView (`/?dm-compendium=1`),
+with native in-app move/resize/close chrome and no minimize/pop-out. `dm-compendium.ts` uses a per-host
+capability passed in the URL fragment (removed immediately), never a player login. The token authorizes
+compendium reads and `/api/dm/compendium/actors`, `/add`, `/link` only; host actions also require a loopback
+connection. They resolve entries from host files, persist against the latest sheet/history and notify
+connected player sheets, including pop-outs. Offline characters receive the same persisted additions.
+`sheetInventory` optionally includes `compendiumRevision`, `loadout` and `vault`; only a newer compendium
+revision replaces domain cards, so ordinary inventory updates preserve local card edits. The host rejects
+stale compendium revisions, protecting additions even from older clients until they reload the sheet.
+The desktop-only capability is never included in player snapshots or invite links. Compatibility versions
+are unchanged; old clients still read the persisted sheet normally.
+`notes.ts` provides private folder trees and sheet-style plain-text editors, with explicit Save/Reload,
+unsaved-draft guards and a permanent shared Group Notes file. `hello.notes:true` enables the feature;
+older hosts show an unavailable explanation without sending note requests. `GET /api/notes` lists the
+authenticated player's entries plus `group.txt`; `GET /api/notes/content?path=...` returns `{path,text,revision}`.
+`POST /api/notes` accepts `{action:"create",path:<parent|"private">,name,folder:boolean}`,
+`{action:"rename",path,name}`, `{action:"delete",path}` or `{action:"save",path,text,revision}`.
+Paths use `private/<folders>/<name>.txt` or `group.txt`; the host derives campaign/player ownership from
+the session, never a request-supplied player ID. Notes are limited to 512 KiB of UTF-8 text. Saves reject
+stale content revisions with 409, keeping the browser draft; Reload confirms before discarding changes.
+The host stores ordinary UTF-8 text files in `<campaign>/notes/players/<playerId>/` and `<campaign>/notes/group.txt`.
+Only window dimensions are stored in localStorage (`dmmt.notes.size.<campaignId>.<playerId>`), never note text.
+Group Notes cannot be renamed/deleted and is available to later campaign members. Refresh reloads the
+folder listing; Reload in an editor fetches other tabs'/players' saved text. No DM desktop control or
+application setting is added, and neither compatibility version changes.
+Notes and Compendium title bars support standalone browser pop-outs using `/?popout=note&path=...`
+and `/?popout=compendium`. These query routes use `/` on existing hosts and the existing authenticated socket;
+no new server route, protocol or compatibility-version change is needed. Note pop-out opens the browser
+window in the click gesture, saves any pending edits, and navigates only on successful save. Blocked pop-ups
+and save failures preserve the source editor/draft. Standalone notes fill their browser window, keep
+Save/Reload and unload guards, and do not overwrite the floating editor's remembered dimensions.
+Compendium pop-outs retain browsing, filters and owned-character Add actions. Add opens/focuses a named sheet
+window and uses origin/source-checked, acknowledged `postMessage` requests with per-request deduplication.
+The live receiving sheet applies and saves the addition; the compendium never saves a stale sheet copy.
+Compendium entries have no drag/drop actions, and floating/standalone sheets do not accept compendium drops.
+Every compendium row has an inventory-style **Link in chat** icon, including non-addable categories and players
+without owned actors. `hello.compendiumChat:true` enables requests to `POST /api/chat-cards` with
+`{compendium:{category,entryId},toId?}`. The host resolves the entry from its own data and posts an existing
+shared-feature description card with no transfer offer or sheet mutation. Compendium cards use a
+`Compendium - <section label>` heading and optional `badges: string[]` matching inventory detail chips;
+the section is no longer a badge and stats are not repeated in the description. Browser and desktop DM
+chat honor these badges; cards without the field keep their existing category-specific badges.
+Optional `sections: [{name?,text}]` preserves separate description and named feature/spell blocks,
+with compendium-style borders in browser and DM chat. Flattened `item.text` remains for older clients.
+All categories use this layout, including equipment features, class/subclass/ancestry/community/transformation
+features and grimoire spells. Inventory weapon/armor links also border their feature. The DM uses native
+JavaFX styled text for bold, italic, bold italic, lists and line breaks rather than displaying Markdown markers.
+Map links respect the chat recipient;
+standalone links go to Everyone. Older hosts and disconnected sessions show an explicit error. These are additive
+contracts; Online and DM Link compatibility versions are unchanged.
+`popout.test.ts` covers window opening, source/origin
+checks, acknowledged additions, existing-sheet reuse, blocked pop-ups and timeout handling.
+`checks/tool-popouts.html` exercises both standalone tools and the receiving live sheet in a real browser;
+`checks/notes.html` also covers title-bar pop-out behavior and save/blocked-window failures.
+A timeout explicitly asks the user to check the sheet
+before retrying an unconfirmed addition. Both tool pop-outs retain their own session socket and survive
+closing the map tab; disconnect/kick status keeps unsaved note text available to copy.
+`notes.test.ts` covers tree boundaries and authenticated/error-aware requests; `checks/notes.html` exercises
+the actual sidebar, dialogs, editor draft protection, resize memory, conflicts and folder operations in a browser.
 Settings is anchored at the bottom; character sheets open from Actors. Chat's recipient dropdown targets Everyone,
 Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
 Messages use separate sender/timestamp cards. Roll cards have styled dice, a summed modifier, a large total and

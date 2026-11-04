@@ -48,6 +48,22 @@ Nothing starts until you click **Start online session**, so offline play and the
 - Share the invite link; players pick their name and enter their password (failed logins are rate limited).
   Each account allows only one browser login session at a time; occupied accounts disappear from the
   automatically refreshed login list. Tabs and sheet pop-outs in the same browser session still work.
+- **Campaign notes:** the browser's **Notes** sidebar tab sits between My actors and Compendium.
+  Create named plain-text notes and nested folders; right-click notes or folders to create, rename or delete
+  (deleting a folder confirms removal of its contents). Double-click a note, or press Enter, to open a draggable,
+  resizable editor. **Save** (Ctrl+S/Cmd+S) persists the text; **Reload** reads the latest saved version.
+  Unsaved drafts are protected when closing or logging out, and editor size is remembered in that browser
+  per campaign/player. Each player's notes are private to that account; the permanent **Group Notes** file
+  is readable and editable by every campaign player, including players added later. Concurrent stale saves
+  are rejected without losing the draft: copy it before reloading and merging the latest text.
+  Notes and folders live on the host inside the campaign (`notes/players/<playerId>/.../*.txt` and
+  `notes/group.txt`), survive session restarts, and are included when copying/backing up the whole campaign.
+  Private means other browser players cannot access them, not encryption against the host's filesystem owner.
+  Notes and Compendium also have a **Pop out** title-bar button, like character sheets. Each opens in an
+  independent, resizable browser window that continues working after the map tab closes. Popping out a note
+  saves pending edits first; blocked pop-ups or failed/conflicting saves keep the original editor and draft.
+  A Compendium pop-out can still browse, search, filter and add entries to owned characters: **Add** opens/focuses
+  the receiving character sheet and applies the entry there, preserving its unsaved changes.
 - **Daggerheart character sheet (mock data)**: players get a sheet button in the sidebar rail and an "Open sheet"
   button per actor. The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
@@ -82,9 +98,24 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the converted Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
-    window (rail button below Actors): category navigation on the left, searchable and filterable tables with
-    expandable rows on the right. They can drag armor, weapons, potions and items onto an open sheet (or click the
-    subtle add icon, choosing the receiving character when they own several) to put them in the matching tab. Entries with
+    window (rail button below Notes): category navigation on the left, searchable and filterable tables with
+    expandable rows on the right. While hosting, the DM has the same compendium embedded in the app, opened
+    with the book icon immediately below Chat on the right sidebar. Drag its header to move it and its bottom-right
+    corner to resize it; it has Close but no minimize or pop-out controls. The DM can link entries to public chat
+    and add equipment, loot and domain cards to any player-owned campaign character, even while the player is
+    offline (create the character sheet first). Additions persist immediately and update open player sheets;
+    quantity caps are enforced. The window closes when hosting ends. Hide the icon in Settings with
+    `online.compendium` under hidden controls; the local API control `online.compendium` remains available.
+    The subtle add icon puts armor, weapons, potions, items and domain cards in the
+    matching sheet tab, choosing the receiving character when they own several. Compendium entries cannot be
+    dragged onto sheets. Every row also has an inventory-style **Link in chat** icon to share its description
+    without adding it to a character or offering inventory for transfer. Add and Link in chat are aligned,
+    equally sized icon buttons with a larger, clearly visible plus for Add. Links use the selected chat recipient;
+    standalone Compendium pop-outs post to Everyone. Chat links show **Compendium - Section** above the name
+    and inventory-style detail badges (including weapon stats, armor thresholds and domain-card details),
+    with Markdown-formatted descriptions and individually bordered feature/spell blocks below in both player
+    and DM chat. This includes equipment features, ancestry/community/class/transformation features and
+    grimoire spells. Entries with
   automation act on the sheet: armor sets evasion, thresholds and armor slots, features and potions get action
   buttons (spend a resource, heal, gain Hope), and buffs/debuffs appear in the sheet's new **Effects** tab - e.g. a
   Control Potion's action report says it gained **Next Finesse Roll +1**, then that effect is removed after the roll.

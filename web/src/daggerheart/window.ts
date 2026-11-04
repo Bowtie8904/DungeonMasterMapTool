@@ -2,7 +2,6 @@ import { el } from '../login';
 import { renderSheetView, SheetViewOptions } from './view';
 
 const HIDDEN = 'hidden';
-export const DRAG_TYPE = 'application/x-dmmt-compendium';
 
 /** Floating, draggable sheet window over the map view (minimise, close, pop out). */
 export class SheetWindow {
@@ -15,7 +14,6 @@ export class SheetWindow {
     actorName: string,
     onPopOut: () => void,
     private readonly onVisibility: (open: boolean) => void,
-    onDrop?: (payload: string) => void,
   ) {
     const mk = (text: string, title: string, fn: () => void) => {
       const b = el('button', { type: 'button', title }, text);
@@ -32,26 +30,6 @@ export class SheetWindow {
     );
     this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, this.body);
     this.enableDrag();
-    if (onDrop) this.enableDrop(onDrop);
-  }
-
-  private enableDrop(onDrop: (payload: string) => void): void {
-    const accepts = (e: DragEvent) => !!e.dataTransfer?.types.includes(DRAG_TYPE);
-    this.element.addEventListener('dragover', (e) => {
-      if (!accepts(e)) return;
-      e.preventDefault();
-      this.element.classList.add('drop-target');
-    });
-    this.element.addEventListener('dragleave', (e) => {
-      if (e.relatedTarget instanceof Node && this.element.contains(e.relatedTarget)) return;
-      this.element.classList.remove('drop-target');
-    });
-    this.element.addEventListener('drop', (e) => {
-      this.element.classList.remove('drop-target');
-      if (!accepts(e)) return;
-      e.preventDefault();
-      onDrop(e.dataTransfer!.getData(DRAG_TYPE));
-    });
   }
 
   get isOpen(): boolean {
@@ -94,13 +72,15 @@ export function makeDraggable(win: HTMLElement, title: HTMLElement): void {
 export class ToolWindow {
   readonly element: HTMLElement;
 
-  constructor(title: string, body: HTMLElement, private readonly onVisibility: (open: boolean) => void = () => {}, extraClass = '') {
+  constructor(title: string, body: HTMLElement, private readonly onVisibility: (open: boolean) => void = () => {}, extraClass = '',
+    onPopOut?: () => void) {
     const mk = (text: string, label: string, fn: () => void) => {
       const b = el('button', { type: 'button', title: label }, text);
       b.addEventListener('click', fn);
       return b;
     };
     const bar = el('div', { class: 'dh-win-title' }, el('h2', {}, title),
+      ...(onPopOut ? [mk('\u29C9', 'Pop out to a new browser window', onPopOut)] : []),
       mk('\u2013', 'Minimise', () => this.element.classList.toggle('minimised')),
       mk('\u2715', 'Close', () => this.setOpen(false)));
     this.element = el('section', { class: `dh-win ${HIDDEN} ${extraClass}`.trim(), ariaLabel: title }, bar, el('div', { class: 'dh-win-body' }, body));

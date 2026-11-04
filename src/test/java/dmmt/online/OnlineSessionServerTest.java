@@ -47,6 +47,179 @@ class OnlineSessionServerTest {
     private volatile boolean drawingSupported;
     private volatile Path compendiumDir;
 
+    private HttpResponse<String> dmCompendiumHttp(String action, JsonNode body, String token) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/dm/compendium/" + action))
+                .header("Content-Type", "application/json");
+        if (token != null) request.header("Authorization", "Bearer " + token);
+        if (body != null) request.POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private String dmCompendiumData() throws Exception {
+        compendiumDir = temp.resolve("dm-compendium");
+        java.nio.file.Files.createDirectories(compendiumDir);
+        java.nio.file.Files.writeString(compendiumDir.resolve("items.json"), """
+                {"category":"items","label":"Items","entries":[{"id":"torch","name":"Host torch","text":"Light.","automation":{"uses":{"max":1,"per":"session"}}}]}
+                """);
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), """
+                {"category":"domain-cards","label":"Domain cards","entries":[{"id":"spell","name":"Host spell","domain":"Grace","level":1,"cardType":"Spell","text":"Spell.","recall":2}]}
+                """);
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Hero").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("unowned").name("NPC").build());
+        store.saveSheet(campaign.getId(), "target", """
+                {"className":"Bard","inventory":[],"carriedArmor":[],"carriedWeapons":[],"loadout":[],"vault":[],
+                "traits":[{"name":"Presence","spellcast":true}],"notes":"Keep me"}
+                """);
+        return URI.create(server.dmCompendiumUrl()).getFragment();
+    }
+
+    @Test
+    void dmCompendiumRejectsMissingForgedAndPlayerCredentialsAndListsOfflineActors() throws Exception {
+        String token = dmCompendiumData();
+        assertEquals(403, dmCompendiumHttp("actors", null, null).statusCode());
+        assertEquals(403, dmCompendiumHttp("actors", null, "wrong").statusCode());
+        var playerRequest = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/dm/compendium/actors"))
+                .header("Cookie", cookie()).header("X-Forwarded-For", "127.0.0.1").build();
+        assertEquals(403, http.send(playerRequest, HttpResponse.BodyHandlers.ofString()).statusCode());
+        JsonNode actors = MAPPER.readTree(dmCompendiumHttp("actors", null, token).body());
+        assertEquals(1, actors.size());
+        assertEquals("target", actors.get(0).path("id").asText());
+        assertEquals("Hero (Alice)", actors.get(0).path("name").asText());
+        var index = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/compendium"))
+                .header("Authorization", "Bearer " + token).build();
+        assertEquals(200, http.send(index, HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertFalse(http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/session")).build(),
+                HttpResponse.BodyHandlers.ofString()).body().contains(token));
+    }
+
+    @Test
+    void dmCompendiumAddsOfflinePersistsCapsAndRejectsBadTargetsAndStaleSaves() throws Exception {
+        String token = dmCompendiumData();
+        ObjectNode request = MAPPER.createObjectNode().put("category", "items").put("entryId", "torch").put("actorId", "target");
+        request.putObject("entry").put("name", "Forged");
+        ObjectNode previous = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+        assertEquals(200, dmCompendiumHttp("add", request, token).statusCode());
+        JsonNode saved = MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "target"));
+        assertEquals("Host torch", saved.path("inventory").get(0).path("name").asText());
+        assertTrue(saved.path("inventory").get(0).has("automation"));
+        assertEquals("Keep me", saved.path("notes").asText());
+        assertEquals(1, saved.path("inventoryRevision").asInt());
+        var staleSave = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/target"))
+                .header("Cookie", cookie()).PUT(HttpRequest.BodyPublishers.ofString(previous.toString())).build();
+        assertEquals(409, http.send(staleSave, HttpResponse.BodyHandlers.ofString()).statusCode());
+        ObjectNode capped = (ObjectNode) saved;
+        ((ObjectNode) capped.path("inventory").get(0)).put("qty", 99);
+        store.saveSheet(campaign.getId(), "target", capped.toString());
+        assertEquals(400, dmCompendiumHttp("add", request, token).statusCode());
+        assertEquals(capped.toString(), store.loadSheet(campaign.getId(), "target"));
+        assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "unowned"), token).statusCode());
+        assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "missing"), token).statusCode());
+        assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "target").put("category", "../items"), token).statusCode());
+        assertEquals(400, dmCompendiumHttp("add", request.put("category", "items").put("entryId", "missing"), token).statusCode());
+    }
+
+    @Test
+    void dmCompendiumLinksPublicChatAndUpdatesLiveDomainCardsWithoutGrantingTransfers() throws Exception {
+        String token = dmCompendiumData();
+        server.publish(state("m1", 0), "m1/l1");
+        Inbox inbox = new Inbox();
+        String cookie = cookie();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("snapshot");
+            ObjectNode request = MAPPER.createObjectNode().put("category", "domain-cards").put("entryId", "spell").put("actorId", "target");
+            assertEquals(200, dmCompendiumHttp("add", request, token).statusCode());
+            JsonNode update = inbox.next("sheetInventory").path("inventory");
+            assertEquals(1, update.path("compendiumRevision").asInt());
+            assertEquals("Host spell", update.path("vault").get(0).path("name").asText());
+            assertEquals("Presence", update.path("vault").get(0).path("spellcast").asText());
+            ObjectNode oldClient = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+            oldClient.remove("compendiumRevision");
+            var stale = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/target"))
+                    .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(oldClient.toString())).build();
+            assertEquals(409, http.send(stale, HttpResponse.BodyHandlers.ofString()).statusCode());
+            assertEquals(200, dmCompendiumHttp("link", request, token).statusCode());
+            JsonNode chat = inbox.next("chat");
+            assertEquals("dm", chat.path("fromId").asText());
+            assertEquals("Compendium - Domain cards", chat.path("sharedCard").path("actorName").asText());
+            assertFalse(chat.path("sharedCard").has("offerQuantity"));
+            assertEquals(0, chat.path("sharedCard").path("available").asInt());
+            assertEquals(chat, dmMessages.getLast());
+            assertTrue(new CampaignStore(store.root()).historyTail(campaign.getId(), 20).contains(chat));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void campaignNotesAuthenticateIsolateOwnersAndShareWithLaterPlayers() throws Exception {
+        assertEquals(401, notesHttp(null, "", null).statusCode());
+        String alice = cookie();
+        assertEquals(1, MAPPER.readTree(notesHttp(alice, "", null).body()).size());
+        assertEquals(200, notesHttp(alice, "", MAPPER.readTree("""
+                {"action":"create","path":"private","name":"Sessions","folder":true}
+                """)).statusCode());
+        JsonNode created = MAPPER.readTree(notesHttp(alice, "", MAPPER.readTree("""
+                {"action":"create","path":"private/Sessions","name":"Secret","folder":false}
+                """)).body());
+        assertEquals("private/Sessions/Secret.txt", created.path("path").asText());
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        String bobCookie = playerCookie(bob);
+        assertEquals(1, MAPPER.readTree(notesHttp(bobCookie, "", null).body()).size());
+        assertEquals(404, notesHttp(bobCookie, "/content?path=private%2FSessions%2FSecret.txt", null).statusCode());
+        for (String action : List.of("rename", "delete", "save")) {
+            ObjectNode forged = MAPPER.createObjectNode().put("action", action).put("path", created.path("path").asText())
+                    .put("name", "Stolen").put("text", "Stolen").put("revision", "").put("playerId", playerId());
+            assertEquals(404, notesHttp(bobCookie, "", forged).statusCode());
+        }
+        JsonNode original = MAPPER.readTree(notesHttp(alice, "/content?path=group.txt", null).body());
+        ObjectNode save = MAPPER.createObjectNode().put("action", "save").put("path", "group.txt")
+                .put("text", "Shared plans").put("revision", original.path("revision").asText());
+        assertEquals(200, notesHttp(alice, "", save).statusCode());
+        assertEquals("Shared plans", MAPPER.readTree(notesHttp(bobCookie, "/content?path=group.txt", null).body()).path("text").asText());
+        assertEquals(409, notesHttp(bobCookie, "", save.put("text", "Stale draft")).statusCode());
+        assertEquals("Shared plans", new CampaignNotes(store.root()).read(campaign.getId(), bob.getId(), "group.txt").text());
+        assertEquals(403, notesHttp(bobCookie, "", MAPPER.readTree("""
+                {"action":"delete","path":"group.txt"}
+                """)).statusCode());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(alice, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("notes").asBoolean());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void campaignNotesRejectMalformedAndTraversalRequestsWithoutLosingText() throws Exception {
+        String cookie = cookie();
+        for (String body : List.of("null", "[]", "{}", "{\"action\":\"create\",\"path\":\"private\",\"folder\":\"yes\",\"name\":\"X\"}",
+                "{\"action\":\"save\",\"path\":\"group.txt\",\"revision\":\"x\",\"text\":42}")) {
+            assertEquals(400, notesHttp(cookie, "", MAPPER.readTree(body)).statusCode(), body);
+        }
+        assertEquals(400, notesHttp(cookie, "/content?path=private%2F..%2Fother.txt", null).statusCode());
+        assertEquals(404, notesHttp(cookie, "/content?path=players%2Fsomeone%2Fsecret.txt", null).statusCode());
+        assertEquals(404, notesHttp(cookie, "/content", null).statusCode());
+        assertEquals("", MAPPER.readTree(notesHttp(cookie, "/content?path=group.txt", null).body()).path("text").asText());
+    }
+
+    @Test
+    void campaignNotesStorageFailuresReturnExplicitErrors() throws Exception {
+        String cookie = cookie();
+        Path notesFolder = store.root().resolve(campaign.getId()).resolve("notes");
+        java.nio.file.Files.writeString(notesFolder, "not a directory");
+        var response = notesHttp(cookie, "", null);
+        assertEquals(500, response.statusCode());
+        assertTrue(MAPPER.readTree(response.body()).path("error").asText().contains("Could not access campaign notes"));
+    }
+
+    private HttpResponse<String> notesHttp(String cookie, String path, JsonNode body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/notes" + path))
+                .header("Content-Type", "application/json");
+        if (cookie != null) request.header("Cookie", cookie);
+        if (body != null) request.POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     @Test
     void onlyHostCanDeleteMessagesAndDeletionPersistsInSnapshots() throws Exception {
         server.publish(state("m1", 0), "m1/l1");
@@ -372,6 +545,53 @@ class OnlineSessionServerTest {
         assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active weapons cannot be offered");
         request.put("category", "armor").set("item", source.path("activeArmor"));
         assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active armor cannot be offered");
+    }
+
+    @Test
+    void compendiumChatLinksResolveHostDataWithoutInventoryAndCannotTransfer() throws Exception {
+        Path dir = temp.resolve("chat-compendium");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.writeString(dir.resolve("items.json"), """
+                {"category":"items","label":"Items","entries":[{"id":"potion","name":"Host potion","rarity":"Rare","text":"Clear **HP**."}]}
+                """);
+        compendiumDir = dir;
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("compendiumChat").asBoolean());
+            inbox.next("snapshot");
+            inbox.next("roster");
+            ObjectNode request = MAPPER.createObjectNode();
+            ObjectNode reference = request.putObject("compendium").put("category", "items").put("entryId", "potion");
+            request.putObject("item").put("name", "Forged client name");
+            assertEquals(401, cardHttp("", "", request).statusCode());
+            HttpResponse<String> posted = cardHttp(cookie, "", request);
+            assertEquals(200, posted.statusCode(), posted.body());
+            JsonNode card = MAPPER.readTree(posted.body());
+            assertEquals("feature", card.path("category").asText());
+            assertEquals("Host potion", card.path("item").path("name").asText());
+            assertEquals("Compendium - Items", card.path("actorName").asText());
+            assertEquals(MAPPER.readTree("[\"gear\",\"Rare\"]"), card.path("badges"));
+            assertFalse(card.path("item").has("badges"));
+            assertEquals("Clear **HP**.", card.path("sections").get(0).path("text").asText());
+            assertFalse(card.path("item").has("sections"));
+            assertEquals("", card.path("actorId").asText());
+            assertEquals(0, card.path("available").asInt());
+            assertFalse(card.has("offerQuantity"));
+            JsonNode message = inbox.next("chat");
+            assertEquals(card, message.path("sharedCard"));
+            assertTrue(message.path("text").asText().contains("Clear **HP**."));
+            assertTrue(server.dmHistory(100).contains(message));
+            request.put("offerQuantity", 1);
+            assertEquals(400, cardHttp(cookie, "", request).statusCode());
+            request.remove("offerQuantity");
+            reference.put("entryId", "missing");
+            assertEquals(400, cardHttp(cookie, "", request).statusCode());
+            reference.put("category", "../items").put("entryId", "potion");
+            assertEquals(400, cardHttp(cookie, "", request).statusCode());
+        } finally { ws.abort(); }
     }
 
     @Test
