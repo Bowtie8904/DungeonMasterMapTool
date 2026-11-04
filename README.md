@@ -16,6 +16,8 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Player map layout:** no top-center session, map or account header obscures the map. A slightly transparent
+  connection badge sits in the bottom-left **Connected players** overlay, including while reconnecting.
 - **Campaigns** are separate from maps: each has a game system (currently Daggerheart; no gameplay effect yet),
   players (username + password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
   and per-player fog memory that survives map switches, sessions and browsers. Campaigns live in

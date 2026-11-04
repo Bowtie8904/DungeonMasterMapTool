@@ -57,7 +57,6 @@ export class App {
   private rosterEl = el('aside', { class: 'players-overlay' });
   private effectsEl = el('aside', { class: 'effects-overlay' });
   private expandedEffects = new Set<string>();
-  private mapTitle = el('span', { class: 'map-name' });
   private textureSelect = el('select', { id: 'effect-texture' });
   private colorInput = el('input', { type: 'color', id: 'drawing-color', value: '#55aa33' });
   private colorEditing = false;
@@ -142,10 +141,10 @@ export class App {
       el('small', {}, 'Map edits are paused. Chat, dice and sheets still work.'),
     ),
   );
-  private statusEl = el('span', { class: 'status' }, 'connecting');
+  private statusEl = el('span', { class: 'status connecting', role: 'status', ariaLabel: 'Connection status' }, 'connecting');
+  private rosterHeading = el('div', { class: 'roster-heading' }, el('span', {}, 'CONNECTED PLAYERS'), this.statusEl);
   private fearEl = el('aside', { class: 'fear-overlay hidden', role: 'status' });
   private countdownsEl = el('aside', { class: 'countdowns-overlay hidden', role: 'status', ariaLabel: 'Countdowns' });
-  private titleEl = el('span', { class: 'title' });
   private toastEl = el('div', { class: 'toast hidden' });
   private overlay = el('div', { class: 'overlay hidden' });
   private exploredTimer: number | null = null;
@@ -166,9 +165,9 @@ export class App {
     const canvas = el('canvas', { class: 'map' });
     const right = this.buildSidebar();
     const left = this.buildTools();
-    const heading = el('div', { class: 'map-heading' }, this.titleEl, this.mapTitle, this.statusEl);
     this.rosterEl.setAttribute('aria-label', 'Connected players and ping to host');
-    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, this.countdownsEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
+    this.rosterEl.append(this.rosterHeading);
+    this.stageEl.append(canvas, left, this.flyout, this.rosterEl, this.fearEl, this.countdownsEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
@@ -741,7 +740,6 @@ export class App {
           this.selectTool();
           this.closeTools();
         }
-        this.titleEl.textContent = `${msg.sessionName ?? 'Online Play'}${msg.campaignName ? ' - ' + msg.campaignName : ''} (${msg.playerName})`;
         this.setPaused(msg.paused);
         break;
       case 'roster':
@@ -753,7 +751,7 @@ export class App {
           }
         }
         this.updateRecipients(msg.players);
-        this.rosterEl.replaceChildren(el('div', { class: 'roster-heading' }, 'CONNECTED / PING TO HOST'),
+        this.rosterEl.replaceChildren(this.rosterHeading,
           el('div', { class: 'player-row' }, 'Dungeon Master', el('span', {}, 'Host')),
           ...msg.players.map(p => el('div', { class: 'player-row' },
             el('span', { class: 'player-name' }, `${p.playerName}${p.chatIdentity ? ` (${p.chatIdentity})` : ''}${p.playerId === this.playerId ? ' (you)' : ''}`),
@@ -886,8 +884,6 @@ export class App {
       void this.loadFog(s);
     }
     if (full || this.store.changed.has('actors') || this.store.changed.has('tokens')) this.renderActors(s);
-    this.titleEl.dataset.map = s.mapName ?? '';
-    this.mapTitle.textContent = s.mapName ?? '';
     if (full || this.store.changed.has('effectTextures')) {
       const previous = this.textureSelect.value || 'none';
       this.textureSelect.replaceChildren(...(s.effectTextures ?? []).map(t => el('option', { value: t.id }, t.label)));

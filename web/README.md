@@ -41,6 +41,9 @@ multiclasses/loadout capacity on normal sheets. Missing actor markers default to
 Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
 
 The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
+There is no top-center session, campaign, map or account heading. The bottom-left **Connected players**
+overlay contains a slightly transparent connection-status badge, visible even before the first roster
+and retained across roster refreshes and reconnects. This layout-only change leaves compatibility versions unchanged.
 `countdowns.ts` renders the optional `state.countdowns` array (`id`, `name`, `initialValue`, `value`) as a
 read-only, near-transparent top-right list beside the sidebar. It follows sidebar expansion/collapse,
 grows/shrinks without scrolling, and hides for empty lists or older hosts. Its subtle **COUNTDOWNS** header
