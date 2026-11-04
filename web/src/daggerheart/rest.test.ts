@@ -199,18 +199,35 @@ describe('daggerheart rests', () => {
     expect(b.stress.on).toBe(3);
   });
 
-  it('keeps the higher die with the Duneborne Oasis feature', () => {
+  it('records downtime dice for explicit Oasis reactions instead of automatically rerolling', () => {
     const c = mockCharacter();
     c.heritage.push(feature('Oasis', 'communities'));
     c.hp.on = 6;
     const rolls = [1, 4];
-    resolveRest(c, 'short', [{ move: 'tend' }], {}, () => rolls.shift()!);
-    expect(c.hp.on).toBe(2);
+    const result = resolveRest(c, 'short', [{ move: 'tend' }], {}, () => rolls.shift()!);
+    expect(c.hp.on).toBe(5);
+    expect(rolls).toEqual([4]);
+    expect(result.dice).toEqual([{ line: 0, expression: '1d4+2', value: 1, resource: 'hp', recovery: 5, cleared: 1 }]);
+    expect(restPassives(c, 'short').some(p => p.id.includes('Oasis'))).toBe(false);
     const d = mockCharacter();
     d.heritage.push(feature('Oasis', 'communities'));
     d.hp.on = 6;
     resolveRest(d, 'short', [{ move: 'tend' }], { passives: { 'feat:Oasis|reroll': false } }, () => 1);
     expect(d.hp.on).toBe(5);
+  });
+
+  it('records capped and configured recovery dice for later rest reactions', () => {
+    const c = mockCharacter();
+    c.hp.on = 1;
+    const capped = resolveRest(c, 'short', [{ move: 'tend' }], {}, () => 4);
+    expect(capped.dice?.[0]).toMatchObject({ resource: 'hp', cleared: 1, recovery: 0 });
+    c.hp.on = 5;
+    c.features.push({ source: 'Custom', name: 'Recovery ritual', text: '', automation: {
+      actions: [{ id: 'heal', label: 'Recover', timing: 'downtime', steps: [{ op: 'clear', resource: 'hp', amount: '1d4' }] }],
+    } });
+    const custom = resolveRest(c, 'short', [{ move: 'act:feat:Recovery ritual|heal' }], {}, () => 2);
+    expect(custom.dice?.[0]).toMatchObject({ expression: '1d4', value: 2, resource: 'hp', cleared: 2, recovery: 3 });
+    expect(c.hp.on).toBe(3);
   });
 
   it('formats the chat report so it can be recognised and parsed', () => {

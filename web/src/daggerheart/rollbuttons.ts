@@ -3,7 +3,7 @@
 
 import { el } from '../login';
 import { claimRollReward, useFeature } from '../api';
-import type { RollMessage, RollSource } from '../protocol';
+import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { availableRollTriggers, costText, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
@@ -40,7 +40,7 @@ function newRef(): string {
 export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
   const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
-  if (t.trigger.reroll === 'hope') return { ...base, label, expression: '1d12', source: 'reroll' };
+  if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+1d12') ? '1d20' : '1d12', source: 'reroll' };
   original ??= {
     label: m.label ?? 'Roll',
     expression: m.expression,
@@ -59,7 +59,52 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
   };
 }
 
-export function rollButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null {
+function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  if (!m.restDice?.length || !m.actorId) return null;
+  const box = el('div', { class: 'roll-actions' });
+  let claiming = false;
+  const paint = async () => {
+    const buttons: HTMLButtonElement[] = [];
+    for (const actorId of host.actorIds?.() ?? []) {
+      const sheet = await host.sheet(actorId);
+      if (!sheet) continue;
+      for (const feature of [...sheet.character.features, ...sheet.character.heritage].filter(f => f.automation?.restReroll)) {
+        const key = `feat:${feature.name}`;
+        if (usesLeft(sheet.character, key, feature.automation!) === 0) continue;
+        m.restDice!.forEach((die, index) => {
+          if (die.used) return;
+          const resource = die.resource === 'hp' ? 'HP' : die.resource === 'stress' ? 'Stress' : die.resource === 'armor' ? 'Armor' : undefined;
+          const button = el('button', { type: 'button', class: 'small' },
+            `${feature.name}: reroll ${resource ?? `die ${index + 1}`} ${die.expression} · ${sheet.character.name}`);
+          button.disabled = claiming;
+          button.addEventListener('click', async () => {
+            if (claiming) return;
+            claiming = true;
+            buttons.forEach(b => { b.disabled = true; });
+            try {
+              await sheet.save.flush?.();
+              await useFeature({ actorId, key, actionId: 'reroll', roll: { id: m.id, ts: m.ts }, restDie: index });
+              die.used = true;
+            } catch (e) { host.toast((e as Error).message); }
+            finally {
+              claiming = false;
+              await paint();
+            }
+          });
+          buttons.push(button);
+        });
+      }
+    }
+    box.replaceChildren(...buttons);
+    box.hidden = !buttons.length;
+  };
+  box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
+  void paint().catch((e: Error) => host.toast(e.message));
+  return box;
+}
+
+export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
+  if ('text' in m) return restButtons(m, host);
   const actorId = m.actorId;
   const ctx = rollContext(m);
   const isAttack = m.source?.split(',').includes('attack');
@@ -93,6 +138,7 @@ export function rollButtons(m: RollMessage, host: RollButtonHost): HTMLElement |
           claiming = false;
           if (!m.rewardClaimed) void paintFor().catch((error: Error) => host.toast(error.message));
         }
+
       });
       buttons.push(reward);
     }

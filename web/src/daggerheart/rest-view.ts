@@ -2,12 +2,12 @@ import { el } from '../login';
 import type { CharacterSheet } from './data';
 import type { RestKind } from './engine';
 import {
-  RestOptions, RestPick, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
+  RestOptions, RestPick, RestResult, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
   shortRestBlocker,
 } from './rest';
 
 /** Downtime dialog: pick moves, then rest. Cancelling leaves the sheet untouched. */
-export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string) => void): void {
+export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string, result: RestResult) => void): void {
   const o: RestOptions = {};
   const picks: RestPick[] = [];
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -72,7 +72,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       const chosen = picks.map((p) => ({ ...p }));
       const result = resolveRest(c, kind, chosen, o);
       close();
-      onDone(restSummary(c, kind, chosen, result));
+      onDone(restSummary(c, kind, chosen, result), result);
     } catch (e) {
       error.textContent = e instanceof Error ? e.message : 'Resting failed.';
     }

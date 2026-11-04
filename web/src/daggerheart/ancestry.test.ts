@@ -27,6 +27,26 @@ function character(ancestry: string): CharacterSheet {
 }
 
 describe('ancestry automation and matching catalog rules', () => {
+  it('offers Quick Reactions as an optional reaction-roll advantage costing one Stress', () => {
+    const c = character('elf');
+    const options = availableRollOptions(c, ['action', 'trait:Agility']);
+    const reaction = options.find(o => o.source === 'Quick Reactions')!;
+    expect(reaction.option).toMatchObject({
+      label: 'Quick Reactions (reaction roll)', cost: { stress: 1 }, advantage: 'advantage',
+    });
+    expect(reaction.option.defaultOn).not.toBe(true);
+    expect(availableRollOptions(c, ['damage'])).toHaveLength(0);
+    expect(suggestedAdvantage([reaction])).toBe(1);
+    expect(effectiveAdvantage(1, [reaction])).toBe(1);
+    expect(selectionBlocker(c, [reaction])).toBeNull();
+    expect(c.stress.on).toBe(0);
+    commitRollOptions(c, [reaction]);
+    expect(c.stress.on).toBe(1);
+    c.stress.on = c.stress.slots;
+    expect(selectionBlocker(c, [reaction])).toBeTruthy();
+    expect(rules('elf', 'Quick Reactions').actions![0].cost).toEqual({ stress: 1 });
+  });
+
   it('never counts per-scene uses anywhere in the maintained catalog', () => {
     for (const file of readdirSync(directory).filter((name) => name.endsWith('.json'))) {
       const data: unknown = JSON.parse(readFileSync(new URL(file, directory), 'utf8'));

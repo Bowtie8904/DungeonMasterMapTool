@@ -1,5 +1,13 @@
 // Format of the automated "action used" report (consuming an item, using a feature) posted to the chat. It is plain
 // chat text (readable on any client); clients that know the format render it as a distinct card.
+import type { CharacterSheet } from './data';
+import { featureRollOrigin, sourceActionLabel } from './engine';
+
+export function actionReportTitle(c: CharacterSheet, key: string, source: string, action: string): string {
+  const feature = [...c.features, ...c.heritage].find(f => key === `feat:${f.name}`);
+  return sourceActionLabel(feature ? featureRollOrigin(c, feature) : undefined, source, action);
+}
+
 export interface ActionReport {
   title: string;
   character: string;

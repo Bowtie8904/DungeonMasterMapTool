@@ -165,6 +165,19 @@ public final class ChatPanel extends VBox {
                     && m.path("ts").asLong() == message.path("ts").asLong());
             return;
         }
+        if ("chatUpdate".equals(message.path("type").asText())) {
+            JsonNode updated = message.path("message");
+            for (int i = 0; i < messages.getChildren().size(); i++) {
+                javafx.scene.Node card = messages.getChildren().get(i);
+                if (!(card.getUserData() instanceof JsonNode previous)
+                        || !previous.path("id").equals(updated.path("id")) || !previous.path("ts").equals(updated.path("ts"))) continue;
+                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated));
+                replacement.setUserData(updated);
+                messages.getChildren().set(i, replacement);
+                break;
+            }
+            return;
+        }
         if ("rollUpdate".equals(message.path("type").asText())) {
             for (int i = 0; i < messages.getChildren().size(); i++) {
                 javafx.scene.Node card = messages.getChildren().get(i);

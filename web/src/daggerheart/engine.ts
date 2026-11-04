@@ -62,6 +62,7 @@ export interface ActionDef {
   actionRoll?: { trait?: TraitName; attack?: boolean; difficulty?: number };
   damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
   target?: 'actor' | 'party';
+  transferHope?: boolean;
   check?: { dice: string; unless: number; mark: 'stress' };
 }
 
@@ -70,6 +71,7 @@ export interface ResourceDef {
   label: string;
   initial: ModValue;
   max?: ModValue;
+  session?: boolean;
 }
 
 export interface RollOption extends ActionDef {
@@ -87,6 +89,9 @@ export interface RollOption extends ActionDef {
   advantage?: 'advantage' | 'disadvantage';
   ignoreDisadvantage?: boolean;
   requiresEffect?: string;
+  hopeDie?: 20;
+  input?: { label: string; default: number; min: number; max: number };
+  quantity?: { resource: string; label: string };
 }
 
 /** A button a feature offers on a finished roll in the chat. */
@@ -107,6 +112,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  restReroll?: boolean;
   rest?: {
     extraMoves?: number;
     longMovesInShort?: boolean;
@@ -338,7 +344,20 @@ export interface AvailableRollOption {
   prepared?: { effect: ActiveEffect; modifier: Modifier };
 }
 
-function featureRollOrigin(c: CharacterSheet, f: Feature): string {
+export function configuredRollOption(c: CharacterSheet, selection: AvailableRollOption, input?: number): AvailableRollOption {
+  const { option } = selection;
+  if (!option.input && !option.quantity) return selection;
+  const min = option.input?.min ?? 1;
+  const max = option.input?.max ?? (c.resources?.[option.quantity!.resource] ?? 0);
+  const value = input ?? option.input?.default ?? 1;
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${option.input?.label ?? option.quantity?.label}: choose a whole number from ${min} to ${max}`);
+  return { ...selection, option: { ...option,
+    value: option.input ? value : evalValue(option.value, c) * value,
+    cost: option.quantity ? Object.fromEntries(Object.entries(option.cost ?? {}).map(([key, cost]) => [key, evalValue(cost, c) * value])) : option.cost,
+  } };
+}
+
+export function featureRollOrigin(c: CharacterSheet, f: Feature): string {
   if (f.source === 'Hope feature') return c.className || f.source;
   const multiclass = /^Multiclass (.+?) - (?:class feature|(.+) (?:foundation|specialization|mastery))$/.exec(f.source);
   if (multiclass) return multiclass[2] || multiclass[1];
@@ -347,11 +366,23 @@ function featureRollOrigin(c: CharacterSheet, f: Feature): string {
 }
 
 export function rollOptionLabel(s: Pick<AvailableRollOption, 'source' | 'origin' | 'option'>): string {
-  return [s.origin, s.source, s.option.label]
+  return sourceActionLabel(s.origin, s.source, s.option.label);
+}
+
+export function sourceActionLabel(origin: string | undefined, source: string, action: string): string {
+  const parts: string[] = [];
+  for (const name of [origin, source, action]
     .filter((name): name is string => !!name?.trim())
-    .map((name) => name.trim())
-    .filter((name, i, names) => i === 0 || name !== names[i - 1])
-    .join(' - ');
+    .map((name) => name.trim())) {
+    const previous = parts[parts.length - 1];
+    if (previous === name) continue;
+    if (previous && [' (', ':', ' - '].some(suffix => name.startsWith(previous + suffix))) {
+      parts[parts.length - 1] = name;
+    } else {
+      parts.push(name);
+    }
+  }
+  return parts.join(' - ');
 }
 
 /** Optional effects are selected by the player, never inferred from situational prose. */
@@ -586,7 +617,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   return costBlocker(c, action.cost);
 }
 
-export type DiceRoll = (expression: string) => number;
+export type DiceRoll = (expression: string, clearingResource?: string) => number;
 
 /** Default local dice roller for expressions such as "1d4+1". */
 export const rollLocal: DiceRoll = (expression) => {
@@ -624,7 +655,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     const t = step.resource ? track(c, step.resource) : null;
     const amount = (fallback: number) => typeof step.amount === 'number' ? step.amount
       : step.amount && /\d*d\d+/i.test(step.amount)
-        ? roll(step.amount.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c))))
+        ? roll(step.amount.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c))), step.op === 'clear' && t ? step.resource : undefined)
         : step.amount ? evalValue(step.amount, c) : fallback;
     if (step.resource && !t) {
       const def = resourceDefinitions(c).find((r) => r.id === step.resource)!;

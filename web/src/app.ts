@@ -618,17 +618,17 @@ export class App {
     });
   }
 
-  private async useSheetFeature(actorId: string, character: CharacterSheet, save: SheetSave, key: string, actionId: string): Promise<void> {
+  private async useSheetFeature(actorId: string, character: CharacterSheet, save: SheetSave, key: string, actionId: string, amount?: number): Promise<void> {
     await save.flush();
     const target = featureTarget(character, key, actionId);
     let targetActorId: string | undefined;
     if (target === 'actor') {
-      const candidates = (this.store.state?.actors ?? []).filter(a => this.connectedPlayers.has(a.ownerId));
+      const candidates = (this.store.state?.actors ?? []).filter(a => this.connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
       const selected = await pickActor(candidates, 'Choose a character', 'Select target');
       if (!selected) return;
       targetActorId = selected.id;
     }
-    await useFeature({ actorId, key, actionId, ...(targetActorId ? { targetActorId } : {}) });
+    await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}) });
   }
 
   private selectTool(): void {
@@ -822,6 +822,16 @@ export class App {
       case 'chat':
         this.addLog({ kind: 'chat', m: msg });
         break;
+      case 'chatUpdate': {
+        const index = this.log.findIndex(e => e.kind === 'chat' && e.m.id === msg.message.id && e.m.ts === msg.message.ts);
+        if (index >= 0) this.log[index] = { kind: 'chat', m: msg.message };
+        if (this.store.state?.chatTail) {
+          const tail = this.store.state.chatTail.findIndex(m => m.id === msg.message.id && m.ts === msg.message.ts);
+          if (tail >= 0) this.store.state.chatTail[tail] = { type: 'chat', ...msg.message };
+        }
+        this.renderLog();
+        break;
+      }
       case 'chatDeleted':
         this.log = this.log.filter(entry => entry.m.id !== msg.id || entry.m.ts !== msg.ts);
         if (this.store.state?.chatTail) {
@@ -842,6 +852,7 @@ export class App {
         if (handle && applyFeatureState(handle.character, msg)) {
           handle.bus.notify();
           handle.save();
+          this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
         }
         break;
       }
@@ -1025,7 +1036,7 @@ export class App {
 
   private logCards = new WeakMap<LogEntry, HTMLElement>();
 
-  private rollActions(m: RollMessage): HTMLElement | null {
+  private rollActions(m: RollMessage | import('./protocol').ChatMessage): HTMLElement | null {
     return rollButtons(m, {
       playerId: this.playerId,
       supportsRollRewards: () => this.conn.rollRewards,
@@ -1104,7 +1115,7 @@ export class App {
               this.scheduleEffects();
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
             },
-            onFeature: (key, actionId) => this.useSheetFeature(a.id, character, changed, key, actionId),
+            onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
             onDamageTaken: async (severity) => {
               await changed.flush();
               await damageTaken(a.id, severity);
@@ -1112,7 +1123,11 @@ export class App {
             actorId: a.id,
             onShare: (entry, quantity) => { void this.shareEntry(a.id, entry, quantity).catch((e: Error) => this.toast(e.message)); },
             onPrepareShare: () => changed.flush(),
-            onLog: (text, rollSource) => { this.conn.send({ type: 'chat', text, rollSource, whisper: false }); },
+            onLog: (text, rollSource, restDice) => {
+              const send = () => { if (!this.conn.send({ type: 'chat', text, rollSource, restDice, actorId: a.id, whisper: false })) this.toast('Not connected. The report was not posted.'); };
+              if (restDice) { changed(); void changed.flush().then(send).catch((e: Error) => this.toast(e.message)); }
+              else send();
+            },
             artwork: a.artwork,
             supportsKeptDice: () => this.conn.keptDice,
             onRoll: (r) => {

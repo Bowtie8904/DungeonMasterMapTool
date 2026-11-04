@@ -47,6 +47,191 @@ class OnlineSessionServerTest {
     private volatile boolean drawingSupported;
     private volatile Path compendiumDir;
 
+    private ObjectNode communitySheet(String name) throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        JsonNode entry = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("communities.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> name.equals(item.path("name").asText())).findFirst().orElseThrow();
+        ObjectNode sheet = MAPPER.createObjectNode().put("level", 3);
+        sheet.set("heritage", entry.path("features").deepCopy());
+        for (JsonNode feature : sheet.path("heritage")) ((ObjectNode) feature).put("source", "Community - " + name);
+        sheet.putObject("usage");
+        sheet.putObject("resources");
+        sheet.putObject("hope").put("on", 5).put("slots", 6);
+        sheet.putObject("hp").put("on", 4).put("slots", 6);
+        sheet.putObject("stress").put("on", 3).put("slots", 6);
+        sheet.putObject("armorTrack").put("on", 3).put("slots", 6);
+        return sheet;
+    }
+
+    private HttpResponse<String> featureHttp(String cookie, ObjectNode body) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private void diceSeed(long seed) throws Exception {
+        var field = OnlineSessionServer.class.getDeclaredField("diceRandom");
+        field.setAccessible(true);
+        ((java.util.Random) field.get(server)).setSeed(seed);
+    }
+
+    @Test
+    void closeKnitValidatesAmountAndAllyThenTransfersHopeAndCountsOneUse() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Giver").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Ally").ownerId(playerId()).build());
+        ObjectNode source = communitySheet("Hearthborne");
+        ObjectNode target = source.deepCopy();
+        ((ObjectNode) target.path("hope")).put("on", 1);
+        store.saveSheet(campaign.getId(), "source", source.toString());
+        store.saveSheet(campaign.getId(), "target", target.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("key", "feat:Close-Knit")
+                    .put("actionId", "use").put("targetActorId", "target").put("amount", 0);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(400, featureHttp(cookie, request.put("amount", 6)).statusCode());
+            assertEquals(source, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")));
+            assertEquals(400, featureHttp(cookie, request.put("amount", 1).put("targetActorId", "source")).statusCode());
+            var result = featureHttp(cookie, request.put("amount", 3).put("targetActorId", "target"));
+            assertEquals(200, result.statusCode(), result.body());
+            assertTrue(inbox.next("chat").path("text").asText().startsWith("ACTION USED\nHearthborne - Close-Knit\n"));
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("hope").path("on").asInt());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("hope").path("on").asInt());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("usage").path("feat:Close-Knit").path("used").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void oasisUpdatesAnAlliesRestAndRecoveryOnlyByTheImprovementAndRejectsDuplicateAndHistoricalUses() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Dune").ownerId(playerId()).build());
+        Campaign.Player bob = Campaign.Player.builder().name("Bob").passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Ally").ownerId(bob.getId()).build());
+        store.saveSheet(campaign.getId(), "source", communitySheet("Duneborne").toString());
+        store.saveSheet(campaign.getId(), "target", communitySheet("Freeborne").toString());
+        String cookie = cookie();
+        Inbox sourceInbox = new Inbox();
+        Inbox targetInbox = new Inbox();
+        WebSocket ws = connect(cookie, sourceInbox);
+        WebSocket targetWs = connect(playerCookie(bob), targetInbox);
+        try {
+            ObjectNode chat = MAPPER.createObjectNode().put("type", "chat").put("actorId", "target")
+                    .put("text", "SHORT REST\nAlly\n\u2022 Tend to Wounds on self: clears 2 HP (1d4+1 = 2)");
+            chat.putArray("restDice").addObject().put("line", 0).put("expression", "1d4+1").put("value", 2)
+                    .put("resource", "hp").put("recovery", 4).put("cleared", 2);
+            targetWs.sendText(chat.toString(), true).join();
+            JsonNode report = sourceInbox.next("chat");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("key", "feat:Oasis")
+                    .put("actionId", "reroll").put("restDie", 0);
+            request.putObject("roll").put("id", report.path("id").asLong()).put("ts", report.path("ts").asLong());
+            diceSeed(0);
+            var result = featureHttp(cookie, request);
+            assertEquals(200, result.statusCode(), result.body());
+            assertEquals(1, sourceInbox.next("sheetFeature").path("usage").path("feat:Oasis").path("used").asInt());
+            JsonNode updated = sourceInbox.next("chatUpdate").path("message");
+            assertTrue(updated.path("text").asText().contains("2/4, kept 4"));
+            assertTrue(updated.path("text").asText().contains("clears 4 HP"));
+            assertEquals(2, targetInbox.next("sheetFeature").path("hp").path("on").asInt());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("hp").path("on").asInt());
+            JsonNode action = sourceInbox.next("chat");
+            assertTrue(action.path("text").asText().startsWith("ACTION USED\nDuneborne - Oasis - Reroll downtime die\nDune\n"));
+            assertTrue(action.path("text").asText().contains("Ally's downtime die"));
+            assertTrue(action.path("text").asText().contains("kept 4"));
+            assertTrue(action.path("text").asText().contains("cleared 2 additional HP"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertTrue(new CampaignStore(store.root()).historyTail(campaign.getId(), 2).contains(updated));
+            for (int previous : List.of(2, 5)) {
+                chat.put("text", "SHORT REST\nAlly\n\u2022 Tend to Wounds on self: clears 2 HP (1d4+1 = " + previous + ")");
+                ObjectNode die = (ObjectNode) chat.path("restDice").get(0);
+                die.put("value", previous).put("recovery", 0);
+                targetWs.sendText(chat.toString(), true).join();
+                JsonNode cappedReport = sourceInbox.next("chat");
+                request.putObject("roll").put("id", cappedReport.path("id").asLong()).put("ts", cappedReport.path("ts").asLong());
+                assertEquals(400, featureHttp(cookie, request).statusCode(), "Oasis is shared across all allies' rest reports");
+                ObjectNode refreshed = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
+                ((ObjectNode) refreshed.path("usage")).remove("feat:Oasis");
+                store.saveSheet(campaign.getId(), "source", refreshed.toString());
+                diceSeed(0);
+                assertEquals(200, featureHttp(cookie, request).statusCode());
+                assertEquals(1, sourceInbox.next("sheetFeature").path("usage").path("feat:Oasis").path("used").asInt());
+                JsonNode capped = sourceInbox.next("chatUpdate").path("message");
+                assertTrue(capped.path("text").asText().contains("clears 2 HP"));
+                assertTrue(capped.path("text").asText().contains("kept " + Math.max(previous, 4)));
+                assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("hp").path("on").asInt());
+                assertTrue(sourceInbox.next("chat").path("text").asText().contains("No additional HP cleared."));
+            }
+            ObjectNode restedSource = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
+            ((ObjectNode) restedSource.path("usage")).remove("feat:Oasis");
+            store.saveSheet(campaign.getId(), "source", restedSource.toString());
+            chat.put("actorId", "source").put("text", "SHORT REST\nDune\n\u2022 Clear Stress: clears 2 Stress (1d4+1 = 2)");
+            ((ObjectNode) chat.path("restDice").get(0)).put("resource", "stress").put("value", 2).put("recovery", 4);
+            ws.sendText(chat.toString(), true).join();
+            JsonNode ownReport = sourceInbox.next("chat");
+            request.putObject("roll").put("id", ownReport.path("id").asLong()).put("ts", ownReport.path("ts").asLong());
+            diceSeed(0);
+            assertEquals(200, featureHttp(cookie, request).statusCode());
+            JsonNode ownState = sourceInbox.next("sheetFeature");
+            assertEquals(1, ownState.path("usage").path("feat:Oasis").path("used").asInt());
+            assertEquals(restedSource.path("stress").path("on").asInt() - 2, ownState.path("stress").path("on").asInt());
+            assertEquals(restedSource.path("featureRevision").asInt() + 1, ownState.path("featureRevision").asInt());
+            sourceInbox.next("chatUpdate");
+            assertTrue(sourceInbox.next("chat").path("text").asText().contains("cleared 2 additional Stress."));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            server.stop();
+            server.start();
+            assertEquals(400, featureHttp(cookie(), request).statusCode());
+        } finally { ws.abort(); targetWs.abort(); }
+    }
+
+    @Test
+    void tideFearReactionIsCappedIdempotentAndSessionOnlyAndDedicatedD20KeepsDualityAndRewards() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Sailor").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ((ObjectNode) sheet.path("resources")).put("tide", 2);
+        store.saveSheet(campaign.getId(), "source", sheet.toString());
+        server.stop();
+        server.start();
+        server.publish(state("m1", 0), "m1/l1");
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("key", "feat:Know the Tide").put("actionId", "gain");
+            for (int i = 0; i < 4; i++) {
+                diceSeed(0);
+                ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"actorId\":\"source\",\"source\":\"action\"}", true).join();
+                JsonNode roll = inbox.next("roll");
+                assertTrue(roll.path("rolls").path(1).asInt() > roll.path("rolls").path(0).asInt());
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var result = featureHttp(cookie, request);
+                assertEquals(200, result.statusCode(), result.body());
+                assertEquals(Math.min(3, i + 1), inbox.next("sheetFeature").path("resources").path("tide").asInt());
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+            }
+            assertFalse(MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "source")).path("resources").has("tide"));
+            long hopeSeed = 0;
+            while (new java.util.Random(hopeSeed).nextInt(20) < 12) hopeSeed++;
+            diceSeed(hopeSeed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"1d20+1d12+2\",\"actorId\":\"source\",\"source\":\"action\"}", true).join();
+            JsonNode dedicated = inbox.next("roll");
+            assertEquals("duality", dedicated.path("kind").asText());
+            assertTrue(dedicated.path("rewardClaimed").isBoolean());
+            assertEquals("1d20+1d12+2", dedicated.path("expression").asText());
+            assertTrue(dedicated.path("rolls").path(0).asInt() > 12);
+            var reward = rewardHttp(cookie, "source", dedicated);
+            assertEquals(200, reward.statusCode(), reward.body());
+            assertEquals(6, inbox.next("sheetFeature").path("hope").path("on").asInt());
+        } finally { ws.abort(); }
+        server.stop();
+        server.start();
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
+    }
+
     private HttpResponse<String> dmCompendiumHttp(String action, JsonNode body, String token) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/dm/compendium/" + action))
                 .header("Content-Type", "application/json");

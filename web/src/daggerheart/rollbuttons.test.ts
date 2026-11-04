@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rollButtons } from './rollbuttons';
 import type { CharacterSheet } from './data';
 import type { RollMessage } from '../protocol';
+import { applyRest } from './engine';
 
 class FakeElement {
   className = '';
@@ -43,6 +44,7 @@ function character(name: string, feature: { name: string; automation: object } |
     loadout: [],
     inventory: [],
     effects: [],
+    usage: {},
     resources: {},
     hope: { on: 2, slots: 6 },
     stress: { on: 2, slots: 6 },
@@ -94,6 +96,77 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers Oasis on another players rest and sends exactly the selected die to the host', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Dune', { name: 'Oasis', automation: { restReroll: true, uses: { max: 1, per: 'rest' } } });
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      c.usage['feat:Oasis'] = { used: 1, per: 'rest' };
+      return { ok: true, status: 200 };
+    });
+    vi.stubGlobal('fetch', fetch);
+    const { host } = hostFor({ 'actor-a': c });
+    const box = rollButtons({
+      id: 33, ts: 1200, fromId: 'player-b', from: 'Bob', actorId: 'actor-b',
+      text: 'SHORT REST\nBob\nRecovery',
+      restDice: [
+        { line: 0, expression: '1d4+1', value: 2 },
+        { line: 1, expression: '1d4+1', value: 3, resource: 'stress' },
+      ],
+    }, host as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(2);
+    expect(box.queryAll('button')[1].text).toBe('Oasis: reroll Stress 1d4+1 · Dune');
+    await box.queryAll('button')[1].click();
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual({
+      actorId: 'actor-a', key: 'feat:Oasis', actionId: 'reroll', roll: { id: 33, ts: 1200 }, restDie: 1,
+    });
+    expect(box.queryAll('button')).toHaveLength(0);
+    expect(box.hidden).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares Oasis usage across reports and restores buttons after either kind of rest', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Dune', { name: 'Oasis', automation: { restReroll: true, uses: { max: 1, per: 'rest' } } });
+    const { host } = hostFor({ 'actor-a': c });
+    const boxes = [33, 34].map(id => rollButtons({
+      id, ts: 1200, fromId: 'player-b', from: 'Bob', actorId: `ally-${id}`,
+      text: 'SHORT REST\nBob\nRecovery',
+      restDice: [{ line: 0, expression: '1d4+1', value: 2, resource: 'hp' }],
+    }, host as never) as unknown as FakeElement);
+    const refresh = async () => {
+      for (const box of boxes) for (const listener of box.listeners.get('refresh-roll-actions') ?? []) await listener();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    };
+    await refresh();
+    expect(boxes.every(box => box.queryAll('button').length === 1)).toBe(true);
+    for (const kind of ['short', 'long'] as const) {
+      c.usage['feat:Oasis'] = { used: 1, per: 'rest' };
+      await refresh();
+      expect(boxes.every(box => box.hidden && box.queryAll('button').length === 0)).toBe(true);
+      applyRest(c, kind);
+      await refresh();
+      expect(boxes.every(box => !box.hidden && box.queryAll('button').length === 1)).toBe(true);
+    }
+  });
+
+  it('does not consume Oasis or hide its buttons when the host rejects the reroll', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Could not save' }), { status: 500 })));
+    const c = character('Dune', { name: 'Oasis', automation: { restReroll: true, uses: { max: 1, per: 'rest' } } });
+    const { host } = hostFor({ 'actor-a': c });
+    const box = rollButtons({
+      id: 33, ts: 1200, fromId: 'player-b', from: 'Bob', actorId: 'ally',
+      text: 'SHORT REST\nBob\nRecovery',
+      restDice: [{ line: 0, expression: '1d4+1', value: 2, resource: 'stress' }],
+    }, host as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button')[0].click();
+    expect(host.toast).toHaveBeenCalledWith('Could not save');
+    expect(c.usage['feat:Oasis']).toBeUndefined();
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+  });
+
   it('claims a Hope reward once through the host without locally granting Hope', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => ({ ok: true, status: 200 }));

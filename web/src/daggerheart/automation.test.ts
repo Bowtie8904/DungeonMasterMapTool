@@ -64,6 +64,22 @@ describe('configurable character automation', () => {
     }
   });
 
+  it.each([
+    ['Elf', 'Quick Reactions', 'Quick Reactions (reaction roll)', 'Elf - Quick Reactions (reaction roll)'],
+    ['Orderborne', 'Dedicated', 'Dedicated (Hope d20)', 'Orderborne - Dedicated (Hope d20)'],
+    ['Ranger', 'Focus', 'Focus: reroll', 'Ranger - Focus: reroll'],
+    ['Warrior', 'Slayer', 'Slayer - spend die', 'Warrior - Slayer - spend die'],
+    [undefined, 'Venom', 'Venom (apply)', 'Venom (apply)'],
+    ['Elf', 'Quick', 'Quick Reactions', 'Elf - Quick - Quick Reactions'],
+  ])('collapses qualified repeated names without losing their details: %s / %s / %s', (origin, source, label, expected) => {
+    const selection = { origin, source, option: { id: 'test', label, roll: 'action', value: 1 }, key: 'test', automation: {} };
+    expect(rollOptionLabel(selection)).toBe(expected);
+    const c = emptyCharacter('Labels');
+    const bonus = selectedRollBonus(c, rollBonus(c, ['action']), [selection]);
+    expect(bonus.names).toEqual([expected]);
+    expect(bonus.contributions).toEqual([{ label: expected, expression: '1' }]);
+  });
+
   it('deduplicates card, equipment and consumable labels while retaining distinct option names', () => {
     const c = warlock();
     c.loadout = [{ name: 'Boost', domain: 'Arcana', level: 1, type: 'Spell', recall: 0, text: '',

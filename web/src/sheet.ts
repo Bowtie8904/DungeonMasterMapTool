@@ -69,16 +69,16 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       character: sheet,
       artwork: actor.artwork,
       onChange: () => changed?.(),
-      onFeature: async (key, actionId) => {
+      onFeature: async (key, actionId, amount) => {
         await changed!.flush();
         let targetActorId: string | undefined;
         if (featureTarget(sheet, key, actionId) === 'actor') {
-          const candidates = (store.state?.actors ?? []).filter(a => connectedPlayers.has(a.ownerId));
+          const candidates = (store.state?.actors ?? []).filter(a => connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
           const selected = await pickActor(candidates, 'Choose a character', 'Select target');
           if (!selected) return;
           targetActorId = selected.id;
         }
-        await useFeature({ actorId, key, actionId, ...(targetActorId ? { targetActorId } : {}) });
+        await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}) });
       },
       onDamageTaken: async (severity) => {
         await changed!.flush();
@@ -97,7 +97,11 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         };
         void share().catch((e: Error) => report(e.message));
       },
-      onLog: (text, rollSource) => { conn.send({ type: 'chat', text, rollSource, whisper: false }); },
+      onLog: (text, rollSource, restDice) => {
+        const send = () => { if (!conn.send({ type: 'chat', text, rollSource, restDice, actorId, whisper: false })) report('Not connected. The report was not posted.'); };
+        if (restDice) { changed!(); void changed!.flush().then(send).catch((e: Error) => report(e.message)); }
+        else send();
+      },
       onRoll: (r) => conn.send({ type: 'roll', ...r }),
       supportsKeptDice: () => conn.keptDice,
     });

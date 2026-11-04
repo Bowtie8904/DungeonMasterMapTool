@@ -411,6 +411,15 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             if ("chatDeleted".equals(message.path("type").asText())) {
                 chatTail.removeIf(m -> m.path("id").asLong() == message.path("id").asLong()
                         && m.path("ts").asLong() == message.path("ts").asLong());
+            } else if ("chatUpdate".equals(message.path("type").asText())) {
+                JsonNode updated = message.path("message");
+                var entries = new java.util.ArrayList<>(chatTail);
+                for (int i = 0; i < entries.size(); i++) {
+                    if (entries.get(i).path("id").equals(updated.path("id")) && entries.get(i).path("ts").equals(updated.path("ts")))
+                        entries.set(i, updated.deepCopy());
+                }
+                chatTail.clear();
+                chatTail.addAll(entries);
             } else if ("rollUpdate".equals(message.path("type").asText())) {
                 for (JsonNode entry : chatTail) {
                     if (!(entry instanceof ObjectNode roll) || !"roll".equals(entry.path("type").asText())

@@ -195,6 +195,8 @@ export interface ChatMessage {
   to?: string;
   text: string;
   sharedCard?: import('./shared-cards').SharedCard;
+  actorId?: string;
+  restDice?: import('./daggerheart/rest').RestDie[];
   rollSource?: RollSource;
 }
 
@@ -357,6 +359,7 @@ export type ServerMessage =
   | { type: 'pause'; paused: boolean }
   | ({ type: 'chat' } & ChatMessage)
   | { type: 'chatDeleted'; id: number; ts: number }
+  | { type: 'chatUpdate'; message: ChatMessage }
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)

@@ -292,6 +292,30 @@ public final class CampaignStore {
 
     // ---- character sheets ----
 
+    private java.util.Set<String> sessionResourceIds = java.util.Set.of();
+    private final java.util.Map<String, ObjectNode> sessionResources = new java.util.HashMap<>();
+
+    public synchronized void beginSession(java.util.Set<String> resourceIds) {
+        sessionResourceIds = java.util.Set.copyOf(resourceIds);
+        sessionResources.clear();
+    }
+
+    private String resourceKey(String campaignId, String actorId) { return campaignId + ":" + actorId; }
+
+    private ObjectNode persistentSheet(ObjectNode sheet) {
+        ObjectNode copy = sheet.deepCopy();
+        if (copy.get("resources") instanceof ObjectNode resources) sessionResourceIds.forEach(resources::remove);
+        return copy;
+    }
+
+    private void rememberSessionResources(String campaignId, String actorId, ObjectNode sheet) {
+        ObjectNode values = MAPPER.createObjectNode();
+        for (String id : sessionResourceIds) {
+            if (sheet.path("resources").has(id)) values.set(id, sheet.path("resources").get(id));
+        }
+        sessionResources.put(resourceKey(campaignId, actorId), values);
+    }
+
     private Path sheetFile(String campaignId, String actorId) {
         if (!safeId(actorId)) {
             throw new IllegalArgumentException("Invalid actor id");
@@ -303,12 +327,25 @@ public final class CampaignStore {
     public synchronized String loadSheet(String campaignId, String actorId) throws IOException {
         recoverSheetTransfer(campaignId);
         Path file = sheetFile(campaignId, actorId);
-        return Files.isRegularFile(file) ? Files.readString(file, java.nio.charset.StandardCharsets.UTF_8) : null;
+        if (!Files.isRegularFile(file)) return null;
+        String raw = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+        if (sessionResourceIds.isEmpty()) return raw;
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(raw);
+        ObjectNode remembered = sessionResources.get(resourceKey(campaignId, actorId));
+        if (!sheet.path("resources").isObject() && (remembered == null || remembered.isEmpty())) return raw;
+        ObjectNode resources = sheet.withObject("/resources");
+        for (String id : sessionResourceIds) {
+            if (resources.has(id) || remembered != null && remembered.has(id))
+                resources.put(id, remembered == null ? 0 : remembered.path(id).asInt());
+        }
+        return sheet.toString();
     }
 
     public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
         recoverSheetTransfer(campaignId);
-        writeSheet(campaignId, actorId, json);
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(json);
+        writeSheet(campaignId, actorId, persistentSheet(sheet).toString());
+        rememberSessionResources(campaignId, actorId, sheet);
     }
 
     public synchronized void transferSheets(String campaignId, String sourceId, ObjectNode source,
@@ -329,7 +366,7 @@ public final class CampaignStore {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
-            transaction.set(entry.getKey(), entry.getValue());
+            transaction.set(entry.getKey(), persistentSheet(entry.getValue()));
         }
         if (roll != null) transaction.set("$roll", roll);
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
@@ -337,6 +374,7 @@ public final class CampaignStore {
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
         Files.move(temp, journal, StandardCopyOption.REPLACE_EXISTING);
         recoverSheetTransfer(campaignId);
+        sheets.forEach((id, sheet) -> rememberSessionResources(campaignId, id, sheet));
     }
 
     // Replay interrupted sheet transfers and roll rewards before subsequent reads/saves.

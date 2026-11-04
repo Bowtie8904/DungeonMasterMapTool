@@ -94,6 +94,8 @@ export interface FeatureRequest {
   key: string;
   actionId: string;
   targetActorId?: string;
+  amount?: number;
+  restDie?: number;
   roll?: { id: number | string; ts: number };
 }
 

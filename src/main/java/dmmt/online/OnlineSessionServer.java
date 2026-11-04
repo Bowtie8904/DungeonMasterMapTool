@@ -171,6 +171,7 @@ public final class OnlineSessionServer {
         }
         sessionId = java.util.UUID.randomUUID().toString();
         sessionRolls.clear();
+        store.beginSession(sessionResourceIds());
         resetSessionUses();
         Javalin javalin = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
@@ -1194,6 +1195,13 @@ public final class OnlineSessionServer {
             ObjectNode sourceSheet = storedSheet(sourceActor.getId());
             JsonNode source = featureSource(sourceSheet, key);
             JsonNode automation = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            if (request.has("restDie")) {
+                if (!automation.path("restReroll").asBoolean() || !"reroll".equals(actionId))
+                    throw new IllegalArgumentException("This feature cannot reroll downtime dice.");
+                rerollRestDie(request, sourceActor, source, sourceSheet, key, automation);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
@@ -1224,6 +1232,18 @@ public final class OnlineSessionServer {
                 damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
             }
             List<String> reportLines = new ArrayList<>();
+            if (definition.path("transferHope").asBoolean()) {
+                JsonNode amount = request.path("amount");
+                if (!amount.isInt() || amount.asInt() < 1 || targets.size() != 1 || targets.getFirst().equals(sourceActor))
+                    throw new IllegalArgumentException("Choose an ally and a positive whole number of Hope.");
+                ObjectNode targetSheet = changedSheets.get(targets.getFirst().getId());
+                ObjectNode hopeTrack = requireTrack(targetSheet, "hope");
+                if (amount.asInt() > hopeTrack.path("slots").asInt() - hopeTrack.path("on").asInt())
+                    throw new IllegalArgumentException("The ally cannot receive that much Hope.");
+                applyFeatureCost(sourceSheet, MAPPER.createObjectNode().put("hope", amount.asInt()));
+                gainTrack(targetSheet, "hope", amount.asInt());
+                reportLines.add("Gave " + amount.asInt() + " Hope to " + targets.getFirst().getName() + ".");
+            }
             applyFeatureCost(sourceSheet, definition.path("cost"));
             JsonNode uses = definition.path("uses").isObject() ? definition.path("uses") : automation.path("uses");
             useFeatureLimit(sourceSheet, key, uses);
@@ -1293,10 +1313,10 @@ public final class OnlineSessionServer {
                 ArrayNode featureUses = originalRoll.withArray("featureUses");
                 String use = sourceActor.getId() + ":" + key + ":" + actionId;
                 if (!containsText(featureUses, use)) featureUses.add(use);
-                replaceRoll(originalRoll);
             }
 
-            commitFeatureSheets(changedSheets);
+            commitFeatureSheets(changedSheets, originalRoll);
+            if (hasRoll) broadcastRollUpdate(originalRoll);
             for (var entry : changedSheets.entrySet()) {
                 Campaign.Actor actor = c.actor(entry.getKey());
                 if (actor != null) sendFeatureState(actor, entry.getValue());
@@ -1312,7 +1332,7 @@ public final class OnlineSessionServer {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 if (hasRoll && definition.has("outcome"))
                     reportLines.add(0, "Changed the original roll to " + ("hope".equals(definition.path("outcome").asText()) ? "Hope" : "Fear") + ".");
-                publishActionReport(sourceActor, reportSource + " - " + actionLabel, reportLines, originalRoll);
+                publishActionReport(sourceActor, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
             }
             json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
         } catch (FeatureIoException e) {
@@ -1328,6 +1348,85 @@ public final class OnlineSessionServer {
 
     private static final class FeatureIoException extends RuntimeException {
         FeatureIoException(IOException cause) { super(cause); }
+    }
+
+    private void rerollRestDie(JsonNode request, Campaign.Actor sourceActor, JsonNode source,
+                               ObjectNode sourceSheet, String key, JsonNode automation) throws IOException {
+        String featureName = source.path("name").asText("Feature");
+        JsonNode ref = request.path("roll");
+        if (!sessionRolls.contains(rollKey(ref.path("id").asLong(-1), ref.path("ts").asLong(-1))))
+            throw new IllegalArgumentException("That rest is not from this hosting session.");
+        ObjectNode message = null;
+        for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE)) {
+            if ("chat".equals(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
+                    && entry.path("ts").equals(ref.path("ts")) && entry instanceof ObjectNode object) {
+                message = object.deepCopy();
+                break;
+            }
+        }
+        if (message == null || !message.path("text").asText().startsWith("SHORT REST\n") || message.has("toId"))
+            throw new IllegalArgumentException("Choose a public short-rest report.");
+        JsonNode index = request.path("restDie");
+        if (!index.isInt() || index.asInt() < 0 || !(message.path("restDice").path(index.asInt()) instanceof ObjectNode die))
+            throw new IllegalArgumentException("Choose a downtime die on that report.");
+        if (die.path("used").asBoolean()) throw new IllegalArgumentException("That downtime die was already rerolled.");
+        Campaign.Actor recipient = campaign.actor(message.path("actorId").asText());
+        if (recipient == null) throw new IllegalArgumentException("The resting character no longer exists.");
+        useFeatureLimit(sourceSheet, key, automation.path("uses"));
+        int previous = die.path("value").asInt();
+        int rolled = DiceRoller.roll(die.path("expression").asText(), config.maxDice(), diceRandom).total();
+        int kept = Math.max(previous, rolled);
+        int improvement = kept - previous;
+        String[] lines = message.path("text").asText().split("\n", -1);
+        int line = die.path("line").asInt() + 2;
+        if (line >= lines.length) throw new IllegalArgumentException("That downtime die is not visible on the report.");
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(sourceActor.getId(), sourceSheet);
+        int applied = improvement;
+        if (die.has("resource")) {
+            ObjectNode sheet = recipient.equals(sourceActor) ? sourceSheet : storedSheet(recipient.getId());
+            ObjectNode track = requireTrack(sheet, die.path("resource").asText());
+            applied = Math.min(improvement, Math.min(die.path("recovery").asInt(0), Math.max(0, track.path("on").asInt())));
+            track.put("on", track.path("on").asInt() - applied);
+            die.put("recovery", Math.max(0, die.path("recovery").asInt() - applied));
+            int beforeClear = die.path("cleared").asInt();
+            lines[line] = lines[line].replaceFirst("(clears|cleared) " + beforeClear + "\\b", "$1 " + (beforeClear + applied));
+            die.put("cleared", beforeClear + applied);
+            changed.put(recipient.getId(), sheet);
+        } else if (improvement > 0) {
+            var clears = java.util.regex.Pattern.compile("clears (\\d+)").matcher(lines[line]);
+            if (clears.find()) lines[line] = clears.replaceFirst("clears " + (Integer.parseInt(clears.group(1)) + improvement));
+        }
+        lines[line] = lines[line].replaceFirst(java.util.regex.Pattern.quote(die.path("expression").asText() + " = " + previous) + "(?![\\d/])",
+                java.util.regex.Matcher.quoteReplacement(die.path("expression").asText() + " = " + previous + "/" + rolled + ", kept " + kept));
+        lines[line] += " (" + featureName + ": " + sourceActor.getName() + ")";
+        die.put("value", kept).put("used", true);
+        message.put("text", String.join("\n", lines));
+        commitFeatureSheets(changed, message);
+        changed.forEach((id, sheet) -> sendFeatureState(campaign.actor(id), sheet));
+        broadcastChatUpdate(message);
+        List<String> report = new ArrayList<>();
+        report.add("Rerolled " + recipient.getName() + "'s downtime die (" + die.path("expression").asText()
+                + "): " + previous + " → " + rolled + "; kept " + kept + ".");
+        if (die.has("resource")) {
+            String resource = switch (die.path("resource").asText()) {
+                case "hp" -> "HP";
+                case "armor" -> "Armor";
+                default -> "Stress";
+            };
+            report.add(applied > 0 ? recipient.getName() + " cleared " + applied + " additional " + resource + "."
+                    : "No additional " + resource + " cleared.");
+        } else if (improvement == 0) {
+            report.add("No improvement; kept the original result.");
+        }
+        publishActionReport(sourceActor, actionReportTitle(sourceSheet, source, "Reroll downtime die"), report, null);
+    }
+
+    private void broadcastChatUpdate(ObjectNode message) {
+        ObjectNode update = MAPPER.createObjectNode().put("type", "chatUpdate");
+        update.set("message", message);
+        broadcast(update.toString());
+        host.dmMessage(update);
     }
 
     private JsonNode featureSource(ObjectNode sheet, String key) {
@@ -1447,7 +1546,8 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("This roll's reward was already claimed.");
             int hope = roll.path("rolls").path(0).asInt(0);
             int fear = roll.path("rolls").path(1).asInt(0);
-            if (hope < 1 || hope > 12 || fear < 1 || fear > 12)
+            int hopeSides = roll.path("expression").asText().startsWith("1d20+1d12") ? 20 : 12;
+            if (hope < 1 || hope > hopeSides || fear < 1 || fear > 12)
                 throw new IllegalArgumentException("This roll has no valid Hope and Fear dice.");
             boolean critical = hope == fear;
             boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
@@ -1580,6 +1680,17 @@ public final class OnlineSessionServer {
                         : (("gain".equals(operation) ? "Gained " : "Marked ") + changed + " " + resource + "."));
                 else if ("gain".equals(operation) && amount > 0)
                     report.add("Gained no " + resource + " (already at maximum).");
+            } else if (List.of("gain", "clear", "mark").contains(operation) && !resource.isBlank()) {
+                JsonNode definition = findResourceDefinition(sheet, resource);
+                if (definition == null) throw new IllegalArgumentException("Resource unavailable: " + resource);
+                ObjectNode resources = sheet.withObject("/resources");
+                int before = resources.path(resource).asInt(0);
+                int max = definition.has("max") ? featureAmount(definition.get("max"), sheet) : Integer.MAX_VALUE;
+                int amount = "all".equals(step.path("amount").asText()) ? before : featureAmount(step.path("amount"), sheet);
+                if (amount < 0) throw new IllegalArgumentException("Invalid resource amount.");
+                int after = "gain".equals(operation) ? (int) Math.min(max, (long) before + amount) : Math.max(0, before - amount);
+                resources.put(resource, after);
+                report.add(("gain".equals(operation) ? "Gained " : "Spent ") + Math.abs(after - before) + " " + definition.path("label").asText(resource) + ".");
             } else if ("effect".equals(operation) && step.path("effect").isObject()) {
                 ObjectNode effect = (ObjectNode) step.path("effect").deepCopy();
                 String name = effect.path("name").asText();
@@ -1599,6 +1710,20 @@ public final class OnlineSessionServer {
         return List.of("hope", "stress", "hp", "armor").contains(resource);
     }
 
+    private static JsonNode findResourceDefinition(JsonNode node, String id) {
+        if (node.isObject()) {
+            for (JsonNode resource : node.path("resources"))
+                if (id.equals(resource.path("id").asText())) return resource;
+        }
+        if (node.isContainerNode()) {
+            for (JsonNode child : node) {
+                JsonNode found = findResourceDefinition(child, id);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private static ObjectNode requireTrack(ObjectNode sheet, String resource) {
         String field = "armor".equals(resource) ? "armorTrack" : resource;
         JsonNode value = sheet.path(field);
@@ -1611,6 +1736,11 @@ public final class OnlineSessionServer {
         if (amount.isTextual()) {
             String text = amount.asText().strip();
             if ("all".equals(text)) return 0;
+            if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
+            if ("@tier".equals(text)) {
+                int level = Math.max(1, sheet.path("level").asInt(1));
+                return level == 1 ? 1 : level <= 4 ? 2 : level <= 7 ? 3 : 4;
+            }
             try { return Integer.parseInt(text); }
             catch (NumberFormatException ignored) { }
         }
@@ -1662,12 +1792,16 @@ public final class OnlineSessionServer {
     }
 
     private void commitFeatureSheets(Map<String, ObjectNode> changedSheets) throws IOException {
+        commitFeatureSheets(changedSheets, null);
+    }
+
+    private void commitFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode roll) throws IOException {
         for (ObjectNode sheet : changedSheets.values()) {
             sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         }
-        store.saveSheets(campaign.getId(), changedSheets);
+        store.saveSheetsAndRoll(campaign.getId(), changedSheets, roll);
     }
 
     private void sendFeatureState(Campaign.Actor actor, ObjectNode sheet) {
@@ -1678,6 +1812,29 @@ public final class OnlineSessionServer {
         }
         for (Client client : clients.values())
             if (actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)) sendTo(client.ctx, message.toString());
+    }
+
+    private static String actionReportTitle(JsonNode sheet, JsonNode source, String action) {
+        String provenance = source.path("source").asText("");
+        String origin;
+        if ("Hope feature".equals(provenance)) {
+            origin = sheet.path("className").asText(provenance);
+        } else {
+            var multiclass = java.util.regex.Pattern.compile(
+                    "^Multiclass (.+?) - (?:class feature|(.+) (?:foundation|specialization|mastery))$").matcher(provenance);
+            origin = multiclass.matches() ? (multiclass.group(2) == null ? multiclass.group(1) : multiclass.group(2))
+                    : provenance.replaceFirst("^(?:Ancestry|Community|Transformation|Class feature|Creation|Subclass (?:foundation|specialization|mastery)) - ", "");
+            if (provenance.startsWith("Ancestry - ")) origin = origin.replaceFirst(" \\((?:first|second)\\)$", "");
+        }
+        List<String> parts = new ArrayList<>();
+        for (String part : List.of(origin, source.path("name").asText("Feature"), action)) {
+            String name = part.strip();
+            if (name.isEmpty() || (!parts.isEmpty() && parts.getLast().equals(name))) continue;
+            if (!parts.isEmpty() && List.of(" (", ":", " - ").stream().anyMatch(suffix -> name.startsWith(parts.getLast() + suffix)))
+                parts.set(parts.size() - 1, name);
+            else parts.add(name);
+        }
+        return String.join(" - ", parts);
     }
 
     private void publishActionReport(Campaign.Actor actor, String title, List<String> lines, ObjectNode roll) {
@@ -1713,12 +1870,6 @@ public final class OnlineSessionServer {
 
     private long nextChatId() {
         synchronized (this) { return ++chatId; }
-    }
-
-    private void replaceRoll(ObjectNode roll) throws IOException {
-        Campaign c = campaign;
-        store.replaceHistoryEntry(c.getId(), roll.path("id").asLong(), roll.path("ts").asLong(), roll);
-        broadcastRollUpdate(roll);
     }
 
     private void broadcastRollUpdate(ObjectNode roll) {
@@ -1768,7 +1919,30 @@ public final class OnlineSessionServer {
             } catch (IOException ignored) {
                 // A missing sheet has no session-limited uses to reset.
             }
+
         }
+    }
+
+    private Set<String> sessionResourceIds() {
+        Set<String> ids = new LinkedHashSet<>();
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory == null || !java.nio.file.Files.isDirectory(directory)) return ids;
+        try (var files = java.nio.file.Files.list(directory)) {
+            for (var file : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList())
+                collectSessionResources(MAPPER.readTree(file.toFile()), ids);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not load session-only compendium resources.", e);
+        }
+        return ids;
+    }
+
+    private static void collectSessionResources(JsonNode node, Set<String> ids) {
+        if (node.isObject()) {
+            for (JsonNode resource : node.path("resources"))
+                if (resource.path("session").asBoolean() && !resource.path("id").asText().isBlank())
+                    ids.add(resource.path("id").asText());
+            node.elements().forEachRemaining(child -> collectSessionResources(child, ids));
+        } else if (node.isArray()) node.forEach(child -> collectSessionResources(child, ids));
     }
 
     private synchronized void handleDamageTaken(Context ctx) {
@@ -2367,6 +2541,32 @@ public final class OnlineSessionServer {
             ObjectNode out = chatMessage(client.playerId, client.playerName, to, text);
             ObjectNode rollSource = rollSource(msg);
             if (rollSource != null) out.set("rollSource", rollSource);
+            if (msg.has("restDice")) {
+                Campaign.Actor actor = ownedActor(client.playerId, msg.path("actorId").asText());
+                if (to != null || !text.startsWith("SHORT REST\n") || !msg.path("restDice").isArray() || msg.path("restDice").size() > 100)
+                    throw new IllegalArgumentException("Invalid short-rest dice report.");
+                ArrayNode dice = out.putArray("restDice");
+                String[] lines = text.split("\n");
+                for (JsonNode raw : msg.path("restDice")) {
+                    String expression = raw.path("expression").asText();
+                    int line = raw.path("line").asInt(-1);
+                    if (!expression.replaceAll("\\s", "").matches("(?i)\\d*d\\d+(?:[+-]\\d+)*") || !raw.path("value").isInt()
+                            || raw.path("value").asInt() < 0 || line < 0)
+                        throw new IllegalArgumentException("Invalid downtime die.");
+                    if (line + 2 >= lines.length || !lines[line + 2].contains(expression + " = " + raw.path("value").asInt())) continue;
+                    ObjectNode die = dice.addObject().put("line", line).put("expression", expression).put("value", raw.path("value").asInt());
+                    if (raw.has("resource")) {
+                        String resource = raw.path("resource").asText();
+                        if (!List.of("hp", "stress", "armor").contains(resource) || !raw.path("recovery").isInt()
+                                || raw.path("recovery").asInt() < 0 || raw.path("recovery").asInt() > 12
+                                || !raw.path("cleared").isInt() || raw.path("cleared").asInt() < 0 || raw.path("cleared").asInt() > 12)
+                            throw new IllegalArgumentException("Invalid downtime recovery.");
+                        die.put("resource", resource).put("recovery", raw.path("recovery").asInt()).put("cleared", raw.path("cleared").asInt());
+                    }
+                }
+                out.put("actorId", actor.getId());
+                sessionRolls.add(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
+            }
             deliver(out, to);
         } catch (IllegalArgumentException e) {
             sendTo(client.ctx, error(e.getMessage()));
@@ -2474,7 +2674,7 @@ public final class OnlineSessionServer {
                 out.put(hint, value.length() > 80 ? value.substring(0, 80) : value);
             }
         }
-        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^2d12(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
+        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^(?:2d12|1d20\\+1d12)(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
             out.put("rewardClaimed", false);
             if (msg.path("difficulty").isInt()) {

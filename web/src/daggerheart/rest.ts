@@ -117,7 +117,16 @@ export function restSlots(c: CharacterSheet, kind: RestKind, o: RestOptions = {}
   return slots;
 }
 
-export interface RestResult { lines: string[] }
+export interface RestDie {
+  line: number;
+  expression: string;
+  value: number;
+  resource?: 'hp' | 'stress' | 'armor';
+  recovery?: number;
+  cleared?: number;
+  used?: boolean;
+}
+export interface RestResult { lines: string[]; dice?: RestDie[] }
 
 export function resolveRest(c: CharacterSheet, kind: RestKind, picks: RestPick[], o: RestOptions = {}, roll: DiceRoll = rollLocal): RestResult {
   const next = structuredClone(c);
@@ -132,6 +141,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   syncDerived(c);
   const tier = tierOf(c.level);
   const lines: string[] = [];
+  const rolledDice: RestDie[] = [];
   const hpBefore = c.hp.on;
   const stressBefore = c.stress.on;
   const slots = restSlots(c, kind, o);
@@ -148,16 +158,31 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const reroll = selected.some(({ b }) => b.reroll);
   const dice = (expr: string): { value: number; text: string } => {
     const first = roll(expr);
+    rolledDice.push({ line: lines.length, expression: expr, value: first });
     if (!reroll) return { value: first, text: String(first) };
     const second = roll(expr);
     return { value: Math.max(first, second), text: `${first}/${second}, kept ${Math.max(first, second)}` };
   };
   const clear = (t: typeof c.hp, n: number): number => { const k = Math.min(t.on, Math.max(0, n)); t.on -= k; return k; };
+  const recovery = (t: typeof c.hp, resource: RestDie['resource'], n: number): number => {
+    const die = rolledDice[rolledDice.length - 1];
+    die.resource = resource;
+    die.recovery = Math.max(0, t.on - n);
+    die.cleared = Math.min(t.on, Math.max(0, n));
+    return clear(t, n);
+  };
 
   const execute = (s: Source, action: ActionDef): void => {
     const rolls: string[] = [];
-    const result = runAction(c, s.key, s.automation, action, `${s.name}: ${action.label}`, (expression) => {
+    const result = runAction(c, s.key, s.automation, action, `${s.name}: ${action.label}`, (expression, clearingResource) => {
       const r = dice(expression);
+      if (clearingResource === 'hp' || clearingResource === 'stress' || clearingResource === 'armor') {
+        const track = clearingResource === 'hp' ? c.hp : clearingResource === 'stress' ? c.stress : c.armorTrack;
+        const die = rolledDice[rolledDice.length - 1];
+        die.resource = clearingResource;
+        die.recovery = Math.max(0, track.on - r.value);
+        die.cleared = Math.min(track.on, Math.max(0, r.value));
+      }
       rolls.push(`${expression} = ${r.text}`);
       return r.value;
     }, 'rest');
@@ -184,18 +209,18 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         const r = dice(`1d4+${tier}`);
         if (p.ally) {
           lines.push(`Tend to Wounds on an ally: clears ${r.value + bonus} HP (1d4+${tier} = ${r.text}${bonusText})`);
-        } else lines.push(`Tend to Wounds on self: clears ${clear(c.hp, r.value + bonus)} HP (1d4+${tier} = ${r.text}${bonusText})`);
+        } else lines.push(`Tend to Wounds on self: clears ${recovery(c.hp, 'hp', r.value + bonus)} HP (1d4+${tier} = ${r.text}${bonusText})`);
         break;
       }
       case 'stress': {
         const r = dice(`1d4+${tier}`);
-        lines.push(`Clear Stress: clears ${clear(c.stress, r.value + bonus)} Stress (1d4+${tier} = ${r.text}${bonusText})`);
+        lines.push(`Clear Stress: clears ${recovery(c.stress, 'stress', r.value + bonus)} Stress (1d4+${tier} = ${r.text}${bonusText})`);
         break;
       }
       case 'repair': {
         const r = dice(`1d4+${tier}`);
         if (p.ally) lines.push(`Repair Armor on an ally: clears ${r.value + bonus} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
-        else lines.push(`Repair Armor: clears ${clear(c.armorTrack, r.value + bonus)} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
+        else lines.push(`Repair Armor: clears ${recovery(c.armorTrack, 'armor', r.value + bonus)} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
         break;
       }
       case 'tend-all': lines.push(p.ally ? 'Tend to All Wounds on an ally' : `Tend to All Wounds: clears ${clear(c.hp, c.hp.on)} HP`); break;
@@ -256,7 +281,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   if (c.hp.on === hpBefore && c.stress.on === stressBefore) {
     for (const { s, b } of selected.filter(({ b }) => b.condition === 'noRecovery')) execute(s, b);
   }
-  return { lines };
+  return { lines, dice: rolledDice };
 }
 
 /** One chat message; the host clips chat text at 1000 characters, so keep it compact. */

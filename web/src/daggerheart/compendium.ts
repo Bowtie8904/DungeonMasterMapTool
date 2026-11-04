@@ -160,8 +160,9 @@ export function describeAutomation(a?: Automation): string[] {
     else if (m.roll) out.push(`${m.roll} rolls ${v}${m.consume ? ' (next roll only)' : ''}`);
   }
   if (a.uses) out.push(`${a.uses.max} use(s) per ${a.uses.per}`);
+  if (a.restReroll) out.push('Chat: reroll a short-rest downtime die and keep the higher result');
   for (const ac of a.actions ?? []) out.push(`Button: ${ac.label}`);
-  for (const resource of a.resources ?? []) out.push(`${resource.label}: starts at ${resource.initial}${resource.max !== undefined ? `, maximum ${resource.max}` : ''}`);
+  for (const resource of a.resources ?? []) out.push(`${resource.label}: starts at ${resource.initial}${resource.max !== undefined ? `, maximum ${resource.max}` : ''}${resource.session ? ', resets each hosting session (not saved)' : ''}`);
   if (a.creation) {
     for (const stat of ['hp', 'stress', 'evasion', 'domainCards'] as const) {
       const value = a.creation[stat];
@@ -171,7 +172,7 @@ export function describeAutomation(a?: Automation): string[] {
   }
   for (const option of a.rollOptions ?? []) {
     const cost = Object.entries(option.cost ?? {}).map(([resource, amount]) => `${amount} ${resource}`).join(', ');
-    out.push(`Optional ${option.roll} bonus: ${option.label}${cost ? ` (cost: ${cost})` : ''}`);
+    out.push(`Optional ${option.roll} bonus: ${option.label}${cost ? ` (cost: ${cost}${option.quantity ? ' per token' : ''})` : ''}${option.hopeDie ? `; Hope d${option.hopeDie}` : ''}${option.input ? `; ${option.input.label} (default +${option.input.default})` : ''}${option.quantity ? '; choose how many tokens to spend' : ''}`);
   }
   if (a.damage) out.push(`Weapon damage: ${a.damage.extraDice} extra dice, discard ${a.damage.dropLowest} lowest`);
   return out;

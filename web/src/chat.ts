@@ -115,7 +115,7 @@ function rollContent(m: RollMessage): HTMLElement {
 
 export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
                                onError?: (message: string) => void,
-                               rollActions?: (m: RollMessage) => HTMLElement | null): HTMLElement {
+                               rollActions?: (m: RollMessage | ChatMessage) => HTMLElement | null): HTMLElement {
   const m = e.m;
   const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const avatar = el('span', { class: 'message-avatar' }, m.from.slice(0, 1).toUpperCase());
@@ -137,6 +137,10 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
       el('strong', {}, report.kind === 'long' ? 'Long rest' : 'Short rest')),
     el('div', { class: 'rest-subtitle' }, report.subtitle),
     el('ul', { class: 'rest-moves' }, ...report.lines.map((l) => el('li', {}, l))));
+    if (e.kind === 'chat' && rollActions && e.m.restDice?.length) {
+      const actions = rollActions(e.m);
+      if (actions) card.append(actions);
+    }
     return card;
   }
   if (damage) {

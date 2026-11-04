@@ -236,6 +236,16 @@
      "name": "Quick Reactions",
      "text": "**Mark a Stress** to gain advantage on a reaction roll.",
      "automation": {
+      "rollOptions": [
+       {
+        "id": "reaction",
+        "label": "Quick Reactions (reaction roll)",
+        "roll": "action",
+        "advantage": "advantage",
+        "cost": { "stress": 1 },
+        "description": "Use only on a reaction roll: mark 1 Stress to gain advantage."
+       }
+      ],
       "actions": [
        {
         "id": "use",

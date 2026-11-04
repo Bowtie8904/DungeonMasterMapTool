@@ -47,11 +47,14 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `consume: true` removes the modifier after the next matching roll; an effect without modifiers left
   is removed. Prepared consume modifiers (a drunk potion) are offered in the matching roll dialog as pre-ticked
   options instead of being applied silently; unticking keeps them for a later roll.
-- **resources**: optional array of `{id, label, initial, max?}` for numeric custom pools. `initial` and `max`
+- **resources**: optional array of `{id, label, initial, max?, session?}` for numeric custom pools. `initial` and `max`
   are numbers or supported formula strings. Omit `max` for an uncapped pool; never infer a cap from Hope or a
   description. Resource ids are stable, shared sheet keys, so a Warlock subclass can spend the `favor` declared
   by its class's Favor feature. Initial values are applied once, not every render/re-equip. Resource counters
   are not rolled-die collections: Prayer/Rally Dice retain distinct rolled values and remain manual.
+  `session: true` declares a session-only pool (initially 0): the host retains values in memory across reconnects
+  and sheet/feature saves, strips them from sheet files and transaction journals, and resets them on new hosting.
+  Know the Tide uses this with `max: "@level"`; its Fear-roll trigger gains tokens once per roll.
 - **uses**: `max` per `shortRest`, `longRest`, `rest` or `session`. Every hosting run starts a new session;
   reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
   Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
@@ -83,6 +86,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   current sheets, not client copies. An effect's `endOnSourceSevere: true` links its duration to its caster's
   Severe damage and replaces that caster's previous grant on recast. `blocksMovement: true` prevents player
   movement of that actor; DM movement is unaffected.
+  `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
+  The host validates both balances and the shared use limit, then spends and grants the entire amount atomically;
+  insufficient Hope or recipient capacity leaves both sheets and the use counter unchanged.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.
@@ -91,6 +97,21 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `noRecovery`; `reroll` keeps the higher of two downtime results. `modifiers` contain
   `{move, rest?, target?: "ally", bonus?, steps?, note?}` for benefits triggered by base rest moves.
   Only owned inventory, equipped weapons/armor, active domain cards/spells and learned features contribute.
+- **restReroll**: `true` offers explicit per-die buttons on current-session short-rest chat reports (Oasis),
+  including other characters' reports. New reports carry optional `actorId` and `restDice` metadata with the
+  expression, result and report-line index; recovery dice also record the affected resource and remaining recovery.
+  The host keeps the higher roll, applies only the additional recovery (respecting the original recovery cap),
+  and journals the changed sheets, source usage and original report together. Oasis declares
+  `uses: {max: 1, per: "rest"}`, shared across all reports for that character; its buttons disappear when spent
+  and return after the character rests. Each die can be rerolled once. A formatted action report announces the
+  original, rerolled and kept results and actual additional recovery. Report updates use
+  additive `chatUpdate` messages; historical reports and older clients without metadata remain readable.
+- **Action report titles:** feature reports use sheet feature `source` provenance to name the originating
+  community, ancestry, class or subclass, followed by the feature and action, omitting adjacent duplicate names
+  (for example `Hearthborne - Close-Knit`). Item/card names remain their own sources. Browser and host reports
+  use the same convention; a repeated name followed by a parenthetical qualifier, colon or spaced-dash suffix
+  replaces the shorter name rather than duplicating it. Roll-option labels use this convention too
+  (for example `Orderborne - Dedicated (Hope d20)`). The readable `ACTION USED` chat format is unchanged.
 - **rollTriggers**: optional array of {id, label, on, when?, die?, matchResource?, cost?, steps?, reroll?, advantage?, description?} shown as buttons under rolls in chat. `audience` defaults to `"self"`; `"ally"` offers it on other players' rolls and `"any"` on both. `on` is `duality`, `action`, `attack`, `spellcast` or `trait:<Name>`; `when` is `always` (default), `fear`, `hope`, `failure` (shown on every roll, since players never know the difficulty), `hopeDie` (with `die`) or `dieMatches` (a Duality Die equals the number in the `matchResource` pool). `outcome: "hope"` changes the original roll's outcome without changing dice or total; Hope/Fear-dependent buttons and outcome badges read that override, while equal dice remain critical. `requiresEffect`/`endEffect` gate a trigger on, and end, an active effect (Ranger's Focus). `on` may also be `card:<Card Name>` for a domain card's own Spellcast roll. A trigger with `damage: {dice, fixed?, extraDice?, type?}` opens the damage dialog (`fixed` uses the dice count as written, otherwise it scales with Proficiency; `extraDice` adds Proficiency dice) and only pays its cost/steps when the damage is sent. Actions may carry their own `uses: {max, per}` (per-action limit) and `sendRoll: {dice, base: 'evasion', label}` which posts a plain roll to the chat without changing the sheet (I See It Coming). Spell cards only get a Spellcast button when their text asks for the roll. The roll dialog uses Advantage / Normal / Disadvantage buttons and a Critical checkbox for damage. `reroll` `hope` rolls a new Hope Die; `duality` repeats the roll (`advantage` adds a d6). Rerolls produce only a roll card, never a duplicate action message. Attack rolls also get a Damage button that behaves like the sheet's, including configured ancestry weapons.
 - **Roll rewards:** `outcome: "hope"` never grants Hope automatically. The original roller claims +1 Hope
   from the updated chat card, once per roll. Critical rolls instead claim +1 Hope and clear 1 Stress.
@@ -118,6 +139,11 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   when toggled; players may override it. `ignoreDisadvantage: true` omits a selected disadvantage die and explains
   this in the breakdown (Surefooted). `requiresEffect` only offers the option while the named effect is active.
   A primary/secondary restriction also applies to nonweapon sources such as Ignition, not to unrelated damage.
+  `hopeDie: 20` replaces only the Hope d12 with a d20 (Dedicated), retaining the Fear d12, modifiers and normal
+  Duality outcomes/rewards. `input: {label, default, min, max}` accepts an integer flat bonus (Found Family:
+  ally Experience, default +2). `quantity: {resource, label}` accepts a positive integer up to the available pool,
+  multiplying the option's flat bonus and all costs by that quantity (Know the Tide). Invalid quantities block
+  sending; cancellation and failed sends spend nothing. Source-wide uses remain shared with sheet actions.
 - **damage**: `{extraDice: number, dropLowest: number}` on a weapon changes **only that source weapon's base
   damage dice**, never bonus dice from coatings/options or another equipped weapon. Powerful/Massive use
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged

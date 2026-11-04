@@ -260,9 +260,9 @@ export function traitMod(c: CharacterSheet, name: TraitName): number {
 
 export type Advantage = -1 | 0 | 1;
 
-/** Builds the dice expression the host evaluates: 2d12 plus an optional advantage die and modifier. */
-export function dualityExpression(mod: number, adv: Advantage): string {
-  let e = '2d12';
+/** Builds the Hope/Fear expression plus an optional advantage die and modifier. */
+export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12): string {
+  let e = hopeDie === 20 ? '1d20+1d12' : '2d12';
   if (adv === 1) e += '+1d6';
   else if (adv === -1) e += '-1d6';
   if (mod > 0) e += `+${mod}`;

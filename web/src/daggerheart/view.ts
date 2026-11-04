@@ -5,7 +5,7 @@ import {
 } from './data';
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
-  availableRollOptions, commitRollOptions, criticalBonus, damageContributions, derivedStats, evalValue, resourceDefinitions, rollBonus,
+  availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, derivedStats, evalValue, resourceDefinitions, rollBonus,
   effectiveAdvantage, rollOptionDice, rollOptionLabel, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
 } from './engine';
 import type { RollContribution, RollSource } from '../protocol';
@@ -17,7 +17,7 @@ import { MAX_LEVEL } from './rules';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
-import { formatActionReport } from './action-summary';
+import { actionReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
 
@@ -56,8 +56,8 @@ export interface SheetViewOptions {
   /** Sends a roll to the shared roll log; returns false when it could not be sent. */
   onRoll: (roll: RollRequest) => boolean;
   /** Posts a short message (action results) to the shared chat. */
-  onLog?: (text: string, rollSource?: RollSource) => void;
-  onFeature?: (key: string, actionId: string) => Promise<void>;
+  onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[]) => void;
+  onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
   actorId?: string;
   onShare?: (entry: SharedEntry, offerQuantity?: number) => void;
@@ -255,9 +255,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const cardResourceIds = (): Set<string> => new Set([...c.loadout.map((d) => d.automation), ...c.inventory.map((i) => i.automation)].flatMap((a) => a?.resources ?? []).map((r) => r.id));
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
-    if (!actions.length && !(key.startsWith('item:') && a?.resources?.length)) return null;
+    if (!actions.length && !a?.resources?.length && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
-    if (key.startsWith('item:')) {
+    if (key.startsWith('item:') || key.startsWith('feat:')) {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolInput(r)));
     }
     for (const action of actions) row.append(actionButton(key, a!, action, label, hooks));
@@ -287,6 +287,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (currentBlock) { b.title = currentBlock; return; }
       if (action.target || action.check) {
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
+        if (action.transferHope) {
+          openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(); render(); }));
+          return;
+        }
         b.disabled = true;
         void opts.onFeature(key, action.id).then(() => { hooks.after?.(); render(); })
           .catch((e: Error) => { b.disabled = false; opts.onLog?.(`Could not use ${label}: ${e.message}`); });
@@ -320,8 +324,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         });
         if (!sent) { opts.onLog?.('Not connected. The roll was not sent and nothing was spent.'); return; }
       }
-      const title = label === action.label ? label : `${label} - ${action.label}`;
-      const effects = runActionDetailed(c, key, a, action, title);
+      const title = actionReportTitle(c, key, label, action.label);
+      const effects = runActionDetailed(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`);
       if (effects === null) return;
       hooks.after?.();
       opts.onLog?.(formatActionReport({ title, character: c.name, lines: effects.length ? effects : ['used'] }), rollSourceFor(c, key));
@@ -375,7 +379,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ...([['Short rest', 'short', 'Short rest: refreshes short-rest abilities and ends effects lasting until a rest'], ['Long rest', 'long', 'Long rest: refreshes all rest abilities and ends effects lasting until a rest']] as const)
         .map(([label, kind, title]) => {
           const b = el('button', { class: 'small', type: 'button', title }, label);
-          b.addEventListener('click', () => openRestDialog(root, c, kind, (summary) => { opts.onLog?.(summary); opts.onChange?.(); render(); }));
+          b.addEventListener('click', () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); }));
           return b;
         }),
       el('button', { class: 'small', type: 'button', title: 'Offered when the last HP is marked (not available yet)', disabled: true }, 'Death move...'),
@@ -982,6 +986,29 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
 interface PendingAction { key: string; automation: Automation; action: ActionDef }
 
+function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: number) => Promise<void>): void {
+  const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+  const amount = el('input', { type: 'number', min: '1', max: String(c.hope.on), step: '1', value: '1', ariaLabel: 'Hope to give' });
+  const error = el('div', { class: 'error', role: 'alert' });
+  const cancel = el('button', { type: 'button' }, 'Cancel');
+  const go = el('button', { type: 'button', class: 'primary' }, 'Choose ally');
+  cancel.addEventListener('click', close);
+  go.addEventListener('click', async () => {
+    const n = amount.valueAsNumber;
+    if (!Number.isInteger(n) || n < 1 || n > c.hope.on) { error.textContent = `Choose 1 to ${c.hope.on} Hope.`; return; }
+    go.disabled = true;
+    try { await send(n); close(); }
+    catch (e) { error.textContent = (e as Error).message; go.disabled = false; }
+  });
+  backdrop.append(el('div', { class: 'dh-rolldlg' }, el('h4', {}, 'Close-Knit'), el('label', {}, 'Hope to give', amount), error, el('div', { class: 'acts' }, cancel, go)));
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', onKey);
+  host.ownerDocument.body.append(backdrop);
+  amount.focus();
+}
+
 /** Small modal: advantage and Experience spend; posts the duality roll to the chat. */
 export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction): void {
   const mod = trait.reduce((n, s) => n + Number(s.expression), 0);
@@ -1002,13 +1029,15 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const error = el('div', { class: 'error', role: 'alert' });
   const options = availableRollOptions(c, targets, weapon ?? actionWeapon);
   const checked = new Set<number>();
-  const selected = () => options.filter((_, i) => checked.has(i));
+  const values = new Map<number, number>();
+  const selected = () => options.flatMap((s, i) => checked.has(i) ? [configuredRollOption(c, s, values.get(i))] : []);
   const combined = () => selectedRollBonus(c, bonus, selected());
   const suggest = () => {
-    advantage = String(suggestedAdvantage(selected()));
+    advantage = String(suggestedAdvantage(options.filter((_, i) => checked.has(i))));
     advButtons.forEach((button, i) => button.classList.toggle('on', ['1', '0', '-1'][i] === advantage));
   };
   const blocker = () => {
+    try { selected(); } catch (e) { return (e as Error).message; }
     if (weapon?.automation?.damage?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
     const active = availableRollOptions(c, targets, weapon ?? actionWeapon);
     if (selected().some((s) => !active.some((a) => a.key === s.key && a.option.id === s.option.id && a.active === s.active))) return 'A selected bonus changed. Reopen this roll dialog.';
@@ -1030,6 +1059,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     return { base, extra, text: extra ? `${base}+${extra}` : base };
   };
   const update = () => {
+    const invalid = blocker();
+    error.textContent = invalid ?? '';
+    go.disabled = !!invalid;
+    if (invalid) return;
     const b = combined();
     preview.textContent = weapon
       ? damageText(b).text
@@ -1052,12 +1085,20 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     });
     const note = s.prepared ? 'ready - already used up'
       : s.active ? 'active - no cost'
-      : [cost ? `costs ${cost} when selected${s.option.effect ? ` (then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'})` : ''}` : '',
+      : [cost ? `costs ${cost}${s.option.quantity ? ' per token' : ''} when selected${s.option.effect ? ` (then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'})` : ''}` : '',
         s.option.consumeItem && s.item ? `uses up 1 ${s.item.name} (${s.item.qty} left)` : ''].filter(Boolean).join('; ');
-    return el('label', { class: 'dh-roll-option' }, input,
-      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
+    const amount = s.option.input || s.option.quantity ? el('input', { type: 'number', step: '1',
+      min: String(s.option.input?.min ?? 1), max: String(s.option.input?.max ?? c.resources?.[s.option.quantity!.resource] ?? 0),
+      value: String(s.option.input?.default ?? 1), ariaLabel: s.option.input?.label ?? s.option.quantity!.label }) : undefined;
+    if (amount) {
+      values.set(i, amount.valueAsNumber);
+      amount.addEventListener('input', () => { values.set(i, amount.valueAsNumber); update(); });
+    }
+    const choice = el('label', { class: 'dh-roll-option' }, input,
+      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
         ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
+    return amount ? el('div', {}, choice, el('label', {}, s.option.input?.label ?? s.option.quantity!.label, amount)) : choice;
   });
   exp.addEventListener('change', update);
   crit.addEventListener('change', update);
@@ -1077,10 +1118,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       contributions: [...damageContributions(c, weapon, b), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])],
     } : {
       label,
-      expression: dualityExpression(total, actualAdvantage) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
+      expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
       kind: 'duality',
       contributions: [
-        { label: 'Hope die', expression: '1d12' },
+        { label: 'Hope die', expression: selected().some((s) => s.option.hopeDie === 20) ? '1d20' : '1d12' },
         { label: 'Fear die', expression: '1d12' },
         ...(actualAdvantage === 0 ? [] : [{ label: actualAdvantage === 1 ? 'Advantage' : 'Disadvantage', expression: actualAdvantage === 1 ? '1d6' : '-1d6' }]),
         ...(requestedAdvantage !== actualAdvantage ? [{ label: 'Disadvantage ignored', expression: '0',

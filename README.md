@@ -103,6 +103,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   physical resistance and action-roll disadvantage and prevents player token movement (the DM can still move it).
   Surefooted, Natural Climber and Hunter's Nose appear as applicable trait-roll options; suggested advantage or
   disadvantage can be overridden, while selected Surefooted prevents a disadvantage die.
+  Elf Quick Reactions is also an optional roll modifier for reaction rolls: mark 1 Stress for advantage,
+  charged only when the roll is sent successfully. Its separate sheet action remains available.
   Lifespring and other configured healing actions select and heal a character; Eye of the Storm selects a
   character for +1 Evasion until the caster takes Severe damage or recasts. Luckbringer grants Hope to all
   actors belonging to currently connected players.
@@ -169,9 +171,22 @@ Nothing starts until you click **Start online session**, so offline play and the
   dialog**: pick up to two different moves (a move can't be chosen twice; Tend to Wounds, Clear Stress, Repair Armor, Prepare alone/with others; long rests
   offer the "all" versions and Work on a Project), plus extra moves and move types granted by your ancestry, community,
   class, domain cards and items (Clank Efficient and Recovery allow one long move in a short rest, Warlock tribute, Forager,
-  Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, Oasis, ...) are listed as
+  Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, ...) are listed as
   checkboxes you can untick if you don't use them. Confirming rests, expires effects, resets uses and posts a styled
     rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Using an item or feature (e.g. drinking a potion) posts a distinct "Action used" card instead of a plain message. Entries without automation stay readable text. Maintain compendium data and automation directly in `dmmap-daggerheart/*.json`; see `docs/DAGGERHEART_DATA.md` for the format.
+  **Community features:** Duneborne Oasis offers per-die reroll buttons on current-session short-rest reports,
+  including allies' reports, keeping the higher result and updating the original report and additional recovery.
+  Each Duneborne character can use it once per rest across all reports; their buttons then disappear until their
+  next rest. A formatted action card announces the reroll, kept result and any additional recovery.
+  Freeborne Unbound has a sheet button and session-use counter shared with its Fear-roll reaction.
+  Hearthborne Close-Knit asks how much Hope to give and which connected ally receives it.
+  Feature action cards name their origin without duplicated feature names (for example, **Hearthborne - Close-Knit**).
+  Roll-option labels also keep qualifiers without repeating the feature name, such as **Elf - Quick Reactions (reaction roll)**
+  and **Orderborne - Dedicated (Hope d20)**.
+  Orderborne Dedicated can replace the Hope die with a d20 from the roll dialog; Reborne Found Family spends
+  1 Hope for an editable ally Experience bonus (default +2). Seaborne Know the Tide has a level-capped token counter
+  on its feature, a gain button on Fear rolls and a quantity selector when spending tokens; tokens survive reconnects
+  but are never saved to disk and start empty on each new hosting session. Nomadic Pack and Brave Face spend 1 Hope.
   Your own roll cards in the chat carry buttons: **Damage** on attack rolls (same dialog as the sheet) and feature
   buttons such as Wizard Strange Patterns, Ranger's Focus / Hawkeye rerolls, Fearless or Patron's Boon, and spell
   Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
