@@ -341,6 +341,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private dmmt.ui.ChatPanel chatPanel;
     private Runnable flyoutRelayout;
     private ControlSection chatSection;
+    private ToggleButton compendiumButton;
+    private final dmmt.ui.CompendiumWindow compendiumWindow = new dmmt.ui.CompendiumWindow();
     private boolean chatHosted;
     private Label onlinePausedHint;
     private ToggleButton playerWindowToggle;
@@ -794,6 +796,7 @@ public class DungeonMasterMapToolApplication extends Application {
             hideLightMenu();
         });
         scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+            if (compendiumWindow.containsFocus()) return;
             if (onlineController == null || !onlineController.running()) return;
             KeyCode key = onlinePauseKey();
             if (key == null || event.getCode() != key || event.isControlDown() || event.isAltDown()
@@ -805,6 +808,7 @@ public class DungeonMasterMapToolApplication extends Application {
             event.consume();
         });
         scene.setOnKeyPressed(event -> {
+            if (compendiumWindow.containsFocus()) return;
             if (event.isControlDown() && event.getCode() == KeyCode.S) {
                 handleSave();
                 event.consume();
@@ -1713,6 +1717,18 @@ public class DungeonMasterMapToolApplication extends Application {
         StackPane chatGraphic = new StackPane(chatIcon, unreadDot);
         StackPane.setAlignment(unreadDot, Pos.TOP_RIGHT);
         chatSection.railButton().setGraphic(chatGraphic);
+        compendiumButton = Icons.toggle(org.kordamp.ikonli.materialdesign2.MaterialDesignB.BOOK_OPEN_VARIANT, "Compendium");
+        compendiumButton.getStyleClass().add("rail-toggle");
+        compendiumButton.setOnAction(event -> {
+            if (!compendiumButton.isSelected()) {
+                compendiumWindow.close();
+            } else if (onlineController != null && onlineController.running()) {
+                compendiumWindow.show(mapCenter, onlineController.server(), () -> compendiumButton.setSelected(false));
+            } else {
+                compendiumButton.setSelected(false);
+                status("Start hosting a campaign before opening the compendium.");
+            }
+        });
 
         List<ControlSection> sectionList = List.of(
                 chatSection,
@@ -1772,6 +1788,7 @@ public class DungeonMasterMapToolApplication extends Application {
             dmSections.put(section.id(), section);
             section.railButton().setToggleGroup(railGroup);
             rail.getChildren().add(section.railButton());
+            if (section == chatSection) rail.getChildren().add(compendiumButton);
         }
         railGroup.selectedToggleProperty().addListener((observable, oldToggle, newToggle) -> {
             flyout.getChildren().clear();
@@ -1780,7 +1797,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             boolean open = newToggle != null;
             boolean chatOpen = open && "chat".equals(newToggle.getUserData());
-            double width = chatOpen ? 400 : 268;
+            double width = chatOpen ? 320 : 268;
             flyout.setPrefWidth(width);
             flyout.setMaxWidth(width);
             scroll.setPrefWidth(width);
@@ -2177,6 +2194,13 @@ public class DungeonMasterMapToolApplication extends Application {
                 section.railButton().setSelected(false);
             }
         });
+        if (compendiumButton != null) {
+            boolean hosting = onlineController != null && onlineController.running() && onlineController.campaign() != null;
+            boolean visible = hosting && !preferences.hiddenControls().contains("online.compendium");
+            compendiumButton.setVisible(visible);
+            compendiumButton.setManaged(visible);
+            compendiumWindow.syncSession(hosting ? onlineController.server() : null);
+        }
     }
 
     private HBox row(javafx.scene.Node... nodes) {
@@ -2939,6 +2963,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("session.browser", sessionToggle);
         dmControlVisibility.register("online.browser", onlineToggle);
         dmControlVisibility.register("online.chat", chatSection.railButton());
+        dmControlVisibility.register("online.compendium", compendiumButton);
         onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
