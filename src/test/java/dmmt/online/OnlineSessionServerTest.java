@@ -989,6 +989,41 @@ class OnlineSessionServerTest {
                 .buildAsync(URI.create("ws://localhost:" + port + "/ws"), inbox).orTimeout(5, TimeUnit.SECONDS).join();
     }
 
+    @Test
+    void countdownsReplicateAndRejectAllPlayerEdits() throws Exception {
+        var countdown = new Campaign.Countdown("clock", "Reinforcements", 6, 4);
+        campaign.getCountdowns().add(countdown);
+        store.save(campaign);
+        ObjectNode first = state("m1", 0);
+        first.set("countdowns", MAPPER.valueToTree(campaign.getCountdowns()));
+        server.publish(first, "m1/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertEquals(4, inbox.next("snapshot").path("state").path("countdowns").get(0).path("value").asInt());
+            for (String action : List.of("create", "delete", "step")) {
+                ws.sendText("{\"type\":\"command\",\"cmdId\":\"forged\",\"kind\":\"countdown\",\"action\":\""
+                        + action + "\",\"id\":\"clock\",\"value\":0,\"name\":\"Forged\",\"initialValue\":1}", true).join();
+                assertEquals("unknown command", inbox.next("reject").path("reason").asText());
+                assertEquals(List.of(countdown), store.load(campaign.getId()).getCountdowns());
+            }
+            ObjectNode stepped = first.deepCopy();
+            ((ObjectNode) stepped.path("countdowns").get(0)).put("value", 3);
+            server.publish(stepped, "m1/l1");
+            JsonNode op = inbox.next("delta").path("ops").get(0);
+            assertEquals("countdowns", op.path("path").asText());
+            assertEquals(3, op.path("value").get(0).path("value").asInt());
+            ObjectNode deleted = stepped.deepCopy();
+            deleted.putArray("countdowns");
+            server.publish(deleted, "m1/l1");
+            assertTrue(inbox.next("delta").path("ops").get(0).path("value").isEmpty());
+            ws.sendText("{\"type\":\"resync\",\"lastSeq\":0}", true).join();
+            assertTrue(inbox.next("snapshot").path("state").path("countdowns").isEmpty());
+        } finally {
+            ws.abort();
+        }
+    }
+
     private ObjectNode state(String mapId, double tokenX) {
         ObjectNode state = MAPPER.createObjectNode();
         state.put("mapId", mapId).put("levelId", "l1");

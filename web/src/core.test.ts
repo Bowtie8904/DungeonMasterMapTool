@@ -39,6 +39,24 @@ const snapshot = (): Partial<GameState> => ({
 });
 
 describe('Store', () => {
+  it('replicates countdown creation, steps and last deletion while supporting older hosts', () => {
+    const s = new Store();
+    s.applySnapshot(1, snapshot());
+    expect(s.state!.countdowns).toBeUndefined();
+    const countdown = { id: 'one', name: 'Reinforcements', initialValue: 6, value: 6 };
+    s.applyDelta(2, [{ op: 'set', path: 'countdowns', value: [countdown] }]);
+    expect(s.state!.countdowns).toEqual([countdown]);
+    expect(s.changed.has('countdowns')).toBe(true);
+    s.applyDelta(3, [{ op: 'set', path: 'countdowns', value: [{ ...countdown, value: 0 }] }]);
+    expect(s.state!.countdowns![0].value).toBe(0);
+    s.applySnapshot(4, { ...snapshot(), countdowns: [{ ...countdown, value: 3 }] });
+    expect(s.state!.countdowns![0].value).toBe(3);
+    s.applyDelta(5, [{ op: 'set', path: 'countdowns', value: [] }]);
+    expect(s.state!.countdowns).toEqual([]);
+    s.applySnapshot(6, snapshot());
+    expect(s.state!.countdowns).toBeUndefined();
+  });
+
   it('applies snapshot then sequential deltas', () => {
     const s = new Store();
     s.applySnapshot(5, snapshot());

@@ -195,6 +195,55 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         return audioStreaming;
     }
 
+    public void addCountdown(String name, int initialValue) throws IOException {
+        requireCountdownHost();
+        var countdown = new Campaign.Countdown(java.util.UUID.randomUUID().toString(), name, initialValue, initialValue);
+        var next = new java.util.ArrayList<>(campaign.getCountdowns());
+        next.add(countdown);
+        saveCountdowns(next);
+    }
+
+    public void stepCountdown(String id, int delta) throws IOException {
+        requireCountdownHost();
+        var next = new java.util.ArrayList<>(campaign.getCountdowns());
+        int index = countdownIndex(id);
+        var stepped = next.get(index).step(delta);
+        if (stepped.equals(next.get(index))) return;
+        next.set(index, stepped);
+        saveCountdowns(next);
+    }
+
+    public void deleteCountdown(String id) throws IOException {
+        requireCountdownHost();
+        var next = new java.util.ArrayList<>(campaign.getCountdowns());
+        next.remove(countdownIndex(id));
+        saveCountdowns(next);
+    }
+
+    private void requireCountdownHost() {
+        if (!running() || campaign == null) throw new IllegalStateException("No online campaign is being hosted.");
+    }
+
+    private int countdownIndex(String id) {
+        for (int i = 0; i < campaign.getCountdowns().size(); i++) {
+            if (campaign.getCountdowns().get(i).id().equals(id)) return i;
+        }
+        throw new IllegalArgumentException("Countdown no longer exists.");
+    }
+
+    private void saveCountdowns(java.util.List<Campaign.Countdown> next) throws IOException {
+        var previous = campaign.getCountdowns();
+        campaign.setCountdowns(next);
+        try {
+            store.save(campaign);
+        } catch (IOException ex) {
+            campaign.setCountdowns(previous);
+            throw ex;
+        }
+        publishNow();
+        app.changed();
+    }
+
     public void setAudioStreaming(boolean enabled) {
         audioStreaming = enabled;
         publishAudio();

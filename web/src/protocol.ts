@@ -240,11 +240,20 @@ export interface RollMessage {
   weapon?: string;
 }
 
+export interface Countdown {
+  id: string;
+  name: string;
+  initialValue: number;
+  value: number;
+}
+
 export interface GameState {
   effectTextures?: EffectTexture[];
   penWidthCells?: number;
   /** Fear tokens the GM holds (0-12); absent when the host predates the Fear counter. */
   fear?: number;
+  /** Read-only campaign countdowns; omitted by older hosts. */
+  countdowns?: Countdown[];
   mapId: string;
   levelId: string;
   mapName?: string;

@@ -9,6 +9,7 @@ import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInve
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
 import { renderEffects } from './effects';
+import { renderCountdowns } from './countdowns';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { addToSheet } from './daggerheart/compendium';
@@ -143,6 +144,7 @@ export class App {
   );
   private statusEl = el('span', { class: 'status' }, 'connecting');
   private fearEl = el('aside', { class: 'fear-overlay hidden', role: 'status' });
+  private countdownsEl = el('aside', { class: 'countdowns-overlay hidden', role: 'status', ariaLabel: 'Countdowns' });
   private titleEl = el('span', { class: 'title' });
   private toastEl = el('div', { class: 'toast hidden' });
   private overlay = el('div', { class: 'overlay hidden' });
@@ -166,7 +168,7 @@ export class App {
     const left = this.buildTools();
     const heading = el('div', { class: 'map-heading' }, this.titleEl, this.mapTitle, this.statusEl);
     this.rosterEl.setAttribute('aria-label', 'Connected players and ping to host');
-    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
+    this.stageEl.append(canvas, heading, left, this.flyout, this.rosterEl, this.fearEl, this.countdownsEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
@@ -879,6 +881,7 @@ export class App {
     setGmFear(s.fear);
     this.setPaused(s.paused);
     if (full || this.store.changed.has('fear')) this.renderFear(s.fear);
+    if (full || this.store.changed.has('countdowns')) renderCountdowns(this.countdownsEl, s.countdowns);
     if (full || this.store.changed.has('dmFog') || this.store.changed.has('fogGrid') || this.store.changed.has('fogMemory')) {
       void this.loadFog(s);
     }

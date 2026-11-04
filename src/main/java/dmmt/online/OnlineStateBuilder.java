@@ -161,6 +161,11 @@ public final class OnlineStateBuilder {
         state.put("penWidthCells", dmmt.service.Tuning.PEN_WIDTH_CELLS.get());
         if (campaign != null) {
             state.put("fear", campaign.getFear());
+            ArrayNode countdowns = state.putArray("countdowns");
+            for (Campaign.Countdown countdown : campaign.getCountdowns()) {
+                countdowns.addObject().put("id", countdown.id()).put("name", countdown.name())
+                        .put("initialValue", countdown.initialValue()).put("value", countdown.value());
+            }
         }
         ArrayNode overlays = state.putArray("overlays");
         for (DmProject.OverlayShape shape : project.getOverlays()) {

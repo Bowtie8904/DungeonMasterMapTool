@@ -41,6 +41,14 @@ multiclasses/loadout capacity on normal sheets. Missing actor markers default to
 Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
 
 The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
+`countdowns.ts` renders the optional `state.countdowns` array (`id`, `name`, `initialValue`, `value`) as a
+read-only, near-transparent top-right list beside the sidebar. It follows sidebar expansion/collapse,
+grows/shrinks without scrolling, and hides for empty lists or older hosts. Its subtle **COUNTDOWNS** header
+is shown only when there are countdowns. Updates use the existing snapshot
+and `set` delta contracts; players have no countdown edit commands. Countdown state is persisted by the DM
+in the campaign, not browser storage. Compatibility versions remain unchanged.
+`checks/countdowns.html` covers five-entry layout, sidebar placement, text safety, read-only rendering,
+steps/deletion, reconnects and older-host fallback in a real browser.
 The desktop DM embeds the same `CompendiumPanel` and styles in a JavaFX WebView (`/?dm-compendium=1`),
 with native in-app move/resize/close chrome and no minimize/pop-out. `dm-compendium.ts` uses a per-host
 capability passed in the URL fragment (removed immediately), never a player login. The token authorizes

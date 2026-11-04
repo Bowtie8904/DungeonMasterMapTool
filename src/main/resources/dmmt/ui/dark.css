@@ -1400,6 +1400,39 @@
     -fx-icon-color: #e8a33d;
 }
 
+.countdowns-overlay {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 4, 0, 0, 1);
+}
+.countdown-title {
+    -fx-text-fill: -dm-muted;
+    -fx-font-size: 10px;
+}
+.countdown-row {
+    -fx-background-color: rgba(18, 20, 26, 0.14);
+    -fx-background-radius: 4;
+    -fx-padding: 3 6;
+}
+.countdown-row .label {
+    -fx-font-size: 11px;
+}
+.countdown-value {
+    -fx-font-weight: bold;
+}
+.countdown-action {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 3;
+    -fx-min-width: 22;
+    -fx-min-height: 22;
+    -fx-max-width: 22;
+    -fx-max-height: 22;
+    -fx-opacity: 0.65;
+}
+.countdown-action:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-opacity: 1;
+}
+
 /* DM-side Fear counter, bottom right of the map while a campaign is hosted. */
 .fear-overlay {
     -fx-background-color: rgba(18, 20, 26, 0.82);

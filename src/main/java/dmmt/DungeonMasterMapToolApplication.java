@@ -338,6 +338,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox imageUnlockBanner;
     private HBox onlinePausedBanner;
     private dmmt.ui.FearOverlay fearOverlay;
+    private dmmt.ui.CountdownOverlay countdownOverlay;
     private dmmt.ui.ChatPanel chatPanel;
     private Runnable flyoutRelayout;
     private ControlSection chatSection;
@@ -665,6 +666,14 @@ public class DungeonMasterMapToolApplication extends Application {
         fearOverlay.onReservedHeightChanged(() -> {
             if (flyoutRelayout != null) flyoutRelayout.run();
         });
+        countdownOverlay = new dmmt.ui.CountdownOverlay(this::createCountdown,
+                (id, delta) -> editCountdown(() -> onlineController.stepCountdown(id, delta)),
+                id -> editCountdown(() -> onlineController.deleteCountdown(id)));
+        StackPane.setAlignment(countdownOverlay, Pos.TOP_RIGHT);
+        countdownOverlay.translateXProperty().bind(controls.widthProperty().add(20).negate());
+        StackPane.setMargin(countdownOverlay, new Insets(10, 0, 0, 0));
+        center.getChildren().add(countdownOverlay);
+        dmControlVisibility.register("online.countdowns.add", countdownOverlay.addButton());
         center.getChildren().add(createBrushSizeLabel());
         remoteTransferOverlay = new dmmt.ui.RemoteTransferOverlay();
         center.getChildren().add(remoteTransferOverlay);
@@ -772,6 +781,7 @@ public class DungeonMasterMapToolApplication extends Application {
         extraApiControls.put("maps.previous", mapBrowser.previousMapButton());
         controlApi = new DmControlApi(dmControlVisibility);
         extraApiControls.forEach(controlApi::add);
+        controlApi.replaceGroup("online.countdowns", countdownOverlay.apiControls());
         controlApi.attachUrlMenus(this::localApiBaseUrl, this::status);
         mapBrowser.setApiUrlProvider(this::mapApiUrl);
         applyApiUrlOptionVisibility();
@@ -2197,6 +2207,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
     /** Shows or hides the tabs of the DM controls according to the {@code ui.sections.hidden} setting. */    private void applySectionVisibility() {
         dmControlVisibility.apply(preferences.hiddenControls());
+        updateCountdownOverlay();
         updateSelectionControls();
         java.util.Set<String> hidden = preferences.hiddenSections();
         if (tokenBrowserToggle != null) {
@@ -6097,6 +6108,38 @@ public class DungeonMasterMapToolApplication extends Application {
             chatHosted = hosted;
             if (hosted) chatPanel.reload();
             else chatPanel.clear();
+        }
+    }
+
+    private void updateCountdownOverlay() {
+        if (countdownOverlay == null) return;
+        boolean hosted = onlineController != null && onlineController.running() && onlineController.campaign() != null;
+        countdownOverlay.setHosted(hosted, preferences.hiddenControls().contains("online.countdowns"));
+        boolean changed = countdownOverlay.setCountdowns(hosted ? onlineController.campaign().getCountdowns() : List.of());
+        if (changed && controlApi != null) {
+            controlApi.replaceGroup("online.countdowns", countdownOverlay.apiControls());
+        }
+    }
+
+    private void createCountdown() {
+        if (onlineController == null || !onlineController.running()) {
+            status("Online Play: no campaign is being hosted.");
+            return;
+        }
+        dmmt.ui.OnlineDialogs.createCountdown(primaryStage).ifPresent(value ->
+                editCountdown(() -> onlineController.addCountdown(value.name(), value.initialValue())));
+    }
+
+    @FunctionalInterface
+    private interface CountdownEdit {
+        void run() throws IOException;
+    }
+
+    private void editCountdown(CountdownEdit edit) {
+        try {
+            edit.run();
+        } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
+            statusFailure("Online Play: could not update countdowns: " + ex.getMessage(), ex);
         }
     }
 

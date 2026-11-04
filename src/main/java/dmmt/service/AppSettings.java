@@ -70,6 +70,7 @@ public final class AppSettings {
         addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
                 "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link",
                 "fearDown|Fear counter minus", "fearUp|Fear counter plus", "chat|Chat tab (shown while hosting)",
+                "countdowns|Countdown overlay (shown while hosting)", "countdowns.add|Create countdown",
                 "measure|Measure tab (shown while hosting)", "measure.distance|Measure distance",
                 "measure.radius|Measure radius", "measure.cone|Measure cone", "measure.rect|Measure rectangle",
                 "measure.hint|Measure hint",

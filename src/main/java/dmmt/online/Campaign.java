@@ -46,6 +46,29 @@ public class Campaign {
     /** Fear tokens the GM currently holds, 0 to {@link #MAX_FEAR}; missing in older files means 0. */
     private int fear;
 
+    @Builder.Default
+    private List<Countdown> countdowns = new ArrayList<>();
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Countdown(String id, String name, int initialValue, int value) {
+        public Countdown {
+            if (!CampaignStore.safeId(id)) throw new IllegalArgumentException("Invalid countdown id.");
+            if (name == null || name.isBlank() || name.trim().length() > 100
+                    || name.codePoints().anyMatch(Character::isISOControl)) {
+                throw new IllegalArgumentException("Countdown name must be 1-100 characters without control characters.");
+            }
+            if (initialValue < 0 || value < 0 || value > initialValue) {
+                throw new IllegalArgumentException("Countdown values must be between 0 and the initial value.");
+            }
+            name = name.trim();
+        }
+
+        public Countdown step(int delta) {
+            if (delta != -1 && delta != 1) throw new IllegalArgumentException("Step must be -1 or 1.");
+            return new Countdown(id, name, initialValue, (int) Math.max(0, Math.min(initialValue, (long) value + delta)));
+        }
+    }
+
     public void setFear(int fear) {
         this.fear = Math.max(0, Math.min(MAX_FEAR, fear));
     }

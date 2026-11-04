@@ -445,6 +445,14 @@ Tabs of the DM controls that are **completely hidden**: a hidden tab's icon is r
 *Keywords:* hide tab, hide section, remove section, sidebar tabs, overlay, declutter, DM controls, show hide
 
 ### `ui.controls.hidden`
+
+The hosting-only countdown list can be hidden with `online.countdowns`, or just its Add button with
+`online.countdowns.add`. This affects only the DM overlay, not the read-only browser display or saved campaign data.
+The local API retains `online.countdowns.add` (opens the name/initial-value dialog) and discovers
+`online.countdowns.<id>.down`, `.up` and `.delete` for each hosted countdown. These controls remain usable when
+hidden, are disabled outside hosting, and step by one within 0..initial value. Deleted countdown controls disappear
+from discovery. Countdown names, initial values and current values are saved in the campaign's `campaign.json`,
+not in the INI file. No new INI keys or compatibility-version changes are required.
 **Default:** empty · **Values:** comma separated `section.control` ids from the table below · **Applies:** live (also changed from the settings window)
 
 Individual controls hidden from the DM controls overlay. In **Settings > DM controls tabs**, expand a tab's **controls** group and uncheck the controls you do not need. Labels, icons and value readouts belonging to a field/slider are hidden together; empty rows and unused separators take no layout space. Values, active tools, map data and keyboard shortcuts are unchanged. Both brush-size sliders have independent visibility choices but still share the same brush size, adjustable with Alt + mouse wheel. Whole-tab visibility (`ui.sections.hidden`) is independent, so restoring a tab preserves its individual choices. Empty means everything is shown; unknown ids are ignored. Hand edits are applied while the app is running.

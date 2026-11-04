@@ -176,7 +176,14 @@ Nothing starts until you click **Start online session**, so offline play and the
   is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
   block anything else. While a campaign is hosted, the **Fear counter** (per campaign, 0-12) appears as a small
   overlay at the bottom right of the DM view with −/+ buttons (local API `online.fearDown`/`online.fearUp`) and
-  permanently as up to 12 tokens at the bottom right of every browser. Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
+  permanently as up to 12 tokens at the bottom right of every browser.
+  **Daggerheart countdowns** appear in a subtle, nearly transparent list at the top right beside the controls/sidebar.
+  While hosting, use the DM's **+** beside **COUNTDOWNS** to enter a name and a nonnegative initial value.
+  Each countdown starts at that value; its minus/plus buttons step between 0 and the initial value, and its **x** deletes it.
+  Players only see the names and current/initial values. The list grows/shrinks with its entries, and all edits are
+  saved with the campaign across restarts. Hide the DM overlay with `ui.controls.hidden=online.countdowns`;
+  Add and per-countdown step/delete controls remain available through the local API (see `docs/SETTINGS.md`).
+  Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
   Chat messages appear as individual sender-headed cards. Roll cards show styled dice, a combined bonus and a

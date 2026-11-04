@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Countdown browser regression</title></head>
+<body><div id="app"></div><pre id="result" style="position:fixed;bottom:0;left:250px;z-index:100;background:#111;color:#fff"></pre>
+<script type="module">
+import '../src/style.css';
+import { App } from '../src/app.ts';
+import { defaultState } from '../src/protocol.ts';
+
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push(name); };
+const frame = () => new Promise(resolve => setTimeout(resolve, 80));
+try {
+  const app = new App(document.getElementById('app'), () => {});
+  const sent = [];
+  app.conn.send = command => { sent.push(command); return true; };
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alice', campaignId: 'campaign', paused: false });
+  app.handle({ type: 'snapshot', seq: 1, state: defaultState() });
+  const overlay = document.querySelector('.countdowns-overlay');
+  assert(getComputedStyle(overlay).display === 'none', 'older host hides countdown overlay');
+  assert(!overlay.querySelector('.countdowns-heading'), 'no header without countdowns');
+  const countdowns = Array.from({ length: 5 }, (_, i) =>
+    ({ id: `c${i}`, name: i === 0 ? '<b>Reinforcements</b>' : `Countdown ${i}`, initialValue: 6, value: i }));
+  app.handle({ type: 'delta', seq: 2, ops: [{ op: 'set', path: 'countdowns', value: countdowns }] });
+  await frame();
+  assert(overlay.querySelectorAll('.countdown-row').length === 5, 'renders five countdowns');
+  assert(overlay.querySelector('.countdowns-heading').textContent === 'COUNTDOWNS', 'nonempty countdown list has a header');
+  assert(overlay.querySelector('.countdown-name').textContent === '<b>Reinforcements</b>' && !overlay.querySelector('b'), 'names are text, never HTML');
+  assert(overlay.querySelector('.countdown-value').textContent === '0 / 6', 'zero and initial value are visible');
+  assert(!overlay.querySelector('button,input,select,[contenteditable]'), 'players have no edit controls');
+  assert(getComputedStyle(overlay).pointerEvents === 'none', 'overlay does not capture map gestures');
+  const background = getComputedStyle(overlay.querySelector('.countdown-row')).backgroundColor;
+  const alpha = Number(background.match(/,\s*([\d.]+)\)$/)?.[1]);
+  assert(alpha > 0 && alpha < 0.2, 'countdown background is nearly transparent');
+  const fiveHeight = overlay.getBoundingClientRect().height;
+  assert(fiveHeight < 220, 'five countdowns are compact without scrolling');
+  const sidebar = document.querySelector('.right-sidebar');
+  assert(overlay.getBoundingClientRect().right < sidebar.getBoundingClientRect().left, 'countdowns sit left of open sidebar');
+  document.querySelector('.section-rail button[aria-label="Chat"]').click();
+  await frame();
+  assert(!document.querySelector('.stage').classList.contains('sidebar-open'), 'sidebar collapsed');
+  assert(overlay.getBoundingClientRect().right < sidebar.getBoundingClientRect().left, 'countdowns sit left of collapsed rail');
+  assert(window.innerWidth - overlay.getBoundingClientRect().right === 70, 'collapsed sidebar releases horizontal space');
+  app.handle({ type: 'delta', seq: 3, ops: [{ op: 'set', path: 'countdowns', value: [{ ...countdowns[0], value: 6 }] }] });
+  await frame();
+  assert(overlay.getBoundingClientRect().height < fiveHeight, 'overlay shrinks when countdowns are deleted');
+  assert(overlay.querySelector('.countdown-value').textContent === '6 / 6', 'step changes are visible');
+  app.handle({ type: 'delta', seq: 4, ops: [{ op: 'set', path: 'countdowns', value: [] }] });
+  assert(getComputedStyle(overlay).display === 'none', 'last deletion hides overlay');
+  assert(!overlay.querySelector('.countdowns-heading'), 'last deletion removes header');
+  app.handle({ type: 'snapshot', seq: 5, state: { ...defaultState(), countdowns } });
+  assert(overlay.querySelectorAll('.countdown-row').length === 5, 'reconnect snapshot restores countdowns');
+  app.handle({ type: 'snapshot', seq: 6, state: defaultState() });
+  assert(getComputedStyle(overlay).display === 'none', 'older host snapshot clears stale countdowns');
+  assert(sent.length === 0, 'countdowns never send player commands');
+  app.dispose();
+  document.getElementById('result').textContent = `PASS: ${checks.length} countdown browser checks`;
+  document.body.dataset.result = 'pass';
+} catch (error) {
+  document.getElementById('result').textContent = 'FAIL: ' + error.stack;
+  document.body.dataset.result = 'fail';
+}
+</script></body>
+</html>

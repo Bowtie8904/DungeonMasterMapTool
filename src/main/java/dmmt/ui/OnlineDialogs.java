@@ -35,7 +35,32 @@ public final class OnlineDialogs {
     public record NewPlayer(String name, String password) {
     }
 
+    public record NewCountdown(String name, int initialValue) {
+    }
+
     private OnlineDialogs() {
+    }
+
+    public static Optional<NewCountdown> createCountdown(Window owner) {
+        TextField name = new TextField();
+        name.setPromptText("e.g. Reinforcements arrive");
+        TextField initial = new TextField("6");
+        Label hint = new Label("Starts at the initial value. Step between 0 and that value; players can only view it.");
+        hint.getStyleClass().add("muted");
+        hint.setWrapText(true);
+        return form(owner, "New countdown", "Create a countdown", MaterialDesignS.SWORD_CROSS, "Create",
+                new String[]{"Name", "Initial value"}, new javafx.scene.Node[]{name, initial}, hint, name,
+                () -> {
+                    try {
+                        new Campaign.Countdown("validation", name.getText(), Integer.parseInt(initial.getText().trim()),
+                                Integer.parseInt(initial.getText().trim()));
+                        return null;
+                    } catch (NumberFormatException ex) {
+                        return "Initial value must be a whole number between 0 and " + Integer.MAX_VALUE + ".";
+                    } catch (IllegalArgumentException ex) {
+                        return ex.getMessage();
+                    }
+                }, () -> new NewCountdown(name.getText().trim(), Integer.parseInt(initial.getText().trim())));
     }
 
     /** Name plus game system. {@code nameProblem} returns an error text or {@code null}. */

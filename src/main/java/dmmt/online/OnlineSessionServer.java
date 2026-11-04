@@ -87,7 +87,7 @@ public final class OnlineSessionServer {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final List<String> DIFF_CATEGORIES = List.of("images", "walls", "doors", "lights", "lighting",
             "weather", "dmFog", "fogGrid", "actors", "grid", "overlays", "texts", "view", "pings", "indoor",
-            "effectTextures", "penWidthCells", "fear");
+            "effectTextures", "penWidthCells", "fear", "countdowns");
     private static final int MAX_FOG_BYTES = 4 * 1024 * 1024;
     private static final int MAX_CHAT_CHARS = 1000;
 
