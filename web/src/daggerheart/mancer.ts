@@ -57,6 +57,7 @@ function runWizard(o: WizardOptions): void {
     const progress = el('div', { class: 'dh-wiz-progress' }, ...steps.map((_, i) => el('span', { class: i < index ? 'done' : i === index ? 'now' : '' })));
     const body = el('div', { class: 'dh-wiz-body' });
     const aside = el('aside', { class: 'dh-wiz-side' });
+    aside.hidden = !step.side;
     const back = el('button', { type: 'button' }, 'Back');
     back.disabled = index === 0;
     back.addEventListener('click', () => { index--; draw(); });
@@ -70,8 +71,6 @@ function runWizard(o: WizardOptions): void {
     };
     const show = (n: Node | null) => {
       aside.replaceChildren(...(n ? [n] : []));
-      aside.hidden = !n;
-      main.classList.toggle('has-side', !!n);
     };
     const showDefault = () => show(step.side?.() ?? null);
     sidePanel = { show: (n) => show(n ?? step.side?.() ?? null) };
@@ -79,7 +78,7 @@ function runWizard(o: WizardOptions): void {
       if (step.problem()) return;
       if (last) { close(); o.onFinish(); } else { index++; draw(); }
     });
-    const main = el('div', { class: 'dh-wiz-main' }, body, aside);
+    const main = el('div', { class: `dh-wiz-main${step.side ? ' has-side' : ''}` }, body, aside);
     box.replaceChildren(
       el('div', { class: 'dh-wiz-head' }, el('div', {}, el('div', { class: 'dh-wiz-kicker' }, `${o.heading} - step ${index + 1} of ${steps.length}`), el('h2', {}, step.title)), x),
       progress,

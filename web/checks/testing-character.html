@@ -43,9 +43,21 @@ const button = (parent, text) => [...parent.querySelectorAll('button')].find((b)
 try {
   const host = document.querySelector('#host');
   const normal = emptyCharacter('Normal');
+  const freshView = renderSheetView({ character: normal, onRoll: () => true });
+  const freshLevelUp = button(freshView, 'Level up');
+  assert(freshLevelUp.disabled, 'Fresh character can level up before creation');
+  assert(freshLevelUp.title === 'Complete character creation before leveling up', 'Missing creation prerequisite tooltip');
+  freshLevelUp.click();
+  assert(!document.querySelector('.dh-wiz') && normal.level === 1, 'Disabled level-up opened a wizard or changed the level');
   normal.mancer.done = true;
   const normalView = renderSheetView({ character: normal, onRoll: () => true });
+  assert(!button(normalView, 'Level up').disabled, 'Completed character cannot level up');
   assert(!button(normalView, 'Edit testing build'), 'Normal actor exposed testing controls');
+  const legacy = emptyCharacter('Legacy');
+  delete legacy.mancer;
+  assert(!button(renderSheetView({ character: legacy, onRoll: () => true }), 'Level up').disabled, 'Legacy character cannot level up');
+  legacy.level = 10;
+  assert(button(renderSheetView({ character: legacy, onRoll: () => true }), 'Level up').disabled, 'Maximum-level character can level up');
   const c = Object.assign(emptyCharacter('Testing hero'), { testingCharacter: true });
   applyTestingBuild(data, c, defaultTestingBuild(data));
   const view = renderSheetView({ character: c, onRoll: () => true });

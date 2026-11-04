@@ -433,8 +433,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       return edit;
     }
     const max = c.level >= MAX_LEVEL;
-    const b = el('button', { class: 'primary small', type: 'button', title: max ? 'Maximum level reached' : `Level up to ${c.level + 1}` }, 'Level up');
-    b.disabled = max;
+    const unfinished = c.mancer?.done === false;
+    const b = el('button', { class: 'primary small', type: 'button', title: unfinished ? 'Complete character creation before leveling up' : max ? 'Maximum level reached' : `Level up to ${c.level + 1}` }, 'Level up');
+    b.disabled = unfinished || max;
     b.addEventListener('click', launchLevelUp);
     return b;
   }

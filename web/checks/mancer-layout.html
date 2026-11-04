@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Character Mancer layout check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { openMancer } from '../src/daggerheart/mancer.ts';
+
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const categories = {
+    classes: [
+      { id: 'scholar', name: 'Scholar', kind: 'class', domains: ['Arcana'], text: 'Class description.' },
+      { id: 'knowledge', name: 'Scholar: Knowledge', kind: 'subclass', parent: 'Scholar', stage: 'foundation',
+        features: [{ name: 'Learning', text: 'Subclass description.' }] },
+    ],
+  };
+  window.fetch = async (url) => new Response(JSON.stringify({
+    entries: categories[String(url).split('/').pop()] ?? [],
+  }), { headers: { 'Content-Type': 'application/json' } });
+  await openMancer(document.querySelector('#host'), emptyCharacter('Layout check'), () => {});
+
+  const bounds = () => ['.dh-wiz-body', '.dh-wiz-side'].map((selector) => {
+    const r = document.querySelector(selector).getBoundingClientRect();
+    return [r.x, r.y, r.width, r.height];
+  });
+  const stable = (before, message) => {
+    const after = bounds();
+    assert(before.every((r, i) => r.every((v, j) => Math.abs(v - after[i][j]) < 1)), message);
+  };
+  const checkPreview = () => {
+    const aside = document.querySelector('.dh-wiz-side');
+    assert(!aside.hidden && aside.childNodes.length === 0, 'Unselected step must reserve an empty panel');
+    assert(aside.getBoundingClientRect().height > 30, 'Empty panel must reserve height on narrow screens');
+    const before = bounds();
+    const option = document.querySelector('.dh-wiz-body .cho');
+    option.dispatchEvent(new MouseEvent('mouseenter'));
+    assert(aside.textContent.trim(), 'Hover must show details');
+    stable(before, 'Hover changed layout');
+    option.dispatchEvent(new MouseEvent('mouseleave'));
+    assert(aside.childNodes.length === 0, 'Leaving an unselected option must clear details');
+    stable(before, 'Mouse leave changed layout');
+    option.focus();
+    assert(aside.textContent.trim(), 'Focus must show details');
+    stable(before, 'Focus changed layout');
+    option.blur();
+    stable(before, 'Blur changed layout');
+    option.click();
+    assert(document.querySelector('.dh-wiz-side').textContent.trim(), 'Selection must keep details');
+    stable(before, 'Selection changed layout');
+    return before;
+  };
+  checkPreview();
+  document.querySelector('.dh-wiz-foot .primary').click();
+  checkPreview();
+  document.querySelector('.dh-wiz-x').click();
+  result.textContent = `PASS (${innerWidth}px viewport)`;
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack ?? error}`;
+}
+</script></body></html>

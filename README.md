@@ -106,7 +106,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   background, Experiences, domain cards, connections, identity, review) with Back/Next and a progress bar, and builds
   the full sheet from the compendium. The sheet's **Level up** button starts a second wizard (tier-milestone Experience,
   two advancement points, per-advancement details, new domain card, optional card swap). All choices are remembered
-  in the sheet (`mancer.choices`, `levelUps`).
+  in the sheet (`mancer.choices`, `levelUps`). **Level up** is disabled until character creation is complete.
   Clank's Purposeful Design adds an Experience selection during creation and permanently increases that
   Experience by +1; mixed ancestry only grants this choice when that feature was selected.
   The advancement slot counts per tier are defined in an
@@ -114,6 +114,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
   shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header labels the original class as "Class:" and any additional class as "Multiclass:".
+  Steps with detail previews keep an empty panel visible before selection, so hovering, focusing and selecting
+  options only updates its contents without shifting the layout (including on narrow screens).
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the maintained Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
