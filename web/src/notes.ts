@@ -2,6 +2,25 @@ import { notesRequest } from './api';
 import { bringToFront, makeDraggable, trackStacking } from './daggerheart/window';
 import { el } from './login';
 import { openPopout } from './popout';
+import { folderSvg } from './handouts';
+
+const noteIcon = 'M6 3h8l5 5v13H6Z M14 3v5h5 M9 13h7 M9 17h7';
+
+function noteSvg(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'handout-folder-icon');
+  const path = document.createElementNS(svg.namespaceURI, 'path');
+  path.setAttribute('d', noteIcon);
+  svg.append(path);
+  return svg;
+}
+
+function noteRow(classes: string, label: string, lead: SVGSVGElement, chevron = '', title?: string): HTMLButtonElement {
+  return el('button', { type: 'button', class: `file-row ${classes}`, role: 'treeitem', ...(title ? { title } : {}) },
+    el('span', { class: 'file-chevron', ariaHidden: 'true' }, chevron), lead, el('span', { class: 'file-name' }, label));
+}
 
 export interface NoteEntry { path: string; name: string; folder: boolean; shared: boolean }
 export interface NoteContent { path: string; text: string; revision: string }
@@ -199,7 +218,7 @@ export class NotesPanel {
   private entries: NoteEntry[] = [];
   private windows = new Set<NoteEditor>();
   private loading = new Set<string>();
-  private expanded = new Set<string>();
+  private collapsed = new Set<string>();
   private selected = 'private';
   private enabled = false;
   private key = '';
@@ -237,7 +256,7 @@ export class NotesPanel {
     const key = `dmmt.notes.size.${campaign}.${player}`;
     if (this.key && this.key !== key) {
       this.windows.forEach(w => w.destroy()); this.windows.clear();
-      this.entries = []; this.expanded.clear(); this.tree.replaceChildren(); this.selected = 'private';
+      this.entries = []; this.collapsed.clear(); this.tree.replaceChildren(); this.selected = 'private';
     }
     this.generation++;
     this.key = key;
@@ -268,16 +287,17 @@ export class NotesPanel {
 
   private render(): void {
     const branch = (parent: string): HTMLElement => {
-      const list = el('ul', { class: 'note-branch' });
+      const list = el('ul', { class: 'file-tree', role: 'group' });
       for (const entry of noteChildren(this.entries, parent)) {
-        const row = el('button', { type: 'button', class: 'note-row', title: entry.folder ? 'Click to expand; right-click for actions' : 'Double-click to edit; right-click for actions' },
-          `${entry.folder ? this.expanded.has(entry.path) ? '\u25be ' : '\u25b8 ' : ''}${entry.name}`);
+        const row = noteRow('note-row', entry.name, entry.folder ? folderSvg() : noteSvg(),
+          entry.folder ? this.collapsed.has(entry.path) ? '\u25b8' : '\u25be' : '',
+          entry.folder ? 'Click to expand; right-click for actions' : 'Double-click to edit; right-click for actions');
         row.classList.toggle('selected', this.selected === entry.path);
-        if (entry.folder) row.setAttribute('aria-expanded', String(this.expanded.has(entry.path)));
+        if (entry.folder) row.setAttribute('aria-expanded', String(!this.collapsed.has(entry.path)));
         row.addEventListener('click', () => {
           this.selected = entry.path;
           if (entry.folder) {
-            if (this.expanded.has(entry.path)) this.expanded.delete(entry.path); else this.expanded.add(entry.path);
+            if (this.collapsed.has(entry.path)) this.collapsed.delete(entry.path); else this.collapsed.add(entry.path);
             this.render();
           } else {
             this.tree.querySelectorAll('.selected').forEach(e => e.classList.remove('selected'));
@@ -291,19 +311,22 @@ export class NotesPanel {
           if (event.key === 'Delete' && !entry.shared) { event.preventDefault(); void this.delete(entry); }
         });
         row.addEventListener('contextmenu', event => { event.preventDefault(); event.stopPropagation(); this.context(event, entry); });
-        list.append(el('li', {}, row, ...(entry.folder && this.expanded.has(entry.path) ? [branch(entry.path)] : [])));
+        list.append(el('li', {}, row, ...(entry.folder && !this.collapsed.has(entry.path) ? [branch(entry.path)] : [])));
       }
       return list;
     };
     const group = this.entries.find(e => e.shared);
-    const groupButton = el('button', { type: 'button', class: 'note-row note-group' }, 'Group Notes');
+    const groupButton = noteRow('note-row note-group', 'Group Notes', noteSvg());
     groupButton.addEventListener('dblclick', () => { if (group) void this.edit(group); });
     groupButton.addEventListener('keydown', e => { if (e.key === 'Enter' && group) void this.edit(group); });
     groupButton.addEventListener('contextmenu', e => { e.preventDefault(); this.context(e, group); });
-    const root = el('button', { type: 'button', class: 'note-row' }, 'My notes');
+    const root = noteRow('note-row', 'My notes', folderSvg(), '\u25be');
+    root.classList.toggle('selected', this.selected === 'private');
     root.addEventListener('click', () => { this.selected = 'private'; this.render(); });
     root.addEventListener('contextmenu', e => { e.preventDefault(); this.selected = 'private'; this.context(e, undefined); });
-    this.tree.replaceChildren(groupButton, root, branch('private'));
+    const top = el('ul', { class: 'file-tree', role: 'tree' },
+      el('li', {}, groupButton), el('li', {}, root, branch('private')));
+    this.tree.replaceChildren(el('ul', { class: 'file-list' }, el('li', { class: 'file-root' }, top)));
   }
 
   private context(event: MouseEvent, entry?: NoteEntry): void {
@@ -337,7 +360,7 @@ export class NotesPanel {
     if (name === null) return;
     try {
       const entry = await notesRequest<NoteEntry>('', { action: 'create', path: parent, name, folder });
-      this.selected = entry.path; this.expanded.add(parent);
+      this.selected = entry.path; this.collapsed.delete(parent);
       await this.open();
       if (!folder) await this.edit(entry);
     } catch (error) { this.report((error as Error).message); }
@@ -382,7 +405,7 @@ export class NotesPanel {
         win.rename({ ...win.entry, path, name: win.entry.path === entry.path ? renamed.name : win.entry.name });
       }
       this.selected = renamed.path;
-      this.expanded = new Set([...this.expanded].map(p => withinNote(p, entry.path) ? renamed.path + p.slice(entry.path.length) : p));
+      this.collapsed = new Set([...this.collapsed].map(p => withinNote(p, entry.path) ? renamed.path + p.slice(entry.path.length) : p));
       await this.open();
     } catch (error) { this.report((error as Error).message); }
   }

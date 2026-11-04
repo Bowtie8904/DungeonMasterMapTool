@@ -32,7 +32,7 @@ export function handoutUrl(id: string): string {
 
 const folderIcon = 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z';
 
-function folderSvg(): SVGSVGElement {
+export function folderSvg(): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('aria-hidden', 'true');
@@ -50,7 +50,7 @@ export class HandoutsPanel {
   private list = el('ul', { class: 'file-list', ariaLabel: 'Handouts' });
   private folders: string[] = [];
   private files: HandoutFile[] = [];
-  private expanded = new Set<string>(['']);
+  private collapsed = new Set<string>();
   private windows = new Map<string, HTMLElement>();
 
   constructor(private mount: (element: HTMLElement) => void) {
@@ -106,7 +106,7 @@ export class HandoutsPanel {
   closeAll(): void {
     this.windows.forEach(w => w.remove());
     this.windows.clear();
-    this.folders = []; this.files = []; this.expanded = new Set(['']);
+    this.folders = []; this.files = []; this.collapsed = new Set();
     this.render();
   }
 
@@ -142,7 +142,7 @@ export class HandoutsPanel {
 
   private row(item: HandoutRow, query: string): HTMLElement {
     const folder = item.kind === 'folder';
-    const open = folder && (query !== '' || this.expanded.has(item.path));
+    const open = folder && (query !== '' || !this.collapsed.has(item.path));
     const chevron = el('span', { class: 'file-chevron', ariaHidden: 'true' }, folder ? (open ? '\u25be' : '\u25b8') : '');
     const lead = folder ? folderSvg()
       : el('img', { class: 'file-thumb', src: handoutUrl(item.file!.id), alt: '', loading: 'lazy', draggable: false });
@@ -152,7 +152,7 @@ export class HandoutsPanel {
       chevron, lead, label);
     if (folder) button.setAttribute('aria-expanded', String(open));
     const toggle = () => {
-      if (this.expanded.has(item.path)) this.expanded.delete(item.path); else this.expanded.add(item.path);
+      if (this.collapsed.has(item.path)) this.collapsed.delete(item.path); else this.collapsed.add(item.path);
       this.render();
     };
     if (folder) button.addEventListener('click', toggle);

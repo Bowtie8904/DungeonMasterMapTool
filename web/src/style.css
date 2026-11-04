@@ -265,12 +265,8 @@ button.share-icon:disabled { opacity: .25; }
 .notes-toolbar { display: flex; gap: 5px; flex-wrap: wrap; }
 .notes-toolbar button { font-size: 12px; padding: 5px 7px; }
 .notes-tree { flex: 1; min-height: 100px; }
-.note-branch { list-style: none; margin: 0; padding-left: 12px; border-left: 1px solid var(--border); margin-left: 10px; }
-.notes-tree > .note-branch { border-left: 0; margin-left: 0; padding-left: 0; }
-.note-row { display: block; width: 100%; text-align: left; background: transparent; border-color: transparent; border-radius: 7px; padding: 7px 10px; overflow-wrap: anywhere; }
-.note-row:hover { background: #ffffff0d; }
-.note-row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; box-shadow: inset 3px 0 0 var(--accent); }
-.note-group { color: var(--accent); margin-bottom: 8px; border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; }
+.note-group { color: var(--accent); margin-bottom: 4px; }
+.note-group .file-name { font-weight: 600; }
 
 /* handouts file browser (also the look shared by the notes tree) */
 .handouts-section { display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; overflow-y: auto; }
