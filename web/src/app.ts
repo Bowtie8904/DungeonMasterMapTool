@@ -848,10 +848,10 @@ export class App {
       case 'rollUpdate': {
         const entry = this.log.find(e => e.kind === 'roll' && e.m.id === msg.id && e.m.ts === msg.ts);
         if (entry?.kind === 'roll') {
-          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, outcome: msg.outcome, featureUses: msg.featureUses } };
+          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, outcome: msg.outcome, featureUses: msg.featureUses, rewardClaimed: msg.rewardClaimed } };
           if (this.store.state?.chatTail) {
             const tail = this.store.state.chatTail.find(m => m.id === msg.id && m.ts === msg.ts);
-            if (tail) Object.assign(tail, { outcome: msg.outcome, featureUses: msg.featureUses });
+            if (tail) Object.assign(tail, { outcome: msg.outcome, featureUses: msg.featureUses, rewardClaimed: msg.rewardClaimed });
           }
           this.renderLog();
         }
@@ -1027,6 +1027,8 @@ export class App {
 
   private rollActions(m: RollMessage): HTMLElement | null {
     return rollButtons(m, {
+      playerId: this.playerId,
+      supportsRollRewards: () => this.conn.rollRewards,
       actorIds: () => this.myActors.map(a => a.id),
       sheet: async (id) => {
         const actor = this.myActors.find(a => a.id === id);
@@ -1097,7 +1099,11 @@ export class App {
           {
             character,
             bus,
-            onChange: () => { changed(); this.scheduleEffects(); },
+            onChange: () => {
+              changed();
+              this.scheduleEffects();
+              this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+            },
             onFeature: (key, actionId) => this.useSheetFeature(a.id, character, changed, key, actionId),
             onDamageTaken: async (severity) => {
               await changed.flush();

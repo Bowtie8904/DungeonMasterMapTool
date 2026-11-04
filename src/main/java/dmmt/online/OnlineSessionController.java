@@ -419,6 +419,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     if (message.has("outcome")) roll.set("outcome", message.get("outcome"));
                     else roll.remove("outcome");
                     if (message.has("featureUses")) roll.set("featureUses", message.get("featureUses"));
+                    if (message.has("rewardClaimed")) roll.set("rewardClaimed", message.get("rewardClaimed"));
                     break;
                 }
             } else {

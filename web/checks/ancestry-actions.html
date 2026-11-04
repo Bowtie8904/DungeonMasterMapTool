@@ -67,6 +67,14 @@ try {
   assert(features.some(([key]) => key === 'feat:Lifespring') && features.some(([key]) => key === 'feat:Unshakable'), 'Host-backed actions not invoked');
   c.heritage = [feature('Surefooted', { rollOptions: [{ id: 'sure', label: 'Surefooted', roll: 'trait:Agility', defaultOn: true, ignoreDisadvantage: true }] })];
   const open = () => openRollDialog(host, c, 'Agility', [], rollBonus(c, ['action', 'trait:Agility']), send, () => {}, ['action', 'trait:Agility']);
+  const surefooted = c.heritage;
+  c.heritage = [{ name: 'Privilege', source: 'Community - Highborne', text: '', automation: {
+    rollOptions: [{ id: 'privilege', label: 'Privilege', roll: 'action', advantage: 'advantage' }],
+  } }];
+  open();
+  assert(dialog().querySelector('.dh-roll-option').textContent === 'Highborne - Privilege', 'Community roll label lost its origin or repeats the feature name');
+  button('Cancel').click();
+  c.heritage = surefooted;
   open();
   assert(dialog().querySelector('input[type=checkbox]').checked, 'Surefooted not preselected');
   button('Disadvantage (-d6)').click();

@@ -1,7 +1,7 @@
 // Automation engine for the dmmap-daggerheart data format (see docs/DAGGERHEART_DATA.md).
 // Pure functions over the CharacterSheet so they can be unit-tested without a DOM.
 
-import { Advantage, CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
+import { Advantage, CharacterSheet, Feature, TraitName, TRAIT_ORDER, tierOf } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 
@@ -327,6 +327,8 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
 export interface AvailableRollOption {
   key: string;
   source: string;
+  /** Display-only provenance; source and key retain their automation identity. */
+  origin?: string;
   automation: Automation;
   option: RollOption;
   item?: CharacterSheet['inventory'][number];
@@ -336,13 +338,29 @@ export interface AvailableRollOption {
   prepared?: { effect: ActiveEffect; modifier: Modifier };
 }
 
+function featureRollOrigin(c: CharacterSheet, f: Feature): string {
+  if (f.source === 'Hope feature') return c.className || f.source;
+  const multiclass = /^Multiclass (.+?) - (?:class feature|(.+) (?:foundation|specialization|mastery))$/.exec(f.source);
+  if (multiclass) return multiclass[2] || multiclass[1];
+  const origin = f.source.replace(/^(?:Ancestry|Community|Transformation|Class feature|Creation|Subclass (?:foundation|specialization|mastery)) - /, '');
+  return f.source.startsWith('Ancestry - ') ? origin.replace(/ \((?:first|second)\)$/, '') : origin;
+}
+
+export function rollOptionLabel(s: Pick<AvailableRollOption, 'source' | 'origin' | 'option'>): string {
+  return [s.origin, s.source, s.option.label]
+    .filter((name): name is string => !!name?.trim())
+    .map((name) => name.trim())
+    .filter((name, i, names) => i === 0 || name !== names[i - 1])
+    .join(' - ');
+}
+
 /** Optional effects are selected by the player, never inferred from situational prose. */
 export function availableRollOptions(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number]): AvailableRollOption[] {
-  const sources: Array<{ key: string; name: string; auto?: Automation; item?: CharacterSheet['inventory'][number]; weapon?: CharacterSheet['activeWeapons'][number] }> = [
+  const sources: Array<{ key: string; name: string; origin?: string; auto?: Automation; item?: CharacterSheet['inventory'][number]; weapon?: CharacterSheet['activeWeapons'][number] }> = [
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
     ...c.activeWeapons.map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
-    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
-    ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
+    ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
   ];
@@ -359,7 +377,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
       : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
     .map((option) => ({
       key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
-      source: s.name, automation: option.uses ? { ...s.auto!, uses: option.uses } : s.auto!, option,
+      source: s.name, origin: s.origin, automation: option.uses ? { ...s.auto!, uses: option.uses } : s.auto!, option,
       item: s.item,
       active: !!option.effect && c.effects.some((e) => e.name === option.effect!.name),
     })))];
@@ -372,10 +390,11 @@ export function rollOptionDice(c: CharacterSheet, option: RollOption): string | 
 
 export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: AvailableRollOption[]): RollBonus {
   const out = { ...base, dice: [...base.dice], names: [...base.names], contributions: [...base.contributions] };
-  for (const { source, option } of selected) {
+  for (const selection of selected) {
+    const { option } = selection;
     const value = evalValue(option.value, c);
     const dice = rollOptionDice(c, option);
-    const label = `${source} - ${option.label}`.slice(0, 120);
+    const label = rollOptionLabel(selection).slice(0, 120);
     out.value += value;
     if (dice) out.dice.push(dice);
     out.names.push(label);

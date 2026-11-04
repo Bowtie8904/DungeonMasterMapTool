@@ -244,6 +244,8 @@ export interface RollMessage {
   featureRoll?: { name: string; result: number; consequence: string };
   /** Feature actions already applied to this roll, keyed by actor and action id. */
   featureUses?: string[];
+  /** Present only on host-supported rolls; persisted and updated after the roller claims the reward. */
+  rewardClaimed?: boolean;
 }
 
 export interface FeatureSheetMessage {
@@ -329,6 +331,7 @@ export interface Hello {
   compendiumChat?: boolean;
   transferOffers?: boolean;
   keptDice?: boolean;
+  rollRewards?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;
@@ -357,7 +360,7 @@ export type ServerMessage =
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
-  | { type: 'rollUpdate'; id: number; ts: number; outcome?: 'hope' | 'fear'; featureUses?: string[] }
+  | { type: 'rollUpdate'; id: number; ts: number; outcome?: 'hope' | 'fear'; featureUses?: string[]; rewardClaimed?: boolean }
   | AudioMessage
   | { type: 'kicked'; reason?: string }
   | { type: 'error'; message: string };

@@ -201,6 +201,7 @@ public final class OnlineSessionServer {
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
         javalin.post("/api/feature", this::handleFeature);
+        javalin.post("/api/roll-reward", this::handleRollReward);
         javalin.post("/api/damage-taken", this::handleDamageTaken);
         javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
         javalin.get("/api/notes/content", ctx -> handleNotes(ctx, "read"));
@@ -1271,15 +1272,6 @@ public final class OnlineSessionServer {
                 if (!"hope".equals(outcome) && !"fear".equals(outcome))
                     throw new IllegalArgumentException("Invalid outcome conversion.");
                 originalRoll.put("outcome", outcome);
-                Campaign.Actor roller = c.actor(originalRoll.path("actorId").asText());
-                if (roller != null) {
-                    ObjectNode rollerSheet = changedSheets.computeIfAbsent(roller.getId(), id -> {
-                        try { return storedSheet(id); }
-                        catch (IOException e) { throw new FeatureIoException(e); }
-                    });
-                    int gained = gainTrack(rollerSheet, "hope", 1);
-                    reportLines.add(roller.getName() + (gained > 0 ? " gained 1 Hope." : " was already at maximum Hope."));
-                }
             }
 
             for (Campaign.Actor target : targets) {
@@ -1417,6 +1409,12 @@ public final class OnlineSessionServer {
         long ts = ref.path("ts").asLong(-1);
         if (id < 0 || ts < 0 || !sessionRolls.contains(rollKey(id, ts)))
             throw new IllegalArgumentException("That roll is no longer available for a feature reaction.");
+        return findHistoryRoll(ref);
+    }
+
+    private ObjectNode findHistoryRoll(JsonNode ref) throws IOException {
+        long id = ref.path("id").asLong(-1);
+        long ts = ref.path("ts").asLong(-1);
         Campaign c = campaign;
         if (c == null) throw new IllegalArgumentException("No online session is running.");
         for (JsonNode entry : store.historyTail(c.getId(), Integer.MAX_VALUE)) {
@@ -1424,6 +1422,61 @@ public final class OnlineSessionServer {
                     && entry.path("ts").asLong(-1) == ts && entry instanceof ObjectNode object) return object.deepCopy();
         }
         throw new IllegalArgumentException("That roll is no longer available for a feature reaction.");
+    }
+
+    private synchronized void handleRollReward(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Roll reward request is too large."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject() || !request.path("roll").isObject())
+                throw new IllegalArgumentException("Invalid roll reward request.");
+            // Recover any interrupted reward transaction before looking up its claim marker.
+            Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
+            ObjectNode sheet = storedSheet(actor.getId());
+            ObjectNode roll = findHistoryRoll(request.path("roll"));
+            if (!playerId.equals(roll.path("fromId").asText()) || !actor.getId().equals(roll.path("actorId").asText()))
+                throw new IllegalArgumentException("Only the original roller can claim this character's reward.");
+            if (!"duality".equals(roll.path("kind").asText()) || !roll.path("rewardClaimed").isBoolean())
+                throw new IllegalArgumentException("This roll does not support reward claims.");
+            if (roll.path("rewardClaimed").asBoolean())
+                throw new IllegalArgumentException("This roll's reward was already claimed.");
+            int hope = roll.path("rolls").path(0).asInt(0);
+            int fear = roll.path("rolls").path(1).asInt(0);
+            if (hope < 1 || hope > 12 || fear < 1 || fear > 12)
+                throw new IllegalArgumentException("This roll has no valid Hope and Fear dice.");
+            boolean critical = hope == fear;
+            boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
+            if (!critical && !withHope)
+                throw new IllegalArgumentException("Only Hope or critical results have a reward.");
+            int gained = gainTrack(sheet, "hope", 1);
+            int cleared = 0;
+            if (critical) {
+                ObjectNode stress = requireTrack(sheet, "stress");
+                cleared = Math.min(1, Math.max(0, stress.path("on").asInt()));
+                stress.put("on", stress.path("on").asInt() - cleared);
+            }
+            if (gained <= 0 && cleared == 0)
+                throw new IllegalArgumentException("Already at maximum Hope with no Stress to clear.");
+            roll.put("rewardClaimed", true);
+            sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+            if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+                throw new IllegalArgumentException("The character sheet is too large.");
+            store.saveSheetsAndRoll(campaign.getId(), Map.of(actor.getId(), sheet), roll);
+            sendFeatureState(actor, sheet);
+            broadcastRollUpdate(roll);
+            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid roll reward request."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not save the roll reward. Reload before retrying."));
+        }
     }
 
     private void validateTrigger(Campaign.Actor sourceActor, String key, JsonNode trigger, ObjectNode roll) throws IOException {
@@ -1665,10 +1718,15 @@ public final class OnlineSessionServer {
     private void replaceRoll(ObjectNode roll) throws IOException {
         Campaign c = campaign;
         store.replaceHistoryEntry(c.getId(), roll.path("id").asLong(), roll.path("ts").asLong(), roll);
+        broadcastRollUpdate(roll);
+    }
+
+    private void broadcastRollUpdate(ObjectNode roll) {
         ObjectNode update = MAPPER.createObjectNode().put("type", "rollUpdate").put("id", roll.path("id").asLong())
                 .put("ts", roll.path("ts").asLong());
         if (roll.has("outcome")) update.set("outcome", roll.get("outcome"));
         update.set("featureUses", roll.withArray("featureUses"));
+        if (roll.has("rewardClaimed")) update.set("rewardClaimed", roll.get("rewardClaimed"));
         String toId = roll.path("toId").asText("");
         String fromId = roll.path("fromId").asText("");
         if (toId.isEmpty()) {
@@ -2136,6 +2194,7 @@ public final class OnlineSessionServer {
             hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
+            hello.put("rollRewards", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
             sendHandouts(handouts(), client);
@@ -2417,6 +2476,7 @@ public final class OnlineSessionServer {
         }
         if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^2d12(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
+            out.put("rewardClaimed", false);
             if (msg.path("difficulty").isInt()) {
                 out.put("difficulty", msg.path("difficulty").asInt());
             }

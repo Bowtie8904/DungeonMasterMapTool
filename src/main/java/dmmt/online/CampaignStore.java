@@ -161,6 +161,7 @@ public final class CampaignStore {
     }
 
     public synchronized void appendHistoryChecked(String campaignId, ObjectNode entry) throws IOException {
+        recoverSheetTransfer(campaignId);
         Path folder = dir(campaignId);
         Files.createDirectories(folder);
         Files.writeString(folder.resolve("history.jsonl"), MAPPER.writeValueAsString(entry) + "\n",
@@ -174,6 +175,7 @@ public final class CampaignStore {
             return result;
         }
         try {
+            recoverSheetTransfer(campaignId);
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
             for (int i = Math.max(0, lines.size() - limit); i < lines.size(); i++) {
                 try {
@@ -190,6 +192,7 @@ public final class CampaignStore {
 
     /** Rewrites history before publishing a deletion; failures leave the original file in place. */
     public synchronized void deleteHistoryEntry(String campaignId, long id, long timestamp) throws IOException {
+        recoverSheetTransfer(campaignId);
         Path file = dir(campaignId).resolve("history.jsonl");
         List<String> kept = new ArrayList<>();
         boolean found = false;
@@ -215,6 +218,12 @@ public final class CampaignStore {
 
     /** Replaces a persisted history message while keeping the same identity and ordering. */
     public synchronized void replaceHistoryEntry(String campaignId, long id, long timestamp, ObjectNode replacement)
+            throws IOException {
+        recoverSheetTransfer(campaignId);
+        replaceHistoryEntryRaw(campaignId, id, timestamp, replacement);
+    }
+
+    private void replaceHistoryEntryRaw(String campaignId, long id, long timestamp, ObjectNode replacement)
             throws IOException {
         Path file = dir(campaignId).resolve("history.jsonl");
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
@@ -311,11 +320,18 @@ public final class CampaignStore {
     }
 
     public synchronized void saveSheets(String campaignId, java.util.Map<String, ObjectNode> sheets) throws IOException {
+        saveSheetsAndRoll(campaignId, sheets, null);
+    }
+
+    /** Journals character changes and a roll's claim marker together for idempotent crash recovery. */
+    public synchronized void saveSheetsAndRoll(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                               ObjectNode roll) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
             transaction.set(entry.getKey(), entry.getValue());
         }
+        if (roll != null) transaction.set("$roll", roll);
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
@@ -323,7 +339,7 @@ public final class CampaignStore {
         recoverSheetTransfer(campaignId);
     }
 
-    // A write-ahead record makes an interrupted two-sheet transfer replayable before any subsequent read/save.
+    // Replay interrupted sheet transfers and roll rewards before subsequent reads/saves.
     private void recoverSheetTransfer(String campaignId) throws IOException {
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         if (!Files.isRegularFile(journal))
@@ -332,8 +348,11 @@ public final class CampaignStore {
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
+            if ("$roll".equals(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
+        if (transaction.get("$roll") instanceof ObjectNode roll)
+            replaceHistoryEntryRaw(campaignId, roll.path("id").asLong(), roll.path("ts").asLong(), roll);
         Files.delete(journal);
     }
 

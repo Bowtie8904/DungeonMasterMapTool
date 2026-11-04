@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Roll reward check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { rollButtons } from '../src/daggerheart/rollbuttons.ts';
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const c = emptyCharacter('Roller');
+  c.hope.on = 2;
+  c.stress.on = 2;
+  let requests = 0;
+  window.fetch = async (url, init) => {
+    assert(url === '/api/roll-reward', 'Unexpected request');
+    const body = JSON.parse(init.body);
+    assert(body.actorId === 'hero' && body.roll.id === 1, 'Reward lost its actor or roll identity');
+    requests++;
+    return new Response('{}', { status: 200 });
+  };
+  const errors = [];
+  const host = {
+    playerId: 'player', supportsRollRewards: () => true,
+    actorIds: () => ['hero'],
+    sheet: async () => ({ character: c, bus: {}, save: Object.assign(() => {}, { flush: async () => {} }) }),
+    send: () => true, log: () => {}, toast: message => errors.push(message),
+  };
+  const roll = { id: 1, ts: 100, fromId: 'player', from: 'Roller', actorId: 'hero', kind: 'duality',
+    source: 'action', rolls: [9, 3], total: 12, expression: '2d12', rewardClaimed: false };
+  const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+  const target = document.querySelector('#host');
+  let box = rollButtons(roll, host);
+  target.append(box);
+  await settle();
+  let reward = box.querySelector('button');
+  assert(reward.textContent === 'Gain 1 Hope' && !reward.disabled, 'Hope reward unavailable');
+  reward.click();
+  reward.click();
+  await settle();
+  assert(requests === 1 && !box.querySelector('button'), 'Reward can be claimed twice');
+  assert(c.hope.on === 2, 'Client granted Hope without a host update');
+  box.remove();
+  c.hope.on = c.hope.slots;
+  box = rollButtons({ ...roll, rolls: [8, 8], rewardClaimed: false }, host);
+  target.append(box);
+  await settle();
+  reward = box.querySelector('button');
+  assert(reward.textContent === 'Gain 1 Hope / Clear 1 Stress' && !reward.disabled, 'Critical cannot clear Stress at maximum Hope');
+  c.stress.on = 0;
+  box.dispatchEvent(new Event('refresh-roll-actions'));
+  await settle();
+  assert(box.querySelector('button').disabled, 'Critical with no benefit is enabled');
+  c.hope.on--;
+  box.dispatchEvent(new Event('refresh-roll-actions'));
+  await settle();
+  assert(!box.querySelector('button').disabled, 'Hope resource changes do not refresh rewards');
+  box.remove();
+  box = rollButtons({ ...roll, rolls: [3, 9], outcome: 'hope', rewardClaimed: false }, host);
+  target.append(box);
+  await settle();
+  assert(box.querySelector('button')?.textContent === 'Gain 1 Hope', 'Fear conversion did not expose a claim');
+  assert(errors.length === 0, errors.join('; '));
+  result.textContent = 'PASS: Hope, converted Hope, critical, caps, resource refresh and double click';
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack ?? error}`;
+}
+</script></body></html>

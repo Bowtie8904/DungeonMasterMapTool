@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyCharacter, normalizeSheet } from './data';
 import {
   Automation, actionBlocker, asksSpellcastRoll, availableRollOptions, availableRollTriggers, commitRollOptions, criticalBonus, damageContributions, damageExpression,
-  derivedStats, evalValue, rollBonus, runAction, selectedRollBonus, selectionBlocker, setGmFear, sheetActions, syncDerived,
+  derivedStats, evalValue, rollBonus, rollOptionLabel, runAction, selectedRollBonus, selectionBlocker, setGmFear, sheetActions, syncDerived,
 } from './engine';
 import { updateCharacterAutomation } from './persist';
 import type { CompendiumFile } from './compendium';
@@ -26,6 +26,57 @@ function warlock() {
 }
 
 describe('configurable character automation', () => {
+  it.each([
+    ['Community - Highborne', 'Privilege', 'Highborne - Privilege'],
+    ['Ancestry - Goblin (first)', 'Surefooted', 'Goblin - Surefooted'],
+    ['Ancestry - Orc (second)', 'Tusks', 'Orc - Tusks'],
+    ['Class feature - Ranger', 'Focus', 'Ranger - Focus'],
+    ['Hope feature', 'No Mercy', 'Warrior - No Mercy'],
+    ['Subclass foundation - Nightwalker', 'Adrenaline', 'Nightwalker - Adrenaline'],
+    ['Subclass specialization - Nightwalker', 'Adrenaline', 'Nightwalker - Adrenaline'],
+    ['Subclass mastery - Nightwalker', 'Adrenaline', 'Nightwalker - Adrenaline'],
+    ['Multiclass Ranger - class feature', 'Focus', 'Ranger - Focus'],
+    ['Multiclass Rogue - Nightwalker foundation', 'Adrenaline', 'Nightwalker - Adrenaline'],
+    ['Transformation - Vampire', 'Blood', 'Vampire - Blood'],
+    ['Custom origin', 'Custom feature', 'Custom origin - Custom feature'],
+    ['', 'Legacy feature', 'Legacy feature'],
+  ])('labels %s options with their origin without changing automation identity', (source, name, expected) => {
+    const c = emptyCharacter('Labels');
+    c.className = 'Warrior';
+    const feature = { source, name, text: '', automation: { rollOptions: [{
+      id: 'bonus', label: name, roll: 'action', value: 1,
+      uses: { max: 1, per: 'rest' as const },
+    }] } };
+    for (const kind of ['features', 'heritage'] as const) {
+      c.features = [];
+      c.heritage = [];
+      c[kind] = [feature];
+      const options = availableRollOptions(c, ['action']);
+      expect(rollOptionLabel(options[0])).toBe(expected);
+      expect(options[0].source).toBe(name);
+      expect(options[0].key).toBe(`feat:${name}:roll:bonus`);
+      const bonus = selectedRollBonus(c, rollBonus(c, ['action']), options);
+      expect(bonus.names).toEqual([expected]);
+      expect(bonus.contributions).toEqual([{ label: expected, expression: '1' }]);
+      commitRollOptions(c, options);
+      expect(actionBlocker(c, options[0].key, options[0].automation, options[0].option)).toBeTruthy();
+      c.usage = {};
+    }
+  });
+
+  it('deduplicates card, equipment and consumable labels while retaining distinct option names', () => {
+    const c = warlock();
+    c.loadout = [{ name: 'Boost', domain: 'Arcana', level: 1, type: 'Spell', recall: 0, text: '',
+      automation: { rollOptions: [{ id: 'boost', label: 'Boost', roll: 'action', value: 1 }] } }];
+    c.inventory = [{ name: 'Charging Quiver', type: 'gear', qty: 1,
+      automation: { rollOptions: [{ id: 'charge', label: 'Charging Quiver', roll: 'action', value: 1 }] } }];
+    const labels = availableRollOptions(c, ['action']).map(rollOptionLabel);
+    expect(labels).toEqual(['Warlock - Favor - Patron Die', 'Boost', 'Charging Quiver']);
+    expect(rollOptionLabel({ source: 'Sword', option: { id: 'power', label: 'Powerful', roll: 'damage' } })).toBe('Sword - Powerful');
+    expect(rollOptionLabel({ source: 'Grindletooth Venom', option: { id: 'venom', label: 'Grindletooth Venom', roll: 'damage' } })).toBe('Grindletooth Venom');
+    expect(rollOptionLabel({ source: 'Agility Roll +1', option: { id: 'ready', label: 'prepared', roll: 'action' } })).toBe('Agility Roll +1 - prepared');
+  });
+
   it('hides rest-only actions without hiding other actions on the same source', () => {
     const tribute: import('./engine').ActionDef = { id: 'arbitrary-id', label: 'Custom move', timing: 'downtime' };
     const gain = { id: 'gain-favor', label: 'Successful Hope roll: gain Favor' };
@@ -216,7 +267,7 @@ describe('configurable character automation', () => {
     const bonus = selectedRollBonus(c, rollBonus(c, ['action']), options);
     expect(bonus.value).toBe(3);
     expect(bonus.dice).toEqual(['d6']);
-    expect(bonus.contributions.map((b) => b.label)).toEqual(['Favor - Patron Die', 'Charm - First', 'Charm - Second']);
+    expect(bonus.contributions.map((b) => b.label)).toEqual(['Warlock - Favor - Patron Die', 'Charm - First', 'Charm - Second']);
     expect(selectionBlocker(c, options, true)).toBeNull();
     commitRollOptions(c, options, true);
     expect(c.resources!.favor).toBe(0);

@@ -7,6 +7,15 @@ Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the sc
 effect-gated mitigation and explicit Hope/Fear outcome overrides; `view.ts` shares those dialogs with chat
 follow-ups. Target healing/buffs and cross-player reactions execute on the host against current sheets.
 Session-limited uses reset per hosting run rather than browser reconnect; scene use limits are not tracked.
+`hello.rollRewards:true` and a host-created `rewardClaimed:false` marker enable the original roller's
+one-time chat reward button: +1 Hope on Hope results, +1 Hope and clear 1 Stress on criticals.
+`POST /api/roll-reward` takes `{actorId,roll:{id,ts}}`; the host validates persisted dice/outcome, roller and
+actor ownership, caps and the unclaimed marker, then journals sheet changes and the claimed history entry
+together. `sheetFeature` updates all owner sheets/pop-outs; `rollUpdate.rewardClaimed` updates chat/history.
+Fear-to-Hope feature conversions only change the outcome; no automatic Hope gain. Critical recovery remains
+available at maximum Hope when Stress can be cleared; no-benefit claims are rejected without consuming them.
+Older hosts and historical messages without the marker offer no button. This adds no settings and does not
+change Online or DM Link compatibility versions.
 `checks/ancestry-actions.html` exercises actual action/damage dialogs, cancelled/disconnected sends,
 combined resource costs, Ignition/Retract defaults, Surefooted and overridable advantage suggestions.
 

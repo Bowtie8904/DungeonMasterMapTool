@@ -19,6 +19,27 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void interruptedRewardReplaysSheetAndHistoryTogetherBeforeHistoryReads() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Rewards");
+        var roll = mapper.createObjectNode().put("id", 1).put("ts", 10).put("rewardClaimed", false);
+        store.appendHistoryChecked(campaign.getId(), roll);
+        store.saveSheet(campaign.getId(), "hero", "{\"hope\":{\"on\":0}}");
+        roll.put("rewardClaimed", true);
+        var transaction = mapper.createObjectNode();
+        transaction.set("hero", mapper.readTree("{\"hope\":{\"on\":1}}"));
+        transaction.set("$roll", roll);
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertTrue(reopened.historyTail(campaign.getId(), 20).getFirst().path("rewardClaimed").asBoolean());
+        assertEquals(1, mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("hope").path("on").asInt());
+        assertTrue(Files.notExists(journal));
+        assertEquals(1, mapper.readTree(new CampaignStore(dir).loadSheet(campaign.getId(), "hero")).path("hope").path("on").asInt());
+    }
+
+    @Test
     void deletingHistoryPersistsAndDoesNotDeleteReusedLegacyIds() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

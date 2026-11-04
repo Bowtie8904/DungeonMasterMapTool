@@ -6,7 +6,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, criticalBonus, damageContributions, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  effectiveAdvantage, rollOptionDice, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
+  effectiveAdvantage, rollOptionDice, rollOptionLabel, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
 } from './engine';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
@@ -1055,7 +1055,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       : [cost ? `costs ${cost} when selected${s.option.effect ? ` (then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'})` : ''}` : '',
         s.option.consumeItem && s.item ? `uses up 1 ${s.item.name} (${s.item.qty} left)` : ''].filter(Boolean).join('; ');
     return el('label', { class: 'dh-roll-option' }, input,
-      el('span', {}, `${s.source} - ${s.option.label}${value ? ` (${signed(value)})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
+      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
         ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
   });
@@ -1084,7 +1084,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         { label: 'Fear die', expression: '1d12' },
         ...(actualAdvantage === 0 ? [] : [{ label: actualAdvantage === 1 ? 'Advantage' : 'Disadvantage', expression: actualAdvantage === 1 ? '1d6' : '-1d6' }]),
         ...(requestedAdvantage !== actualAdvantage ? [{ label: 'Disadvantage ignored', expression: '0',
-          notes: ignored.map((s) => ({ label: s.source, impact: 'Disadvantage die not rolled' })) }] : []),
+          notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),
         ...trait,
         ...b.contributions,
         ...(e ? [{ label: `Experience - ${e.name}`.slice(0, 120), expression: String(e.mod) }] : []),

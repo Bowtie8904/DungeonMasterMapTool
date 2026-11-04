@@ -107,6 +107,16 @@ export async function useFeature(request: FeatureRequest): Promise<void> {
   if (!res.ok) throw await readError(res);
 }
 
+export async function claimRollReward(actorId: string, roll: { id: number | string; ts: number }): Promise<void> {
+  const res = await fetch('/api/roll-reward', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actorId, roll }),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
 export async function damageTaken(actorId: string, severity: number): Promise<void> {
   if (severity < 3) return;
   const res = await fetch('/api/damage-taken', {

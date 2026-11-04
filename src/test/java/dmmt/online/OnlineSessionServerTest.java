@@ -172,11 +172,12 @@ class OnlineSessionServerTest {
         Inbox inbox = new Inbox();
         Inbox bobInbox = new Inbox();
         WebSocket ws = connect(aliceCookie, inbox);
-        WebSocket bobWs = connect(playerCookie(bob), bobInbox);
+        String bobCookie = playerCookie(bob);
+        WebSocket bobWs = connect(bobCookie, bobInbox);
         try {
             JsonNode fearRoll = null;
             for (int attempt = 0; attempt < 20; attempt++) {
-                ws.sendText("""
+                bobWs.sendText("""
                         {"type":"roll","kind":"duality","expression":"2d12","source":"action",
                         "actorId":"roller","label":"Test action"}
                         """, true).join();
@@ -204,7 +205,12 @@ class OnlineSessionServerTest {
                             && entry.path("ts").asLong() == rolledFear.path("ts").asLong()).findFirst().orElseThrow();
             assertEquals(rolledFear.path("rolls"), persistedRoll.path("rolls"));
             assertEquals("hope", persistedRoll.path("outcome").asText());
-            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).path("hope").path("on").asInt());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).path("hope").path("on").asInt());
+            assertEquals(400, rewardHttp(aliceCookie, "caster", persistedRoll).statusCode());
+            assertEquals(200, rewardHttp(bobCookie, "roller", persistedRoll).statusCode());
+            assertEquals(1, bobInbox.next("sheetFeature").path("hope").path("on").asInt());
+            assertTrue(bobInbox.next("rollUpdate").path("rewardClaimed").asBoolean());
+            assertEquals(400, rewardHttp(bobCookie, "roller", persistedRoll).statusCode());
             assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("usage")
                     .path("feat:Hallowed Aura").path("used").asInt());
             assertEquals(1, store.historyTail(campaign.getId(), 50).stream()
@@ -217,6 +223,139 @@ class OnlineSessionServerTest {
             ws.abort();
             bobWs.abort();
         }
+    }
+
+    private HttpResponse<String> rewardHttp(String cookie, String actorId, JsonNode roll) throws Exception {
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", actorId);
+        body.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private ObjectNode rewardRoll(long id, int hope, int fear) throws Exception {
+        ObjectNode roll = MAPPER.createObjectNode().put("type", "roll").put("id", id).put("ts", 1234)
+                .put("fromId", playerId()).put("actorId", "reward-actor").put("kind", "duality")
+                .put("rewardClaimed", false);
+        roll.putArray("rolls").add(hope).add(fear);
+        store.appendHistoryChecked(campaign.getId(), roll);
+        return roll;
+    }
+
+    private void rewardSheet(int hope, int stress) throws Exception {
+        ObjectNode sheet = MAPPER.createObjectNode().put("featureRevision", 0);
+        sheet.putObject("hope").put("on", hope).put("slots", 6);
+        sheet.putObject("stress").put("on", stress).put("slots", 6);
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+    }
+
+    @Test
+    void rollRewardsValidateOutcomeOwnershipCapsAndPersistOneClaimAcrossReloads() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Hero").ownerId(playerId()).build());
+        rewardSheet(3, 2);
+        String cookie = cookie();
+        ObjectNode hope = rewardRoll(5001, 10, 3);
+        ObjectNode stale = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(200, rewardHttp(cookie, "reward-actor", hope).statusCode());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("hope").path("on").asInt());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("stress").path("on").asInt());
+        assertEquals(400, rewardHttp(cookie, "reward-actor", hope).statusCode());
+        assertTrue(new CampaignStore(store.root()).historyTail(campaign.getId(), 20).getFirst().path("rewardClaimed").asBoolean());
+        var staleSave = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/reward-actor"))
+                .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(stale.toString())).build();
+        assertEquals(409, http.send(staleSave, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        assertEquals(400, rewardHttp(cookie, "reward-actor", rewardRoll(5002, 2, 11)).statusCode());
+        ObjectNode converted = rewardRoll(5003, 2, 11);
+        converted.put("outcome", "hope");
+        store.replaceHistoryEntry(campaign.getId(), 5003, 1234, converted);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", converted).statusCode());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("hope").path("on").asInt());
+
+        ObjectNode nonDuality = rewardRoll(5004, 10, 3);
+        nonDuality.put("kind", "dice");
+        store.replaceHistoryEntry(campaign.getId(), 5004, 1234, nonDuality);
+        assertEquals(400, rewardHttp(cookie, "reward-actor", nonDuality).statusCode());
+        ObjectNode legacy = rewardRoll(5005, 10, 3);
+        legacy.remove("rewardClaimed");
+        store.replaceHistoryEntry(campaign.getId(), 5005, 1234, legacy);
+        assertEquals(400, rewardHttp(cookie, "reward-actor", legacy).statusCode());
+        ObjectNode otherRoller = rewardRoll(5006, 10, 3);
+        otherRoller.put("fromId", "someone-else");
+        store.replaceHistoryEntry(campaign.getId(), 5006, 1234, otherRoller);
+        assertEquals(400, rewardHttp(cookie, "reward-actor", otherRoller).statusCode());
+        assertEquals(400, rewardHttp(cookie, "not-owned", hope).statusCode());
+
+        rewardSheet(6, 2);
+        ObjectNode capped = rewardRoll(5007, 10, 3);
+        assertEquals(400, rewardHttp(cookie, "reward-actor", capped).statusCode());
+        assertFalse(store.historyTail(campaign.getId(), 20).getLast().path("rewardClaimed").asBoolean());
+        ObjectNode critical = rewardRoll(5008, 8, 8);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", critical).statusCode());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(6, sheet.path("hope").path("on").asInt());
+        assertEquals(1, sheet.path("stress").path("on").asInt());
+        assertEquals(400, rewardHttp(cookie, "reward-actor", critical).statusCode());
+        rewardSheet(6, 0);
+        assertEquals(400, rewardHttp(cookie, "reward-actor", rewardRoll(5009, 8, 8)).statusCode());
+        rewardSheet(5, 1);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", rewardRoll(5010, 8, 8)).statusCode());
+        sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(6, sheet.path("hope").path("on").asInt());
+        assertEquals(0, sheet.path("stress").path("on").asInt());
+    }
+
+    @Test
+    void newDualityRollAdvertisesRewardAndClaimSynchronizesChatAndSheet() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Hero").ownerId(playerId()).build());
+        rewardSheet(0, 2);
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("rollRewards").asBoolean());
+            JsonNode roll = null;
+            for (int attempt = 0; attempt < 50; attempt++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"action","actorId":"reward-actor"}
+                        """, true).join();
+                JsonNode message = inbox.next("roll");
+                assertTrue(message.path("rewardClaimed").isBoolean());
+                if (message.path("rolls").path(0).asInt() >= message.path("rolls").path(1).asInt()) {
+                    roll = message;
+                    break;
+                }
+            }
+            assertNotNull(roll);
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("hope").path("on").asInt());
+            assertEquals(200, rewardHttp(cookie, "reward-actor", roll).statusCode());
+            assertEquals(1, inbox.next("sheetFeature").path("hope").path("on").asInt());
+            JsonNode update = inbox.next("rollUpdate");
+            assertTrue(update.path("rewardClaimed").asBoolean());
+            assertEquals(roll.path("id"), update.path("id"));
+            assertTrue(dmMessages.stream().anyMatch(m -> "rollUpdate".equals(m.path("type").asText())
+                    && m.path("rewardClaimed").asBoolean()));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void simultaneousRewardClaimsGrantOnlyOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Hero").ownerId(playerId()).build());
+        rewardSheet(0, 2);
+        JsonNode roll = rewardRoll(6001, 7, 7);
+        String cookie = cookie();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "reward-actor");
+        body.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
+        var first = http.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        var second = http.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(List.of(200, 400), java.util.stream.Stream.of(first.join().statusCode(), second.join().statusCode()).sorted().toList());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(1, sheet.path("hope").path("on").asInt());
+        assertEquals(1, sheet.path("stress").path("on").asInt());
+        assertEquals(1, sheet.path("featureRevision").asInt());
     }
 
     @Test

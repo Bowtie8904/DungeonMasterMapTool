@@ -44,6 +44,8 @@ function character(name: string, feature: { name: string; automation: object } |
     inventory: [],
     effects: [],
     resources: {},
+    hope: { on: 2, slots: 6 },
+    stress: { on: 2, slots: 6 },
   } as unknown as CharacterSheet;
 }
 
@@ -92,6 +94,96 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('claims a Hope reward once through the host without locally granting Hope', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => ({ ok: true, status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', undefined);
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, rolls: [9, 3], rewardClaimed: false }, {
+      ...host, playerId: 'player-b', supportsRollRewards: () => true,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const reward = box.queryAll('button')[0];
+    expect(reward.text).toBe('Gain 1 Hope');
+    await Promise.all([reward.click(), reward.click()]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('/api/roll-reward');
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
+      actorId: 'actor-b', roll: { id: original.id, ts: original.ts },
+    });
+    expect(c.hope.on).toBe(2);
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
+  it('offers critical recovery at capped Hope only when Stress is marked, and refreshes after resource edits', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    c.hope.on = c.hope.slots;
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, rolls: [8, 8], rewardClaimed: false }, {
+      ...host, playerId: 'player-b', supportsRollRewards: () => true,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')[0].text).toBe('Gain 1 Hope / Clear 1 Stress');
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+    c.stress.on = 0;
+    for (const listener of box.listeners.get('refresh-roll-actions') ?? []) await listener();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')[0].disabled).toBe(true);
+  });
+
+  it('reports a failed claim and allows retry without changing resources or consuming the reward', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Could not save reward' }), { status: 500 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', undefined);
+    const { host } = hostFor({ 'actor-b': c });
+    const roll = { ...original, rolls: [9, 3], rewardClaimed: false };
+    const box = rollButtons(roll, {
+      ...host, playerId: 'player-b', supportsRollRewards: () => true,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(host.toast).toHaveBeenCalledWith('Could not save reward');
+    expect(roll.rewardClaimed).toBe(false);
+    expect(c.hope.on).toBe(2);
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+  });
+
+  it.each([
+    ['Fear', [3, 9], false, 'player-b', true],
+    ['already claimed', [9, 3], true, 'player-b', true],
+    ['legacy roll', [9, 3], undefined, 'player-b', true],
+    ['other roller', [9, 3], false, 'player-a', true],
+    ['older host', [9, 3], false, 'player-b', false],
+  ] as const)('does not offer reward for %s', async (_name, rolls, rewardClaimed, playerId, supported) => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const { host } = hostFor({ 'actor-b': character('Bob', undefined) });
+    const box = rollButtons({ ...original, rolls: [...rolls], rewardClaimed }, {
+      ...host, playerId, supportsRollRewards: () => supported,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
+  it('offers converted Hope rewards and disables capped Hope until a resource refresh', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    c.hope.on = c.hope.slots;
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, outcome: 'hope', rewardClaimed: false }, {
+      ...host, playerId: 'player-b', supportsRollRewards: () => true,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')[0].disabled).toBe(true);
+    c.hope.on--;
+    for (const listener of box.listeners.get('refresh-roll-actions') ?? []) await listener();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+  });
+
   it('shows an ally-only feature on another player’s Fear action and sends one host action without local duplicate logging', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => ({ ok: true, status: 200 }));

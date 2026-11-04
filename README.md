@@ -93,6 +93,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   Firbolg and Centaur Charge reactions on Agility roll cards spend one Stress and post a fixed 1d12 damage roll.
   Hallowed Aura and Luckbender can react to other players' action rolls; Fearless and Hallowed Aura update the
   original roll to **with Hope** without changing its dice, including its available follow-up actions.
+  Hope-result chat rolls offer the original roller a one-time **Gain 1 Hope** button. Criticals instead offer
+  **Gain 1 Hope / Clear 1 Stress**. Outcome conversions no longer grant Hope automatically; claim it on the
+  converted roll. Claims are saved on the host and stay consumed after reloads. At maximum Hope the button
+  is disabled, except a critical can still clear marked Stress; capped rewards are not consumed.
   Rerolls produce a single roll card. Session-limited features reset when the DM stops and starts hosting,
   not when a player reconnects; per-scene use counters are not tracked.
   Ignition is a primary-weapon damage option, paid once while its removable buff is active. Retract preselects
@@ -177,7 +181,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   and a selectable, level-scaled Patron Die. Creation grants can add HP, Stress, Evasion, domain-card choices and
   eligible domains, including mixed-ancestry feature selection. Attack/action and damage dialogs offer multiple
   optional bonuses together (for example **Charging Quiver** on arrow damage), show their conditions and costs,
-  and reject unaffordable combinations including an Experience's Hope cost. Costs and limited uses are consumed
+  and identify feature origins (for example **Highborne - Privilege**). Repeated source/option names are shown
+  only once for cards and items; the same labels appear in roll breakdowns.
+  Dialogs reject unaffordable combinations including an Experience's Hope cost. Costs and limited uses are consumed
   only after a successful send; canceling or disconnecting spends nothing.
   **Powerful** weapons such as the Advanced Greatstaff roll an extra weapon damage die and discard the lowest
   on the host; chat marks discarded dice and preserves the correct breakdown. Older hosts are identified by an

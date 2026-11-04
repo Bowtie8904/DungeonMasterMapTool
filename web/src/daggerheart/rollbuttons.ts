@@ -2,7 +2,7 @@
 // Damage on attacks, and the roll triggers (rerolls, Hope/Stress on matching dice) of the character's features.
 
 import { el } from '../login';
-import { useFeature } from '../api';
+import { claimRollReward, useFeature } from '../api';
 import type { RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { availableRollTriggers, costText, usesLeft } from './engine';
@@ -21,6 +21,8 @@ export interface RollButtonHost {
   send(roll: RollRequest): boolean;
   log(text: string, rollSource?: RollSource): void;
   toast(message: string): void;
+  playerId?: string;
+  supportsRollRewards?: () => boolean;
 }
 
 /** Context of a finished duality roll, or null when the message is not a duality roll. */
@@ -58,16 +60,42 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
 }
 
 export function rollButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null {
-  if (!m.source) return null;
   const actorId = m.actorId;
   const ctx = rollContext(m);
-  const isAttack = m.source.split(',').includes('attack');
+  const isAttack = m.source?.split(',').includes('attack');
   if (!(ctx || (actorId && isAttack && m.weapon))) return null;
   const box = el('div', { class: 'roll-actions' });
+  let claiming = false;
 
   const paint = (sheets: Array<{ actorId: string; sheet: RollButtonSheet }>) => {
     const buttons: HTMLElement[] = [];
     const rolledActor = actorId ? sheets.find((entry) => entry.actorId === actorId) : undefined;
+    const critical = !!ctx && ctx.hope === ctx.fear;
+    const withHope = !!ctx && (critical || (ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) === 'hope');
+    if (rolledActor && withHope && m.fromId === host.playerId && host.supportsRollRewards?.() && m.rewardClaimed === false) {
+      const { character: c, save } = rolledActor.sheet;
+      const reward = el('button', { class: 'small primary', type: 'button' },
+        critical ? 'Gain 1 Hope / Clear 1 Stress' : 'Gain 1 Hope');
+      reward.disabled = claiming || (c.hope.on >= c.hope.slots && (!critical || c.stress.on <= 0));
+      reward.title = reward.disabled ? 'Already at maximum Hope with no available reward' : 'Claim this roll reward once';
+      reward.addEventListener('click', async () => {
+        if (claiming || m.rewardClaimed) return;
+        claiming = true;
+        reward.disabled = true;
+        try {
+          await save.flush?.();
+          await claimRollReward(rolledActor.actorId, { id: m.id, ts: m.ts });
+          m.rewardClaimed = true;
+          await paintFor();
+        } catch (error) {
+          host.toast((error as Error).message);
+        } finally {
+          claiming = false;
+          if (!m.rewardClaimed) void paintFor().catch((error: Error) => host.toast(error.message));
+        }
+      });
+      buttons.push(reward);
+    }
     if (rolledActor && isAttack && m.weapon) {
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
       damage.addEventListener('click', () => { if (!rolledActor.sheet.bus.damage?.(m.weapon!, !!ctx && ctx.hope === ctx.fear)) host.toast(`${m.weapon} is no longer equipped.`); });
@@ -128,6 +156,7 @@ export function rollButtons(m: RollMessage, host: RollButtonHost): HTMLElement |
   };
 
   box.hidden = true;
-  void paintFor().catch(() => {});
+  box.addEventListener('refresh-roll-actions', () => { void paintFor().catch((error: Error) => host.toast(error.message)); });
+  void paintFor().catch((error: Error) => host.toast(error.message));
   return box;
 }
