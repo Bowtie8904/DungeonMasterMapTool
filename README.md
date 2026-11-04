@@ -98,7 +98,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
   shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header labels the original class as "Class:" and any additional class as "Multiclass:".
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
-  holds the converted Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
+  holds the maintained Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**
     window (rail button below Notes): category navigation on the left, searchable and filterable tables with
     expandable rows on the right. While hosting, the DM has the same compendium embedded in the app, opened
@@ -130,14 +130,13 @@ Nothing starts until you click **Start online session**, so offline play and the
   Control Potion's action report says it gained **Next Finesse Roll +1**, then that effect is removed after the roll.
   The report keeps the potion name as the action source so the item and its effect are distinct. Rest-only moves and
   benefits have no standalone action buttons; use them only in a confirmed rest. Downtime timing, additional moves,
-  passive benefits and roll tables are configured in compendium automation (`tools/daggerheart/rest-automation.json`
-  for exported content).
+  passive benefits and roll tables are configured in the relevant compendium JSON entries.
   A subtle shield button on the **Thresholds** vital opens a damage dialog, styled like the roll windows. Enter the
   incoming damage and type, then tick an Armor Slot or any armor, card, feature or item mitigation available to the
   character (for example Scales, Shrug It Off or Ring of Resistance). A live preview shows the HP to mark: Minor 1,
   Major 2, Severe 3, and 4 for damage of at least twice the Severe threshold. **Apply** marks HP and Armor Slots,
   pays Hope/Stress/HP costs, counts limited uses, consumes items and posts a damage report card to the chat. Mitigations are
-  configured in `tools/daggerheart/damage-automation.json`.
+  configured in the relevant compendium JSON entries.
   Forager and Potioncraft Kit add choices, not extra slots; explicit grants such as Celestial Trance and
   Potion of Stability still increase the number of moves. These rules use metadata,
   not runtime name/label exceptions. Other actions on the same feature or item remain available.
@@ -147,8 +146,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   class, domain cards and items (Clank Efficient and Recovery allow one long move in a short rest, Warlock tribute, Forager,
   Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, Oasis, ...) are listed as
   checkboxes you can untick if you don't use them. Confirming rests, expires effects, resets uses and posts a styled
-    rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Using an item or feature (e.g. drinking a potion) posts a distinct "Action used" card instead of a plain message. Entries without automation stay readable text. Regenerate the files with
-  `python tools/daggerheart/convert.py`.
+    rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Using an item or feature (e.g. drinking a potion) posts a distinct "Action used" card instead of a plain message. Entries without automation stay readable text. Maintain compendium data and automation directly in `dmmap-daggerheart/*.json`; see `docs/DAGGERHEART_DATA.md` for the format.
   Your own roll cards in the chat carry buttons: **Damage** on attack rolls (same dialog as the sheet) and feature
   buttons such as Wizard Strange Patterns, Ranger's Focus / Hawkeye rerolls, Fearless or Patron's Boon, and spell
   Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
