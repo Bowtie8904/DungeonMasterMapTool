@@ -640,6 +640,15 @@ public final class OnlineSessionServer {
         host.measurementsChanged();
     }
 
+    /** DM-created measurement (new or updated); returns false when the session limit is reached. */
+    public synchronized boolean dmMeasurementUpsert(OnlineMeasurement value) {
+        if (!measurements.containsKey(value.id()) && measurements.size() >= 500) return false;
+        measurements.put(value.id(), value);
+        publishMeasurements();
+        host.measurementsChanged();
+        return true;
+    }
+
     private synchronized void publishMeasurements() {
         broadcast(measurementsJson());
     }

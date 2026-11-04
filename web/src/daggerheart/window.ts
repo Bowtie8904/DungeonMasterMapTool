@@ -38,14 +38,18 @@ export class SheetWindow {
       return b;
     };
     this.title = el('div', { class: 'dh-win-title' });
-    this.body = el('div', { class: 'dh-win-body' }, renderSheetView(options));
+    const mini = el('div', { class: 'dh-win-mini' });
+    this.body = el('div', { class: 'dh-win-body' }, renderSheetView({
+      ...options,
+      onMiniStrip: (strip) => { options.onMiniStrip?.(strip); mini.replaceChildren(...(strip ? [strip] : [])); },
+    }));
     this.title.append(
       el('h2', {}, `${actorName} - Daggerheart sheet`),
       mk('\u29C9', 'Pop out to a new browser window', () => { this.setOpen(false); onPopOut(); }),
       mk('\u2013', 'Minimise', () => this.element.classList.toggle('minimised')),
       mk('\u2715', 'Close', () => this.setOpen(false)),
     );
-    this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, this.body);
+    this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, mini, this.body);
     this.enableDrag();
     trackStacking(this.element);
   }

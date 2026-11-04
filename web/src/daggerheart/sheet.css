@@ -290,6 +290,17 @@
 .dh-win-title button:hover { background: #1f252d; }
 .dh-win.minimised { height: auto !important; min-height: 0; resize: none; }
 .dh-win.minimised .dh-win-body { display: none; }
+.dh-win-mini { display: none; }
+.dh-win.minimised .dh-win-mini:not(:empty) { display: block; padding: 6px 8px; background: #161b21; }
+.mini-strip { display: flex; align-items: stretch; gap: 6px; }
+.mini-evasion, .mini-trait { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 3px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); color: var(--text); font: inherit; }
+.mini-evasion { min-width: 64px; border-color: var(--hope); }
+.mini-trait { flex: 1; min-width: 0; cursor: pointer; }
+.mini-trait:hover { background: #1f252d; border-color: var(--hope); }
+.mini-traits { display: flex; flex: 1; gap: 4px; }
+.mini-sep { width: 1px; background: var(--border); margin: 0 4px; }
+.mini-strip .nm { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.mini-strip .md { font-size: 14px; font-weight: 700; }
 .dh-win-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dh-popout { position: fixed; inset: 0; display: flex; flex-direction: column; }
 

@@ -95,7 +95,9 @@ class ControlVisibilityTest {
                 ControlVisibility visibility = (ControlVisibility) field(app, "dmControlVisibility");
                 Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream()
                         .filter(control -> !Set.of("tokens", "session", "online").contains(control.sectionId()))
-                        .map(AppSettings.SidebarControl::id).collect(Collectors.toSet());
+                        .map(AppSettings.SidebarControl::id).collect(Collectors.toCollection(java.util.HashSet::new));
+                expected.addAll(Set.of("online.measure.distance", "online.measure.radius", "online.measure.cone",
+                        "online.measure.rect", "online.measure.hint"));
                 assertEquals(expected, visibility.registeredIds());
                 AppSettings settings = (AppSettings) field(app, "preferences");
                 Node diagonal = (Node) field(app, "screenInchesSpinner");

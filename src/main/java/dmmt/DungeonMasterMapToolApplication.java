@@ -442,6 +442,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private String selectedOverlayId;
     private DmProject.OverlayShape draftOverlay;
     private String selectedMeasurementId;
+    private String measureMode;
+    private dmmt.online.OnlineMeasurement measureDraft;
+    private boolean measureDraftPublished;
+    private long measureLastSend;
+    private ToggleGroup measureGroup;
     private dmmt.online.OnlineMeasurement measurementDrag;
     private double measurementStartX;
     private double measurementStartY;
@@ -1734,8 +1739,34 @@ public class DungeonMasterMapToolApplication extends Application {
         handoutsPanel = new dmmt.ui.HandoutsPanel(() -> mapCenter, this::status);
         filesSection = new ControlSection("Handouts", org.kordamp.ikonli.materialdesign2.MaterialDesignF.FOLDER_IMAGE, "files", handoutsPanel);
 
+        measureGroup = new ToggleGroup();
+        HBox measureRow = row();
+        for (var spec : List.of(
+                new Object[]{"distance", MaterialDesignR.RULER, "Distance: drag from a start point to an end point"},
+                new Object[]{"radius", MaterialDesignC.CIRCLE_OUTLINE, "Radius: drag from the centre outward"},
+                new Object[]{"cone", MaterialDesignT.TRIANGLE_OUTLINE, "Cone: drag from the tip outward (60 degrees)"},
+                new Object[]{"rect", MaterialDesignR.RECTANGLE_OUTLINE, "Rectangle: drag corner to corner"})) {
+            String kind = (String) spec[0];
+            ToggleButton button = Icons.toggle((org.kordamp.ikonli.Ikon) spec[1], (String) spec[2]);
+            button.setUserData(kind);
+            button.setToggleGroup(measureGroup);
+            button.setOnAction(e -> setMeasureMode(button.isSelected() ? kind : null));
+            measureRow.getChildren().add(button);
+        }
+        Label measureHint = new Label("Drag on the map to measure in tiles and Daggerheart ranges (Melee 1, Very Close 3, "
+                + "Close 6, Far 12, Very Far beyond). Shapes are shared with players and stay until you click their x. "
+                + "Esc leaves the tool.");
+        measureHint.getStyleClass().add("muted");
+        measureHint.setWrapText(true);
+        measureHint.setPrefWidth(220);
+        measureHint.setMinHeight(Region.USE_PREF_SIZE);
+        dmControlVisibility.registerRow("online.measure", measureRow, "distance", "radius", "cone", "rect");
+        dmControlVisibility.register("online.measure.hint", measureHint);
+        ControlSection measureSection = new ControlSection("Measure", MaterialDesignR.RULER, "measure", measureRow, measureHint);
+
         List<ControlSection> sectionList = List.of(
                 chatSection,
+                measureSection,
                 filesSection,
                 new ControlSection("Tools", MaterialDesignC.CURSOR_DEFAULT, "tools", toolsRow),
                 new ControlSection("Fog of war", MaterialDesignW.WEATHER_FOG, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
@@ -1793,7 +1824,7 @@ public class DungeonMasterMapToolApplication extends Application {
             dmSections.put(section.id(), section);
             section.railButton().setToggleGroup(railGroup);
             rail.getChildren().add(section.railButton());
-            if (section == chatSection) rail.getChildren().add(compendiumButton);
+            if (section.id().equals("measure")) rail.getChildren().add(compendiumButton);
         }
         railGroup.selectedToggleProperty().addListener((observable, oldToggle, newToggle) -> {
             flyout.getChildren().clear();
@@ -2192,6 +2223,8 @@ public class DungeonMasterMapToolApplication extends Application {
             boolean hostingNow = onlineController != null && onlineController.running() && onlineController.campaign() != null;
             boolean show = "chat".equals(id)
                     ? hostingNow && !preferences.hiddenControls().contains("online.chat")
+                    : "measure".equals(id)
+                    ? hostingNow && !preferences.hiddenControls().contains("online.measure")
                     : "files".equals(id)
                     ? hostingNow && !preferences.hiddenControls().contains("online.files")
                     : !hidden.contains(id);
@@ -2199,6 +2232,10 @@ public class DungeonMasterMapToolApplication extends Application {
             section.railButton().setManaged(show);
             if (!show) {
                 section.railButton().setSelected(false);
+                if ("measure".equals(id) && (measureMode != null || measureDraft != null)) {
+                    cancelMeasureDraft();
+                    setMeasureMode(null);
+                }
             }
         });
         if (compendiumButton != null) {
@@ -2769,6 +2806,10 @@ public class DungeonMasterMapToolApplication extends Application {
             toolChipIcon.setIconCode(MaterialDesignC.CROSSHAIRS_GPS);
             toolChipLabel.setText("Ping — click the map");
             toolChip.setVisible(true);
+        } else if (measureMode != null) {
+            toolChipIcon.setIconCode(MaterialDesignR.RULER);
+            toolChipLabel.setText("Measure — drag on the map");
+            toolChip.setVisible(true);
         } else if (activeTool != EditorTool.SELECT) {
             toolChipIcon.setIconCode(activeTool.icon);
             toolChipLabel.setText(activeTool.label);
@@ -2781,6 +2822,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void setLaserToolActive(boolean active) {
         if (active) {
             setPingArmed(false);
+            setMeasureMode(null);
             setActiveTool(EditorTool.SELECT);
         }
         laserToolActive = active;
@@ -2806,6 +2848,9 @@ public class DungeonMasterMapToolApplication extends Application {
         if (armed && laserToolActive) {
             setLaserToolActive(false);
         }
+        if (armed) {
+            setMeasureMode(null);
+        }
         pingArmed = armed;
         if (pingToggle != null && pingToggle.isSelected() != armed) {
             pingToggle.setSelected(armed);
@@ -2823,6 +2868,9 @@ public class DungeonMasterMapToolApplication extends Application {
         }
         if (pingArmed) {
             return Icons.cursor(MaterialDesignC.CROSSHAIRS_GPS, 0.5, 0.5);
+        }
+        if (measureMode != null) {
+            return Cursor.CROSSHAIR;
         }
         return switch (activeTool) {
             case SELECT -> Cursor.DEFAULT;
@@ -2855,7 +2903,7 @@ public class DungeonMasterMapToolApplication extends Application {
             cursor = textResizeCursor(resizingTextHandle);
         } else if (resizingLayer || resizingOverlay || resizingToken) {
             cursor = Cursor.SE_RESIZE;
-        } else if (pingArmed || laserToolActive || activeTool != EditorTool.SELECT) {
+        } else if (pingArmed || laserToolActive || measureMode != null || activeTool != EditorTool.SELECT) {
             cursor = toolCursor();
         } else {
             cursor = hoverInsideCanvas ? selectHoverCursor(hoverWorldX, hoverWorldY) : Cursor.DEFAULT;
@@ -2974,6 +3022,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("session.browser", sessionToggle);
         dmControlVisibility.register("online.browser", onlineToggle);
         dmControlVisibility.register("online.chat", chatSection.railButton());
+        dmControlVisibility.register("online.measure", dmSections.get("measure").railButton());
         dmControlVisibility.register("online.compendium", compendiumButton);
         dmControlVisibility.register("online.files", filesSection.railButton());
         handoutsPanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
@@ -3168,7 +3217,58 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event ->
                 canvasMouseDown = event.isPrimaryButtonDown() || event.isSecondaryButtonDown() || event.isMiddleButtonDown());
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
-            if (project == null || activeTool != EditorTool.SELECT || onlineController == null
+            if (measureMode == null || project == null || onlineController == null || onlineController.server() == null
+                    || event.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
+            dmCanvas.requestFocus();
+            var camera = project.getViews().getDmCamera();
+            var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
+            var deleteHit = dmmt.ui.OnlineMeasurementOverlay.pickDelete(onlineController.server().measurements(),
+                    point.x(), point.y(), camera.getZoom());
+            if (deleteHit != null) {
+                onlineController.server().dmMeasurement(deleteHit, true);
+            } else {
+                measureDraft = new dmmt.online.OnlineMeasurement("dm-" + java.util.UUID.randomUUID(), "dm", measureMode,
+                        point.x(), point.y(), point.x(), point.y());
+                measureDraftPublished = false;
+                measureLastSend = 0;
+                measurementMapKey = onlineController.mapKey();
+            }
+            event.consume();
+            renderDm();
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_DRAGGED, event -> {
+            if (measureDraft == null) return;
+            event.consume();
+            if (onlineController == null || onlineController.server() == null
+                    || !java.util.Objects.equals(measurementMapKey, onlineController.mapKey())) {
+                cancelMeasureDraft();
+                return;
+            }
+            var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(),
+                    project.getViews().getDmCamera());
+            measureDraft = new dmmt.online.OnlineMeasurement(measureDraft.id(), "dm", measureDraft.kind(),
+                    measureDraft.x1(), measureDraft.y1(), point.x(), point.y());
+            long now = System.currentTimeMillis();
+            if (now - measureLastSend >= 100) {
+                measureLastSend = now;
+                measureDraftPublished = onlineController.server().dmMeasurementUpsert(measureDraft);
+            }
+            renderDm();
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> {
+            if (measureDraft == null || event.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
+            event.consume();
+            var draft = measureDraft;
+            measureDraft = null;
+            if (onlineController != null && onlineController.server() != null
+                    && java.util.Objects.equals(measurementMapKey, onlineController.mapKey())
+                    && !onlineController.server().dmMeasurementUpsert(draft)) {
+                status("Measurement limit reached; delete old measurements.");
+            }
+            renderDm();
+        });
+        dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            if (project == null || activeTool != EditorTool.SELECT || measureMode != null || onlineController == null
                     || onlineController.server() == null) return;
             var camera = project.getViews().getDmCamera();
             var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
@@ -3424,7 +3524,7 @@ public class DungeonMasterMapToolApplication extends Application {
 
             if (event.getButton() == MouseButton.SECONDARY) {
                 finishPlayerViewportDrag();
-                rightClickCancelCandidate = pingArmed || laserToolActive || activeTool != EditorTool.SELECT;
+                rightClickCancelCandidate = pingArmed || laserToolActive || measureMode != null || activeTool != EditorTool.SELECT;
                 rightPressScreenX = event.getX();
                 rightPressScreenY = event.getY();
                 DmProject.TokenInstance token = rightClickCancelCandidate ? null : pickToken(world.x(), world.y());
@@ -4405,6 +4505,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 ? java.util.List.<dmmt.online.OnlineMeasurement>of() : onlineController.server().measurements();
         if (selectedMeasurementId != null && onlineMeasurements.stream().noneMatch(m -> m.id().equals(selectedMeasurementId))) {
             selectedMeasurementId = null;
+        }
+        if (measureDraft != null) {
+            var draftId = measureDraft.id();
+            var withDraft = new java.util.ArrayList<>(onlineMeasurements.stream().filter(m -> !m.id().equals(draftId)).toList());
+            withDraft.add(measureDraft);
+            onlineMeasurements = withDraft;
         }
         key = java.util.Arrays.asList(key, onlineMeasurements, selectedMeasurementId);
         boolean dynamic = activeTool != EditorTool.SELECT || resizingToken || rotatingToken || draftOverlay != null || draftWall != null
@@ -5685,7 +5791,7 @@ public class DungeonMasterMapToolApplication extends Application {
     }
 
     private String hoveredInteractableId() {
-        if (!hoverInsideCanvas || pingArmed || laserToolActive || activeTool != EditorTool.SELECT
+        if (!hoverInsideCanvas || pingArmed || laserToolActive || measureMode != null || activeTool != EditorTool.SELECT
                 || panningDmCamera || draggingLight || draggingLayer || draggingOverlay || resizingOverlay || draggingPlayerViewport || resizingLayer) {
             return null;
         }
@@ -6040,9 +6146,48 @@ public class DungeonMasterMapToolApplication extends Application {
         if (fogDragging) {
             restoreFog(fogBeforeSnapshot);
         }
+        if (measureDraft != null) {
+            cancelMeasureDraft();
+            return;
+        }
         setPingArmed(false);
         setLaserToolActive(false);
+        setMeasureMode(null);
         setActiveTool(EditorTool.SELECT);
+    }
+
+    /** Drops an unfinished measurement, also removing it from players if it was already shared. */
+    private void cancelMeasureDraft() {
+        var draft = measureDraft;
+        measureDraft = null;
+        if (draft != null && measureDraftPublished && onlineController != null && onlineController.server() != null) {
+            onlineController.server().dmMeasurement(draft, true);
+        }
+        measureDraftPublished = false;
+        renderDm();
+    }
+
+    private void setMeasureMode(String kind) {
+        if (kind == null && measureMode == null) {
+            return;
+        }
+        if (measureMode != null && kind == null || kind != null && !kind.equals(measureMode)) {
+            measureDraft = null;
+            measureDraftPublished = false;
+        }
+        measureMode = kind;
+        if (kind != null) {
+            setPingArmed(false);
+            setLaserToolActive(false);
+            setActiveTool(EditorTool.SELECT);
+            status("Measure: drag on the map. Shapes stay until you click their x. Esc leaves the tool.");
+        }
+        if (measureGroup != null) {
+            measureGroup.getToggles().stream().filter(t -> t.getUserData().equals(kind)).findFirst()
+                    .ifPresentOrElse(measureGroup::selectToggle, () -> measureGroup.selectToggle(null));
+        }
+        updateToolChip();
+        updateCanvasCursor();
     }
 
     private void setActiveTool(EditorTool tool) {
@@ -6060,6 +6205,9 @@ public class DungeonMasterMapToolApplication extends Application {
         draggingText = false;
         resizingTextHandle = -1;
         activeTool = tool == null ? EditorTool.SELECT : tool;
+        if (activeTool != EditorTool.SELECT) {
+            setMeasureMode(null);
+        }
         roomPreview = null;
         geometryPreviewHover = false;
         if (activeTool == EditorTool.TEXT || activeTool == EditorTool.ROOM_LABEL) {

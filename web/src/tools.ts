@@ -60,9 +60,20 @@ export function drawingHit(o: Overlay, x: number, y: number, tolerance: number):
   return false;
 }
 
+/** Daggerheart SRD defined ranges on a one-inch grid: Melee 1, Very Close 3, Close 6, Far 12 squares, then Very Far. */
+export function daggerheartRange(tiles: number): string {
+  if (tiles <= 1) return 'Melee';
+  if (tiles <= 3) return 'Very Close';
+  if (tiles <= 6) return 'Close';
+  if (tiles <= 12) return 'Far';
+  return 'Very Far';
+}
+
 export function measurementLabel(m: Measurement, ppc: number): string {
-  if (m.kind === 'rect') return `${(Math.abs(m.x2 - m.x1) / ppc).toFixed(1)} x ${(Math.abs(m.y2 - m.y1) / ppc).toFixed(1)} tiles`;
-  return `${m.kind === 'radius' ? 'r = ' : ''}${(Math.hypot(m.x2 - m.x1, m.y2 - m.y1) / ppc).toFixed(1)} tiles`;
+  const length = Math.hypot(m.x2 - m.x1, m.y2 - m.y1) / ppc;
+  const range = daggerheartRange(Number(length.toFixed(1)));
+  if (m.kind === 'rect') return `${(Math.abs(m.x2 - m.x1) / ppc).toFixed(1)} x ${(Math.abs(m.y2 - m.y1) / ppc).toFixed(1)} tiles · ${range}`;
+  return `${m.kind === 'radius' ? 'r = ' : ''}${length.toFixed(1)} tiles · ${range}`;
 }
 
 export function measurementBounds(m: Measurement): [number, number, number, number] {

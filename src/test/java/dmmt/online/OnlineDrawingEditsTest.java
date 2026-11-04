@@ -84,9 +84,14 @@ class OnlineDrawingEditsTest {
                 {"id":"m","kind":"distance","x1":0,"y1":0,"x2":30,"y2":40}
                 """);
         var m = OnlineMeasurement.parse(node, "alice");
-        assertEquals("5.0 tiles", m.label(10));
+        assertEquals("5.0 tiles \u00B7 Close", m.label(10));
         assertEquals("alice", m.translate(3, 5).ownerId());
-        assertEquals("5.0 tiles", m.translate(3, 5).label(10));
+        assertEquals("5.0 tiles \u00B7 Close", m.translate(3, 5).label(10));
+        assertEquals("Melee", OnlineMeasurement.daggerheartRange(1));
+        assertEquals("Very Close", OnlineMeasurement.daggerheartRange(3));
+        assertEquals("Close", OnlineMeasurement.daggerheartRange(6));
+        assertEquals("Far", OnlineMeasurement.daggerheartRange(12));
+        assertEquals("Very Far", OnlineMeasurement.daggerheartRange(12.5));
         ((ObjectNode) node).put("kind", "invalid");
         assertThrows(IllegalArgumentException.class, () -> OnlineMeasurement.parse(node, "alice"));
     }

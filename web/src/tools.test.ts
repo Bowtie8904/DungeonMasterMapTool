@@ -36,12 +36,20 @@ describe('owned map drawings', () => {
 describe('shared measurement labels', () => {
   const m: Measurement = { id: 'm', ownerId: 'alice', kind: 'distance', x1: 0, y1: 0, x2: 30, y2: 40 };
   it('uses Euclidean grid-tile distance, including radius and cone length', () => {
-    expect(measurementLabel(m, 10)).toBe('5.0 tiles');
-    expect(measurementLabel({ ...m, kind: 'radius' }, 10)).toBe('r = 5.0 tiles');
-    expect(measurementLabel({ ...m, kind: 'cone' }, 10)).toBe('5.0 tiles');
+    expect(measurementLabel(m, 10)).toBe('5.0 tiles · Close');
+    expect(measurementLabel({ ...m, kind: 'radius' }, 10)).toBe('r = 5.0 tiles · Close');
+    expect(measurementLabel({ ...m, kind: 'cone' }, 10)).toBe('5.0 tiles · Close');
   });
   it('shows both rectangle dimensions independently of drag direction', () => {
-    expect(measurementLabel({ ...m, kind: 'rect', x2: -30 }, 10)).toBe('3.0 x 4.0 tiles');
+    expect(measurementLabel({ ...m, kind: 'rect', x2: -30 }, 10)).toBe('3.0 x 4.0 tiles · Close');
+  });
+  it('maps tile distances to the Daggerheart SRD ranges', () => {
+    const at = (tiles: number) => measurementLabel({ ...m, x2: tiles * 10, y2: 0 }, 10);
+    expect(at(1)).toBe('1.0 tiles · Melee');
+    expect(at(3)).toBe('3.0 tiles · Very Close');
+    expect(at(6)).toBe('6.0 tiles · Close');
+    expect(at(12)).toBe('12.0 tiles · Far');
+    expect(at(13)).toBe('13.0 tiles · Very Far');
   });
   it('uses the entire measured geometry for box selection, not just endpoints', () => {
     expect(measurementBounds(m)).toEqual([0, 0, 30, 40]);

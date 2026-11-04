@@ -236,7 +236,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   Ctrl+Z (Cmd+Z on macOS) cancels an active stroke or undoes your last confirmed drawing creation, edit or deletion.
   Undo history is limited to 100 edits in the current map and resets on map changes/reload; it never undoes other
   players' work or the DM's history. The DM uses the existing effect controls and undo/redo. Drawing edits are blocked while paused.
-- **Shared measuring:** Measure offers distance, circle radius, a 60-degree cone and rectangle, labelled in grid tiles.
+- **Shared measuring:** Measure offers distance, circle radius, a 60-degree cone and rectangle, labelled in grid tiles
+  plus the matching Daggerheart range (Melee ≤1, Very Close ≤3, Close ≤6, Far ≤12, Very Far beyond, per the SRD's
+  1-inch-grid tile suggestion). The DM has the same tool in a hosting-only **Measure** rail icon below Chat
+  (hide with `online.measure`).
   Drag to create a measurement; everyone, including the DM, sees it while dragging and after release. In Navigate,
   the creator can move/delete it. In the DM's Select mode, drag a measurement to move it, or use Delete/right-click
   to remove it. A subtle cross beside each completed measurement also deletes it; only its creator and the DM

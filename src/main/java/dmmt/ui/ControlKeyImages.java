@@ -111,6 +111,7 @@ public final class ControlKeyImages {
             case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
             case "online.chat" -> MaterialDesignC.CHAT_OUTLINE;
+            case "online.measure" -> MaterialDesignR.RULER;
             case "online.compendium" -> MaterialDesignB.BOOK_OPEN_VARIANT;
             case "online.files" -> MaterialDesignF.FOLDER_IMAGE;
             case "weather.lightningInterval" -> MaterialDesignW.WEATHER_LIGHTNING;

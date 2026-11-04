@@ -63,6 +63,8 @@ export interface SheetViewOptions {
   /** Called after anything on the sheet may have changed (the host debounces and saves). */
   onChange?: () => void;
   supportsKeptDice?: () => boolean;
+  /** Receives a compact Evasion and traits strip after every render (the floating window shows it on its minimised bar). */
+  onMiniStrip?: (strip: HTMLElement | null) => void;
 }
 
 type Page = 'char' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
@@ -292,6 +294,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('aside', { class: 'sheet-sidebar', ariaLabel: 'Traits' }, traits()),
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
+    opts.onMiniStrip?.(c.mancer?.done === false ? null : miniStrip());
     opts.onChange?.();
     const p = root.querySelector('.pages');
     if (p) p.scrollTop = scroll;
@@ -428,6 +431,24 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       traits.append(tile);
     }
     return traits;
+  }
+
+  function miniStrip(): HTMLElement {
+    const strip = el('div', { class: 'mini-strip' });
+    const evasion = el('div', { class: 'mini-evasion', title: 'Evasion' },
+      el('span', { class: 'nm' }, 'Evasion'), el('span', { class: 'md' }, String(derivedStats(c).evasion)));
+    const group = el('div', { class: 'mini-traits', role: 'group', ariaLabel: 'Traits' });
+    for (const name of TRAIT_ORDER) {
+      const base = c.traits.find((x) => x.name === name)!.mod;
+      const total = traitTotal(c, name);
+      const md = el('span', { class: 'md' }, signed(total));
+      if (total !== base) md.style.color = total > base ? 'var(--hope, #4a9)' : 'var(--hp, #c55)';
+      const tile = el('button', { type: 'button', class: 'mini-trait', title: `Roll ${name}` }, el('span', { class: 'nm' }, name), md);
+      tile.addEventListener('click', () => rollDuality(name, name, [`trait:${name}`]));
+      group.append(tile);
+    }
+    strip.append(evasion, el('span', { class: 'mini-sep', ariaHidden: 'true' }), group);
+    return strip;
   }
 
   function experiences(): HTMLElement {
