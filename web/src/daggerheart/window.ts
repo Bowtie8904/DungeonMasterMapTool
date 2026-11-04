@@ -3,6 +3,23 @@ import { renderSheetView, SheetViewOptions } from './view';
 
 const HIDDEN = 'hidden';
 
+const BASE_Z = 4;
+const stack: HTMLElement[] = [];
+
+/** Raises a floating window above all others (sheets, tools, notes and handouts share one stack). */
+export function bringToFront(win: HTMLElement): void {
+  const at = stack.indexOf(win);
+  if (at >= 0) stack.splice(at, 1);
+  stack.push(win);
+  for (let i = stack.length - 1; i >= 0; i--) if (!stack[i].isConnected && stack[i] !== win) stack.splice(i, 1);
+  stack.forEach((w, i) => { w.style.zIndex = String(BASE_Z + i); });
+}
+
+/** Brings the window to the front whenever it is clicked, even when a child handles the event. */
+export function trackStacking(win: HTMLElement): void {
+  win.addEventListener('pointerdown', () => bringToFront(win), true);
+}
+
 /** Floating, draggable sheet window over the map view (minimise, close, pop out). */
 export class SheetWindow {
   readonly element: HTMLElement;
@@ -30,6 +47,7 @@ export class SheetWindow {
     );
     this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, this.body);
     this.enableDrag();
+    trackStacking(this.element);
   }
 
   get isOpen(): boolean {
@@ -38,7 +56,7 @@ export class SheetWindow {
 
   setOpen(open: boolean): void {
     this.element.classList.toggle(HIDDEN, !open);
-    if (open) this.element.classList.remove('minimised');
+    if (open) { this.element.classList.remove('minimised'); bringToFront(this.element); }
     this.onVisibility(open);
   }
 
@@ -85,6 +103,7 @@ export class ToolWindow {
       mk('\u2715', 'Close', () => this.setOpen(false)));
     this.element = el('section', { class: `dh-win ${HIDDEN} ${extraClass}`.trim(), ariaLabel: title }, bar, el('div', { class: 'dh-win-body' }, body));
     makeDraggable(this.element, bar);
+    trackStacking(this.element);
   }
 
   get isOpen(): boolean {
@@ -93,7 +112,7 @@ export class ToolWindow {
 
   setOpen(open: boolean): void {
     this.element.classList.toggle(HIDDEN, !open);
-    if (open) this.element.classList.remove('minimised');
+    if (open) { this.element.classList.remove('minimised'); bringToFront(this.element); }
     this.onVisibility(open);
   }
 

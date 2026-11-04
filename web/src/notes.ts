@@ -1,5 +1,5 @@
 import { notesRequest } from './api';
-import { makeDraggable } from './daggerheart/window';
+import { bringToFront, makeDraggable, trackStacking } from './daggerheart/window';
 import { el } from './login';
 import { openPopout } from './popout';
 
@@ -60,9 +60,7 @@ class NoteEditor {
     this.element = el('section', { class: 'dh-win note-win' }, bar,
       el('div', { class: 'dh-win-body' }, this.textarea,
         el('div', { class: 'note-actions' }, this.saveButton, this.reloadButton, this.status)));
-    this.element.addEventListener('pointerdown', () => {
-      if (this.element.parentElement?.lastElementChild !== this.element) this.element.parentElement?.append(this.element);
-    });
+    trackStacking(this.element);
     if (standalone) this.element.classList.add('note-popout');
     pop.addEventListener('click', () => { void this.popOut(); });
     this.rename(entry);
@@ -112,7 +110,7 @@ class NoteEditor {
 
   focus(): void {
     this.element.classList.remove('minimised');
-    this.element.parentElement?.append(this.element);
+    bringToFront(this.element);
     this.textarea.focus();
   }
 

@@ -1,4 +1,4 @@
-import { makeDraggable } from './daggerheart/window';
+import { bringToFront, makeDraggable, trackStacking } from './daggerheart/window';
 import { el } from './login';
 import type { HandoutFile } from './protocol';
 
@@ -76,6 +76,7 @@ export class HandoutsPanel {
     if (existing) {
       existing.classList.remove('minimised');
       this.mount(existing);
+      bringToFront(existing);
       return;
     }
     const mk = (text: string, label: string, fn: () => void) => {
@@ -92,13 +93,14 @@ export class HandoutsPanel {
     const failed = el('p', { class: 'muted hidden' }, 'This image is no longer available.');
     image.addEventListener('error', () => { image.classList.add('hidden'); failed.classList.remove('hidden'); });
     win.append(bar, el('div', { class: 'dh-win-body handout-body' }, image, failed));
-    win.addEventListener('pointerdown', () => { if (win.parentElement?.lastElementChild !== win) win.parentElement?.append(win); });
+    trackStacking(win);
     makeDraggable(win, bar);
     const offset = this.windows.size * 24;
     win.style.left = `${40 + offset}px`;
     win.style.top = `${40 + offset}px`;
     this.windows.set(id, win);
     this.mount(win);
+    bringToFront(win);
   }
 
   closeAll(): void {
