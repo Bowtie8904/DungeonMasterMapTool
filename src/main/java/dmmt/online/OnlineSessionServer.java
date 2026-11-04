@@ -94,6 +94,8 @@ public final class OnlineSessionServer {
     private final Config config;
     private final CampaignStore store;
     private final CampaignNotes notes;
+    private final Object handoutsLock = new Object();
+    private CampaignHandouts handouts;
     private final AssetRegistry assets;
     private final Host host;
     private final LoginRateLimiter limiter;
@@ -196,6 +198,8 @@ public final class OnlineSessionServer {
         javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
         javalin.get("/api/notes/content", ctx -> handleNotes(ctx, "read"));
         javalin.post("/api/notes", ctx -> handleNotes(ctx, "edit"));
+        javalin.get("/api/handouts", this::handleHandoutList);
+        javalin.get("/api/handouts/{id}", this::handleHandoutImage);
         javalin.post("/api/chat-cards", this::handleShareCard);
         javalin.get("/api/chat-cards/{id}", this::handleCardStock);
         javalin.post("/api/chat-cards/{id}/grab", this::handleGrabCard);
@@ -377,6 +381,90 @@ public final class OnlineSessionServer {
 
     public Campaign campaign() {
         return campaign;
+    }
+
+    // ---- handouts ----
+
+    /** The handout library of the hosted campaign; players see it filtered by their grants. */
+    public CampaignHandouts handouts() {
+        Campaign c = campaign;
+        synchronized (handoutsLock) {
+            if (handouts == null || !handouts.campaignId().equals(c.getId())) {
+                handouts = new CampaignHandouts(store.root(), c.getId());
+                handouts.addListener(this::publishHandouts);
+            }
+            return handouts;
+        }
+    }
+
+    /** Sends every connected player their own filtered handout list; {@code showId} also opens that image for all. */
+    private void publishHandouts(String showId) {
+        CampaignHandouts library = handouts();
+        for (Client client : clients.values()) {
+            sendHandouts(library, client);
+        }
+        if (showId != null) {
+            try {
+                CampaignHandouts.FileEntry entry = library.find(showId);
+                if (entry != null) {
+                    broadcast(MAPPER.createObjectNode().put("type", "handoutShow").put("id", entry.id)
+                            .put("name", entry.name).toString());
+                }
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    private void sendHandouts(CampaignHandouts library, Client client) {
+        try {
+            sendTo(client.ctx, handoutsJson(library.listFor(client.playerId)));
+        } catch (IOException ignored) {
+        }
+    }
+
+    static String handoutsJson(CampaignHandouts.Listing listing) {
+        ObjectNode message = MAPPER.createObjectNode().put("type", "handouts");
+        ArrayNode folders = message.putArray("folders");
+        listing.folders().forEach(folders::add);
+        ArrayNode files = message.putArray("files");
+        for (CampaignHandouts.FileEntry f : listing.files()) {
+            files.addObject().put("id", f.id).put("name", f.name).put("folder", f.folder).put("ext", f.ext).put("size", f.size);
+        }
+        return message.toString();
+    }
+
+    private void handleHandoutList(Context ctx) {
+        String player = requirePlayer(ctx);
+        if (player == null) return;
+        ctx.header("Cache-Control", "no-store");
+        try {
+            ctx.contentType("application/json").result(handoutsJson(handouts().listFor(player)));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read the handouts."));
+        }
+    }
+
+    private void handleHandoutImage(Context ctx) {
+        String player = requirePlayer(ctx);
+        if (player == null) return;
+        String id = ctx.pathParam("id");
+        if (!CampaignStore.safeId(id)) {
+            json(ctx, 404, errorBody("Unknown handout."));
+            return;
+        }
+        try {
+            CampaignHandouts library = handouts();
+            CampaignHandouts.FileEntry entry = library.find(id);
+            java.nio.file.Path file = library.open(id, player, false);
+            ctx.header("Cache-Control", "private, no-cache");
+            ctx.header("X-Content-Type-Options", "nosniff");
+            ctx.contentType(CampaignHandouts.contentType(entry.ext));
+            ctx.result(java.nio.file.Files.newInputStream(file));
+        } catch (CampaignHandouts.Rejected e) {
+            json(ctx, e.status(), errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read the handout."));
+        }
     }
 
     public boolean isPaused() {
@@ -1426,7 +1514,9 @@ public final class OnlineSessionServer {
             hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
+            hello.put("handouts", true);
             sendTo(ctx, hello.toString());
+            sendHandouts(handouts(), client);
             if (audioJson != null) {
                 sendTo(ctx, audioJson);
             }

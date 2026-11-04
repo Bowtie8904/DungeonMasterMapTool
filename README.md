@@ -106,6 +106,13 @@ Nothing starts until you click **Start online session**, so offline play and the
     offline (create the character sheet first). Additions persist immediately and update open player sheets;
     quantity caps are enforced. The window closes when hosting ends. Hide the icon in Settings with
     `online.compendium` under hidden controls; the local API control `online.compendium` remains available.
+  - **Handouts:** while hosting, a **Handouts** icon below the Compendium opens a file browser for images. The DM
+    can create folders, add images from disk or the clipboard, rename, copy, delete and drag files and folders
+    between folders (Ctrl copies), and share files with individual players or everyone. Granted files appear in the
+    player's **Files** tab (below Compendium) in the same folder with the same name, updating live; players can
+    only browse and view. Double-click opens an image window; **Show to all players** opens it for every
+    logged-in player and grants access. Hide with `online.files`; the local API controls `online.files`,
+    `online.files.import`, `.paste`, `.folder` and `.refresh` remain available.
     The subtle add icon puts armor, weapons, potions, items and domain cards in the
     matching sheet tab, choosing the receiving character when they own several. Compendium entries cannot be
     dragged onto sheets. Every row also has an inventory-style **Link in chat** icon to share its description

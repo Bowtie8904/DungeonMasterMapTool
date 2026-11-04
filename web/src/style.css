@@ -265,10 +265,36 @@ button.share-icon:disabled { opacity: .25; }
 .notes-toolbar { display: flex; gap: 5px; flex-wrap: wrap; }
 .notes-toolbar button { font-size: 12px; padding: 5px 7px; }
 .notes-tree { flex: 1; min-height: 100px; }
-.note-branch { list-style: none; margin: 0; padding-left: 14px; }
-.note-row { display: block; width: 100%; text-align: left; background: transparent; border-color: transparent; overflow-wrap: anywhere; }
-.note-row.selected { border-color: var(--accent); }
-.note-group { color: var(--accent); margin-bottom: 12px; }
+.note-branch { list-style: none; margin: 0; padding-left: 12px; border-left: 1px solid var(--border); margin-left: 10px; }
+.notes-tree > .note-branch { border-left: 0; margin-left: 0; padding-left: 0; }
+.note-row { display: block; width: 100%; text-align: left; background: transparent; border-color: transparent; border-radius: 7px; padding: 7px 10px; overflow-wrap: anywhere; }
+.note-row:hover { background: #ffffff0d; }
+.note-row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; box-shadow: inset 3px 0 0 var(--accent); }
+.note-group { color: var(--accent); margin-bottom: 8px; border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; }
+
+/* handouts file browser (also the look shared by the notes tree) */
+.handouts-section { display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; overflow-y: auto; }
+.file-search { width: 100%; }
+.file-list { list-style: none; margin: 0; padding: 0; }
+.file-root { list-style: none; }
+.file-tree { list-style: none; margin: 0; padding: 0; }
+.file-tree .file-tree { padding-left: 14px; margin-left: 10px; border-left: 1px solid var(--border); }
+.file-chevron { width: 12px; flex-shrink: 0; color: var(--muted); text-align: center; }
+.file-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: transparent; border-color: transparent; border-radius: 7px; padding: 5px 8px; }
+.file-row:hover { background: #ffffff0d; }
+.file-row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.file-thumb, .handout-folder-icon { width: 24px; height: 24px; flex-shrink: 0; border-radius: 4px; }
+.file-thumb { object-fit: cover; background: var(--bg); border: 1px solid var(--border); }
+.handout-folder-icon { padding: 2px; fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: var(--accent); stroke-width: 1.5; }
+.file-text { display: flex; flex-direction: column; min-width: 0; }
+.file-name { overflow-wrap: anywhere; font-weight: 500; }
+.file-meta { font-size: 11px; color: var(--muted); }
+.file-empty { padding: 14px 8px; font-size: 13px; }
+.dh-win.handout-win { left: 40px; top: 40px; width: min(720px, calc(100% - 80px)); height: min(560px, calc(100% - 80px)); min-width: 240px; min-height: 160px; resize: both; z-index: 7; }
+.handout-win.minimised { height: auto !important; min-height: 0; resize: none; }
+.handout-body { display: flex; align-items: center; justify-content: center; padding: 6px; overflow: auto; background: var(--bg); }
+.handout-image { max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in; }
+.handout-image.actual { max-width: none; max-height: none; cursor: zoom-out; }
 .notes-context { position: fixed; z-index: 100; display: flex; flex-direction: column; padding: 5px; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 4px 18px #0008; }
 .notes-context button { text-align: left; border-color: transparent; background: transparent; }
 .notes-dialog form { display: flex; flex-direction: column; gap: 12px; }

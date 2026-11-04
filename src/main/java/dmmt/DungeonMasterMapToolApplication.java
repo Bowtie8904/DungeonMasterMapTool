@@ -342,6 +342,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private Runnable flyoutRelayout;
     private ControlSection chatSection;
     private ToggleButton compendiumButton;
+    private ControlSection filesSection;
+    private dmmt.ui.HandoutsPanel handoutsPanel;
     private final dmmt.ui.CompendiumWindow compendiumWindow = new dmmt.ui.CompendiumWindow();
     private boolean chatHosted;
     private Label onlinePausedHint;
@@ -1729,9 +1731,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 status("Start hosting a campaign before opening the compendium.");
             }
         });
+        handoutsPanel = new dmmt.ui.HandoutsPanel(() -> mapCenter, this::status);
+        filesSection = new ControlSection("Handouts", org.kordamp.ikonli.materialdesign2.MaterialDesignF.FOLDER_IMAGE, "files", handoutsPanel);
 
         List<ControlSection> sectionList = List.of(
                 chatSection,
+                filesSection,
                 new ControlSection("Tools", MaterialDesignC.CURSOR_DEFAULT, "tools", toolsRow),
                 new ControlSection("Fog of war", MaterialDesignW.WEATHER_FOG, "fog", fogToolsRow, fogFillRow, fogSharpnessRow, fogEffectsRow),
                 new ControlSection("Lighting", MaterialDesignL.LIGHTBULB_OUTLINE, "lighting", lightRow, revealRow, timeRow, ambientBrightnessRow, lightTintRow, brightCoreRow, lightHint),
@@ -1797,7 +1802,7 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             boolean open = newToggle != null;
             boolean chatOpen = open && "chat".equals(newToggle.getUserData());
-            double width = chatOpen ? 320 : 268;
+            double width = chatOpen || open && "files".equals(newToggle.getUserData()) ? 320 : 268;
             flyout.setPrefWidth(width);
             flyout.setMaxWidth(width);
             scroll.setPrefWidth(width);
@@ -2184,9 +2189,11 @@ public class DungeonMasterMapToolApplication extends Application {
             if (!visible && onlineToggle.isSelected()) mapBrowserToggle.setSelected(true);
         }
         dmSections.forEach((id, section) -> {
+            boolean hostingNow = onlineController != null && onlineController.running() && onlineController.campaign() != null;
             boolean show = "chat".equals(id)
-                    ? onlineController != null && onlineController.running() && onlineController.campaign() != null
-                            && !preferences.hiddenControls().contains("online.chat")
+                    ? hostingNow && !preferences.hiddenControls().contains("online.chat")
+                    : "files".equals(id)
+                    ? hostingNow && !preferences.hiddenControls().contains("online.files")
                     : !hidden.contains(id);
             section.railButton().setVisible(show);
             section.railButton().setManaged(show);
@@ -2200,6 +2207,10 @@ public class DungeonMasterMapToolApplication extends Application {
             compendiumButton.setVisible(visible);
             compendiumButton.setManaged(visible);
             compendiumWindow.syncSession(hosting ? onlineController.server() : null);
+        }
+        if (handoutsPanel != null) {
+            boolean hosting = onlineController != null && onlineController.running() && onlineController.campaign() != null;
+            handoutsPanel.bind(hosting ? onlineController.server() : null);
         }
     }
 
@@ -2964,8 +2975,10 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("online.browser", onlineToggle);
         dmControlVisibility.register("online.chat", chatSection.railButton());
         dmControlVisibility.register("online.compendium", compendiumButton);
+        dmControlVisibility.register("online.files", filesSection.railButton());
+        handoutsPanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
-        fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
+        if (fearOverlay != null) fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         tokenBrowser.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         applySectionVisibility();
         return librarySidebar;

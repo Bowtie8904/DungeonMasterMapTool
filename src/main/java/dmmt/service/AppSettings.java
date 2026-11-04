@@ -70,7 +70,9 @@ public final class AppSettings {
         addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
                 "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link",
                 "fearDown|Fear counter minus", "fearUp|Fear counter plus", "chat|Chat tab (shown while hosting)",
-                "compendium|Compendium window (shown while hosting)");
+                "compendium|Compendium window (shown while hosting)", "files|Handouts tab (shown while hosting)",
+                "files.import|Add handout images", "files.paste|Handout from clipboard", "files.folder|New handout folder",
+                "files.refresh|Reload handouts");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
                 "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");

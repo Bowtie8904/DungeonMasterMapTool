@@ -131,7 +131,7 @@ class ControlVisibilityTest {
                 settings.setHiddenControls(expected);
                 apply.invoke(app);
                 for (Object section : ((java.util.Map<?, ?>) field(app, "dmSections")).values()) {
-                    if ("chat".equals(((ControlSection) section).id())) continue;
+                    if ("chat".equals(((ControlSection) section).id()) || "files".equals(((ControlSection) section).id())) continue;
                     VBox body = (VBox) ((ControlSection) section).getChildren().get(1);
                     assertTrue(body.getChildren().stream().noneMatch(Node::isManaged));
                 }

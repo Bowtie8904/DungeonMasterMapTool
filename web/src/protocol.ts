@@ -303,7 +303,10 @@ export interface Hello {
   keptDice?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
+  handouts?: boolean;
 }
+
+export interface HandoutFile { id: string; name: string; folder: string; ext: string; size: number }
 
 import type { AudioMessage } from './audio';
 
@@ -322,6 +325,8 @@ export type ServerMessage =
   | { type: 'pause'; paused: boolean }
   | ({ type: 'chat' } & ChatMessage)
   | { type: 'chatDeleted'; id: number; ts: number }
+  | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
+  | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
   | AudioMessage
   | { type: 'kicked'; reason?: string }

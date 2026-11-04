@@ -22,11 +22,12 @@ import { OnlineAudio } from './audio';
 import { markAudioGesture, settings } from './settings';
 import { Store } from './store';
 import { NotesPanel } from './notes';
+import { HandoutsPanel } from './handouts';
 import { openPopout } from './popout';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
-type SidebarSection = 'chat' | 'actors' | 'notes' | 'settings';
+type SidebarSection = 'chat' | 'actors' | 'notes' | 'files' | 'settings';
 type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?: Overlay };
 type SheetHandle = { character: CharacterSheet; bus: SheetBus; save: SheetSave };
 
@@ -99,6 +100,7 @@ export class App {
     el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
   private notes = new NotesPanel(element => this.stageEl.append(element), text => this.toast(text));
+  private handouts = new HandoutsPanel(element => this.stageEl.append(element));
   private sheetHandles = new Map<string, SheetHandle>();
   private myActors: Actor[] = [];
   private compendium = new CompendiumPanel({
@@ -396,8 +398,9 @@ export class App {
     this.sections.set('chat', this.buildChat());
     this.sections.set('actors', this.actorsEl);
     this.sections.set('notes', this.notes.element);
+    this.sections.set('files', this.handouts.element);
     this.sections.set('settings', this.buildSettings());
-    for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['notes', 'Notes'], ['compendium', 'Compendium'], ['settings', 'Settings']] as const) {
+    for (const [id, label] of [['chat', 'Chat'], ['actors', 'My actors'], ['notes', 'Notes'], ['compendium', 'Compendium'], ['files', 'Files'], ['settings', 'Settings']] as const) {
       if (id === 'compendium') {
         const button = iconButton(id, label, () => this.compendiumWindow.toggle());
         button.setAttribute('aria-pressed', 'false');
@@ -411,6 +414,7 @@ export class App {
       rail.append(button);
       this.sections.get(id)!.classList.toggle('hidden', id !== 'chat');
     }
+    this.sectionButtons.get('files')?.classList.add('hidden');
     this.sidebar.append(el('header', { class: 'panel-heading' }, this.sectionTitle,
       iconButton('close', 'Collapse sidebar', () => {
         const previous = this.section; this.showSection(null);
@@ -710,7 +714,9 @@ export class App {
         this.playerId = msg.playerId;
         this.notes.setSession(msg.notes === true, msg.campaignId ?? '', msg.playerId);
         if (this.section === 'notes') void this.notes.open();
-        this.currentIdentity = null;
+        this.handouts.closeAll();
+        this.sectionButtons.get('files')?.classList.toggle('hidden', msg.handouts !== true);
+        if (msg.handouts !== true && this.section === 'files') this.showSection('chat');
         this.identitySupported = msg.chatIdentity === true;
         this.identityInput.disabled = this.identitySave.disabled = !this.identitySupported;
         this.identityInput.value = '';
@@ -818,6 +824,12 @@ export class App {
       }
       case 'roll':
         this.addLog({ kind: 'roll', m: msg });
+        break;
+      case 'handouts':
+        this.handouts.update(msg.folders, msg.files);
+        break;
+      case 'handoutShow':
+        this.handouts.open(msg.id, msg.name);
         break;
       case 'kicked':
         this.dispose();

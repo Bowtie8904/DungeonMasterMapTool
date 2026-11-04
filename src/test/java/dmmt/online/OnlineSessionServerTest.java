@@ -220,6 +220,52 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<byte[]> handoutHttp(String cookie, String path) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/handouts" + path));
+        if (cookie != null) request.header("Cookie", cookie);
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    @Test
+    void handoutsAreFilteredPerPlayerServedOnlyWhenGrantedAndBroadcastWhenShown() throws Exception {
+        var image = new java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        var png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", png);
+        CampaignHandouts handouts = server.handouts();
+        handouts.createFolder("", "Maps");
+        var secret = handouts.addImage("Maps", "Secret", png.toByteArray());
+        var open = handouts.addImage("Maps", "Open", png.toByteArray());
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        String alice = cookie();
+        String bobCookie = playerCookie(bob);
+
+        assertEquals(401, handoutHttp(null, "").statusCode());
+        assertEquals(0, MAPPER.readTree(handoutHttp(alice, "").body()).path("files").size());
+        assertEquals(404, handoutHttp(alice, "/" + secret.id).statusCode());
+
+        handouts.grant(List.of(open.id), false, java.util.Set.of(playerId()));
+        JsonNode aliceList = MAPPER.readTree(handoutHttp(alice, "").body());
+        assertEquals(1, aliceList.path("files").size());
+        assertEquals("Open", aliceList.path("files").get(0).path("name").asText());
+        assertEquals("Maps", aliceList.path("files").get(0).path("folder").asText());
+        assertEquals(200, handoutHttp(alice, "/" + open.id).statusCode());
+        assertEquals(404, handoutHttp(bobCookie, "/" + open.id).statusCode());
+        assertEquals(0, MAPPER.readTree(handoutHttp(bobCookie, "").body()).path("files").size());
+
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(alice, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("handouts").asBoolean());
+            assertEquals(1, inbox.next("handouts").path("files").size());
+            handouts.show(secret.id);
+            assertEquals(secret.id, inbox.next("handoutShow").path("id").asText());
+            assertEquals(200, handoutHttp(alice, "/" + secret.id).statusCode());
+            assertEquals(200, handoutHttp(bobCookie, "/" + secret.id).statusCode());
+        } finally { ws.abort(); }
+    }
+
     @Test
     void onlyHostCanDeleteMessagesAndDeletionPersistsInSnapshots() throws Exception {
         server.publish(state("m1", 0), "m1/l1");
