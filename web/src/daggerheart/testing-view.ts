@@ -2,6 +2,7 @@ import { el } from '../login';
 import { CharacterSheet, TestingBuild } from './data';
 import { classEntries, findClass, loadRulesData, MAX_LEVEL, STAGES, subclassesOf } from './rules';
 import { applyTestingBuild, defaultTestingBuild, testingBuildProblems } from './testing';
+import { ancestryPicker } from './ancestry-choice';
 
 export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, onDone: () => void): Promise<void> {
   if (!c.testingCharacter) throw new Error('This is not a testing character.');
@@ -66,6 +67,10 @@ export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, on
         field('Mixed ancestry (second feature)', ['', ...data.ancestries.map((e) => e.name)], draft.ancestry2 ?? '', (value) => { draft.ancestry2 = value || undefined; }),
         field('Community', data.communities.map((e) => e.name), draft.community, (value) => { draft.community = value; }),
         field('Transformation', ['', ...data.transformations.map((e) => e.name)], draft.transformation ?? '', (value) => { draft.transformation = value || undefined; }));
+      if (draft.transformation === 'Shapeshifter') {
+        const choice = { ancestry: draft.ancestry2 && draft.ancestry2 !== draft.ancestry ? `${draft.ancestry} / ${draft.ancestry2}` : draft.ancestry, feature: draft.ancestryFeature ?? '' };
+        body.append(ancestryPicker(data.ancestries, choice, () => { draft.ancestryFeature = choice.feature; validate(); }));
+      }
       validate();
     };
     const validate = () => {

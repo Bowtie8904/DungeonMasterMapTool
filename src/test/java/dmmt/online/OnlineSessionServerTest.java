@@ -76,6 +76,120 @@ class OnlineSessionServerTest {
         ((java.util.Random) field.get(server)).setSeed(seed);
     }
 
+    private ObjectNode transformationSheet(String name) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        JsonNode entry = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("transformations.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> name.equals(item.path("name").asText())).findFirst().orElseThrow();
+        sheet.put("transformation", name);
+        sheet.set("heritage", entry.path("features").deepCopy());
+        for (JsonNode feature : sheet.path("heritage")) ((ObjectNode) feature).put("source", "Transformation - " + name);
+        sheet.putArray("effects");
+        return sheet;
+    }
+
+    @Test
+    void feedValidatesFangsAndAmountPaysStressCapsTokensAndRejectsDuplicateClaims() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("vampire").name("Vampire").ownerId(playerId()).build());
+        ObjectNode sheet = transformationSheet("Vampire");
+        sheet.withObject("/resources").put("feedTokens", 4);
+        store.saveSheet(campaign.getId(), "vampire", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "vampire").put("key", "feat:Feed").put("actionId", "feed").put("amount", 3);
+            for (String weapon : List.of("Sword", "Fangs")) {
+                ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", "2d12").put("source", "attack,action").put("weapon", weapon).put("actorId", "vampire").toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                if ("Sword".equals(weapon)) {
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    continue;
+                }
+                for (int amount : List.of(0, -1, 7)) assertEquals(400, featureHttp(cookie, request.put("amount", amount)).statusCode());
+                assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "vampire")));
+                var response = featureHttp(cookie, request.put("amount", 3));
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "vampire"));
+                assertEquals(6, saved.path("resources").path("feedTokens").asInt());
+                assertEquals(4, saved.path("stress").path("on").asInt());
+                assertTrue(inbox.next("chat").path("text").asText().contains("Feed tokens (6/6)"));
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                assertEquals(6, MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "vampire"))
+                        .path("resources").path("feedTokens").asInt());
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void wolfHopeStressRequiresActiveFormAcceptsCriticalAndRejectsFearOrDuplicate() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("wolf").name("Wolf").ownerId(playerId()).build());
+        ObjectNode sheet = transformationSheet("Werewolf");
+        store.saveSheet(campaign.getId(), "wolf", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            diceSeed(0);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action\",\"actorId\":\"wolf\"}", true).join();
+            JsonNode fear = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "wolf").put("key", "feat:Wolf Form").put("actionId", "hope-stress");
+            request.putObject("roll").put("id", fear.path("id").asLong()).put("ts", fear.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            sheet.withArray("effects").addObject().put("name", "Wolf Form").put("kind", "buff").put("until", "rest");
+            store.saveSheet(campaign.getId(), "wolf", sheet.toString());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            long seed = 0;
+            while (true) {
+                java.util.Random random = new java.util.Random(seed);
+                if (random.nextInt(12) == random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action\",\"actorId\":\"wolf\"}", true).join();
+            JsonNode critical = inbox.next("roll");
+            request.putObject("roll").put("id", critical.path("id").asLong()).put("ts", critical.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "wolf")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void fearD20RollsKeepDualityAndRewardClaimsWithEitherHopeDie() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("vampire").name("Vampire").ownerId(playerId()).build());
+        ObjectNode sheet = transformationSheet("Vampire");
+        store.saveSheet(campaign.getId(), "vampire", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (int hopeSides : List.of(12, 20)) {
+                sheet = transformationSheet("Vampire");
+                store.saveSheet(campaign.getId(), "vampire", sheet.toString());
+                long seed = 0;
+                while (true) {
+                    java.util.Random random = new java.util.Random(seed);
+                    if (random.nextInt(hopeSides) >= random.nextInt(20)) break;
+                    seed++;
+                }
+                diceSeed(seed);
+                String expression = "1d" + hopeSides + "+1d20+2";
+                ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", expression).put("source", "action").put("actorId", "vampire").toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                assertEquals("duality", roll.path("kind").asText());
+                assertTrue(roll.path("rewardClaimed").isBoolean());
+                var response = rewardHttp(cookie, "vampire", roll);
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals(400, rewardHttp(cookie, "vampire", roll).statusCode());
+            }
+        } finally { ws.abort(); }
+    }
+
     @Test
     void closeKnitValidatesAmountAndAllyThenTransfersHopeAndCountsOneUse() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("source").name("Giver").ownerId(playerId()).build());

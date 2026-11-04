@@ -32,13 +32,56 @@ export async function loadRulesData(): Promise<RulesData> {
 const TRANSFORMATION_SOURCE = 'Transformation - ';
 
 /** Gives the character one transformation (or none for ''); a character can only have one, so any previous one is replaced. Its features are always active and are not domain cards. */
-export function setTransformation(d: RulesData, c: CharacterSheet, name: string): void {
-  c.heritage = c.heritage.filter((f) => !f.source.startsWith(TRANSFORMATION_SOURCE));
+export function setTransformation(d: RulesData, c: CharacterSheet, name: string, ancestryFeature = c.ancestryFeature): void {
   const entry = name ? d.transformations.find((e) => e.name === name) : undefined;
+  const single = entry?.features?.some((f) => f.automation?.actions?.some((a) => a.ancestryChoice));
+  if (single && !ancestryFeatureChoices(d.ancestries, c.ancestry).some((f) => f.name === ancestryFeature)) throw new Error('Choose the ancestry feature to retain.');
+  if (single || c.ancestryFeature) replaceAncestry(d.ancestries, c, c.ancestry, single ? ancestryFeature : undefined);
+  if (c.transformation !== entry?.name) {
+    const old = c.heritage.filter((f) => f.source.startsWith(TRANSFORMATION_SOURCE)).map((f) => f.name);
+    c.effects = c.effects.filter((e) => !old.some((name) => e.source === name || e.source?.startsWith(`${name} - `)));
+  }
+  c.heritage = c.heritage.filter((f) => !f.source.startsWith(TRANSFORMATION_SOURCE));
   c.transformation = entry?.name;
   if (entry?.automation) c.heritage.push({ source: `${TRANSFORMATION_SOURCE}${entry.name}`, name: entry.name, text: entry.text ?? '', automation: entry.automation });
   for (const f of entry?.features ?? []) c.heritage.push(toFeature(`${TRANSFORMATION_SOURCE}${entry!.name}`, f));
   if (c.mancer?.choices) c.mancer.choices.transformation = entry?.name;
+}
+
+export function ancestryFeatureChoices(entries: CompendiumEntry[], ancestry: string): Feature[] {
+  const names = ancestry.split(' / ');
+  return names.flatMap((name, i) => {
+    const entry = entries.find((e) => e.name === name);
+    return (entry?.features ?? []).flatMap((f, j) => names.length > 1 && i !== j ? []
+      : [toFeature(`Ancestry - ${name} (${j === 0 ? 'first' : 'second'})`, f)]);
+  });
+}
+
+export function replaceAncestry(entries: CompendiumEntry[], c: CharacterSheet, ancestry: string, feature?: string): void {
+  const choices = ancestryFeatureChoices(entries, ancestry);
+  if (!choices.length || (feature !== undefined && !choices.some((f) => f.name === feature))) throw new Error('Choose a valid ancestry and feature.');
+  const next = feature ? choices.filter((f) => f.name === feature) : choices;
+  const entry = entries.find((e) => e.name === ancestry);
+  if (!feature && entry?.automation) next.push({ source: `Ancestry - ${ancestry}`, name: entry.name, text: entry.text ?? '', automation: entry.automation });
+  const old = c.heritage.filter((f) => f.source.startsWith('Ancestry - '));
+  const removed = old.filter((f) => !next.some((n) => n.name === f.name)).map((f) => f.name);
+  c.effects = c.effects.filter((e) => !removed.some((name) => e.source === name || e.source?.startsWith(`${name} - `)));
+  const grant = (features: Feature[], stat: 'hp' | 'stress' | 'evasion') => features.reduce((n, f) => n + (f.automation?.creation?.[stat] ?? 0), 0);
+  for (const stat of ['hp', 'stress', 'evasion'] as const) {
+    const delta = grant(next, stat) - grant(old, stat);
+    if (stat === 'evasion') c.evasion += delta;
+    else {
+      c[stat].slots = Math.max(1, Math.min(c[stat].total, c[stat].slots + delta));
+      c[stat].on = Math.min(c[stat].on, c[stat].slots);
+    }
+  }
+  c.heritage = [...c.heritage.filter((f) => !f.source.startsWith('Ancestry - ')), ...next];
+  c.ancestry = ancestry;
+  c.ancestryFeature = feature;
+  if (c.testingBuild) {
+    const [first, second] = ancestry.split(' / ');
+    Object.assign(c.testingBuild, { ancestry: first, ancestry2: second, ancestryFeature: feature });
+  }
 }
 
 export const TRAIT_VALUES = [2, 1, 1, 0, 0, -1];
@@ -81,10 +124,12 @@ function creationEntries(d: RulesData, ch: CreationChoices): CompendiumEntry[] {
 }
 
 function wholeAncestry(d: RulesData, ch: CreationChoices): CompendiumEntry | undefined {
+  if (ch.transformation === 'Shapeshifter') return undefined;
   return !ch.ancestry2 || ch.ancestry2 === ch.ancestry ? d.ancestries.find((e) => e.name === ch.ancestry) : undefined;
 }
 
 function ancestryFeatures(d: RulesData, ch: CreationChoices) {
+  if (ch.transformation === 'Shapeshifter') return ancestryFeatureChoices(d.ancestries, ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry).filter((f) => f.name === ch.ancestryFeature);
   const first = d.ancestries.find((e) => e.name === ch.ancestry);
   const second = d.ancestries.find((e) => e.name === (ch.ancestry2 || ch.ancestry));
   return [first?.features?.[0], second?.features?.[1]];
@@ -169,6 +214,7 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   if (!findClass(d, ch.className)) p.push('Choose a class.');
   if (!ch.subclass) p.push('Choose a subclass.');
   if (!ch.ancestry || !ch.community) p.push('Choose an ancestry and a community.');
+  if (ch.transformation === 'Shapeshifter' && !ancestryFeatureChoices(d.ancestries, ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry).some((f) => f.name === ch.ancestryFeature)) p.push('Choose the ancestry feature to retain.');
   if (!traitsValid(ch.traits)) p.push('Assign +2, +1, +1, 0, 0 and -1 to your six traits.');
   const primary = d.weapons.find((e) => e.name === ch.primary);
   if (!primary) p.push('Choose a primary weapon.');
@@ -193,6 +239,7 @@ function markSpellcast(c: CharacterSheet, trait?: string): void {
 
 /** Builds the level 1 sheet from the Mancer choices (the SRD creation steps). Keeps free-form data of an earlier build. */
 export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: CharacterSheet): CharacterSheet {
+  if (ch.transformation === 'Shapeshifter' && !ancestryFeatures(d, ch).length) throw new Error('Choose the ancestry feature to retain.');
   const cardProblems = creationCardProblems(d, ch);
   if (!prev?.testingCharacter && cardProblems.length) throw new Error(cardProblems.join(' '));
   const experienceSelectionProblems = creationExperienceProblems(d, ch);
@@ -226,7 +273,7 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   ancestryFeatures(d, ch).forEach((f, i) => {
     if (!f) return;
     const label = i === 0 ? 'first' : 'second';
-    const feature = toFeature(`Ancestry - ${i === 0 ? ch.ancestry : ch.ancestry2 || ch.ancestry} (${label})`, f);
+    const feature = 'source' in f ? f : toFeature(`Ancestry - ${i === 0 ? ch.ancestry : ch.ancestry2 || ch.ancestry} (${label})`, f);
     c.heritage.push(feature);
   });
   const ancestry = wholeAncestry(d, ch);
@@ -234,7 +281,7 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   c.community = ch.community;
   for (const f of d.communities.find((e) => e.name === ch.community)?.features ?? []) c.heritage.push(toFeature(`Community - ${ch.community}`, f));
 
-  setTransformation(d, c, ch.transformation ?? '');
+  setTransformation(d, c, ch.transformation ?? '', ch.ancestryFeature);
   for (const entry of creationEntries(d, ch).filter((e) => e !== d.transformations.find((t) => t.name === ch.transformation))) {
     if (entry.automation) c.features.push({ source: `Creation - ${entry.name}`, name: entry.name, text: entry.text ?? '', automation: entry.automation });
   }

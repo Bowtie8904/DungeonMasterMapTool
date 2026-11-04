@@ -1,6 +1,7 @@
 import { el } from '../login';
 import type { CharacterSheet } from './data';
 import type { RestKind } from './engine';
+import { chooseAncestryFeature } from './ancestry-choice';
 import {
   RestOptions, RestPick, RestResult, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
   shortRestBlocker,
@@ -41,7 +42,20 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       });
       const select = el('select', {}, el('option', { value: '' }, 'None'), ...options);
       select.value = pick.move;
-      select.addEventListener('change', () => { pick.move = select.value; pick.ally = false; draw(); });
+      select.addEventListener('change', () => {
+        pick.move = select.value; pick.ally = false; delete pick.ancestry;
+        const move = slot.moves.find((m) => m.id === pick.move);
+        if (move?.ancestryChoice) {
+          const ancestry = picks.slice(0, i).reduce((name, p) => p.ancestry?.ancestry ?? name, c.ancestry);
+          const feature = picks.slice(0, i).reduce((name, p) => p.ancestry?.feature ?? name, c.ancestryFeature);
+          go.disabled = true;
+          void chooseAncestryFeature(host, ancestry, move.ancestryChoice === 'ancestry', feature).then((picked) => {
+            if (picked) { pick.ancestry = picked.choice; o.ancestries = picked.entries; }
+            else pick.move = '';
+            draw();
+          }).catch((e: Error) => { pick.move = ''; draw(); error.textContent = e.message; });
+        } else draw();
+      });
       const move = slot.moves.find((m) => m.id === pick.move);
       const ally = move?.ally ? (() => {
         const t = el('select', {}, el('option', { value: 'self' }, 'Self'), el('option', { value: 'ally' }, 'An ally (chat only)'));
@@ -49,7 +63,8 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
         t.addEventListener('change', () => { pick.ally = t.value === 'ally'; draw(); });
         return t;
       })() : null;
-      return el('div', { class: 'dh-rest-slot' }, el('span', { class: 'muted' }, slot.label), select, ...(ally ? [ally] : []));
+      return el('div', { class: 'dh-rest-slot' }, el('span', { class: 'muted' }, slot.label), select, ...(ally ? [ally] : []),
+        ...(pick.ancestry ? [el('span', { class: 'muted' }, `${pick.ancestry.ancestry} - ${pick.ancestry.feature}`)] : []));
     });
     const longInShort = kind === 'short' && canTakeLongMovesInShortRest(c);
     const passives = restPassives(c, kind);

@@ -102,6 +102,7 @@ export interface CreationChoices {
   ancestry: string;
   /** Mixed Ancestry: the ancestry that supplies the second feature */
   ancestry2?: string;
+  ancestryFeature?: string;
   community: string;
   /** Optional transformation (Hope & Fear); a character can only have one */
   transformation?: string;
@@ -166,6 +167,7 @@ export interface CharacterSheet {
   domains: string[];
   ancestry: string;
   community: string;
+  ancestryFeature?: string;
   /** Optional transformation (Hope & Fear); its features are in `heritage` */
   transformation?: string;
   player: string;
@@ -230,6 +232,7 @@ export interface TestingBuild {
   level: number;
   ancestry: string;
   ancestry2?: string;
+  ancestryFeature?: string;
   community: string;
   transformation?: string;
   multiclasses: Array<{ className: string; subclass: string; stage: TestingStage; domain: string }>;
@@ -261,8 +264,8 @@ export function traitMod(c: CharacterSheet, name: TraitName): number {
 export type Advantage = -1 | 0 | 1;
 
 /** Builds the Hope/Fear expression plus an optional advantage die and modifier. */
-export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12): string {
-  let e = hopeDie === 20 ? '1d20+1d12' : '2d12';
+export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12, fearDie: 12 | 20 = 12): string {
+  let e = hopeDie === 12 && fearDie === 12 ? '2d12' : `1d${hopeDie}+1d${fearDie}`;
   if (adv === 1) e += '+1d6';
   else if (adv === -1) e += '-1d6';
   if (mod > 0) e += `+${mod}`;

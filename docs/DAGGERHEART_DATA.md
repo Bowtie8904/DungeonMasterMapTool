@@ -55,6 +55,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `session: true` declares a session-only pool (initially 0): the host retains values in memory across reconnects
   and sheet/feature saves, strips them from sheet files and transaction journals, and resets them on new hosting.
   Know the Tide uses this with `max: "@level"`; its Fear-roll trigger gains tokens once per roll.
+  `longRestLoss` subtracts that many tokens automatically on each long rest, floored at zero (Feed).
 - **uses**: `max` per `shortRest`, `longRest`, `rest` or `session`. Every hosting run starts a new session;
   reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
   Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
@@ -89,6 +90,13 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
   The host validates both balances and the shared use limit, then spends and grants the entire amount atomically;
   insufficient Hope or recipient capacity leaves both sheets and the use counter unchanged.
+  `actionRoll.trait: "highest"` selects the trait with the highest current total modifier (Fangs; ties use
+  standard trait order). `requiresEffect` gates an action and `endEffect` removes the named effect after use.
+  `sendRoll.base` is optional; its `dice` may use `@tier` as the dice count (`"@tierd20"` for Howling Rampage).
+  `ancestryChoice: "ancestry"|"feature"` declares a Shapeshifter downtime choice and also exposes a sheet
+  button for that downtime move. An ancestry change requires a new feature choice; feature-only changes
+  retain the current ancestry. `ancestryFeature` on the sheet records the retained feature; creation choices
+  and testing builds also carry it. Only that feature contributes ancestry automation and creation stats.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.
@@ -117,6 +125,12 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   from the updated chat card, once per roll. Critical rolls instead claim +1 Hope and clear 1 Stress.
   At maximum Hope, only criticals with marked Stress can still claim; no-benefit claims stay unconsumed.
   The host persists claims and character changes together; older hosts/history do not expose claim buttons.
+  A trigger's `weapon` restricts it to the named attack weapon. `tokenGain: {resource, max}` asks for a positive
+  integer `amount` through a styled in-app popup with inline validation and Cancel/Feed controls (no browser
+  prompt). Cancellation spends nothing; request errors stay inline with input retained for retry.
+  The feature request adds it to the capped pool atomically with the cost and per-roll
+  claim (Feed); hit success and ability to bleed are player-confirmed. `when: "hopeOrCritical"` includes equal
+  Duality Dice (Wolf Form); existing `when: "hope"` continues to exclude criticals.
 - **rollOptions**: optional array of `{id, label, roll, value?, dice?, diceByLevel?, cost?, steps?, description?,
   uses?, consumeItem?, weapon?, effect?}`. `effect` (`{name, kind, until}`) is started by the first roll that ticks
   the option (paying its cost); while that effect is active the option is pre-ticked and free. Entries that support
@@ -144,6 +158,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   ally Experience, default +2). `quantity: {resource, label}` accepts a positive integer up to the available pool,
   multiplying the option's flat bonus and all costs by that quantity (Know the Tide). Invalid quantities block
   sending; cancellation and failed sends spend nothing. Source-wide uses remain shared with sheet actions.
+  `fearDie: 20` independently replaces the Fear d12 with a d20 (Feed); Hope and Fear can both be d20.
+  `resourceEmpty: "<id>"` offers an option only at zero tokens. Combined with `defaultOn` and
+  `advantage: "disadvantage"`, it suggests hunger disadvantage without removing the player's override.
 - **damage**: `{extraDice: number, dropLowest: number}` on a weapon changes **only that source weapon's base
   damage dice**, never bonus dice from coatings/options or another equipped weapon. Powerful/Massive use
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged
@@ -175,7 +192,7 @@ purely narrative text.
 | Weapons | 336 | 336 | 144 | 192 |
 | Consumables | 182 | 182 | 61 | 121 |
 | Items | 174 | 174 | 81 | 93 |
-| **All categories** | **1,187** | **1,294** | **705** | **589** |
+| **All categories** | **1,187** | **1,294** | **708** | **586** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -264,19 +281,23 @@ Classes, ancestries, communities and transformations are included in the total.
   Option fields:
   - `id`, `label`, `description`; `passive` (always applied when its conditions hold) or `defaultOn`.
     `requiresEffect` only offers the mitigation while the named effect is active (Retracted).
+    `excludesEffect` blocks activation while the named effect is already active (Wolf Form).
   - `when`: `type` (`physical`/`magic`), `severity` (list of `minor`/`major`/`severe`/`massive`, after reductions),
     `armor`, `lastArmor`, `armorFull`, `lastHp`, `hpUnmarkedMax`, `min: {value, at}` (e.g. `@cards_splendor` ≥ 4).
+    `markingHp` requires at least one HP actually marked after armor and other mitigation.
   - `cost` (resource → value; `@hp` = HP the damage would mark), `uses` (`"source"` shares the source's `uses`,
     or its own `{max, per}`), `consumeItem`, `quantity` (player picks a count; cost and dice scale).
-  - Effects: `thresholds` (bonus), `halve`, `reduce` (value), `negate`, `severity` (steps down), `hp` (+/- HP),
+  - Effects: `thresholds` (bonus), `double`, `halve`, `reduce` (value), `negate`, `severity` (steps down), `hp` (+/- HP),
     `replaceHp` (pay `cost` instead of marking HP), `armorSlots` (number or `"any"`), `armorSeverity` (steps per slot),
     `armorCost`, `armorBlocked`, `saveArmor`, `roll: {count, sides, success, each}` (`count` may be a value, `"hp"` or
     `"quantity"`; without `success` the total reduces damage), and `followUp: {dice, text}` rolled on apply.
-  - Order: thresholds → halve (rounded up) → flat/rolled reductions → severity (massive = at least 2× Severe) →
+    `effect` adds a standard active effect only when the damage is applied (Wolf Form), never on preview/cancel.
+  - Order: thresholds → double → halve (rounded up, resistance never stacks) → flat/rolled reductions → severity (massive = at least 2× Severe) →
     negate → Armor Slots → severity steps → HP adjustments → HP replacement. HP is capped at the unmarked slots.
     Values may use `@hp`, `@armorScore`, `@cards_<domain>` and the usual named values.
   Rest-only actions have no standalone buttons and
-  `runAction` rejects them outside the rest context; unrelated actions on mixed-use sources remain available.
+  `runAction` rejects them outside the rest context, except the explicit Shapeshifter `ancestryChoice` buttons;
+  unrelated actions on mixed-use sources remain available.
   Automated downtime consumables are consumed when their selected move executes.
   Effects gained during downtime persist until the next rest. Failed resolution leaves the sheet unchanged.
   Existing character loads receive missing rest metadata for saved gear without replacing customized actions,

@@ -1205,6 +1205,12 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            if (definition.has("requiresEffect")) {
+                boolean active = false;
+                for (JsonNode effect : sourceSheet.path("effects"))
+                    if (definition.path("requiresEffect").asText().equals(effect.path("name").asText())) active = true;
+                if (!active) throw new IllegalArgumentException("The required effect is no longer active.");
+            }
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
@@ -1232,6 +1238,19 @@ public final class OnlineSessionServer {
                 damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
             }
             List<String> reportLines = new ArrayList<>();
+            if (definition.path("tokenGain").isObject()) {
+                JsonNode gain = definition.path("tokenGain");
+                JsonNode amount = request.path("amount");
+                int max = gain.path("max").asInt();
+                if (!amount.isInt() || amount.asInt() < 1 || amount.asInt() > max)
+                    throw new IllegalArgumentException("Choose a whole number of Feed tokens from 1 to " + max + ".");
+                ObjectNode resources = sourceSheet.withObject("/resources");
+                String resource = gain.path("resource").asText();
+                int before = resources.path(resource).asInt();
+                int after = Math.min(max, before + amount.asInt());
+                resources.put(resource, after);
+                reportLines.add("Gained " + (after - before) + " Feed tokens (" + after + "/" + max + ").");
+            }
             if (definition.path("transferHope").asBoolean()) {
                 JsonNode amount = request.path("amount");
                 if (!amount.isInt() || amount.asInt() < 1 || targets.size() != 1 || targets.getFirst().equals(sourceActor))
@@ -1546,8 +1565,10 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("This roll's reward was already claimed.");
             int hope = roll.path("rolls").path(0).asInt(0);
             int fear = roll.path("rolls").path(1).asInt(0);
-            int hopeSides = roll.path("expression").asText().startsWith("1d20+1d12") ? 20 : 12;
-            if (hope < 1 || hope > hopeSides || fear < 1 || fear > 12)
+            String expression = roll.path("expression").asText();
+            int hopeSides = expression.startsWith("1d20+") ? 20 : 12;
+            int fearSides = expression.matches("^1d(?:12|20)\\+1d20.*") ? 20 : 12;
+            if (hope < 1 || hope > hopeSides || fear < 1 || fear > fearSides)
                 throw new IllegalArgumentException("This roll has no valid Hope and Fear dice.");
             boolean critical = hope == fear;
             boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
@@ -1592,6 +1613,8 @@ public final class OnlineSessionServer {
         String on = trigger.path("on").asText("");
         if (!"duality".equals(on) && !List.of(source.split(",")).contains(on))
             throw new IllegalArgumentException("This feature does not apply to that roll.");
+        if (trigger.has("weapon") && !trigger.path("weapon").asText().equals(roll.path("weapon").asText()))
+            throw new IllegalArgumentException("This feature requires a " + trigger.path("weapon").asText() + " attack.");
         ArrayNode uses = roll.withArray("featureUses");
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
         if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
@@ -1603,6 +1626,7 @@ public final class OnlineSessionServer {
             actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
         String when = trigger.path("when").asText("always");
         if ("hope".equals(when) && !"hope".equals(actualOutcome)
+                || "hopeOrCritical".equals(when) && !"hope".equals(actualOutcome) && !"crit".equals(actualOutcome)
                 || "fear".equals(when) && !"fear".equals(actualOutcome)
                 || ("hope".equals(actualOutcome) || "fear".equals(actualOutcome)) && "crit".equals(actualOutcome))
             throw new IllegalArgumentException("The original roll no longer meets this feature's condition.");
@@ -2674,7 +2698,7 @@ public final class OnlineSessionServer {
                 out.put(hint, value.length() > 80 ? value.substring(0, 80) : value);
             }
         }
-        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^(?:2d12|1d20\\+1d12)(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
+        if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^(?:2d12|1d(?:12|20)\\+1d(?:12|20))(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
             out.put("rewardClaimed", false);
             if (msg.path("difficulty").isInt()) {

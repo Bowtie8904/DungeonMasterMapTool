@@ -4,16 +4,20 @@ import {
   ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, applyRest, evalValue, rollLocal, runAction, syncDerived,
 } from './engine';
 import { formatRestReport } from './rest-summary';
+import type { CompendiumEntry } from './compendium';
+import type { AncestryChoice } from './ancestry-choice';
+import { replaceAncestry } from './rules';
 
-export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string }
+export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string; ancestryChoice?: ActionDef['ancestryChoice'] }
 export interface RestSlot { label: string; moves: RestMove[] }
-export interface RestPick { move: string; ally?: boolean }
+export interface RestPick { move: string; ally?: boolean; ancestry?: AncestryChoice }
 
 /** A passive benefit of the sheet that the player may switch off for this rest (e.g. not using the bedroll). */
 export interface RestPassive { id: string; label: string; defaultOn: boolean }
 export interface RestOptions {
   /** Overrides per passive id; absent means the passive's default. */
   passives?: Record<string, boolean>;
+  ancestries?: CompendiumEntry[];
 }
 
 export const MAX_SHORT_RESTS_IN_ROW = 3;
@@ -95,7 +99,7 @@ function downtimeActions(c: CharacterSheet, kind: RestKind): RestMove[] {
   return sources(c).flatMap((s) => (s.automation.actions ?? [])
     .filter((a) => a.timing === 'downtime'
       && (!a.downtime?.rest || a.downtime.rest === kind) && !actionBlocker(c, s.key, s.automation, a, 'rest'))
-    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.label}` })));
+    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.label}`, ancestryChoice: a.ancestryChoice })));
 }
 
 export function availableMoves(c: CharacterSheet, kind: RestKind): RestMove[] {
@@ -239,6 +243,13 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         const s = sources(c).find((x) => x.key === key);
         const a = s?.automation.actions?.find((x) => x.id === actionId);
         if (!s || !a) throw new Error('Downtime move no longer available');
+        if (a.ancestryChoice) {
+          if (!p.ancestry || !o.ancestries) throw new Error('Choose an ancestry feature for this downtime move.');
+          if (a.ancestryChoice === 'feature' && p.ancestry.ancestry !== c.ancestry) throw new Error('Only Skin Deep must choose a feature of your current ancestry.');
+          if (a.ancestryChoice === 'feature' && p.ancestry.feature === c.ancestryFeature) throw new Error('Choose a different ancestry feature.');
+          replaceAncestry(o.ancestries, c, p.ancestry.ancestry, p.ancestry.feature);
+          lines.push(`${s.name}: ${c.ancestry} - ${c.ancestryFeature}`);
+        }
         execute(s, a);
         const table = a.downtime?.table;
         if (table) {

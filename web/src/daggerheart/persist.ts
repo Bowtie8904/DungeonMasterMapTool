@@ -152,7 +152,8 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
   if (!c.testingCharacter) delete c.testingBuild;
   if (c.testingCharacter) {
     const data = await loadRulesData();
-    applyTestingBuild(data, c, c.testingBuild ?? defaultTestingBuild(data));
+    const build = c.testingBuild ?? defaultTestingBuild(data);
+    if (build.transformation !== 'Shapeshifter' || build.ancestryFeature) applyTestingBuild(data, c, build);
   } else if (res.sheet) {
     try { await refreshCharacterAutomation(c); }
     catch (e) {

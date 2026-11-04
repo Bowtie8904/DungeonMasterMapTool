@@ -13,7 +13,8 @@ import { rollSourceFor } from './roll-source';
 
 import { openLevelUp, openMancer, openTransformation } from './mancer';
 import { inline, rich } from './rich';
-import { MAX_LEVEL } from './rules';
+import { MAX_LEVEL, replaceAncestry } from './rules';
+import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
@@ -280,11 +281,25 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function actionButton(key: string, a: Automation, action: ActionDef, label: string, hooks: { extraBlock?: () => string | null; after?: () => void }): HTMLElement {
     const cost = costText(action.cost, c);
     const b = el('button', { class: 'small primary', type: 'button' }, cost ? `${action.label} (${cost})` : action.label);
+    if (action.actionRoll?.trait === 'highest') {
+      const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
+      b.textContent = `Attack ${signed(traitTotal(c, trait))} (${trait})`;
+    }
     const block = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
     if (block) { b.disabled = true; b.title = block; }
     b.addEventListener('click', () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
+      if (action.ancestryChoice) {
+        b.disabled = true;
+        void chooseAncestryFeature(root, c.ancestry, action.ancestryChoice === 'ancestry', c.ancestryFeature).then((picked) => {
+          if (!picked) return;
+          replaceAncestry(picked.entries, c, picked.choice.ancestry, picked.choice.feature);
+          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines: [`Used a downtime move: ${c.ancestry} - ${c.ancestryFeature}`] }), rollSourceFor(c, key));
+          render();
+        }).catch((e: Error) => opts.onLog?.(`Could not use ${label}: ${e.message}`)).finally(() => { b.disabled = false; });
+        return;
+      }
       if (action.target || action.check) {
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
@@ -302,12 +317,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       }
       if (action.actionRoll) {
         const spec = action.actionRoll;
-        const targets = ['action', ...(spec.trait ? [`trait:${spec.trait}`] : []), ...(spec.attack ? ['attack'] : []),
+        const trait = spec.trait === 'highest' ? TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best) : spec.trait;
+        const targets = ['action', ...(trait ? [`trait:${trait}`] : []), ...(spec.attack ? ['attack'] : []),
           ...(key.startsWith('card:') ? [key] : [])];
         const bonus = rollBonus(c, targets, undefined, false);
         const damage = a.actions?.find((candidate) => candidate.damage)?.damage;
         const weapon = spec.attack && damage ? featureWeapon(label, damage) : undefined;
-        openRollDialog(root, c, action.label, spec.trait ? traitContributions(c, spec.trait) : [], bonus,
+        openRollDialog(root, c, action.label, trait ? traitContributions(c, trait) : [], bonus,
           (request) => sendRoll(targets.join(','), weapon?.name, rollSourceFor(c, key))({ ...request, difficulty: spec.difficulty }),
           () => { runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(); render(); },
           targets, undefined, undefined, weapon, false, { key, automation: a, action });
@@ -316,9 +332,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.sendRoll) {
         if (actionBlocker(c, key, a, action)) return;
         const base = action.sendRoll.base === 'evasion' ? derivedStats(c).evasion : 0;
+        const dice = action.sendRoll.dice.replace(/@tier(?=d|\b)/g, String(tierOf(c.level)));
         const sent = opts.onRoll({
-          label: action.sendRoll.label.slice(0, 80), expression: `${base}+${action.sendRoll.dice}`,
-          contributions: [{ label: 'Evasion', expression: String(base) }, { label: `${label} ${action.sendRoll.dice}`.slice(0, 120), expression: action.sendRoll.dice }],
+          label: action.sendRoll.label.slice(0, 80), expression: `${base}+${dice}`,
+          contributions: [...(action.sendRoll.base ? [{ label: 'Evasion', expression: String(base) }] : []), { label: `${label} ${dice}`.slice(0, 120), expression: dice }],
           rollSource: rollSourceFor(c, key),
           ...(opts.actorId ? { actorId: opts.actorId } : {}),
         });
@@ -339,12 +356,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const scroll = root.querySelector('.pages')?.scrollTop ?? 0;
     const sidebarScroll = root.querySelector('.sheet-sidebar')?.scrollTop ?? 0;
     syncDerived(c);
-    root.replaceChildren(header(), ...(c.mancer?.done === false ? [startBanner()] : [
+    root.replaceChildren(header(), ...(c.mancer?.done === false ? [startBanner()] : c.transformation === 'Shapeshifter' && !c.ancestryFeature ? [ancestryBanner()] : [
       el('div', { class: 'sheet-layout' },
         el('aside', { class: 'sheet-sidebar', ariaLabel: 'Traits' }, traits()),
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
-    opts.onMiniStrip?.(c.mancer?.done === false ? null : miniStrip());
+    opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     opts.onChange?.();
     const p = root.querySelector('.pages');
     if (p) p.scrollTop = scroll;
@@ -355,6 +372,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   const launchMancer = () => { void openMancer(root, c, () => render()); };
   const launchLevelUp = () => { void openLevelUp(root, c, () => render()); };
+
+  function ancestryBanner(): HTMLElement {
+    const choose = el('button', { class: 'primary', type: 'button' }, 'Choose retained ancestry feature');
+    choose.addEventListener('click', () => {
+      if (c.testingCharacter) void openTestingEditor(root, c, () => render());
+      else void openTransformation(root, c, () => render());
+    });
+    return card('Only Skin Deep', null, 'Choose the single ancestry feature your Shapeshifter retains before using the sheet.', choose);
+  }
 
   function startBanner(): HTMLElement {
     const go = el('button', { class: 'primary', type: 'button' }, 'Start the Character Mancer');
@@ -1118,11 +1144,11 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       contributions: [...damageContributions(c, weapon, b), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])],
     } : {
       label,
-      expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
+      expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12, selected().some((s) => s.option.fearDie === 20) ? 20 : 12) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
       kind: 'duality',
       contributions: [
         { label: 'Hope die', expression: selected().some((s) => s.option.hopeDie === 20) ? '1d20' : '1d12' },
-        { label: 'Fear die', expression: '1d12' },
+        { label: 'Fear die', expression: selected().some((s) => s.option.fearDie === 20) ? '1d20' : '1d12' },
         ...(actualAdvantage === 0 ? [] : [{ label: actualAdvantage === 1 ? 'Advantage' : 'Disadvantage', expression: actualAdvantage === 1 ? '1d6' : '-1d6' }]),
         ...(requestedAdvantage !== actualAdvantage ? [{ label: 'Disadvantage ignored', expression: '0',
           notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),

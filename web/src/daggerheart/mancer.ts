@@ -4,6 +4,8 @@ import { el } from '../login';
 import { Advancement, AdvancementType, CharacterSheet, CreationChoices, LevelUpRecord, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
 import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
+import { ancestryPicker } from './ancestry-choice';
+import { ancestryFeatureChoices } from './rules';
 import {
   ADVANCEMENT_TYPES, MAX_LEVEL, RulesData, STAGES, TRAIT_VALUES, achievementsAt, advancementCost, advancementLeft, applyLevelUp, buildCharacter,
   classEntries, creationAllowances, creationCardProblems, creationExperienceProblems, creationProblems, emptyChoices, experienceProblems, findClass, guideFor, levelUpCards, levelUpProblems, loadRulesData, setTransformation, shortSubclass,
@@ -324,9 +326,15 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
     if (data.transformations.length) {
       list.push({
         key: 'transformation', title: 'Transformation (optional)', hint: 'A transformation changes your character with a benefit and a drawback. Only take one if your GM offers it - most heroes choose none.',
-        problem: () => null,
+        problem: () => ch.transformation === 'Shapeshifter' && !ancestryFeatureChoices(data.ancestries, ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry).some((f) => f.name === ch.ancestryFeature) ? 'Choose the ancestry feature to retain.' : null,
         side: () => transformationSide(data, ch.transformation ?? ''),
-        render: (body, _t, redraw) => body.append(transformationPicker(data, ch.transformation ?? '', (n) => { ch.transformation = n || undefined; redraw(); })),
+        render: (body, _t, redraw) => {
+          body.append(transformationPicker(data, ch.transformation ?? '', (n) => { ch.transformation = n || undefined; redraw(); }));
+          if (ch.transformation === 'Shapeshifter') {
+            const choice = { ancestry: ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry, feature: ch.ancestryFeature ?? '' };
+            body.append(ancestryPicker(data.ancestries, choice, () => { ch.ancestryFeature = choice.feature; redraw(); }));
+          }
+        },
       });
     }
 
@@ -540,15 +548,19 @@ export async function openTransformation(host: HTMLElement, c: CharacterSheet, o
   if (!data) return;
   if (!data.transformations.length) { alert('No transformations are available in the compendium.'); return; }
   let chosen = c.transformation ?? '';
+  const ancestry = { ancestry: c.ancestry, feature: c.ancestryFeature ?? '' };
   runWizard({
     host, heading: 'Transformation', finishLabel: 'Apply',
     steps: () => [{
       key: 'transformation', title: 'Choose a transformation', hint: 'A character can only have one. It always stays active and does not count against your domain cards.',
-      problem: () => null,
+      problem: () => chosen === 'Shapeshifter' && !ancestryFeatureChoices(data.ancestries, c.ancestry).some((f) => f.name === ancestry.feature) ? 'Choose the ancestry feature to retain.' : null,
       side: () => transformationSide(data, chosen),
-      render: (body, _t, redraw) => body.append(transformationPicker(data, chosen, (n) => { chosen = n; redraw(); })),
+      render: (body, _t, redraw) => {
+        body.append(transformationPicker(data, chosen, (n) => { chosen = n; redraw(); }));
+        if (chosen === 'Shapeshifter') body.append(ancestryPicker(data.ancestries, ancestry, redraw));
+      },
     }],
-    onFinish: () => { setTransformation(data, c, chosen); onDone(); },
+    onFinish: () => { setTransformation(data, c, chosen, ancestry.feature); onDone(); },
   });
 }
 

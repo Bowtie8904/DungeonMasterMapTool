@@ -3,7 +3,7 @@
 
 import type { CharacterSheet, InventoryItem } from './data';
 import {
-  Automation, DiceRoll, ModValue, Resource, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft,
+  Automation, DiceRoll, EffectDef, ModValue, Resource, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 
@@ -33,6 +33,7 @@ export interface MitigationWhen {
   hpUnmarkedMax?: number;
   /** Only while the value (for example "@cards_splendor") is at least `at`. */
   min?: { value: ModValue; at: number };
+  markingHp?: boolean;
 }
 
 export interface MitigationRoll {
@@ -62,6 +63,9 @@ export interface MitigationOption {
   /** The player picks how many times to apply it; cost and dice scale with the quantity. */
   quantity?: boolean;
   halve?: boolean;
+  double?: boolean;
+  effect?: EffectDef;
+  excludesEffect?: string;
   reduce?: ModValue;
   negate?: boolean;
   thresholds?: number;
@@ -172,6 +176,7 @@ function usageKey(m: AvailableMitigation): { key: string; auto: Automation } | n
 /** Conditions that do not depend on the damage being calculated. */
 export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, type: DamageType): string | null {
   const o = m.option;
+  if (o.excludesEffect && c.effects.some((e) => e.name === o.excludesEffect)) return 'Effect is already active';
   if (o.requiresEffect && !c.effects.some((e) => e.name === o.requiresEffect)) return 'Required effect is no longer active';
   const u = usageKey(m);
   if (u) {
@@ -249,6 +254,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
 
   // 1. Resistance (never stacks), then flat and rolled reductions.
   let damage = Math.max(0, Math.floor(input.damage || 0));
+  if (active.some((m) => m.option.double && !m.option.when?.severity?.length)) damage *= 2;
   if (active.some((m) => m.option.halve && !m.option.when?.severity?.length)) damage = Math.ceil(damage / 2);
   let reduction = 0;
   for (const m of active.filter((x) => !x.option.when?.severity?.length)) {
@@ -297,6 +303,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   const hpBeforeReplace = Math.min(hp, remaining);
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
+  drop((m) => m.option.when?.markingHp && hp <= 0 ? 'Requires marking at least one HP' : null);
 
   // 5. Costs.
   const costs: Record<string, number> = {};
@@ -357,6 +364,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   }
   const notes: string[] = [];
   for (const m of r.applied) {
+    if (m.option.effect) addEffect(c, m.option.effect, m.source);
     const u = usageKey(m);
     if (u) {
       const entry = c.usage[u.key] ?? { used: 0, per: u.auto.uses!.per };

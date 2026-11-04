@@ -122,6 +122,16 @@ Nothing starts until you click **Start online session**, so offline play and the
   `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
   shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header labels the original class as "Class:" and any additional class as "Multiclass:".
+  Ghost's Ephemeral applies physical resistance/double magic damage in the damage calculator and has a
+  2-Stress pass-through action. Shapeshifters choose exactly one ancestry feature when acquired; their
+  feature buttons and rest moves change ancestry plus retained feature, or just the current ancestry's feature.
+  Existing Shapeshifters must make this choice before using their sheet. Vampire Fangs has attack/damage
+  buttons using the highest trait; Feed appears on Fangs rolls (confirm a successful hit on a bleeding target,
+  enter HP marked in the styled feature popup, confirm to spend 1 Stress; cancellation spends nothing).
+  Feed tracks up to six tokens, loses one per long rest, offers a token-paid
+  Fear d20, and suggests disadvantage by default when empty. Wolf Form activates as a rest-expiring effect
+  from its feature or HP-marking damage mitigation, adds 1d10 to attacks/damage, and offers a Stress button
+  on Hope/critical rolls. Howling Rampage rolls tier d20 physical damage and ends the form.
   Steps with detail previews keep an empty panel visible before selection, so hovering, focusing and selecting
   options only updates its contents without shifting the layout (including on narrow screens).
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)

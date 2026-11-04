@@ -59,7 +59,10 @@ export interface ActionDef {
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   /** Sends a plain roll to the chat, for example the d4 of I See It Coming added to the Evasion against one attack. */
   sendRoll?: { dice: string; base?: 'evasion'; label: string };
-  actionRoll?: { trait?: TraitName; attack?: boolean; difficulty?: number };
+  actionRoll?: { trait?: TraitName | 'highest'; attack?: boolean; difficulty?: number };
+  ancestryChoice?: 'ancestry' | 'feature';
+  endEffect?: string;
+  requiresEffect?: string;
   damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
   target?: 'actor' | 'party';
   transferHope?: boolean;
@@ -72,6 +75,7 @@ export interface ResourceDef {
   initial: ModValue;
   max?: ModValue;
   session?: boolean;
+  longRestLoss?: number;
 }
 
 export interface RollOption extends ActionDef {
@@ -90,6 +94,8 @@ export interface RollOption extends ActionDef {
   ignoreDisadvantage?: boolean;
   requiresEffect?: string;
   hopeDie?: 20;
+  fearDie?: 20;
+  resourceEmpty?: string;
   input?: { label: string; default: number; min: number; max: number };
   quantity?: { resource: string; label: string };
 }
@@ -97,7 +103,7 @@ export interface RollOption extends ActionDef {
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
   on: string;
-  when?: 'always' | 'fear' | 'hope' | 'failure' | 'hopeDie' | 'dieMatches';
+  when?: 'always' | 'fear' | 'hope' | 'hopeOrCritical' | 'failure' | 'hopeDie' | 'dieMatches';
   die?: number;
   matchResource?: string;
   reroll?: 'hope' | 'duality';
@@ -109,6 +115,8 @@ export interface RollTrigger extends ActionDef {
   description?: string;
   audience?: 'self' | 'ally' | 'any';
   outcome?: 'hope' | 'fear';
+  weapon?: string;
+  tokenGain?: { resource: string; max: number };
 }
 
 export interface Automation {
@@ -403,6 +411,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
   return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
     .filter((o) => targets.includes(o.roll))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
+    .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
       ? weapon?.slot.toLowerCase() === o.weapon && c.activeWeapons.includes(weapon)
       : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
@@ -540,6 +549,10 @@ export type RestKind = 'short' | 'long';
 
 /** Expires effects and refreshes limited-use abilities for a rest. */
 export function applyRest(c: CharacterSheet, kind: RestKind): void {
+  syncResources(c);
+  if (kind === 'long') for (const r of resourceDefinitions(c)) {
+    if (r.longRestLoss) c.resources![r.id] = Math.max(0, c.resources![r.id] - r.longRestLoss);
+  }
   const expiring: Until[] = kind === 'long' ? ['rest', 'shortRest', 'longRest', 'scene'] : ['shortRest', 'rest', 'scene'];
   c.effects = c.effects.filter((e) => !expiring.includes(e.until ?? 'manual'));
   for (const key of Object.keys(c.usage)) {
@@ -602,12 +615,13 @@ export function isRestOnlyAction(action: ActionDef): boolean {
 }
 
 export function sheetActions(a: Automation | undefined): ActionDef[] {
-  return (a?.actions ?? []).filter((action) => !isRestOnlyAction(action));
+  return (a?.actions ?? []).filter((action) => !isRestOnlyAction(action) || action.ancestryChoice);
 }
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
-  if (context !== 'rest' && isRestOnlyAction(action)) return 'Choose this move in the rest dialog';
+  if (context !== 'rest' && isRestOnlyAction(action) && !action.ancestryChoice) return 'Choose this move in the rest dialog';
+  if (action.requiresEffect && !c.effects.some((e) => e.name === action.requiresEffect)) return 'Required effect is not active';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return a.uses?.per === 'session' ? 'No uses left this session' : 'No uses left until a rest';
@@ -685,6 +699,10 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       log.push(`${step.effect.kind === 'debuff' ? 'afflicted by' : 'gained'} ${step.effect.name}`);
     }
   }
+  if (action.endEffect) {
+    c.effects = c.effects.filter((e) => e.name !== action.endEffect);
+    log.push(`ended ${action.endEffect}`);
+  }
   return log;
 }
 
@@ -722,6 +740,7 @@ export interface RollContext {
   fear: number;
   total: number;
   outcome?: 'hope' | 'fear';
+  weapon?: string;
 }
 
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
@@ -729,10 +748,12 @@ export interface AvailableRollTrigger { key: string; source: string; automation:
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
   if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
   if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
+  if (t.weapon && t.weapon !== ctx.weapon) return false;
   // Players never know the difficulty, so any roll may have failed (Hope rolls and criticals included).
   const failed = true;
   switch (t.when ?? 'always') {
     case 'fear': return ctx.hope !== ctx.fear && (ctx.outcome ? ctx.outcome === 'fear' : ctx.fear > ctx.hope);
+    case 'hopeOrCritical': return ctx.hope === ctx.fear || (ctx.outcome ? ctx.outcome === 'hope' : ctx.hope > ctx.fear);
     case 'hope': return ctx.hope !== ctx.fear && (ctx.outcome ? ctx.outcome === 'hope' : ctx.hope > ctx.fear);
     case 'failure': return failed;
     case 'hopeDie': return ctx.hope === t.die;

@@ -10,6 +10,18 @@ class FakeElement {
   disabled = false;
   title = '';
   textContent = '';
+  value = '';
+  open = false;
+  removed = false;
+  get valueAsNumber(): number { return this.value === '' ? NaN : Number(this.value); }
+  showModal(): void { this.open = true; }
+  close(): void {
+    this.open = false;
+    for (const callback of this.listeners.get('close') ?? []) void callback();
+  }
+  remove(): void { this.removed = true; }
+  focus(): void {}
+  select(): void {}
   children: FakeElement[] = [];
   listeners = new Map<string, Array<() => unknown>>();
   constructor(readonly tagName: string) {}
@@ -96,6 +108,58 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('uses a styled Feed popup with inline validation, cancellation, retry and single submission', async () => {
+    const body = new FakeElement('body');
+    vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Could not save Feed' }), { status: 500 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', { name: 'Feed', automation: { rollTriggers: [{
+      id: 'feed', label: 'Feed', on: 'attack', weapon: 'Fangs', cost: { stress: 1 },
+      description: 'Use only after a successful Fangs attack against a creature that can bleed.',
+      tokenGain: { resource: 'feedTokens', max: 6 },
+    }] } });
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, source: 'attack,action', weapon: 'Fangs' }, host as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const feed = box.queryAll('button').find((b) => b.text.startsWith('Feed'))!;
+    await feed.click();
+    let dialog = body.queryAll('dialog')[0];
+    expect(dialog.open).toBe(true);
+    expect(dialog.className).toBe('dh dh-rolldlg');
+    expect(dialog.text).toContain('creature that can bleed');
+    expect(fetch).not.toHaveBeenCalled();
+    await dialog.queryAll('button')[0].click();
+    expect(dialog.removed).toBe(true);
+    expect(feed.disabled).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+    await feed.click();
+    dialog = body.queryAll('dialog')[1];
+    const amount = dialog.queryAll('input')[0];
+    const confirm = dialog.queryAll('button')[1];
+    for (const invalid of ['', '0', '7', '1.5']) {
+      amount.value = invalid;
+      await confirm.click();
+      expect(dialog.text).toContain('Enter a whole number from 1 to 6.');
+      expect(fetch).not.toHaveBeenCalled();
+    }
+    amount.value = '3';
+    await confirm.click();
+    expect(dialog.text).toContain('Could not save Feed');
+    expect(dialog.open).toBe(true);
+    expect(amount.value).toBe('3');
+    expect(confirm.disabled).toBe(false);
+    await Promise.all([confirm.click(), confirm.click()]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toEqual({
+      actorId: 'actor-b', key: 'feat:Feed', actionId: 'feed', roll: { id: original.id, ts: original.ts }, amount: 3,
+    });
+    expect(dialog.removed).toBe(true);
+    expect(c.stress.on).toBe(2);
+    expect(host.toast).not.toHaveBeenCalled();
+  });
+
   it('offers Oasis on another players rest and sends exactly the selected die to the host', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Dune', { name: 'Oasis', automation: { restReroll: true, uses: { max: 1, per: 'rest' } } });

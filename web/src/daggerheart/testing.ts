@@ -4,6 +4,7 @@ import { resourceDefinitions, syncDerived } from './engine';
 import {
   buildCharacter, classEntries, creationAllowances, emptyChoices, findClass, guideFor, MAX_LEVEL, RulesData,
   shortSubclass, STAGES, subclassCard, subclassesOf, suggestedTraits,
+  ancestryFeatureChoices,
 } from './rules';
 
 export function defaultTestingBuild(d: RulesData): TestingBuild {
@@ -30,6 +31,7 @@ export function testingBuildProblems(d: RulesData, b: TestingBuild): string[] {
   }
   if (!b.ancestry || !d.communities.some((e) => e.name === b.community)) problems.push('Choose an ancestry and community.');
   if (b.transformation && !d.transformations.some((e) => e.name === b.transformation)) problems.push('Choose a valid transformation.');
+  if (b.transformation === 'Shapeshifter' && !ancestryFeatureChoices(d.ancestries, b.ancestry2 && b.ancestry2 !== b.ancestry ? `${b.ancestry} / ${b.ancestry2}` : b.ancestry).some((f) => f.name === b.ancestryFeature)) problems.push('Choose the ancestry feature to retain.');
   return problems;
 }
 
@@ -94,6 +96,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   c.subclass = base.subclass;
   c.domains = base.domains;
   c.ancestry = base.ancestry;
+  c.ancestryFeature = base.ancestryFeature;
   c.community = base.community;
   c.transformation = base.transformation;
   c.level = b.level;

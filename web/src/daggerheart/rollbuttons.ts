@@ -29,18 +29,52 @@ export interface RollButtonHost {
 export function rollContext(m: RollMessage): RollContext | null {
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
-  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome } as RollContext;
+  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon } as RollContext;
 }
 
 function newRef(): string {
   return Math.random().toString(36).slice(2, 12);
 }
 
+function openTokenGain(t: AvailableRollTrigger, cost: string, submit: (amount: number) => Promise<void>, onClose: () => void): void {
+  const max = t.trigger.tokenGain!.max;
+  const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: t.trigger.label });
+  const amount = el('input', { type: 'number', min: '1', max: String(max), step: '1', value: '1', ariaLabel: 'HP marked by the target' });
+  const error = el('div', { class: 'error', role: 'alert' });
+  const cancel = el('button', { type: 'button' }, 'Cancel');
+  const go = el('button', { type: 'button', class: 'primary' }, cost ? `${t.trigger.label} (${cost})` : t.trigger.label);
+  let pending = false;
+  cancel.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('cancel', (event) => { if (pending) event.preventDefault(); });
+  dialog.addEventListener('close', () => { dialog.remove(); onClose(); }, { once: true });
+  go.addEventListener('click', async () => {
+    if (pending) return;
+    const n = amount.valueAsNumber;
+    if (!Number.isInteger(n) || n < 1 || n > max) {
+      error.textContent = `Enter a whole number from 1 to ${max}.`;
+      return;
+    }
+    pending = true;
+    go.disabled = cancel.disabled = amount.disabled = true;
+    error.textContent = '';
+    try { await submit(n); dialog.close(); }
+    catch (e) { error.textContent = (e as Error).message; }
+    finally { pending = false; go.disabled = cancel.disabled = amount.disabled = false; }
+  });
+  dialog.append(el('h4', {}, t.trigger.label),
+    el('p', { class: 'muted' }, t.trigger.description ?? 'Enter the tokens gained.'),
+    el('label', {}, `HP marked by the target (1-${max})`, amount), error, el('div', { class: 'acts' }, cancel, go));
+  document.body.append(dialog);
+  dialog.showModal();
+  amount.focus();
+  amount.select();
+}
+
 /** Request repeating the roll (optionally with advantage) or rolling only the Hope Die again. */
 export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
   const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
-  if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+1d12') ? '1d20' : '1d12', source: 'reroll' };
+  if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+') ? '1d20' : '1d12', source: 'reroll' };
   original ??= {
     label: m.label ?? 'Roll',
     expression: m.expression,
@@ -166,7 +200,15 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         b.title = t.trigger.description ?? t.source;
         b.addEventListener('click', async () => {
+          if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.tokenGain) {
+            openTokenGain(t, cost, async (amount) => {
+              await sheet.save.flush?.();
+              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+            }, () => { b.disabled = false; });
+            return;
+          }
           try {
             await sheet.save.flush?.();
             await useFeature({
