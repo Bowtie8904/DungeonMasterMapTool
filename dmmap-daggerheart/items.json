@@ -93,7 +93,18 @@
    "id": "woven-net",
    "name": "Woven Net",
    "rarity": "Common",
-   "text": "You can make a Finesse Roll using this net to trap a small creature. A trapped target can break free with a successful Attack Roll (16)."
+   "text": "You can make a Finesse Roll using this net to trap a small creature. A trapped target can break free with a successful Attack Roll (16).",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Trap a creature",
+      "actionRoll": {
+       "trait": "Finesse"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "fire-jar",
@@ -184,7 +195,18 @@
    "id": "skeleton-key",
    "name": "Skeleton Key",
    "rarity": "Common",
-   "text": "When you use this key to open a locked door, you gain advantage on the Finesse Roll."
+   "text": "When you use this key to open a locked door, you gain advantage on the Finesse Roll.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "advantage",
+      "label": "Skeleton Key",
+      "roll": "trait:Finesse",
+      "advantage": "advantage",
+      "description": "When you use this key to open a locked door, you gain advantage on the Finesse Roll."
+     }
+    ]
+   }
   },
   {
    "id": "arcane-prism",
@@ -944,10 +966,6 @@
    "rarity": "Uncommon",
    "text": "While wearing this mask, once per scene you can mimic a creature within Close range. Until you are next spotlighted, they experience either delayed speech (must mark a Stress to speak), erratic movements (disadvantage on reaction rolls), or clumsy attacks (disadvantage on attack rolls).",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",
@@ -1007,14 +1025,29 @@
    "rarity": "Uncommon",
    "text": "While wearing this nose you have advantage on Presence Rolls to entertain an audience. Once per long rest, you can also mark a Stress to turn a roll with Fear into a roll with Hope.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Use"
+      "id": "entertain",
+      "label": "Red Nose of Hope",
+      "roll": "trait:Presence",
+      "advantage": "advantage",
+      "description": "While wearing the nose, entertaining an audience."
+     }
+    ],
+    "rollTriggers": [
+     {
+      "id": "hope",
+      "label": "Red Nose of Hope: change Fear into Hope",
+      "on": "duality",
+      "when": "fear",
+      "outcome": "hope",
+      "cost": {
+       "stress": 1
+      },
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      }
      }
     ]
    }
@@ -1124,7 +1157,18 @@
    "id": "ticket-masters-pouch",
    "name": "Ticket Master’s Pouch",
    "rarity": "Uncommon",
-   "text": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price."
+   "text": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "advantage",
+      "label": "Ticket Master’s Pouch",
+      "roll": "trait:Presence",
+      "advantage": "advantage",
+      "description": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price."
+     }
+    ]
+   }
   },
   {
    "id": "timeglass",
@@ -1196,6 +1240,15 @@
      {
       "id": "use",
       "label": "Use"
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "advantage",
+      "label": "Veilcloak",
+      "roll": "trait:Finesse",
+      "advantage": "advantage",
+      "description": "While wearing this, you have advantage on Finesse Rolls made while in darkness. You can also spend a Hope once per long rest to make it shine with dim light up to Close range. Creatures outside that range must mark a Stress to see inside."
      }
     ]
    }
@@ -1522,10 +1575,6 @@
    "rarity": "Uncommon",
    "text": "Once per scene, you can activate this girdle to gain a +1 bonus to your Proficiency for your next attack.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",
@@ -1932,10 +1981,6 @@
    "rarity": "Legendary",
    "text": "When the GM spends a Fear, roll a d4. Once per scene on a result of 4, you clear a Stress.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",

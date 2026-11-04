@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { CompendiumEntry, describeAutomation } from './compendium';
 import { emptyCharacter, normalizeSheet } from './data';
 import { syncDerived } from './engine';
-import { buildCharacter, creationAllowances, creationCardProblems, creationProblems, emptyChoices, RulesData, startingCards } from './rules';
+import { buildCharacter, creationAllowances, creationCardProblems, creationExperienceProblems, creationProblems, emptyChoices, RulesData, startingCards } from './rules';
+import { applyTestingBuild } from './testing';
 
 const feature = (name: string, creation: NonNullable<NonNullable<CompendiumEntry['automation']>['creation']>) => ({
   name, text: '', automation: { creation },
@@ -53,7 +54,7 @@ describe('data-driven creation grants', () => {
 
   it('combines class, foundation, selected mixed heritage, community and transformation grants', () => {
     const d = data(), ch = choices();
-    expect(creationAllowances(d, ch)).toEqual({ hp: 2, stress: 2, evasion: 2, domainCards: 3, domains: ['Arcana', 'Grace'] });
+    expect(creationAllowances(d, ch)).toEqual({ hp: 2, stress: 2, evasion: 2, domainCards: 3, experienceBonus: 0, domains: ['Arcana', 'Grace'] });
     expect(creationProblems(d, ch)).toEqual([]);
     const c = buildCharacter(d, ch);
     expect(c.hp.slots).toBe(8);
@@ -66,6 +67,105 @@ describe('data-driven creation grants', () => {
     expect(c.hp.slots).toBe(8);
     expect(c.stress.slots).toBe(8);
     expect(c.evasion).toBe(12);
+  });
+
+  describe('permanent creation Experience bonuses', () => {
+    function bonusData() {
+      const d = data();
+      d.ancestries[0].features![0] = feature('A custom creation feature', { experienceBonus: 1 });
+      d.ancestries[0].features![1] = { name: 'Other feature', text: '' };
+      return d;
+    }
+
+    it.each([undefined, -1, 2, 0.5, NaN])('requires a valid selected Experience index (%s)', (experienceBonusIndex) => {
+      const d = bonusData(), ch = { ...choices(), experienceBonusIndex };
+      expect(creationExperienceProblems(d, ch)).toContain('Choose an Experience for the permanent creation bonus.');
+      expect(creationProblems(d, ch)).toContain('Choose an Experience for the permanent creation bonus.');
+      expect(() => buildCharacter(d, ch)).toThrow('Choose an Experience');
+    });
+
+    it('applies the selected grant once, remembers it across draft revisits and reruns, and follows renames by index', () => {
+      const d = bonusData(), ch = { ...choices(), experienceBonusIndex: 1 };
+      const original = structuredClone(d);
+      const c = buildCharacter(d, ch);
+      expect(c.experiences).toEqual([{ name: 'Reader', mod: 2 }, { name: 'Traveler', mod: 3 }]);
+      expect(c.mancer?.choices?.experienceBonusIndex).toBe(1);
+      const revisited = structuredClone(c.mancer!.choices!);
+      revisited.experiences[1] = '  Veteran traveler  ';
+      const rebuilt = buildCharacter(d, revisited, c);
+      expect(rebuilt.experiences).toEqual([{ name: 'Reader', mod: 2 }, { name: 'Veteran traveler', mod: 3 }]);
+      const restored = normalizeSheet(JSON.parse(JSON.stringify(rebuilt)), rebuilt.name);
+      syncDerived(restored);
+      syncDerived(restored);
+      expect(restored.experiences).toEqual(rebuilt.experiences);
+      expect(restored.mancer?.choices?.experienceBonusIndex).toBe(1);
+      expect(d).toEqual(original);
+    });
+
+    it('only inherits the chosen mixed ancestry feature and ignores the remembered selection without a grant', () => {
+      const d = bonusData(), ch = { ...choices(), experienceBonusIndex: 0 };
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([3, 2]);
+      ch.ancestry = 'Second';
+      ch.ancestry2 = 'First';
+      expect(creationAllowances(d, ch).experienceBonus).toBe(0);
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([2, 2]);
+      ch.ancestry = 'First';
+      ch.ancestry2 = '';
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([3, 2]);
+    });
+
+    it('aggregates grants from every supported creation source without inferring feature names', () => {
+      const d = bonusData(), ch = { ...choices(), experienceBonusIndex: 0 };
+      d.classes[0].automation = { creation: { experienceBonus: 1 } };
+      d.communities[0].features!.push(feature('Another source', { experienceBonus: 1 }));
+      d.transformations[0].automation = { creation: { experienceBonus: 1 } };
+      expect(creationAllowances(d, ch).experienceBonus).toBe(4);
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([6, 2]);
+      d.ancestries[0].features![0] = { name: 'Purposeful Design', text: 'Not an automated feature.' };
+      expect(creationAllowances(d, ch).experienceBonus).toBe(3);
+    });
+
+    it('uses whole-ancestry bonuses only when unmixed and ignores invalid grant values', () => {
+      const d = data(), ch = { ...choices(), experienceBonusIndex: 0 };
+      d.ancestries[0].automation = { creation: { experienceBonus: 1 } };
+      d.ancestries[0].features![1] = { name: 'Other feature', text: '' };
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([2, 2]);
+      ch.ancestry2 = '';
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([3, 2]);
+      for (const experienceBonus of [NaN, Infinity, -1, 0]) {
+        d.ancestries[0].automation = { creation: { experienceBonus } };
+        expect(creationAllowances(d, ch).experienceBonus).toBe(0);
+        expect(creationExperienceProblems(d, ch)).toEqual([]);
+      }
+    });
+
+    it('keeps duplicate names selectable by index and rejects a blank selected Experience', () => {
+      const d = bonusData(), ch = { ...choices(), experiences: ['Same', 'Same'], experienceBonusIndex: 1 };
+      expect(buildCharacter(d, ch).experiences.map((e) => e.mod)).toEqual([2, 3]);
+      ch.experiences[1] = ' ';
+      expect(creationExperienceProblems(d, ch)).toContain('Choose an Experience for the permanent creation bonus.');
+      expect(() => buildCharacter(d, ch)).toThrow();
+    });
+
+    it('does not reapply new compendium creation metadata on a legacy sheet reload', () => {
+      const c = buildCharacter(data(), choices());
+      c.heritage[0].automation = { creation: { experienceBonus: 1 } };
+      const restored = normalizeSheet(JSON.parse(JSON.stringify(c)), c.name);
+      syncDerived(restored);
+      expect(restored.experiences.map((e) => e.mod)).toEqual([2, 2]);
+    });
+
+    it('gives new testing characters a stable first-Experience default and preserves it on refresh', () => {
+      const d = bonusData();
+      const c = Object.assign(emptyCharacter('Tester'), { testingCharacter: true });
+      const b = { className: 'Scholar', subclass: 'Scholar: Knowledge', stage: 'foundation' as const, level: 1,
+        ancestry: 'First', ancestry2: 'Second', community: 'Town', multiclasses: [] };
+      applyTestingBuild(d, c, b);
+      expect(c.experiences.map((e) => e.mod)).toEqual([3, 2]);
+      c.experiences[0].mod = 5;
+      applyTestingBuild(d, c, b);
+      expect(c.experiences.map((e) => e.mod)).toEqual([5, 2]);
+    });
   });
 
   it('updates card count and eligibility when selected sources change', () => {

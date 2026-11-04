@@ -6,7 +6,7 @@ import {
 } from './damage';
 
 /** Incoming-damage dialog: enter damage, pick mitigation, preview the HP to mark, then apply. */
-export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string) => void): void {
+export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void): void {
   const options = availableMitigations(c);
   const input: DamageInput = {
     damage: 0, type: 'physical', armor: false, armorCount: 1, selected: new Set(options.filter((m) => m.option.defaultOn).map((m) => m.id)),
@@ -135,7 +135,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
       const summary = applyDamage(c, r, input.type);
       if (!summary) { error.textContent = 'Could not apply damage'; return; }
       close();
-      onDone(summary);
+      onDone(summary, r.negated ? 0 : r.final);
     };
   }
 

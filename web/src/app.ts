@@ -1,10 +1,10 @@
-import { cardRequest, uploadArtwork, logout } from './api';
+import { cardRequest, uploadArtwork, logout, useFeature, damageTaken } from './api';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
-import { applyInventory, autosave, loadCharacter, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, loadCharacter, type SheetSave } from './daggerheart/persist';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
@@ -37,6 +37,7 @@ export class App {
   private view: MapView;
   private conn: Connection;
   private playerId = '';
+  private connectedPlayers = new Set<string>();
   private playerWhispers = false;
   private chatCards = false;
   private compendiumChat = false;
@@ -617,6 +618,19 @@ export class App {
     });
   }
 
+  private async useSheetFeature(actorId: string, character: CharacterSheet, save: SheetSave, key: string, actionId: string): Promise<void> {
+    await save.flush();
+    const target = featureTarget(character, key, actionId);
+    let targetActorId: string | undefined;
+    if (target === 'actor') {
+      const candidates = (this.store.state?.actors ?? []).filter(a => this.connectedPlayers.has(a.ownerId));
+      const selected = await pickActor(candidates, 'Choose a character', 'Select target');
+      if (!selected) return;
+      targetActorId = selected.id;
+    }
+    await useFeature({ actorId, key, actionId, ...(targetActorId ? { targetActorId } : {}) });
+  }
+
   private selectTool(): void {
     this.toolButtons.forEach((b, id) => b.setAttribute('aria-pressed', String(id === 'navigate')));
   }
@@ -744,6 +758,7 @@ export class App {
         break;
       case 'roster':
         {
+          this.connectedPlayers = new Set(msg.players.filter(p => p.connections > 0).map(p => p.playerId));
           const own = msg.players.find(p => p.playerId === this.playerId);
           if (own && this.currentIdentity !== (own.chatIdentity ?? '')) {
             this.currentIdentity = own.chatIdentity ?? '';
@@ -820,6 +835,26 @@ export class App {
       case 'sheetInventory': {
         const handle = this.sheetHandles.get(msg.actorId);
         if (handle && applyInventory(handle.character, msg.inventory)) handle.bus.notify();
+        break;
+      }
+      case 'sheetFeature': {
+        const handle = this.sheetHandles.get(msg.actorId);
+        if (handle && applyFeatureState(handle.character, msg)) {
+          handle.bus.notify();
+          handle.save();
+        }
+        break;
+      }
+      case 'rollUpdate': {
+        const entry = this.log.find(e => e.kind === 'roll' && e.m.id === msg.id && e.m.ts === msg.ts);
+        if (entry?.kind === 'roll') {
+          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, outcome: msg.outcome, featureUses: msg.featureUses } };
+          if (this.store.state?.chatTail) {
+            const tail = this.store.state.chatTail.find(m => m.id === msg.id && m.ts === msg.ts);
+            if (tail) Object.assign(tail, { outcome: msg.outcome, featureUses: msg.featureUses });
+          }
+          this.renderLog();
+        }
         break;
       }
       case 'roll':
@@ -991,12 +1026,13 @@ export class App {
   private logCards = new WeakMap<LogEntry, HTMLElement>();
 
   private rollActions(m: RollMessage): HTMLElement | null {
-    const actor = this.myActors.find((a) => a.id === m.actorId);
-    if (!actor) return null;
     return rollButtons(m, {
-      sheet: async () => {
+      actorIds: () => this.myActors.map(a => a.id),
+      sheet: async (id) => {
+        const actor = this.myActors.find(a => a.id === id);
+        if (!actor) return undefined;
         await this.ensureSheet(actor);
-        return this.sheetHandles.get(actor.id);
+        return this.sheetHandles.get(id);
       },
       send: (roll) => this.conn.send({ type: 'roll', ...roll }),
       log: (text, rollSource) => { this.conn.send({ type: 'chat', text, rollSource, whisper: false }); },
@@ -1062,6 +1098,11 @@ export class App {
             character,
             bus,
             onChange: () => { changed(); this.scheduleEffects(); },
+            onFeature: (key, actionId) => this.useSheetFeature(a.id, character, changed, key, actionId),
+            onDamageTaken: async (severity) => {
+              await changed.flush();
+              await damageTaken(a.id, severity);
+            },
             actorId: a.id,
             onShare: (entry, quantity) => { void this.shareEntry(a.id, entry, quantity).catch((e: Error) => this.toast(e.message)); },
             onPrepareShare: () => changed.flush(),

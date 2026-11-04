@@ -45,6 +45,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
     ...emptyChoices(), ...b, name: c.name, pronouns: c.pronouns,
     primary: guideFor(b.className).primary, armor: guideFor(b.className).armor,
     experiences: ['Testing experience', 'Testing background'],
+    experienceBonusIndex: 0,
     traits,
   };
   const base = buildCharacter(d, choices, c);

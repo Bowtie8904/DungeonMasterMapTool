@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { keptRolls, rollDetails } from './chat';
+import { describe, expect, it, vi } from 'vitest';
+import { keptRolls, renderLogEntry, rollDetails } from './chat';
 import type { RollMessage } from './protocol';
 
 const message: RollMessage = {
@@ -8,6 +8,33 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('shows only the feature consequence below the dice, without repeating its name or result', () => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute() {}
+      get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
+      find(cls: string): Element | undefined {
+        return this.className === cls ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      for (const [result, consequence] of [[1, 'Marked 1 Stress.'], [6, 'No Stress marked.']] as const) {
+        const card = renderLogEntry({ kind: 'roll', m: {
+          ...message, kind: 'dice', label: 'Unshakable', expression: '1d6', rolls: [result], total: result,
+          featureRoll: { name: 'Unshakable', result, consequence },
+        } }, 'player') as unknown as Element;
+        const line = card.find('roll-feature-result')!;
+        expect(line.text).toBe(consequence);
+        expect(line.children).toEqual([consequence]);
+        expect(card.find('roll-title')?.text).toBe('Unshakable');
+      }
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('shows discarded dice without counting them, including ties and signed mixed pools', () => {
     expect(keptRolls('4d6kh3+1d8-3d4kh2+6', [2, 6, 2, 4, 8, -1, -3, -4])).toEqual([true, true, false, true, true, false, true, true]);
     const details = rollDetails({ ...message, kind: undefined, expression: '4d6kh3+6', rolls: [2, 6, 2, 4], total: 18 });

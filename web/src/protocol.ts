@@ -238,6 +238,25 @@ export interface RollMessage {
   /** Comma separated roll targets, for example "attack,trait:Agility,action" or "damage". */
   source?: string;
   weapon?: string;
+  /** Host-authoritative Hope/Fear override; dice and total remain unchanged. */
+  outcome?: 'hope' | 'fear';
+  /** Additional result rendered on a feature-check roll card. */
+  featureRoll?: { name: string; result: number; consequence: string };
+  /** Feature actions already applied to this roll, keyed by actor and action id. */
+  featureUses?: string[];
+}
+
+export interface FeatureSheetMessage {
+  type: 'sheetFeature';
+  actorId: string;
+  featureRevision: number;
+  hp?: import('./daggerheart/data').Track;
+  stress?: import('./daggerheart/data').Track;
+  hope?: import('./daggerheart/data').Track;
+  armorTrack?: import('./daggerheart/data').Track;
+  effects?: import('./daggerheart/engine').ActiveEffect[];
+  usage?: import('./daggerheart/data').CharacterSheet['usage'];
+  resources?: Record<string, number>;
 }
 
 export interface Countdown {
@@ -323,6 +342,7 @@ export type ServerMessage =
   | Hello
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }
+  | FeatureSheetMessage
   | { type: 'roster'; players: Array<{ playerId: string; playerName: string; chatIdentity?: string; connections: number; pingMs: number }> }
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }
@@ -337,6 +357,7 @@ export type ServerMessage =
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
+  | { type: 'rollUpdate'; id: number; ts: number; outcome?: 'hope' | 'fear'; featureUses?: string[] }
   | AudioMessage
   | { type: 'kicked'; reason?: string }
   | { type: 'error'; message: string };

@@ -213,6 +213,32 @@ public final class CampaignStore {
         }
     }
 
+    /** Replaces a persisted history message while keeping the same identity and ordering. */
+    public synchronized void replaceHistoryEntry(String campaignId, long id, long timestamp, ObjectNode replacement)
+            throws IOException {
+        Path file = dir(campaignId).resolve("history.jsonl");
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        List<String> updated = new ArrayList<>(lines.size());
+        boolean found = false;
+        for (String line : lines) {
+            JsonNode entry = MAPPER.readTree(line);
+            if (!found && entry.path("id").asLong(-1) == id && entry.path("ts").asLong(-1) == timestamp) {
+                updated.add(MAPPER.writeValueAsString(replacement));
+                found = true;
+            } else {
+                updated.add(line);
+            }
+        }
+        if (!found) throw new IOException("Chat message no longer exists.");
+        Path temp = file.resolveSibling("history.jsonl.tmp");
+        try {
+            Files.write(temp, updated, StandardCharsets.UTF_8);
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     // ---- artwork ----
 
     /** Validates, downsizes and re-encodes an uploaded image as PNG; returns its sha256 hex name. */
@@ -278,10 +304,18 @@ public final class CampaignStore {
 
     public synchronized void transferSheets(String campaignId, String sourceId, ObjectNode source,
                                             String targetId, ObjectNode target) throws IOException {
+        java.util.Map<String, ObjectNode> sheets = new java.util.LinkedHashMap<>();
+        sheets.put(sourceId, source);
+        sheets.put(targetId, target);
+        saveSheets(campaignId, sheets);
+    }
+
+    public synchronized void saveSheets(String campaignId, java.util.Map<String, ObjectNode> sheets) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
-        transaction.set(sourceId, source);
-        transaction.set(targetId, target);
+        for (var entry : sheets.entrySet()) {
+            transaction.set(entry.getKey(), entry.getValue());
+        }
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);

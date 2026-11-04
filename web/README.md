@@ -2,6 +2,14 @@
 
 Browser client for the Online Play host (plan.md section 3.41). Vanilla TypeScript, Canvas 2D, no runtime dependencies.
 
+Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the schema in
+`docs/DAGGERHEART_DATA.md`. `engine.ts` exposes configured trait/attack/damage actions, suggested roll modes,
+effect-gated mitigation and explicit Hope/Fear outcome overrides; `view.ts` shares those dialogs with chat
+follow-ups. Target healing/buffs and cross-player reactions execute on the host against current sheets.
+Session-limited uses reset per hosting run rather than browser reconnect; scene use limits are not tracked.
+`checks/ancestry-actions.html` exercises actual action/damage dialogs, cancelled/disconnected sends,
+combined resource costs, Ignition/Retract defaults, Surefooted and overridable advantage suggestions.
+
 ```
 npm install
 npm test          # vitest unit tests (protocol, clock, bitset, vision, weather, shared vectors)

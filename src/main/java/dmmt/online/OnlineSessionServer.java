@@ -101,10 +101,12 @@ public final class OnlineSessionServer {
     private final LoginRateLimiter limiter;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String dmCompendiumToken = java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID();
+    private String sessionId = java.util.UUID.randomUUID().toString();
     private final Random diceRandom = new Random();
     private final Map<String, String> sessions = new ConcurrentHashMap<>();
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
     private final Map<String, LoginClaim> loginClaims = new java.util.HashMap<>();
+    private final Set<String> sessionRolls = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private record LoginClaim(String token, long expiresAt) {
     }
@@ -167,6 +169,9 @@ public final class OnlineSessionServer {
         if (app != null) {
             return;
         }
+        sessionId = java.util.UUID.randomUUID().toString();
+        sessionRolls.clear();
+        resetSessionUses();
         Javalin javalin = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.http.maxRequestSize = 9L * 1024 * 1024;
@@ -195,6 +200,8 @@ public final class OnlineSessionServer {
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
+        javalin.post("/api/feature", this::handleFeature);
+        javalin.post("/api/damage-taken", this::handleDamageTaken);
         javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
         javalin.get("/api/notes/content", ctx -> handleNotes(ctx, "read"));
         javalin.post("/api/notes", ctx -> handleNotes(ctx, "edit"));
@@ -273,6 +280,7 @@ public final class OnlineSessionServer {
         clients.clear();
         sessions.clear();
         loginClaims.clear();
+        sessionRolls.clear();
         app.stop();
         app = null;
         current = null;
@@ -1137,8 +1145,9 @@ public final class OnlineSessionServer {
             }
             ObjectNode previous = storedSheet(actor.getId());
             if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)
-                    || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)) {
-                ObjectNode conflict = errorBody("Inventory or domain cards changed on the host. Refresh the sheet before saving.");
+                    || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)
+                    || sheet.path("featureRevision").asLong(0) != previous.path("featureRevision").asLong(0)) {
+                ObjectNode conflict = errorBody("Inventory, domain cards or feature state changed on the host. Refresh the sheet before saving.");
                 conflict.set("sheet", previous);
                 json(ctx, 409, conflict);
                 return;
@@ -1160,6 +1169,609 @@ public final class OnlineSessionServer {
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read or save the character sheet."));
         }
+    }
+
+    private synchronized void handleFeature(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Feature request is too large."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject())
+                throw new IllegalArgumentException("Invalid feature request.");
+            Campaign c = campaign;
+            if (c == null) throw new IllegalArgumentException("No online session is running.");
+            Campaign.Actor sourceActor = ownedActor(playerId, request.path("actorId").asText());
+            String key = request.path("key").asText("").strip();
+            String actionId = request.path("actionId").asText("").strip();
+            if (key.length() > 160 || actionId.isEmpty() || actionId.length() > 100)
+                throw new IllegalArgumentException("Invalid feature action.");
+
+            ObjectNode sourceSheet = storedSheet(sourceActor.getId());
+            JsonNode source = featureSource(sourceSheet, key);
+            JsonNode automation = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            boolean hasRoll = request.path("roll").isObject();
+            JsonNode definition = featureDefinition(automation, actionId, hasRoll);
+            if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+
+            ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
+            if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
+            else if (!definition.has("target") && !definition.has("check"))
+                throw new IllegalArgumentException("This feature action must be made from its character sheet.");
+
+            String targetMode = definition.path("target").asText("");
+            List<Campaign.Actor> targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
+            Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
+            changedSheets.put(sourceActor.getId(), sourceSheet);
+            for (Campaign.Actor target : targets) {
+                changedSheets.computeIfAbsent(target.getId(), id -> {
+                    try { return storedSheet(id); }
+                    catch (IOException e) { throw new FeatureIoException(e); }
+                });
+            }
+
+            String actionLabel = definition.path("label").asText("Feature");
+            String reportSource = source.path("name").asText(sourceActor.getName());
+            DiceRoller.Result damageRoll = null;
+            if (definition.path("damage").isObject()) {
+                JsonNode damage = definition.path("damage");
+                if (!damage.path("fixed").asBoolean())
+                    throw new IllegalArgumentException("Only fixed damage is supported for this feature reaction.");
+                damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
+            }
+            List<String> reportLines = new ArrayList<>();
+            applyFeatureCost(sourceSheet, definition.path("cost"));
+            JsonNode uses = definition.path("uses").isObject() ? definition.path("uses") : automation.path("uses");
+            useFeatureLimit(sourceSheet, key, uses);
+
+            if (definition.path("check").isObject()) {
+                JsonNode check = definition.path("check");
+                DiceRoller.Result result = DiceRoller.roll(check.path("dice").asText(""), config.maxDice(), diceRandom);
+                int die = result.rolls().isEmpty() ? 0 : result.rolls().getFirst();
+                boolean marked = die != check.path("unless").asInt(Integer.MIN_VALUE);
+                String mark = check.path("mark").asText("stress");
+                if (!isTrack(mark)) throw new IllegalArgumentException("Invalid feature check consequence.");
+                if (marked) markTrack(sourceSheet, mark, 1);
+                String resourceLabel = switch (mark) {
+                    case "hp" -> "HP";
+                    case "hope" -> "Hope";
+                    case "armor" -> "Armor";
+                    default -> "Stress";
+                };
+                String consequence = marked ? "Marked 1 " + resourceLabel + "." : "No " + resourceLabel + " marked.";
+                changedSheets.put(sourceActor.getId(), sourceSheet);
+                commitFeatureSheets(changedSheets);
+                sendFeatureState(sourceActor, sourceSheet);
+                publishFeatureCheck(sourceActor, source, actionLabel, result, consequence);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
+
+            for (JsonNode step : definition.path("steps")) {
+                JsonNode effect = step.path("effect");
+                if (!"effect".equals(step.path("op").asText()) || !effect.path("endOnSourceSevere").asBoolean()) continue;
+                for (Campaign.Actor actor : c.getActors()) {
+                    ObjectNode existing = changedSheets.get(actor.getId());
+                    boolean wasLoaded = existing != null;
+                    if (existing == null) {
+                        try { existing = storedSheet(actor.getId()); }
+                        catch (IOException e) { throw new FeatureIoException(e); }
+                    }
+                    if (removeSevereEffectsFromSource(existing, sourceActor.getId(), key))
+                        changedSheets.put(actor.getId(), existing);
+                    else if (wasLoaded) changedSheets.put(actor.getId(), existing);
+                }
+            }
+
+            if (hasRoll && definition.has("outcome")) {
+                String outcome = definition.path("outcome").asText("");
+                if (!"hope".equals(outcome) && !"fear".equals(outcome))
+                    throw new IllegalArgumentException("Invalid outcome conversion.");
+                originalRoll.put("outcome", outcome);
+                Campaign.Actor roller = c.actor(originalRoll.path("actorId").asText());
+                if (roller != null) {
+                    ObjectNode rollerSheet = changedSheets.computeIfAbsent(roller.getId(), id -> {
+                        try { return storedSheet(id); }
+                        catch (IOException e) { throw new FeatureIoException(e); }
+                    });
+                    int gained = gainTrack(rollerSheet, "hope", 1);
+                    reportLines.add(roller.getName() + (gained > 0 ? " gained 1 Hope." : " was already at maximum Hope."));
+                }
+            }
+
+            for (Campaign.Actor target : targets) {
+                ObjectNode targetSheet = changedSheets.get(target.getId());
+                if (hasRoll && definition.has("endEffect")) {
+                    String effectName = definition.path("endEffect").asText();
+                    removeEffects(targetSheet, effectName, null, null);
+                }
+                if (definition.path("steps").isArray()) {
+                    List<String> targetLines = new ArrayList<>();
+                    applyFeatureSteps(targetSheet, definition.path("steps"), actionLabel, sourceActor, key, targetLines);
+                    for (String line : targetLines)
+                        reportLines.add(("party".equals(targetMode) || !target.equals(sourceActor)
+                                ? target.getName() + ": " : "") + line);
+                }
+            }
+
+            if (hasRoll) {
+                ArrayNode featureUses = originalRoll.withArray("featureUses");
+                String use = sourceActor.getId() + ":" + key + ":" + actionId;
+                if (!containsText(featureUses, use)) featureUses.add(use);
+                replaceRoll(originalRoll);
+            }
+
+            commitFeatureSheets(changedSheets);
+            for (var entry : changedSheets.entrySet()) {
+                Campaign.Actor actor = c.actor(entry.getKey());
+                if (actor != null) sendFeatureState(actor, entry.getValue());
+            }
+            if (damageRoll != null) {
+                String damageType = definition.path("damage").path("type").asText("physical");
+                ObjectNode damage = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
+                damage.put("source", "damage");
+                damage.putObject("featureRoll").put("name", reportSource).put("result", damageRoll.total())
+                        .put("consequence", damageType + " damage. " + definition.path("description").asText(""));
+                deliver(damage, null);
+            } else if (!definition.has("reroll")) {
+                if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
+                if (hasRoll && definition.has("outcome"))
+                    reportLines.add(0, "Changed the original roll to " + ("hope".equals(definition.path("outcome").asText()) ? "Hope" : "Fear") + ".");
+                publishActionReport(sourceActor, reportSource + " - " + actionLabel, reportLines, originalRoll);
+            }
+            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+        } catch (FeatureIoException e) {
+            json(ctx, 500, errorBody("Could not read the target character sheet."));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid feature request."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not save the feature action."));
+        }
+    }
+
+    private static final class FeatureIoException extends RuntimeException {
+        FeatureIoException(IOException cause) { super(cause); }
+    }
+
+    private JsonNode featureSource(ObjectNode sheet, String key) {
+        int separator = key.indexOf(':');
+        if (separator <= 0) throw new IllegalArgumentException("Invalid feature source.");
+        String kind = key.substring(0, separator);
+        String name = key.substring(separator + 1);
+        List<String> fields = switch (kind) {
+            case "feat" -> List.of("features", "heritage");
+            case "card" -> List.of("loadout", "vault");
+            case "weapon" -> List.of("activeWeapons");
+            case "armor" -> List.of("activeArmor");
+            case "item" -> List.of("inventory");
+            default -> List.of();
+        };
+        for (String field : fields) {
+            JsonNode values = sheet.path(field);
+            if (values.isArray()) {
+                for (JsonNode value : values) {
+                    if (name.equals(value.path("name").asText())) return value;
+                }
+            } else if (values.isObject() && name.equals(values.path("name").asText())) {
+                return values;
+            }
+        }
+        throw new IllegalArgumentException("Feature not found on the source character.");
+    }
+
+    private JsonNode featureDefinition(JsonNode automation, String actionId, boolean trigger) {
+        JsonNode list = automation.path(trigger ? "rollTriggers" : "actions");
+        if (!list.isArray()) return null;
+        for (JsonNode item : list) if (actionId.equals(item.path("id").asText())) return item;
+        return null;
+    }
+
+    private JsonNode catalogAutomation(String key, String name, JsonNode fallback) {
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory == null || name.isBlank()) return fallback;
+        try (var files = java.nio.file.Files.list(directory)) {
+            List<java.nio.file.Path> ordered = files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList();
+            String preferred = key.startsWith("card:") ? "domain-cards.json"
+                    : key.startsWith("item:") ? "items.json"
+                    : key.startsWith("weapon:") ? "weapons.json"
+                    : key.startsWith("armor:") ? "armor.json" : "";
+            if (!preferred.isEmpty()) ordered = java.util.stream.Stream.concat(
+                    ordered.stream().filter(p -> p.getFileName().toString().equals(preferred)),
+                    ordered.stream().filter(p -> !p.getFileName().toString().equals(preferred))).toList();
+            for (java.nio.file.Path file : ordered) {
+                JsonNode root = MAPPER.readTree(file.toFile());
+                JsonNode found = findCatalogFeature(root, name);
+                if (found != null) return found;
+            }
+        } catch (IOException | RuntimeException ignored) {
+            return fallback;
+        }
+        return fallback;
+    }
+
+    private JsonNode findCatalogFeature(JsonNode node, String name) {
+        if (node.isObject()) {
+            if (name.equals(node.path("name").asText()) && node.path("automation").isObject())
+                return node.path("automation");
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                JsonNode found = findCatalogFeature(fields.next().getValue(), name);
+                if (found != null) return found;
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                JsonNode found = findCatalogFeature(child, name);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private ObjectNode findSessionRoll(JsonNode ref) throws IOException {
+        long id = ref.path("id").asLong(-1);
+        long ts = ref.path("ts").asLong(-1);
+        if (id < 0 || ts < 0 || !sessionRolls.contains(rollKey(id, ts)))
+            throw new IllegalArgumentException("That roll is no longer available for a feature reaction.");
+        Campaign c = campaign;
+        if (c == null) throw new IllegalArgumentException("No online session is running.");
+        for (JsonNode entry : store.historyTail(c.getId(), Integer.MAX_VALUE)) {
+            if ("roll".equals(entry.path("type").asText()) && entry.path("id").asLong(-1) == id
+                    && entry.path("ts").asLong(-1) == ts && entry instanceof ObjectNode object) return object.deepCopy();
+        }
+        throw new IllegalArgumentException("That roll is no longer available for a feature reaction.");
+    }
+
+    private void validateTrigger(Campaign.Actor sourceActor, String key, JsonNode trigger, ObjectNode roll) throws IOException {
+        String rolledActorId = roll.path("actorId").asText("");
+        Campaign.Actor rolledActor = campaign.actor(rolledActorId);
+        if (rolledActor == null) throw new IllegalArgumentException("This roll is not linked to a character.");
+        String audience = trigger.path("audience").asText("self");
+        if ("self".equals(audience) && !sourceActor.getId().equals(rolledActorId))
+            throw new IllegalArgumentException("This feature only applies to your own character's roll.");
+        if ("ally".equals(audience) && sourceActor.getId().equals(rolledActorId))
+            throw new IllegalArgumentException("This feature only applies to another character's roll.");
+        String source = roll.path("source").asText("");
+        String on = trigger.path("on").asText("");
+        if (!"duality".equals(on) && !List.of(source.split(",")).contains(on))
+            throw new IllegalArgumentException("This feature does not apply to that roll.");
+        ArrayNode uses = roll.withArray("featureUses");
+        String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
+        if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
+        int hope = roll.path("rolls").path(0).asInt(Integer.MIN_VALUE);
+        int fear = roll.path("rolls").path(1).asInt(Integer.MIN_VALUE);
+        if (hope < 1 || fear < 1) throw new IllegalArgumentException("The original roll has no valid Hope and Fear dice.");
+        String actualOutcome = roll.path("outcome").asText("");
+        if (!"hope".equals(actualOutcome) && !"fear".equals(actualOutcome))
+            actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
+        String when = trigger.path("when").asText("always");
+        if ("hope".equals(when) && !"hope".equals(actualOutcome)
+                || "fear".equals(when) && !"fear".equals(actualOutcome)
+                || ("hope".equals(actualOutcome) || "fear".equals(actualOutcome)) && "crit".equals(actualOutcome))
+            throw new IllegalArgumentException("The original roll no longer meets this feature's condition.");
+        if (trigger.has("outcome") && ("crit".equals(actualOutcome)
+                || trigger.path("outcome").asText().equals(actualOutcome)))
+            throw new IllegalArgumentException("The original roll cannot be changed to that outcome.");
+    }
+
+    private List<Campaign.Actor> resolveFeatureTargets(Campaign c, Campaign.Actor source, String targetActorId, String mode) {
+        if ("party".equals(mode)) {
+            Set<String> online = new LinkedHashSet<>();
+            clients.values().forEach(client -> online.add(client.playerId));
+            return c.getActors().stream().filter(a -> a.getOwnerId() != null && online.contains(a.getOwnerId())).toList();
+        }
+        if ("actor".equals(mode)) {
+            Campaign.Actor target = c.actor(targetActorId);
+            if (target == null || target.getOwnerId() == null || campaign.player(target.getOwnerId()) == null
+                    || clients.values().stream().noneMatch(client -> target.getOwnerId().equals(client.playerId)))
+                throw new IllegalArgumentException("Choose a connected player's character as the target.");
+            return List.of(target);
+        }
+        if (!targetActorId.isEmpty()) throw new IllegalArgumentException("This action does not accept a target.");
+        return List.of(source);
+    }
+
+    private void applyFeatureCost(ObjectNode sheet, JsonNode costs) {
+        if (!costs.isObject()) return;
+        var fields = costs.fields();
+        while (fields.hasNext()) {
+            var cost = fields.next();
+            int amount = featureAmount(cost.getValue(), sheet);
+            if (amount < 0) throw new IllegalArgumentException("Invalid feature cost.");
+            String resource = cost.getKey();
+            if (isTrack(resource)) {
+                ObjectNode track = requireTrack(sheet, resource);
+                int on = track.path("on").asInt();
+                if ("hope".equals(resource) ? on < amount : on + amount > track.path("slots").asInt())
+                    throw new IllegalArgumentException("Not enough " + resource.toUpperCase(java.util.Locale.ROOT) + ".");
+                track.put("on", "hope".equals(resource) ? on - amount : on + amount);
+            } else {
+                ObjectNode resources = sheet.withObject("/resources");
+                if (resources.path(resource).asInt(-1) < amount)
+                    throw new IllegalArgumentException("Not enough " + resource + ".");
+                resources.put(resource, resources.path(resource).asInt() - amount);
+            }
+        }
+    }
+
+    private void useFeatureLimit(ObjectNode sheet, String key, JsonNode uses) {
+        if (!uses.isObject() || uses.path("per").asText().equals("scene")) return;
+        int max = uses.path("max").asInt(0);
+        if (max <= 0) return;
+        ObjectNode counters = sheet.withObject("/usage");
+        ObjectNode counter = counters.with(key);
+        int used = counter.path("used").asInt(0);
+        if (used >= max) throw new IllegalArgumentException("This feature has no uses remaining.");
+        counter.put("used", used + 1);
+        counter.put("per", uses.path("per").asText("session"));
+    }
+
+    private void applyFeatureSteps(ObjectNode sheet, JsonNode steps, String label, Campaign.Actor sourceActor,
+                                   String sourceKey, List<String> report) {
+        for (JsonNode step : steps) {
+            String operation = step.path("op").asText("");
+            String resource = step.path("resource").asText("");
+            if (("gain".equals(operation) || "mark".equals(operation) || "clear".equals(operation)) && isTrack(resource)) {
+                ObjectNode track = requireTrack(sheet, resource);
+                int before = track.path("on").asInt();
+                int amount = featureAmount(step.path("amount"), sheet);
+                if ("all".equals(step.path("amount").asText())) amount = before;
+                if ("clear".equals(operation)) track.put("on", Math.max(0, before - Math.max(0, amount)));
+                else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
+                int changed = Math.abs(before - track.path("on").asInt());
+                if (changed > 0) report.add(resource.equals("hp") ? "Cleared " + changed + " HP."
+                        : (("gain".equals(operation) ? "Gained " : "Marked ") + changed + " " + resource + "."));
+                else if ("gain".equals(operation) && amount > 0)
+                    report.add("Gained no " + resource + " (already at maximum).");
+            } else if ("effect".equals(operation) && step.path("effect").isObject()) {
+                ObjectNode effect = (ObjectNode) step.path("effect").deepCopy();
+                String name = effect.path("name").asText();
+                if (name.isBlank()) continue;
+                removeEffects(sheet, name, sourceActor.getId(), sourceKey);
+                effect.put("id", "f" + java.util.UUID.randomUUID());
+                effect.put("source", label);
+                effect.put("sourceActorId", sourceActor.getId());
+                effect.put("sourceKey", sourceKey);
+                sheet.withArray("effects").add(effect);
+                report.add("Gained " + name + ".");
+            }
+        }
+    }
+
+    private static boolean isTrack(String resource) {
+        return List.of("hope", "stress", "hp", "armor").contains(resource);
+    }
+
+    private static ObjectNode requireTrack(ObjectNode sheet, String resource) {
+        String field = "armor".equals(resource) ? "armorTrack" : resource;
+        JsonNode value = sheet.path(field);
+        if (!(value instanceof ObjectNode track)) throw new IllegalArgumentException("Resource unavailable: " + resource);
+        return track;
+    }
+
+    private int featureAmount(JsonNode amount, ObjectNode sheet) {
+        if (amount.isIntegralNumber() && amount.canConvertToInt()) return amount.asInt();
+        if (amount.isTextual()) {
+            String text = amount.asText().strip();
+            if ("all".equals(text)) return 0;
+            try { return Integer.parseInt(text); }
+            catch (NumberFormatException ignored) { }
+        }
+        throw new IllegalArgumentException("This feature uses a value the host cannot apply.");
+    }
+
+    private int gainTrack(ObjectNode sheet, String resource, int amount) {
+        ObjectNode track = requireTrack(sheet, resource);
+        int before = track.path("on").asInt();
+        track.put("on", Math.min(track.path("slots").asInt(), before + amount));
+        return track.path("on").asInt() - before;
+    }
+
+    private void markTrack(ObjectNode sheet, String resource, int amount) {
+        ObjectNode track = requireTrack(sheet, resource);
+        track.put("on", Math.min(track.path("slots").asInt(), track.path("on").asInt() + amount));
+    }
+
+    private boolean removeEffects(ObjectNode sheet, String name, String sourceActorId, String sourceKey) {
+        JsonNode effects = sheet.path("effects");
+        if (!effects.isArray()) return false;
+        ArrayNode kept = MAPPER.createArrayNode();
+        boolean removed = false;
+        for (JsonNode effect : effects) {
+            boolean match = (name == null || name.equals(effect.path("name").asText()))
+                    && (sourceActorId == null || sourceActorId.equals(effect.path("sourceActorId").asText()))
+                    && (sourceKey == null || sourceKey.equals(effect.path("sourceKey").asText()));
+            if (match) removed = true;
+            else kept.add(effect);
+        }
+        if (removed) sheet.set("effects", kept);
+        return removed;
+    }
+
+    private boolean removeSevereEffectsFromSource(ObjectNode sheet, String sourceActorId, String sourceKey) {
+        JsonNode effects = sheet.path("effects");
+        if (!effects.isArray()) return false;
+        ArrayNode kept = MAPPER.createArrayNode();
+        boolean removed = false;
+        for (JsonNode effect : effects) {
+            boolean match = effect.path("endOnSourceSevere").asBoolean()
+                    && sourceActorId.equals(effect.path("sourceActorId").asText())
+                    && sourceKey.equals(effect.path("sourceKey").asText());
+            if (match) removed = true;
+            else kept.add(effect);
+        }
+        if (removed) sheet.set("effects", kept);
+        return removed;
+    }
+
+    private void commitFeatureSheets(Map<String, ObjectNode> changedSheets) throws IOException {
+        for (ObjectNode sheet : changedSheets.values()) {
+            sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+            if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+                throw new IllegalArgumentException("The character sheet is too large.");
+        }
+        store.saveSheets(campaign.getId(), changedSheets);
+    }
+
+    private void sendFeatureState(Campaign.Actor actor, ObjectNode sheet) {
+        ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
+                .put("featureRevision", sheet.path("featureRevision").asLong(0));
+        for (String field : List.of("hp", "stress", "hope", "armorTrack", "effects", "usage", "resources")) {
+            if (sheet.has(field)) message.set(field, sheet.get(field));
+        }
+        for (Client client : clients.values())
+            if (actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)) sendTo(client.ctx, message.toString());
+    }
+
+    private void publishActionReport(Campaign.Actor actor, String title, List<String> lines, ObjectNode roll) {
+        String text = "ACTION USED\n" + title + "\n" + actor.getName()
+                + lines.stream().map(line -> "\n• " + line).reduce("", String::concat);
+        String toId = roll == null ? null : roll.path("toId").asText(null);
+        ObjectNode message = chatMessage(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName(), toId, clip(text));
+        deliver(message, toId);
+    }
+
+    private void publishFeatureCheck(Campaign.Actor actor, JsonNode source, String label, DiceRoller.Result result,
+                                     String consequence) {
+        ObjectNode out = featureRollMessage(actor, source, label, result);
+        out.putObject("featureRoll").put("name", source.path("name").asText()).put("result", result.total()).put("consequence", consequence);
+        deliver(out, null);
+    }
+
+    private ObjectNode featureRollMessage(Campaign.Actor actor, JsonNode source, String label, DiceRoller.Result result) {
+        String sourceName = source.path("name").asText();
+        ObjectNode out = MAPPER.createObjectNode().put("id", nextChatId()).put("type", "roll")
+                .put("ts", System.currentTimeMillis()).put("fromId", actor.getOwnerId())
+                .put("from", campaign.player(actor.getOwnerId()).getName()).put("expression", result.expression())
+                .put("total", result.total()).put("label", label).put("kind", "dice").put("actorId", actor.getId());
+        ArrayNode rolls = out.putArray("rolls");
+        result.rolls().forEach(rolls::add);
+        out.putObject("rollSource").put("name", sourceName).put("text", source.path("text").asText(""))
+                .put("source", source.path("source").asText("Feature"));
+        ArrayNode breakdown = out.putArray("breakdown");
+        ObjectNode detail = breakdown.addObject().put("label", sourceName).put("expression", result.expression()).put("total", result.total());
+        detail.set("rolls", rolls.deepCopy());
+        return out;
+    }
+
+    private long nextChatId() {
+        synchronized (this) { return ++chatId; }
+    }
+
+    private void replaceRoll(ObjectNode roll) throws IOException {
+        Campaign c = campaign;
+        store.replaceHistoryEntry(c.getId(), roll.path("id").asLong(), roll.path("ts").asLong(), roll);
+        ObjectNode update = MAPPER.createObjectNode().put("type", "rollUpdate").put("id", roll.path("id").asLong())
+                .put("ts", roll.path("ts").asLong());
+        if (roll.has("outcome")) update.set("outcome", roll.get("outcome"));
+        update.set("featureUses", roll.withArray("featureUses"));
+        String toId = roll.path("toId").asText("");
+        String fromId = roll.path("fromId").asText("");
+        if (toId.isEmpty()) {
+            broadcast(update.toString());
+        } else {
+            String json = update.toString();
+            for (Client client : clients.values())
+                if (client.playerId.equals(toId) || client.playerId.equals(fromId)) sendTo(client.ctx, json);
+        }
+        if (toId.isEmpty() || "dm".equals(toId) || "dm".equals(fromId)) host.dmMessage(update);
+    }
+
+    private static boolean containsText(ArrayNode list, String value) {
+        for (JsonNode entry : list) if (value.equals(entry.asText())) return true;
+        return false;
+    }
+
+    private static String rollKey(long id, long ts) {
+        return id + ":" + ts;
+    }
+
+    private void resetSessionUses() {
+        Campaign c = campaign;
+        if (c == null) return;
+        for (Campaign.Actor actor : c.getActors()) {
+            try {
+                ObjectNode sheet = storedSheet(actor.getId());
+                JsonNode raw = sheet.path("usage");
+                if (!raw.isObject()) continue;
+                ObjectNode usage = (ObjectNode) raw;
+                List<String> stale = new ArrayList<>();
+                usage.fields().forEachRemaining(entry -> {
+                    if (List.of("session", "scene").contains(entry.getValue().path("per").asText())) stale.add(entry.getKey());
+                });
+                if (stale.isEmpty()) continue;
+                stale.forEach(usage::remove);
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                store.saveSheet(c.getId(), actor.getId(), sheet.toString());
+            } catch (IOException ignored) {
+                // A missing sheet has no session-limited uses to reset.
+            }
+        }
+    }
+
+    private synchronized void handleDamageTaken(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject())
+                throw new IllegalArgumentException("Invalid damage notification.");
+            Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
+            int severity = request.path("severity").asInt(0);
+            if (severity > 4 || severity < 0)
+                throw new IllegalArgumentException("Only Severe or Massive damage ends this effect.");
+            if (severity < 3) {
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
+            Map<String, ObjectNode> changed = removeSourceSevereEffects(actor);
+            if (!changed.isEmpty()) {
+                for (ObjectNode sheet : changed.values())
+                    sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                store.saveSheets(campaign.getId(), changed);
+                for (var entry : changed.entrySet()) {
+                    Campaign.Actor changedActor = campaign.actor(entry.getKey());
+                    if (changedActor != null) sendFeatureState(changedActor, entry.getValue());
+                }
+            }
+            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid damage notification."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not save effects after damage."));
+        }
+    }
+
+    private Map<String, ObjectNode> removeSourceSevereEffects(Campaign.Actor source) throws IOException {
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        for (Campaign.Actor target : campaign.getActors()) {
+            ObjectNode sheet = storedSheet(target.getId());
+            JsonNode effects = sheet.path("effects");
+            if (!effects.isArray()) continue;
+            ArrayNode kept = MAPPER.createArrayNode();
+            boolean removed = false;
+            for (JsonNode effect : effects) {
+                boolean ownLocalEffect = target.getId().equals(source.getId())
+                        && !effect.hasNonNull("sourceActorId");
+                boolean sourcedEffect = source.getId().equals(effect.path("sourceActorId").asText(""));
+                if (effect.path("endOnSourceSevere").asBoolean() && (ownLocalEffect || sourcedEffect)) {
+                    removed = true;
+                } else {
+                    kept.add(effect);
+                }
+            }
+            if (removed) {
+                sheet.set("effects", kept);
+                changed.put(target.getId(), sheet);
+            }
+        }
+        return changed;
     }
 
     private ObjectNode storedSheet(String actorId) throws IOException {
@@ -1515,6 +2127,7 @@ public final class OnlineSessionServer {
             hello.put("sessionName", config.sessionName());
             hello.put("campaignName", c.getName());
             hello.put("paused", paused);
+            hello.put("sessionId", sessionId);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
@@ -1808,6 +2421,7 @@ public final class OnlineSessionServer {
                 out.put("difficulty", msg.path("difficulty").asInt());
             }
         }
+        sessionRolls.add(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
         deliver(out, to);
     }
 

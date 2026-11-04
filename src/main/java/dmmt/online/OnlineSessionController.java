@@ -1,6 +1,7 @@
 package dmmt.online;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.model.DmProject;
 import dmmt.service.Tuning;
@@ -19,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 
 /** Application-side owner of the optional Online Play session: starts the host and publishes the map state. */
 public final class OnlineSessionController implements OnlineSessionServer.Host {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     /** What the controller needs from the running application; all calls happen on the JavaFX thread. */
     public interface App {
         DmProject project();
@@ -352,8 +354,9 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 DmProject project = app.project();
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
-                String problem = project == null ? "No map open"
-                        : MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y);
+                String problem = project == null ? "No map open" : movementBlockReason(token);
+                if (problem == null)
+                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y);
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));
@@ -366,6 +369,25 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             }
         });
         return result;
+    }
+
+    private String movementBlockReason(DmProject.TokenInstance token) {
+        if (token == null || campaign == null) return null;
+        Campaign.Actor actor = campaign.actor(token.getActorId());
+        if (actor == null) return null;
+        try {
+            String saved = store.loadSheet(campaign.getId(), actor.getId());
+            if (saved == null) return null;
+            JsonNode effects = MAPPER.readTree(saved).path("effects");
+            if (effects.isArray()) {
+                for (JsonNode effect : effects)
+                    if (effect.path("blocksMovement").asBoolean())
+                        return "This character cannot move while a movement-blocking effect is active.";
+            }
+        } catch (IOException ignored) {
+            return "Could not verify this character's movement effects.";
+        }
+        return null;
     }
 
     @Override
@@ -389,6 +411,16 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             if ("chatDeleted".equals(message.path("type").asText())) {
                 chatTail.removeIf(m -> m.path("id").asLong() == message.path("id").asLong()
                         && m.path("ts").asLong() == message.path("ts").asLong());
+            } else if ("rollUpdate".equals(message.path("type").asText())) {
+                for (JsonNode entry : chatTail) {
+                    if (!(entry instanceof ObjectNode roll) || !"roll".equals(entry.path("type").asText())
+                            || entry.path("id").asLong() != message.path("id").asLong()
+                            || entry.path("ts").asLong() != message.path("ts").asLong()) continue;
+                    if (message.has("outcome")) roll.set("outcome", message.get("outcome"));
+                    else roll.remove("outcome");
+                    if (message.has("featureUses")) roll.set("featureUses", message.get("featureUses"));
+                    break;
+                }
             } else {
                 chatTail.addLast(OnlineSessionServer.playerView(message));
             }

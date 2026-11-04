@@ -1,14 +1,15 @@
-import { getSheet } from './api';
+import { getSheet, useFeature, damageTaken } from './api';
 import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
 import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
-import { applyInventory, autosave, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, type SheetSave } from './daggerheart/persist';
 import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
 import { setGmFear } from './daggerheart/engine';
 import { postCard, transferable } from './shared-cards';
 import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
+import { pickActor } from './actor-picker';
 
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
   const store = new Store();
@@ -19,6 +20,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let changed: SheetSave | undefined;
   let chatCards = false;
   let transferOffers = false;
+  const connectedPlayers = new Set<string>();
   let rulesWarning = '';
   const bus = new SheetBus();
   const additions = new Map<string, Promise<string | null>>();
@@ -67,6 +69,21 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       character: sheet,
       artwork: actor.artwork,
       onChange: () => changed?.(),
+      onFeature: async (key, actionId) => {
+        await changed!.flush();
+        let targetActorId: string | undefined;
+        if (featureTarget(sheet, key, actionId) === 'actor') {
+          const candidates = (store.state?.actors ?? []).filter(a => connectedPlayers.has(a.ownerId));
+          const selected = await pickActor(candidates, 'Choose a character', 'Select target');
+          if (!selected) return;
+          targetActorId = selected.id;
+        }
+        await useFeature({ actorId, key, actionId, ...(targetActorId ? { targetActorId } : {}) });
+      },
+      onDamageTaken: async (severity) => {
+        await changed!.flush();
+        await damageTaken(actorId, severity);
+      },
       bus,
       actorId,
       onPrepareShare: () => changed!.flush(),
@@ -106,8 +123,20 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           if (changed) void changed.refresh().catch((e: Error) => report(e.message));
           return;
         }
+        if (m.type === 'roster') {
+          connectedPlayers.clear();
+          for (const player of m.players) if (player.connections > 0) connectedPlayers.add(player.playerId);
+          return;
+        }
         if (m.type === 'sheetInventory') {
           if (m.actorId === actorId && character && applyInventory(character, m.inventory)) bus.notify();
+          return;
+        }
+        if (m.type === 'sheetFeature') {
+          if (m.actorId === actorId && character && applyFeatureState(character, m)) {
+            bus.notify();
+            changed?.();
+          }
           return;
         }
         if (m.type === 'snapshot') store.applySnapshot(m.seq, m.state);

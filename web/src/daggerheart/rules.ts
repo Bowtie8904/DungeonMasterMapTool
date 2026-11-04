@@ -91,21 +91,22 @@ function ancestryFeatures(d: RulesData, ch: CreationChoices) {
 }
 
 /** Creation grants are evaluated from the selected sources, never feature names or already-built sheets. */
-export function creationAllowances(d: RulesData, ch: CreationChoices): { hp: number; stress: number; evasion: number; domainCards: number; domains: string[] } {
+export function creationAllowances(d: RulesData, ch: CreationChoices): { hp: number; stress: number; evasion: number; domainCards: number; experienceBonus: number; domains: string[] } {
   const entries = creationEntries(d, ch);
   const sources = [...entries.flatMap((e) => [e.automation, ...(e.features ?? []).map((f) => f.automation)]),
     wholeAncestry(d, ch)?.automation, ...ancestryFeatures(d, ch).map((f) => f?.automation)];
-  const out = { hp: 0, stress: 0, evasion: 0, domainCards: 2, domains: [...(findClass(d, ch.className)?.domains ?? [])] };
+  const out = { hp: 0, stress: 0, evasion: 0, domainCards: 2, experienceBonus: 0, domains: [...(findClass(d, ch.className)?.domains ?? [])] };
   for (const a of sources) {
     const grant = a?.creation;
     if (!grant) continue;
-    for (const stat of ['hp', 'stress', 'evasion', 'domainCards'] as const) {
+    for (const stat of ['hp', 'stress', 'evasion', 'domainCards', 'experienceBonus'] as const) {
       const value = grant[stat];
       if (typeof value === 'number' && Number.isFinite(value)) out[stat] += Math.trunc(value);
     }
     out.domains.push(...(grant.domains ?? []));
   }
   out.domainCards = Math.max(0, out.domainCards);
+  out.experienceBonus = Math.max(0, out.experienceBonus);
   out.domains = [...new Set(out.domains)];
   return out;
 }
@@ -131,6 +132,17 @@ export const starterGear = (list: CompendiumEntry[]) => {
 
 export function experienceProblems(names: string[]): string[] {
   return names.some((n) => !n.trim()) || names.length < 2 ? ['Write two Experiences.'] : [];
+}
+
+export function creationExperienceProblems(d: RulesData, ch: CreationChoices): string[] {
+  const p = experienceProblems(ch.experiences);
+  if (creationAllowances(d, ch).experienceBonus > 0) {
+    const index = ch.experienceBonusIndex;
+    if (index === undefined || !Number.isInteger(index) || index < 0 || !ch.experiences[index]?.trim()) {
+      p.push('Choose an Experience for the permanent creation bonus.');
+    }
+  }
+  return p;
 }
 
 export function traitsValid(t: Record<TraitName, number>): boolean {
@@ -162,7 +174,7 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   if (!primary) p.push('Choose a primary weapon.');
   else if (primary.weapon?.burden && /two/i.test(primary.weapon.burden) && ch.secondary) p.push('A two-handed weapon leaves no hand for a secondary weapon.');
   if (!d.armor.some((e) => e.name === ch.armor)) p.push('Choose armor.');
-  p.push(...experienceProblems(ch.experiences));
+  p.push(...creationExperienceProblems(d, ch));
   p.push(...creationCardProblems(d, ch));
   return p;
 }
@@ -183,6 +195,8 @@ function markSpellcast(c: CharacterSheet, trait?: string): void {
 export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: CharacterSheet): CharacterSheet {
   const cardProblems = creationCardProblems(d, ch);
   if (!prev?.testingCharacter && cardProblems.length) throw new Error(cardProblems.join(' '));
+  const experienceSelectionProblems = creationExperienceProblems(d, ch);
+  if (creationAllowances(d, ch).experienceBonus > 0 && experienceSelectionProblems.length) throw new Error(experienceSelectionProblems.join(' '));
   const name = ch.name.trim() || prev?.name || 'Unnamed hero';
   const c = emptyCharacter(name);
   const cls = findClass(d, ch.className);
@@ -242,7 +256,9 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   if (potion) addToSheet(c, 'consumables', potion);
   if (ch.classItem.trim()) c.inventory.push({ name: ch.classItem.trim(), type: 'class item', qty: 1 });
 
-  c.experiences = ch.experiences.filter((n) => n.trim()).map((n) => ({ name: n.trim(), mod: 2 }));
+  c.experiences = ch.experiences.map((n, i) => ({
+    name: n.trim(), mod: 2 + (i === ch.experienceBonusIndex ? grants.experienceBonus : 0),
+  })).filter((e) => e.name);
   for (const n of ch.cards) {
     const card = d.cards.find((e) => e.name === n && e.level === 1);
     if (card) (c.loadout.length < LOADOUT_SIZE ? c.loadout : c.vault).push(cardFrom(card, c));

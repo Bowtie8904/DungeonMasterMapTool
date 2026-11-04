@@ -86,13 +86,30 @@ Nothing starts until you click **Start online session**, so offline play and the
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
   Domain-card counters labeled "Tokens" sit in each loadout card's header between its domain and recall cost;
   domain-card action groups have no enclosing border, while individual buttons retain their normal styling.
+  Ancestry actions perform their configured attacks, damage and checks instead of only spending resources.
+  Feature checks such as Unshakable show a concise consequence below the dice and include the full feature in Source.
+  Firbolg and Centaur Charge reactions on Agility roll cards spend one Stress and post a fixed 1d12 damage roll.
+  Hallowed Aura and Luckbender can react to other players' action rolls; Fearless and Hallowed Aura update the
+  original roll to **with Hope** without changing its dice, including its available follow-up actions.
+  Rerolls produce a single roll card. Session-limited features reset when the DM stops and starts hosting,
+  not when a player reconnects; per-scene use counters are not tracked.
+  Ignition is a primary-weapon damage option, paid once while its removable buff is active. Retract preselects
+  physical resistance and action-roll disadvantage and prevents player token movement (the DM can still move it).
+  Surefooted, Natural Climber and Hunter's Nose appear as applicable trait-roll options; suggested advantage or
+  disadvantage can be overridden, while selected Surefooted prevents a disadvantage die.
+  Lifespring and other configured healing actions select and heal a character; Eye of the Storm selects a
+  character for +1 Evasion until the caster takes Severe damage or recasts. Luckbringer grants Hope to all
+  actors belonging to currently connected players.
 - **Daggerheart Character Mancer and level-up guide**: a new actor's sheet only shows a "Start the Character Mancer"
   prompt. The wizard shows one small choice per step (class, subclass, ancestry, community, an optional transformation,
   traits, primary weapon, secondary weapon, armor, supplies,
   background, Experiences, domain cards, connections, identity, review) with Back/Next and a progress bar, and builds
   the full sheet from the compendium. The sheet's **Level up** button starts a second wizard (tier-milestone Experience,
   two advancement points, per-advancement details, new domain card, optional card swap). All choices are remembered
-  in the sheet (`mancer.choices`, `levelUps`); The advancement slot counts per tier are an
+  in the sheet (`mancer.choices`, `levelUps`).
+  Clank's Purposeful Design adds an Experience selection during creation and permanently increases that
+  Experience by +1; mixed ancestry only grants this choice when that feature was selected.
+  The advancement slot counts per tier are defined in an
   editable table (`ADVANCEMENT_RULES` in `web/src/daggerheart/rules.ts`). **Transformations** (Hope & Fear, from
   `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are

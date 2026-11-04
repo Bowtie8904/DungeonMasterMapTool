@@ -1,6 +1,7 @@
 package dmmt.ui;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -162,6 +163,24 @@ public final class ChatPanel extends VBox {
             messages.getChildren().removeIf(card -> card.getUserData() instanceof JsonNode m
                     && m.path("id").asLong() == message.path("id").asLong()
                     && m.path("ts").asLong() == message.path("ts").asLong());
+            return;
+        }
+        if ("rollUpdate".equals(message.path("type").asText())) {
+            for (int i = 0; i < messages.getChildren().size(); i++) {
+                javafx.scene.Node card = messages.getChildren().get(i);
+                if (!(card.getUserData() instanceof JsonNode previous)
+                        || !"roll".equals(previous.path("type").asText())
+                        || previous.path("id").asLong() != message.path("id").asLong()
+                        || previous.path("ts").asLong() != message.path("ts").asLong()) continue;
+                ObjectNode updated = (ObjectNode) previous.deepCopy();
+                if (message.has("outcome")) updated.set("outcome", message.get("outcome"));
+                else updated.remove("outcome");
+                if (message.has("featureUses")) updated.set("featureUses", message.get("featureUses"));
+                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated));
+                replacement.setUserData(updated);
+                messages.getChildren().set(i, replacement);
+                return;
+            }
             return;
         }
         addCard(message);

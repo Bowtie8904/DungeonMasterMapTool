@@ -2,21 +2,22 @@
 // Damage on attacks, and the roll triggers (rerolls, Hope/Stress on matching dice) of the character's features.
 
 import { el } from '../login';
+import { useFeature } from '../api';
 import type { RollMessage, RollSource } from '../protocol';
-import { rollSourceFor } from './roll-source';
 import type { CharacterSheet } from './data';
-import { actionBlocker, availableRollTriggers, costText, runAction } from './engine';
+import { availableRollTriggers, costText, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 
 export interface RollButtonSheet {
   character: CharacterSheet;
   bus: SheetBus;
-  save: () => void;
+  save: (() => void) & { flush?: () => Promise<void> };
 }
 
 export interface RollButtonHost {
   sheet(actorId: string): Promise<RollButtonSheet | undefined>;
+  actorIds?(): string[];
   send(roll: RollRequest): boolean;
   log(text: string, rollSource?: RollSource): void;
   toast(message: string): void;
@@ -26,7 +27,7 @@ export interface RollButtonHost {
 export function rollContext(m: RollMessage): RollContext | null {
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
-  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total };
+  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome } as RollContext;
 }
 
 function newRef(): string {
@@ -38,7 +39,16 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
   const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
   if (t.trigger.reroll === 'hope') return { ...base, label, expression: '1d12', source: 'reroll' };
-  if (!original) return null;
+  original ??= {
+    label: m.label ?? 'Roll',
+    expression: m.expression,
+    kind: m.kind === 'duality' ? 'duality' : undefined,
+    contributions: m.breakdown?.map(({ label: name, expression, notes }) => ({ label: name, expression, notes })),
+    rollSource: m.rollSource,
+    actorId: m.actorId,
+    source: m.source,
+    weapon: m.weapon,
+  };
   const advantage = t.trigger.advantage;
   return {
     ...original, ...base, label, source: m.source,
@@ -48,61 +58,76 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
 }
 
 export function rollButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null {
-  if (!m.actorId || !m.source) return null;
+  if (!m.source) return null;
   const actorId = m.actorId;
   const ctx = rollContext(m);
   const isAttack = m.source.split(',').includes('attack');
-  if (!(ctx || (isAttack && m.weapon))) return null;
+  if (!(ctx || (actorId && isAttack && m.weapon))) return null;
   const box = el('div', { class: 'roll-actions' });
-  const used = new Set<string>();
 
-  const paint = (sheet: RollButtonSheet) => {
-    const c = sheet.character;
+  const paint = (sheets: Array<{ actorId: string; sheet: RollButtonSheet }>) => {
     const buttons: HTMLElement[] = [];
-    if (isAttack && m.weapon) {
+    const rolledActor = actorId ? sheets.find((entry) => entry.actorId === actorId) : undefined;
+    if (rolledActor && isAttack && m.weapon) {
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
-      damage.addEventListener('click', () => { if (!sheet.bus.damage?.(m.weapon!, !!ctx && ctx.hope === ctx.fear)) host.toast(`${m.weapon} is no longer equipped.`); });
+      damage.addEventListener('click', () => { if (!rolledActor.sheet.bus.damage?.(m.weapon!, !!ctx && ctx.hope === ctx.fear)) host.toast(`${m.weapon} is no longer equipped.`); });
       buttons.push(damage);
     }
-    for (const t of ctx ? availableRollTriggers(c, ctx) : []) {
-      const id = `${t.key}:${t.trigger.id}`;
-      const cost = costText(t.trigger.cost, c);
-      const b = el('button', { class: 'small', type: 'button' }, `${t.trigger.label}${cost ? ` (${cost})` : ''}`);
-      const block = used.has(id) ? 'Already used on this roll' : actionBlocker(c, t.key, t.automation, t.trigger);
-      b.title = block ?? t.trigger.description ?? t.source;
-      b.disabled = !!block;
-      b.addEventListener('click', () => {
-        const current = actionBlocker(c, t.key, t.automation, t.trigger);
-        if (current) { host.toast(current); paint(sheet); return; }
-        const complete = () => {
-          const message = runAction(c, t.key, t.automation, t.trigger, `${t.source} - ${t.trigger.label}`);
-          if (message === null) return;
-          if (t.trigger.endEffect) c.effects = c.effects.filter((e) => e.name !== t.trigger.endEffect);
-          used.add(id);
-          if (!t.trigger.damage) host.log(`${c.name}: ${message}`, rollSourceFor(c, t.key));
-          sheet.bus.notify();
-          sheet.save();
-          paint(sheet);
+
+    for (const { actorId: featureActorId, sheet } of sheets) {
+      const c = sheet.character;
+      for (const t of ctx ? availableRollTriggers(c, ctx) : []) {
+        if (usesLeft(c, t.key, t.automation) === 0) continue;
+        const trigger = t.trigger as typeof t.trigger & {
+          audience?: string; outcome?: 'hope' | 'fear'; target?: 'actor' | 'party';
         };
-        if (t.trigger.damage) {
-          if (!sheet.bus.spellDamage?.(t.source, t.trigger.damage, !!ctx && ctx.hope === ctx.fear, complete, rollSourceFor(c, t.key) ?? m.rollSource)) host.toast('The character sheet is not open.');
-          return;
-        }
-        if (t.trigger.reroll) {
-          const request = rerollRequest(m, t, m.ref ? sheet.bus.sent.get(m.ref) : undefined);
-          if (!request) { host.toast('The original roll is no longer available to repeat.'); return; }
-          if (!host.send(request)) { host.toast('Not connected. The reroll was not sent and nothing was spent.'); return; }
-          sheet.bus.sent.set(request.ref!, request);
-        }
-        complete();
-      });
-      buttons.push(b);
+        const actualOutcome = ctx ? (ctx.hope === ctx.fear ? 'crit' : ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) : undefined;
+        if (trigger.outcome && (actualOutcome === 'crit' || actualOutcome === trigger.outcome)) continue;
+        const audience = trigger.audience ?? 'self';
+        if (audience === 'self' && featureActorId !== actorId) continue;
+        if (audience === 'ally' && featureActorId === actorId) continue;
+        if (m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
+        const cost = costText(t.trigger.cost, c);
+        const b = el('button', { class: 'small', type: 'button' },
+          `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
+        b.title = t.trigger.description ?? t.source;
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            await sheet.save.flush?.();
+            await useFeature({
+              actorId: featureActorId,
+              key: t.key,
+              actionId: t.trigger.id,
+              roll: { id: m.id, ts: m.ts },
+            });
+            if (t.trigger.reroll) {
+              const request = rerollRequest(m, t);
+              if (!request) throw new Error('The original roll is no longer available to repeat.');
+              if (!host.send(request)) throw new Error('Not connected. The reroll was not sent.');
+            }
+          } catch (error) {
+            host.toast((error as Error).message);
+            b.disabled = false;
+          }
+        });
+        buttons.push(b);
+      }
     }
     box.replaceChildren(...buttons);
     box.hidden = buttons.length === 0;
   };
 
+  const paintFor = async () => {
+    const ids = new Set([...(host.actorIds?.() ?? []), ...(actorId ? [actorId] : [])]);
+    const values = await Promise.all([...ids].map(async (id) => {
+      const sheet = await host.sheet(id);
+      return sheet ? { actorId: id, sheet } : undefined;
+    }));
+    paint(values.filter((value): value is { actorId: string; sheet: RollButtonSheet } => !!value));
+  };
+
   box.hidden = true;
-  void host.sheet(actorId).then((sheet) => { if (sheet) paint(sheet); }).catch(() => {});
+  void paintFor().catch(() => {});
   return box;
 }

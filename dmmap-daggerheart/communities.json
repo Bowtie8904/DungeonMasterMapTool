@@ -48,13 +48,7 @@
         "on": "duality",
         "when": "fear",
         "description": "The GM does not gain Fear.",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "hope",
-          "amount": 1
-         }
-        ]
+        "outcome": "hope"
        }
       ]
      }
@@ -120,7 +114,18 @@
    "features": [
     {
      "name": "Privilege",
-     "text": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
+     "text": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Privilege",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
+       }
+      ]
+     }
     }
    ]
   },
@@ -131,7 +136,18 @@
    "features": [
     {
      "name": "Well-Read",
-     "text": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
+     "text": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Well-Read",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
+       }
+      ]
+     }
     }
    ]
   },
@@ -191,7 +207,18 @@
    "features": [
     {
      "name": "Steady",
-     "text": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
+     "text": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Steady",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
+       }
+      ]
+     }
     }
    ]
   },
@@ -258,7 +285,18 @@
    "features": [
     {
      "name": "Scoundrel",
-     "text": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
+     "text": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Scoundrel",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
+       }
+      ]
+     }
     }
    ]
   },
@@ -269,7 +307,18 @@
    "features": [
     {
      "name": "Low-Light Living",
-     "text": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
+     "text": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Low-Light Living",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
+       }
+      ]
+     }
     }
    ]
   },
@@ -326,7 +375,18 @@
    "features": [
     {
      "name": "Lightfoot",
-     "text": "Your movement is naturally silent. You have advantage on rolls to move without being heard."
+     "text": "Your movement is naturally silent. You have advantage on rolls to move without being heard.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Lightfoot",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "Your movement is naturally silent. You have advantage on rolls to move without being heard."
+       }
+      ]
+     }
     }
    ]
   }

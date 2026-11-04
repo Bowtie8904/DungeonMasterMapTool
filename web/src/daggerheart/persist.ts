@@ -70,6 +70,73 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     }
   }
   syncResources(c);
+  for (const source of automationSources(c)) stripSceneUses(source.automation);
+  for (const [key, use] of Object.entries(c.usage)) if (use.per === 'scene') delete c.usage[key];
+}
+
+function automationSources(c: CharacterSheet): Array<{ key: string; automation?: import('./engine').Automation }> {
+  return [
+    ...c.features.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
+    ...c.heritage.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
+    ...c.loadout.map((item) => ({ key: `card:${item.name}`, automation: item.automation })),
+    ...c.activeWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
+    ...c.carriedWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
+    ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, automation: c.activeArmor.automation }] : []),
+    ...c.carriedArmor.map((item) => ({ key: `armor:${item.name}`, automation: item.automation })),
+    ...c.vault.map((item) => ({ key: `card:${item.name}`, automation: item.automation })),
+    ...c.inventory.map((item) => ({ key: `item:${item.name}`, automation: item.automation })),
+  ];
+}
+
+function stripSceneUses(value: unknown): void {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach(stripSceneUses);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  const uses = record.uses;
+  if (uses && typeof uses === 'object' && (uses as Record<string, unknown>).per === 'scene') delete record.uses;
+  Object.values(record).forEach(stripSceneUses);
+}
+
+export function featureTarget(c: CharacterSheet, key: string, actionId: string): 'actor' | 'party' | undefined {
+  const [kind, ...rest] = key.split(':');
+  const name = rest.join(':');
+  const source = kind === 'feat'
+    ? [...c.features, ...c.heritage].find((item) => item.name === name)
+    : kind === 'card' ? c.loadout.find((item) => item.name === name)
+      : kind === 'weapon' ? c.activeWeapons.find((item) => item.name === name)
+        : kind === 'armor' ? c.activeArmor?.name === name ? c.activeArmor : undefined
+          : kind === 'item' ? c.inventory.find((item) => item.name === name) : undefined;
+  const action = source?.automation?.actions?.find((item) => item.id === actionId) as
+    (import('./engine').ActionDef & { target?: 'actor' | 'party' }) | undefined;
+  return action?.target;
+}
+
+export interface FeatureSheetState {
+  actorId: string;
+  featureRevision: number;
+  hp?: CharacterSheet['hp'];
+  stress?: CharacterSheet['stress'];
+  hope?: CharacterSheet['hope'];
+  armorTrack?: CharacterSheet['armorTrack'];
+  effects?: CharacterSheet['effects'];
+  usage?: CharacterSheet['usage'];
+  resources?: CharacterSheet['resources'];
+}
+
+export function applyFeatureState(c: CharacterSheet, update: FeatureSheetState): boolean {
+  if (update.featureRevision <= ((c as CharacterSheet & { featureRevision?: number }).featureRevision ?? 0)) return false;
+  (c as CharacterSheet & { featureRevision?: number }).featureRevision = update.featureRevision;
+  if (update.hp) c.hp = structuredClone(update.hp);
+  if (update.stress) c.stress = structuredClone(update.stress);
+  if (update.hope) c.hope = structuredClone(update.hope);
+  if (update.armorTrack) c.armorTrack = structuredClone(update.armorTrack);
+  if (update.effects) c.effects = structuredClone(update.effects);
+  if (update.usage) c.usage = structuredClone(update.usage);
+  if (update.resources) c.resources = structuredClone(update.resources);
+  return true;
 }
 
 export async function refreshCharacterAutomation(c: CharacterSheet): Promise<void> {
@@ -93,6 +160,8 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
       onWarning(`Could not refresh compendium rules; using saved rules: ${(e as Error).message}`);
     }
   }
+  for (const source of automationSources(c)) stripSceneUses(source.automation);
+  for (const [key, use] of Object.entries(c.usage)) if (use.per === 'scene') delete c.usage[key];
   return c;
 }
 
@@ -132,6 +201,9 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
       } catch (e) {
         if (e instanceof InventoryConflict) {
           applyInventory(c, e.sheet);
+          applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
+            hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, armorTrack: e.sheet.armorTrack,
+            effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources });
           document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
         }
         onError(`Could not save the character sheet: ${(e as Error).message}`);
@@ -153,6 +225,12 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
       const sheet = await getSheet(actorId);
       if (sheet.sheet && applyInventory(c, sheet.sheet)) {
         document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+      }
+      if (sheet.sheet && applyFeatureState(c, { actorId,
+        featureRevision: (sheet.sheet as { featureRevision?: number }).featureRevision ?? 0,
+        hp: sheet.sheet.hp, stress: sheet.sheet.stress, hope: sheet.sheet.hope, armorTrack: sheet.sheet.armorTrack,
+        effects: sheet.sheet.effects, usage: sheet.sheet.usage, resources: sheet.sheet.resources })) {
+        document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
       }
     },
   });

@@ -1,7 +1,7 @@
 // Automation engine for the dmmap-daggerheart data format (see docs/DAGGERHEART_DATA.md).
 // Pure functions over the CharacterSheet so they can be unit-tested without a DOM.
 
-import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
+import { Advantage, CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 
@@ -31,6 +31,10 @@ export interface EffectDef {
   until?: Until;
   text?: string;
   modifiers?: Modifier[];
+  blocksMovement?: boolean;
+  endOnSourceSevere?: boolean;
+  sourceActorId?: string;
+  sourceKey?: string;
 }
 
 export interface Step {
@@ -55,6 +59,10 @@ export interface ActionDef {
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   /** Sends a plain roll to the chat, for example the d4 of I See It Coming added to the Evasion against one attack. */
   sendRoll?: { dice: string; base?: 'evasion'; label: string };
+  actionRoll?: { trait?: TraitName; attack?: boolean; difficulty?: number };
+  damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
+  target?: 'actor' | 'party';
+  check?: { dice: string; unless: number; mark: 'stress' };
 }
 
 export interface ResourceDef {
@@ -75,6 +83,10 @@ export interface RollOption extends ActionDef {
   /** Effect started by the first roll that selects this option; while it is active the option is pre-selected and free. */
   effect?: EffectDef;
   weapon?: 'source' | 'primary' | 'secondary' | 'any';
+  defaultOn?: boolean;
+  advantage?: 'advantage' | 'disadvantage';
+  ignoreDisadvantage?: boolean;
+  requiresEffect?: string;
 }
 
 /** A button a feature offers on a finished roll in the chat. */
@@ -89,9 +101,9 @@ export interface RollTrigger extends ActionDef {
   requiresEffect?: string;
   /** Removes the effect with this name when the button is used. */
   endEffect?: string;
-  /** Opens the damage dialog for a spell: Proficiency dice of the given die unless fixed. */
-  damage?: { dice: string; fixed?: boolean; extraDice?: number };
   description?: string;
+  audience?: 'self' | 'ally' | 'any';
+  outcome?: 'hope' | 'fear';
 }
 
 export interface Automation {
@@ -106,7 +118,7 @@ export interface Automation {
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   actions?: ActionDef[];
   resources?: ResourceDef[];
-  creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[] };
+  creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[]; experienceBonus?: number };
   rollOptions?: RollOption[];
   damage?: { extraDice: number; dropLowest: number };
   /** Options offered in the incoming-damage dialog (see damage.ts). */
@@ -341,9 +353,10 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
   }));
   return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
     .filter((o) => targets.includes(o.roll))
-    .filter((o) => !s.weapon || o.weapon === 'any' || (o.weapon === 'primary' || o.weapon === 'secondary'
-      ? weapon?.slot.toLowerCase() === o.weapon
-      : !weapon || weapon === s.weapon))
+    .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
+    .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
+      ? weapon?.slot.toLowerCase() === o.weapon && c.activeWeapons.includes(weapon)
+      : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
     .map((option) => ({
       key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
       source: s.name, automation: option.uses ? { ...s.auto!, uses: option.uses } : s.auto!, option,
@@ -371,6 +384,16 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
   return out;
 }
 
+export function suggestedAdvantage(selected: AvailableRollOption[]): Advantage {
+  const advantage = selected.some((s) => s.option.advantage === 'advantage');
+  const disadvantage = selected.some((s) => s.option.advantage === 'disadvantage');
+  return advantage === disadvantage ? 0 : advantage ? 1 : -1;
+}
+
+export function effectiveAdvantage(requested: Advantage, selected: AvailableRollOption[]): Advantage {
+  return requested === -1 && selected.some((s) => s.option.ignoreDisadvantage) ? 0 : requested;
+}
+
 export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOption[], experience = false): string | null {
   const cost: Record<string, number> = experience ? { hope: 1 } : {};
   const uses = new Map<string, number>();
@@ -384,7 +407,8 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
     if (s.automation.uses) {
       const count = (uses.get(s.key) ?? 0) + 1;
       uses.set(s.key, count);
-      if (count > usesLeft(c, s.key, s.automation)!) return `${s.source}: not enough uses left`;
+      const left = usesLeft(c, s.key, s.automation);
+      if (left !== null && count > left) return `${s.source}: not enough uses left`;
     }
     for (const [res, value] of Object.entries(s.option.cost ?? {})) cost[res] = (cost[res] ?? 0) + evalValue(value, c);
   }
@@ -477,7 +501,7 @@ export function applyRest(c: CharacterSheet, kind: RestKind): void {
 }
 
 export function usesLeft(c: CharacterSheet, key: string, a: Automation): number | null {
-  if (!a.uses) return null;
+  if (!a.uses || a.uses.per === 'scene') return null;
   return Math.max(0, a.uses.max - (c.usage[key]?.used ?? 0));
 }
 
@@ -536,7 +560,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (context !== 'rest' && isRestOnlyAction(action)) return 'Choose this move in the rest dialog';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
-  if (left !== null && left <= 0) return 'No uses left until a rest';
+  if (left !== null && left <= 0) return a.uses?.per === 'session' ? 'No uses left this session' : 'No uses left until a rest';
   for (const step of action.steps ?? []) {
     if (step.resource && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
   }
@@ -572,7 +596,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   payCost(c, action.cost);
   const cost = costText(action.cost, c);
   if (cost) log.push(`spent ${cost}`);
-  if (a.uses) {
+  if (a.uses && a.uses.per !== 'scene') {
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
     u.used++;
     c.usage[key] = u;
@@ -647,6 +671,7 @@ export interface RollContext {
   hope: number;
   fear: number;
   total: number;
+  outcome?: 'hope' | 'fear';
 }
 
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
@@ -657,8 +682,8 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
   // Players never know the difficulty, so any roll may have failed (Hope rolls and criticals included).
   const failed = true;
   switch (t.when ?? 'always') {
-    case 'fear': return ctx.fear > ctx.hope;
-    case 'hope': return ctx.hope > ctx.fear;
+    case 'fear': return ctx.hope !== ctx.fear && (ctx.outcome ? ctx.outcome === 'fear' : ctx.fear > ctx.hope);
+    case 'hope': return ctx.hope !== ctx.fear && (ctx.outcome ? ctx.outcome === 'hope' : ctx.hope > ctx.fear);
     case 'failure': return failed;
     case 'hopeDie': return ctx.hope === t.die;
     case 'dieMatches': {

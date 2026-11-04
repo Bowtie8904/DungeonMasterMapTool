@@ -22,6 +22,17 @@
         "id": "use",
         "label": "Hallowed Aura"
        }
+      ],
+      "rollTriggers": [
+       {
+        "id": "hope",
+        "label": "Hallowed Aura: change Fear into Hope",
+        "on": "action",
+        "when": "fear",
+        "outcome": "hope",
+        "audience": "ally",
+        "description": "An ally within Close range rolled with Fear."
+       }
       ]
      }
     },
@@ -37,10 +48,6 @@
         "severity": 1,
         "cost": {
          "hope": 1
-        },
-        "uses": {
-         "max": 1,
-         "per": "scene"
         }
        }
       ]
@@ -55,7 +62,12 @@
    "features": [
     {
      "name": "Purposeful Design",
-     "text": "Decide who made you and for what purpose. At character creation, choose one of your Experiences that best aligns with this purpose and gain a permanent +1 bonus to it."
+     "text": "Decide who made you and for what purpose. At character creation, choose one of your Experiences that best aligns with this purpose and gain a permanent +1 bonus to it.",
+     "automation": {
+      "creation": {
+       "experienceBonus": 1
+      }
+     }
     },
     {
      "name": "Efficient",
@@ -106,7 +118,27 @@
     },
     {
      "name": "Elemental Breath",
-     "text": "Choose an element for your breath (such as electricity, fire, or ice). You can use this breath against a target or group of targets within Very Close range, treating it as an Instinct weapon that deals **d8** magic damage using your Proficiency."
+     "text": "Choose an element for your breath (such as electricity, fire, or ice). You can use this breath against a target or group of targets within Very Close range, treating it as an Instinct weapon that deals **d8** magic damage using your Proficiency.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Attack",
+        "actionRoll": {
+         "trait": "Instinct",
+         "attack": true
+        }
+       },
+       {
+        "id": "damage",
+        "label": "Damage",
+        "damage": {
+         "dice": "d8",
+         "type": "magic"
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -245,6 +277,35 @@
         "label": "Ignition",
         "cost": {
          "stress": 1
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Ignition",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Your primary weapon is ablaze: +1d6 damage and bright light. Remove at the end of the scene."
+          }
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "ignition",
+        "label": "Ignition",
+        "roll": "damage",
+        "weapon": "primary",
+        "dice": "1d6",
+        "cost": {
+         "stress": 1
+        },
+        "effect": {
+         "name": "Ignition",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Your primary weapon is ablaze: +1d6 damage and bright light. Remove at the end of the scene."
         }
        }
       ]
@@ -269,11 +330,23 @@
        {
         "id": "reroll",
         "label": "Luckbender: reroll Duality Dice",
-        "on": "duality",
+        "on": "action",
         "cost": {
          "hope": 3
         },
-        "reroll": "duality"
+        "reroll": "duality",
+        "audience": "any",
+        "description": "You or a willing ally within Close range made an action roll."
+       }
+      ],
+      "actions": [
+       {
+        "id": "use",
+        "label": "Luckbender: roll Duality Dice",
+        "actionRoll": {},
+        "cost": {
+         "hope": 3
+        }
        }
       ]
      }
@@ -336,9 +409,30 @@
       "actions": [
        {
         "id": "use",
-        "label": "Charge",
+        "label": "Charge damage",
         "cost": {
          "stress": 1
+        },
+        "damage": {
+         "dice": "1d12",
+         "fixed": true,
+         "type": "physical"
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "charge",
+        "label": "Charge: roll damage",
+        "on": "trait:Agility",
+        "description": "Successful Agility Roll moving from Far or Very Far into Melee. Damage all targets within Melee.",
+        "cost": {
+         "stress": 1
+        },
+        "damage": {
+         "dice": "1d12",
+         "fixed": true,
+         "type": "physical"
         }
        }
       ]
@@ -346,7 +440,20 @@
     },
     {
      "name": "Unshakable",
-     "text": "When you would mark a Stress, roll a **d6**. On a result of 6, don’t mark it."
+     "text": "When you would mark a Stress, roll a **d6**. On a result of 6, don’t mark it.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Unshakable",
+        "check": {
+         "dice": "1d6",
+         "unless": 6,
+         "mark": "stress"
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -357,7 +464,19 @@
    "features": [
     {
      "name": "Fungril Network",
-     "text": "Make an **Instinct Roll** (**12**) to use your mycelial array to speak with others of your ancestry. On a success, you can communicate across any distance."
+     "text": "Make an **Instinct Roll** (**12**) to use your mycelial array to speak with others of your ancestry. On a success, you can communicate across any distance.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Fungril Network",
+        "actionRoll": {
+         "trait": "Instinct",
+         "difficulty": 12
+        }
+       }
+      ]
+     }
     },
     {
      "name": "Death Connection",
@@ -403,13 +522,38 @@
         "label": "Retract",
         "cost": {
          "stress": 1
-        }
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Retracted",
+           "kind": "buff",
+           "until": "manual",
+           "blocksMovement": true,
+           "text": "Resistance to physical damage, disadvantage on action rolls, and you cannot move. Remove when you leave your shell."
+          }
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "retracted",
+        "label": "Retracted",
+        "roll": "action",
+        "requiresEffect": "Retracted",
+        "defaultOn": true,
+        "advantage": "disadvantage",
+        "description": "Disadvantage on action rolls."
        }
       ],
       "mitigation": [
        {
         "id": "retracted",
         "label": "Retracted",
+        "requiresEffect": "Retracted",
+        "defaultOn": true,
         "description": "While retracted into your shell you have resistance to physical damage.",
         "when": {
          "type": "physical"
@@ -465,19 +609,7 @@
     },
     {
      "name": "Flicker Step",
-     "text": "Once per scene, you can teleport to another point you can see within Far range.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "scene"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Flicker Step"
-       }
-      ]
-     }
+     "text": "Once per scene, you can teleport to another point you can see within Far range."
     }
    ]
   },
@@ -488,7 +620,19 @@
    "features": [
     {
      "name": "Surefooted",
-     "text": "You ignore disadvantage on Agility Rolls."
+     "text": "You ignore disadvantage on Agility Rolls.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "surefooted",
+        "label": "Surefooted",
+        "roll": "trait:Agility",
+        "defaultOn": true,
+        "ignoreDisadvantage": true,
+        "description": "Ignore disadvantage on Agility rolls."
+       }
+      ]
+     }
     },
     {
      "name": "Danger Sense",
@@ -515,7 +659,27 @@
    "features": [
     {
      "name": "Luckbringer",
-     "text": "At the start of each session, everyone in your party gains a Hope."
+     "text": "At the start of each session, everyone in your party gains a Hope.",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Luckbringer",
+        "target": "party",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "name": "Internal Compass",
@@ -589,20 +753,25 @@
         "cost": {
          "stress": 2
         },
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "hope",
-          "amount": 1
-         }
-        ]
+        "outcome": "hope"
        }
       ]
      }
     },
     {
      "name": "Dread Visage",
-     "text": "You have advantage on rolls to intimidate hostile creatures."
+     "text": "You have advantage on rolls to intimidate hostile creatures.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Dread Visage",
+        "roll": "action",
+        "advantage": "advantage",
+        "description": "You have advantage on rolls to intimidate hostile creatures."
+       }
+      ]
+     }
     }
    ]
   },
@@ -630,7 +799,19 @@
     },
     {
      "name": "Retracting Claws",
-     "text": "Make an **Agility Roll** to scratch a target within Melee range. On a success, they become temporarily *Vulnerable*."
+     "text": "Make an **Agility Roll** to scratch a target within Melee range. On a success, they become temporarily *Vulnerable*.",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Retracting Claws",
+        "actionRoll": {
+         "trait": "Agility",
+         "attack": true
+        }
+       }
+      ]
+     }
     }
    ]
   },
@@ -679,9 +860,21 @@
       "actions": [
        {
         "id": "use",
-        "label": "Long Tongue",
+        "label": "Attack",
         "cost": {
          "stress": 1
+        },
+        "actionRoll": {
+         "trait": "Finesse",
+         "attack": true
+        }
+       },
+       {
+        "id": "damage",
+        "label": "Damage",
+        "damage": {
+         "dice": "d12",
+         "type": "physical"
         }
        }
       ]
@@ -696,7 +889,18 @@
    "features": [
     {
      "name": "Natural Climber",
-     "text": "You have advantage on Agility Rolls that involve balancing and climbing."
+     "text": "You have advantage on Agility Rolls that involve balancing and climbing.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "climber",
+        "label": "Natural Climber",
+        "roll": "trait:Agility",
+        "advantage": "advantage",
+        "description": "Advantage for balancing and climbing."
+       }
+      ]
+     }
     },
     {
      "name": "Nimble",
@@ -737,9 +941,28 @@
        {
         "id": "use",
         "label": "Eye of the Storm",
+        "target": "actor",
         "cost": {
          "hope": 2
-        }
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Eye of the Storm",
+           "kind": "buff",
+           "until": "manual",
+           "endOnSourceSevere": true,
+           "text": "+1 Evasion until the caster takes Severe damage or casts Eye of the Storm again.",
+           "modifiers": [
+            {
+             "stat": "evasion",
+             "value": 1
+            }
+           ]
+          }
+         }
+        ]
        }
       ]
      }
@@ -769,7 +992,15 @@
         "label": "Lifespring",
         "cost": {
          "stress": 1
-        }
+        },
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 1
+         }
+        ]
        }
       ]
      }
@@ -813,7 +1044,18 @@
     },
     {
      "name": "Hunter's Nose",
-     "text": "Your nose is highly specialized. You have **advantage on Instinct Rolls** that involve smelling."
+     "text": "Your nose is highly specialized. You have **advantage on Instinct Rolls** that involve smelling.",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "nose",
+        "label": "Hunter's Nose",
+        "roll": "trait:Instinct",
+        "advantage": "advantage",
+        "description": "Only for rolls involving smelling."
+       }
+      ]
+     }
     }
    ]
   },
@@ -829,9 +1071,30 @@
       "actions": [
        {
         "id": "use",
-        "label": "Charge",
+        "label": "Charge damage",
         "cost": {
          "stress": 1
+        },
+        "damage": {
+         "dice": "1d12",
+         "fixed": true,
+         "type": "physical"
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "charge",
+        "label": "Charge: roll damage",
+        "on": "trait:Agility",
+        "description": "Successful Agility Roll moving from Far or Very Far into Melee. Damage all targets within Melee.",
+        "cost": {
+         "stress": 1
+        },
+        "damage": {
+         "dice": "1d12",
+         "fixed": true,
+         "type": "physical"
         }
        }
       ]

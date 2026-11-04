@@ -86,12 +86,16 @@ function rollContent(m: RollMessage): HTMLElement {
   if (secret) return body;
   if (duality) {
     const r = dualityResult(values, m.total);
-    const badges = el('div', { class: 'roll-outcomes' }, el('span', { class: `roll-outcome ${r.outcome}` }, OUTCOME_LABEL[r.outcome]));
+    const outcome = r.outcome === 'crit' ? 'crit' : (m.outcome ?? r.outcome);
+    const badges = el('div', { class: 'roll-outcomes' }, el('span', { class: `roll-outcome ${outcome}` }, OUTCOME_LABEL[outcome]));
     if (typeof m.difficulty === 'number') {
       const success = dualitySucceeds(r, m.difficulty);
       badges.append(el('span', { class: `roll-outcome ${success ? 'success' : 'failure'}` }, `${success ? 'Success' : 'Failure'} / Difficulty ${m.difficulty}`));
     }
     body.append(badges);
+  }
+  if (m.featureRoll) {
+    body.append(el('div', { class: 'roll-feature-result' }, m.featureRoll.consequence));
   }
   const breakdown = el('details', { class: 'roll-breakdown' },
     el('summary', {}, 'Roll breakdown'),
@@ -171,7 +175,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
         el('div', { class: 'shared-source' }, m.rollSource.source),
         el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
   }
-  if (e.kind === 'roll' && m.fromId === playerId && rollActions) {
+  if (e.kind === 'roll' && rollActions) {
     const actions = rollActions(e.m as RollMessage);
     if (actions) card.append(actions);
   }

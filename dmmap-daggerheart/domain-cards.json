@@ -1443,10 +1443,6 @@
    "recall": 2,
    "text": "Once per scene, **spend any number of Hope** to target an equal number of adversaries within Close range. Each target makes a **Reaction Roll (15)**. Targets who fail take **d8+6** magic damage using your Spellcast trait as they are engulfed in dark fire. Targets who succeed take half damage.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",
@@ -2223,7 +2219,18 @@
    "domain": "Valor",
    "level": 4,
    "recall": 1,
-   "text": "Describe how you taunt a target within Close range, then make a **Presence Roll** against them. On a success, the target must mark a Stress, and the next time the GM spotlights them, they must target you with an attack, which they make with disadvantage."
+   "text": "Describe how you taunt a target within Close range, then make a **Presence Roll** against them. On a success, the target must mark a Stress, and the next time the GM spotlights them, they must target you with an attack, which they make with disadvantage.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Goad Them On",
+      "actionRoll": {
+       "trait": "Presence"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "gore-and-glory",
@@ -2362,7 +2369,15 @@
       "label": "Healing Strike",
       "cost": {
        "hope": 2
-      }
+      },
+      "target": "actor",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -2946,6 +2961,16 @@
        "hope": 1
       },
       "description": "Only within a natural environment."
+     }
+    ],
+    "actions": [
+     {
+      "id": "use",
+      "label": "Speak to plants and animals",
+      "actionRoll": {
+       "trait": "Instinct",
+       "difficulty": 12
+      }
      }
     ]
    }
@@ -3568,7 +3593,7 @@
      },
      {
       "id": "hp",
-      "label": "Clear 2 own HP",
+      "label": "Clear 2 HP",
       "steps": [
        {
         "op": "clear",
@@ -3578,11 +3603,12 @@
       ],
       "cost": {
        "restoration": 1
-      }
+      },
+      "target": "actor"
      },
      {
       "id": "stress",
-      "label": "Clear 2 own Stress",
+      "label": "Clear 2 Stress",
       "steps": [
        {
         "op": "clear",
@@ -3592,7 +3618,8 @@
       ],
       "cost": {
        "restoration": 1
-      }
+      },
+      "target": "actor"
      },
      {
       "id": "other",
@@ -4357,6 +4384,20 @@
        "stress": 1
       }
      }
+    ],
+    "rollTriggers": [
+     {
+      "id": "hope",
+      "label": "Stealth Expertise: change Fear into Hope",
+      "on": "action",
+      "when": "fear",
+      "outcome": "hope",
+      "audience": "any",
+      "cost": {
+       "stress": 1
+      },
+      "description": "You or an ally within Close range rolling to move unnoticed through a dangerous area."
+     }
     ]
    }
   },
@@ -4438,10 +4479,6 @@
    "recall": 2,
    "text": "Once per scene, **\nmark a Stress\n**to summon an otherworldly creature that deals **d8+1**\nmagic damage using your Spellcast trait to a target within Far range. If the target marks any Hit Points from this attack, they must succeed on a **Reaction Roll (12)** to steel themselves against the horror or mark an equal number of Stress.\n\nAfter making the attack, the creature dissipates.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",

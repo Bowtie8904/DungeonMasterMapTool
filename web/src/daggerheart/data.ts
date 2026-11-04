@@ -112,6 +112,8 @@ export interface CreationChoices {
   potion: 'health' | 'stamina';
   classItem: string;
   experiences: string[];
+  /** Original creation Experience index chosen for a permanent creation bonus. */
+  experienceBonusIndex?: number;
   cards: string[];
   /** Question and answer, one entry per background question */
   background: Array<{ question: string; answer: string }>;

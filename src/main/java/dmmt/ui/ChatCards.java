@@ -632,9 +632,7 @@ public final class ChatCards {
             return body;
         }
         if (duality) {
-            int hope = values.get(0);
-            int fear = values.get(1);
-            String outcome = hope == fear ? "crit" : hope > fear ? "hope" : "fear";
+            String outcome = dualityOutcome(m, values);
             FlowPane badges = new FlowPane(5, 5);
             badges.getChildren().add(badge(switch (outcome) {
                 case "crit" -> "Critical success";
@@ -649,8 +647,21 @@ public final class ChatCards {
             }
             body.getChildren().add(badges);
         }
+        if (m.path("featureRoll").isObject()) {
+            body.getChildren().add(wrapped(m.path("featureRoll").path("consequence").asText(), "chat-feature-result"));
+        }
         body.getChildren().add(breakdown(expression, details, total));
         return body;
+    }
+
+    static String dualityOutcome(JsonNode message, List<Integer> values) {
+        int hope = values.get(0);
+        int fear = values.get(1);
+        return hope == fear ? "crit" : switch (message.path("outcome").asText()) {
+            case "hope" -> "hope";
+            case "fear" -> "fear";
+            default -> hope > fear ? "hope" : "fear";
+        };
     }
 
     private static boolean[] allTrue(int size) {

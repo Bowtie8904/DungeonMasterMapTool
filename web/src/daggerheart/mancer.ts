@@ -6,7 +6,7 @@ import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
 import {
   ADVANCEMENT_TYPES, MAX_LEVEL, RulesData, STAGES, TRAIT_VALUES, achievementsAt, advancementCost, advancementLeft, applyLevelUp, buildCharacter,
-  classEntries, creationAllowances, creationCardProblems, creationProblems, emptyChoices, findClass, guideFor, levelUpCards, levelUpProblems, loadRulesData, setTransformation, shortSubclass,
+  classEntries, creationAllowances, creationCardProblems, creationExperienceProblems, creationProblems, emptyChoices, experienceProblems, findClass, guideFor, levelUpCards, levelUpProblems, loadRulesData, setTransformation, shortSubclass,
   starterGear, subclassCard, subclassStageOf, subclassesOf, suggestedTraits, startingCards, traitsValid,
 } from './rules';
 
@@ -439,9 +439,21 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
 
     list.push({
       key: 'experiences', title: 'Write two Experiences', hint: 'A short phrase about your history or skills, like "Tavern brawler" or "Raised by wolves". Each gives +2 when it applies to a roll.',
-      problem: () => (ch.experiences.length < 2 || ch.experiences.some((x) => !x.trim()) ? 'Write both Experiences.' : null),
+      problem: () => experienceProblems(ch.experiences)[0] ?? null,
       render: (body, touch) => {
         for (let i = 0; i < 2; i++) body.append(el('label', { class: 'dh-wiz-q' }, `Experience ${i + 1}`, textInput(ch.experiences[i] ?? '', 'e.g. Silver tongue', (v) => { ch.experiences[i] = v; }, touch)));
+      },
+    });
+
+    if (creation.experienceBonus > 0) list.push({
+      key: 'experience-bonus', title: 'Strengthen an Experience',
+      hint: `Your creation features grant a permanent ${signed(creation.experienceBonus)} to one of your Experiences. Choose which one.`,
+      problem: () => creationExperienceProblems(data, ch)[0] ?? null,
+      render: (body, _touch, redraw) => {
+        body.append(el('div', { class: 'cho-row' }, ...ch.experiences.map((name, i) => choice(
+          name.trim() || `Experience ${i + 1}`, `+2 → ${signed(2 + creation.experienceBonus)}`,
+          ch.experienceBonusIndex === i, () => { ch.experienceBonusIndex = i; redraw(); }, [], !name.trim(),
+        ))));
       },
     });
 
@@ -494,7 +506,7 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
             row('Traits', TRAIT_ORDER.map((n) => `${n.slice(0, 3)} ${signed(ch.traits[n])}`).join('  ')),
             row('Weapons', [ch.primary, ch.secondary].filter(Boolean).join(' + ')),
             row('Armor', ch.armor),
-            row('Experiences', ch.experiences.join(', ')),
+            row('Experiences', ch.experiences.map((name, i) => `${name} ${signed(2 + (i === ch.experienceBonusIndex ? creation.experienceBonus : 0))}`).join(', ')),
             row(`Domain cards (${ch.cards.length}/${creation.domainCards})`, ch.cards.join(', ')),
           ),
         );

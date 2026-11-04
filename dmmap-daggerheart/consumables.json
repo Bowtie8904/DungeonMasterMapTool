@@ -1459,10 +1459,6 @@
    "rarity": "Rare",
    "text": "Once per scene until your next rest, when you make a roll with your Duality Dice, you can mark a Stress to postpone the result and roll again, using the postponed result for your next roll. If you fail to use the postponed result in the scene, you permanently lose a Stress slot.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
       "id": "use",

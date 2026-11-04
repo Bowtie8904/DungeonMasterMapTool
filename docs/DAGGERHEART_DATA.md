@@ -52,8 +52,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   description. Resource ids are stable, shared sheet keys, so a Warlock subclass can spend the `favor` declared
   by its class's Favor feature. Initial values are applied once, not every render/re-equip. Resource counters
   are not rolled-die collections: Prayer/Rally Dice retain distinct rolled values and remain manual.
-- **uses**: `max` per `shortRest`, `longRest`, `rest`, `scene` or `session`; reset by the corresponding lifecycle
-  controls. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
+- **uses**: `max` per `shortRest`, `longRest`, `rest` or `session`. Every hosting run starts a new session;
+  reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
+  Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
   limit. A rest limit is not a custom resource recharge rule.
 - **actions**: normally a button on the feature/item/card. `timing: "downtime"` offers the action only as a rest
   move; `timing: "rest"` hides standalone controls for benefits handled by `rest` metadata. Missing `timing`
@@ -72,6 +73,16 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   - `effect` (`{name, kind: buff|debuff, until: manual|rest|shortRest|longRest|scene|session, text, modifiers}`) adds
     an entry to the Effects tab. `name` is the concise effect label shown in action reports and the tab, not the
     item/card/feature that granted it; the granting source is tracked separately. Use `text` for the effect details.
+  `actionRoll: {trait?, attack?, difficulty?}` opens the standard Duality dialog (without a trait it rolls just
+  Duality Dice). `damage: {dice, fixed?, type?: "physical"|"magic"}` opens damage using Proficiency unless fixed.
+  Both pay action costs only when the roll is sent and validate combined action, Experience and option costs.
+  `check: {dice, unless, mark: "stress"}` is a host-rolled conditional check: mark Stress unless the die equals
+  the configured face (Unshakable). Its roll card includes the consequence.
+  `target: "actor"` selects a campaign character and applies configured steps there, keeping costs and usage
+  on the source; `"party"` applies to every actor of connected players. Target actions run on the host against
+  current sheets, not client copies. An effect's `endOnSourceSevere: true` links its duration to its caster's
+  Severe damage and replaces that caster's previous grant on recast. `blocksMovement: true` prevents player
+  movement of that actor; DM movement is unaffected.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.
@@ -80,7 +91,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `noRecovery`; `reroll` keeps the higher of two downtime results. `modifiers` contain
   `{move, rest?, target?: "ally", bonus?, steps?, note?}` for benefits triggered by base rest moves.
   Only owned inventory, equipped weapons/armor, active domain cards/spells and learned features contribute.
-- **rollTriggers**: optional array of {id, label, on, when?, die?, matchResource?, cost?, steps?, reroll?, advantage?, description?} shown as buttons under your own roll in the chat. `on` is `duality`, `attack`, `spellcast` or `trait:<Name>`; `when` is `always` (default), `fear`, `hope`, `failure` (shown on every roll, since players never know the difficulty), `hopeDie` (with `die`) or `dieMatches` (a Duality Die equals the number in the `matchResource` pool). `requiresEffect`/`endEffect` gate a trigger on, and end, an active effect (Ranger's Focus). `on` may also be `card:<Card Name>` for a domain card's own Spellcast roll. A trigger with `damage: {dice, fixed?, extraDice?}` opens the damage dialog (spell damage; `fixed` uses the dice count as written, otherwise it scales with Proficiency; `extraDice` adds Proficiency dice) and only pays its cost/steps when the damage is sent. Actions may carry their own `uses: {max, per}` (per-action limit) and `sendRoll: {dice, base: 'evasion', label}` which posts a plain roll to the chat without changing the sheet (I See It Coming). Spell cards only get a Spellcast button when their text asks for the roll. The roll dialog uses Advantage / Normal / Disadvantage buttons and a Critical checkbox for damage. `reroll` `hope` rolls a new Hope Die; `duality` repeats the roll (`advantage` adds a d6). Attack rolls also get a Damage button that behaves like the sheet's.
+- **rollTriggers**: optional array of {id, label, on, when?, die?, matchResource?, cost?, steps?, reroll?, advantage?, description?} shown as buttons under rolls in chat. `audience` defaults to `"self"`; `"ally"` offers it on other players' rolls and `"any"` on both. `on` is `duality`, `action`, `attack`, `spellcast` or `trait:<Name>`; `when` is `always` (default), `fear`, `hope`, `failure` (shown on every roll, since players never know the difficulty), `hopeDie` (with `die`) or `dieMatches` (a Duality Die equals the number in the `matchResource` pool). `outcome: "hope"` changes the original roll's outcome without changing dice or total; Hope/Fear-dependent buttons and outcome badges read that override, while equal dice remain critical. `requiresEffect`/`endEffect` gate a trigger on, and end, an active effect (Ranger's Focus). `on` may also be `card:<Card Name>` for a domain card's own Spellcast roll. A trigger with `damage: {dice, fixed?, extraDice?, type?}` opens the damage dialog (`fixed` uses the dice count as written, otherwise it scales with Proficiency; `extraDice` adds Proficiency dice) and only pays its cost/steps when the damage is sent. Actions may carry their own `uses: {max, per}` (per-action limit) and `sendRoll: {dice, base: 'evasion', label}` which posts a plain roll to the chat without changing the sheet (I See It Coming). Spell cards only get a Spellcast button when their text asks for the roll. The roll dialog uses Advantage / Normal / Disadvantage buttons and a Critical checkbox for damage. `reroll` `hope` rolls a new Hope Die; `duality` repeats the roll (`advantage` adds a d6). Rerolls produce only a roll card, never a duplicate action message. Attack rolls also get a Damage button that behaves like the sheet's, including configured ancestry weapons.
 - **rollOptions**: optional array of `{id, label, roll, value?, dice?, diceByLevel?, cost?, steps?, description?,
   uses?, consumeItem?, weapon?, effect?}`. `effect` (`{name, kind, until}`) is started by the first roll that ticks
   the option (paying its cost); while that effect is active the option is pre-ticked and free. Entries that support
@@ -99,15 +110,20 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   weapon must be the option's source). Paired/Double Duty/Focused explicitly use `primary`, so an equipped
   secondary weapon can grant its bonus to primary-weapon damage. Nonweapon sources have no weapon restriction
   by default; other weapon-local options retain the `source` default.
+  `defaultOn` preselects an option. `advantage: "advantage"|"disadvantage"` suggests the corresponding roll mode
+  when toggled; players may override it. `ignoreDisadvantage: true` omits a selected disadvantage die and explains
+  this in the breakdown (Surefooted). `requiresEffect` only offers the option while the named effect is active.
+  A primary/secondary restriction also applies to nonweapon sources such as Ignition, not to unrelated damage.
 - **damage**: `{extraDice: number, dropLowest: number}` on a weapon changes **only that source weapon's base
   damage dice**, never bonus dice from coatings/options or another equipped weapon. Powerful/Massive use
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged
   flat bonus and independent bonus dice. The host's kept-dice expression is `NdSkhK` (for example `4d6kh3+6`);
   chat records all rolls and the kept total. An attachable Greatstone does not grant this to every carried weapon.
-- **creation**: additive `{hp?, stress?, evasion?, domainCards?, domains?}`; numeric slot/evasion/card allowances
+- **creation**: additive `{hp?, stress?, evasion?, domainCards?, domains?, experienceBonus?}`; numeric slot/evasion/card allowances
   and optional extra accessible domain names. Apply through the Character Mancer once, not as repeating resource
   gains. Whole/mixed-ancestry feature selection must respect which feature was chosen. Endurance, High Stamina,
   Nimble, Prepared, Battlemage and At Ease are data-driven; Stoneskin remains a passive Armor Score/threshold bonus.
+  `experienceBonus` asks the player which creation Experience permanently receives the bonus (Purposeful Design).
 - **manual**: not part of the maintained format. Original descriptions stay visible.
 - Armor automatically sets damage thresholds (base major/severe + level; unarmored level and 2x level) and the armor
   slots from the armor score.
@@ -124,12 +140,12 @@ purely narrative text.
 
 | Category | Entries | Rule sources | Executable | Plain gear |
 |---|---:|---:|---:|---:|
-| Domain cards | 236 | 236 | 164 | 72 |
-| Armor | 110 | 110 | 79 | 31 |
+| Domain cards | 236 | 236 | 165 | 71 |
+| Armor | 110 | 110 | 80 | 30 |
 | Weapons | 336 | 336 | 144 | 192 |
 | Consumables | 182 | 182 | 61 | 121 |
-| Items | 174 | 174 | 78 | 96 |
-| **All categories** | **1,187** | **1,294** | **684** | **610** |
+| Items | 174 | 174 | 81 | 93 |
+| **All categories** | **1,187** | **1,294** | **705** | **589** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -139,14 +155,25 @@ Classes, ancestries, communities and transformations are included in the total.
   with Hope**, choose **one** button: gain Favor instead without awarding Hope (also works when Hope is full),
   or replace Hope already awarded by spending it to gain Favor. Do not use these after other Hope gains.
   Patron's Pact is an optional action-roll Patron Die costing one Favor, d6/d8 at level 5.
-  Pact Mantle's thresholds, Fury's tier-scaled Patron Dice (a damage-dialog option costing 1 Favor that starts a
-  scene effect; while active it is pre-ticked and free; remove the effect manually after Severe damage), and the fixed-Favor costs of Endless/Wrathful
+  Pact Mantle's thresholds and intimidation option end on taking Severe damage. Fury's tier-scaled Patron Dice
+  (a damage-dialog option costing 1 Favor that starts a scene effect; while active it is pre-ticked and free;
+  remove the effect manually after dealing Severe damage), and the fixed-Favor costs of Endless/Wrathful
   subfeatures are explicit; damage prevention, reroll choice, range and target effects remain manual.
 - **Other class/heritage sources:** permanent Stalwart, Shell, Rugged, Ascendant and Fleeting Shadow bonuses;
   creation grants; Battle Ritual, Courage, Limit Breaker, Deadly Determination and Frontline Tank resource actions;
   Rogue's Dodge effect; No Mercy as an effect-based attack option (pre-ticked while active); optional Tusks, Kick, Elementalist, Heart of a Poet, Wings of Light, Sneak Attack,
   Combat Training, Adrenaline and Face Your Fear. Later upgrades that replace another feature's die are manual
   where not encoded on the originating option.
+- **Ancestry review and matching rules:** Elemental Breath/Long Tongue attacks and damage; Charge reactions and
+  fixed damage; Fungril Network against 12; Retracting Claws; Unshakable; Purposeful Design; Ignition; Retract;
+  Surefooted and situational advantage options. Hallowed Aura/Luckbender react to allies, Luckbringer grants party
+  Hope, Eye of the Storm maintains a caster-linked target buff, and Lifespring heals a chosen target.
+  The catalog-wide audit removed every scene-use limit and also mapped Unbound, Stealth Expertise and Red Nose
+  of Hope outcome conversion; simple situational community/gear advantages; Nature's Tongue, Goad Them On and
+  Woven Net trait rolls; and Life Support, Healing Strike, Sparing Touch and Restoration target healing.
+  Range, willingness, attack success and narrative prerequisites remain player/GM decisions. Complex healing
+  choices such as Healing Hands (result-dependent amounts and per-target rest limits), Mending Touch's special
+  healing-time upgrade, and area/group healing still need their own workflows rather than guessed targets.
 - **Pools:** Favor, Slayer Dice, Tide, poison tokens, Spellcharge, Inspiration, Restoration, thorns, Dark Army
   fiends, Twilight Toll, chaos, Invisibility/Disguise tokens and Alconite charge. Explicit gain/spend/clear buttons
   track **numeric tokens** only. Follow descriptions for start/end-session and rest preparation/clearing; rest
@@ -167,19 +194,22 @@ Classes, ancestries, communities and transformations are included in the total.
 
 ### Explicit unsupported boundaries
 
-- **Cross-actor/GM state:** target selection, range/line of sight, companion stats, healing other actors, GM Fear,
+- **Cross-actor/GM state:** range/line of sight, companion stats, GM Fear,
   target Difficulty/thresholds/HP/Stress, resistance, damage prevention/reflection and forced movement. Examples:
-  Life Support, Healing Hands, Hex, Drain, aura allies and target-dependent damage.
+  Healing Hands, Hex, Drain, unconfigured aura allies and target-dependent damage. Explicit `target` actions
+  support character selection/healing and configured effects; this does not infer general target automation.
 - **Roll-result-dependent rules:** trigger validation, changing Hope/Fear die size or values, reroll selection,
   exploding dice (Brutal/Recursive), special face replacements (Serrated/Self-Correcting), doubling matching dice,
-  critical conversion, damage severity changes and after-the-fact roll replacement. Ordinary optional extra dice
+  critical conversion, damage severity changes and arbitrary after-the-fact roll replacement. Explicit outcome
+  overrides and configured rerolls are supported without inferring other replacements. Ordinary optional extra dice
   are supported; these algorithms are not inferred from prose.
 - **Conditional passives and substitutions:** Wolf Form/Feral Hide, Conjure Shield, Irontree reinforcement,
   Defiant Bulwark, Vowkeeper and Heartsteel, four-domain “Touched” loadout conditions, resource-dependent
   thresholds, proficiency for only one attack, min/half/multiplied formulas, and effects ending on a damage/result
-  trigger. Conditions never become always-on bonuses. Early-expiring numeric effects have explicit removal notes.
+  trigger unless explicitly configured (`endOnSourceSevere`). Conditions never become always-on bonuses.
+  Other early-expiring numeric effects have explicit removal notes.
 - **Selections and permanent changes:** Bare Bones' armor replacement table, Vitality's choose-two bonuses,
-  Mutagens/Transcendence choices, chosen Experiences, scars, permanently lost slots, copied/attached/transferred
+  Mutagens/Transcendence choices, arbitrary chosen Experiences, scars, permanently lost slots, copied/attached/transferred
   item features, transformation/Beastform statistics and replacing upgraded feature dice. No choice is guessed.
 - **Complex pools/multiple sub-abilities:** Prayer/Rally Dice keep distinct rolled face values; Unstoppable,
   Wild Surge, Moon phases and Zone of Protection keep stateful die faces; variable token expenditure, rolled-table
@@ -203,6 +233,7 @@ Classes, ancestries, communities and transformations are included in the total.
   equipped armor and weapons, class/ancestry/community features, loadout cards and inventory items with quantity.
   Option fields:
   - `id`, `label`, `description`; `passive` (always applied when its conditions hold) or `defaultOn`.
+    `requiresEffect` only offers the mitigation while the named effect is active (Retracted).
   - `when`: `type` (`physical`/`magic`), `severity` (list of `minor`/`major`/`severe`/`massive`, after reductions),
     `armor`, `lastArmor`, `armorFull`, `lastHp`, `hpUnmarkedMax`, `min: {value, at}` (e.g. `@cards_splendor` ≥ 4).
   - `cost` (resource → value; `@hp` = HP the damage would mark), `uses` (`"source"` shares the source's `uses`,

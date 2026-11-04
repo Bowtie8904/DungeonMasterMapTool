@@ -1,5 +1,7 @@
 package dmmt.ui;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ChatCardsTest {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Test
     void rendersMarkdownAsStyledNativeTextWithListsAndLineBreaks() {
         var block = ChatCards.markdown("**Bold** and *italic*\n\n- ***Both***", "chat-shared-description");
@@ -83,5 +87,20 @@ class ChatCardsTest {
         assertEquals(2, details.size());
         assertEquals(9, details.get(0).total());
         assertEquals(3, details.get(1).total());
+    }
+
+    @Test
+    void dualityCardUsesHostOutcomeOverrideButKeepsCriticalPrecedence() throws Exception {
+        JsonNode fearDiceWithHope = MAPPER.readTree("""
+                {"type":"roll","id":1,"ts":1,"from":"Alice","fromId":"a","expression":"2d12",
+                 "rolls":[3,9],"total":12,"kind":"duality","outcome":"hope"}
+                """);
+        assertEquals("hope", ChatCards.dualityOutcome(fearDiceWithHope, List.of(3, 9)));
+
+        JsonNode criticalWithOverride = MAPPER.readTree("""
+                {"type":"roll","id":2,"ts":2,"from":"Alice","fromId":"a","expression":"2d12",
+                 "rolls":[8,8],"total":16,"kind":"duality","outcome":"fear"}
+                """);
+        assertEquals("crit", ChatCards.dualityOutcome(criticalWithOverride, List.of(8, 8)));
     }
 }

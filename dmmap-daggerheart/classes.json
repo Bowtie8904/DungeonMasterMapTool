@@ -431,8 +431,28 @@
       },
       "actions": [
        {
-        "id": "use",
-        "label": "Sparing Touch"
+        "id": "hp",
+        "label": "Sparing Touch: clear 2 HP",
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 2
+         }
+        ]
+       },
+       {
+        "id": "stress",
+        "label": "Sparing Touch: clear 2 Stress",
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         }
+        ]
        }
       ]
      }
@@ -1594,6 +1614,7 @@
            "name": "Patron’s Mantle",
            "kind": "buff",
            "until": "scene",
+           "endOnSourceSevere": true,
            "text": "Patron’s Mantle",
            "modifiers": [
             {
@@ -1607,6 +1628,16 @@
         "cost": {
          "favor": 1
         }
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "intimidate",
+        "label": "Patron’s Mantle",
+        "roll": "action",
+        "advantage": "advantage",
+        "requiresEffect": "Patron’s Mantle",
+        "description": "Only action rolls to intimidate a target while the mantle is active."
        }
       ]
      }
@@ -2935,7 +2966,18 @@
     {
      "name": "Ethereal Visage",
      "text": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Ethereal Visage",
+        "roll": "trait:Presence",
+        "advantage": "advantage",
+        "description": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope."
+       }
+      ]
+     }
     }
    ]
   },
@@ -3274,7 +3316,15 @@
         "label": "Life Support",
         "cost": {
          "hope": 3
-        }
+        },
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 1
+         }
+        ]
        }
       ]
      }

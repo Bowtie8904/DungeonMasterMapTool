@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Ancestry action runtime check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { rollBonus } from '../src/daggerheart/engine.ts';
+import { openRollDialog, renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
+import { openDamageDialog } from '../src/daggerheart/damage-view.ts';
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const c = emptyCharacter('Ancestry check');
+  c.mancer.done = true;
+  c.className = 'Warrior';
+  c.hp.slots = 6;
+  c.stress.slots = 6;
+  c.hope.on = 6;
+  c.proficiency.on = 3;
+  c.experiences = [{ name: 'Tracker', mod: 2 }];
+  const host = document.querySelector('#host');
+  const bus = new SheetBus();
+  const sent = [], logs = [], features = [];
+  let accept = true;
+  const send = request => { sent.push(request); return accept; };
+  const feature = (name, automation) => ({ name, source: 'Ancestry', text: '', automation });
+  c.heritage = [
+    feature('Long Tongue', { actions: [
+      { id: 'use', label: 'Attack', actionRoll: { trait: 'Finesse', attack: true }, cost: { stress: 1 } },
+      { id: 'damage', label: 'Damage', damage: { dice: 'd12', type: 'physical' } },
+    ] }),
+    feature('Fungril Network', { actions: [{ id: 'use', label: 'Fungril Network', actionRoll: { trait: 'Instinct', difficulty: 12 } }] }),
+    feature('Charge', { actions: [{ id: 'use', label: 'Charge damage', cost: { stress: 1 }, damage: { dice: '1d12', fixed: true, type: 'physical' } }] }),
+    feature('Lifespring', { actions: [{ id: 'use', label: 'Lifespring', target: 'actor' }] }),
+    feature('Unshakable', { actions: [{ id: 'use', label: 'Unshakable', check: { dice: '1d6', unless: 6, mark: 'stress' } }] }),
+  ];
+  host.append(renderSheetView({ character: c, actorId: 'actor', bus, onRoll: send, onLog: message => logs.push(message),
+    onFeature: async (key, actionId) => { features.push([key, actionId]); } }));
+  const button = text => [...document.querySelectorAll('button')].find(b => b.textContent === text);
+  const dialog = () => document.querySelector('.dh-rolldlg');
+  const confirm = () => button('Roll to chat').click();
+  button('Attack (1 Stress)').click();
+  button('Cancel').click();
+  assert(c.stress.on === 0, 'Cancelling attack spent Stress');
+  accept = false;
+  button('Attack (1 Stress)').click();
+  confirm();
+  assert(c.stress.on === 0 && dialog(), 'Failed send spent Stress');
+  accept = true;
+  confirm();
+  assert(c.stress.on === 1 && !dialog(), 'Attack did not pay Stress on send');
+  assert(sent.at(-1).kind === 'duality' && sent.at(-1).source.includes('attack'), 'Attack is not a Duality attack');
+  assert(sent.at(-1).weapon === 'Long Tongue', 'Attack lost damage-button reference');
+  assert(bus.damage('Long Tongue'), 'Ancestry chat damage is unavailable');
+  confirm();
+  assert(sent.at(-1).expression === '3d12', 'Ancestry damage did not scale with Proficiency');
+  assert(logs.length === 0, 'Roll generated duplicate feature messages');
+  button('Charge damage (1 Stress)').click();
+  confirm();
+  assert(sent.at(-1).expression === '1d12' && c.stress.on === 2, 'Charge must roll fixed damage and pay Stress');
+  button('Fungril Network').click();
+  confirm();
+  assert(sent.at(-1).difficulty === 12 && sent.at(-1).source.includes('trait:Instinct'), 'Network lost trait or difficulty');
+  button('Lifespring').click();
+  await Promise.resolve();
+  button('Unshakable').click();
+  await Promise.resolve();
+  assert(features.some(([key]) => key === 'feat:Lifespring') && features.some(([key]) => key === 'feat:Unshakable'), 'Host-backed actions not invoked');
+  c.heritage = [feature('Surefooted', { rollOptions: [{ id: 'sure', label: 'Surefooted', roll: 'trait:Agility', defaultOn: true, ignoreDisadvantage: true }] })];
+  const open = () => openRollDialog(host, c, 'Agility', [], rollBonus(c, ['action', 'trait:Agility']), send, () => {}, ['action', 'trait:Agility']);
+  open();
+  assert(dialog().querySelector('input[type=checkbox]').checked, 'Surefooted not preselected');
+  button('Disadvantage (-d6)').click();
+  confirm();
+  assert(!sent.at(-1).expression.includes('d6'), 'Surefooted rolled disadvantage');
+  assert(sent.at(-1).contributions.some(s => s.label === 'Disadvantage ignored' && s.notes.length), 'Suppression missing from breakdown');
+  c.heritage = [feature('Retract', { rollOptions: [{ id: 'retract', label: 'Retracted', roll: 'action', defaultOn: true, requiresEffect: 'Retracted', advantage: 'disadvantage' }] })];
+  c.effects = [{ id: 'shell', name: 'Retracted', kind: 'buff', blocksMovement: true }];
+  open();
+  assert(dialog().querySelector('.dh-adv-btn.dis.on'), 'Retract did not suggest disadvantage');
+  button('Advantage (+d6)').click();
+  confirm();
+  assert(sent.at(-1).expression.includes('+1d6'), 'User cannot override Retract roll mode');
+  c.heritage[0].automation.mitigation = [{ id: 'shell', label: 'Retracted', defaultOn: true, requiresEffect: 'Retracted', when: { type: 'physical' }, halve: true }];
+  openDamageDialog(host, c, () => {});
+  const shell = [...dialog().querySelectorAll('label')].find(label => label.textContent.includes('Retracted'));
+  assert(shell.querySelector('input').checked, 'Retract resistance not preselected');
+  button('Cancel').click();
+  c.heritage = [feature('Natural Climber', { rollOptions: [{ id: 'climb', label: 'Natural Climber', roll: 'trait:Agility', advantage: 'advantage' }] })];
+  open();
+  const checkbox = dialog().querySelector('input[type=checkbox]');
+  assert(!checkbox.checked, 'Situational climbing option should be opt-in');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new Event('change'));
+  assert(dialog().querySelector('.dh-adv-btn.adv.on'), 'Climbing did not suggest advantage');
+  button('Normal').click();
+  confirm();
+  assert(!sent.at(-1).expression.includes('d6'), 'User cannot override climbing advantage');
+  const ignition = { name: 'Ignition', kind: 'buff', until: 'scene' };
+  c.effects = [];
+  c.heritage = [feature('Ignition', { rollOptions: [{ id: 'flame', label: 'Ignition', roll: 'damage', weapon: 'primary', dice: '1d6', cost: { stress: 1 }, effect: ignition }] })];
+  c.activeWeapons = [{ name: 'Sword', slot: 'Primary', damageType: 'phys', trait: 'Agility', range: 'Melee', damage: 'd8', hands: 1, tier: 1 }];
+  bus.notify();
+  bus.damage('Sword');
+  let flame = [...dialog().querySelectorAll('label')].find(label => label.textContent.includes('Ignition')).querySelector('input');
+  assert(!flame.checked, 'Inactive Ignition should be opt-in');
+  flame.checked = true;
+  flame.dispatchEvent(new Event('change'));
+  confirm();
+  assert(c.stress.on === 3 && c.effects[0].name === 'Ignition', 'Ignition did not activate and pay once');
+  bus.damage('Sword');
+  flame = [...dialog().querySelectorAll('label')].find(label => label.textContent.includes('Ignition')).querySelector('input');
+  assert(flame.checked, 'Active Ignition should be preselected');
+  confirm();
+  assert(c.stress.on === 3 && sent.at(-1).expression === '3d8+1d6', 'Active Ignition must be free and add damage once');
+  c.heritage = [feature('Expensive attack', { actions: [{ id: 'use', label: 'Expensive attack', actionRoll: { trait: 'Agility' }, cost: { hope: 6 } }] })];
+  bus.notify();
+  button('Expensive attack (6 Hope)').click();
+  const experience = dialog().querySelector('select');
+  experience.value = '0';
+  experience.dispatchEvent(new Event('change'));
+  assert(button('Roll to chat').disabled, 'Combined action and Experience Hope overspend allowed');
+  button('Cancel').click();
+  result.textContent = 'PASS: attacks, fixed/scaled damage, costs, cancel/disconnect, difficulty, host actions, Surefooted, Retract, advantage overrides';
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+}
+</script></body></html>

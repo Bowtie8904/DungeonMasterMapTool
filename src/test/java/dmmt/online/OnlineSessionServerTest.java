@@ -150,6 +150,260 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void allyFearReactionUpdatesTheOriginalRollAndBothSheetsWithoutASecondRoll() throws Exception {
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Alice").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Bob").ownerId(bob.getId()).build());
+        String sourceJson = """
+                {"featureRevision":0,"usage":{},"hope":{"on":0,"slots":5},"features":[{"name":"Hallowed Aura",
+                "automation":{"uses":{"max":1,"per":"longRest"},"rollTriggers":[{"id":"hope","label":"Hallowed Aura",
+                "on":"action","when":"fear","outcome":"hope","audience":"ally"}]}}]}
+                """;
+        String rollerJson = """
+                {"featureRevision":0,"usage":{},"hope":{"on":0,"slots":5},"stress":{"on":0,"slots":6},
+                "hp":{"on":0,"slots":6},"effects":[]}
+                """;
+        store.saveSheet(campaign.getId(), "caster", sourceJson);
+        store.saveSheet(campaign.getId(), "roller", rollerJson);
+        ObjectNode stale = (ObjectNode) MAPPER.readTree(sourceJson);
+        String aliceCookie = cookie();
+        Inbox inbox = new Inbox();
+        Inbox bobInbox = new Inbox();
+        WebSocket ws = connect(aliceCookie, inbox);
+        WebSocket bobWs = connect(playerCookie(bob), bobInbox);
+        try {
+            JsonNode fearRoll = null;
+            for (int attempt = 0; attempt < 20; attempt++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"action",
+                        "actorId":"roller","label":"Test action"}
+                        """, true).join();
+                JsonNode message = inbox.next("roll");
+                if (message.path("rolls").get(1).asInt() > message.path("rolls").get(0).asInt()) {
+                    fearRoll = message;
+                    break;
+                }
+            }
+            assertNotNull(fearRoll, "Expected to roll Fear within a reasonable number of attempts");
+            JsonNode rolledFear = java.util.Objects.requireNonNull(fearRoll);
+            ObjectNode reaction = MAPPER.createObjectNode().put("actorId", "caster")
+                    .put("key", "feat:Hallowed Aura").put("actionId", "hope");
+            reaction.putObject("roll").put("id", rolledFear.path("id").asLong()).put("ts", rolledFear.path("ts").asLong());
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                    .header("Cookie", aliceCookie).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(reaction.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            assertEquals("hope", bobInbox.next("rollUpdate").path("outcome").asText());
+            assertEquals(rolledFear.path("id").asLong(), update.path("id").asLong());
+            assertEquals("hope", update.path("outcome").asText());
+            JsonNode persistedRoll = store.historyTail(campaign.getId(), 50).stream()
+                    .filter(entry -> entry.path("id").asLong() == rolledFear.path("id").asLong()
+                            && entry.path("ts").asLong() == rolledFear.path("ts").asLong()).findFirst().orElseThrow();
+            assertEquals(rolledFear.path("rolls"), persistedRoll.path("rolls"));
+            assertEquals("hope", persistedRoll.path("outcome").asText());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).path("hope").path("on").asInt());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("usage")
+                    .path("feat:Hallowed Aura").path("used").asInt());
+            assertEquals(1, store.historyTail(campaign.getId(), 50).stream()
+                    .filter(entry -> "chat".equals(entry.path("type").asText())
+                            && entry.path("text").asText().contains("ACTION USED")).count());
+            var staleSave = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/caster"))
+                    .header("Cookie", aliceCookie).PUT(HttpRequest.BodyPublishers.ofString(stale.toString())).build();
+            assertEquals(409, http.send(staleSave, HttpResponse.BodyHandlers.ofString()).statusCode());
+        } finally {
+            ws.abort();
+            bobWs.abort();
+        }
+    }
+
+    @Test
+    void targetFeatureAppliesStepsToTargetAndDamageNotificationEndsSevereSourceEffects() throws Exception {
+        Campaign.Player bob = Campaign.Player.builder().name("Bob")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();
+        campaign.getPlayers().add(bob);
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Ally").ownerId(bob.getId()).build());
+        store.saveSheet(campaign.getId(), "source", """
+                {"featureRevision":0,"usage":{},"hope":{"on":2,"slots":5},"features":[{"name":"Lifespring",
+                "automation":{"uses":{"max":1,"per":"session"},"actions":[{"id":"heal","label":"Heal",
+                "target":"actor","cost":{"hope":1},"steps":[{"op":"clear","resource":"hp","amount":1}]}]}},
+                {"name":"Luckbringer","automation":{"uses":{"max":1,"per":"session"},"actions":[{"id":"share",
+                "label":"Share Hope","target":"party","steps":[{"op":"gain","resource":"hope","amount":1}]}]}}]}
+                """);
+        store.saveSheet(campaign.getId(), "target", """
+                {"featureRevision":0,"usage":{},"hope":{"on":4,"slots":5},"hp":{"on":3,"slots":6},"effects":[
+                {"name":"Storm Ward","endOnSourceSevere":true,"sourceActorId":"source","sourceKey":"feat:Eye of the Storm"},
+                {"name":"Other effect","endOnSourceSevere":false,"sourceActorId":"source","sourceKey":"feat:Other"}]}
+                """);
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        Inbox aliceInbox = new Inbox();
+        WebSocket ws = connect(playerCookie(bob), inbox);
+        WebSocket aliceWs = connect(cookie, aliceInbox);
+        try {
+        ObjectNode heal = MAPPER.createObjectNode().put("actorId", "source").put("key", "feat:Lifespring")
+                .put("actionId", "heal").put("targetActorId", "target");
+        HttpResponse<String> healed = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(heal.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, healed.statusCode(), healed.body());
+        JsonNode sourceAfterHeal = MAPPER.readTree(store.loadSheet(campaign.getId(), "source"));
+        JsonNode targetAfterHeal = MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+        assertEquals(1, sourceAfterHeal.path("hope").path("on").asInt());
+        assertEquals(1, sourceAfterHeal.path("usage").path("feat:Lifespring").path("used").asInt());
+        assertEquals(2, targetAfterHeal.path("hp").path("on").asInt());
+
+        ObjectNode partyAction = MAPPER.createObjectNode().put("actorId", "source")
+                .put("key", "feat:Luckbringer").put("actionId", "share");
+        HttpResponse<String> partyResult = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(partyAction.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, partyResult.statusCode(), partyResult.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("hope").path("on").asInt());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("hope").path("on").asInt());
+        JsonNode actionReport = store.historyTail(campaign.getId(), 50).stream()
+                .filter(entry -> entry.path("text").asText().contains("Luckbringer"))
+                .findFirst().orElseThrow();
+        assertTrue(actionReport.path("text").asText().contains("Caster: Gained 1 hope."));
+        assertTrue(actionReport.path("text").asText().contains("Ally: Gained 1 hope."));
+
+        ObjectNode damage = MAPPER.createObjectNode().put("actorId", "source").put("severity", 2);
+        HttpResponse<String> minor = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/damage-taken"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(damage.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, minor.statusCode());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("effects").size());
+        damage.put("severity", 3);
+        HttpResponse<String> severe = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/damage-taken"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(damage.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, severe.statusCode(), severe.body());
+        JsonNode targetAfterSevere = MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+        assertEquals(1, targetAfterSevere.path("effects").size());
+        assertEquals("Other effect", targetAfterSevere.path("effects").get(0).path("name").asText());
+        } finally {
+            ws.abort();
+            aliceWs.abort();
+        }
+    }
+
+    @Test
+    void startingANewHostSessionResetsOnlySessionUses() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Alice").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"featureRevision":0,"usage":{"session":{"used":1,"per":"session"},
+                "rest":{"used":1,"per":"longRest"}}}
+                """);
+        Inbox initialInbox = new Inbox();
+        WebSocket initial = connect(cookie(), initialInbox);
+        String oldSession = initialInbox.next("hello").path("sessionId").asText();
+        initial.abort();
+        server.stop();
+        server.start();
+
+        Inbox nextInbox = new Inbox();
+        WebSocket next = connect(cookie(), nextInbox);
+        try {
+            String nextSession = nextInbox.next("hello").path("sessionId").asText();
+            assertFalse(oldSession.equals(nextSession));
+            JsonNode usage = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor")).path("usage");
+            assertFalse(usage.has("session"));
+            assertEquals(1, usage.path("rest").path("used").asInt());
+        } finally {
+            next.abort();
+        }
+    }
+
+    @Test
+    void chargeReactionsRollFixedDamageOnceForBothAncestries() throws Exception {
+        JsonNode ancestries = MAPPER.readTree(Path.of("dmmap-daggerheart", "ancestries.json").toFile()).path("entries");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (String ancestry : List.of("firbolg", "centaur")) {
+                JsonNode charge = java.util.stream.StreamSupport.stream(ancestries.spliterator(), false)
+                        .filter(entry -> ancestry.equals(entry.path("id").asText())).findFirst().orElseThrow()
+                        .path("features").get(0);
+                campaign.getActors().add(Campaign.Actor.builder().id(ancestry).name(ancestry).ownerId(playerId()).build());
+                ObjectNode sheet = MAPPER.createObjectNode().put("featureRevision", 0);
+                sheet.putObject("stress").put("on", 0).put("slots", 6);
+                sheet.putObject("proficiency").put("on", 5).put("total", 5);
+                sheet.putArray("heritage").add(charge);
+                store.saveSheet(campaign.getId(), ancestry, sheet.toString());
+                ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", "2d12").put("source", "action,trait:Agility")
+                        .put("actorId", ancestry).toString(), true).join();
+                JsonNode original = inbox.next("roll");
+                ObjectNode action = MAPPER.createObjectNode().put("actorId", ancestry)
+                        .put("key", "feat:Charge").put("actionId", "charge");
+                action.putObject("roll").put("id", original.path("id").asLong()).put("ts", original.path("ts").asLong());
+                var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                        .header("Cookie", cookie).header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(action.toString())).build();
+                var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode damage = inbox.next("roll");
+                assertEquals("damage", damage.path("source").asText());
+                assertEquals(ancestry, damage.path("actorId").asText());
+                assertEquals("1d12", damage.path("expression").asText());
+                assertEquals(1, damage.path("rolls").size(), "Charge must not scale with Proficiency");
+                assertTrue(damage.path("total").asInt() >= 1 && damage.path("total").asInt() <= 12);
+                assertEquals(damage.path("rolls").get(0).asInt(), damage.path("total").asInt());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), ancestry)).path("stress").path("on").asInt());
+                assertEquals(400, http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), ancestry)).path("stress").path("on").asInt());
+                List<JsonNode> history = store.historyTail(campaign.getId(), 50);
+                assertEquals(1, history.stream().filter(entry -> "damage".equals(entry.path("source").asText())
+                        && ancestry.equals(entry.path("actorId").asText())).count());
+                JsonNode savedOriginal = history.stream().filter(entry -> entry.path("id").equals(original.path("id"))
+                        && entry.path("ts").equals(original.path("ts"))).findFirst().orElseThrow();
+                assertEquals(original.path("rolls"), savedOriginal.path("rolls"));
+                assertEquals(original.path("total"), savedOriginal.path("total"));
+                assertTrue(savedOriginal.path("featureUses").toString().contains(ancestry + ":feat:Charge:charge"));
+                assertEquals(0, history.stream().filter(entry -> entry.path("text").asText().contains("ACTION USED")).count());
+            }
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
+    void featureCheckPublishesOneRollAndAppliesConfiguredStressConsequence() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Alice").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"featureRevision":0,"usage":{},"stress":{"on":0,"slots":6},
+                "features":[{"name":"Unshakable","source":"Ancestry - Firbolg",
+                "text":"When you would mark a Stress, roll a **d6**. On a result of 6, do not mark it.",
+                "automation":{"actions":[{"id":"check","label":"Unshakable",
+                "check":{"dice":"1d6","unless":6,"mark":"stress"}}]}}]}
+                """);
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "actor")
+                .put("key", "feat:Unshakable").put("actionId", "check");
+        HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(action.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode result = store.historyTail(campaign.getId(), 10).stream()
+                .filter(entry -> entry.path("featureRoll").isObject()).findFirst().orElseThrow();
+        int die = result.path("featureRoll").path("result").asInt();
+        assertTrue(die >= 1 && die <= 6);
+        assertEquals(die == 6 ? "No Stress marked." : "Marked 1 Stress.", result.path("featureRoll").path("consequence").asText());
+        assertEquals("Unshakable", result.path("rollSource").path("name").asText());
+        assertEquals("Ancestry - Firbolg", result.path("rollSource").path("source").asText());
+        assertEquals("When you would mark a Stress, roll a **d6**. On a result of 6, do not mark it.",
+                result.path("rollSource").path("text").asText());
+        assertEquals(die == 6 ? 0 : 1, MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"))
+                .path("stress").path("on").asInt());
+        assertEquals(0, store.historyTail(campaign.getId(), 10).stream()
+                .filter(entry -> entry.path("text").asText().contains("ACTION USED")).count());
+    }
+
+    @Test
     void campaignNotesAuthenticateIsolateOwnersAndShareWithLaterPlayers() throws Exception {
         assertEquals(401, notesHttp(null, "", null).statusCode());
         String alice = cookie();

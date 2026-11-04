@@ -52,6 +52,7 @@ export interface MitigationOption {
   /** Applied automatically whenever its conditions hold. */
   passive?: boolean;
   defaultOn?: boolean;
+  requiresEffect?: string;
   when?: MitigationWhen;
   /** Paid on apply; "@hp" means the HP the damage would mark. */
   cost?: MitigationCost;
@@ -130,7 +131,10 @@ export interface DamageResult {
 export function availableMitigations(c: CharacterSheet): AvailableMitigation[] {
   const out: AvailableMitigation[] = [];
   const add = (key: string, source: string, a?: Automation, item?: InventoryItem) => {
-    for (const option of a?.mitigation ?? []) out.push({ id: `${key}/${option.id}`, key, source, automation: a!, option, item });
+    for (const option of a?.mitigation ?? []) {
+      if (option.requiresEffect && !c.effects.some((e) => e.name === option.requiresEffect)) continue;
+      out.push({ id: `${key}/${option.id}`, key, source, automation: a!, option, item });
+    }
   };
   if (c.activeArmor) add(`armor:${c.activeArmor.name}`, c.activeArmor.name, c.activeArmor.automation);
   for (const w of c.activeWeapons) add(`weapon:${w.name}`, w.name, w.automation);
@@ -160,13 +164,15 @@ function value(v: ModValue | undefined, c: CharacterSheet, hp = 0): number {
 function usageKey(m: AvailableMitigation): { key: string; auto: Automation } | null {
   const uses = m.option.uses;
   if (!uses) return null;
-  if (uses === 'source') return m.automation.uses ? { key: m.key, auto: m.automation } : null;
+  if (uses === 'source') return m.automation.uses && m.automation.uses.per !== 'scene' ? { key: m.key, auto: m.automation } : null;
+  if (uses.per === 'scene') return null;
   return { key: `${m.key}:mitigation:${m.option.id}`, auto: { uses } };
 }
 
 /** Conditions that do not depend on the damage being calculated. */
 export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, type: DamageType): string | null {
   const o = m.option;
+  if (o.requiresEffect && !c.effects.some((e) => e.name === o.requiresEffect)) return 'Required effect is no longer active';
   const u = usageKey(m);
   if (u) {
     const left = usesLeft(c, u.key, u.auto);
@@ -345,6 +351,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   c.hp.on = Math.min(c.hp.slots, c.hp.on + r.hp + (r.costs.hp ?? 0));
   c.stress.on = Math.min(c.stress.slots, c.stress.on + (r.costs.stress ?? 0));
   c.hope.on = Math.max(0, c.hope.on - (r.costs.hope ?? 0));
+  if (!r.negated && r.final >= 3) c.effects = c.effects.filter((e) => !e.endOnSourceSevere || !!e.sourceActorId);
   for (const [res, n] of Object.entries(r.costs)) {
     if (!['hp', 'stress', 'hope', 'armor'].includes(res)) c.resources![res] = Math.max(0, (c.resources![res] ?? 0) - n);
   }

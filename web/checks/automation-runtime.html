@@ -26,7 +26,7 @@ try {
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const dialog = () => document.querySelector('.dh-rolldlg');
   const button = (text) => [...dialog().querySelectorAll('button')].find((b) => b.textContent === text);
-  const selectAll = () => dialog().querySelectorAll('input[type=checkbox]').forEach((input) => { input.checked=true; input.dispatchEvent(new Event('change')); });
+  const selectAll = () => dialog().querySelectorAll('fieldset input[type=checkbox]').forEach((input) => { input.checked=true; input.dispatchEvent(new Event('change')); });
   let sent;
   let accept = false;
   const open = (w = weapon, supports = true) => openRollDialog(host,c,'Runtime damage',[],rollBonus(c,w?['damage']:['action']),
@@ -47,7 +47,7 @@ try {
   assert(sent.expression==='2d6kh1+6+3+1d4','Wrong damage expression: '+sent.expression);
   assert(sent.contributions.some((s)=>s.label.includes('Quiver')),'Missing named bonus');
   open();
-  assert(dialog().querySelectorAll('input[type=checkbox]')[1].disabled,'Independent use limit not enforced');
+  assert(dialog().querySelectorAll('fieldset input[type=checkbox]')[1].disabled,'Independent use limit not enforced');
   button('Cancel').click();
   open(weapon,false);
   assert(button('Roll to chat').disabled,'Old host accepted kept dice');
@@ -56,7 +56,7 @@ try {
   c.inventory[0].automation.rollOptions.push({id:'help',label:'Help',roll:'action',value:1,cost:{hope:1}});
   open(null);
   selectAll();
-  const experience = dialog().querySelectorAll('select')[1];
+  const experience = dialog().querySelector('select');
   experience.value='0';
   experience.dispatchEvent(new Event('change'));
   assert(button('Roll to chat').disabled,'Combined bonus and Experience costs were not checked');

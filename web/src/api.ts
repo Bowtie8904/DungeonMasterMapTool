@@ -89,6 +89,35 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise
   if (!res.ok) throw await readError(res);
 }
 
+export interface FeatureRequest {
+  actorId: string;
+  key: string;
+  actionId: string;
+  targetActorId?: string;
+  roll?: { id: number | string; ts: number };
+}
+
+export async function useFeature(request: FeatureRequest): Promise<void> {
+  const res = await fetch('/api/feature', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function damageTaken(actorId: string, severity: number): Promise<void> {
+  if (severity < 3) return;
+  const res = await fetch('/api/damage-taken', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actorId, severity }),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
 export async function cardRequest<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/chat-cards${path}`, {
     method: body === undefined ? 'GET' : 'POST',
