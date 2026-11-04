@@ -16,7 +16,7 @@ export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, on
   const apply = el('button', { type: 'button', class: 'primary', disabled: true }, 'Apply testing build');
   box.append(el('div', { class: 'dh-wiz-head' }, el('h2', {}, 'Testing character')),
     el('p', { class: 'dh-wiz-hint' }, 'Testing only. All cards in your domains are active, regardless of level. Class and heritage changes replace their features and resources; equipment and notes are kept.'),
-    body, error, el('div', { class: 'dh-wiz-foot' }, cancel, apply));
+    body, el('div', { class: 'dh-wiz-foot' }, cancel, error, apply));
   overlay.append(box);
   host.ownerDocument.body.append(overlay);
   document.addEventListener('keydown', onKey);

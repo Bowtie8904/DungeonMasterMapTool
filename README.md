@@ -43,6 +43,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   class/card resources update automatically; all domain cards in the available domains, at every level, are
   active together, with no five-card limit. New testers start at level 10 with mastery features and starter gear.
   Equipment and notes survive build changes; obsolete features, resources and their effects are removed.
+  The editor uses the full available dialog height for its scrolling form, with validation messages and
+  Cancel/Apply controls kept in the footer.
   Testing characters are visibly marked and permanently testing-only: players cannot enable testing on normal
   actors, and normal character creation, advancement and loadout limits still apply.
 - **Actor tokens** are stored in the map file; older builds still open such maps. Actor tokens of other campaigns

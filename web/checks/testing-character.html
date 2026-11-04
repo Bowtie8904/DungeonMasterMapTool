@@ -69,10 +69,23 @@ try {
   button(view, 'Edit testing build').click();
   let editor = await waitFor(() => document.querySelector('.dh-wiz select'));
   let dialog = editor.closest('[role=dialog]');
+  const checkEditorLayout = () => {
+    const body = dialog.querySelector('.dh-wiz-body').getBoundingClientRect();
+    const hint = dialog.querySelector('.dh-wiz-hint').getBoundingClientRect();
+    const footer = dialog.querySelector('.dh-wiz-foot').getBoundingClientRect();
+    const box = dialog.getBoundingClientRect();
+    assert(Math.abs(body.top - hint.bottom) < 1, 'Testing form does not start below the hint');
+    assert(Math.abs(body.bottom - footer.top) < 1, 'Testing form does not fill the space above the footer');
+    assert(footer.bottom <= box.bottom && footer.bottom <= innerHeight, 'Testing editor actions are outside the dialog or viewport');
+    assert(dialog.querySelector('.dh-wiz-foot [role="alert"]'), 'Testing validation is not in the footer');
+  };
+  checkEditorLayout();
   let level = dialog.querySelector('input[aria-label="Testing level"]');
   level.value = '0';
   level.dispatchEvent(new Event('input'));
   assert(button(dialog, 'Apply testing build').disabled, 'Invalid testing level accepted');
+  assert(dialog.querySelector('[role="alert"]').textContent.trim(), 'Invalid testing level has no visible explanation');
+  checkEditorLayout();
   button(dialog, 'Cancel').click();
   assert(c.level === 10 && c.className === 'Ranger', 'Cancel changed the sheet');
   button(view, 'Edit testing build').click();
@@ -82,6 +95,13 @@ try {
   primary.value = 'Warlock';
   primary.dispatchEvent(new Event('change'));
   button(dialog, 'Add multiclass').click();
+  checkEditorLayout();
+  const form = dialog.querySelector('.dh-wiz-body');
+  if (form.scrollHeight > form.clientHeight) {
+    form.scrollTop = form.scrollHeight;
+    assert(form.scrollTop > 0, 'Overflowing testing choices cannot scroll');
+    checkEditorLayout();
+  }
   assert(!button(dialog, 'Apply testing build').disabled, 'Valid testing multiclass rejected');
   button(dialog, 'Apply testing build').click();
   assert(!document.querySelector('.dh-wiz'), 'Editor did not close');
