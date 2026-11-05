@@ -40,6 +40,16 @@ export interface EffectDef {
   endOnSourceSevere?: boolean;
   sourceActorId?: string;
   sourceKey?: string;
+  unique?: boolean;
+  die?: Pick<RollOption, 'dice' | 'diceByLevel' | 'diceByFeature'>;
+  rollOptions?: RollOption[];
+  actions?: ActionDef[];
+}
+
+export interface ChatBenefit {
+  id: string;
+  label: string;
+  steps: Step[];
 }
 
 export interface Step {
@@ -70,7 +80,8 @@ export interface ActionDef {
   endEffect?: string;
   requiresEffect?: string;
   damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
-  target?: 'actor' | 'party';
+  target?: 'actor' | 'party' | 'allActors';
+  chatBenefits?: ChatBenefit[];
   transferHope?: boolean;
   check?: { dice: string; unless: number; mark: 'stress' };
 }
@@ -111,6 +122,7 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  addDice?: string;
   on: string;
   excludeRolls?: string[];
   when?: 'always' | 'fear' | 'hope' | 'hopeOrCritical' | 'failure' | 'hopeDie' | 'dieMatches';
@@ -131,6 +143,9 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  grantsFeatures?: string[];
+  usesOverrides?: Record<string, number>;
+  actionBenefits?: Record<string, ChatBenefit[]>;
   deathMove?: { kind: 'hopeBonus' | 'hopeSpend' | 'mask' | 'undying' | 'spectral' | 'egg' | 'battleHardened' | 'lifeWard' | 'unbreakable'; moves?: ('risk' | 'avoid')[]; bonus?: number };
   restReroll?: boolean;
   rest?: {
@@ -419,6 +434,9 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
+    ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
+      rollOptions: e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions,
+    } })),
   ];
   const prepared: AvailableRollOption[] = c.effects.flatMap((e) => (e.modifiers ?? []).flatMap((modifier, i) => {
     if (!modifier.consume || !modifier.roll || !targets.includes(modifier.roll)) return [];
@@ -489,6 +507,7 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
   const uses = new Map<string, number>();
   const items = new Map<CharacterSheet['inventory'][number], number>();
   for (const s of selected) {
+    if (s.key.startsWith('effect:') && !c.effects.some(e => s.key === `effect:${e.id}` || s.prepared?.effect === e)) return 'This effect is no longer active';
     if (s.active) continue;
     const block = actionBlocker(c, s.key, s.automation, s.option);
     if (block) return block;
@@ -601,7 +620,11 @@ export function applyRest(c: CharacterSheet, kind: RestKind): void {
 
 export function usesLeft(c: CharacterSheet, key: string, a: Automation): number | null {
   if (!a.uses || a.uses.per === 'scene') return null;
-  return Math.max(0, a.uses.max - (c.usage[key]?.used ?? 0));
+  return Math.max(0, usesMax(c, key, a) - (c.usage[key]?.used ?? 0));
+}
+
+export function usesMax(c: CharacterSheet, key: string, a: Automation): number {
+  return automationSources(c).reduce((max, source) => Math.max(max, source.usesOverrides?.[key] ?? 0), a.uses?.max ?? 0);
 }
 
 export function costText(cost?: ActionDef['cost'], c?: CharacterSheet): string {

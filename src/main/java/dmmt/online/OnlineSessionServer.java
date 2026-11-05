@@ -1385,6 +1385,11 @@ public final class OnlineSessionServer {
             Campaign c = campaign;
             if (c == null) throw new IllegalArgumentException("No online session is running.");
             Campaign.Actor sourceActor = ownedActor(playerId, request.path("actorId").asText());
+            if (request.has("benefitId")) {
+                claimActionBenefit(request, sourceActor);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             String key = request.path("key").asText("").strip();
             String actionId = request.path("actionId").asText("").strip();
             if (key.length() > 160 || actionId.isEmpty() || actionId.length() > 100)
@@ -1414,7 +1419,7 @@ public final class OnlineSessionServer {
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
-            else if (!definition.has("target") && !definition.has("check"))
+            else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits"))
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
             String targetMode = definition.path("target").asText("");
@@ -1481,7 +1486,7 @@ public final class OnlineSessionServer {
             }
             applyFeatureCost(sourceSheet, definition.path("cost"));
             JsonNode uses = definition.path("uses").isObject() ? definition.path("uses") : automation.path("uses");
-            useFeatureLimit(sourceSheet, key, uses);
+            useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
 
             if (definition.path("check").isObject()) {
                 JsonNode check = definition.path("check");
@@ -1528,6 +1533,18 @@ public final class OnlineSessionServer {
                     throw new IllegalArgumentException("Invalid outcome conversion.");
                 originalRoll.put("outcome", outcome);
             }
+            if (hasRoll && definition.has("addDice")) {
+                DiceRoller.Result extra = DiceRoller.roll(definition.path("addDice").asText(), config.maxDice(), diceRandom);
+                if (originalRoll.path("rolls").size() + extra.rolls().size() > config.maxDice())
+                    throw new IllegalArgumentException("Adding these dice exceeds the host's dice limit.");
+                originalRoll.put("total", Math.addExact(originalRoll.path("total").asInt(), extra.total()));
+                originalRoll.put("expression", originalRoll.path("expression").asText() + "+" + extra.expression());
+                for (int die : extra.rolls()) originalRoll.withArray("rolls").add(die);
+                ObjectNode detail = originalRoll.withArray("breakdown").addObject()
+                        .put("label", actionLabel).put("expression", extra.expression()).put("total", extra.total());
+                detail.set("rolls", MAPPER.valueToTree(extra.rolls()));
+                reportLines.add("Added " + extra.expression() + " = " + extra.total() + " to the original roll.");
+            }
 
             for (Campaign.Actor target : targets) {
                 ObjectNode targetSheet = changedSheets.get(target.getId());
@@ -1550,13 +1567,30 @@ public final class OnlineSessionServer {
                 if (!containsText(featureUses, use)) featureUses.add(use);
             }
 
-            commitFeatureSheets(changedSheets, originalRoll);
+            ArrayNode benefits = actionBenefits(sourceSheet, key, definition);
+            ObjectNode benefitReport = null;
+            if (!benefits.isEmpty()) {
+                if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
+                benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, null);
+                benefitReport.put("actorId", sourceActor.getId());
+                ObjectNode claims = benefitReport.putObject("actionBenefits");
+                claims.put("sessionId", sessionId);
+                claims.set("options", benefits);
+                claims.putArray("claimedBy");
+                ArrayNode eligible = claims.putArray("actorIds");
+                for (Campaign.Actor actor : c.getActors())
+                    if (hasPlayerSheet(actor) && !actor.getOwnerId().equals(sourceActor.getOwnerId())) eligible.add(actor.getId());
+            }
+            commitFeatureSheets(changedSheets, benefitReport == null ? originalRoll : benefitReport, benefitReport != null);
             if (hasRoll) broadcastRollUpdate(originalRoll);
             for (var entry : changedSheets.entrySet()) {
                 Campaign.Actor actor = c.actor(entry.getKey());
                 if (actor != null) sendFeatureState(actor, entry.getValue());
             }
-            if (damageRoll != null) {
+            if (benefitReport != null) {
+                sessionRolls.add(rollKey(benefitReport.path("id").asLong(), benefitReport.path("ts").asLong()));
+                deliver(benefitReport, null, false);
+            } else if (damageRoll != null) {
                 String damageType = definition.path("damage").path("type").asText("physical");
                 ObjectNode damage = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
                 damage.put("source", "damage");
@@ -1583,6 +1617,70 @@ public final class OnlineSessionServer {
 
     private static final class FeatureIoException extends RuntimeException {
         FeatureIoException(IOException cause) { super(cause); }
+    }
+
+    private boolean hasPlayerSheet(Campaign.Actor actor) throws IOException {
+        return actor.getOwnerId() != null && campaign.player(actor.getOwnerId()) != null
+                && store.loadSheet(campaign.getId(), actor.getId()) != null;
+    }
+
+    private JsonNode effectiveFeatureUses(ObjectNode sheet, String key, JsonNode uses) {
+        if (!uses.isObject()) return uses;
+        ObjectNode result = uses.deepCopy();
+        int max = result.path("max").asInt();
+        for (JsonNode feature : sheet.path("features")) {
+            JsonNode automation = catalogAutomation("feat:" + feature.path("name").asText(),
+                    feature.path("name").asText(), feature.path("automation"));
+            max = Math.max(max, automation.path("usesOverrides").path(key).asInt());
+        }
+        result.put("max", max);
+        return result;
+    }
+
+    private ArrayNode actionBenefits(ObjectNode sheet, String key, JsonNode action) {
+        ArrayNode benefits = MAPPER.createArrayNode();
+        if (action.path("chatBenefits").isArray()) benefits.addAll((ArrayNode) action.path("chatBenefits"));
+        for (JsonNode feature : sheet.path("features")) {
+            JsonNode automation = catalogAutomation("feat:" + feature.path("name").asText(),
+                    feature.path("name").asText(), feature.path("automation"));
+            JsonNode extra = automation.path("actionBenefits").path(key);
+            if (extra.isArray()) benefits.addAll((ArrayNode) extra);
+        }
+        return benefits;
+    }
+
+    private void claimActionBenefit(JsonNode request, Campaign.Actor actor) throws IOException {
+        ObjectNode sheet = storedSheet(actor.getId());
+        JsonNode ref = request.path("roll");
+        if (!sessionRolls.contains(rollKey(ref.path("id").asLong(-1), ref.path("ts").asLong(-1))))
+            throw new IllegalArgumentException("That performance is not from this hosting session.");
+        ObjectNode message = null;
+        for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE))
+            if ("chat".equals(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
+                    && entry.path("ts").equals(ref.path("ts")) && entry instanceof ObjectNode object) {
+                message = object.deepCopy();
+                break;
+            }
+        if (message == null || !message.path("actionBenefits").isObject())
+            throw new IllegalArgumentException("That message has no claimable benefit.");
+        ObjectNode claims = (ObjectNode) message.path("actionBenefits");
+        if (!containsText(claims.withArray("actorIds"), actor.getId())
+                || actor.getOwnerId().equals(message.path("fromId").asText()))
+            throw new IllegalArgumentException("Choose an eligible ally who received this performance.");
+        if (containsText(claims.withArray("claimedBy"), actor.getOwnerId()))
+            throw new IllegalArgumentException("You already claimed a benefit from this performance.");
+        JsonNode benefit = null;
+        for (JsonNode option : claims.path("options"))
+            if (option.path("id").asText().equals(request.path("benefitId").asText())) { benefit = option; break; }
+        if (benefit == null) throw new IllegalArgumentException("That benefit is not available.");
+        ObjectNode before = sheet.deepCopy();
+        List<String> lines = new ArrayList<>();
+        applyFeatureSteps(sheet, benefit.path("steps"), benefit.path("label").asText(), actor, "", lines);
+        if (sheet.equals(before)) throw new IllegalArgumentException("No benefit available: already at maximum Hope or nothing to clear.");
+        claims.withArray("claimedBy").add(actor.getOwnerId());
+        commitFeatureSheets(Map.of(actor.getId(), sheet), message);
+        sendFeatureState(actor, sheet);
+        broadcastChatUpdate(message);
     }
 
     private void rerollRestDie(JsonNode request, Campaign.Actor sourceActor, JsonNode source,
@@ -1872,6 +1970,14 @@ public final class OnlineSessionServer {
     }
 
     private List<Campaign.Actor> resolveFeatureTargets(Campaign c, Campaign.Actor source, String targetActorId, String mode) {
+        if ("allActors".equals(mode)) {
+            List<Campaign.Actor> targets = new ArrayList<>();
+            for (Campaign.Actor actor : c.getActors()) {
+                try { if (hasPlayerSheet(actor)) targets.add(actor); }
+                catch (IOException e) { throw new FeatureIoException(e); }
+            }
+            return targets;
+        }
         if ("party".equals(mode)) {
             Set<String> online = new LinkedHashSet<>();
             clients.values().forEach(client -> online.add(client.playerId));
@@ -1956,7 +2062,29 @@ public final class OnlineSessionServer {
                 ObjectNode effect = (ObjectNode) step.path("effect").deepCopy();
                 String name = effect.path("name").asText();
                 if (name.isBlank()) continue;
-                removeEffects(sheet, name, sourceActor.getId(), sourceKey);
+                removeEffects(sheet, name, effect.path("unique").asBoolean() ? null : sourceActor.getId(),
+                        effect.path("unique").asBoolean() ? null : sourceKey);
+                if (effect.path("die").isObject()) {
+                    ObjectNode caster;
+                    try { caster = storedSheet(sourceActor.getId()); }
+                    catch (IOException e) { throw new FeatureIoException(e); }
+                    String dice = effect.path("die").path("dice").asText();
+                    int level = caster.path("level").asInt(1);
+                    int best = 0;
+                    var levels = effect.path("die").path("diceByLevel").fields();
+                    while (levels.hasNext()) {
+                        var entry = levels.next();
+                        int threshold = Integer.parseInt(entry.getKey());
+                        if (threshold <= level && threshold > best) { best = threshold; dice = entry.getValue().asText(); }
+                    }
+                    var upgrades = effect.path("die").path("diceByFeature").fields();
+                    while (upgrades.hasNext()) {
+                        var upgrade = upgrades.next();
+                        for (JsonNode feature : caster.path("features"))
+                            if (upgrade.getKey().equals(feature.path("name").asText())) dice = upgrade.getValue().asText();
+                    }
+                    resolveEffectDie(effect, dice);
+                }
                 effect.put("id", "f" + java.util.UUID.randomUUID());
                 effect.put("source", label);
                 effect.put("sourceActorId", sourceActor.getId());
@@ -1964,7 +2092,19 @@ public final class OnlineSessionServer {
                 sheet.withArray("effects").add(effect);
                 report.add("Gained " + name + ".");
             }
+
         }
+    }
+
+    private void resolveEffectDie(JsonNode node, String dice) {
+        if (node instanceof ObjectNode object) {
+            List<String> replacements = new ArrayList<>();
+            object.fields().forEachRemaining(entry -> {
+                if (entry.getValue().isTextual() && "@die".equals(entry.getValue().asText())) replacements.add(entry.getKey());
+                else resolveEffectDie(entry.getValue(), dice);
+            });
+            replacements.forEach(key -> object.put(key, dice));
+        } else if (node.isArray()) node.forEach(child -> resolveEffectDie(child, dice));
     }
 
     private static boolean isTrack(String resource) {
@@ -2203,12 +2343,17 @@ public final class OnlineSessionServer {
     }
 
     private void publishActionReport(Campaign.Actor actor, JsonNode source, String title, List<String> lines, ObjectNode roll) {
+        ObjectNode message = actionReportMessage(actor, source, title, lines, roll);
+        deliver(message, message.path("toId").asText(null));
+    }
+
+    private ObjectNode actionReportMessage(Campaign.Actor actor, JsonNode source, String title, List<String> lines, ObjectNode roll) {
         String text = "ACTION USED\n" + title + "\n" + actor.getName()
                 + lines.stream().map(line -> "\n• " + line).reduce("", String::concat);
         String toId = roll == null ? null : roll.path("toId").asText(null);
         ObjectNode message = chatMessage(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName(), toId, clip(text));
         message.set("rollSource", featureSourceDescription(source));
-        deliver(message, toId);
+        return message;
     }
 
     private ObjectNode featureSourceDescription(JsonNode source) {
@@ -2255,6 +2400,10 @@ public final class OnlineSessionServer {
         if (roll.has("rewardClaimed")) update.set("rewardClaimed", roll.get("rewardClaimed"));
         if (roll.has("deathResult")) update.set("deathResult", roll.get("deathResult"));
         if (roll.has("deathMove") && roll.has("featureRoll")) update.set("featureRoll", roll.get("featureRoll"));
+        update.set("total", roll.path("total"));
+        update.set("expression", roll.path("expression"));
+        update.set("rolls", roll.path("rolls"));
+        if (roll.has("breakdown")) update.set("breakdown", roll.get("breakdown"));
         String toId = roll.path("toId").asText("");
         String fromId = roll.path("fromId").asText("");
         if (toId.isEmpty()) {
@@ -2282,19 +2431,24 @@ public final class OnlineSessionServer {
         for (Campaign.Actor actor : c.getActors()) {
             try {
                 ObjectNode sheet = storedSheet(actor.getId());
-                JsonNode raw = sheet.path("usage");
-                if (!raw.isObject()) continue;
-                ObjectNode usage = (ObjectNode) raw;
+                ObjectNode usage = sheet.withObject("/usage");
                 List<String> stale = new ArrayList<>();
                 usage.fields().forEachRemaining(entry -> {
                     if (List.of("session", "scene").contains(entry.getValue().path("per").asText())) stale.add(entry.getKey());
                 });
-                if (stale.isEmpty()) continue;
+                ArrayNode effects = MAPPER.createArrayNode();
+                boolean expired = false;
+                for (JsonNode effect : sheet.path("effects")) {
+                    if ("session".equals(effect.path("until").asText())) expired = true;
+                    else effects.add(effect);
+                }
+                if (stale.isEmpty() && !expired) continue;
+                if (expired) sheet.set("effects", effects);
                 stale.forEach(usage::remove);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
                 store.saveSheet(c.getId(), actor.getId(), sheet.toString());
-            } catch (IOException ignored) {
-                // A missing sheet has no session-limited uses to reset.
+            } catch (IOException e) {
+                throw new IllegalStateException("Could not reset session uses and effects for " + actor.getName() + ".", e);
             }
 
         }
@@ -2747,6 +2901,7 @@ public final class OnlineSessionServer {
             hello.put("keptDice", true);
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
+            hello.put("partyFeatures", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("handouts", true);

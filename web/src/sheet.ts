@@ -68,6 +68,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     });
     const view = renderSheetView({
       character: sheet,
+      supportsPartyFeatures: () => conn.partyFeatures,
       artwork: actor.artwork,
       onChange: () => changed?.(),
       onFeature: async (key, actionId, amount) => {

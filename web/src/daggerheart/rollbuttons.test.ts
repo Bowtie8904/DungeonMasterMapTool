@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rerollRequest, rollButtons, rollContext } from './rollbuttons';
 import type { CharacterSheet } from './data';
-import type { RollMessage } from '../protocol';
+import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest } from './engine';
+import { renderLogEntry } from '../chat';
 
 class FakeElement {
   className = '';
@@ -110,6 +111,87 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it.each([
+    ['Relaxing Song', 'heal', 'Within Close range: clear 1 HP', 'hp', 'clear', 1],
+    ['Heartbreaking Song', 'hope', 'Within Close range: gain 1 Hope', 'hope', 'gain', 1],
+    ['Rally', 'stress', 'Clear 1 Stress', 'stress', 'clear', 1],
+    ['Rousing Speech', 'stress', 'Clear 2 Stress', 'stress', 'clear', 2],
+  ] as const)('renders clickable %s claims on action-used chat cards', async (song, id, label, resource, op, amount) => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const message: ChatMessage = {
+      id: 7, ts: 100, fromId: 'bard-player', from: 'Bard', text: `ACTION USED\n${song}\nBard`,
+      actionBenefits: { sessionId: 'session', actorIds: ['a'], claimedBy: [],
+        options: [{ id, label, steps: [{ op, resource, amount }] }] },
+    };
+    const { host } = hostFor({ a: character('Ally', undefined) });
+    const supported = { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true, sessionId: () => 'session' };
+    const render = (playerId: string) => renderLogEntry({ kind: 'chat', m: message }, playerId, undefined, undefined,
+      m => rollButtons(m, { ...supported, playerId })) as unknown as FakeElement;
+    const card = render('ally-player');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(card.className).toContain('action-report');
+    expect(card.queryAll('button').map(button => button.text)).toEqual([`${label} · Ally`]);
+    expect(render('bard-player').queryAll('button')).toHaveLength(0);
+    await card.queryAll('button')[0].click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'a', benefitId: id, roll: { id: 7, ts: 100 } });
+    expect(card.queryAll('button')).toHaveLength(0);
+    const updated = render('ally-player');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(updated.queryAll('button')).toHaveLength(0);
+  });
+
+  it('renders performance claims on plain chat messages without requiring a parsed action report', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const message: ChatMessage = { id: 8, ts: 100, fromId: 'bard-player', from: 'Bard', text: 'Song',
+      actionBenefits: { sessionId: 'session', actorIds: ['a'], claimedBy: [],
+        options: [{ id: 'heal', label: 'Clear 1 HP', steps: [{ op: 'clear', resource: 'hp', amount: 1 }] }] } };
+    const { host } = hostFor({ a: character('Ally', undefined) });
+    const card = renderLogEntry({ kind: 'chat', m: message }, 'ally-player', undefined, undefined,
+      m => rollButtons(m, { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true, sessionId: () => 'session' })) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(card.queryAll('button').map(button => button.text)).toEqual(['Clear 1 HP · Ally']);
+  });
+
+  it('offers performance claims to eligible allies once per player, not once per actor or option', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const message: ChatMessage = { id: 7, ts: 100, fromId: 'bard-player', from: 'Bard', text: 'ACTION USED\nRally\nBard',
+      actionBenefits: { sessionId: 'session', actorIds: ['a', 'b'], claimedBy: [], options: [
+        { id: 'hope', label: 'Gain Hope', steps: [{ op: 'gain', resource: 'hope', amount: 1 }] },
+        { id: 'stress', label: 'Clear Stress', steps: [{ op: 'clear', resource: 'stress', amount: 1 }] },
+      ] } };
+    const { host } = hostFor({ a: character('First', undefined), b: character('Second', undefined), c: character('Ineligible', undefined) });
+    const supported = { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true, sessionId: () => 'session' };
+    expect(rollButtons(message, { ...supported, supportsPartyFeatures: () => false })).toBeNull();
+    expect(rollButtons(message, { ...supported, sessionId: () => 'old' })).toBeNull();
+    expect(rollButtons(message, { ...supported, playerId: 'bard-player' })).toBeNull();
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(4);
+    await box.queryAll('button')[0].click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'a', benefitId: 'hope', roll: { id: 7, ts: 100 } });
+    expect(box.queryAll('button')).toHaveLength(0);
+    expect(message.actionBenefits!.claimedBy).toEqual(['ally-player']);
+  });
+
+  it('retains performance claims and displays errors when the host rejects a claim', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Nothing to clear' }), { status: 400 })));
+    const message: ChatMessage = { id: 8, ts: 100, fromId: 'bard-player', from: 'Bard', text: 'Song',
+      actionBenefits: { sessionId: 'session', actorIds: ['a'], claimedBy: [],
+        options: [{ id: 'heal', label: 'Clear HP', steps: [{ op: 'clear', resource: 'hp', amount: 1 }] }] } };
+    const { host } = hostFor({ a: character('Ally', undefined) });
+    const box = rollButtons(message, { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true, sessionId: () => 'session' }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button')[0].click();
+    expect(host.toast).toHaveBeenCalledWith('Nothing to clear');
+    expect(message.actionBenefits!.claimedBy).toEqual([]);
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+  });
+
   it('offers sender-only pending Risk recovery and flushes before the idempotent claim', async () => {
     const body = new FakeElement('body');
     vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });

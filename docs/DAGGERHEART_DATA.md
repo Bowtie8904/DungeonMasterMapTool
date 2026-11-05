@@ -51,7 +51,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   are numbers or supported formula strings. Omit `max` for an uncapped pool; never infer a cap from Hope or a
   description. Resource ids are stable, shared sheet keys, so a Warlock subclass can spend the `favor` declared
   by its class's Favor feature. Initial values are applied once, not every render/re-equip. Resource counters
-  are not rolled-die collections: Prayer/Rally Dice retain distinct rolled values and remain manual.
+  are not rolled-die collections: Prayer Dice retain distinct rolled values and remain manual.
+  Rally Dice use consumable effects instead of numeric resource pools.
   `session: true` declares a session-only pool (initially 0): the host retains values in memory across reconnects
   and sheet/feature saves, strips them from sheet files and transaction journals, and resets them on new hosting.
   Know the Tide uses this with `max: "@level"`; its Fear-roll trigger gains tokens once per roll.
@@ -62,6 +63,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
   Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
   limit. A rest limit is not a custom resource recharge rule.
+  `usesOverrides: {"feat:<Feature>": number}` raises another source's maximum while the granting feature
+  is learned (Virtuoso), without resetting its usage. `grantsFeatures: ["<Feature>", ...]` refreshes linked
+  catalog features on existing sheets (the split Gifted Performer songs), retaining their counters.
 - **actions**: normally a button on the feature/item/card. `timing: "downtime"` offers the action only as a rest
   move; `timing: "rest"` hides standalone controls for benefits handled by `rest` metadata. Missing `timing`
   retains normal behavior (`timing: "action"` explicitly preserves a GM's normal-action override);
@@ -89,6 +93,22 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   current sheets, not client copies. An effect's `endOnSourceSevere: true` links its duration to its caster's
   Severe damage and replaces that caster's previous grant on recast. `blocksMovement: true` prevents player
   movement of that actor; DM movement is unaffected.
+  `"allActors"` targets every player-owned campaign actor with a saved sheet, including the source and
+  offline actors, without changing the connected-player meaning of `"party"`.
+  `chatBenefits: [{id, label, steps}]` applies the action's ordinary steps to its owner and publishes
+  optional ally claims in the chat report. `automation.actionBenefits: {"feat:<Feature>": [...]}` adds
+  choices to that feature's report while the granting feature is learned (Maestro on Rally).
+  A player chooses an eligible owned actor and may claim only one option per report, across all their
+  actors/tabs. Claims at full Hope or with nothing recoverable are rejected without consuming the claim.
+  Report options/eligible actors are snapshotted by the host; costs, uses, benefits and claims are journaled
+  with their sheets. `actionBenefits` chat metadata includes `options`, `actorIds`, `claimedBy` and `sessionId`;
+  `/api/feature` accepts `{actorId, benefitId, roll: {id, ts}}`. Historical-session claims are unavailable.
+  `hello.partyFeatures` capability gates these actions and after-roll additions on older hosts.
+  Effects may carry `rollOptions` and `actions` with `endEffect` to share a single consumable across
+  roll types and recovery. `unique: true` replaces all previous effects with that name and offers only
+  one matching option per roll dialog. Optional `die: {dice, diceByLevel?, diceByFeature?}` resolves from
+  the granting actor at grant time, replacing `@die` in the effect's actions/options, never from its recipient.
+  Session-duration effects expire on the next hosting run, not on rests or reconnects.
   `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
   The host validates both balances and the shared use limit, then spends and grants the entire amount atomically;
   insufficient Hope or recipient capacity leaves both sheets and the use counter unchanged.
@@ -199,6 +219,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   from the updated chat card, once per roll. Critical rolls instead claim +1 Hope and clear 1 Stress.
   At maximum Hope, only criticals with marked Stress can still claim; no-benefit claims stay unconsumed.
   The host persists claims and character changes together; older hosts/history do not expose claim buttons.
+  `rollTriggers[].addDice` rolls additional dice on the host after the original action, paying costs once
+  and updating the saved roll's expression, dice, total and breakdown through additive `rollUpdate` fields.
+  Original Hope/Fear dice and outcome are unchanged. Heart of a Poet uses this for its 1-Hope d4.
   A trigger's `weapon` restricts it to the named attack weapon. `tokenGain: {resource, max}` asks for a positive
   integer `amount` through a styled in-app popup with inline validation and Cancel/Feed controls (no browser
   prompt). Cancellation spends nothing; request errors stay inline with input retained for retry.
@@ -290,10 +313,10 @@ feature with independently limited sub-abilities: a source-wide limit applies to
 
 ## Catalog coverage
 
-The maintained catalog covers **1,187 entries / 1,294 rule sources**, including expansion content, not just core
+The maintained catalog covers **1,187 entries / 1,296 rule sources**, including expansion content, not just core
 classes or the named examples. A source is an individual class/heritage/transformation feature, or one gear/card/item
 entry. The counts below describe the current catalog snapshot; edit them when catalog changes affect the totals.
-“Executable” means at least one modifier, counter, action, roll option, creation/rest grant, damage-mitigation option, weapon-damage operation or death-move metadata;
+“Executable” means at least one modifier, counter/usage upgrade, action/chat benefit, roll option, creation/rest grant, damage-mitigation option, weapon-damage operation or death-move metadata;
 **it does not mean the whole feature is automated**. A cost/use-only button tracks the owner's spending, not the
 target's outcome. “Plain gear” has no feature to automate. Sources without an executable operation are
 purely narrative text.
@@ -305,12 +328,21 @@ purely narrative text.
 | Weapons | 336 | 336 | 144 | 192 |
 | Consumables | 182 | 182 | 62 | 120 |
 | Items | 174 | 174 | 84 | 90 |
-| **All categories** | **1,187** | **1,294** | **713** | **581** |
+| **All categories** | **1,187** | **1,296** | **719** | **577** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
 ### Curated mappings
 
+- **Bard:** Rally grants one d6/d8 (level 5) session effect to every player-owned actor with a sheet;
+  Epic Poetry upgrades it to d10. Spend it optionally on action, reaction or damage rolls, or use its
+  Effects-tab action to roll it and clear Stress. Each use removes the whole effect. Relaxing, Epic and
+  Heartbreaking Songs are separate long-rest features/counters; Virtuoso raises each limit to two.
+  Relaxing/Heartbreaking heal the bard or grant Hope and offer once-per-other-player chat claims;
+  Rousing Speech offers clearing 2 Stress to allies. Maestro's Rally report offers one Hope or one Stress
+  recovery, mutually exclusive per player. Range/narrative conditions remain table-confirmed; Epic Song's
+  adversary Vulnerable condition remains manual. Heart of a Poet is a finished-action d4 button, not a
+  pre-roll option. Epic Poetry's Help-an-Ally action spends the usual 1 Hope and rolls a d10 advantage die.
 - **Warlock:** initial 3 Favor, **uncapped**; downtime tribute gains `@spellcast`. After a **successful action roll
   with Hope**, choose **one** button: gain Favor instead without awarding Hope (also works when Hope is full),
   or replace Hope already awarded by spending it to gain Favor. Do not use these after other Hope gains.
@@ -321,7 +353,7 @@ Classes, ancestries, communities and transformations are included in the total.
   subfeatures are explicit; damage prevention, reroll choice, range and target effects remain manual.
 - **Other class/heritage sources:** permanent Stalwart, Shell, Rugged, Ascendant and Fleeting Shadow bonuses;
   creation grants; Battle Ritual, Courage, Limit Breaker, Deadly Determination and Frontline Tank resource actions;
-  Rogue's Dodge effect; No Mercy as an effect-based attack option (pre-ticked while active); optional Tusks, Kick, Elementalist, Heart of a Poet, Wings of Light, Sneak Attack,
+  Rogue's Dodge effect; No Mercy as an effect-based attack option (pre-ticked while active); optional Tusks, Kick, Elementalist, Wings of Light, Sneak Attack,
   Combat Training, Adrenaline and Face Your Fear. Later upgrades that replace another feature's die are manual
   where not encoded on the originating option.
 - **Ancestry review and matching rules:** Elemental Breath/Long Tongue attacks and damage; Charge reactions and
@@ -371,13 +403,13 @@ Classes, ancestries, communities and transformations are included in the total.
 - **Selections and permanent changes:** Bare Bones' armor replacement table, Vitality's choose-two bonuses,
   Mutagens/Transcendence choices, arbitrary chosen Experiences, scars, permanently lost slots, copied/attached/transferred
   item features, transformation/Beastform statistics and replacing upgraded feature dice. No choice is guessed.
-- **Complex pools/multiple sub-abilities:** Prayer/Rally Dice keep distinct rolled face values; Unstoppable,
+- **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values; Unstoppable,
   Wild Surge, Moon phases and Zone of Protection keep stateful die faces; variable token expenditure, rolled-table
   outcomes and automatic rest/session hooks stay manual unless an explicit button/option is listed. Grimoires
     (`Book of ...`) have no card-level automation; each spell in `spells[]` is its own feature with its own
     parsed cost/usage button, Spellcast roll button and usage counter (key `card:<Book>/<Spell>`), so spells never
     share one subspell's cost/use. The sheet draws a separator line between spells.
-  Usage upgrades such as Devout/Virtuoso/Reliable Backup do not invent new once-per-rest actions.
+  Unconfigured usage upgrades such as Devout/Reliable Backup do not invent new once-per-rest actions.
 - **Narrative/world/inventory:** crafting recipes, foraging, downtime projects, timers/countdowns, conjured objects,
   item attachment, form/appearance changes, portals, memory/information gathering, immunities, senses and travel.
   Descriptions and manual boundary notes remain available, even when there is no executable action.

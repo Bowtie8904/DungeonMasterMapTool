@@ -17,6 +17,8 @@ export class Connection {
   keptDice = false;
   rollMultipliers = false;
   rollRewards = false;
+  partyFeatures = false;
+  sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
   readonly clock = new ClockSync();
@@ -61,6 +63,7 @@ export class Connection {
     this.keptDice = false;
     this.rollMultipliers = false;
     this.rollRewards = false;
+    this.partyFeatures = false;
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.events.onStatus('connecting');
@@ -96,6 +99,8 @@ export class Connection {
         this.keptDice = msg.keptDice === true;
         this.rollMultipliers = msg.rollMultipliers === true;
         this.rollRewards = msg.rollRewards === true;
+        this.partyFeatures = msg.partyFeatures === true;
+        this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;
         if (this.clock.samples === 0) this.clock.seed(msg.serverTime, performance.now());

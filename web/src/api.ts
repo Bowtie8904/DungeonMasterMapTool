@@ -97,6 +97,7 @@ export interface FeatureRequest {
   confirmRange?: boolean;
   amount?: number;
   restDie?: number;
+  benefitId?: string;
   roll?: { id: number | string; ts: number };
 }
 

@@ -173,6 +173,10 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
           el('div', { class: 'shared-source' }, m.rollSource.source),
           el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
     }
+    if (e.kind === 'chat' && e.m.actionBenefits && rollActions) {
+      const actions = rollActions(e.m);
+      if (actions) card.append(actions);
+    }
     return card;
   }
   card.append(e.kind === 'roll' ? rollContent(e.m) : e.m.sharedCard
@@ -184,8 +188,8 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
         el('div', { class: 'shared-source' }, m.rollSource.source),
         el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
   }
-  if (e.kind === 'roll' && rollActions) {
-    const actions = rollActions(e.m as RollMessage);
+  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits)) {
+    const actions = rollActions(e.m);
     if (actions) card.append(actions);
   }
   return card;

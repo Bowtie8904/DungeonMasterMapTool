@@ -1041,6 +1041,8 @@ export class App {
     return rollButtons(m, {
       playerId: this.playerId,
       supportsRollRewards: () => this.conn.rollRewards,
+      supportsPartyFeatures: () => this.conn.partyFeatures,
+      sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
       actorIds: () => this.myActors.map(a => a.id),
       sheet: async (id) => {
@@ -1145,6 +1147,7 @@ export class App {
             artwork: a.artwork,
             supportsKeptDice: () => this.conn.keptDice,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
+            supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {
               const sent = this.conn.send({ type: 'roll', ...r });
               if (!sent) this.toast('Not connected. Your roll was not sent.');

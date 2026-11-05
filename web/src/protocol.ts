@@ -197,6 +197,7 @@ export interface ChatMessage {
   sharedCard?: import('./shared-cards').SharedCard;
   actorId?: string;
   restDice?: import('./daggerheart/rest').RestDie[];
+  actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string };
   rollSource?: RollSource;
 }
 
@@ -338,6 +339,7 @@ export interface Hello {
   playerName: string;
   serverTime: number;
   sessionName?: string;
+  sessionId?: string;
   campaignName?: string;
   paused: boolean;
   campaignId?: string;
@@ -350,6 +352,7 @@ export interface Hello {
   keptDice?: boolean;
   rollMultipliers?: boolean;
   rollRewards?: boolean;
+  partyFeatures?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;
@@ -379,7 +382,7 @@ export type ServerMessage =
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
-  | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll'>>)
+  | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll' | 'total' | 'expression' | 'rolls' | 'breakdown'>>)
   | AudioMessage
   | { type: 'kicked'; reason?: string }
   | { type: 'error'; message: string };

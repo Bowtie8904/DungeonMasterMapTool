@@ -70,6 +70,222 @@ class OnlineSessionServerTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private ObjectNode bardSheet(String subclass) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Bard").put("subclass", subclass).put("level", 5);
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if ("bard".equals(entry.path("id").asText()) || entry.path("id").asText().startsWith("bard-" + subclass.toLowerCase(java.util.Locale.ROOT))) {
+                for (JsonNode feature : entry.path("features")) {
+                    ObjectNode learned = feature.deepCopy();
+                    learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Bard"
+                            : "Subclass " + entry.path("stage").asText() + " - " + subclass);
+                    features.add(learned);
+                }
+            }
+        }
+        return sheet;
+    }
+
+    private String allyCookie(String id) throws Exception {
+        campaign.getPlayers().add(Campaign.Player.builder().id(id).name("Ally")
+                .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build());
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/login"))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"playerId\":\"" + id + "\",\"password\":\"secret\"}")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        return response.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
+    }
+
+    private ObjectNode benefitRequest(String actorId, JsonNode message, String benefit) {
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", actorId).put("benefitId", benefit);
+        request.putObject("roll").put("id", message.path("id").asLong()).put("ts", message.path("ts").asLong());
+        return request;
+    }
+
+    @Test
+    void bardRallyGrantsResolvedDiceToOfflineActorsAndClearsThemOnlyOnNewSessions() throws Exception {
+        campaign.getPlayers().add(Campaign.Player.builder().id("offline").name("Offline").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("bard").name("Bard").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("offline").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("unsaved").name("Unsaved").ownerId("offline").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("npc").name("NPC").build());
+        store.saveSheet(campaign.getId(), "ally", communitySheet("Seaborne").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("partyFeatures").asBoolean());
+            for (int level : List.of(1, 5, 10)) {
+                ObjectNode bard = bardSheet(level == 10 ? "Wordsmith" : "Troubadour");
+                bard.put("level", level);
+                store.saveSheet(campaign.getId(), "bard", bard.toString());
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "bard").put("key", "feat:Rally").put("actionId", "use");
+                var response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                String dice = level == 1 ? "1d6" : level == 5 ? "1d8" : "1d10";
+                for (String actor : List.of("bard", "ally")) {
+                    JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), actor));
+                    assertEquals(1, saved.path("effects").size());
+                    JsonNode effect = saved.path("effects").path(0);
+                    assertEquals("session", effect.path("until").asText());
+                    assertEquals(dice, effect.path("rollOptions").path(0).path("dice").asText());
+                    assertEquals(dice, effect.path("actions").path(0).path("steps").path(0).path("amount").asText());
+                }
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+            }
+            JsonNode before = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+            ws.abort();
+            awaitConnections(0);
+            ws = connect(cookie, new Inbox());
+            assertEquals(before, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")));
+            assertEquals(null, store.loadSheet(campaign.getId(), "unsaved"));
+            ws.abort();
+            awaitConnections(0);
+            server.stop();
+            server.start();
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").size());
+            assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("usage").has("feat:Rally"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void bardSongsApplyOwnerBenefitsAndPersistOneClaimPerPlayerWithVirtuosoLimits() throws Exception {
+        String allyCookie = allyCookie("ally-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("bard").name("Bard").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("ally-player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("second").name("Second").ownerId("ally-player").build());
+        store.saveSheet(campaign.getId(), "bard", bardSheet("Troubadour").toString());
+        store.saveSheet(campaign.getId(), "ally", communitySheet("Seaborne").toString());
+        store.saveSheet(campaign.getId(), "second", communitySheet("Seaborne").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode action = MAPPER.createObjectNode().put("actorId", "bard").put("key", "feat:Relaxing Song").put("actionId", "use");
+            for (int use = 0; use < 2; use++) {
+                var response = featureHttp(cookie, action);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode message = inbox.next("chat");
+                assertEquals(3 - use, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hp").path("on").asInt());
+                ObjectNode claim = benefitRequest("ally", message, "heal");
+                assertEquals(200, featureHttp(allyCookie, claim).statusCode());
+                assertEquals(3 - use, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hp").path("on").asInt());
+                assertEquals(400, featureHttp(allyCookie, claim.put("actorId", "second")).statusCode());
+                assertEquals(400, featureHttp(cookie, claim.put("actorId", "bard")).statusCode());
+                JsonNode updated = inbox.next("chatUpdate").path("message");
+                assertEquals("ally-player", updated.path("actionBenefits").path("claimedBy").path(0).asText());
+                assertTrue(store.historyTail(campaign.getId(), Integer.MAX_VALUE).stream().anyMatch(entry -> entry.equals(updated)));
+            }
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+            action.put("key", "feat:Heartbreaking Song");
+            assertEquals(200, featureHttp(cookie, action).statusCode());
+            JsonNode song = inbox.next("chat");
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hope").path("on").asInt());
+            assertEquals(200, featureHttp(allyCookie, benefitRequest("ally", song, "hope")).statusCode());
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hope").path("on").asInt());
+            action.put("key", "feat:Epic Song");
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void maestroAndRousingSpeechClaimsValidateChoicesCapacityAndSession() throws Exception {
+        String allyCookie = allyCookie("ally-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("bard").name("Bard").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("ally-player").build());
+        store.saveSheet(campaign.getId(), "bard", bardSheet("Troubadour").toString());
+        ObjectNode ally = communitySheet("Seaborne");
+        ((ObjectNode) ally.path("hope")).put("on", 6);
+        store.saveSheet(campaign.getId(), "ally", ally.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        JsonNode rally;
+        try {
+            ObjectNode action = MAPPER.createObjectNode().put("actorId", "bard").put("key", "feat:Rally").put("actionId", "use");
+            assertEquals(200, featureHttp(cookie, action).statusCode());
+            rally = inbox.next("chat");
+            assertEquals(2, rally.path("actionBenefits").path("options").size());
+            assertEquals(400, featureHttp(allyCookie, benefitRequest("ally", rally, "hope")).statusCode());
+            assertEquals(400, featureHttp(allyCookie, benefitRequest("ally", rally, "invented")).statusCode());
+            assertEquals(200, featureHttp(allyCookie, benefitRequest("ally", rally, "stress")).statusCode());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(allyCookie, benefitRequest("ally", rally, "hope")).statusCode());
+            store.saveSheet(campaign.getId(), "bard", bardSheet("Wordsmith").toString());
+            action.put("key", "feat:Rousing Speech");
+            assertEquals(200, featureHttp(cookie, action).statusCode());
+            JsonNode speech = inbox.next("chat");
+            assertEquals(200, featureHttp(allyCookie, benefitRequest("ally", speech, "stress")).statusCode());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("stress").path("on").asInt());
+        } finally { ws.abort(); }
+        server.stop();
+        server.start();
+        String newAllyCookie = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/login"))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"playerId\":\"ally-player\",\"password\":\"secret\"}")).build(),
+                HttpResponse.BodyHandlers.ofString()).headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
+        assertEquals(400, featureHttp(newAllyCookie, benefitRequest("ally", rally, "stress")).statusCode());
+    }
+
+    @Test
+    void interruptedSongClaimRecoversTheSheetAndMarkerBeforeRetrying() throws Exception {
+        String allyCookie = allyCookie("ally-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("bard").name("Bard").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("ally-player").build());
+        store.saveSheet(campaign.getId(), "bard", bardSheet("Troubadour").toString());
+        store.saveSheet(campaign.getId(), "ally", communitySheet("Seaborne").toString());
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "bard").put("key", "feat:Relaxing Song").put("actionId", "use");
+        assertEquals(200, featureHttp(cookie(), action).statusCode());
+        ObjectNode message = (ObjectNode) dmMessages.stream().filter(m -> m.has("actionBenefits")).findFirst().orElseThrow().deepCopy();
+        ObjectNode recovered = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        ((ObjectNode) recovered.path("hp")).put("on", 3);
+        recovered.put("featureRevision", recovered.path("featureRevision").asLong() + 1);
+        ((ObjectNode) message.path("actionBenefits")).withArray("claimedBy").add("ally-player");
+        ObjectNode journal = MAPPER.createObjectNode();
+        journal.set("ally", recovered);
+        journal.set("$roll", message);
+        Path journalFile = temp.resolve("campaigns").resolve(campaign.getId()).resolve("sheet-transfer.json");
+        java.nio.file.Files.writeString(journalFile, journal.toString());
+        assertEquals(400, featureHttp(allyCookie, benefitRequest("ally", message, "heal")).statusCode());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hp").path("on").asInt());
+        assertTrue(java.nio.file.Files.notExists(journalFile));
+        assertTrue(store.historyTail(campaign.getId(), Integer.MAX_VALUE).stream().anyMatch(m -> m.equals(message)));
+    }
+
+    @Test
+    void heartOfAPoetAddsAHostRolledD4ToTheOriginalActionOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("bard").name("Bard").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "bard", bardSheet("Wordsmith").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action,trait:Presence\",\"actorId\":\"bard\"}", true).join();
+            JsonNode original = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "bard").put("key", "feat:Heart of a Poet").put("actionId", "poet");
+            request.putObject("roll").put("id", original.path("id").asLong()).put("ts", original.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            int extra = update.path("total").asInt() - original.path("total").asInt();
+            assertTrue(extra >= 1 && extra <= 4);
+            assertEquals("1d4", update.path("breakdown").path(update.path("breakdown").size() - 1).path("expression").asText());
+            assertFalse(update.has("outcome"));
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hope").path("on").asInt());
+            JsonNode saved = store.historyTail(campaign.getId(), Integer.MAX_VALUE).stream()
+                    .filter(entry -> entry.path("id").equals(original.path("id"))).findFirst().orElseThrow();
+            assertEquals(original.path("rolls").path(0), saved.path("rolls").path(0));
+            assertEquals(original.path("rolls").path(1), saved.path("rolls").path(1));
+            assertEquals(extra, saved.path("rolls").path(2).asInt());
+            assertEquals("2d12+1d4", saved.path("expression").asText());
+            assertEquals(update.path("total"), saved.path("total"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
     private void diceSeed(long seed) throws Exception {
         var field = OnlineSessionServer.class.getDeclaredField("diceRandom");
         field.setAccessible(true);

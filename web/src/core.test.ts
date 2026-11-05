@@ -39,6 +39,17 @@ const snapshot = (): Partial<GameState> => ({
 });
 
 describe('Store', () => {
+  it('merges after-roll dice additions while retaining original Duality dice and source', () => {
+    const s = new Store();
+    const roll: RollMessage = { id: 4, ts: 5, fromId: 'p', from: 'Player', kind: 'duality',
+      expression: '2d12', rolls: [4, 5], total: 9, source: 'action,trait:Presence' };
+    s.applySnapshot(1, { ...snapshot(), chatTail: [{ ...roll, type: 'roll' }] });
+    expect(s.applyRollUpdate({ type: 'rollUpdate', id: 4, ts: 5, expression: '2d12+1d4',
+      rolls: [4, 5, 3], total: 12, breakdown: [{ label: 'Heart of a Poet', expression: '1d4', rolls: [3], total: 3 }] })).toBe(true);
+    expect(s.state!.chatTail![0]).toMatchObject({ source: 'action,trait:Presence', expression: '2d12+1d4',
+      rolls: [4, 5, 3], total: 12, breakdown: [{ total: 3 }] });
+  });
+
   it('merges death recovery and feature consequences without losing original dice or omitted annotations', () => {
     const s = new Store();
     const roll: RollMessage = { id: 4, ts: 5, fromId: 'p', from: 'Player', kind: 'dice', deathMove: 'risk',

@@ -75,8 +75,16 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
       ...['ancestries', 'communities', 'transformations'].flatMap(entries).filter((e) => f.source.includes(e.name)),
     ];
     const feature = candidates.flatMap((e) => e.features ?? []).find((a) => a.name === f.name);
-    if (feature) f.automation = feature.automation;
-    else {
+    if (feature) {
+      f.automation = feature.automation;
+      for (const name of feature.automation?.grantsFeatures ?? []) {
+        const granted = candidates.flatMap(e => e.features ?? []).find(item => item.name === name);
+        if (!granted) continue;
+        const existing = c.features.find(item => item.name === name);
+        if (existing) existing.text = granted.text;
+        else c.features.push({ ...structuredClone(granted), source: f.source });
+      }
+    } else {
       const entry = candidates.find((e) => e.name === f.name);
       if (entry) f.automation = entry.automation;
     }
@@ -112,7 +120,7 @@ function stripSceneUses(value: unknown): void {
   Object.values(record).forEach(stripSceneUses);
 }
 
-export function featureTarget(c: CharacterSheet, key: string, actionId: string): 'actor' | 'party' | undefined {
+export function featureTarget(c: CharacterSheet, key: string, actionId: string): import('./engine').ActionDef['target'] {
   const [kind, ...rest] = key.split(':');
   const name = rest.join(':');
   const source = kind === 'feat'
@@ -121,8 +129,7 @@ export function featureTarget(c: CharacterSheet, key: string, actionId: string):
       : kind === 'weapon' ? c.activeWeapons.find((item) => item.name === name)
         : kind === 'armor' ? c.activeArmor?.name === name ? c.activeArmor : undefined
           : kind === 'item' ? c.inventory.find((item) => item.name === name) : undefined;
-  const action = source?.automation?.actions?.find((item) => item.id === actionId) as
-    (import('./engine').ActionDef & { target?: 'actor' | 'party' }) | undefined;
+  const action = source?.automation?.actions?.find((item) => item.id === actionId);
   return action?.target;
 }
 

@@ -288,6 +288,15 @@ Nothing starts until you click **Start online session**, so offline play and the
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
+  **Bard automation:** Rally grants every player-owned character with a sheet a session-only die, including
+  offline allies. Spend it in action/reaction/damage rolls or clear Stress from the Effects tab; any use removes it.
+  Troubadour songs have separate buttons and long-rest limits, automatically doubled by Virtuoso.
+  Relaxing/Heartbreaking Songs apply the bard's recovery/Hope and show Clear 1 HP/Gain 1 Hope buttons
+  directly on their chat messages for other players, usable once per player per performance;
+  Maestro adds a Hope-or-Stress choice to Rally, and Rousing Speech lets allies clear 2 Stress.
+  Wordsmith's Heart of a Poet adds a host-rolled d4 to a finished action, while Epic Poetry rolls a d10
+  Help-an-Ally advantage die and upgrades Rally to d10. Range and narrative conditions remain table-confirmed;
+  Epic Song's Vulnerable condition is applied manually. Reload existing sheets to pick up the updated songs.
   Midnight's **Stealth Expertise** reaction is offered on non-attack Fear action rolls only, for yourself
   or an ally; moving unnoticed and the ally's range still require player confirmation.
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via

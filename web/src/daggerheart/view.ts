@@ -6,7 +6,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
+  effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
@@ -72,6 +72,7 @@ export interface SheetViewOptions {
   onChange?: () => void;
   supportsKeptDice?: () => boolean;
   supportsRollMultipliers?: () => boolean;
+  supportsPartyFeatures?: () => boolean;
   /** Receives a compact Evasion and traits strip after every render (the floating window shows it on its minimised bar). */
   onMiniStrip?: (strip: HTMLElement | null) => void;
 }
@@ -278,7 +279,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     for (const action of actions) row.append(actionButton(key, a!, action, label, hooks));
     const left = a ? usesLeft(c, key, a) : null;
-    if (left !== null && a?.uses) row.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${a.uses.max} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
+    if (left !== null && a?.uses) row.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
     return row;
   }
 
@@ -326,7 +327,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         }).catch((e: Error) => opts.onLog?.(`Could not use ${label}: ${e.message}`)).finally(() => { setBusy(false); });
         return;
       }
-      if (action.target || action.check) {
+      if (action.target === 'allActors' || action.chatBenefits) {
+        if (!opts.supportsPartyFeatures?.()) { opts.onLog?.('Update the host to use party feature actions.'); return; }
+      }
+      if (action.target || action.check || action.chatBenefits) {
         if (a.deathMove?.kind === 'lifeWard' && !window.confirm('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
@@ -667,6 +671,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
         rich(e.text),
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
+        ...((e.actions?.length ?? 0) ? [el('div', { class: 'acts' },
+          ...e.actions!.map(action => actionButton(`effect:${e.id}`, {}, action, e.name, {
+            extraBlock: () => c.effects.includes(e) ? null : 'This effect is no longer active',
+          })))] : []),
       );
     });
     const name = el('input', { placeholder: 'Condition or effect name' });

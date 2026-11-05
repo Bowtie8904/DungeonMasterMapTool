@@ -2495,7 +2495,14 @@
     {
      "name": "Virtuoso",
      "text": "You are among the greatest of your craft and your skill is boundless. You can perform each of your “Gifted Performer” feature’s songs twice instead of once per long rest.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "usesOverrides": {
+       "feat:Relaxing Song": 2,
+       "feat:Epic Song": 2,
+       "feat:Heartbreaking Song": 2
+      }
+     }
     }
    ]
   },
@@ -2515,7 +2522,15 @@
     {
      "name": "Maestro",
      "text": "Your rallying songs steel the courage of those who listen. When you give a Rally Die to an ally, they can gain a Hope or clear a Stress.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actionBenefits": {
+       "feat:Rally": [
+        { "id": "hope", "label": "Maestro: gain 1 Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] },
+        { "id": "stress", "label": "Maestro: clear 1 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] }
+       ]
+      }
+     }
     }
    ]
   },
@@ -2535,12 +2550,46 @@
     {
      "name": "Gifted Performer",
      "text": "Describe how you perform for others. You can play each song once per long rest.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Relaxing Song", "Epic Song", "Heartbreaking Song"]
+     }
     },
     {
      "name": "Relaxing Song",
-     "text": "- You and all allies within Close range clear a Hit Point.\n\n- ***Epic Song:*** Make a target within Close range temporarily *Vulnerable*.\n\n- ***Heartbreaking Song:*** You and all allies within Close range gain a Hope.",
-     "type": "subclass"
+     "text": "You and all allies within Close range clear a Hit Point. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{
+       "id": "use", "label": "Relaxing Song",
+       "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }],
+       "chatBenefits": [{ "id": "heal", "label": "Within Close range: clear 1 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] }]
+      }]
+     }
+    },
+    {
+     "name": "Epic Song",
+     "text": "Make a target within Close range temporarily Vulnerable. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{ "id": "use", "label": "Epic Song" }],
+      "manual": ["Choose a target within Close range and apply Vulnerable at the table."]
+     }
+    },
+    {
+     "name": "Heartbreaking Song",
+     "text": "You and all allies within Close range gain a Hope. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{
+       "id": "use", "label": "Heartbreaking Song",
+       "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }],
+       "chatBenefits": [{ "id": "hope", "label": "Within Close range: gain 1 Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }]
+      }]
+     }
     }
    ]
   },
@@ -3068,7 +3117,14 @@
     {
      "name": "Epic Poetry",
      "text": "Your Rally Die increases to a **d10**. Additionally, when you Help an Ally, you can narrate the moment as if you were writing the tale of their heroism in a memoir. When you do, roll a **d10** as your advantage die.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [{
+       "id": "help", "label": "Help an Ally: roll d10 advantage",
+       "cost": { "hope": 1 },
+       "sendRoll": { "dice": "1d10", "label": "Epic Poetry: d10 advantage die" }
+      }]
+     }
     }
    ]
   },
@@ -3129,7 +3185,8 @@
       "actions": [
        {
         "id": "use",
-        "label": "Rousing Speech"
+        "label": "Rousing Speech",
+        "chatBenefits": [{ "id": "stress", "label": "Within Far range: clear 2 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }] }]
        }
       ]
      }
@@ -3139,12 +3196,12 @@
      "text": "After you make an action roll to impress, persuade, or offend someone, you can **spend a Hope** to add a **d4** to the roll.",
      "type": "subclass",
      "automation": {
-      "rollOptions": [
+      "rollTriggers": [
        {
         "id": "poet",
         "label": "Heart of a Poet",
-        "roll": "action",
-        "dice": "1d4",
+        "on": "action",
+        "addDice": "1d4",
         "cost": {
          "hope": 1
         },
@@ -3687,7 +3744,22 @@
       "actions": [
        {
         "id": "use",
-        "label": "Rally"
+        "label": "Rally",
+        "target": "allActors",
+        "steps": [{
+         "op": "effect",
+         "effect": {
+          "name": "Rally Die", "kind": "buff", "until": "session", "unique": true,
+          "text": "Spend this die on one action, reaction or damage roll, or to clear Stress.",
+          "die": { "dice": "1d6", "diceByLevel": { "5": "1d8" }, "diceByFeature": { "Epic Poetry": "1d10" } },
+          "rollOptions": [
+           { "id": "action", "label": "Spend Rally Die", "roll": "action", "dice": "@die", "endEffect": "Rally Die" },
+           { "id": "reaction", "label": "Spend Rally Die", "roll": "reaction", "dice": "@die", "endEffect": "Rally Die" },
+           { "id": "damage", "label": "Spend Rally Die", "roll": "damage", "dice": "@die", "endEffect": "Rally Die" }
+          ],
+          "actions": [{ "id": "stress", "label": "Spend Rally Die: clear Stress", "endEffect": "Rally Die", "steps": [{ "op": "clear", "resource": "stress", "amount": "@die" }] }]
+         }
+        }]
        }
       ]
      }

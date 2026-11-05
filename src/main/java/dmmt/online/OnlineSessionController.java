@@ -443,6 +443,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     else roll.remove("outcome");
                     if (message.has("featureUses")) roll.set("featureUses", message.get("featureUses"));
                     if (message.has("rewardClaimed")) roll.set("rewardClaimed", message.get("rewardClaimed"));
+                    for (String field : java.util.List.of("total", "expression", "rolls", "breakdown"))
+                        if (message.has(field)) roll.set(field, message.get(field));
                     break;
                 }
             } else {

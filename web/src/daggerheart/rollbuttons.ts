@@ -24,6 +24,8 @@ export interface RollButtonHost {
   toast(message: string): void;
   playerId?: string;
   supportsRollRewards?: () => boolean;
+  supportsPartyFeatures?: () => boolean;
+  sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
 
@@ -98,6 +100,45 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
     expression: original.expression + (advantage ? '+1d6' : ''),
     contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: '1d6' }] : [])],
   };
+}
+
+function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  const claims = m.actionBenefits;
+  if (!claims || !host.supportsPartyFeatures?.() || !host.playerId || m.fromId === host.playerId
+      || claims.sessionId !== host.sessionId?.()) return null;
+  const box = el('div', { class: 'roll-actions' });
+  let pending = false;
+  const paint = async () => {
+    const buttons: HTMLButtonElement[] = [];
+    if (!claims.claimedBy.includes(host.playerId!)) {
+      for (const actorId of host.actorIds?.() ?? []) {
+        if (!claims.actorIds.includes(actorId)) continue;
+        const sheet = await host.sheet(actorId);
+        if (!sheet) continue;
+        for (const benefit of claims.options) {
+          const button = el('button', { type: 'button', class: 'small' }, `${benefit.label} · ${sheet.character.name}`);
+          button.disabled = pending;
+          button.addEventListener('click', async () => {
+            if (pending) return;
+            pending = true;
+            buttons.forEach(b => { b.disabled = true; });
+            try {
+              await sheet.save.flush?.();
+              await useFeature({ actorId, key: '', actionId: 'claim', benefitId: benefit.id, roll: { id: m.id, ts: m.ts } });
+              if (!claims.claimedBy.includes(host.playerId!)) claims.claimedBy.push(host.playerId!);
+            } catch (e) { host.toast((e as Error).message); }
+            finally { pending = false; await paint(); }
+          });
+          buttons.push(button);
+        }
+      }
+    }
+    box.replaceChildren(...buttons);
+    box.hidden = !buttons.length;
+  };
+  box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
+  void paint().catch((e: Error) => host.toast(e.message));
+  return box;
 }
 
 function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
@@ -184,7 +225,7 @@ function deathButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null 
 }
 
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
-  if ('text' in m) return restButtons(m, host);
+  if ('text' in m) return benefitButtons(m, host) ?? restButtons(m, host);
   if (m.deathMove) return deathButtons(m, host);
   const actorId = m.actorId;
   const ctx = rollContext(m);
@@ -247,8 +288,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        b.disabled = !!blocked;
-        b.title = blocked ?? t.trigger.description ?? t.source;
+        const unsupported = t.trigger.addDice && !host.supportsPartyFeatures?.() ? 'Update the host to add dice to finished rolls.' : undefined;
+        b.disabled = !!blocked || !!unsupported;
+        b.title = unsupported ?? blocked ?? t.trigger.description ?? t.source;
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
