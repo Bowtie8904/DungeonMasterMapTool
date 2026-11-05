@@ -1,6 +1,6 @@
 // Loads and saves a character sheet on the host (one JSON file per actor).
 
-import { getSheet, InventoryConflict, saveSheet } from '../api';
+import { acceptSheetVersion, getSheet, InventoryConflict, saveSheet } from '../api';
 import { CharacterSheet, emptyCharacter, multiclassesOf, normalizeSheet } from './data';
 import { CompendiumFile, fetchCompendiumCategory, fetchCompendiumIndex } from './compendium';
 import { syncResources } from './engine';
@@ -202,6 +202,7 @@ export async function refreshCharacterAutomation(c: CharacterSheet): Promise<voi
 
 export async function loadCharacter(actorId: string, actorName: string, onWarning?: (message: string) => void): Promise<CharacterSheet> {
   const res = await getSheet(actorId);
+  acceptSheetVersion(actorId, res.version);
   const c = res.sheet ? normalizeSheet(res.sheet, actorName) : emptyCharacter(actorName);
   c.testingCharacter = res.testingCharacter === true;
   if (!c.testingCharacter) delete c.testingBuild;
@@ -247,8 +248,49 @@ export type SheetSave = (() => void) & { flush: () => Promise<void>; refresh: ()
 
 export function autosave(actorId: string, c: CharacterSheet, onError: (message: string) => void, delayMs = 700): SheetSave {
   let last = '';
+  const baseline = JSON.stringify(c);
+  const dirty = () => JSON.stringify(c) !== (last || baseline);
   let timer: number | undefined;
   let saving: Promise<void> | undefined;
+  let refreshPending = false;
+  let refreshing: Promise<void> | undefined;
+  const replace = (sheet: Partial<CharacterSheet>, version?: string) => {
+    const normalized = normalizeSheet(sheet, c.name);
+    normalized.testingCharacter = c.testingCharacter;
+    for (const key of Object.keys(c)) Reflect.deleteProperty(c, key);
+    Object.assign(c, normalized);
+    acceptSheetVersion(actorId, version);
+    last = JSON.stringify(c);
+    document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+    document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
+  };
+  const refreshFull = async () => {
+    refreshPending = true;
+    if (saving || dirty()) return;
+    if (refreshing) { await refreshing; return; }
+    refreshing = (async () => {
+      do {
+        refreshPending = false;
+        const data = await getSheet(actorId);
+        if (saving || dirty()) { refreshPending = true; break; }
+        if (data.version && data.sheet) {
+          const normalized = normalizeSheet(data.sheet, c.name);
+          normalized.testingCharacter = c.testingCharacter;
+          if (JSON.stringify(normalized) !== JSON.stringify(c))
+            replace(data.sheet, data.version);
+          else acceptSheetVersion(actorId, data.version);
+        } else {
+          if (data.sheet && applyInventory(c, data.sheet))
+            document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+          if (data.sheet && applyFeatureState(c, { ...data.sheet, actorId,
+            featureRevision: (data.sheet as { featureRevision?: number }).featureRevision ?? 0 }))
+            document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
+          last = JSON.stringify(c);
+        }
+      } while (refreshPending && !saving && !dirty());
+    })();
+    try { await refreshing; } finally { refreshing = undefined; }
+  };
   const flush = async () => {
     if (timer !== undefined) window.clearTimeout(timer);
     timer = undefined;
@@ -257,16 +299,24 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     if (json === last) return;
     const operation = async () => {
       try {
-        await saveSheet(actorId, c);
-        last = json;
+        const result = await saveSheet(actorId, c);
+        if (result?.version && result.sheet && JSON.stringify(c) === json) {
+          const normalized = normalizeSheet(result.sheet, c.name);
+          normalized.testingCharacter = c.testingCharacter;
+          if (JSON.stringify(normalized) !== json) replace(result.sheet, result.version);
+          else last = json;
+        } else last = json;
       } catch (e) {
         if (e instanceof InventoryConflict) {
-          applyInventory(c, e.sheet);
-          applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
-            hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
-            effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
-            permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
-          document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+          if (e.version) replace(e.sheet, e.version);
+          else {
+            applyInventory(c, e.sheet);
+            applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
+              hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
+              effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
+              permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
+            document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+          }
         }
         onError(`Could not save the character sheet: ${(e as Error).message}`);
         throw e;
@@ -274,6 +324,7 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     };
     saving = operation();
     try { await saving; } finally { saving = undefined; }
+    if (refreshPending) await refreshFull();
   };
   const backgroundFlush = () => { void flush().catch(() => { /* reported by flush */ }); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') backgroundFlush(); });
@@ -283,18 +334,6 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
   };
   return Object.assign(changed, {
     flush,
-    refresh: async () => {
-      const sheet = await getSheet(actorId);
-      if (sheet.sheet && applyInventory(c, sheet.sheet)) {
-        document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
-      }
-      if (sheet.sheet && applyFeatureState(c, { actorId,
-        featureRevision: (sheet.sheet as { featureRevision?: number }).featureRevision ?? 0,
-        hp: sheet.sheet.hp, stress: sheet.sheet.stress, hope: sheet.sheet.hope, scars: sheet.sheet.scars, armorTrack: sheet.sheet.armorTrack,
-        effects: sheet.sheet.effects, usage: sheet.sheet.usage, resources: sheet.sheet.resources,
-        permanentHp: sheet.sheet.permanentHp, longRestRevision: sheet.sheet.longRestRevision, spectralBlocked: sheet.sheet.spectralBlocked, deathNarrative: sheet.sheet.deathNarrative, pendingDeathRoll: sheet.sheet.pendingDeathRoll ?? null })) {
-        document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
-      }
-    },
+    refresh: refreshFull,
   });
 }

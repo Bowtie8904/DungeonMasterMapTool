@@ -146,6 +146,9 @@ public final class OnlineSessionServer {
         final WsContext ctx;
         final String playerId;
         final String playerName;
+        String dmActorId;
+        String dmToken;
+        boolean fullSheets;
         volatile long pingId;
         volatile long pingSentNanos;
         /** Last measured round trip in milliseconds; -1 until the first pong. */
@@ -156,6 +159,35 @@ public final class OnlineSessionServer {
             this.playerId = playerId;
             this.playerName = playerName;
         }
+    }
+
+    private record DmSheetGrant(String actorId, String ownerId) { }
+    private final Map<String, DmSheetGrant> dmSheetGrants = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public synchronized String dmSheetUrl(String actorId) {
+        Campaign.Actor actor = campaign == null ? null : campaign.actor(actorId);
+        if (!isRunning() || actor == null || campaign.player(actor.getOwnerId()) == null)
+            throw new IllegalArgumentException("Start hosting this actor's campaign and assign it to a player before opening its sheet.");
+        String token = java.util.UUID.randomUUID().toString();
+        dmSheetGrants.put(token, new DmSheetGrant(actorId, actor.getOwnerId()));
+        return "http://127.0.0.1:" + port() + "/sheet/" + actorId + "?dm-sheet=1#" + token;
+    }
+
+    public synchronized void revokeDmSheet(String url) {
+        String token = java.net.URI.create(url).getFragment();
+        DmSheetGrant grant = dmSheetGrants.remove(token);
+        if (grant == null) return;
+        for (Client client : new ArrayList<>(clients.values()))
+            if (token.equals(client.dmToken)) client.ctx.closeSession(1001, "DM sheet closed");
+    }
+
+    private DmSheetGrant dmSheetGrant(String address, String token) {
+        if (!("127.0.0.1".equals(address) || "::1".equals(address) || "0:0:0:0:0:0:0:1".equals(address)))
+            return null;
+        DmSheetGrant grant = token == null ? null : dmSheetGrants.get(token);
+        Campaign.Actor actor = grant == null || campaign == null ? null : campaign.actor(grant.actorId());
+        return actor != null && grant.ownerId().equals(actor.getOwnerId())
+                && campaign.player(grant.ownerId()) != null ? grant : null;
     }
 
     static final long PING_INTERVAL_SECONDS = 3;
@@ -181,6 +213,7 @@ public final class OnlineSessionServer {
             return;
         }
         sessionId = java.util.UUID.randomUUID().toString();
+        dmSheetGrants.clear();
         sessionRolls.clear();
         store.beginSession(sessionResourceIds());
         resetSessionUses();
@@ -199,7 +232,8 @@ public final class OnlineSessionServer {
                         public void doFilter(jakarta.servlet.ServletRequest req, jakarta.servlet.ServletResponse res,
                                              jakarta.servlet.FilterChain chain) throws IOException, jakarta.servlet.ServletException {
                             jakarta.servlet.http.HttpServletRequest request = (jakarta.servlet.http.HttpServletRequest) req;
-                            if (playerOf(cookieValue(request.getHeader("Cookie"))) == null) {
+                            if (playerOf(cookieValue(request.getHeader("Cookie"))) == null
+                                    && dmSheetGrant(request.getRemoteAddr(), request.getParameter("dm-sheet")) == null) {
                                 ((jakarta.servlet.http.HttpServletResponse) res).sendError(401, "Login required");
                                 return;
                             }
@@ -294,6 +328,7 @@ public final class OnlineSessionServer {
             }
         }
         clients.clear();
+        dmSheetGrants.clear();
         sessions.clear();
         loginClaims.clear();
         sessionRolls.clear();
@@ -399,6 +434,7 @@ public final class OnlineSessionServer {
     // ---- state publication ----
 
     public synchronized void setCampaign(Campaign campaign) {
+        if (this.campaign != null && !this.campaign.getId().equals(campaign.getId())) dmSheetGrants.clear();
         this.campaign = campaign;
         sharedCards.clear();
     }
@@ -632,6 +668,7 @@ public final class OnlineSessionServer {
         Map<String, long[]> stats = new java.util.LinkedHashMap<>();
         Map<String, String> names = new java.util.HashMap<>();
         for (Client client : clients.values()) {
+            if (client.dmActorId != null) continue;
             long[] s = stats.computeIfAbsent(client.playerId, k -> new long[]{0, -1});
             s[0]++;
             if (client.rttMs >= 0 && (s[1] < 0 || client.rttMs < s[1])) {
@@ -719,7 +756,7 @@ public final class OnlineSessionServer {
         sessions.values().removeIf(playerId::equals);
         loginClaims.remove(playerId);
         for (Client client : new ArrayList<>(clients.values())) {
-            if (client.playerId.equals(playerId)) {
+            if (client.dmActorId == null && client.playerId.equals(playerId)) {
                 sendTo(client.ctx, "{\"type\":\"kicked\",\"reason\":" + MAPPER.valueToTree(reason) + "}");
                 clients.remove(client.ctx.sessionId());
                 client.ctx.closeSession(1008, reason);
@@ -888,7 +925,8 @@ public final class OnlineSessionServer {
     private synchronized void onDisconnect(String sessionId) {
         Client removed = clients.remove(sessionId);
         if (removed != null) {
-            if (clients.values().stream().noneMatch(client -> client.playerId.equals(removed.playerId))) {
+            if (removed.dmActorId != null) return;
+            if (clients.values().stream().noneMatch(client -> client.dmActorId == null && client.playerId.equals(removed.playerId))) {
                 loginClaims.remove(removed.playerId);
             }
             host.rosterChanged();
@@ -991,6 +1029,31 @@ public final class OnlineSessionServer {
     }
 
     private String requirePlayer(Context ctx) {
+        String authorization = ctx.header("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            DmSheetGrant grant = dmSheetGrant(ctx.req().getRemoteAddr(), authorization.substring(7));
+            if (grant != null) {
+                String path = ctx.path();
+                if (path.equals("/api/sheet/" + grant.actorId())
+                        || path.equals("/api/death-move/" + grant.actorId())
+                        || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
+                    return grant.ownerId();
+                if (List.of("/api/feature", "/api/death-move", "/api/death-recovery", "/api/damage-taken",
+                        "/api/chat-cards", "/api/roll-reward").contains(path)) {
+                    try {
+                        JsonNode body = MAPPER.readTree(ctx.body());
+                        if (body != null && grant.actorId().equals(body.path("actorId").asText())) return grant.ownerId();
+                    } catch (IOException e) {
+                        json(ctx, 400, errorBody("Invalid character sheet request."));
+                        return null;
+                    }
+                }
+                json(ctx, 403, errorBody("This DM sheet can only control its own character."));
+                return null;
+            }
+            json(ctx, 403, errorBody("The DM sheet session has expired. Close and reopen it while hosting."));
+            return null;
+        }
         String playerId = playerOf(ctx.cookie(OnlineProtocol.COOKIE));
         if (playerId == null) {
             json(ctx, 401, errorBody("Login required"));
@@ -1119,8 +1182,10 @@ public final class OnlineSessionServer {
         }
         ObjectNode body = MAPPER.createObjectNode();
         body.put("actorId", actor.getId());
+        body.put("saved", true);
         body.put("name", actor.getName());
         body.put("testingCharacter", actor.isTestingCharacter());
+        ctx.header("Cache-Control", "no-store");
         try {
             String stored = store.loadSheet(c.getId(), actor.getId());
             if (stored == null) {
@@ -1128,6 +1193,7 @@ public final class OnlineSessionServer {
             } else {
                 body.set("sheet", MAPPER.readTree(stored));
             }
+            body.put("version", sheetVersion(stored));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read the character sheet."));
             return;
@@ -1160,6 +1226,14 @@ public final class OnlineSessionServer {
                 return;
             }
             ObjectNode previous = storedSheet(actor.getId());
+            String expected = ctx.header("If-Match");
+            if (expected != null && !expected.equals(sheetVersion(store.loadSheet(c.getId(), actor.getId())))) {
+                ObjectNode conflict = errorBody("The character sheet changed in another window. Latest sheet loaded; please reapply your edit.");
+                conflict.set("sheet", previous);
+                conflict.put("version", sheetVersion(store.loadSheet(c.getId(), actor.getId())));
+                json(ctx, 409, conflict);
+                return;
+            }
             if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)
                     || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)
                     || sheet.path("featureRevision").asLong(0) != previous.path("featureRevision").asLong(0)) {
@@ -1202,7 +1276,7 @@ public final class OnlineSessionServer {
                 store.saveSheet(c.getId(), actor.getId(), saved.toString());
             }
             stockChanged(actor.getId());
-            json(ctx, 200, MAPPER.createObjectNode().put("saved", true));
+            handleSheet(ctx);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
         } catch (IllegalArgumentException e) {
@@ -1210,6 +1284,20 @@ public final class OnlineSessionServer {
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read or save the character sheet."));
         }
+    }
+
+    private static String sheetVersion(String stored) {
+        return "\"" + CampaignStore.sha256((stored == null ? "" : stored).getBytes(StandardCharsets.UTF_8)) + "\"";
+    }
+
+    private void sheetChanged(String actorId) {
+        Campaign.Actor actor = campaign.actor(actorId);
+        if (actor == null) return;
+        String message = MAPPER.createObjectNode().put("type", "sheetChanged").put("actorId", actorId).toString();
+        for (Client client : clients.values())
+            if (client.fullSheets && actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)
+                    && (client.dmActorId == null || client.dmActorId.equals(actorId)))
+                sendTo(client.ctx, message);
     }
 
     private void validateDeathSave(ObjectNode saved, ObjectNode previous) {
@@ -2373,6 +2461,7 @@ public final class OnlineSessionServer {
     }
 
     private void sendFeatureState(Campaign.Actor actor, ObjectNode sheet) {
+        sheetChanged(actor.getId());
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
         for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
@@ -2880,6 +2969,7 @@ public final class OnlineSessionServer {
     }
 
     private void stockChanged(String actorId) {
+        sheetChanged(actorId);
         broadcast(MAPPER.createObjectNode().put("type", "cardStock").put("actorId", actorId).toString());
         host.cardStockChanged(actorId);
     }
@@ -3012,7 +3102,9 @@ public final class OnlineSessionServer {
 
     private synchronized void onConnect(io.javalin.websocket.WsConnectContext ctx) {
         String token = ctx.cookie(OnlineProtocol.COOKIE);
-        String playerId = playerOf(token);
+        DmSheetGrant grant = dmSheetGrant(ctx.session.getRemoteAddress() instanceof java.net.InetSocketAddress address
+                ? address.getAddress().getHostAddress() : "", ctx.queryParam("dm-sheet"));
+        String playerId = grant == null ? playerOf(token) : grant.ownerId();
         Campaign c = campaign;
         Campaign.Player player = c == null ? null : c.player(playerId);
         if (player == null) {
@@ -3020,19 +3112,22 @@ public final class OnlineSessionServer {
             return;
         }
         LoginClaim claim = loginClaim(playerId);
-        if (claim != null && !claim.token().equals(token)) {
+        if (grant == null && claim != null && !claim.token().equals(token)) {
             ctx.closeSession(1008, "Player account already connected");
             return;
         }
         ctx.session.setIdleTimeout(java.time.Duration.ofMinutes(10));
         Set<String> connected = new LinkedHashSet<>();
-        clients.values().forEach(cl -> connected.add(cl.playerId));
-        if (!connected.contains(playerId) && connected.size() >= config.maxPlayers()) {
+        clients.values().stream().filter(cl -> cl.dmActorId == null).forEach(cl -> connected.add(cl.playerId));
+        if (grant == null && !connected.contains(playerId) && connected.size() >= config.maxPlayers()) {
             ctx.closeSession(1008, "Session is full");
             return;
         }
         Client client = new Client(ctx, playerId, player.getName());
-        loginClaims.put(playerId, new LoginClaim(token, Long.MAX_VALUE));
+        client.dmActorId = grant == null ? null : grant.actorId();
+        client.dmToken = grant == null ? null : ctx.queryParam("dm-sheet");
+        client.fullSheets = "1".equals(ctx.queryParam("sheet-sync"));
+        if (grant == null) loginClaims.put(playerId, new LoginClaim(token, Long.MAX_VALUE));
         synchronized (this) {
             clients.put(ctx.sessionId(), client);
             ObjectNode hello = MAPPER.createObjectNode();
@@ -3061,6 +3156,7 @@ public final class OnlineSessionServer {
             hello.put("partyFeatures", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
+            hello.put("sheetSync", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
             sendHandouts(handouts(), client);
@@ -3086,6 +3182,21 @@ public final class OnlineSessionServer {
             return;
         }
         JsonNode msg = MAPPER.readTree(text);
+        if (client.dmActorId != null) {
+            if (!dmSheetGrants.containsKey(client.dmToken)
+                    || campaign.actor(client.dmActorId) == null
+                    || !client.playerId.equals(campaign.actor(client.dmActorId).getOwnerId())) {
+                ctx.closeSession(1008, "The DM sheet session has expired.");
+                return;
+            }
+            String type = msg.path("type").asText();
+            boolean infrastructure = List.of("clockSync", "pong", "resync").contains(type);
+            boolean sheetAction = List.of("roll", "chat").contains(type) && client.dmActorId.equals(msg.path("actorId").asText());
+            if (!infrastructure && !sheetAction) {
+                sendTo(ctx, error("This DM sheet can only control its own character."));
+                return;
+            }
+        }
         switch (msg.path("type").asText("")) {
             case "clockSync" -> {
                 ObjectNode out = MAPPER.createObjectNode();

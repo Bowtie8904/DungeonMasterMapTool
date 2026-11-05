@@ -12,6 +12,35 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('refreshes the full sheet live without saving it back or overwriting a pending edit', async () => {
+    vi.stubGlobal('window', globalThis);
+    vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
+    const c = mockCharacter();
+    const save = autosave('live', c, vi.fn());
+    vi.mocked(getSheet).mockResolvedValue({ version: '"new"', sheet: { ...c, notes: 'Player notes', gold: 12 } });
+    await save.refresh();
+    expect(c.notes).toBe('Player notes');
+    expect(c.gold).toBe(12);
+    expect(saveSheet).not.toHaveBeenCalled();
+    c.notes = 'Pending DM edit';
+    vi.mocked(getSheet).mockResolvedValue({ version: '"newer"', sheet: { ...c, notes: 'Another player edit' } });
+    await save.refresh();
+    expect(c.notes).toBe('Pending DM edit');
+  });
+
+  it('rejects full-sheet conflicts explicitly and adopts the latest complete state', async () => {
+    vi.stubGlobal('window', globalThis);
+    vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
+    const c = mockCharacter();
+    const save = autosave('conflict', c, vi.fn());
+    c.notes = 'Stale DM edit';
+    vi.mocked(saveSheet).mockRejectedValueOnce(new InventoryConflict({ ...c, notes: 'Newest player edit', gold: 20 }, '"latest"'));
+    await expect(save.flush()).rejects.toBeInstanceOf(InventoryConflict);
+    expect(c.notes).toBe('Newest player edit');
+    expect(c.gold).toBe(20);
+  });
   it('merges partial death feature inventory without clearing equipment and honors independent card revisions', () => {
     const c = mockCharacter();
     const armor = c.activeArmor;

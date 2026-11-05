@@ -44,6 +44,7 @@ public final class OnlinePlayPanel extends VBox {
     /** Map-level actions the panel cannot do on its own. */
     public interface Actions {
         void placeActor(Campaign campaign, Campaign.Actor actor);
+        void openSheet(Campaign campaign, Campaign.Actor actor);
 
         /** Number of actor tokens on the open map that belong to another campaign. */
         int foreignActorTokens(Campaign campaign);
@@ -391,7 +392,7 @@ public final class OnlinePlayPanel extends VBox {
         actorEmpty.setWrapText(true);
         StackPane treeStack = new StackPane(actorTree, actorEmpty);
         return page(bar, actorSearch, treeStack, foreignBox,
-                hint("Drag actors onto the map or into folders. Right-click for owner, artwork and more."));
+                hint("Double-click an actor to open its character sheet. Drag onto the map to place it. Right-click for owner, artwork and more."));
     }
 
     private Node connectedPage() {
@@ -796,6 +797,7 @@ public final class OnlinePlayPanel extends VBox {
         removeArt.setDisable(actor.getArtwork() == null);
         return menu(item("Place at view centre", MaterialDesignM.MAP_MARKER_RADIUS_OUTLINE,
                         () -> actions.placeActor(current, actor)),
+                item("Open character sheet", MaterialDesignB.BOOK_OPEN_VARIANT, () -> actions.openSheet(current, actor)),
                 owner,
                 new SeparatorMenuItem(),
                 item("Change artwork…", MaterialDesignI.IMAGE_PLUS, () -> chooseArtwork(actor)),
@@ -1019,8 +1021,9 @@ public final class OnlinePlayPanel extends VBox {
                 e.consume();
             });
             setOnMouseClicked(e -> {
-                if (e.getClickCount() == 2 && getItem() != null && getItem().actor() != null) {
-                    actions.placeActor(current, getItem().actor());
+                if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2 && getItem() != null && getItem().actor() != null) {
+                    actions.openSheet(current, getItem().actor());
+                    e.consume();
                 }
             });
         }

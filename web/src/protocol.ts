@@ -333,6 +333,7 @@ export type DeltaOp =
 
 export interface Hello {
   type: 'hello';
+  sheetSync?: boolean;
   deathMoves?: boolean;
   deathMoveOptions?: boolean;
   protocol: number;
@@ -369,6 +370,7 @@ export interface HandoutFile { id: string; name: string; folder: string; ext: st
 import type { AudioMessage } from './audio';
 
 export type ServerMessage =
+  | { type: 'sheetChanged'; actorId: string }
   | Hello
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }

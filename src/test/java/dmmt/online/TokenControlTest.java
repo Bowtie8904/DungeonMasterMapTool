@@ -105,6 +105,7 @@ class TokenControlTest {
                 controller.start(campaign);
                 panel[0] = new OnlinePlayPanel(controller, new OnlinePlayPanel.Actions() {
                     @Override public void placeActor(Campaign c, Campaign.Actor actor) { fail(); }
+                    @Override public void openSheet(Campaign c, Campaign.Actor actor) { fail(); }
                     @Override public int foreignActorTokens(Campaign c) { return 0; }
                     @Override public void removeForeignActorTokens(Campaign c) { fail(); }
                 });

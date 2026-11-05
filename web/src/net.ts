@@ -1,5 +1,6 @@
 import { ClockSync } from './clock';
 import { ServerMessage } from './protocol';
+import { dmSheetAuthorization } from './api';
 
 export interface ConnectionEvents {
   onMessage(msg: ServerMessage): void;
@@ -22,6 +23,7 @@ export class Connection {
   sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
+  sheetSync = false;
   readonly clock = new ClockSync();
   private ws: WebSocket | null = null;
   private attempts = 0;
@@ -57,7 +59,10 @@ export class Connection {
 
   private url(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}/ws`;
+    const params = new URLSearchParams({ 'sheet-sync': '1' });
+    const dm = dmSheetAuthorization();
+    if (dm) params.set('dm-sheet', dm);
+    return `${proto}//${location.host}/ws?${params}`;
   }
 
   private open(): void {
@@ -68,6 +73,7 @@ export class Connection {
     this.partyFeatures = false;
     this.deathMoves = false;
     this.deathMoveOptions = false;
+    this.sheetSync = false;
     this.events.onStatus('connecting');
     const ws = new WebSocket(this.url());
     this.ws = ws;
@@ -106,6 +112,7 @@ export class Connection {
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;
+        this.sheetSync = msg.sheetSync === true;
         if (this.clock.samples === 0) this.clock.seed(msg.serverTime, performance.now());
       }
       if (msg.type === 'kicked') {

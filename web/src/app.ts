@@ -882,12 +882,19 @@ export class App {
       case 'cardStock':
         this.refreshCardStock(msg.actorId);
         break;
+      case 'sheetChanged': {
+        const handle = this.sheetHandles.get(msg.actorId);
+        if (handle) void handle.save.refresh().catch((error: Error) => this.toast(error.message));
+        break;
+      }
       case 'sheetInventory': {
+        if (this.conn.sheetSync) break;
         const handle = this.sheetHandles.get(msg.actorId);
         if (handle && applyInventory(handle.character, msg.inventory)) handle.bus.notify();
         break;
       }
       case 'sheetFeature': {
+        if (this.conn.sheetSync) break;
         const handle = this.sheetHandles.get(msg.actorId);
         if (handle && applyFeatureState(handle.character, msg)) {
           handle.bus.notify();
@@ -1147,8 +1154,12 @@ export class App {
         this.sheetHandles.set(a.id, { character, bus, save: changed });
         bus.subscribe(() => this.scheduleEffects());
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
-          if ((event as CustomEvent<string>).detail === a.id) bus.notify();
+          if ((event as CustomEvent<string>).detail === a.id) {
+            bus.notify();
+            this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+          }
         });
+        void changed.refresh().catch((error: Error) => this.toast(error.message));
         const win = new SheetWindow(
           {
             character,

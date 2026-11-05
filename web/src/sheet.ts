@@ -1,4 +1,4 @@
-import { getSheet, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
+import { acceptSheetVersion, getSheet, useFeature, damageTaken, takeDeathMove, getDeathOptions, dmSheetAuthorization } from './api';
 import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
@@ -12,6 +12,10 @@ import { postCard, transferable } from './shared-cards';
 import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
 
+declare global {
+  interface Window { dmmtFlushSheet?: () => Promise<void> }
+}
+
 export async function startSheet(root: HTMLElement, actorId: string): Promise<void> {
   const store = new Store();
   let unauthorized = false;
@@ -24,6 +28,8 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let goldTransfers = false;
   const connectedPlayers = new Set<string>();
   let rulesWarning = '';
+  let actorName = 'Character';
+  let artwork: string | undefined;
   const bus = new SheetBus();
   const additions = new Map<string, Promise<string | null>>();
   const report = (message: string) => {
@@ -59,18 +65,22 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   window.addEventListener('pagehide', () => window.removeEventListener('message', receive), { once: true });
   const refresh = () => {
     const actor = store.state?.actors.find((a) => a.id === actorId);
-    if (shown || !allowed || !actor || !character) return;
+    if (shown || !allowed || !character) return;
     shown = true;
     const sheet = character;
-    document.title = `${actor.name} - Daggerheart`;
+    document.title = `${actor?.name ?? actorName} - Daggerheart`;
     changed = autosave(actorId, sheet, report);
+    if (dmSheetAuthorization()) window.dmmtFlushSheet = () => changed!.flush();
     document.addEventListener('dmmt-inventory-refreshed', (event) => {
+      if ((event as CustomEvent<string>).detail === actorId) bus.notify();
+    });
+    document.addEventListener('dmmt-feature-refreshed', (event) => {
       if ((event as CustomEvent<string>).detail === actorId) bus.notify();
     });
     const view = renderSheetView({
       character: sheet,
       supportsPartyFeatures: () => conn.partyFeatures,
-      artwork: actor.artwork,
+      artwork: actor?.artwork ?? artwork,
       onChange: () => changed?.(),
       onFeature: async (key, actionId, amount) => {
         await changed!.flush();
@@ -128,6 +138,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     view.classList.add('dh-popout');
     root.replaceChildren(view);
     if (rulesWarning) report(rulesWarning);
+    void changed.refresh().catch((e: Error) => report(e.message));
   };
   root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'muted' }, 'Loading sheet...')));
 
@@ -137,7 +148,8 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onStatus: (s) => {
         if (s === 'unauthorized' && !unauthorized) {
           unauthorized = true;
-          void showLogin(root, () => location.reload());
+          if (dmSheetAuthorization()) report('The DM sheet session is unavailable. Close and reopen it while hosting.');
+          else void showLogin(root, () => location.reload());
         }
       },
       onMessage: (m) => {
@@ -153,11 +165,18 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           for (const player of m.players) if (player.connections > 0) connectedPlayers.add(player.playerId);
           return;
         }
+        if (m.type === 'sheetChanged') {
+          if (m.actorId === actorId && changed) void changed.refresh().catch((e: Error) => report(e.message));
+          return;
+        }
+        if (m.type === 'error') { report(m.message); return; }
         if (m.type === 'sheetInventory') {
+          if (conn.sheetSync) return;
           if (m.actorId === actorId && character && applyInventory(character, m.inventory)) bus.notify();
           return;
         }
         if (m.type === 'sheetFeature') {
+          if (conn.sheetSync) return;
           if (m.actorId === actorId && character && applyFeatureState(character, m)) {
             bus.notify();
             changed?.();
@@ -186,8 +205,12 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   conn.start();
   try {
     const res = await getSheet(actorId);
+    acceptSheetVersion(actorId, res.version);
     const name = store.state?.actors.find((a) => a.id === actorId)?.name ?? res.name ?? 'Character';
+    actorName = name;
+    artwork = res.artwork;
     character = res.sheet ? normalizeSheet(res.sheet, name) : emptyCharacter(name);
+    character.testingCharacter = res.testingCharacter === true;
     if (res.sheet) {
       try { await refreshCharacterAutomation(character); }
       catch (e) { rulesWarning = `Could not refresh compendium rules; using saved rules: ${(e as Error).message}`; }
@@ -199,4 +222,5 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'error' }, `Cannot load sheet: ${(e as Error).message}`)));
     }
   }
+  window.addEventListener('pagehide', () => conn.stop(), { once: true });
 }

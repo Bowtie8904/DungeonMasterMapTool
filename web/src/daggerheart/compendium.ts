@@ -2,6 +2,7 @@
 
 import { Armor, CharacterSheet, DomainCard, InventoryItem, Spell, Weapon } from './data';
 import type { Automation } from './engine';
+import { hostFetch } from '../api';
 
 export interface CompendiumFeature {
   name: string;
@@ -59,7 +60,7 @@ export interface CompendiumIndexItem {
 }
 
 export type CompendiumFetch = (url: string) => Promise<Response>;
-const compendiumFetch: CompendiumFetch = url => fetch(url, { credentials: 'same-origin' });
+const compendiumFetch: CompendiumFetch = url => hostFetch(url, { credentials: 'same-origin' });
 
 export async function fetchCompendiumIndex(request: CompendiumFetch = compendiumFetch): Promise<CompendiumIndexItem[]> {
   const res = await request('/api/compendium');

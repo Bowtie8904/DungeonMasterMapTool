@@ -174,7 +174,18 @@ before retrying an unconfirmed addition. Both tool pop-outs retain their own ses
 closing the map tab; disconnect/kick status keeps unsaved note text available to copy.
 `notes.test.ts` covers tree boundaries and authenticated/error-aware requests; `checks/notes.html` exercises
 the actual sidebar, dialogs, editor draft protection, resize memory, conflicts and folder operations in a browser.
-Settings is anchored at the bottom; character sheets open from Actors. Chat's recipient dropdown targets Everyone,
+Settings is anchored at the bottom; character sheets open from Actors.
+The desktop DM opens the same sheet in an embedded WebView by double-clicking an actor or Select-mode actor token.
+`?dm-sheet=1` uses an actor-scoped, revocable loopback capability supplied in the URL fragment and immediately
+removed from browser history; HTTP requests use a Bearer header and the socket uses the capability at upgrade.
+These connections act on behalf of the owner but do not count in the player roster or claim a player login.
+`hello.sheetSync` and optional `sheetChanged` notifications refresh complete saved sheets for owners and their
+DM windows. `GET` and successful `PUT /api/sheet/{id}` include an opaque `version`; updated clients send it in
+`If-Match`. A stale save returns 409 with the latest sheet/version and an explicit reapply-edit message.
+Pending local edits are not silently overwritten by notifications. Legacy clients keep the existing partial
+inventory/feature revisions; Online Play and DM Link compatibility versions and settings are unchanged.
+
+Chat's recipient dropdown targets Everyone,
 Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
 Messages use separate sender/timestamp cards. Roll cards have styled dice, a summed modifier, a large total and
 an initially collapsed, keyboard-accessible **Roll breakdown**. Sheet rolls list named trait/passive/Experience,

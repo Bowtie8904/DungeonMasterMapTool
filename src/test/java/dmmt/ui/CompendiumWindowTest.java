@@ -39,7 +39,11 @@ class CompendiumWindowTest {
         Campaign.Player player = Campaign.Player.builder().name("Offline player").build();
         campaign.getPlayers().add(player);
         campaign.getActors().add(Campaign.Actor.builder().id("hero").name("Hero").ownerId(player.getId()).build());
-        store.saveSheet(campaign.getId(), "hero", "{\"className\":\"Bard\",\"traits\":[],\"inventory\":[]}");
+        store.saveSheet(campaign.getId(), "hero", """
+                {"name":"Hero","className":"Bard","subclass":"","ancestry":"","community":"","inventory":[],"traits":[
+                {"name":"Agility","mod":0},{"name":"Strength","mod":0},{"name":"Finesse","mod":0},
+                {"name":"Instinct","mod":0},{"name":"Presence","mod":0},{"name":"Knowledge","mod":0}]}
+                """);
         Path data = temp.resolve("data");
         Files.createDirectories(data);
         Files.writeString(data.resolve("items.json"), """
@@ -91,6 +95,59 @@ class CompendiumWindowTest {
             for (int attempt = 0; attempt < 50 && server.dmHistory(20).isEmpty(); attempt++)
                 Thread.sleep(100);
             assertEquals("dm", server.dmHistory(20).getFirst().path("fromId").asText());
+            CompendiumWindow sheet = new CompendiumWindow();
+            String sheetUrl = server.dmSheetUrl("hero");
+            AtomicBoolean sheetClosed = new AtomicBoolean();
+            fx(() -> { sheet.showSheet(desktop, server, "Hero", sheetUrl, () -> {
+                server.revokeDmSheet(sheetUrl);
+                sheetClosed.set(true);
+            }); return null; });
+            WebView sheetWeb = fx(() -> (WebView) desktop.lookupAll(".web-view").stream().filter(node -> node != web).findFirst().orElseThrow());
+            try {
+                String sheetText = "";
+                for (int attempt = 0; attempt < 150; attempt++) {
+                    sheetText = fx(() -> String.valueOf(sheetWeb.getEngine().executeScript("document.body.textContent")));
+                    if (sheetText.contains("Background") && sheetText.contains("Hero")) break;
+                    Thread.sleep(100);
+                }
+                assertTrue(sheetText.contains("Background") && sheetText.contains("Hero"),
+                        "Real character sheet must render in WebView without a player login: " + sheetText);
+                assertTrue(server.roster().isEmpty(), "DM sheets must not connect offline owners");
+                assertEquals("0", fx(() -> String.valueOf(sheetWeb.getEngine().executeScript("location.hash.length"))));
+                fx(() -> { sheetWeb.getEngine().executeScript("document.querySelector('[data-kind=\"hope\"] button').click()"); return null; });
+                for (int attempt = 0; attempt < 100 && !store.loadSheet(campaign.getId(), "hero").contains("\"on\":1"); attempt++)
+                    Thread.sleep(100);
+                var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                var saved = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(store.loadSheet(campaign.getId(), "hero"));
+                assertEquals(1, saved.path("hope").path("on").asInt(), "DM resource edits must persist: "
+                        + fx(() -> String.valueOf(sheetWeb.getEngine().executeScript("document.body.textContent"))));
+                ((com.fasterxml.jackson.databind.node.ObjectNode) saved.path("hope")).put("on", 3);
+                String dmToken = java.net.URI.create(sheetUrl).getFragment();
+                var response = java.net.http.HttpClient.newHttpClient().send(java.net.http.HttpRequest.newBuilder(
+                                java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/sheet/hero"))
+                        .header("Authorization", "Bearer " + dmToken)
+                        .PUT(java.net.http.HttpRequest.BodyPublishers.ofString(saved.toString())).build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body());
+                String marked = "";
+                for (int attempt = 0; attempt < 100; attempt++) {
+                    marked = fx(() -> String.valueOf(sheetWeb.getEngine().executeScript(
+                            "document.querySelectorAll('[data-kind=\"hope\"] button.on').length")));
+                    if ("3".equals(marked)) break;
+                    Thread.sleep(100);
+                }
+                assertEquals("3", marked, "Saved edits from another client must appear live in the DM's WebView");
+                fx(() -> {
+                    sheetWeb.getEngine().executeScript("document.querySelectorAll('[data-kind=\"hope\"] button')[1].click()");
+                    sheet.requestClose();
+                    return null;
+                });
+                for (int attempt = 0; attempt < 100 && !sheetClosed.get(); attempt++) Thread.sleep(100);
+                assertTrue(sheetClosed.get(), "Closing must flush pending edits before disposing the WebView");
+                assertEquals(2, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("hope").path("on").asInt());
+            } finally {
+                fx(() -> { sheet.close(); return null; });
+            }
             fx(() -> {
                 window.show(desktop, server, () -> closed.set(true));
                 assertEquals(1, desktop.lookupAll(".compendium-window").size());
@@ -98,6 +155,12 @@ class CompendiumWindowTest {
                 var frame = (javafx.scene.layout.Region) desktop.lookup(".compendium-window");
                 assertTrue(frame.getLayoutX() + frame.getWidth() <= 500);
                 assertTrue(frame.getLayoutY() + frame.getHeight() <= 300);
+                frame.relocate(10.5, 20.25);
+                desktop.resize(501, 301);
+                double scale = stage[0].getOutputScaleX();
+                for (double value : new double[] {frame.getLayoutX(), frame.getLayoutY(), frame.getWidth(), frame.getHeight()}) {
+                    assertEquals(Math.rint(value * scale), value * scale, 1e-9, "Embedded WebView must sit on device pixels");
+                }
                 window.syncSession(null);
                 assertTrue(closed.get());
                 assertTrue(desktop.getChildren().isEmpty());

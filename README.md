@@ -115,7 +115,16 @@ Nothing starts until you click **Start online session**, so offline play and the
   saves pending edits first; blocked pop-ups or failed/conflicting saves keep the original editor and draft.
   A Compendium pop-out can still browse, search, filter and add entries to owned characters: **Add** opens/focuses
   the receiving character sheet and applies the entry there, preserving its unsaved changes.
-- **Daggerheart character sheet (mock data)**: players get a sheet button in the sidebar rail and an "Open sheet"
+- **DM character sheets**: while hosting a Daggerheart campaign, double-click a player-owned actor in the Actors
+  tree or its map token with Select to open its sheet inside the DM view. Right-click an actor and choose
+  **Open character sheet** for the same action. Windows are non-modal, draggable and resizable; reopening an actor
+  brings its existing sheet forward. Offline players' sheets are available too. The DM uses the same sheet and
+  rules as players, acting on behalf of the character's owner. Saved changes synchronize live in both directions,
+  including resources, equipment and notes. Concurrent stale saves are rejected with an explicit message instead
+  of overwriting newer changes. Actor placement remains available through drag/drop and **Place at view centre**.
+  Normal closing saves pending edits first. Sheets close when hosting ends or changes; DM access never requires
+  logging in as a player.
+- **Daggerheart character sheet**: players get a sheet button in the sidebar rail and an "Open sheet"
   button per actor. The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.

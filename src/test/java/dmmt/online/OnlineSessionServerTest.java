@@ -1191,6 +1191,59 @@ class OnlineSessionServerTest {
         return URI.create(server.dmCompendiumUrl()).getFragment();
     }
 
+    private HttpResponse<String> dmSheetHttp(String actorId, String token, JsonNode body, String version) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/sheet/" + actorId))
+                .header("Authorization", "Bearer " + token);
+        if (version != null) request.header("If-Match", version);
+        if (body != null) request.header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void dmSheetsAreActorScopedRevocableAndSynchronizeOfflineOwnerEdits() throws Exception {
+        dmCompendiumData();
+        String url = server.dmSheetUrl("target");
+        String token = URI.create(url).getFragment();
+        assertEquals(403, dmSheetHttp("target", "wrong", null, null).statusCode());
+        assertEquals(403, dmSheetHttp("unowned", token, null, null).statusCode());
+        assertThrows(IllegalArgumentException.class, () -> server.dmSheetUrl("unowned"));
+        Inbox dm = new Inbox();
+        WebSocket socket = http.newWebSocketBuilder().buildAsync(
+                URI.create("ws://127.0.0.1:" + port + "/ws?sheet-sync=1&dm-sheet=" + token), dm).join();
+        try {
+            assertTrue(dm.next("hello").path("sheetSync").asBoolean());
+            assertTrue(server.roster().isEmpty(), "Opening an offline owner's sheet must not connect that player");
+            JsonNode initial = MAPPER.readTree(dmSheetHttp("target", token, null, null).body());
+            ObjectNode edited = initial.path("sheet").deepCopy();
+            edited.put("notes", "DM edit");
+            var saved = dmSheetHttp("target", token, edited, initial.path("version").asText());
+            assertEquals(200, saved.statusCode(), saved.body());
+            assertEquals("target", dm.next("sheetChanged").path("actorId").asText());
+            String version = MAPPER.readTree(saved.body()).path("version").asText();
+            assertFalse(version.equals(initial.path("version").asText()));
+            var stale = dmSheetHttp("target", token, edited.put("notes", "Stale"), initial.path("version").asText());
+            assertEquals(409, stale.statusCode());
+            assertEquals("DM edit", MAPPER.readTree(stale.body()).path("sheet").path("notes").asText());
+            assertEquals("DM edit", MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("notes").asText());
+            edited.put("notes", "Player edit");
+            var playerSave = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/target"))
+                    .header("Cookie", cookie()).header("If-Match", version)
+                    .PUT(HttpRequest.BodyPublishers.ofString(edited.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, playerSave.statusCode(), playerSave.body());
+            assertEquals("target", dm.next("sheetChanged").path("actorId").asText());
+            assertEquals("Player edit", MAPPER.readTree(dmSheetHttp("target", token, null, null).body()).path("sheet").path("notes").asText());
+            socket.sendText("{\"type\":\"roll\",\"actorId\":\"unowned\",\"expression\":\"1d6\"}", true).join();
+            assertTrue(dm.next("error").path("message").asText().contains("own character"));
+            server.revokeDmSheet(url);
+            assertEquals(403, dmSheetHttp("target", token, null, null).statusCode());
+        } finally { socket.abort(); }
+        String restartedToken = URI.create(server.dmSheetUrl("target")).getFragment();
+        server.stop();
+        server.start();
+        assertEquals(403, dmSheetHttp("target", restartedToken, null, null).statusCode());
+    }
+
     @Test
     void dmCompendiumRejectsMissingForgedAndPlayerCredentialsAndListsOfflineActors() throws Exception {
         String token = dmCompendiumData();

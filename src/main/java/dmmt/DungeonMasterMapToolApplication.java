@@ -346,6 +346,40 @@ public class DungeonMasterMapToolApplication extends Application {
     private ControlSection filesSection;
     private dmmt.ui.HandoutsPanel handoutsPanel;
     private final dmmt.ui.CompendiumWindow compendiumWindow = new dmmt.ui.CompendiumWindow();
+    private final Map<String, dmmt.ui.CompendiumWindow> characterSheets = new java.util.LinkedHashMap<>();
+
+    private boolean characterSheetHasFocus() {
+        return characterSheets.values().stream().anyMatch(dmmt.ui.CompendiumWindow::containsFocus);
+    }
+
+    private void openCharacterSheet(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
+        if (onlineController == null || !onlineController.running() || campaign == null || actor == null
+                || !campaign.getId().equals(onlineController.campaign().getId())) {
+            status("Start hosting this actor's campaign before opening its character sheet.");
+            return;
+        }
+        if (!"daggerheart".equalsIgnoreCase(campaign.getSystem())) {
+            status("Character sheets are available for Daggerheart campaigns.");
+            return;
+        }
+        var server = onlineController.server();
+        var existing = characterSheets.get(actor.getId());
+        if (existing != null) {
+            existing.toFront();
+            return;
+        }
+        try {
+            String url = server.dmSheetUrl(actor.getId());
+            var window = new dmmt.ui.CompendiumWindow();
+            characterSheets.put(actor.getId(), window);
+            window.showSheet(mapCenter, server, actor.getName() + " - Character sheet", url, () -> {
+                characterSheets.remove(actor.getId());
+                server.revokeDmSheet(url);
+            });
+        } catch (IllegalArgumentException e) {
+            status(e.getMessage());
+        }
+    }
     private boolean chatHosted;
     private Label onlinePausedHint;
     private ToggleButton playerWindowToggle;
@@ -813,7 +847,7 @@ public class DungeonMasterMapToolApplication extends Application {
             hideLightMenu();
         });
         scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
-            if (compendiumWindow.containsFocus()) return;
+            if (compendiumWindow.containsFocus() || characterSheetHasFocus()) return;
             if (onlineController == null || !onlineController.running()) return;
             KeyCode key = onlinePauseKey();
             if (key == null || event.getCode() != key || event.isControlDown() || event.isAltDown()
@@ -825,7 +859,7 @@ public class DungeonMasterMapToolApplication extends Application {
             event.consume();
         });
         scene.setOnKeyPressed(event -> {
-            if (compendiumWindow.containsFocus()) return;
+            if (compendiumWindow.containsFocus() || characterSheetHasFocus()) return;
             if (event.isControlDown() && event.getCode() == KeyCode.S) {
                 handleSave();
                 event.consume();
@@ -2258,6 +2292,8 @@ public class DungeonMasterMapToolApplication extends Application {
             compendiumButton.setVisible(visible);
             compendiumButton.setManaged(visible);
             compendiumWindow.syncSession(hosting ? onlineController.server() : null);
+            for (var sheet : new ArrayList<>(characterSheets.values()))
+                sheet.syncSession(hosting ? onlineController.server() : null);
         }
         if (handoutsPanel != null) {
             boolean hosting = onlineController != null && onlineController.running() && onlineController.campaign() != null;
@@ -3723,6 +3759,17 @@ public class DungeonMasterMapToolApplication extends Application {
             boolean rotationHandle = onTokenRotationHandle(tokenHandle, world.x(), world.y(), camera.getZoom());
             DmProject.TokenInstance token = handle || rotationHandle ? tokenHandle : pickToken(world.x(), world.y());
             if (token != null) {
+                if (activeTool == EditorTool.SELECT && !handle && !rotationHandle
+                        && event.getClickCount() == 2 && token.getActorId() != null) {
+                    var campaign = onlineController == null ? null : onlineController.campaign();
+                    if (campaign != null && campaign.getId().equals(token.getCampaignId())) {
+                        clearSingleSelection();
+                        selectedTokenId = token.getId();
+                        openCharacterSheet(campaign, campaign.actor(token.getActorId()));
+                        event.consume();
+                        return;
+                    }
+                }
                 clearSingleSelection();
                 selectedTokenId = token.getId();
                 tokenDragBefore = cloneToken(token);
@@ -10923,6 +10970,9 @@ public class DungeonMasterMapToolApplication extends Application {
         onlinePanel = new dmmt.ui.OnlinePlayPanel(onlineController, new dmmt.ui.OnlinePlayPanel.Actions() {
             @Override public void placeActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
                 placeCampaignActor(campaign, actor);
+            }
+            @Override public void openSheet(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
+                openCharacterSheet(campaign, actor);
             }
             @Override public int foreignActorTokens(dmmt.online.Campaign campaign) {
                 return project == null ? 0 : (int) project.getTokens().stream()
