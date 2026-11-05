@@ -140,7 +140,7 @@ export class App {
       'span',
       { class: 'banner-text' },
       el('strong', {}, 'Game paused by the DM'),
-      el('small', {}, 'Map edits are paused. Chat, dice and sheets still work.'),
+      el('small', {}, 'Token movement is restricted.')
     ),
   );
   private statusEl = el('span', { class: 'status connecting', role: 'status', ariaLabel: 'Connection status' }, 'connecting');
@@ -178,6 +178,12 @@ export class App {
     this.view.onSelectTool = () => this.selectTool();
     this.view.onUndo = () => this.undoDrawing();
     this.view.onMove = (m) => this.commitMove(m);
+    this.view.onPortal = id => {
+      const state = this.store.state;
+      if (state && !this.conn.send({ type: 'command', kind: 'togglePortal', id,
+        cmdId: `portal-${++this.cmdCounter}`, mapId: state.mapId, levelId: state.levelId }))
+        this.toast('Not connected. Your edit was not sent.');
+    };
     this.view.onRotate = (tokenId, rotationDeg) => {
       const state = this.store.state;
       if (state) this.sendTool({ type: 'command',
@@ -767,6 +773,7 @@ export class App {
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
         this.view.canRotateTokens = msg.tokenRotation === true;
+        this.view.canControlPortals = msg.portalControls === true;
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
         this.toolButtons.get('measure')!.disabled = !msg.measurementTools;
         if (this.view.tool === 'draw' && !msg.drawingTools || this.view.tool === 'measure' && !msg.measurementTools) {
@@ -1021,6 +1028,8 @@ export class App {
     this.syncInFlight();
     if (msg.token) this.restore(msg.token.id, msg.token.x, msg.token.y);
     else if (pending) this.restore(pending.tokenId, pending.prevX, pending.prevY);
+    if (msg.cmdId.startsWith('portal-') && (msg.reason === 'locked' || msg.reason === 'paused'
+      || msg.reason === 'Map changed or game paused')) return;
     this.toast(msg.reason === 'paused' ? 'The game is paused.' : `Edit rejected: ${msg.reason}`);
   }
 

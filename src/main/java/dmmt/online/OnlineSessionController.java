@@ -41,6 +41,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         /** Applies an already validated move with undo history. */
         void applyMove(String tokenId, double x, double y);
         void applyRotation(String tokenId, double rotationDeg);
+        void togglePortal(DmProject.Interactable portal);
 
         void applyOverlay(String id, DmProject.OverlayShape shape);
 
@@ -379,6 +380,40 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     @Override
     public boolean supportsTokenRotation() {
         return true;
+    }
+
+    @Override
+    public boolean supportsPortalControls() {
+        return true;
+    }
+
+    @Override
+    public CompletableFuture<OnlineSessionServer.MoveResult> togglePortal(String playerId, String id,
+                                                                         String mapId, String levelId) {
+        CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            if (result.isDone()) return;
+            try {
+                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
+                    return;
+                }
+                DmProject project = app.project();
+                DmProject.Interactable portal = project == null ? null : project.getInteractables().stream()
+                        .filter(p -> id.equals(p.getId())).findFirst().orElse(null);
+                if (portal == null || portal.isLocked()) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected(portal == null ? "Portal not found" : "locked"));
+                    return;
+                }
+                app.togglePortal(portal);
+                publishNow();
+                result.complete(OnlineSessionServer.MoveResult.accepted());
+            } catch (RuntimeException ex) {
+                app.status("Online portal interaction failed: " + ex.getMessage());
+                result.complete(OnlineSessionServer.MoveResult.rejected("Portal interaction failed"));
+            }
+        });
+        return result;
     }
 
     @Override

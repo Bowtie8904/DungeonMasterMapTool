@@ -20,6 +20,7 @@ export interface Door {
   y2: number;
   open: boolean;
   kind?: string;
+  locked?: boolean;
 }
 
 export interface Light {
@@ -346,6 +347,7 @@ export interface Hello {
   drawingTools?: boolean;
   measurementTools?: boolean;
   tokenRotation?: boolean;
+  portalControls?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;
   compendiumChat?: boolean;

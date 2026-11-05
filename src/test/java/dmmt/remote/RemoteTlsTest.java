@@ -140,11 +140,11 @@ class RemoteTlsTest {
              var workers = Executors.newVirtualThreadPerTaskExecutor()) {
             var serverFailure = workers.submit(failedAccept(listener));
             var failure = assertThrows(RemoteTlsChannel.CompatibilityException.class, () -> {
-                try (var unexpected = RemoteTlsChannel.connect(address(listener), client, "different-build", 3000)) {
+                try (var unexpected = RemoteTlsChannel.connect(address(listener), client, "6", 3000)) {
                     fail("Mismatched builds must not produce an application channel");
                 }
             });
-            assertTrue(failure.getMessage().contains("different-build"));
+            assertTrue(failure.getMessage().contains("compatibility version 6"));
             assertTrue(failure.getMessage().contains(BUILD));
             assertTrue(failure.getMessage().contains("protocol " + RemoteWire.PROTOCOL_VERSION));
             var rejected = serverFailure.get(5, TimeUnit.SECONDS);

@@ -107,7 +107,8 @@ There is no top-center session, campaign, map or account heading. The bottom-lef
 overlay contains a slightly transparent connection-status badge, visible even before the first roster
 and retained across roster refreshes and reconnects. This layout-only change leaves compatibility versions unchanged.
 `countdowns.ts` renders the optional `state.countdowns` array (`id`, `name`, `initialValue`, `value`) as a
-read-only, near-transparent top-right list beside the sidebar. It follows sidebar expansion/collapse,
+read-only, translucent top-right list beside the sidebar. Countdown and collapsed active-effect rows use
+40%-opaque backgrounds for readability over maps; expanded effects retain a darker background. It follows sidebar expansion/collapse,
 grows/shrinks without scrolling, and hides for empty lists or older hosts. Its subtle **COUNTDOWNS** header
 is shown only when there are countdowns. Updates use the existing snapshot
 and `set` delta contracts; players have no countdown edit commands. Countdown state is persisted by the DM

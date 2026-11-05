@@ -22,7 +22,13 @@ Nothing starts until you click **Start online session**, so offline play and the
   have dashed square outlines and a small rotation handle (on supporting hosts). Drag the handle to rotate;
   arrow keys with the map focused move selected tokens by half a tile. The host still enforces control,
   pause and movement restrictions. Browser doors/windows use light-gray round icons, changing their glyph
-  rather than color when opened; no portal segments are drawn. DM door/window rendering is unchanged.
+  rather than color when opened; no portal segments are drawn.
+- **Door/window locks:** right-click a door or window on the DM map and toggle **Locked**. New and legacy
+  portals default to unlocked; locks are saved with the map and support DM undo/redo. Locked portals show
+  a small amber padlock on the DM badge only. Players left-click badges with Select to open/close unlocked
+  portals while unpaused; locked portals and paused games ignore player clicks without changing their
+  appearance. The DM can still open/close locked portals. Browser controls require a supporting host;
+  DM Link now requires compatibility version 7 on both machines because map snapshots include locks.
 - **Campaigns** are separate from maps: each has a game system (currently Daggerheart; no gameplay effect yet),
   players (username + password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
   and per-player fog memory that survives map switches, sessions and browsers. Campaigns live in
@@ -320,7 +326,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   block anything else. While a campaign is hosted, the **Fear counter** (per campaign, 0-12) appears as a small
   overlay at the bottom right of the DM view with −/+ buttons (local API `online.fearDown`/`online.fearUp`) and
   permanently as up to 12 tokens at the bottom right of every browser.
-  **Daggerheart countdowns** appear in a subtle, nearly transparent list at the top right beside the controls/sidebar.
+  **Daggerheart countdowns** appear in a compact list at the top right beside the controls/sidebar,
+  with 40%-opaque row backgrounds for readability on both DM and player maps.
   While hosting, use the DM's **+** beside **COUNTDOWNS** to enter a name and a nonnegative initial value.
   Each countdown starts at that value; its minus/plus buttons step between 0 and the initial value, and its **x** deletes it.
   Players only see the names and current/initial values. The list grows/shrinks with its entries, and all edits are
@@ -380,7 +387,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   The subtle bottom-left roster shows each connected player's round-trip ping **to the host**
   (not to you); `--` means a sample is not available yet.
 - **Active effects overlay:** below the left tools, a subtle fixed-width list shows each of your actors' active
-  effects, grouped by character name. Each row has the effect name and a remove (x) button; click a name to expand the
+  effects, grouped by character name, with 40%-opaque row backgrounds. Each row has the effect name and a remove (x) button; click a name to expand the
   full source (for example the whole Patron's Fury feature) and click again to collapse.
 - **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
   Right-drag pans while keeping the active tool;

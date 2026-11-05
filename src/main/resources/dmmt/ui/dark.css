@@ -1408,7 +1408,7 @@
     -fx-font-size: 10px;
 }
 .countdown-row {
-    -fx-background-color: rgba(18, 20, 26, 0.14);
+    -fx-background-color: rgba(18, 20, 26, 0.40);
     -fx-background-radius: 4;
     -fx-padding: 3 6;
 }

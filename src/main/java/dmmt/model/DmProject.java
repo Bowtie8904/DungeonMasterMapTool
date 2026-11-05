@@ -278,6 +278,7 @@ public class DmProject {
         private double y2;
         @Builder.Default
         private String state = "closed";
+        private boolean locked;
         @Builder.Default
         private boolean blocksSightWhenClosed = true;
     }

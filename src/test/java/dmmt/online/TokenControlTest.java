@@ -192,6 +192,64 @@ class TokenControlTest {
         return task.get(30, TimeUnit.SECONDS);
     }
 
+    @Test
+    void portalControlsRecheckLocksPauseAndMapAndPersistLocks() throws Exception {
+        TestApp app = new TestApp();
+        var controller = new OnlineSessionController(temp, app);
+        Campaign campaign = controller.store().create("Portals");
+        campaign.getPlayers().add(Campaign.Player.builder().id("player").name("Player").build());
+        try {
+            onFx(() -> {
+                try (var socket = new java.net.ServerSocket(0)) {
+                    String port = String.valueOf(socket.getLocalPort());
+                    Tuning.apply(key -> "online.port".equals(key) ? port : null);
+                }
+                app.project.getInteractables().add(DmProject.Interactable.builder().id("door").build());
+                app.project.getInteractables().add(DmProject.Interactable.builder().id("window").type("window").build());
+                controller.start(campaign);
+                return null;
+            });
+            assertTrue(controller.supportsPortalControls());
+            for (var portal : app.project.getInteractables()) {
+                assertFalse(portal.isLocked());
+                assertTrue(controller.togglePortal("player", portal.getId(), "map", "level").get(5, TimeUnit.SECONDS).ok());
+                assertEquals("open", portal.getState());
+                assertTrue(controller.togglePortal("player", portal.getId(), "map", "level").get(5, TimeUnit.SECONDS).ok());
+                assertEquals("closed", portal.getState());
+                onFx(() -> { portal.setLocked(true); return null; });
+                assertEquals("locked", controller.togglePortal("player", portal.getId(), "map", "level")
+                        .get(5, TimeUnit.SECONDS).reason());
+                assertEquals("closed", portal.getState());
+                onFx(() -> { portal.setState("open"); return null; });
+                assertFalse(controller.togglePortal("player", portal.getId(), "map", "level").get(5, TimeUnit.SECONDS).ok());
+                assertEquals("open", portal.getState());
+                Path file = temp.resolve(portal.getId() + ".dmmap");
+                new dmmt.service.ProjectService().save(file, app.project);
+                assertTrue(new dmmt.service.ProjectService().load(file).getInteractables().stream()
+                        .filter(p -> p.getId().equals(portal.getId())).findFirst().orElseThrow().isLocked());
+                assertTrue(new dmmt.service.ProjectService().copy(app.project).getInteractables().stream()
+                        .filter(p -> p.getId().equals(portal.getId())).findFirst().orElseThrow().isLocked());
+                onFx(() -> { portal.setLocked(false); controller.server().setPaused(true); return null; });
+                assertFalse(controller.togglePortal("player", portal.getId(), "map", "level").get(5, TimeUnit.SECONDS).ok());
+                assertEquals("open", portal.getState());
+                onFx(() -> { controller.server().setPaused(false); return null; });
+                assertFalse(controller.togglePortal("player", portal.getId(), "wrong", "level").get(5, TimeUnit.SECONDS).ok());
+                assertFalse(controller.togglePortal("player", portal.getId(), "map", "wrong").get(5, TimeUnit.SECONDS).ok());
+                assertEquals("open", portal.getState());
+            }
+            assertFalse(controller.togglePortal("player", "missing", "map", "level").get(5, TimeUnit.SECONDS).ok());
+            var state = new OnlineStateBuilder(file -> null).build(app.project,
+                    new OnlineStateBuilder.Context("map", "level", "", null, 0, false, false), campaign,
+                    new AssetRegistry(temp.resolve("cache"), 2048, controller.store()), List.of());
+            assertFalse(state.path("doors").get(0).path("locked").asBoolean(true));
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            assertFalse(mapper.readValue("{\"id\":\"legacy\",\"type\":\"window\"}", DmProject.Interactable.class).isLocked());
+        } finally {
+            onFx(() -> { controller.stop(); Tuning.reset(); return null; });
+        }
+        assertFalse(controller.togglePortal("player", "door", "map", "level").get(5, TimeUnit.SECONDS).ok());
+    }
+
     private static final class TestApp implements OnlineSessionController.App {
         private final DmProject project = new DmProject();
         TestApp() {
@@ -213,6 +271,9 @@ class TokenControlTest {
             project.getTokens().stream().filter(t -> t.getId().equals(id)).findFirst().orElseThrow().setRotationDeg(rotationDeg);
         }
         @Override public void applyOverlay(String id, DmProject.OverlayShape shape) { fail(); }
+        @Override public void togglePortal(DmProject.Interactable portal) {
+            portal.setState("open".equals(portal.getState()) ? "closed" : "open");
+        }
         @Override public void measurementsChanged() { }
         @Override public void status(String text) { }
         @Override public dmmt.audio.AudioEngine audioEngine() { return null; }

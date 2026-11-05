@@ -5731,6 +5731,14 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void showInteractableContextMenu(DmProject.Interactable portal, double screenX, double screenY) {
         ContextMenu menu = new ContextMenu();
+        CheckMenuItem locked = new CheckMenuItem("Locked");
+        locked.setSelected(portal.isLocked());
+        locked.setOnAction(e -> {
+            boolean before = portal.isLocked();
+            boolean after = locked.isSelected();
+            executeWithFogHistory("Set portal lock", () -> portal.setLocked(after), () -> portal.setLocked(before));
+        });
+        menu.getItems().addAll(locked, new SeparatorMenuItem());
         ToggleGroup types = new ToggleGroup();
         for (String type : List.of("door", "window")) {
             RadioMenuItem item = new RadioMenuItem(type.equals("door") ? "Door" : "Window");
@@ -10879,6 +10887,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 changeToken(tokenId, "Rotate player token", token -> token.setRotationDeg(rotationDeg));
                 renderDm();
                 renderPlayer();
+            }
+            @Override public void togglePortal(DmProject.Interactable portal) {
+                toggleInteractable(portal);
             }
             @Override public void applyOverlay(String id, DmProject.OverlayShape shape) {
                 DmProject.OverlayShape before = cloneOverlayOrNull(findOverlay(id));

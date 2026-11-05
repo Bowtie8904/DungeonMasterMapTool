@@ -79,12 +79,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .countdowns-overlay { position: absolute; top: 20px; right: 70px; width: 215px; z-index: 1; pointer-events: none; text-shadow: 0 1px 4px #000, 0 0 8px #000; }
 .stage.sidebar-open .countdowns-overlay { right: calc(70px + min(320px, calc(100vw - 150px))); }
 .countdowns-heading { margin: 0 8px 6px; font-size: 9px; letter-spacing: 1.3px; color: #a4acb5; }
-.countdown-row { display: flex; align-items: baseline; gap: 10px; padding: 5px 8px; margin-bottom: 4px; background: #0b0d1024; border-radius: 4px; color: #d3d9df; font-size: 12px; }
+.countdown-row { display: flex; align-items: baseline; gap: 10px; padding: 5px 8px; margin-bottom: 4px; background: #0b0d1066; border-radius: 4px; color: #d3d9df; font-size: 12px; }
 .countdown-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .countdown-value { flex-shrink: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
 .effect-group + .effect-group { margin-top: 10px; }
 .effect-group-name { font-size: 9px; letter-spacing: 1.3px; text-transform: uppercase; color: #a4acb5; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.effect-row { pointer-events: auto; width: 195px; margin-top: 3px; background: #0b0d1024; border-left: 2px solid #6fae6f; border-radius: 4px; font-size: 12px; color: #d3d9df; }
+.effect-row { pointer-events: auto; width: 195px; margin-top: 3px; background: #0b0d1066; border-left: 2px solid #6fae6f; border-radius: 4px; font-size: 12px; color: #d3d9df; }
 .effect-row.debuff { border-left-color: #c55; }
 .effect-row.open { background: #0b0d10a8; }
 .effect-head { display: flex; align-items: center; gap: 4px; }

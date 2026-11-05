@@ -105,6 +105,7 @@ public final class OnlineStateBuilder {
             node.put("x1", door.getX1()).put("y1", door.getY1()).put("x2", door.getX2()).put("y2", door.getY2());
             node.put("open", isOpen(door));
             node.put("kind", door.getType());
+            node.put("locked", door.isLocked());
         }
         ArrayNode lights = state.putArray("lights");
         for (DmProject.LightSource light : project.effectiveLights()) {

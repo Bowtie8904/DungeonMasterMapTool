@@ -18,6 +18,8 @@ class RemoteProjectDocumentTest {
         project.getViews().getPlayerCamera().setX(44);
         project.getActivePings().add(DmProject.PingEvent.builder().x(9).build());
         project.getWalls().add(DmProject.WallSegment.builder().x1(1).y1(2).x2(3).y2(4).build());
+        project.getInteractables().add(DmProject.Interactable.builder().id("locked-door").locked(true).build());
+        project.getInteractables().add(DmProject.Interactable.builder().id("window").type("window").build());
         project.getFog().setMask(new FogMask(0, 0, 10, 100, 100));
         project.getFog().getMask().applyCells(new int[]{0, 9, 4096, 9999}, true);
         project.getImageLayers().add(DmProject.ImageLayer.builder().id("z-first").width(100).height(100).build());
@@ -35,6 +37,7 @@ class RemoteProjectDocumentTest {
         assertEquals(44, restored.getViews().getPlayerCamera().getX());
         assertTrue(restored.getActivePings().isEmpty());
         assertEquals(project.getWalls(), restored.getWalls());
+        assertEquals(project.getInteractables(), restored.getInteractables());
         assertEquals(project.getOverlays(), restored.getOverlays());
         assertEquals(List.of("z-first", "a-second"), restored.getImageLayers().stream().map(DmProject.ImageLayer::getId).toList());
         assertEquals(project.getFog().getMask().copyBits(), restored.getFog().getMask().copyBits());

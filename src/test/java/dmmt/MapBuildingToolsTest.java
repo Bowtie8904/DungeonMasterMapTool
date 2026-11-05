@@ -1138,6 +1138,57 @@ class MapBuildingToolsTest {
     }
 
     @Test
+    void portalLockContextToggleIsUndoableSavedAndDoesNotRestrictDm() throws Exception {
+        onFx(() -> {
+            for (String type : new String[]{"door", "window"}) {
+                Fixture f = fixture();
+                var portal = DmProject.Interactable.builder().id("portal").type(type)
+                        .x1(20).y1(100).x2(180).y2(100).build();
+                f.project.getInteractables().add(portal);
+                Stage stage = new Stage();
+                stage.setScene(f.canvas.getScene());
+                stage.show();
+                try {
+                    f.press(100, 100, MouseButton.SECONDARY, false);
+                    ContextMenu menu = (ContextMenu) get(f.app, "activeLightMenu");
+                    var locked = (javafx.scene.control.CheckMenuItem) menu.getItems().stream()
+                            .filter(item -> "Locked".equals(item.getText())).findFirst().orElseThrow();
+                    assertFalse(locked.isSelected());
+                    locked.setSelected(true);
+                    locked.fire();
+                    assertTrue(portal.isLocked());
+                    f.api.execute("tools.undo", Map.of());
+                    assertFalse(portal.isLocked());
+                    f.api.execute("tools.redo", Map.of());
+                    assertTrue(portal.isLocked());
+                    invoke(f.app, "toggleInteractable", portal);
+                    assertEquals("open", portal.getState());
+                    assertTrue(portal.isLocked());
+                    f.api.execute("tools.undo", Map.of());
+                    assertEquals("closed", portal.getState());
+                    assertTrue(portal.isLocked());
+                    Path file = directory.resolve("locked-" + type + ".dmmap");
+                    new ProjectService().save(file, f.project);
+                    assertTrue(new ProjectService().load(file).getInteractables().getFirst().isLocked());
+                    Canvas canvas = new Canvas(400, 300);
+                    CanvasMapRenderer renderer = (CanvasMapRenderer) get(f.app, "renderer");
+                    var camera = f.project.getViews().getDmCamera();
+                    invoke(renderer, "drawInteractableBadges", canvas.getGraphicsContext2D(), f.project.getInteractables(),
+                            400.0, 300.0, camera, null);
+                    javafx.scene.SnapshotParameters transparent = new javafx.scene.SnapshotParameters();
+                    transparent.setFill(javafx.scene.paint.Color.TRANSPARENT);
+                    var lockedPixel = canvas.snapshot(transparent, null).getPixelReader().getColor(112, 110);
+                    portal.setLocked(false);
+                    canvas.getGraphicsContext2D().clearRect(0, 0, 400, 300);
+                    invoke(renderer, "drawInteractableBadges", canvas.getGraphicsContext2D(), f.project.getInteractables(),
+                            400.0, 300.0, camera, null);
+                    assertNotEquals(lockedPixel, canvas.snapshot(transparent, null).getPixelReader().getColor(112, 110));
+                } finally { stage.close(); }
+            }
+        });
+    }
+
+    @Test
     void roomStyleDefaultsAreIndependentAndTypingDeletingAndFontChangesKeepEditorCentered() throws Exception {
         onFx(() -> {
             Fixture f = fixture();

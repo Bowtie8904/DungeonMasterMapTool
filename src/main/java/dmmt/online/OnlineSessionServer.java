@@ -62,6 +62,11 @@ public final class OnlineSessionServer {
     public interface Host {
         default boolean supportsDrawing() { return false; }
         default boolean supportsTokenRotation() { return false; }
+        default boolean supportsPortalControls() { return false; }
+
+        default CompletableFuture<MoveResult> togglePortal(String playerId, String id, String mapId, String levelId) {
+            return CompletableFuture.completedFuture(MoveResult.rejected("Portal controls are unavailable on this host"));
+        }
 
         default CompletableFuture<MoveResult> rotateToken(String playerId, String tokenId, String mapId,
                                                            String levelId, double rotationDeg) {
@@ -2954,6 +2959,7 @@ public final class OnlineSessionServer {
             hello.put("sessionId", sessionId);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("tokenRotation", host.supportsTokenRotation());
+            hello.put("portalControls", host.supportsPortalControls());
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
             hello.put("compendiumChat", true);
@@ -3015,6 +3021,24 @@ public final class OnlineSessionServer {
 
     private void onCommand(Client client, JsonNode msg) {
         String cmdId = msg.path("cmdId").asText("");
+        if ("togglePortal".equals(msg.path("kind").asText())) {
+            if (paused || !host.supportsPortalControls()
+                    || !msg.path("id").isTextual() || msg.path("id").asText().isBlank()
+                    || !msg.path("mapId").isTextual() || msg.path("mapId").asText().isBlank()
+                    || !msg.path("levelId").isTextual() || msg.path("levelId").asText().isBlank()) {
+                sendTo(client.ctx, reject(cmdId, paused ? "paused" : "Invalid or unsupported portal interaction", null));
+                return;
+            }
+            host.togglePortal(client.playerId, msg.path("id").asText(), msg.path("mapId").asText(), msg.path("levelId").asText())
+                    .orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
+                        if (error != null || result == null || !result.ok()) {
+                            sendTo(client.ctx, reject(cmdId, error != null || result == null ? "Portal interaction failed" : result.reason(), null));
+                        } else {
+                            sendTo(client.ctx, MAPPER.createObjectNode().put("type", "ack").put("cmdId", cmdId).put("seq", seq()).toString());
+                        }
+                    });
+            return;
+        }
         if ("rotateToken".equals(msg.path("kind").asText())) {
             String tokenId = msg.path("tokenId").asText("");
             double rotation = msg.path("rotationDeg").asDouble(Double.NaN);

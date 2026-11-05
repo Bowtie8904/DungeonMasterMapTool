@@ -3,7 +3,7 @@ import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
 import { TokenMotion } from './motion';
 import { lightActive, rasterLightTint, TintEnvironment } from './lighting';
-import { GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
+import { Door, GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
 import { chooseLevel, PyramidInfo, tileUrl, visibleTiles } from './pyramid';
 import {
@@ -72,6 +72,8 @@ export class MapView {
   serverNow: () => number = () => Date.now();
   onMove: (m: MoveCommit) => void = () => {};
   canRotateTokens = false;
+  canControlPortals = false;
+  onPortal: (id: string) => void = () => {};
   onRotate: (tokenId: string, rotationDeg: number) => void = () => {};
   private rotation: { tokenId: string; startAngle: number; before: number; angle: number } | null = null;
   /** Fired (throttled by the caller) when new explored cells exist. */
@@ -386,6 +388,12 @@ export class MapView {
     return null;
   }
 
+  private portalAt(x: number, y: number): Door | undefined {
+    if (!this.canControlPortals) return undefined;
+    return [...this.state?.doors ?? []].reverse().find(d =>
+      Math.hypot(x - (d.x1 + d.x2) / 2, y - (d.y1 + d.y2) / 2) <= 12 / this.cam.scale);
+  }
+
   private tokenHit(t: Token, x: number, y: number): boolean {
     const r = t.sizeTiles * this.state!.grid.pixelsPerCell / 2;
     const dx = x - t.x, dy = y - t.y;
@@ -463,6 +471,7 @@ export class MapView {
       else if (this.hover && !this.marquee) {
         const hit = this.selectionAt(this.hover.x, this.hover.y);
         if (hit) cursor = hit.kind === 'shape' && hit.resize ? 'nwse-resize' : 'grab';
+        else if (this.portalAt(this.hover.x, this.hover.y)) cursor = 'pointer';
       }
     }
     this.canvas.style.cursor = cursor;
@@ -505,6 +514,11 @@ export class MapView {
         this.invalidate(); return;
       }
       const hit = this.selectionAt(w.x, w.y);
+      const portal = !hit ? this.portalAt(w.x, w.y) : undefined;
+      if (portal) {
+        if (!portal.locked) this.onPortal(portal.id);
+        return;
+      }
       if (hit?.kind === 'rotation') {
         const t = hit.token;
         this.rotation = { tokenId: t.id, startAngle: Math.atan2(w.y - t.y, w.x - t.x),

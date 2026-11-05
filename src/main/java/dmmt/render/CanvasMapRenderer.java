@@ -2484,6 +2484,12 @@ public class CanvasMapRenderer {
             if (glyph != null) {
                 gc.drawImage(glyph, Math.round(cx - glyph.getWidth() / 2.0), Math.round(cy - glyph.getHeight() / 2.0));
             }
+            if (interactable.isLocked()) {
+                gc.setFill(Color.web("#F2BB55"));
+                gc.fillOval(cx + 4, cy + 4, 12, 12);
+                Image lock = Icons.image(org.kordamp.ikonli.materialdesign2.MaterialDesignL.LOCK, 10, Color.web("#202024"));
+                if (lock != null) gc.drawImage(lock, Math.round(cx + 5), Math.round(cy + 5));
+            }
         }
     }
 

@@ -46,6 +46,9 @@ class OnlineSessionServerTest {
     private final List<JsonNode> dmMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean drawingSupported;
     private volatile boolean rotationSupported;
+    private volatile boolean portalSupported;
+    private final List<String> portals = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile OnlineSessionServer.MoveResult portalResult = OnlineSessionServer.MoveResult.accepted();
     private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Path compendiumDir;
 
@@ -2387,6 +2390,20 @@ class OnlineSessionServerTest {
                     public boolean supportsTokenRotation() { return rotationSupported; }
 
                     @Override
+                    public boolean supportsPortalControls() { return portalSupported; }
+
+                    @Override
+                    public CompletableFuture<OnlineSessionServer.MoveResult> togglePortal(String playerId, String id,
+                                                                                          String mapId, String levelId) {
+                        assertEquals(OnlineSessionServerTest.this.playerId(), playerId);
+                        assertEquals("door", id);
+                        assertEquals("m1", mapId);
+                        assertEquals("l1", levelId);
+                        portals.add(id);
+                        return CompletableFuture.completedFuture(portalResult);
+                    }
+
+                    @Override
                     public CompletableFuture<OnlineSessionServer.MoveResult> rotateToken(String playerId, String tokenId,
                                                                                           String mapId, String levelId, double rotationDeg) {
                         assertEquals(OnlineSessionServerTest.this.playerId(), playerId);
@@ -2838,6 +2855,54 @@ class OnlineSessionServerTest {
             ws.sendText(command.toString(), true).join();
             assertEquals("rotate", inbox.next("ack").path("cmdId").asText());
             assertEquals(List.of(90.0), rotations);
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void portalCapabilityCommandsAndPauseAreValidated() throws Exception {
+        portalSupported = true;
+        server.publish(state("m1", 5), "m1/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            JsonNode hello = inbox.next("hello");
+            assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
+            assertTrue(hello.path("portalControls").asBoolean());
+            ObjectNode command = MAPPER.createObjectNode().put("type", "command").put("cmdId", "portal")
+                    .put("kind", "togglePortal").put("id", "door").put("mapId", "m1").put("levelId", "l1");
+            for (String field : List.of("id", "mapId", "levelId")) {
+                for (var invalid : List.of(command.deepCopy().putNull(field), command.deepCopy().put(field, ""),
+                        command.deepCopy().put(field, 42))) {
+                    ws.sendText(invalid.toString(), true).join();
+                    assertEquals("portal", inbox.next("reject").path("cmdId").asText());
+                }
+            }
+            assertTrue(portals.isEmpty());
+            server.setPaused(true);
+            ws.sendText(command.toString(), true).join();
+            assertEquals("paused", inbox.next("reject").path("reason").asText());
+            assertTrue(portals.isEmpty());
+            server.setPaused(false);
+            portalResult = OnlineSessionServer.MoveResult.rejected("locked");
+            ws.sendText(command.toString(), true).join();
+            assertEquals("locked", inbox.next("reject").path("reason").asText());
+            portalResult = OnlineSessionServer.MoveResult.accepted();
+            ws.sendText(command.toString(), true).join();
+            assertEquals("portal", inbox.next("ack").path("cmdId").asText());
+            assertEquals(List.of("door", "door"), portals);
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void hostsWithoutPortalControlsRejectNewCommands() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertFalse(inbox.next("hello").path("portalControls").asBoolean());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"p\",\"kind\":\"togglePortal\",\"id\":\"door\","
+                    + "\"mapId\":\"m1\",\"levelId\":\"l1\"}", true).join();
+            assertEquals("p", inbox.next("reject").path("cmdId").asText());
+            assertTrue(portals.isEmpty());
         } finally { ws.abort(); }
     }
 
