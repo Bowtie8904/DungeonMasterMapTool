@@ -698,8 +698,13 @@ export function applyRest(c: CharacterSheet, kind: RestKind): void {
 }
 
 export function usesLeft(c: CharacterSheet, key: string, a: Automation): number | null {
-  if (!a.uses || a.uses.per === 'scene') return null;
+  if (!a.uses) return null;
   return Math.max(0, usesMax(c, key, a) - (c.usage[key]?.used ?? 0));
+}
+
+/** Player-facing reason an exhausted limited-use ability is blocked. */
+export function noUsesLeftText(per: NonNullable<Automation['uses']>['per'] | undefined): string {
+  return per === 'session' ? 'No uses left this session' : per === 'scene' ? 'No uses left this scene' : 'No uses left until a rest';
 }
 
 export function usesMax(c: CharacterSheet, key: string, a: Automation): number {
@@ -773,7 +778,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (action.requiresEffect && !c.effects.some((e) => e.name === action.requiresEffect)) return 'Required effect is not active';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
-  if (left !== null && left <= 0) return a.uses?.per === 'session' ? 'No uses left this session' : 'No uses left until a rest';
+  if (left !== null && left <= 0) return noUsesLeftText(a.uses?.per);
   for (const step of action.steps ?? []) {
     if (step.resource && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
   }
@@ -810,7 +815,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   payCost(c, resolvedCost);
   const cost = costText(resolvedCost, c);
   if (cost) log.push(`spent ${cost}`);
-  if (a.uses && a.uses.per !== 'scene') {
+  if (a.uses) {
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
     u.used++;
     c.usage[key] = u;

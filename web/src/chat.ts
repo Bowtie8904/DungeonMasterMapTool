@@ -130,13 +130,22 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     avatar,
     el('strong', { class: 'message-sender' }, sender),
     el('time', { dateTime: new Date(m.ts).toISOString(), title: new Date(m.ts).toLocaleString() }, time));
-  const report = e.kind === 'chat' && !m.toId && !e.m.sharedCard ? parseRestReport(e.m.text) : null;
-  const damage = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !report ? parseDamageReport(e.m.text) : null;
-  const action = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !report && !damage ? parseActionReport(e.m.text) : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
+  const system = e.kind === 'chat' && !m.toId && m.fromId === 'dm' && (e.m.system === 'sceneEnd' || e.m.system === 'newSession') ? e.m.system : null;
+  const plainChat = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !system;
+  const report = plainChat ? parseRestReport(e.m.text) : null;
+  const damage = plainChat && !report ? parseDamageReport(e.m.text) : null;
+  const action = plainChat && !report && !damage ? parseActionReport(e.m.text) : null;
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));
+  }
+  if (system && e.kind === 'chat') {
+    const lines = e.m.text.split('\n');
+    card.append(el('div', { class: 'system-banner' }, el('strong', {}, system === 'newSession' ? 'New session' : 'Scene ended')),
+      el('div', { class: 'rest-subtitle' }, lines[1] ?? ''),
+      el('ul', { class: 'rest-moves' }, ...lines.slice(2).map((l: string) => el('li', {}, l.replace(/^• /, '')))));
+    return card;
   }
   if (report) {
     card.append(el('div', { class: 'rest-banner' },

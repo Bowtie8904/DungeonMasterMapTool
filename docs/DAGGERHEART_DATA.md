@@ -102,15 +102,16 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   by its class's Favor feature. Initial values are applied once, not every render/re-equip. Resource counters
   are not rolled-die collections: Prayer Dice retain distinct rolled values and remain manual.
   Rally Dice use consumable effects instead of numeric resource pools.
-  `session: true` declares a session-only pool (initially 0): the host retains values in memory across reconnects
-  and sheet/feature saves, strips them from sheet files and transaction journals, and resets them on new hosting.
+  `session: true` declares a session pool (initially 0): it is saved with the sheet like other pools and
+  reset to 0 when the DM clicks **New session**.
   Know the Tide uses this with `max: "@level"`; its Fear-roll trigger gains tokens once per roll.
   `longRestLoss` subtracts that many tokens automatically on each long rest, floored at zero (Feed).
   `resetOn: "longRest"|"shortRest"|"rest"` restores the pool to `initial` on that rest;
   a long rest also counts as a short rest. Toxic Concoctions uses `initial: 0, resetOn: "longRest"`.
-- **uses**: `max` per `shortRest`, `longRest`, `rest` or `session`. Every hosting run starts a new session;
-  reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
-  Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
+- **uses**: `max` per `shortRest`, `longRest`, `rest`, `scene` or `session`. Scene uses reset when the DM clicks
+  **End scene** or **New session** and on any rest; session uses reset only on **New session**. Reconnecting or
+  restarting hosting resets nothing. Exhausted uses show "No uses left this scene/this session/until a rest".
+  Scene-duration effects are also removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
   limit. A rest limit is not a custom resource recharge rule.
   `usesOverrides: {"feat:<Feature>": number}` raises another source's maximum while the granting feature
   is learned (Virtuoso), without resetting its usage. `grantsFeatures: ["<Feature>", ...]` refreshes linked
@@ -157,7 +158,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   roll types and recovery. `unique: true` replaces all previous effects with that name and offers only
   one matching option per roll dialog. Optional `die: {dice, diceByLevel?, diceByFeature?}` resolves from
   the granting actor at grant time, replacing `@die` in the effect's actions/options, never from its recipient.
-  Session-duration effects expire on the next hosting run, not on rests or reconnects.
+  Scene-duration effects expire on **End scene**, **New session** or any rest; session-duration effects expire
+  only on **New session**, not on rests, reconnects or hosting restarts.
   `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
   The host validates both balances and the shared use limit, then spends and grants the entire amount atomically;
   insufficient Hope or recipient capacity leaves both sheets and the use counter unchanged.
@@ -453,7 +455,7 @@ Classes, ancestries, communities and transformations are included in the total.
   fixed damage; Fungril Network against 12; Retracting Claws; Unshakable; Purposeful Design; Ignition; Retract;
   Surefooted and situational advantage options. Hallowed Aura/Luckbender react to allies, Luckbringer grants party
   Hope, Eye of the Storm maintains a caster-linked target buff, and Lifespring heals a chosen target.
-  The catalog-wide audit removed every scene-use limit and also mapped Unbound, Stealth Expertise and Red Nose
+  The catalog-wide audit encodes "once per scene" limits as `per: "scene"` uses and also mapped Unbound, Stealth Expertise and Red Nose
   of Hope outcome conversion; simple situational community/gear advantages; Nature's Tongue, Goad Them On and
   Woven Net trait rolls; and Life Support, Healing Strike, Sparing Touch and Restoration target healing.
   Range, willingness, attack success and narrative prerequisites remain player/GM decisions. Complex healing

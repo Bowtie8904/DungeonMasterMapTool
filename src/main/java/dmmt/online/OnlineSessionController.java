@@ -224,6 +224,20 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         app.changed();
     }
 
+    /** Ends the current scene: refreshes per-scene uses and removes scene effects on every campaign sheet. */
+    public void endScene() {
+        if (!running()) return;
+        String problem = server.endScene();
+        app.status(problem == null ? "Online Play: scene ended." : "Online Play: " + problem);
+    }
+
+    /** Starts a new play session: also refreshes per-session uses, effects and session resource pools. */
+    public void newSession() {
+        if (!running()) return;
+        String problem = server.newSession();
+        app.status(problem == null ? "Online Play: new session started." : "Online Play: " + problem);
+    }
+
     public boolean audioStreaming() {
         return audioStreaming;
     }

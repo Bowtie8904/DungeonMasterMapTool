@@ -163,7 +163,7 @@ export function describeAutomation(a?: Automation): string[] {
   if (a.uses) out.push(`${a.uses.max} use(s) per ${a.uses.per}`);
   if (a.restReroll) out.push('Chat: reroll a short-rest downtime die and keep the higher result');
   for (const ac of a.actions ?? []) out.push(`Button: ${ac.label}`);
-  for (const resource of a.resources ?? []) out.push(`${resource.label}: starts at ${resource.initial}${resource.max !== undefined ? `, maximum ${resource.max}` : ''}${resource.session ? ', resets each hosting session (not saved)' : ''}`);
+  for (const resource of a.resources ?? []) out.push(`${resource.label}: starts at ${resource.initial}${resource.max !== undefined ? `, maximum ${resource.max}` : ''}${resource.session ? ', resets when the GM starts a new session' : ''}`);
   if (a.creation) {
     for (const stat of ['hp', 'stress', 'evasion', 'domainCards'] as const) {
       const value = a.creation[stat];

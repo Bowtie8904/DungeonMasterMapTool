@@ -458,6 +458,11 @@ The local API retains `online.countdowns.add` (opens the name/initial-value dial
 hidden, are disabled outside hosting, and step by one within 0..initial value. Deleted countdown controls disappear
 from discovery. Countdown names, initial values and current values are saved in the campaign's `campaign.json`,
 not in the INI file. No new INI keys or compatibility-version changes are required.
+
+Hide `online.endScene` or `online.newSession` to remove the small **End scene** / **New session** buttons left of
+the hosting-only Fear counter. Both remain available through the local API while hosting. End scene resets per-scene
+uses and scene-duration effects; New session also resets per-session uses, session-duration effects and session
+token pools. Each posts a chat announcement.
 **Default:** empty · **Values:** comma separated `section.control` ids from the table below · **Applies:** live (also changed from the settings window)
 
 Individual controls hidden from the DM controls overlay. In **Settings > DM controls tabs**, expand a tab's **controls** group and uncheck the controls you do not need. Labels, icons and value readouts belonging to a field/slider are hidden together; empty rows and unused separators take no layout space. Values, active tools, map data and keyboard shortcuts are unchanged. Both brush-size sliders have independent visibility choices but still share the same brush size, adjustable with Alt + mouse wheel. Whole-tab visibility (`ui.sections.hidden`) is independent, so restoring a tab preserves its individual choices. Empty means everything is shown; unknown ids are ignored. Hand edits are applied while the app is running.

@@ -721,6 +721,10 @@
    "rarity": "Legendary",
    "text": "Once per session, you can spend 5 Hope to lead a Tag Team Roll with three PCs instead of two.",
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "session"
+    },
     "actions": [
      {
       "id": "use",
@@ -975,6 +979,10 @@
    "rarity": "Uncommon",
    "text": "While wearing this mask, once per scene you can mimic a creature within Close range. Until you are next spotlighted, they experience either delayed speech (must mark a Stress to speak), erratic movements (disadvantage on reaction rolls), or clumsy attacks (disadvantage on attack rolls).",
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1584,6 +1592,10 @@
    "rarity": "Uncommon",
    "text": "Once per scene, you can activate this girdle to gain a +1 bonus to your Proficiency for your next attack.",
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1993,6 +2005,10 @@
    "rarity": "Legendary",
    "text": "When the GM spends a Fear, roll a d4. Once per scene on a result of 4, you clear a Stress.",
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",

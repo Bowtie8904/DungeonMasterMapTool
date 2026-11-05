@@ -291,6 +291,8 @@ class OnlineSessionServerTest {
             awaitConnections(0);
             server.stop();
             server.start();
+            assertEquals(before, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")));
+            assertNull(server.newSession());
             assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").size());
             assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("usage").has("feat:Rally"));
         } finally { ws.abort(); }
@@ -1129,6 +1131,8 @@ class OnlineSessionServerTest {
         server.stop();
         server.start();
         server.publish(state("m1", 0), "m1/l1");
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
+        assertNull(server.newSession());
         assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
         String cookie = cookie();
         Inbox inbox = new Inbox();
@@ -1146,7 +1150,7 @@ class OnlineSessionServerTest {
                 assertEquals(Math.min(3, i + 1), inbox.next("sheetFeature").path("resources").path("tide").asInt());
                 assertEquals(400, featureHttp(cookie, request).statusCode());
             }
-            assertFalse(MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "source")).path("resources").has("tide"));
+            assertEquals(3, MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
             long hopeSeed = 0;
             while (new java.util.Random(hopeSeed).nextInt(20) < 12) hopeSeed++;
             diceSeed(hopeSeed);
@@ -1162,6 +1166,8 @@ class OnlineSessionServerTest {
         } finally { ws.abort(); }
         server.stop();
         server.start();
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
+        assertNull(server.newSession());
         assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("resources").path("tide").asInt());
     }
 
@@ -1727,11 +1733,13 @@ class OnlineSessionServerTest {
     }
 
     @Test
-    void startingANewHostSessionResetsOnlySessionUses() throws Exception {
+    void restartingHostingKeepsUsesUntilTheDmEndsTheSceneOrStartsANewSession() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Alice").ownerId(playerId()).build());
         store.saveSheet(campaign.getId(), "actor", """
                 {"featureRevision":0,"usage":{"session":{"used":1,"per":"session"},
-                "rest":{"used":1,"per":"longRest"}}}
+                "scene":{"used":1,"per":"scene"},"rest":{"used":1,"per":"longRest"}},
+                "effects":[{"id":"e1","name":"Fury","until":"scene"},{"id":"e2","name":"Rally","until":"session"},
+                {"id":"e3","name":"Ward","until":"manual"}]}
                 """);
         Inbox initialInbox = new Inbox();
         WebSocket initial = connect(cookie(), initialInbox);
@@ -1745,9 +1753,34 @@ class OnlineSessionServerTest {
         try {
             String nextSession = nextInbox.next("hello").path("sessionId").asText();
             assertFalse(oldSession.equals(nextSession));
-            JsonNode usage = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor")).path("usage");
-            assertFalse(usage.has("session"));
-            assertEquals(1, usage.path("rest").path("used").asInt());
+            JsonNode afterRestart = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"));
+            assertTrue(afterRestart.path("usage").has("session"));
+            assertTrue(afterRestart.path("usage").has("scene"));
+            assertEquals(3, afterRestart.path("effects").size());
+
+            assertNull(server.endScene());
+            JsonNode state = nextInbox.next("sheetFeature");
+            assertFalse(state.path("usage").has("scene"));
+            assertTrue(state.path("usage").has("session"));
+            assertEquals(1, state.path("featureRevision").asInt());
+            JsonNode sceneMessage = nextInbox.next("chat");
+            assertEquals("sceneEnd", sceneMessage.path("system").asText());
+            assertTrue(sceneMessage.path("text").asText().startsWith("SCENE ENDED\n"));
+            assertTrue(sceneMessage.path("text").asText().contains("Alice"));
+            JsonNode afterScene = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"));
+            assertFalse(afterScene.path("usage").has("scene"));
+            assertTrue(afterScene.path("usage").has("session"));
+            assertEquals(List.of("Rally", "Ward"), java.util.stream.StreamSupport.stream(afterScene.path("effects").spliterator(), false)
+                    .map(e -> e.path("name").asText()).toList());
+
+            assertNull(server.newSession());
+            assertEquals("newSession", nextInbox.next("chat").path("system").asText());
+            JsonNode afterSession = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"));
+            assertFalse(afterSession.path("usage").has("session"));
+            assertEquals(1, afterSession.path("usage").path("rest").path("used").asInt());
+            assertEquals(List.of("Ward"), java.util.stream.StreamSupport.stream(afterSession.path("effects").spliterator(), false)
+                    .map(e -> e.path("name").asText()).toList());
+            assertTrue(store.historyTail(campaign.getId(), 20).stream().anyMatch(m -> "newSession".equals(m.path("system").asText())));
         } finally {
             next.abort();
         }

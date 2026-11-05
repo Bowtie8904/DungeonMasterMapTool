@@ -210,13 +210,16 @@ public final class ChatCards {
         String text = m.path("text").asText("");
         boolean whisper = !m.path("toId").asText("").isEmpty();
         boolean plain = !roll && !whisper && !m.has("sharedCard");
-        RestReport rest = plain ? parseRestReport(text) : null;
-        DamageReport damage = plain && rest == null ? parseDamageReport(text) : null;
-        ActionReport action = plain && rest == null && damage == null ? parseActionReport(text) : null;
+        String system = plain && "dm".equals(m.path("fromId").asText()) ? m.path("system").asText("") : "";
+        if (!"sceneEnd".equals(system) && !"newSession".equals(system)) system = "";
+        RestReport rest = plain && system.isEmpty() ? parseRestReport(text) : null;
+        DamageReport damage = plain && system.isEmpty() && rest == null ? parseDamageReport(text) : null;
+        ActionReport action = plain && system.isEmpty() && rest == null && damage == null ? parseActionReport(text) : null;
 
         VBox card = new VBox();
         card.getStyleClass().add("chat-entry");
         if (roll) card.getStyleClass().add("chat-roll");
+        if (!system.isEmpty()) card.getStyleClass().add("chat-system");
         if (rest != null) card.getStyleClass().add("chat-rest");
         if (damage != null) card.getStyleClass().add("chat-damage");
         if (action != null) card.getStyleClass().add("chat-action");
@@ -229,6 +232,10 @@ public final class ChatCards {
             VBox box = new VBox(label);
             box.setPadding(new Insets(8, 12, 0, 12));
             card.getChildren().add(box);
+        }
+        if (!system.isEmpty()) {
+            card.getChildren().add(systemBody(system, text));
+            return card;
         }
         if (rest != null) {
             card.getChildren().add(restBody(rest));
@@ -272,6 +279,17 @@ public final class ChatCards {
             VBox.setMargin(details, new Insets(0, 14, 12, 14));
             card.getChildren().add(details);
         }
+    }
+
+    /** Scene-end and new-session announcements: a banner, the summary line and per-character reset details. */
+    private static Node systemBody(String system, String text) {
+        String[] lines = text.split("\n");
+        Label banner = new Label("newSession".equals(system) ? "NEW SESSION" : "SCENE ENDED");
+        banner.getStyleClass().add("chat-system-banner");
+        String subtitle = lines.length > 1 ? lines[1] : "";
+        List<String> items = new ArrayList<>();
+        for (int i = 2; i < lines.length; i++) items.add(lines[i].replaceFirst("^• ", ""));
+        return new VBox(banner, wrapped(subtitle, "chat-rest-subtitle"), bullets(items));
     }
 
     private static Node actionBody(ActionReport report) {

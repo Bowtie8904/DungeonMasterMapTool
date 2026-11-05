@@ -1,9 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { CompendiumFile } from './compendium';
 import {
-  actionBlocker, availableRollOptions, availableRollTriggers, commitRollOptions, damageExpression,
+  actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, damageExpression,
   effectiveAdvantage, rollBonus, rollTargets, runAction, selectedRollBonus, selectionBlocker, suggestedAdvantage, usesLeft, type Automation,
 } from './engine';
 import { applyDamage, availableMitigations, computeDamage, mitigationBlocker } from './damage';
@@ -82,27 +82,16 @@ describe('ancestry automation and matching catalog rules', () => {
     expect(rules('elf', 'Quick Reactions').actions).toBeUndefined();
   });
 
-  it('never counts per-scene uses anywhere in the maintained catalog', () => {
-    for (const file of readdirSync(directory).filter((name) => name.endsWith('.json'))) {
-      const data: unknown = JSON.parse(readFileSync(new URL(file, directory), 'utf8'));
-      const check = (value: unknown): void => {
-        if (!value || typeof value !== 'object') return;
-        if (!Array.isArray(value)) {
-          const entry = value as { uses?: { per?: string } };
-          expect(entry.uses?.per, file).not.toBe('scene');
-        }
-        Object.values(value).forEach(check);
-      };
-      check(data);
-    }
+  it('counts per-scene uses and blocks them until the scene ends or a rest', () => {
     const c = character('aetheris');
-    const legacy: Automation = { uses: { max: 1, per: 'scene' }, actions: [{ id: 'use', label: 'Legacy' }] };
-    c.usage.legacy = { used: 1, per: 'scene' };
-    expect(usesLeft(c, 'legacy', legacy)).toBeNull();
-    expect(runAction(c, 'legacy', legacy, legacy.actions![0], 'Legacy')).not.toBeNull();
-    expect(c.usage.legacy.used).toBe(1);
-    c.heritage.push({ source: 'Legacy', name: 'Legacy', text: '', automation: { ...legacy, rollOptions: [{ id: 'legacy', label: 'Legacy', roll: 'action' }] } });
-    expect(selectionBlocker(c, availableRollOptions(c, ['action']))).toBeNull();
+    const limited: Automation = { uses: { max: 1, per: 'scene' }, actions: [{ id: 'use', label: 'Limited' }] };
+    expect(usesLeft(c, 'limited', limited)).toBe(1);
+    expect(runAction(c, 'limited', limited, limited.actions![0], 'Limited')).not.toBeNull();
+    expect(c.usage.limited).toEqual({ used: 1, per: 'scene' });
+    expect(usesLeft(c, 'limited', limited)).toBe(0);
+    expect(actionBlocker(c, 'limited', limited, limited.actions![0])).toBe('No uses left this scene');
+    applyRest(c, 'short');
+    expect(usesLeft(c, 'limited', limited)).toBe(1);
     expect(ancestries.entries.find((e) => e.id === 'gnome')!.features!.find((f) => f.name === 'Flicker Step')!.automation).toBeUndefined();
   });
 

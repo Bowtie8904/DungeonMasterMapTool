@@ -215,8 +215,6 @@ public final class OnlineSessionServer {
         sessionId = java.util.UUID.randomUUID().toString();
         dmSheetGrants.clear();
         sessionRolls.clear();
-        store.beginSession(sessionResourceIds());
-        resetSessionUses();
         Javalin javalin = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.http.maxRequestSize = 9L * 1024 * 1024;
@@ -2172,7 +2170,7 @@ public final class OnlineSessionServer {
     }
 
     private void useFeatureLimit(ObjectNode sheet, String key, JsonNode uses) {
-        if (!uses.isObject() || uses.path("per").asText().equals("scene")) return;
+        if (!uses.isObject()) return;
         int max = uses.path("max").asInt(0);
         if (max <= 0) return;
         ObjectNode counters = sheet.withObject("/usage");
@@ -2580,32 +2578,73 @@ public final class OnlineSessionServer {
         return id + ":" + ts;
     }
 
-    private void resetSessionUses() {
-        Campaign c = campaign;
-        if (c == null) return;
-        for (Campaign.Actor actor : c.getActors()) {
-            try {
-                ObjectNode sheet = storedSheet(actor.getId());
-                ObjectNode usage = sheet.withObject("/usage");
-                List<String> stale = new ArrayList<>();
-                usage.fields().forEachRemaining(entry -> {
-                    if (List.of("session", "scene").contains(entry.getValue().path("per").asText())) stale.add(entry.getKey());
-                });
-                ArrayNode effects = MAPPER.createArrayNode();
-                boolean expired = false;
-                for (JsonNode effect : sheet.path("effects")) {
-                    if ("session".equals(effect.path("until").asText())) expired = true;
-                    else effects.add(effect);
-                }
-                if (stale.isEmpty() && !expired) continue;
-                if (expired) sheet.set("effects", effects);
-                stale.forEach(usage::remove);
-                sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
-                store.saveSheet(c.getId(), actor.getId(), sheet.toString());
-            } catch (IOException e) {
-                throw new IllegalStateException("Could not reset session uses and effects for " + actor.getName() + ".", e);
-            }
+    /** DM button: ends the current scene, refreshing per-scene uses and removing scene-duration effects. */
+    public synchronized String endScene() {
+        return resetPeriod(false);
+    }
 
+    /** DM button: starts a new play session; also ends the scene and empties session resource pools. */
+    public synchronized String newSession() {
+        return resetPeriod(true);
+    }
+
+    private String resetPeriod(boolean session) {
+        Campaign c = campaign;
+        if (c == null) return "No online session is running.";
+        Set<String> periods = session ? Set.of("scene", "session") : Set.of("scene");
+        Set<String> resourceIds = session ? sessionResourceIds() : Set.of();
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        List<String> lines = new ArrayList<>();
+        try {
+            for (Campaign.Actor actor : c.getActors()) {
+                if (store.loadSheet(c.getId(), actor.getId()) == null) continue;
+                ObjectNode sheet = storedSheet(actor.getId());
+                int uses = 0;
+                if (sheet.get("usage") instanceof ObjectNode usage) {
+                    List<String> stale = new ArrayList<>();
+                    usage.fields().forEachRemaining(entry -> {
+                        if (periods.contains(entry.getValue().path("per").asText())) stale.add(entry.getKey());
+                    });
+                    stale.forEach(usage::remove);
+                    uses = stale.size();
+                }
+                List<String> ended = new ArrayList<>();
+                if (sheet.get("effects") instanceof ArrayNode effects) {
+                    ArrayNode kept = MAPPER.createArrayNode();
+                    for (JsonNode effect : effects) {
+                        if (periods.contains(effect.path("until").asText())) ended.add(effect.path("name").asText("Effect"));
+                        else kept.add(effect);
+                    }
+                    if (!ended.isEmpty()) sheet.set("effects", kept);
+                }
+                List<String> cleared = new ArrayList<>();
+                if (sheet.get("resources") instanceof ObjectNode resources) {
+                    for (String id : resourceIds) {
+                        if (resources.path(id).asInt(0) != 0) {
+                            resources.put(id, 0);
+                            cleared.add(id.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + id.substring(1));
+                        }
+                    }
+                }
+                if (uses == 0 && ended.isEmpty() && cleared.isEmpty()) continue;
+                changed.put(actor.getId(), sheet);
+                List<String> parts = new ArrayList<>();
+                if (uses > 0) parts.add(uses + (uses == 1 ? " use" : " uses") + " refreshed");
+                if (!ended.isEmpty()) parts.add("ended " + String.join(", ", new LinkedHashSet<>(ended)));
+                if (!cleared.isEmpty()) parts.add("cleared " + String.join(", ", cleared) + " tokens");
+                lines.add(actor.getName() + ": " + String.join("; ", parts));
+            }
+            if (lines.isEmpty()) lines.add(session ? "No session or scene limits to reset." : "No scene limits to reset.");
+            String text = (session ? "NEW SESSION\nSession and scene limits reset." : "SCENE ENDED\nScene limits reset.")
+                    + lines.stream().map(line -> "\n• " + line).reduce("", String::concat);
+            ObjectNode message = chatMessage("dm", "DM", null, clip(text));
+            message.put("system", session ? "newSession" : "sceneEnd");
+            persistFeatureSheets(changed, message, true);
+            for (var entry : changed.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
+            deliver(message, null, false);
+            return null;
+        } catch (IOException | RuntimeException e) {
+            return "Could not reset " + (session ? "the session" : "the scene") + ": " + e.getMessage();
         }
     }
 

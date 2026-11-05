@@ -3,7 +3,7 @@
 
 import type { CharacterSheet, InventoryItem } from './data';
 import {
-  Automation, DiceRoll, EffectDef, ModValue, Resource, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft,
+  Automation, DiceRoll, EffectDef, ModValue, Resource, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft, noUsesLeftText,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
@@ -176,8 +176,7 @@ function value(v: ModValue | undefined, c: CharacterSheet, hp = 0): number {
 function usageKey(m: AvailableMitigation): { key: string; auto: Automation } | null {
   const uses = m.option.uses;
   if (!uses) return null;
-  if (uses === 'source') return m.automation.uses && m.automation.uses.per !== 'scene' ? { key: m.key, auto: m.automation } : null;
-  if (uses.per === 'scene') return null;
+  if (uses === 'source') return m.automation.uses ? { key: m.key, auto: m.automation } : null;
   return { key: `${m.key}:mitigation:${m.option.id}`, auto: { uses } };
 }
 
@@ -189,7 +188,7 @@ export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, typ
   const u = usageKey(m);
   if (u) {
     const left = usesLeft(c, u.key, u.auto);
-    if (left !== null && left <= 0) return 'No uses left until a rest';
+    if (left !== null && left <= 0) return noUsesLeftText(u.auto.uses?.per);
   }
   if (o.consumeItem && (!m.item || m.item.qty <= 0)) return 'None left';
   const w = o.when ?? {};

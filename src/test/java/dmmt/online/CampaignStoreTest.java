@@ -19,24 +19,18 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
-    void sessionResourcesStayInMemoryAcrossAllSavePathsAndResetForNewHosting() throws Exception {
+    void sessionResourcesArePersistedLikeOtherResources() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);
         Campaign campaign = store.create("Session resources");
-        store.beginSession(java.util.Set.of("tide"));
         store.saveSheet(campaign.getId(), "hero", "{\"resources\":{\"tide\":3,\"favor\":4}}");
-        assertEquals(3, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("resources").path("tide").asInt());
         var disk = mapper.readTree(new CampaignStore(dir).loadSheet(campaign.getId(), "hero"));
-        org.junit.jupiter.api.Assertions.assertFalse(disk.path("resources").has("tide"));
+        assertEquals(3, disk.path("resources").path("tide").asInt());
         assertEquals(4, disk.path("resources").path("favor").asInt());
-        var hero = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(store.loadSheet(campaign.getId(), "hero"));
+        var hero = (com.fasterxml.jackson.databind.node.ObjectNode) disk;
         ((com.fasterxml.jackson.databind.node.ObjectNode) hero.path("resources")).put("tide", 2);
         store.saveSheets(campaign.getId(), java.util.Map.of("hero", hero));
-        assertEquals(2, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("resources").path("tide").asInt());
-        org.junit.jupiter.api.Assertions.assertFalse(Files.readString(dir.resolve(campaign.getId()).resolve("sheets").resolve("hero.json")).contains("\"tide\""));
-        store.beginSession(java.util.Set.of("tide"));
-        assertEquals(0, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("resources").path("tide").asInt());
-        assertEquals(4, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("resources").path("favor").asInt());
+        assertEquals(2, mapper.readTree(new CampaignStore(dir).loadSheet(campaign.getId(), "hero")).path("resources").path("tide").asInt());
     }
 
     @Test

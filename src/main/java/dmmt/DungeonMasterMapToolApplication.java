@@ -695,6 +695,10 @@ public class DungeonMasterMapToolApplication extends Application {
         center.getChildren().addAll(chip, topBanners, levelSwitcher, controls);
         fearOverlay = new dmmt.ui.FearOverlay(delta -> {
             if (onlineController != null) onlineController.adjustFear(delta);
+        }, () -> {
+            if (onlineController != null) onlineController.endScene();
+        }, () -> {
+            if (onlineController != null) onlineController.newSession();
         });
         center.getChildren().add(fearOverlay);
         fearOverlay.onReservedHeightChanged(() -> {

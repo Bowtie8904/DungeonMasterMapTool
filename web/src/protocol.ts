@@ -200,6 +200,8 @@ export interface ChatMessage {
   restDice?: import('./daggerheart/rest').RestDie[];
   actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string };
   rollSource?: RollSource;
+  /** Host announcement from the DM's End scene / New session buttons. */
+  system?: 'sceneEnd' | 'newSession';
 }
 
 /** Description at roll time, independent of mechanics and the current sheet. */

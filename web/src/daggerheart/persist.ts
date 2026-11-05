@@ -104,8 +104,6 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     if (stance) effect.text = stance.effect.text;
   }
   syncResources(c);
-  for (const source of automationSources(c)) stripSceneUses(source.automation);
-  for (const [key, use] of Object.entries(c.usage)) if (use.per === 'scene') delete c.usage[key];
 }
 
 function automationSources(c: CharacterSheet): Array<{ key: string; automation?: import('./engine').Automation }> {
@@ -120,18 +118,6 @@ function automationSources(c: CharacterSheet): Array<{ key: string; automation?:
     ...c.vault.map((item) => ({ key: `card:${item.name}`, automation: item.automation })),
     ...c.inventory.map((item) => ({ key: `item:${item.name}`, automation: item.automation })),
   ];
-}
-
-function stripSceneUses(value: unknown): void {
-  if (!value || typeof value !== 'object') return;
-  if (Array.isArray(value)) {
-    value.forEach(stripSceneUses);
-    return;
-  }
-  const record = value as Record<string, unknown>;
-  const uses = record.uses;
-  if (uses && typeof uses === 'object' && (uses as Record<string, unknown>).per === 'scene') delete record.uses;
-  Object.values(record).forEach(stripSceneUses);
 }
 
 export function featureTarget(c: CharacterSheet, key: string, actionId: string): import('./engine').ActionDef['target'] {
@@ -217,8 +203,6 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
       onWarning(`Could not refresh compendium rules; using saved rules: ${(e as Error).message}`);
     }
   }
-  for (const source of automationSources(c)) stripSceneUses(source.automation);
-  for (const [key, use] of Object.entries(c.usage)) if (use.per === 'scene') delete c.usage[key];
   return c;
 }
 

@@ -69,6 +69,15 @@ describe('roll breakdowns', () => {
       const dm = renderLogEntry({ kind: 'roll', m: { ...message, fromId: 'dm', from: 'DM' } }, 'player') as unknown as Element;
       expect(dm.find('message-sender')?.text).toBe('Gamemaster');
       expect(dm.find('message-avatar')?.text).toBe('G');
+      const scene = renderLogEntry({ kind: 'chat', m: {
+        id: 2, ts: 0, fromId: 'dm', from: 'DM', system: 'sceneEnd',
+        text: 'SCENE ENDED\nScene limits reset.\n• Aria: 1 use refreshed; ended Fury',
+      } }, 'player') as unknown as Element;
+      expect(scene.className).toContain('system-report');
+      expect(scene.find('system-banner')?.text).toBe('Scene ended');
+      expect(scene.find('rest-moves')?.text).toBe('Aria: 1 use refreshed; ended Fury');
+      const forged = renderLogEntry({ kind: 'chat', m: { id: 3, ts: 0, fromId: 'player', from: 'P', system: 'newSession', text: 'NEW SESSION' } }, 'player') as unknown as Element;
+      expect(forged.find('system-banner')).toBeUndefined();
     } finally { vi.unstubAllGlobals(); }
   });
 

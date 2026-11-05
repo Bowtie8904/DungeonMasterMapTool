@@ -51,7 +51,7 @@ No automatic Werewolf transformation selection is performed. See `docs/DAGGERHEA
 additive metadata contracts; Online and DM Link compatibility versions and global settings are unchanged.
 `checks/blood-hunter.html` exercises the real rest and roll dialogs, cancellation, benefit limits, locked
 HP controls, Psychometry's Spellcast routing, Chasing Death costs/dice and Veilwalker's next-attack option.
-Session-limited uses reset per hosting run rather than browser reconnect; scene use limits are not tracked.
+Limited uses (per rest, scene or session) persist across reconnects and host restarts; scene and session limits reset when the DM clicks End scene / New session, which also posts a highlighted chat announcement (`system: "sceneEnd"|"newSession"`).
 `hello.rollRewards:true` and a host-created `rewardClaimed:false` marker enable the original roller's
 one-time chat reward button: +1 Hope on Hope results, +1 Hope and clear 1 Stress on criticals.
 `POST /api/roll-reward` takes `{actorId,roll:{id,ts}}`; the host validates persisted dice/outcome, roller and

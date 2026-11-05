@@ -783,6 +783,10 @@
     "text": "Once per scene, reduce magic damage taken by 1d8. The next time you deal magic damage, add the last result."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -956,6 +960,10 @@
     "text": "Once per scene, when you would take damage, you may mark two Armor Slots to instead take no damage, vanish and reappear at a point you can see within Close range."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1505,6 +1513,10 @@
     "text": "Once per scene when you mark an Armor Slot, you may gain 1 Hope. If you do, the next attack against you has advantage."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1808,6 +1820,10 @@
     "text": "Once per scene, you can recall a domain card from your vault without paying its Recall Cost."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1866,6 +1882,10 @@
     "text": "Once per scene when you take magic damage, you can clear an Armor Slot."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -1934,6 +1954,10 @@
     "text": "Once per scene when you spend Hope, you can clear an Armor Slot."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",
@@ -2094,6 +2118,10 @@
     "text": "Once per scene, you can change a failure with Hope into a success with Fear."
    },
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
     "actions": [
      {
       "id": "use",

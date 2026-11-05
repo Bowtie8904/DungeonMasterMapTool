@@ -42,6 +42,10 @@
      "automation": {
       "mitigation": [
        {
+        "uses": {
+         "max": 1,
+         "per": "scene"
+        },
         "id": "wings",
         "label": "Spend Hope instead of an Armor Slot",
         "description": "Once per scene while flying, instead of marking an Armor Slot.",

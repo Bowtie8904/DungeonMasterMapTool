@@ -174,8 +174,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Gain 1 Hope / Clear 1 Stress**. Outcome conversions no longer grant Hope automatically; claim it on the
   converted roll. Claims are saved on the host and stay consumed after reloads. At maximum Hope the button
   is disabled, except a critical can still clear marked Stress; capped rewards are not consumed.
-  Rerolls produce a single roll card. Session-limited features reset when the DM stops and starts hosting,
-  not when a player reconnects; per-scene use counters are not tracked.
+  Rerolls produce a single roll card. Limited uses persist across reconnects and host restarts; the DM resets them
+  with **End scene** (per-scene uses and scene-duration effects) and **New session** (also per-session uses,
+  session-duration effects and session token pools). Both post a highlighted announcement in the chat.
   Changing Hope, Stress, HP, Armor, Proficiency, gold or a resource pool on the sheet immediately enables or
   disables the affected feature, item and card action buttons; no tab switch is needed.
   Ignition is a primary-weapon damage option, paid once while its removable buff is active. Retract preselects
@@ -281,7 +282,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   Orderborne Dedicated can replace the Hope die with a d20 from the roll dialog; Reborne Found Family spends
   1 Hope for an editable ally Experience bonus (default +2). Seaborne Know the Tide has a level-capped token counter
   on its feature, a gain button on Fear rolls and a quantity selector when spending tokens; tokens survive reconnects
-  but are never saved to disk and start empty on each new hosting session. Nomadic Pack and Brave Face spend 1 Hope.
+  are saved with the sheet and reset to 0 when the DM clicks **New session**. Nomadic Pack and Brave Face spend 1 Hope.
   Your own roll cards in the chat carry buttons: **Damage** on attack rolls (same dialog as the sheet) and feature
   buttons such as Wizard Strange Patterns, Ranger's Focus / Hawkeye rerolls, Fearless or Patron's Boon, and spell
   Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
@@ -334,7 +335,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
   block anything else. While a campaign is hosted, the **Fear counter** (per campaign, 0-12) appears as a small
   overlay at the bottom right of the DM view with −/+ buttons (local API `online.fearDown`/`online.fearUp`) and
-  permanently as up to 12 tokens at the bottom right of every browser.
+  permanently as up to 12 tokens at the bottom right of every browser. Left of the Fear counter, small
+  **End scene** and **New session** buttons (local API `online.endScene`/`online.newSession`) reset per-scene
+  and per-session limits for every character with a sheet and post a chat announcement listing what was refreshed.
+  Hosting start/stop no longer resets anything, so click **New session** at the start of each real play session.
   **Daggerheart countdowns** appear in a compact list at the top right beside the controls/sidebar,
   with 40%-opaque row backgrounds for readability on both DM and player maps.
   While hosting, use the DM's **+** beside **COUNTDOWNS** to enter a name and a nonnegative initial value.
