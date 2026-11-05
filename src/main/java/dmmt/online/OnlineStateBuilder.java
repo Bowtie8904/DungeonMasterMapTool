@@ -245,7 +245,7 @@ public final class OnlineStateBuilder {
             flash.put("color", dmmt.service.Tuning.WEATHER_FLASH_COLOR.get());
         }
 
-        state.set("tokens", tokens(project, campaign, assets));
+        state.set("tokens", tokens(project, campaign, assets, ctx.mapId()));
 
         FogMask mask = project.getFog() == null ? null : project.getFog().getMask();
         if (mask != null) {
@@ -296,7 +296,7 @@ public final class OnlineStateBuilder {
         return node;
     }
 
-    private ArrayNode tokens(DmProject project, Campaign campaign, AssetRegistry assets) {
+    private ArrayNode tokens(DmProject project, Campaign campaign, AssetRegistry assets, String mapId) {
         ArrayNode tokens = MAPPER.createArrayNode();
         Map<String, DmProject.TokenDefinition> defs = project.getTokenDefinitions() == null
                 ? Map.of() : project.getTokenDefinitions();
@@ -336,7 +336,7 @@ public final class OnlineStateBuilder {
                 node.put("actorId", actor.getId());
             }
             ArrayNode by = node.putArray("controlledBy");
-            for (String playerId : controllers(token, actor, campaign, null)) {
+            for (String playerId : controllers(token, actor, campaign, mapId)) {
                 by.add(playerId);
             }
         }

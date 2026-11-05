@@ -9461,6 +9461,10 @@ public class DungeonMasterMapToolApplication extends Application {
         MenuItem remove = new MenuItem("Remove token from map");
         remove.setOnAction(e -> removeToken(id));
         java.util.List<MenuItem> items = new java.util.ArrayList<>(java.util.List.of(visible, name, size));
+        if (onlinePanel != null && token.getActorId() == null) {
+            String mapId = multiLevelManifest != null ? multiLevelManifest.getId() : project.getId();
+            items.add(onlinePanel.tokenControlMenu(mapId, token));
+        }
         DmProject.LightSource attached = token.getLight();
         if (attached == null) {
             MenuItem addLight = new MenuItem("Add light (torch)");

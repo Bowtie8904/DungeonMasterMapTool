@@ -103,9 +103,9 @@ export class MapView {
     this.ctx = canvas.getContext('2d')!;
     canvas.style.touchAction = 'none';
     canvas.tabIndex = 0;
-    canvas.addEventListener('pointerdown', (e) => this.pointerDown(e));
+    canvas.addEventListener('pointerdown', (e) => { this.pointerDown(e); this.updateCursor(); });
     canvas.addEventListener('pointermove', (e) => this.pointerMove(e));
-    canvas.addEventListener('pointerup', (e) => this.pointerUp(e));
+    canvas.addEventListener('pointerup', (e) => { this.pointerUp(e); this.updateCursor(); });
     canvas.addEventListener('pointercancel', e => {
       if (this.drag?.kind === 'pan') {
         this.drag = null;
@@ -136,6 +136,7 @@ export class MapView {
 
   invalidate(): void {
     this.dirty = true;
+    this.updateCursor();
   }
 
   destroy(): void {
@@ -147,7 +148,7 @@ export class MapView {
   /** Call after walls/doors/lights/tokens/lighting/fog changes. */
   invalidateVision(): void {
     this.visionDirty = true;
-    this.dirty = true;
+    this.invalidate();
   }
 
   setState(state: GameState | null): void {
@@ -193,7 +194,6 @@ export class MapView {
       this.clearSelection();
       this.onSelection(null, false);
     }
-    this.canvas.style.cursor = tool === 'navigate' ? 'default' : 'crosshair';
     this.invalidate();
   }
 
@@ -356,10 +356,50 @@ export class MapView {
     return null;
   }
 
+  private selectionAt(x: number, y: number) {
+    const s = this.state;
+    if (!s) return null;
+    const hitGroup = (s.overlays ?? []).some(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)
+      && drawingHit(o, x, y, 6 / this.cam.scale))
+      || s.tokens.some(t => this.selectedTokens.has(t.id) && this.isMine(t)
+        && Math.hypot(x - t.x, y - t.y) <= t.sizeTiles * s.grid.pixelsPerCell / 2)
+      || this.measurements.some(m => this.selectedMeasures.has(m.id) && m.ownerId === this.playerId
+        && measurementHit(m, x, y, 10 / this.cam.scale));
+    if (hitGroup) return { kind: 'group' } as const;
+    const measure = [...this.measurements].reverse().find(m => m.ownerId === this.playerId && measurementHit(m, x, y, 10 / this.cam.scale));
+    if (measure) return { kind: 'measure', measure } as const;
+    const selected = s.overlays?.find(o => o.id === this.selectedDrawing && ownsDrawing(o, this.playerId, this.campaignId));
+    const bounds = selected ? drawingBounds(selected) : null;
+    const resize = !!bounds && Math.hypot(x - bounds[2], y - bounds[3]) < 12 / this.cam.scale;
+    const shape = resize ? selected : [...s.overlays ?? []].reverse().find(o =>
+      ownsDrawing(o, this.playerId, this.campaignId) && drawingHit(o, x, y, 6 / this.cam.scale));
+    const token = this.tokenAt(x, y);
+    if (shape && (resize || !token)) return { kind: 'shape', shape, resize } as const;
+    return token ? { kind: 'token', token } as const : null;
+  }
+
+  private updateCursor(): void {
+    let cursor = 'default';
+    if (this.drag?.kind === 'pan') cursor = 'grabbing';
+    else if (!this.paused && this.state) {
+      if (this.gesture?.resize) cursor = 'nwse-resize';
+      else if (this.group || this.drag?.kind === 'token' || this.gesture && !this.gesture.create) cursor = 'grabbing';
+      else if (this.gesture?.create) cursor = 'crosshair';
+      else if (this.hover && this.measurementDeleteAt(this.hover.x, this.hover.y)) cursor = 'pointer';
+      else if (this.tool !== 'navigate') cursor = 'crosshair';
+      else if (this.hover && !this.marquee) {
+        const hit = this.selectionAt(this.hover.x, this.hover.y);
+        if (hit) cursor = hit.kind === 'shape' && hit.resize ? 'nwse-resize' : 'grab';
+      }
+    }
+    this.canvas.style.cursor = cursor;
+  }
+
   private pointerDown(e: PointerEvent): void {
     this.canvas.focus();
     this.canvas.setPointerCapture(e.pointerId);
     const w = this.toWorld(e);
+    this.hover = w;
     const s = this.state;
     if (e.button === 2) {
       this.cancelGesture();
@@ -391,13 +431,8 @@ export class MapView {
           kind: this.measureMode, x1: w.x, y1: w.y, x2: w.x, y2: w.y } };
         this.invalidate(); return;
       }
-      const hitGroup = (s.overlays ?? []).some(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)
-        && drawingHit(o, w.x, w.y, 6 / this.cam.scale))
-        || s.tokens.some(t => this.selectedTokens.has(t.id) && this.isMine(t)
-          && Math.hypot(w.x - t.x, w.y - t.y) <= t.sizeTiles * s.grid.pixelsPerCell / 2)
-        || this.measurements.some(m => this.selectedMeasures.has(m.id) && m.ownerId === this.playerId
-          && measurementHit(m, w.x, w.y, 10 / this.cam.scale));
-      if (hitGroup) {
+      const hit = this.selectionAt(w.x, w.y);
+      if (hit?.kind === 'group') {
         this.group = { start: w, end: w,
           shapes: (s.overlays ?? []).filter(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)),
           tokens: s.tokens.filter(t => this.selectedTokens.has(t.id) && this.isMine(t)).map(t => ({ ...t })),
@@ -405,18 +440,15 @@ export class MapView {
         return;
       }
       this.selectedDrawings.clear(); this.selectedTokens.clear(); this.selectedMeasures.clear();
-      const measure = [...this.measurements].reverse().find(m => m.ownerId === this.playerId && measurementHit(m, w.x, w.y, 10 / this.cam.scale));
+      const measure = hit?.kind === 'measure' ? hit.measure : null;
       if (measure) {
         this.selectedMeasure = measure.id; this.selectedDrawing = null;
         this.gesture = { start: w, measurement: { ...measure }, move: { ...measure }, create: false };
         this.onSelection(null, true); this.invalidate(); return;
       }
-      const selected = s.overlays?.find(o => o.id === this.selectedDrawing && ownsDrawing(o, this.playerId, this.campaignId));
-      const bounds = selected ? drawingBounds(selected) : null;
-      const resize = !!bounds && Math.hypot(w.x - bounds[2], w.y - bounds[3]) < 12 / this.cam.scale;
-      const shape = resize ? selected : [...s.overlays ?? []].reverse().find(o =>
-        ownsDrawing(o, this.playerId, this.campaignId) && drawingHit(o, w.x, w.y, 6 / this.cam.scale));
-      if (shape && (resize || !this.tokenAt(w.x, w.y))) {
+      const shape = hit?.kind === 'shape' ? hit.shape : null;
+      const resize = hit?.kind === 'shape' && hit.resize;
+      if (shape) {
         this.selectedDrawing = shape.id; this.selectedMeasure = null;
         this.gesture = { start: w, shape: { ...shape, points: [...shape.points] }, before: shape, resize, create: false };
         this.onSelection(shape, false); this.invalidate(); return;
@@ -440,12 +472,11 @@ export class MapView {
         this.cam.x = d.camX + e.clientX - d.startX;
         this.cam.y = d.camY + e.clientY - d.startY;
       }
-      this.canvas.style.cursor = 'grabbing';
+      this.hover = this.toWorld(e);
       this.invalidate();
       return;
     }
-    this.canvas.style.cursor = !this.paused && this.measurementDeleteAt(this.hover.x, this.hover.y) ? 'pointer'
-      : this.tool === 'navigate' ? 'default' : 'crosshair';
+    this.updateCursor();
     if (this.marquee || this.group) {
       if (this.marquee) this.marquee.end = this.hover;
       if (this.group) this.group.end = this.hover;
@@ -508,7 +539,7 @@ export class MapView {
         this.setTool('navigate');
         this.onSelectTool();
       }
-      this.canvas.style.cursor = this.tool === 'navigate' ? 'default' : 'crosshair';
+      this.hover = this.toWorld(e);
       this.invalidate();
       return;
     }
@@ -594,7 +625,8 @@ export class MapView {
     this.cam.x = px - (px - this.cam.x) * k;
     this.cam.y = py - (py - this.cam.y) * k;
     this.cam.scale = next;
-    this.dirty = true;
+    this.hover = this.toWorld(e);
+    this.invalidate();
   }
 
   private getImage(url: string): HTMLImageElement {

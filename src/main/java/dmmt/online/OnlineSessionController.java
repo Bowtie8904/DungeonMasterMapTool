@@ -169,6 +169,35 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    /** Saves a regular map token's movement grant without changing its reusable definition. */
+    public void setTokenControl(Campaign edited, String mapId, String tokenId, String playerId,
+                                boolean enabled) throws IOException {
+        if (edited == null || edited.player(playerId) == null)
+            throw new IllegalArgumentException("Select an existing campaign player.");
+        if (running() && edited != campaign)
+            throw new IllegalArgumentException("The hosted campaign changed; reopen the token menu.");
+        DmProject project = app.project();
+        DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
+                .filter(t -> t.getId().equals(tokenId)).findFirst().orElse(null);
+        if (token == null || !app.mapId().equals(mapId) || token.getActorId() != null)
+            throw new IllegalArgumentException("The map or token changed; reopen the token menu.");
+        var previous = edited.getControlledTokens();
+        var next = new java.util.ArrayList<>(previous);
+        next.removeIf(link -> mapId.equals(link.getMapId()) && tokenId.equals(link.getTokenId())
+                && playerId.equals(link.getPlayerId()));
+        if (enabled)
+            next.add(new Campaign.TokenLink(playerId, mapId, tokenId));
+        edited.setControlledTokens(next);
+        try {
+            store.save(edited);
+        } catch (IOException ex) {
+            edited.setControlledTokens(previous);
+            throw ex;
+        }
+        if (running()) publishNow();
+        app.changed();
+    }
+
     /** Fear tokens the GM holds in the hosted campaign; 0 when no session runs. */
     public int fear() {
         return running() && campaign != null ? campaign.getFear() : 0;

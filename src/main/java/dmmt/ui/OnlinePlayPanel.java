@@ -145,6 +145,34 @@ public final class OnlinePlayPanel extends VBox {
         return current;
     }
 
+    public Menu tokenControlMenu(String mapId, DmProject.TokenInstance token) {
+        Menu menu = new Menu("Player movement control");
+        Campaign selected = controller.running() ? controller.campaign() : current;
+        if (selected == null || selected.getPlayers().isEmpty()) {
+            MenuItem hint = new MenuItem(selected == null
+                    ? "Select a campaign in Online Play first" : "Add players in Online Play first");
+            hint.setDisable(true);
+            menu.getItems().add(hint);
+            return menu;
+        }
+        for (Campaign.Player player : selected.getPlayers()) {
+            CheckMenuItem item = new CheckMenuItem(player.getName());
+            item.setSelected(dmmt.online.OnlineStateBuilder.controllers(token, null, selected, mapId)
+                    .contains(player.getId()));
+            item.setOnAction(event -> {
+                boolean enabled = item.isSelected();
+                try {
+                    controller.setTokenControl(selected, mapId, token.getId(), player.getId(), enabled);
+                } catch (IOException | IllegalArgumentException ex) {
+                    item.setSelected(!enabled);
+                    Dialogs.error(window(), "Could not save token control", ex.getMessage());
+                }
+            });
+            menu.getItems().add(item);
+        }
+        return menu;
+    }
+
     /** The actor of the open campaign that an {@link #ACTOR} drag refers to, or {@code null}. */
     public Campaign.Actor actorForDrop(String actorId) {
         return current == null ? null : current.actor(actorId);

@@ -301,6 +301,15 @@ Nothing starts until you click **Start online session**, so offline play and the
   The account becomes available when its last tab disconnects, on logout or when you kick the player.
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
+  In Select mode, hovering over a controllable token or your own drawing/measurement shows a **grab** cursor;
+  moving it shows **grabbing**. Drawing resize handles show a diagonal resize cursor, and your measurement
+  delete buttons show a pointer. Objects you cannot control keep the normal cursor; paused maps do not
+  advertise editing. Drawing and measurement tools retain their crosshair cursor.
+  To grant movement of a regular image token, right-click its placed instance on the DM map and open
+  **Player movement control**, then check the players who may move it. Uncheck to revoke access.
+  Select a campaign and add players in **Online Play** first; assignments can be prepared before starting
+  the session and are saved with that campaign. Permissions apply only to that token on that map, not other
+  copies of its library token. Make the token **Visible to players** so assigned players can see and move it.
   **Press Space** in the DM view (setting `online.pauseKey`; local API `online.pause`) to pause or resume: movement
   is blocked, the DM view shows a "paused" banner with a Resume button, and players see a banner that does not
   block anything else. While a campaign is hosted, the **Fear counter** (per campaign, 0-12) appears as a small
