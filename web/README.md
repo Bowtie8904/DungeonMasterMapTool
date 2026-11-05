@@ -240,7 +240,18 @@ on map/level changes. Both features are advertised in `hello`, so older hosts ke
 Audio preferences and logout live in Settings; the roster reports host-measured round-trip ping.
 Right-click without dragging switches to Select without dismissing flyouts; right-drag pans without changing
 the active tool. Empty left-drag box-selects
-owned drawings, controlled tokens and measurements for group movement. Drawing undo is browser-local,
+owned drawings, controlled tokens and measurements for group movement. Left-clicking a controlled token
+also selects it. Both selection methods show dashed square token outlines; selected tokens expose a
+rotation handle when the host advertises `hello.tokenRotation:true`. Dragging it previews rotation locally
+and sends `command {cmdId,kind:"rotateToken",tokenId,mapId,levelId,rotationDeg}` on release. The host checks
+current map/level, pause, visibility, ownership and finite angles, then applies an undoable persisted edit.
+Rejected or cancelled rotation never replaces the authoritative token state. Older hosts retain selection
+and movement without rotation handles; Online Play and DM Link compatibility versions are unchanged.
+Arrow keys with the map focused move all selected controlled tokens by exactly half a grid tile per
+press/repeat, through the existing move command and rollback path. They do nothing during pointer
+gestures, while paused or in text controls. Door/window badges are always light gray; only their glyph
+changes on opening/closing, and the browser draws no portal segments. DM rendering is unchanged.
+Drawing undo is browser-local,
 bounded to 100 acknowledged edits per map and uses the existing authoritative ownership-checked commands.
 Measurement delete crosses are drawn/picked at a constant screen size and shown only to the creator
 (the desktop DM also gets them). Pen/brush cursors preview world-space stroke width.
@@ -251,6 +262,8 @@ internal seams at overlaps. The edge is cached independently of texture animatio
 run `npm run dev`, then open `http://localhost:5173/checks/player-layout.html` (adjust the port if necessary).
 It exercises actual layout controls and canvas gestures with local test state, without a running Java host.
 The page reports PASS/FAIL; it is not included in the production bundle.
+`checks/token-controls.html` isolates token click/box selection, half-tile arrows, movement rollback,
+rotation commands/previews/cancellation, pause and older-host capability handling with the real app and canvas.
 `checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,
 and checks safe, independent source disclosures and source propagation from feature/local action rolls,
 Spellcast, individual grimoire spells and follow-up spell damage.

@@ -40,6 +40,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
         /** Applies an already validated move with undo history. */
         void applyMove(String tokenId, double x, double y);
+        void applyRotation(String tokenId, double rotationDeg);
 
         void applyOverlay(String id, DmProject.OverlayShape shape);
 
@@ -370,6 +371,42 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             } catch (RuntimeException ex) {
                 app.status("Online drawing failed: " + ex.getMessage());
                 result.complete(OnlineSessionServer.MoveResult.rejected("Drawing failed"));
+            }
+        });
+        return result;
+    }
+
+    @Override
+    public boolean supportsTokenRotation() {
+        return true;
+    }
+
+    @Override
+    public CompletableFuture<OnlineSessionServer.MoveResult> rotateToken(String playerId, String tokenId,
+                                                                         String mapId, String levelId, double rotationDeg) {
+        CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            if (result.isDone()) return;
+            try {
+                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
+                    return;
+                }
+                DmProject project = app.project();
+                DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
+                        .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
+                String problem = !Double.isFinite(rotationDeg) ? "Invalid rotation"
+                        : MoveValidator.checkControl(campaign, mapId, playerId, token);
+                if (problem != null) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected(problem));
+                    return;
+                }
+                app.applyRotation(tokenId, (rotationDeg % 360 + 360) % 360);
+                publishNow();
+                result.complete(OnlineSessionServer.MoveResult.accepted());
+            } catch (RuntimeException ex) {
+                app.status("Online rotation failed: " + ex.getMessage());
+                result.complete(OnlineSessionServer.MoveResult.rejected("Rotation failed"));
             }
         });
         return result;

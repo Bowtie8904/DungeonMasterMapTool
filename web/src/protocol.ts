@@ -345,6 +345,7 @@ export interface Hello {
   campaignId?: string;
   drawingTools?: boolean;
   measurementTools?: boolean;
+  tokenRotation?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;
   compendiumChat?: boolean;
@@ -372,6 +373,8 @@ export type ServerMessage =
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }
   | { type: 'delta'; seq: number; ops: DeltaOp[] }
+  /** Accepted move of another connection's token, relayed before the next delta; `mapKey` is `mapId/levelId`. */
+  | { type: 'tokenMoved'; mapKey: string; id: string; x: number; y: number }
   | { type: 'ack'; cmdId: string; seq?: number }
   | { type: 'reject'; cmdId: string; reason: string; token?: { id: string; x: number; y: number } }
   | { type: 'clockSync'; id: number; clientSent: number; serverTime: number }

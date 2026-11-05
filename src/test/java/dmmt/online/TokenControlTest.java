@@ -138,6 +138,54 @@ class TokenControlTest {
         }
     }
 
+    @Test
+    void rotationRequiresLiveControlAndCurrentMapAndPublishesNormalizedAngles() throws Exception {
+        TestApp app = new TestApp();
+        var controller = new OnlineSessionController(temp, app);
+        Campaign campaign = controller.store().create("Rotation");
+        campaign.getPlayers().add(Campaign.Player.builder().id("player").name("Player").build());
+        campaign.getControlledTokens().add(new Campaign.TokenLink("player", "map", "token"));
+        try {
+            onFx(() -> {
+                try (var socket = new java.net.ServerSocket(0)) {
+                    String port = String.valueOf(socket.getLocalPort());
+                    Tuning.apply(key -> "online.port".equals(key) ? port : null);
+                }
+                controller.start(campaign);
+                return null;
+            });
+            assertTrue(controller.supportsTokenRotation());
+            assertTrue(controller.rotateToken("player", "token", "map", "level", -30).get(5, TimeUnit.SECONDS).ok());
+            assertEquals(330, app.project.getTokens().getFirst().getRotationDeg());
+            assertFalse(controller.rotateToken("second", "token", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "missing", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "copy", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "token", "wrong", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "token", "map", "wrong", 40).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "token", "map", "level", Double.NaN).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "token", "map", "level", Double.POSITIVE_INFINITY).get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> { app.project.getTokens().getFirst().setPlayerVisible(false); return null; });
+            assertFalse(controller.rotateToken("player", "token", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> {
+                app.project.getTokens().getFirst().setPlayerVisible(true);
+                controller.server().setPaused(true);
+                return null;
+            });
+            assertFalse(controller.rotateToken("player", "token", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+            assertEquals(330, app.project.getTokens().getFirst().getRotationDeg());
+            assertEquals(330, new dmmt.service.ProjectService().copy(app.project).getTokens().getFirst().getRotationDeg());
+            onFx(() -> {
+                controller.server().setPaused(false);
+                controller.setTokenControl(campaign, "map", "token", "player", false);
+                return null;
+            });
+            assertFalse(controller.rotateToken("player", "token", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+        } finally {
+            onFx(() -> { controller.stop(); Tuning.reset(); return null; });
+        }
+        assertFalse(controller.rotateToken("player", "token", "map", "level", 40).get(5, TimeUnit.SECONDS).ok());
+    }
+
     private static <T> T onFx(java.util.concurrent.Callable<T> action) throws Exception {
         FutureTask<T> task = new FutureTask<>(action);
         Platform.runLater(task);
@@ -160,6 +208,9 @@ class TokenControlTest {
         @Override public void applyMove(String id, double x, double y) {
             var token = project.getTokens().stream().filter(t -> t.getId().equals(id)).findFirst().orElseThrow();
             token.setX(x); token.setY(y);
+        }
+        @Override public void applyRotation(String id, double rotationDeg) {
+            project.getTokens().stream().filter(t -> t.getId().equals(id)).findFirst().orElseThrow().setRotationDeg(rotationDeg);
         }
         @Override public void applyOverlay(String id, DmProject.OverlayShape shape) { fail(); }
         @Override public void measurementsChanged() { }

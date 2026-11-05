@@ -111,6 +111,31 @@ class TokenSupportTest
     }
 
     @Test
+    void browserRotationUsesNormalUndoableTokenEditsAndRetainsOtherTokenData() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 150.0, 100.0);
+            String id = f.project.getTokens().getFirst().getId();
+            var before = new ProjectService().copy(f.project).getTokens().getFirst();
+            invoke(f.app, "createOnlinePlay");
+            var controller = (dmmt.online.OnlineSessionController)get(f.app, "onlineController");
+            var bridge = (dmmt.online.OnlineSessionController.App)get(controller, "app");
+            bridge.applyRotation(id, 33.25);
+            assertEquals(33.25, token(f, id).getRotationDeg());
+            assertEquals(before.getX(), token(f, id).getX());
+            assertEquals(before.getY(), token(f, id).getY());
+            assertEquals(before.getSizeTiles(), token(f, id).getSizeTiles());
+            assertEquals(before.getDefinitionId(), token(f, id).getDefinitionId());
+            assertEquals(33.25, new ProjectService().copy(f.project).getTokens().getFirst().getRotationDeg());
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(before, token(f, id));
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(33.25, token(f, id).getRotationDeg());
+        });
+    }
+
+    @Test
     void resizingShowsLiveDiameterInTilesAndClearsTheRetainedLabelOnRelease() throws Exception
     {
         onFx(() -> {

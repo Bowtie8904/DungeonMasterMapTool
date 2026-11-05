@@ -10875,6 +10875,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 renderDm();
                 renderPlayer();
             }
+            @Override public void applyRotation(String tokenId, double rotationDeg) {
+                changeToken(tokenId, "Rotate player token", token -> token.setRotationDeg(rotationDeg));
+                renderDm();
+                renderPlayer();
+            }
             @Override public void applyOverlay(String id, DmProject.OverlayShape shape) {
                 DmProject.OverlayShape before = cloneOverlayOrNull(findOverlay(id));
                 applyOverlayState(id, shape);

@@ -131,6 +131,7 @@ class CountdownTest {
         @Override public String mapName() { return "Map"; }
         @Override public boolean showGrid() { return false; }
         @Override public void applyMove(String id, double x, double y) { fail("Unexpected player move"); }
+        @Override public void applyRotation(String id, double rotationDeg) { fail("Unexpected player rotation"); }
         @Override public void applyOverlay(String id, DmProject.OverlayShape shape) { fail("Unexpected drawing"); }
         @Override public void measurementsChanged() { }
         @Override public void status(String text) { }

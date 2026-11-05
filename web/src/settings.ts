@@ -33,6 +33,12 @@ export const settings = {
   get maxParticles(): number {
     return Math.max(0, num('dmmt.maxParticles', DEFAULT_MAX_PARTICLES));
   },
+  get smoothTokens(): boolean {
+    return localStorage.getItem('dmmt.smoothTokens') !== '0';
+  },
+  set smoothTokens(on: boolean) {
+    localStorage.setItem('dmmt.smoothTokens', on ? '1' : '0');
+  },
 };
 
 /** Records that the user clicked "Join" (a user gesture), so audio may start later. */

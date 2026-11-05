@@ -1,6 +1,7 @@
 import { base64ToBytes, bitsToFlags } from './bitset';
 import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
+import { TokenMotion } from './motion';
 import { lightActive, rasterLightTint, TintEnvironment } from './lighting';
 import { GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
@@ -62,8 +63,17 @@ export class MapView {
   paused = false;
   readonly fog = new FogState();
   maxParticles = 1500;
+  /** Glide other tokens between position updates instead of jumping; off saves redraws on slow devices. */
+  smoothMovement = true;
+  private readonly motion = new TokenMotion();
+  /** Positions tokens are drawn at this frame (interpolated); hit-testing and vision use the real positions. */
+  private shown = new Map<string, { x: number; y: number }>();
+  private moving = false;
   serverNow: () => number = () => Date.now();
   onMove: (m: MoveCommit) => void = () => {};
+  canRotateTokens = false;
+  onRotate: (tokenId: string, rotationDeg: number) => void = () => {};
+  private rotation: { tokenId: string; startAngle: number; before: number; angle: number } | null = null;
   /** Fired (throttled by the caller) when new explored cells exist. */
   onExplored: () => void = () => {};
 
@@ -113,12 +123,14 @@ export class MapView {
         this.invalidate();
         return;
       }
-      if (this.gesture || this.marquee || this.group) this.cancelGesture(e);
+      if (this.rotation || this.gesture || this.marquee || this.group) this.cancelGesture(e);
       else this.pointerUp(e);
     });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     canvas.addEventListener('pointerleave', () => { this.hover = null; this.invalidate(); });
+    canvas.addEventListener('blur', () => { if (this.rotation) this.cancelGesture(); });
     canvas.addEventListener('keydown', (e) => {
+      if (this.nudgeTokens(e)) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (this.gesture?.shape) this.cancelGesture();
@@ -154,17 +166,24 @@ export class MapView {
   setState(state: GameState | null): void {
     if (state && this.state && (state.mapId !== this.state.mapId || state.levelId !== this.state.levelId)) {
       this.gesture = null;
+      this.rotation = null;
       this.drag = null;
       this.marquee = this.group = null;
       this.clearSelection();
       this.selectedDrawing = this.selectedMeasure = null;
       this.measurements = [];
       this.onSelection(null, false);
+      this.motion.retain();
     }
+    if (state) this.motion.retain(new Set(state.tokens.map((t) => t.id)));
     if (this.selectedDrawing && !state?.overlays?.some(o => o.id === this.selectedDrawing && ownsDrawing(o, this.playerId, this.campaignId))) {
       this.selectedDrawing = null; this.onSelection(null, false);
     }
     this.state = state;
+    for (const id of this.selectedTokens) {
+      if (!state?.tokens.some(t => t.id === id && this.isMine(t))) this.selectedTokens.delete(id);
+    }
+    if (this.rotation && !state?.tokens.some(t => t.id === this.rotation?.tokenId && this.isMine(t))) this.rotation = null;
     const d = this.drag;
     if (state && d?.kind === 'token' && d.token) {
       // Host updates lag behind the live drag; keep the dragged token under the pointer.
@@ -255,6 +274,7 @@ export class MapView {
   }
 
   private cancelGesture(e?: PointerEvent): void {
+    this.rotation = null;
     this.marquee = this.group = null;
     const g = this.gesture;
     if (g?.published && g.measurement && !this.paused) {
@@ -264,6 +284,17 @@ export class MapView {
     this.gesture = null;
     if (e && this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     this.invalidate();
+  }
+
+  /** Applies a relayed move of another connection's token ahead of the next state update. */
+  tokenMoved(t: Token, x: number, y: number): void {
+    const d = this.drag;
+    if (d?.kind === 'token' && d.token?.id === t.id) return;
+    if (t.x === x && t.y === y) return;
+    t.x = x;
+    t.y = y;
+    if (this.isMine(t)) this.invalidateVision();
+    else this.invalidate();
   }
 
   /** Called when the host corrects a token position; keeps an active drag consistent with it. */
@@ -350,22 +381,63 @@ export class MapView {
     for (let i = s.tokens.length - 1; i >= 0; i--) {
       const t = s.tokens[i];
       if (!this.isMine(t)) continue;
-      const r = (t.sizeTiles * s.grid.pixelsPerCell) / 2;
-      if (Math.hypot(x - t.x, y - t.y) <= r) return t;
+      if (this.tokenHit(t, x, y)) return t;
     }
     return null;
+  }
+
+  private tokenHit(t: Token, x: number, y: number): boolean {
+    const r = t.sizeTiles * this.state!.grid.pixelsPerCell / 2;
+    const dx = x - t.x, dy = y - t.y;
+    if (t.shape !== 'square') return Math.hypot(dx, dy) <= r;
+    const angle = (t.rotationDeg ?? 0) * Math.PI / 180;
+    return Math.abs(dx * Math.cos(angle) + dy * Math.sin(angle)) <= r
+      && Math.abs(-dx * Math.sin(angle) + dy * Math.cos(angle)) <= r;
+  }
+
+  private nudgeTokens(e: KeyboardEvent): boolean {
+    const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const direction = directions[e.key];
+    if (!direction || e.ctrlKey || e.metaKey || e.altKey || this.paused || this.tool !== 'navigate'
+      || this.drag || this.rotation || this.gesture || this.group || this.marquee || !this.state) return false;
+    const tokens = this.state.tokens.filter(t => this.selectedTokens.has(t.id) && this.isMine(t));
+    if (!tokens.length) return false;
+    e.preventDefault();
+    const step = this.state.grid.pixelsPerCell / 2;
+    for (const t of tokens) {
+      const prevX = t.x, prevY = t.y;
+      t.x += direction[0] * step; t.y += direction[1] * step;
+      this.onMove({ tokenId: t.id, x: t.x, y: t.y, prevX, prevY });
+    }
+    this.invalidateVision();
+    return true;
+  }
+
+  private rotationHandle(t: Token): { x: number; y: number } {
+    const radius = t.sizeTiles * this.state!.grid.pixelsPerCell / 2 + 24 / this.cam.scale;
+    const angle = (this.rotation?.tokenId === t.id ? this.rotation.angle : t.rotationDeg ?? 0) * Math.PI / 180;
+    return { x: t.x + Math.sin(angle) * radius, y: t.y - Math.cos(angle) * radius };
   }
 
   private selectionAt(x: number, y: number) {
     const s = this.state;
     if (!s) return null;
+    if (this.canRotateTokens) {
+      const token = [...s.tokens].reverse().find(t => {
+        if (!this.selectedTokens.has(t.id) || !this.isMine(t)) return false;
+        const handle = this.rotationHandle(t);
+        return Math.hypot(x - handle.x, y - handle.y) <= 10 / this.cam.scale;
+      });
+      if (token) return { kind: 'rotation', token } as const;
+    }
     const hitGroup = (s.overlays ?? []).some(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)
       && drawingHit(o, x, y, 6 / this.cam.scale))
       || s.tokens.some(t => this.selectedTokens.has(t.id) && this.isMine(t)
-        && Math.hypot(x - t.x, y - t.y) <= t.sizeTiles * s.grid.pixelsPerCell / 2)
+        && this.tokenHit(t, x, y))
       || this.measurements.some(m => this.selectedMeasures.has(m.id) && m.ownerId === this.playerId
         && measurementHit(m, x, y, 10 / this.cam.scale));
-    if (hitGroup) return { kind: 'group' } as const;
+    if (hitGroup && !(this.selectedTokens.size === 1 && !this.selectedDrawings.size && !this.selectedMeasures.size))
+      return { kind: 'group' } as const;
     const measure = [...this.measurements].reverse().find(m => m.ownerId === this.playerId && measurementHit(m, x, y, 10 / this.cam.scale));
     if (measure) return { kind: 'measure', measure } as const;
     const selected = s.overlays?.find(o => o.id === this.selectedDrawing && ownsDrawing(o, this.playerId, this.campaignId));
@@ -382,7 +454,8 @@ export class MapView {
     let cursor = 'default';
     if (this.drag?.kind === 'pan') cursor = 'grabbing';
     else if (!this.paused && this.state) {
-      if (this.gesture?.resize) cursor = 'nwse-resize';
+      if (this.rotation) cursor = 'grabbing';
+      else if (this.gesture?.resize) cursor = 'nwse-resize';
       else if (this.group || this.drag?.kind === 'token' || this.gesture && !this.gesture.create) cursor = 'grabbing';
       else if (this.gesture?.create) cursor = 'crosshair';
       else if (this.hover && this.measurementDeleteAt(this.hover.x, this.hover.y)) cursor = 'pointer';
@@ -432,6 +505,12 @@ export class MapView {
         this.invalidate(); return;
       }
       const hit = this.selectionAt(w.x, w.y);
+      if (hit?.kind === 'rotation') {
+        const t = hit.token;
+        this.rotation = { tokenId: t.id, startAngle: Math.atan2(w.y - t.y, w.x - t.x),
+          before: t.rotationDeg ?? 0, angle: t.rotationDeg ?? 0 };
+        this.invalidate(); return;
+      }
       if (hit?.kind === 'group') {
         this.group = { start: w, end: w,
           shapes: (s.overlays ?? []).filter(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)),
@@ -457,6 +536,7 @@ export class MapView {
       this.onSelection(null, false);
     }
     const t = this.paused ? null : this.tokenAt(w.x, w.y);
+    if (t) { this.selectedTokens.add(t.id); this.onSelection(null, false, 1); this.invalidate(); }
     this.drag = t
       ? { kind: 'token', token: t, startX: e.clientX, startY: e.clientY, prevX: t.x, prevY: t.y, camX: 0, camY: 0 }
       : null;
@@ -477,6 +557,14 @@ export class MapView {
       return;
     }
     this.updateCursor();
+    if (this.rotation) {
+      const token = this.state?.tokens.find(t => t.id === this.rotation?.tokenId && this.isMine(t));
+      if (token && !this.paused && this.canRotateTokens && Math.hypot(this.hover.x - token.x, this.hover.y - token.y) > 0.001) {
+        const angle = Math.atan2(this.hover.y - token.y, this.hover.x - token.x);
+        this.rotation.angle = (this.rotation.before + (angle - this.rotation.startAngle) * 180 / Math.PI + 360) % 360;
+      }
+      this.invalidate(); return;
+    }
     if (this.marquee || this.group) {
       if (this.marquee) this.marquee.end = this.hover;
       if (this.group) this.group.end = this.hover;
@@ -528,6 +616,12 @@ export class MapView {
 
   private pointerUp(e: PointerEvent): void {
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
+    if (this.rotation) {
+      const rotation = this.rotation; this.rotation = null;
+      if (!this.paused && this.canRotateTokens && this.state?.tokens.some(t => t.id === rotation.tokenId && this.isMine(t))
+        && rotation.angle !== rotation.before) this.onRotate(rotation.tokenId, rotation.angle);
+      this.invalidate(); return;
+    }
     if (this.drag?.kind === 'pan') {
       const d = this.drag;
       this.drag = null;
@@ -607,7 +701,7 @@ export class MapView {
     if (!t) return;
     const now = performance.now();
     if (!final && now - this.lastTick < MOVE_TICK_MS) return;
-    if (!final && t.x === d.prevX && t.y === d.prevY) return;
+    if (t.x === d.prevX && t.y === d.prevY) return;
     this.lastTick = now;
     this.onMove({ tokenId: t.id, x: t.x, y: t.y, prevX: d.prevX, prevY: d.prevY });
     d.prevX = t.x;
@@ -707,12 +801,37 @@ export class MapView {
     return g ? { originX: g.originX, originY: g.originY, cellSize: g.cellSize, cols: g.cols, rows: g.rows } : null;
   }
 
-  /** Lights attached to a token follow the locally dragged position instead of waiting for the host's next update. */
-  private liveLights(s: GameState): GameState['lights'] {
+  /**
+   * Lights attached to a token follow the locally dragged position instead of waiting for the host's next update;
+   * when drawing (`shown`), they also follow the token's interpolated position.
+   */
+  private liveLights(s: GameState, shown = false): GameState['lights'] {
     const d = this.drag;
-    if (d?.kind !== 'token' || !d.token) return s.lights;
-    const id = `token-light-${d.token.id}`;
-    return s.lights.map((l) => (l.id === id ? { ...l, x: d.token!.x, y: d.token!.y } : l));
+    const dragged = d?.kind === 'token' && d.token ? d.token : null;
+    if (!dragged && !(shown && this.moving)) return s.lights;
+    return s.lights.map((l) => {
+      if (!l.id.startsWith('token-light-')) return l;
+      const id = l.id.slice('token-light-'.length);
+      const p = dragged?.id === id ? dragged : shown ? this.shown.get(id) : undefined;
+      return p && (p.x !== l.x || p.y !== l.y) ? { ...l, x: p.x, y: p.y } : l;
+    });
+  }
+
+  /** Interpolated draw positions for this frame; sets {@link moving} while any token is still gliding. */
+  private updateShown(s: GameState): void {
+    this.shown.clear();
+    this.motion.animating = false;
+    const now = performance.now();
+    const d = this.drag;
+    for (const t of s.tokens) {
+      if (!this.smoothMovement || (d?.kind === 'token' && d.token?.id === t.id)) {
+        this.motion.settle(t.id, t.x, t.y, now);
+        this.shown.set(t.id, { x: t.x, y: t.y });
+      } else {
+        this.shown.set(t.id, this.motion.position(t.id, t.x, t.y, s.grid.pixelsPerCell, now));
+      }
+    }
+    this.moving = this.motion.animating;
   }
 
   private lightPolygon(l: { id: string; x: number; y: number; range: number }): Polygon {
@@ -768,7 +887,8 @@ export class MapView {
     const weatherActive = weatherKind(s.weather.type) !== 'none';
     const flickering = s.lighting.flicker !== false && (s.lights.some((l) => l.on && l.flicker)
       || (s.overlays ?? []).some((o) => o.emits && (o.flicker ?? 0) > 0));
-    if (!this.dirty && !weatherActive && !flickering && !this.textureActive && !this.pingActive && !this.fog.animating) return;
+    if (!this.dirty && !weatherActive && !flickering && !this.textureActive && !this.pingActive && !this.fog.animating
+      && !this.moving) return;
     if (time - this.lastFrame < MIN_FRAME_MS) return;
     this.lastFrame = time;
     if (this.visionDirty) {
@@ -795,6 +915,7 @@ export class MapView {
 
   private draw(s: GameState): void {
     applyWeatherConfig(s.weather);
+    this.updateShown(s);
     const ctx = this.ctx;
     const ppc = s.grid.pixelsPerCell;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -823,7 +944,7 @@ export class MapView {
 
     this.textureActive = (s.overlays ?? []).some((o) => o.tile && (o.layers ?? []).some((l) => l[0] !== 0 || l[1] !== 0 || l[4] > 0));
     if (s.view?.showGrid === true) this.drawGrid(ctx, ppc, s.view?.gridOpacity ?? 0.08);
-    this.drawDoors(ctx, s, ppc);
+    this.drawDoors(ctx, s);
     this.drawFloorOverlays(ctx, s);
     this.drawTokens(ctx, s, ppc);
     this.drawLighting(ctx, s, () => this.drawOverlays(ctx, s, false));
@@ -877,7 +998,7 @@ export class MapView {
     }
     for (const t of s.tokens) {
       if (this.selectedTokens.has(t.id) && this.isMine(t)) {
-        ctx.beginPath(); ctx.arc(t.x, t.y, t.sizeTiles * s.grid.pixelsPerCell / 2 + 3 / this.cam.scale, 0, Math.PI * 2); ctx.stroke();
+        this.drawTokenSelection(ctx, t, s.grid.pixelsPerCell, this.canRotateTokens && !this.paused);
       }
     }
     if (this.marquee) {
@@ -889,7 +1010,7 @@ export class MapView {
       const g = this.group, dx = g.end.x - g.start.x, dy = g.end.y - g.start.y;
       for (const o of g.shapes) this.drawOverlay(ctx, translateDrawing(o, dx, dy), s.grid.pixelsPerCell);
       for (const t of g.tokens) {
-        ctx.beginPath(); ctx.arc(t.x + dx, t.y + dy, t.sizeTiles * s.grid.pixelsPerCell / 2, 0, Math.PI * 2); ctx.stroke();
+        this.drawTokenSelection(ctx, { ...t, x: t.x + dx, y: t.y + dy }, s.grid.pixelsPerCell, false);
       }
       for (const m of g.measures) {
         measurementPath(ctx, { ...m, x1: m.x1 + dx, y1: m.y1 + dy, x2: m.x2 + dx, y2: m.y2 + dy }); ctx.stroke();
@@ -1020,25 +1141,28 @@ export class MapView {
     ctx.stroke();
   }
 
-  private drawDoors(ctx: CanvasRenderingContext2D, s: GameState, ppc: number): void {
-    ctx.save();
-    ctx.lineCap = 'round';
-    const badges: Array<{ cx: number; cy: number; color: string; window: boolean; open: boolean }> = [];
+  private drawDoors(ctx: CanvasRenderingContext2D, s: GameState): void {
     for (const d of s.doors) {
       const window = (d.kind ?? '').toLowerCase() === 'window';
-      const color = window ? (d.open ? '#32CD32' : '#6FB7E8') : d.open ? '#32CD32' : '#E0473C';
-      ctx.beginPath();
-      ctx.moveTo(d.x1, d.y1);
-      ctx.lineTo(d.x2, d.y2);
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = d.open ? 0.55 : 0.9;
-      ctx.lineWidth = Math.max(2 / this.cam.scale, ppc * 0.05);
-      ctx.setLineDash(d.open ? [ppc * 0.12, ppc * 0.1] : []);
-      ctx.stroke();
-      badges.push({ cx: (d.x1 + d.x2) / 2, cy: (d.y1 + d.y2) / 2, color, window, open: d.open });
+      this.drawBadge(ctx, (d.x1 + d.x2) / 2, (d.y1 + d.y2) / 2, '#dddddd', window, d.open);
+    }
+  }
+
+  private drawTokenSelection(ctx: CanvasRenderingContext2D, t: Token, ppc: number, handle: boolean): void {
+    const r = t.sizeTiles * ppc / 2;
+    const angle = this.rotation?.tokenId === t.id ? this.rotation.angle : t.rotationDeg ?? 0;
+    ctx.save();
+    ctx.translate(t.x, t.y); ctx.rotate(angle * Math.PI / 180);
+    ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1.5 / this.cam.scale;
+    ctx.setLineDash([5 / this.cam.scale, 4 / this.cam.scale]);
+    ctx.strokeRect(-r, -r, r * 2, r * 2); ctx.setLineDash([]);
+    if (handle) {
+      const y = -r - 24 / this.cam.scale;
+      ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, y, 5 / this.cam.scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#eeeeee'; ctx.fill(); ctx.stroke();
     }
     ctx.restore();
-    for (const b of badges) this.drawBadge(ctx, b.cx, b.cy, b.color, b.window, b.open);
   }
 
   /** Screen-sized door/window badge: closed shows a shut panel, open shows an ajar one. */
@@ -1098,14 +1222,16 @@ export class MapView {
     for (const t of s.tokens) {
       const mine = this.isMine(t);
       if (!mine && fogOn && !this.fog.isVisibleOrRevealed(t.x, t.y)) continue;
+      const pos = this.shown.get(t.id) ?? t;
       const diameter = t.sizeTiles * ppc;
       const r = diameter / 2;
       const color = t.color ?? '#5599CC';
       const square = t.shape === 'square';
       const border = t.border !== false;
       ctx.save();
-      ctx.translate(t.x, t.y);
-      ctx.rotate(((t.rotationDeg || 0) * Math.PI) / 180);
+      ctx.translate(pos.x, pos.y);
+      const rotation = this.rotation?.tokenId === t.id ? this.rotation.angle : t.rotationDeg ?? 0;
+      ctx.rotate(rotation * Math.PI / 180);
       ctx.beginPath();
       if (square) ctx.rect(-r, -r, diameter, diameter);
       else ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -1148,9 +1274,9 @@ export class MapView {
         ctx.textBaseline = 'top';
         ctx.lineWidth = fs * 0.2;
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText(t.name, t.x, t.y + r + 2 / this.cam.scale);
+        ctx.strokeText(t.name, pos.x, pos.y + r + 2 / this.cam.scale);
         ctx.fillStyle = '#fff';
-        ctx.fillText(t.name, t.x, t.y + r + 2 / this.cam.scale);
+        ctx.fillText(t.name, pos.x, pos.y + r + 2 / this.cam.scale);
         ctx.restore();
       }
     }
@@ -1554,7 +1680,7 @@ export class MapView {
       darkness,
       indoor: ind && indoorMaps ? { grid: ind, inside: indoorMaps.flags, darkness: ind.nightDarkness } : undefined,
     };
-    const lights = this.liveLights(s).filter((l) => l.on && l.range > 0 && lightActive(environment, l.x, l.y));
+    const lights = this.liveLights(s, true).filter((l) => l.on && l.range > 0 && lightActive(environment, l.x, l.y));
     const emitters = (s.overlays ?? []).filter((o) => o.emits && (o.lightStrength ?? 0) > 0);
     const indoorDark = ind ? ind.nightDarkness : 0;
     if (darkness <= 0.01 && indoorDark <= 0.01 && lights.length === 0 && emitters.length === 0) {

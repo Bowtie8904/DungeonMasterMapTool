@@ -18,6 +18,11 @@ Nothing starts until you click **Start online session**, so offline play and the
 
 - **Player map layout:** no top-center session, map or account header obscures the map. A slightly transparent
   connection badge sits in the bottom-left **Connected players** overlay, including while reconnecting.
+- **Player token controls:** left-click a controlled token with Select, or box-select several. Selected tokens
+  have dashed square outlines and a small rotation handle (on supporting hosts). Drag the handle to rotate;
+  arrow keys with the map focused move selected tokens by half a tile. The host still enforces control,
+  pause and movement restrictions. Browser doors/windows use light-gray round icons, changing their glyph
+  rather than color when opened; no portal segments are drawn. DM door/window rendering is unchanged.
 - **Campaigns** are separate from maps: each has a game system (currently Daggerheart; no gameplay effect yet),
   players (username + password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
   and per-player fog memory that survives map switches, sessions and browsers. Campaigns live in
@@ -366,6 +371,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   controls, an optional **Chat identity**, and logout. Chat identities are saved in the campaign per player
   on the host (shared across browsers/devices), used for future chat messages, rolls and shared cards, and shown as `username (identity)`
   in the bottom-left roster; leave the identity empty to use your account name (maximum 60 characters).
+  Settings also has **Smooth token movement** (on by default, remembered per browser): tokens moved by
+  other players or the DM glide between updates instead of jumping. Other players' drags reach you as soon
+  as the host accepts each step (about 20 updates per second). Turn it off on slow devices to redraw less.
   A small dot on the Chat icon marks new messages received while Chat is closed; opening Chat clears it.
   New messages scroll to the bottom, including your own roll's action buttons as they load, unless you are
   reading older messages. **Jump to latest** returns to the bottom.

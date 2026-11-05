@@ -70,7 +70,7 @@ export class App {
   private borderInput = el('input', { type: 'checkbox' });
   private emitsInput = el('input', { type: 'checkbox' });
   private aboveInput = el('input', { type: 'checkbox', checked: true });
-  private selectionHint = el('p', { class: 'tool-hint' }, 'Navigate to select your drawings. Drag to move; corner handle to resize.');
+  private selectionHint = el('p', { class: 'tool-hint' }, 'Select controlled tokens, drawings or measurements by clicking or dragging a box.');
   private deleteButton = iconButton('delete', 'Delete selected drawing or measurement', () => this.view.deleteSelection());
   private audioGesture = () => {
     if (this.audioAvailable && !settings.muted) { this.audio.enable(); this.updateSoundUi(); }
@@ -173,10 +173,16 @@ export class App {
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
+    this.view.smoothMovement = settings.smoothTokens;
     this.updateDrawingMode('pen');
     this.view.onSelectTool = () => this.selectTool();
     this.view.onUndo = () => this.undoDrawing();
     this.view.onMove = (m) => this.commitMove(m);
+    this.view.onRotate = (tokenId, rotationDeg) => {
+      const state = this.store.state;
+      if (state) this.sendTool({ type: 'command',
+        kind: 'rotateToken', tokenId, rotationDeg, mapId: state.mapId, levelId: state.levelId });
+    };
     this.view.onExplored = () => this.scheduleExplored();
     this.view.onDrawing = (action, id, shape) => {
       this.sendDrawing({ action, id, shape });
@@ -283,8 +289,18 @@ export class App {
         out.disabled = false;
       }
     });
+    const smooth = el('input', { type: 'checkbox', checked: settings.smoothTokens });
+    smooth.addEventListener('change', () => {
+      settings.smoothTokens = smooth.checked;
+      this.view.smoothMovement = smooth.checked;
+      this.view.invalidate();
+    });
     return el('div', { class: 'settings-section' }, identityForm, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
-      el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'), out);
+      el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'),
+      el('h3', {}, 'Display'),
+      el('label', { class: 'vol', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
+        smooth, ' Smooth token movement'),
+      out);
   }
 
   private updateSoundUi(): void {
@@ -685,9 +701,9 @@ export class App {
       this.colorSelection = shape?.id ?? null;
     }
     this.deleteButton.disabled = !shape && !measurement;
-    this.selectionHint.textContent = count ? `${count} owned objects selected. Drag a selected object to move the group. Delete removes drawings and measurements, not actors.`
+    this.selectionHint.textContent = count ? `${count} owned object${count === 1 ? '' : 's'} selected. Drag to move; arrows move tokens by half a tile.${this.view.canRotateTokens ? ' Drag a token handle to rotate.' : ''} Delete removes drawings and measurements, not tokens.`
       : shape ? 'Your drawing selected. Drag to move; corner handle to resize. Open Drawing to change style.'
-      : measurement ? 'Your measurement selected. Drag to move or delete.' : 'Navigate to select your drawings or measurements.';
+      : measurement ? 'Your measurement selected. Drag to move or delete.' : 'Select your controlled tokens, drawings or measurements.';
     if (shape) {
       const pending = [...this.pendingDrawings.values()].reverse().find(p => p.inverse.id === shape.id);
       const color = pending?.after?.color ?? shape.color;
@@ -750,6 +766,7 @@ export class App {
         }
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
+        this.view.canRotateTokens = msg.tokenRotation === true;
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
         this.toolButtons.get('measure')!.disabled = !msg.measurementTools;
         if (this.view.tool === 'draw' && !msg.drawingTools || this.view.tool === 'measure' && !msg.measurementTools) {
@@ -797,6 +814,12 @@ export class App {
         const r = this.store.applyDelta(msg.seq, msg.ops);
         if (r === 'gap') this.conn.send({ type: 'resync', lastSeq: this.store.lastSeq });
         else if (r === 'ok') this.afterState(false);
+        break;
+      }
+      case 'tokenMoved': {
+        const s = this.store.state;
+        const token = s && msg.mapKey === `${s.mapId}/${s.levelId}` ? s.tokens.find((t) => t.id === msg.id) : undefined;
+        if (token) this.view.tokenMoved(token, msg.x, msg.y);
         break;
       }
       case 'ack':

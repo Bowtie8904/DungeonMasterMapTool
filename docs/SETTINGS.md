@@ -14,6 +14,11 @@ and shared cards. It is trimmed, limited to 60 characters without control charac
 across browsers/devices and host restarts; the bottom-left overlay shows `username (identity)`. Clearing the field
 and saving restores the account name. Older hosts disable this setting with an update hint.
 
+**Settings > Smooth token movement** (default on) is stored only in that browser's local storage
+(`dmmt.smoothTokens`), not in `dmmt-settings.ini`. When on, tokens moved by other players or the DM glide
+between position updates instead of jumping; the map redraws only while a token is gliding. Turn it off on
+slow devices to show positions immediately with fewer redraws. Movement updates arrive equally fast either way.
+
 ## Remote-session settings ownership
 
 Open the **Session** tab in the left sidebar to explicitly host or connect; neither opening setup nor

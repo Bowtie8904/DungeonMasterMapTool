@@ -21,13 +21,8 @@ public final class MoveValidator {
         if (!Double.isFinite(x) || !Double.isFinite(y)) {
             return "Invalid position";
         }
-        if (!token.isPlayerVisible()) {
-            return "Token is hidden";
-        }
-        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
-        if (!OnlineStateBuilder.controllers(token, actor, campaign, mapId).contains(playerId)) {
-            return "You do not control this token";
-        }
+        String controlProblem = checkControl(campaign, mapId, playerId, token);
+        if (controlProblem != null) return controlProblem;
         if (phaseMovement) {
             double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
             double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
@@ -54,6 +49,21 @@ public final class MoveValidator {
                     && crosses(x0, y0, x, y, door.getX1(), door.getY1(), door.getX2(), door.getY2())) {
                 return "Blocked by a closed door";
             }
+        }
+        return null;
+    }
+
+    /** Shared visibility and ownership rules for player movement and rotation. */
+    public static String checkControl(Campaign campaign, String mapId, String playerId, DmProject.TokenInstance token) {
+        if (token == null) {
+            return "Unknown token";
+        }
+        if (!token.isPlayerVisible()) {
+            return "Token is hidden";
+        }
+        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
+        if (!OnlineStateBuilder.controllers(token, actor, campaign, mapId).contains(playerId)) {
+            return "You do not control this token";
         }
         return null;
     }

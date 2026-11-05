@@ -45,6 +45,8 @@ class OnlineSessionServerTest {
     private final List<String> drawings = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<JsonNode> dmMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean drawingSupported;
+    private volatile boolean rotationSupported;
+    private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Path compendiumDir;
 
     private ObjectNode communitySheet(String name) throws Exception {
@@ -2382,6 +2384,20 @@ class OnlineSessionServerTest {
                     }
 
                     @Override
+                    public boolean supportsTokenRotation() { return rotationSupported; }
+
+                    @Override
+                    public CompletableFuture<OnlineSessionServer.MoveResult> rotateToken(String playerId, String tokenId,
+                                                                                          String mapId, String levelId, double rotationDeg) {
+                        assertEquals(OnlineSessionServerTest.this.playerId(), playerId);
+                        assertEquals("t1", tokenId);
+                        assertEquals("m1", mapId);
+                        assertEquals("l1", levelId);
+                        rotations.add(rotationDeg);
+                        return CompletableFuture.completedFuture(OnlineSessionServer.MoveResult.accepted());
+                    }
+
+                    @Override
                     public CompletableFuture<OnlineSessionServer.MoveResult> editDrawing(String playerId, JsonNode command) {
                         if (!drawingSupported) return OnlineSessionServer.Host.super.editDrawing(playerId, command);
                         drawings.add(playerId + ":" + command.path("id").asText());
@@ -2753,6 +2769,92 @@ class OnlineSessionServerTest {
         assertEquals("c2", inbox.next("ack").path("cmdId").asText());
         assertEquals(1, moves.size());
         ws.abort();
+    }
+
+    @Test
+    void acceptedMovesAreRelayedToOtherConnectionsOnlyForPublishedTokens() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox mover = new Inbox();
+        Inbox watcher = new Inbox();
+        WebSocket moverWs = connect(cookie, mover);
+        WebSocket watcherWs = connect(cookie, watcher);
+        try {
+            mover.next("snapshot");
+            watcher.next("snapshot");
+            long seq = server.seq();
+            moverWs.sendText("{\"type\":\"command\",\"cmdId\":\"c1\",\"kind\":\"moveToken\",\"tokenId\":\"t1\",\"x\":1.5,\"y\":2}", true).join();
+            assertEquals("c1", mover.next("ack").path("cmdId").asText());
+            JsonNode relayed = watcher.next("tokenMoved");
+            assertEquals("m1/l1", relayed.path("mapKey").asText());
+            assertEquals("t1", relayed.path("id").asText());
+            assertEquals(1.5, relayed.path("x").asDouble());
+            assertEquals(2, relayed.path("y").asDouble());
+            assertEquals(seq, server.seq());
+            Thread.sleep(150);
+            assertTrue(mover.messages.stream().noneMatch(m -> "tokenMoved".equals(m.path("type").asText())));
+
+            moverWs.sendText("{\"type\":\"command\",\"cmdId\":\"c2\",\"kind\":\"moveToken\",\"tokenId\":\"hidden\",\"x\":3,\"y\":3}", true).join();
+            assertEquals("c2", mover.next("ack").path("cmdId").asText());
+            Thread.sleep(150);
+            assertTrue(watcher.messages.stream().noneMatch(m -> "tokenMoved".equals(m.path("type").asText())));
+            server.setPaused(true);
+            moverWs.sendText("{\"type\":\"command\",\"cmdId\":\"c3\",\"kind\":\"moveToken\",\"tokenId\":\"t1\",\"x\":4,\"y\":4}", true).join();
+            assertEquals("c3", mover.next("reject").path("cmdId").asText());
+            Thread.sleep(150);
+            assertTrue(watcher.messages.stream().noneMatch(m -> "tokenMoved".equals(m.path("type").asText())));
+        } finally {
+            moverWs.abort();
+            watcherWs.abort();
+        }
+    }
+
+    @Test
+    void rotationCapabilityAndCommandsAreAdditiveAndValidated() throws Exception {
+        rotationSupported = true;
+        server.publish(state("m1", 5), "m1/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            JsonNode hello = inbox.next("hello");
+            assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
+            assertTrue(hello.path("tokenRotation").asBoolean());
+            ObjectNode command = MAPPER.createObjectNode().put("type", "command").put("cmdId", "rotate")
+                    .put("kind", "rotateToken").put("tokenId", "t1").put("mapId", "m1").put("levelId", "l1").put("rotationDeg", 90);
+            for (String invalidField : List.of("tokenId", "mapId", "levelId", "rotationDeg")) {
+                ObjectNode invalid = command.deepCopy();
+                invalid.remove(invalidField);
+                ws.sendText(invalid.toString(), true).join();
+                assertEquals("rotate", inbox.next("reject").path("cmdId").asText());
+            }
+            ws.sendText(command.deepCopy().put("rotationDeg", "NaN").toString(), true).join();
+            inbox.next("reject");
+            assertTrue(rotations.isEmpty());
+            server.setPaused(true);
+            ws.sendText(command.toString(), true).join();
+            assertEquals("paused", inbox.next("reject").path("reason").asText());
+            assertTrue(rotations.isEmpty());
+            server.setPaused(false);
+            ws.sendText(command.toString(), true).join();
+            assertEquals("rotate", inbox.next("ack").path("cmdId").asText());
+            assertEquals(List.of(90.0), rotations);
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void hostsWithoutRotationKeepLegacyMovementAndRejectUnsupportedRotation() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertFalse(inbox.next("hello").path("tokenRotation").asBoolean());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"r\",\"kind\":\"rotateToken\",\"tokenId\":\"t1\","
+                    + "\"mapId\":\"m1\",\"levelId\":\"l1\",\"rotationDeg\":90}", true).join();
+            assertEquals("r", inbox.next("reject").path("cmdId").asText());
+            assertTrue(rotations.isEmpty());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"m\",\"kind\":\"moveToken\",\"tokenId\":\"t1\",\"x\":1,\"y\":1}", true).join();
+            assertEquals("m", inbox.next("ack").path("cmdId").asText());
+            assertEquals(1, moves.size());
+        } finally { ws.abort(); }
     }
 
     @Test

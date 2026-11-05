@@ -61,6 +61,12 @@ public final class OnlineSessionServer {
     /** Callbacks into the application; may be invoked from server threads. */
     public interface Host {
         default boolean supportsDrawing() { return false; }
+        default boolean supportsTokenRotation() { return false; }
+
+        default CompletableFuture<MoveResult> rotateToken(String playerId, String tokenId, String mapId,
+                                                           String levelId, double rotationDeg) {
+            return CompletableFuture.completedFuture(MoveResult.rejected("Token rotation is unavailable on this host"));
+        }
 
         default void measurementsChanged() { }
 
@@ -2947,6 +2953,7 @@ public final class OnlineSessionServer {
             hello.put("paused", paused);
             hello.put("sessionId", sessionId);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
+            hello.put("tokenRotation", host.supportsTokenRotation());
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
             hello.put("compendiumChat", true);
@@ -3008,6 +3015,25 @@ public final class OnlineSessionServer {
 
     private void onCommand(Client client, JsonNode msg) {
         String cmdId = msg.path("cmdId").asText("");
+        if ("rotateToken".equals(msg.path("kind").asText())) {
+            String tokenId = msg.path("tokenId").asText("");
+            double rotation = msg.path("rotationDeg").asDouble(Double.NaN);
+            if (paused || !host.supportsTokenRotation() || tokenId.isEmpty() || !msg.path("rotationDeg").isNumber()
+                    || !Double.isFinite(rotation) || msg.path("mapId").asText("").isEmpty()
+                    || msg.path("levelId").asText("").isEmpty()) {
+                sendTo(client.ctx, reject(cmdId, paused ? "paused" : "Invalid or unsupported token rotation", null));
+                return;
+            }
+            host.rotateToken(client.playerId, tokenId, msg.path("mapId").asText(), msg.path("levelId").asText(), rotation)
+                    .orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
+                        if (error != null || result == null || !result.ok()) {
+                            sendTo(client.ctx, reject(cmdId, error != null || result == null ? "Rotation failed" : result.reason(), null));
+                        } else {
+                            sendTo(client.ctx, MAPPER.createObjectNode().put("type", "ack").put("cmdId", cmdId).put("seq", seq()).toString());
+                        }
+                    });
+            return;
+        }
         if ("drawing".equals(msg.path("kind").asText())) {
             if (paused) {
                 sendTo(client.ctx, reject(cmdId, "paused", null));
@@ -3044,10 +3070,39 @@ public final class OnlineSessionServer {
                 ObjectNode ack = MAPPER.createObjectNode();
                 ack.put("type", "ack").put("cmdId", cmdId).put("seq", seq());
                 sendTo(client.ctx, ack.toString());
+                relayTokenMove(client, tokenId, x, y);
             } else {
                 sendTo(client.ctx, reject(cmdId, result.reason(), tokenId, result.x(), result.y()));
             }
         });
+    }
+
+    /**
+     * Forwards an accepted move to the other browser connections at once instead of waiting for the next published
+     * delta. Only tokens in the published player state are relayed, so hidden tokens never leak; the authoritative
+     * position still arrives with the next delta.
+     */
+    private synchronized void relayTokenMove(Client sender, String tokenId, double x, double y) {
+        if (current == null || currentMapKey == null) {
+            return;
+        }
+        boolean published = false;
+        for (JsonNode token : current.path("tokens")) {
+            if (tokenId.equals(token.path("id").asText())) {
+                published = true;
+                break;
+            }
+        }
+        if (!published) {
+            return;
+        }
+        String json = MAPPER.createObjectNode().put("type", "tokenMoved").put("mapKey", currentMapKey)
+                .put("id", tokenId).put("x", x).put("y", y).toString();
+        for (Client other : clients.values()) {
+            if (other != sender) {
+                sendTo(other.ctx, json);
+            }
+        }
     }
 
     private String reject(String cmdId, String reason, String tokenId) {

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Player token controls regression</title></head>
+<body><div id="app"></div><pre id="result" style="position:fixed;bottom:0;left:250px;z-index:100;background:#111;color:#fff"></pre>
+<script type="module">
+import '../src/style.css';
+import { App } from '../src/app.ts';
+import { defaultState } from '../src/protocol.ts';
+
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push(name); };
+const errors = [];
+addEventListener('error', event => errors.push(event.message));
+try {
+  const app = new App(document.getElementById('app'), () => {});
+  const sent = [];
+  app.conn.send = command => { sent.push(command); return true; };
+  const hello = { type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alice', campaignId: 'campaign',
+    paused: false, drawingTools: true, measurementTools: true, tokenRotation: true };
+  app.handle(hello);
+  const state = { ...defaultState(), mapId: 'map', levelId: 'level', grid: { pixelsPerCell: 100 },
+    images: [{ id: 'map-image', url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><rect width="1000" height="1000" fill="#303438"/></svg>'),
+      x: 0, y: 0, width: 1000, height: 1000, rotationDeg: 0, zIndex: 0 }],
+    view: { fogEnabled: false, showGrid: true },
+    tokens: [{ id: 'owned', x: 300, y: 300, sizeTiles: 1, rotationDeg: 0, controlledBy: ['alice'] },
+      { id: 'other', x: 500, y: 300, sizeTiles: 1, rotationDeg: 0, controlledBy: ['bob'] }],
+    doors: [{ id: 'door', x1: 300, y1: 500, x2: 400, y2: 500, kind: 'door', open: false },
+      { id: 'window', x1: 500, y1: 500, x2: 600, y2: 500, kind: 'window', open: true }] };
+  app.handle({ type: 'snapshot', seq: 1, state });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const canvas = document.querySelector('canvas.map');
+  canvas.setPointerCapture = () => {};
+  const point = (x, y) => ({ clientX: x * app.view.cam.scale + app.view.cam.x,
+    clientY: y * app.view.cam.scale + app.view.cam.y, pointerId: 1, button: 0 });
+  const click = (x, y) => { app.view.pointerDown(point(x, y)); app.view.pointerUp(point(x, y)); };
+  const key = (key, target = canvas) => {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(event); return event;
+  };
+  click(300, 300);
+  assert([...app.view.selectedTokens].join() === 'owned' && sent.length === 0, 'left click selects without sending movement');
+  assert(key('ArrowRight').defaultPrevented, 'arrow key is consumed for selected token');
+  const nudge = sent.at(-1);
+  assert(nudge.kind === 'moveToken' && nudge.tokenId === 'owned' && nudge.x === 350 && nudge.y === 300,
+    'arrow sends exactly half a tile through normal movement');
+  app.handle({ type: 'reject', cmdId: nudge.cmdId, reason: 'Blocked by a wall', token: { id: 'owned', x: 300, y: 300 } });
+  assert(app.store.state.tokens[0].x === 300, 'rejected arrow movement rolls back');
+  const beforeTyping = sent.length;
+  assert(!key('ArrowRight', document.querySelector('.composer input')).defaultPrevented && sent.length === beforeTyping,
+    'text controls retain arrow keys');
+  const handleRadius = 50 + 24 / app.view.cam.scale;
+  app.view.pointerDown(point(300, 300 - handleRadius));
+  app.view.pointerMove(point(300 + handleRadius, 300));
+  assert(!key('ArrowRight').defaultPrevented, 'no nudging during rotation');
+  app.view.pointerUp(point(300 + handleRadius, 300));
+  const rotation = sent.at(-1);
+  assert(rotation.kind === 'rotateToken' && rotation.tokenId === 'owned' && rotation.mapId === 'map'
+    && rotation.levelId === 'level' && Math.abs(rotation.rotationDeg - 90) < 0.001, 'rotation sends map-scoped command');
+  assert(app.store.state.tokens[0].rotationDeg === 0, 'rotation preview does not overwrite authoritative state');
+  app.handle({ type: 'reject', cmdId: rotation.cmdId, reason: 'Map changed or game paused' });
+  assert(app.store.state.tokens[0].rotationDeg === 0, 'rejected rotation leaves host state intact');
+  app.handle({ type: 'delta', seq: 2, ops: [{ op: 'tokens', upsert: [{ ...state.tokens[0], rotationDeg: 90 }], remove: [] }] });
+  assert(app.store.state.tokens[0].rotationDeg === 90, 'host rotation update reaches renderer');
+  app.view.pointerDown(point(300 + handleRadius, 300));
+  app.view.pointerMove(point(300, 300 + handleRadius));
+  const beforeCancel = sent.length;
+  canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }));
+  app.view.pointerUp(point(300, 300 + handleRadius));
+  assert(sent.length === beforeCancel && app.store.state.tokens[0].rotationDeg === 90, 'cancelled rotation sends nothing');
+  app.view.pointerDown(point(200, 200)); app.view.pointerMove(point(600, 400)); app.view.pointerUp(point(600, 400));
+  assert([...app.view.selectedTokens].join() === 'owned', 'box selection excludes foreign token');
+  const context = canvas.getContext('2d');
+  const boxes = [], arcs = [];
+  const originalRect = context.strokeRect, originalArc = context.arc;
+  context.strokeRect = function(...args) { boxes.push(args); originalRect.apply(this, args); };
+  context.arc = function(...args) { arcs.push(args); originalArc.apply(this, args); };
+  app.view.drawToolAnnotations(context, app.store.state);
+  context.strokeRect = originalRect; context.arc = originalArc;
+  assert(boxes.some(box => box.join() === '-50,-50,100,100') && arcs.length === 1 && Math.abs(arcs[0][2] * app.view.cam.scale - 5) < 0.001,
+    'box-selected token has square outline and only the small rotation-anchor circle');
+  app.handle({ type: 'pause', paused: true });
+  const beforePause = sent.length;
+  assert(!key('ArrowDown').defaultPrevented && sent.length === beforePause, 'pause disables keyboard movement');
+  app.handle({ type: 'pause', paused: false });
+  app.handle({ ...hello, tokenRotation: undefined });
+  assert(!app.view.canRotateTokens, 'older hosts disable rotation handles');
+  app.handle(hello);
+  app.view.invalidate();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  assert(errors.length === 0, errors.join('; '));
+  document.body.dataset.result = 'pass';
+  document.getElementById('result').textContent = `PASS (${checks.length} checks)\n` + checks.join('\n');
+} catch (error) {
+  document.body.dataset.result = 'fail';
+  document.getElementById('result').textContent = `FAIL: ${error.stack || error}`;
+}
+</script></body></html>
