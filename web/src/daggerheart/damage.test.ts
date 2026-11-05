@@ -29,6 +29,19 @@ const run = (c: CharacterSheet, input: Partial<DamageInput>, roll = fixed(1)) =>
 const feat = (name: string, category = 'ancestries') => ({ source: 'test', name, text: '', automation: rules(category, name) });
 
 describe('damage calculation', () => {
+  it('uses catalog Spectral Form resistance only with its effect and only against physical damage', () => {
+    const { c, severe } = setup(x => x.features.push(feat('Spectral Form', 'classes')));
+    const mitigation = c.features[0].automation!.mitigation![0];
+    expect(mitigation.requiresEffect).toBe('Spectral Form');
+    const input = { damage: severe, selected: new Set([`feat:Spectral Form/${mitigation.id}`]) };
+    expect(run(c, input).damage).toBe(severe);
+    expect(availableMitigations(c)).toHaveLength(0);
+    c.effects.push({ id: 'spectral', name: 'Spectral Form', kind: 'buff', spectralHp: c.hp.on, phaseMovement: true });
+    expect(run(c, input).damage).toBe(Math.floor(severe / 2));
+    expect(run(c, { ...input, type: 'magic' }).damage).toBe(severe);
+    c.effects = [];
+    expect(run(c, input).damage).toBe(severe);
+  });
   it('round-trips the chat damage report, including reduced and negated damage', () => {
     const report = { name: 'Ari · the Bold', input: 14, damage: 7, type: 'magic', severity: 'Negated', hp: 0, lines: ['Used Rune Ward', 'Paid 1 Hope'] };
     expect(parseDamageReport(formatDamageReport(report))).toEqual(report);

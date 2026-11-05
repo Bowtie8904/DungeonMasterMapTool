@@ -40,6 +40,58 @@ class CampaignStoreTest {
     }
 
     @Test
+    void newDeathMoveMessageAndScarsAreJournaledWithoutExistingHistoryAndReplayIsIdempotent() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Death moves");
+        var sheet = mapper.createObjectNode().put("scars", 1);
+        var message = mapper.createObjectNode().put("id", 1).put("ts", 10).put("deathMove", "avoid");
+        store.saveSheetsAndMessage(campaign.getId(), java.util.Map.of("hero", sheet), message);
+        assertEquals(List.of(message), store.historyTail(campaign.getId(), 20));
+        assertEquals(1, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("scars").asInt());
+        var transaction = mapper.createObjectNode();
+        transaction.set("hero", sheet);
+        transaction.set("$message", message);
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals(List.of(message), reopened.historyTail(campaign.getId(), 20));
+        assertTrue(Files.notExists(journal));
+        var second = mapper.createObjectNode().put("id", 2).put("ts", 11).put("deathMove", "risk");
+        reopened.saveSheetsAndMessage(campaign.getId(), java.util.Map.of("hero", sheet), second);
+        assertEquals(List.of(message, second), reopened.historyTail(campaign.getId(), 20));
+        org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
+                () -> reopened.replaceHistoryEntry(campaign.getId(), 3, 12, second));
+    }
+
+    @Test
+    void multipleDeathReportsAndRecoveryClaimReplayWithoutDuplicates() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Atomic death results");
+        var original = mapper.createObjectNode().put("id", 1).put("ts", 10).put("type", "roll");
+        original.putObject("deathResult").put("claimed", false);
+        store.appendHistoryChecked(campaign.getId(), original);
+        var claimed = original.deepCopy();
+        claimed.withObject("/deathResult").put("claimed", true);
+        var expiration = mapper.createObjectNode().put("id", 2).put("ts", 11).put("text", "Spectral Form ended");
+        var ward = mapper.createObjectNode().put("id", 3).put("ts", 12).put("text", "Life Ward consumed");
+        var sheet = mapper.createObjectNode().put("permanentHp", 1);
+        store.saveSheetsAndResults(campaign.getId(), java.util.Map.of("hero", sheet), claimed, List.of(expiration, ward));
+        assertEquals(List.of(claimed, expiration, ward), store.historyTail(campaign.getId(), 20));
+        var transaction = mapper.createObjectNode();
+        transaction.set("hero", sheet);
+        transaction.set("$roll", claimed);
+        transaction.putArray("$messages").add(expiration).add(ward);
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals(List.of(claimed, expiration, ward), reopened.historyTail(campaign.getId(), 20));
+        assertEquals(1, mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("permanentHp").asInt());
+        assertTrue(Files.notExists(journal));
+    }
+
+    @Test
     void interruptedRewardReplaysSheetAndHistoryTogetherBeforeHistoryReads() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

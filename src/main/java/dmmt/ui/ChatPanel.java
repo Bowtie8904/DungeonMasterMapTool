@@ -190,6 +190,8 @@ public final class ChatPanel extends VBox {
                 else updated.remove("outcome");
                 if (message.has("featureUses")) updated.set("featureUses", message.get("featureUses"));
                 if (message.has("rewardClaimed")) updated.set("rewardClaimed", message.get("rewardClaimed"));
+                if (message.has("deathResult")) updated.set("deathResult", message.get("deathResult"));
+                if (message.has("featureRoll")) updated.set("featureRoll", message.get("featureRoll"));
                 javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated));
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);

@@ -61,7 +61,7 @@ function rollContent(m: RollMessage): HTMLElement {
   const details = rollDetails(m);
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   const kept = secret ? values.map(() => true) : keptRolls(m.expression, values);
-  const duality = !secret && m.kind === 'duality' && values.length >= 2;
+  const duality = !secret && (m.kind === 'duality' || m.deathMove === 'risk') && values.length >= 2;
   const dice = el('div', { class: 'roll-dice' });
   let index = 0;
   for (const detail of details) {
@@ -90,13 +90,14 @@ function rollContent(m: RollMessage): HTMLElement {
   if (secret) return body;
   if (duality) {
     const r = dualityResult(values, m.total);
-    const outcome = r.outcome === 'crit' ? 'crit' : (m.outcome ?? r.outcome);
+    const outcome = m.deathResult?.outcome ?? (r.outcome === 'crit' ? 'crit' : (m.outcome ?? r.outcome));
     const badges = el('div', { class: 'roll-outcomes' }, el('span', { class: `roll-outcome ${outcome}` }, OUTCOME_LABEL[outcome]));
     if (typeof m.difficulty === 'number') {
       const success = dualitySucceeds(r, m.difficulty);
       badges.append(el('span', { class: `roll-outcome ${success ? 'success' : 'failure'}` }, `${success ? 'Success' : 'Failure'} / Difficulty ${m.difficulty}`));
     }
     body.append(badges);
+    if (m.deathResult) body.append(el('p', { class: 'muted' }, `Adjusted Hope ${m.deathResult.adjustedHope} (${signed(m.deathResult.bonus)} bonus) · Recovery ${m.deathResult.budget}${m.deathResult.converted ? " · Won't Stay Dead" : ''}${m.deathResult.claimed ? ' · Recovery resolved' : ''}`));
   }
   if (m.featureRoll) {
     body.append(el('div', { class: 'roll-feature-result' }, m.featureRoll.consequence));
@@ -162,7 +163,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     return card;
   }
   if (action) {
-    card.append(el('div', { class: 'action-banner' }, el('strong', {}, 'Action used')),
+    card.append(el('div', { class: 'action-banner' }, el('strong', {}, action.title.startsWith('Death move - ') ? 'Death move' : 'Action used')),
       el('div', { class: 'action-title' }, action.title),
       el('ul', { class: 'action-lines' }, ...action.lines.map((l) => el('li', {}, l))));
     if (m.rollSource) {

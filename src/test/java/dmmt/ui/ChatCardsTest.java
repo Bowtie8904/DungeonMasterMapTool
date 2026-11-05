@@ -15,6 +15,21 @@ class ChatCardsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
+    void deathOutcomeUsesAdjustedHopeAndConvertedResultsWithoutChangingDice() throws Exception {
+        JsonNode tie = MAPPER.readTree("""
+                {"deathMove":"risk","deathResult":{"outcome":"hope","hope":3,"fear":4,"adjustedHope":4}}
+                """);
+        assertEquals("hope", ChatCards.dualityOutcome(tie, List.of(3, 4)));
+        JsonNode converted = MAPPER.readTree("""
+                {"deathMove":"risk","deathResult":{"outcome":"hope","converted":true}}
+                """);
+        assertEquals("hope", ChatCards.dualityOutcome(converted, List.of(1, 12)));
+        JsonNode critical = MAPPER.readTree("""
+                {"deathMove":"risk","deathResult":{"outcome":"crit","adjustedHope":9}}
+                """);
+        assertEquals("crit", ChatCards.dualityOutcome(critical, List.of(8, 8)));
+    }
+    @Test
     void rendersMarkdownAsStyledNativeTextWithListsAndLineBreaks() {
         var block = ChatCards.markdown("**Bold** and *italic*\n\n- ***Both***", "chat-shared-description");
         assertEquals(3, block.getChildren().size());

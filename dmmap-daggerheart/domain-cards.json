@@ -219,6 +219,7 @@
    "recall": 2,
    "text": "Once per long rest when you would make a Death Move, you can **spend a Hope** to clear a Hit Point instead.",
    "automation": {
+    "deathMove": { "kind": "battleHardened" },
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -227,16 +228,7 @@
      {
       "id": "use",
       "label": "Instead of death move: clear HP",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "hp",
-        "amount": 1
-       }
-      ],
-      "cost": {
-       "hope": 1
-      }
+      "deathMove": "battleHardened"
      }
     ]
    }
@@ -2721,14 +2713,31 @@
    "recall": 1,
    "text": "**Spend 3 Hope** and choose an ally within Close range. They are marked with a glowing sigil of protection. When this ally would make a death move, they clear a Hit Point instead.\n\nThis effect ends when it saves the target from a death move, you cast Life Ward on another target, or you take a long rest.",
    "automation": {
+    "deathMove": { "kind": "lifeWard" },
     "actions": [
      {
       "id": "use",
       "label": "Life Ward",
+      "target": "actor",
       "cost": {
        "hope": 3
-      }
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Life Ward",
+         "kind": "buff",
+         "until": "manual",
+         "lifeWard": true,
+         "text": "Clear 1 HP instead of making a death move. Ends when used, when the caster recasts Life Ward, or on the caster's long rest (not the target's)."
+        }
+       }
+      ]
      }
+    ],
+    "manual": [
+     "Confirm the target is an ally within Close range before casting; map coordinates do not establish range automatically."
     ]
    }
   },
@@ -4890,17 +4899,12 @@
    "recall": 4,
    "text": "When you mark your last Hit Point, instead of making a death move, you can roll a **d6** and clear a number of Hit Points equal to the result. Then place this card in your vault.",
    "automation": {
+    "deathMove": { "kind": "unbreakable" },
     "actions": [
      {
       "id": "use",
       "label": "At last HP: clear HP",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "hp",
-        "amount": "1d6"
-       }
-      ]
+      "deathMove": "unbreakable"
      }
     ]
    }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { rerollRequest, rollButtons } from './rollbuttons';
+import { rerollRequest, rollButtons, rollContext } from './rollbuttons';
 import type { CharacterSheet } from './data';
 import type { RollMessage } from '../protocol';
 import { applyRest } from './engine';
@@ -11,6 +11,8 @@ class FakeElement {
   title = '';
   textContent = '';
   value = '';
+  max = '';
+  setAttribute(): void {}
   open = false;
   removed = false;
   get valueAsNumber(): number { return this.value === '' ? NaN : Number(this.value); }
@@ -108,6 +110,72 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers sender-only pending Risk recovery and flushes before the idempotent claim', async () => {
+    const body = new FakeElement('body');
+    vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });
+    const order: string[] = [];
+    const fetch = vi.fn().mockImplementation(async () => { order.push('claim'); return new Response(null, { status: 204 }); });
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', undefined);
+    c.hp = { on: 6, slots: 6, total: 12 };
+    c.permanentHp = 2;
+    c.pendingDeathRoll = { id: 21, ts: 1000 };
+    const message: RollMessage = { ...original, kind: 'dice', deathMove: 'risk',
+      deathResult: { outcome: 'hope', hope: 3, fear: 4, adjustedHope: 4, bonus: 1, budget: 4, claimed: false, undying: false } };
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const supported = { ...host, playerId: original.fromId, supportsDeathMoveOptions: () => true,
+      sheet: async () => ({ ...sheet!, save: Object.assign(() => {}, { flush: async () => { order.push('flush'); } }) }) };
+    expect(rollContext(message)).toBeNull();
+    expect(rollButtons(message, { ...supported, playerId: 'other' })).toBeNull();
+    expect(rollButtons(message, { ...supported, supportsDeathMoveOptions: () => false })).toBeNull();
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').map(b => b.text)).toEqual(['Apply recovery']);
+    await box.queryAll('button')[0].click();
+    const inputs = body.queryAll('input');
+    inputs[0].value = '2';
+    inputs[2].value = '2';
+    await body.queryAll('button').find(b => b.text === 'Apply recovery')!.click();
+    expect(order).toEqual(['flush', 'claim']);
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ actorId: 'actor-b', roll: { id: 21, ts: 1000 }, hp: 2, stress: 2 });
+    expect(message.deathResult!.claimed).toBe(true);
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
+  it('requires permanent-cost confirmation before undying conversion and hides stale pending claims', async () => {
+    const body = new FakeElement('body');
+    vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', undefined);
+    c.hp = { on: 6, slots: 6, total: 12 };
+    c.pendingDeathRoll = { id: 21, ts: 1000 };
+    const message: RollMessage = { ...original, kind: 'dice', deathMove: 'risk',
+      deathResult: { outcome: 'fear', hope: 3, fear: 9, adjustedHope: 3, bonus: 0, budget: 3, claimed: false, undying: true } };
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons(message, { ...host, playerId: original.fromId, supportsDeathMoveOptions: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button')[0].click();
+    expect(fetch).not.toHaveBeenCalled();
+    await body.queryAll('button').find(b => b.text === "Confirm Won't Stay Dead")!.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ actorId: 'actor-b', roll: { id: 21, ts: 1000 }, undying: true });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').map(b => b.text)).toEqual(['Apply recovery']);
+    c.pendingDeathRoll = undefined;
+    for (const callback of box.listeners.get('refresh-roll-actions') ?? []) await callback();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+  it('never offers ordinary rewards or reactions for death-move rolls', () => {
+    const { host } = hostFor({});
+    for (const deathMove of ['avoid', 'risk'] as const) {
+      expect(rollButtons({
+        id: 1, ts: 1, from: 'Player', fromId: 'player', actorId: 'actor',
+        expression: '2d12', rolls: [9, 4], total: 13, kind: 'dice', deathMove,
+      }, host)).toBeNull();
+    }
+  });
   it.each(['hope', 'duality'] as const)('preserves the reaction marker when rerolling %s', reroll => {
     const request = rerollRequest({ ...original, source: 'reaction,trait:Agility' }, {
       key: 'test', source: 'Reroll', automation: {}, trigger: { id: 'reroll', label: 'Reroll', on: 'duality', reroll },

@@ -4,6 +4,7 @@
 import { Advantage, CharacterSheet, Feature, TraitName, TRAIT_ORDER, tierOf } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
+import { syncDeathState } from './death';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -32,6 +33,10 @@ export interface EffectDef {
   text?: string;
   modifiers?: Modifier[];
   blocksMovement?: boolean;
+  unconsciousHp?: number;
+  spectralHp?: number;
+  phaseMovement?: boolean;
+  lifeWard?: boolean;
   endOnSourceSevere?: boolean;
   sourceActorId?: string;
   sourceKey?: string;
@@ -45,6 +50,7 @@ export interface Step {
 }
 
 export interface ActionDef {
+  deathMove?: string;
   id: string;
   label: string;
   timing?: 'action' | 'downtime' | 'rest';
@@ -125,6 +131,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  deathMove?: { kind: 'hopeBonus' | 'hopeSpend' | 'mask' | 'undying' | 'spectral' | 'egg' | 'battleHardened' | 'lifeWard' | 'unbreakable'; moves?: ('risk' | 'avoid')[]; bonus?: number };
   restReroll?: boolean;
   rest?: {
     extraMoves?: number;
@@ -304,6 +311,7 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
+  syncDeathState(c);
   syncResources(c);
   const d = derivedStats(c);
   c.armorTrack.slots = Math.min(c.armorTrack.total, d.armorSlots);
@@ -646,8 +654,16 @@ export function sheetActions(a: Automation | undefined): ActionDef[] {
   return (a?.actions ?? []).filter((action) => !isRestOnlyAction(action) || action.ancestryChoice);
 }
 
+export function routeDeathAction(action: ActionDef, open: (move: string) => void): boolean {
+  if (!action.deathMove) return false;
+  open(action.deathMove);
+  return true;
+}
+
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (action.deathMove && c.hp.slots > 0 && (c.permanentHp ?? 0) >= c.hp.slots) return 'All Hit Points are permanently marked; this character has crossed the veil of death.';
+  if (action.deathMove && (c.hp.on < c.hp.slots || c.pendingDeathRoll)) return 'Requires all HP marked and no pending death recovery';
   if (context !== 'rest' && isRestOnlyAction(action) && !action.ancestryChoice) return 'Choose this move in the rest dialog';
   if (action.requiresEffect && !c.effects.some((e) => e.name === action.requiresEffect)) return 'Required effect is not active';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
@@ -710,7 +726,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     }
     if (step.op === 'clear' && t && step.resource) {
       const n = step.amount === 'all' ? t.on : amount(1);
-      const cleared = Math.min(t.on, Math.max(0, n));
+      const cleared = Math.min(Math.max(0, t.on - (step.resource === 'hp' ? c.permanentHp ?? 0 : 0)), Math.max(0, n));
       t.on -= cleared;
       log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : 'Stress'}${typeof step.amount === 'string' && step.amount !== 'all' ? ` (${step.amount})` : ''}`);
     } else if (step.op === 'gain' && t && step.resource) {
@@ -731,6 +747,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     c.effects = c.effects.filter((e) => e.name !== action.endEffect);
     log.push(`ended ${action.endEffect}`);
   }
+  syncDeathState(c);
   return log;
 }
 

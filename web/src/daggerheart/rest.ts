@@ -7,6 +7,7 @@ import { formatRestReport } from './rest-summary';
 import type { CompendiumEntry } from './compendium';
 import type { AncestryChoice } from './ancestry-choice';
 import { replaceAncestry } from './rules';
+import { syncDeathState } from './death';
 
 export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string; ancestryChoice?: ActionDef['ancestryChoice'] }
 export interface RestSlot { label: string; moves: RestMove[] }
@@ -167,12 +168,13 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
     const second = roll(expr);
     return { value: Math.max(first, second), text: `${first}/${second}, kept ${Math.max(first, second)}` };
   };
-  const clear = (t: typeof c.hp, n: number): number => { const k = Math.min(t.on, Math.max(0, n)); t.on -= k; return k; };
+  const floor = (t: typeof c.hp) => t === c.hp ? c.permanentHp ?? 0 : 0;
+  const clear = (t: typeof c.hp, n: number): number => { const k = Math.min(Math.max(0, t.on - floor(t)), Math.max(0, n)); t.on -= k; return k; };
   const recovery = (t: typeof c.hp, resource: RestDie['resource'], n: number): number => {
     const die = rolledDice[rolledDice.length - 1];
     die.resource = resource;
-    die.recovery = Math.max(0, t.on - n);
-    die.cleared = Math.min(t.on, Math.max(0, n));
+    die.recovery = Math.max(floor(t), t.on - n);
+    die.cleared = Math.min(Math.max(0, t.on - floor(t)), Math.max(0, n));
     return clear(t, n);
   };
 
@@ -184,8 +186,8 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         const track = clearingResource === 'hp' ? c.hp : clearingResource === 'stress' ? c.stress : c.armorTrack;
         const die = rolledDice[rolledDice.length - 1];
         die.resource = clearingResource;
-        die.recovery = Math.max(0, track.on - r.value);
-        die.cleared = Math.min(track.on, Math.max(0, r.value));
+        die.recovery = Math.max(floor(track), track.on - r.value);
+        die.cleared = Math.min(Math.max(0, track.on - floor(track)), Math.max(0, r.value));
       }
       rolls.push(`${expression} = ${r.text}`);
       return r.value;
@@ -285,6 +287,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   }
 
   c.shortRestsInRow = kind === 'long' ? 0 : (c.shortRestsInRow ?? 0) + 1;
+  if (kind === 'long') c.longRestRevision = (c.longRestRevision ?? 0) + 1;
   const gainedEffects = c.effects.filter((e) => !previousEffects.has(e.id));
   applyRest(c, kind);
   // Effects created by a downtime move last until the next rest, not this one.
@@ -292,6 +295,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   if (c.hp.on === hpBefore && c.stress.on === stressBefore) {
     for (const { s, b } of selected.filter(({ b }) => b.condition === 'noRecovery')) execute(s, b);
   }
+  syncDeathState(c);
   return { lines, dice: rolledDice };
 }
 

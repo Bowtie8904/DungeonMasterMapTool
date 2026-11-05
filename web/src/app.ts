@@ -1,10 +1,11 @@
-import { cardRequest, uploadArtwork, logout, useFeature, damageTaken } from './api';
+import { cardRequest, uploadArtwork, logout, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
-import { applyFeatureState, applyInventory, autosave, featureTarget, loadCharacter, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, type SheetSave } from './daggerheart/persist';
+import { basicDeathOptions } from './daggerheart/death';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
@@ -623,12 +624,14 @@ export class App {
     const target = featureTarget(character, key, actionId);
     let targetActorId: string | undefined;
     if (target === 'actor') {
-      const candidates = (this.store.state?.actors ?? []).filter(a => this.connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
+      const ward = isLifeWard(character, key);
+      if (ward && !this.conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
+      const candidates = (this.store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : this.connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
       const selected = await pickActor(candidates, 'Choose a character', 'Select target');
       if (!selected) return;
       targetActorId = selected.id;
     }
-    await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}) });
+    await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
   }
 
   private selectTool(): void {
@@ -857,13 +860,11 @@ export class App {
         break;
       }
       case 'rollUpdate': {
+        this.store.applyRollUpdate(msg);
         const entry = this.log.find(e => e.kind === 'roll' && e.m.id === msg.id && e.m.ts === msg.ts);
         if (entry?.kind === 'roll') {
-          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, outcome: msg.outcome, featureUses: msg.featureUses, rewardClaimed: msg.rewardClaimed } };
-          if (this.store.state?.chatTail) {
-            const tail = this.store.state.chatTail.find(m => m.id === msg.id && m.ts === msg.ts);
-            if (tail) Object.assign(tail, { outcome: msg.outcome, featureUses: msg.featureUses, rewardClaimed: msg.rewardClaimed });
-          }
+          const { type: _type, ...update } = msg;
+          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, ...update } };
           this.renderLog();
         }
         break;
@@ -1040,6 +1041,7 @@ export class App {
     return rollButtons(m, {
       playerId: this.playerId,
       supportsRollRewards: () => this.conn.rollRewards,
+      supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
       actorIds: () => this.myActors.map(a => a.id),
       sheet: async (id) => {
         const actor = this.myActors.find(a => a.id === id);
@@ -1119,6 +1121,18 @@ export class App {
             onDamageTaken: async (severity) => {
               await changed.flush();
               await damageTaken(a.id, severity);
+            },
+            onDeathOptions: async () => {
+              await changed.flush();
+              if (!this.conn.isOpen) throw new Error('Not connected. Cannot load death-move options.');
+              return this.conn.deathMoveOptions ? getDeathOptions(a.id) : basicDeathOptions();
+            },
+            onDeathMove: async (move, extras) => {
+              if (!this.conn.isOpen) throw new Error('Not connected. The death move was not made.');
+              if (!this.conn.deathMoves) throw new Error('This host does not support death moves. Update the host.');
+              if (!this.conn.deathMoveOptions && (extras || !['blaze', 'avoid', 'risk'].includes(move))) throw new Error('This host does not support expanded death moves. Update the host.');
+              await changed.flush();
+              await takeDeathMove(a.id, move, extras);
             },
             actorId: a.id,
             onShare: (entry, quantity) => { void this.shareEntry(a.id, entry, quantity).catch((e: Error) => this.toast(e.message)); },

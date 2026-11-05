@@ -76,6 +76,103 @@ class OnlineSessionServerTest {
         ((java.util.Random) field.get(server)).setSeed(seed);
     }
 
+    private HttpResponse<String> deathMoveHttp(String cookie, String actorId, String move) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/death-move"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.createObjectNode().put("actorId", actorId)
+                        .put("move", move).toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void deathMovesAuthenticateValidateRollPersistAndSynchronizeAllOwnerTabs() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("dying").name("Aria").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("foreign").name("Foreign").ownerId("someone").build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("level", 10);
+        ((ObjectNode) sheet.path("hope")).put("total", 6).put("on", 6);
+        store.saveSheet(campaign.getId(), "dying", sheet.toString());
+        assertEquals(401, deathMoveHttp("", "dying", "avoid").statusCode());
+        String cookie = cookie();
+        assertEquals(403, deathMoveHttp(cookie, "foreign", "avoid").statusCode());
+        assertEquals(400, deathMoveHttp(cookie, "dying", "avoid").statusCode());
+        ((ObjectNode) sheet.path("hp")).put("on", 6);
+        store.saveSheet(campaign.getId(), "dying", sheet.toString());
+        Inbox first = new Inbox();
+        Inbox second = new Inbox();
+        WebSocket ws = connect(cookie, first);
+        WebSocket other = connect(cookie, second);
+        try {
+            JsonNode hello = first.next("hello");
+            assertTrue(hello.path("deathMoves").asBoolean());
+            assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
+            diceSeed(0); // First d12 is 1.
+            assertEquals(200, deathMoveHttp(cookie, "dying", "avoid").statusCode());
+            for (Inbox inbox : List.of(first, second)) {
+                JsonNode update = inbox.next("sheetFeature");
+                assertEquals(1, update.path("scars").asInt());
+                assertEquals(5, update.path("hope").path("slots").asInt());
+                assertTrue(update.path("effects").get(0).path("blocksMovement").asBoolean());
+                JsonNode roll = inbox.next("roll");
+                assertEquals("avoid", roll.path("deathMove").asText());
+                assertEquals(1, roll.path("rolls").get(0).asInt());
+                assertFalse(roll.has("rewardClaimed"));
+                assertTrue(roll.path("featureRoll").path("consequence").asText().contains("permanent scar"));
+            }
+            assertEquals(400, deathMoveHttp(cookie, "dying", "avoid").statusCode());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+            assertEquals(1, saved.path("scars").asInt());
+            assertEquals(1, store.historyTail(campaign.getId(), 20).size());
+            var stale = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/dying"))
+                    .header("Cookie", cookie).PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(409, stale.statusCode());
+            campaign.getActors().add(Campaign.Actor.builder().id("healer").name("Healer").ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), "healer", """
+                    {"usage":{},"features":[{"name":"Healing","automation":{"actions":[
+                    {"id":"heal","label":"Heal","target":"actor","steps":[{"op":"clear","resource":"hp","amount":1}]}]}}]}
+                    """);
+            var healed = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "healer").put("key", "feat:Healing")
+                    .put("actionId", "heal").put("targetActorId", "dying"));
+            assertEquals(200, healed.statusCode(), healed.body());
+            JsonNode awake = MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+            assertEquals(5, awake.path("hp").path("on").asInt());
+            assertTrue(awake.path("effects").isEmpty());
+            assertEquals(1, awake.path("scars").asInt());
+            assertEquals(5, awake.path("hope").path("slots").asInt());
+        } finally { ws.abort(); other.abort(); }
+    }
+
+    @Test
+    void blazeAndRiskPublishPublicReportsWithoutOrdinaryRollRewardsOrRecovery() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("dying").name("Aria").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ((ObjectNode) sheet.path("hp")).put("on", 6);
+        store.saveSheet(campaign.getId(), "dying", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertEquals(200, deathMoveHttp(cookie, "dying", "blaze").statusCode());
+            JsonNode chat = inbox.next("chat");
+            assertTrue(chat.path("text").asText().startsWith("ACTION USED\nDeath move - Blaze of Glory\nAria"));
+            assertTrue(chat.path("text").asText().contains("critically succeeds"));
+            assertFalse(chat.has("toId"));
+            assertEquals(200, deathMoveHttp(cookie, "dying", "risk").statusCode());
+            JsonNode roll = inbox.next("roll");
+            assertEquals("risk", roll.path("deathMove").asText());
+            assertEquals(2, roll.path("rolls").size());
+            assertEquals("Hope die", roll.path("breakdown").get(0).path("label").asText());
+            assertEquals("Fear die", roll.path("breakdown").get(1).path("label").asText());
+            assertFalse(roll.has("rewardClaimed"));
+            assertFalse(roll.has("toId"));
+            assertEquals(400, rewardHttp(cookie, "dying", roll).statusCode());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+            assertEquals(6, saved.path("hp").path("on").asInt());
+            assertEquals(sheet.path("stress"), saved.path("stress"));
+            assertEquals(2, store.historyTail(campaign.getId(), 20).size());
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode transformationSheet(String name) throws Exception {
         ObjectNode sheet = communitySheet("Seaborne");
         JsonNode entry = java.util.stream.StreamSupport.stream(
@@ -86,6 +183,237 @@ class OnlineSessionServerTest {
         for (JsonNode feature : sheet.path("heritage")) ((ObjectNode) feature).put("source", "Transformation - " + name);
         sheet.putArray("effects");
         return sheet;
+    }
+
+    private JsonNode deathEntry(String file, String name) throws Exception {
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve(file).toFile()).path("entries"))
+            if (name.equals(entry.path("name").asText())) return entry.deepCopy();
+        throw new AssertionError("Missing catalog entry " + name);
+    }
+
+    private HttpResponse<String> deathRequest(String cookie, String endpoint, ObjectNode body) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + endpoint))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> saveDeathSheet(String cookie, String actor, ObjectNode sheet) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + actor))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void deathExtensionsResolveCatalogBonusesAndClaimRecoveryOnceAcrossOwnerTabs() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("dying").name("Aria").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ((ObjectNode) sheet.path("hp")).put("on", 6);
+        ((ObjectNode) sheet.path("hope")).put("total", 6);
+        sheet.putArray("effects");
+        ObjectNode relic = (ObjectNode) deathEntry("items.json", "Reliquary of the Sightless Saint");
+        relic.put("qty", 2);
+        relic.withObject("/automation").withObject("/deathMove").put("bonus", 99);
+        sheet.putArray("inventory").add(relic);
+        sheet.set("activeArmor", deathEntry("armor.json", "Hallowed Heroplate"));
+        store.saveSheet(campaign.getId(), "dying", sheet.toString());
+        String cookie = cookie();
+        var options = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/death-move/dying"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, options.statusCode(), options.body());
+        assertEquals(2, MAPPER.readTree(options.body()).path("bonuses").size());
+        Inbox first = new Inbox(), second = new Inbox();
+        WebSocket ws = connect(cookie, first), other = connect(cookie, second);
+        try {
+            assertTrue(first.next("hello").path("deathMoveOptions").asBoolean());
+            diceSeed(0);
+            var response = deathRequest(cookie, "/api/death-move", MAPPER.createObjectNode().put("actorId", "dying")
+                    .put("move", "risk").put("blessedHope", 3));
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode roll = first.next("roll");
+            assertEquals(1, roll.path("deathResult").path("hope").asInt());
+            assertEquals(5, roll.path("deathResult").path("fear").asInt());
+            assertEquals(5, roll.path("deathResult").path("adjustedHope").asInt());
+            assertEquals("hope", roll.path("deathResult").path("outcome").asText());
+            assertEquals(4, roll.path("breakdown").size());
+            ObjectNode claim = MAPPER.createObjectNode().put("actorId", "dying").put("hp", 3).put("stress", 2);
+            claim.set("roll", MAPPER.createObjectNode().setAll(java.util.Map.of("id", roll.path("id"), "ts", roll.path("ts"))));
+            var recovered = deathRequest(cookie, "/api/death-recovery", claim);
+            assertEquals(200, recovered.statusCode(), recovered.body());
+            for (Inbox inbox : List.of(first, second)) {
+                JsonNode update = inbox.next("rollUpdate");
+                assertTrue(update.path("deathResult").path("claimed").asBoolean());
+                assertTrue(update.path("featureRoll").path("consequence").asText().contains("cleared 3 HP and 2 Stress"));
+            }
+            assertEquals(400, deathRequest(cookie, "/api/death-recovery", claim).statusCode());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+            assertEquals(3, saved.path("hp").path("on").asInt());
+            assertEquals(1, saved.path("stress").path("on").asInt());
+            assertEquals(2, saved.path("hope").path("on").asInt());
+            assertEquals(1, saved.path("usage").path("armor:Hallowed Heroplate").path("used").asInt());
+            assertEquals(1, store.historyTail(campaign.getId(), 10).size());
+            assertFalse(saved.has("pendingDeathRoll"));
+            assertEquals(409, saveDeathSheet(cookie, "dying", sheet).statusCode());
+        } finally { ws.abort(); other.abort(); }
+    }
+
+    @Test
+    void deathExtensionsConvertFailedRiskAndProtectPermanentHpAgainstOrdinarySaves() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("dying").name("Aria").ownerId(playerId()).build());
+        ObjectNode sheet = transformationSheet("Reanimated");
+        ((ObjectNode) sheet.path("hp")).put("on", 6);
+        store.saveSheet(campaign.getId(), "dying", sheet.toString());
+        String cookie = cookie();
+        diceSeed(0);
+        assertEquals(200, deathMoveHttp(cookie, "dying", "risk").statusCode());
+        JsonNode roll = store.historyTail(campaign.getId(), 10).getFirst();
+        ObjectNode convert = MAPPER.createObjectNode().put("actorId", "dying").put("undying", true);
+        convert.set("roll", MAPPER.createObjectNode().setAll(java.util.Map.of("id", roll.path("id"), "ts", roll.path("ts"))));
+        var converted = deathRequest(cookie, "/api/death-recovery", convert);
+        assertEquals(200, converted.statusCode(), converted.body());
+        assertEquals(400, deathRequest(cookie, "/api/death-recovery", convert).statusCode());
+        JsonNode convertedRoll = store.historyTail(campaign.getId(), 10).getFirst();
+        assertEquals(roll.path("rolls"), convertedRoll.path("rolls"));
+        assertEquals("hope", convertedRoll.path("deathResult").path("outcome").asText());
+        ObjectNode claim = convert.deepCopy();
+        claim.remove("undying");
+        claim.put("hp", 1);
+        assertEquals(200, deathRequest(cookie, "/api/death-recovery", claim).statusCode());
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+        assertEquals(1, saved.path("permanentHp").asInt());
+        ((ObjectNode) saved.path("hp")).put("on", 0);
+        var healed = saveDeathSheet(cookie, "dying", saved);
+        assertEquals(200, healed.statusCode(), healed.body());
+        saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "dying"));
+        assertEquals(1, saved.path("hp").path("on").asInt());
+        saved.put("permanentHp", 0);
+        assertEquals(400, saveDeathSheet(cookie, "dying", saved).statusCode());
+    }
+
+    @Test
+    void deathExtensionsLifeWardSupportsOfflineAlliesRecastLongRestAndLastHpSaves() throws Exception {
+        campaign.getPlayers().add(Campaign.Player.builder().id("offline").name("Offline player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("offline").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("other").name("Other").ownerId("offline").build());
+        ObjectNode caster = communitySheet("Seaborne");
+        ((ObjectNode) caster.path("hope")).put("on", 6).put("total", 6);
+        caster.putArray("loadout").add(deathEntry("domain-cards.json", "Life Ward"));
+        ObjectNode ally = communitySheet("Seaborne");
+        ally.putArray("effects");
+        store.saveSheet(campaign.getId(), "caster", caster.toString());
+        store.saveSheet(campaign.getId(), "ally", ally.toString());
+        store.saveSheet(campaign.getId(), "other", ally.toString());
+        String cookie = cookie();
+        ObjectNode ward = MAPPER.createObjectNode().put("actorId", "caster").put("key", "card:Life Ward")
+                .put("actionId", "use").put("targetActorId", "ally");
+        assertEquals(400, featureHttp(cookie, ward).statusCode());
+        ward.put("confirmRange", true);
+        var cast = featureHttp(cookie, ward);
+        assertEquals(200, cast.statusCode(), cast.body());
+        JsonNode protectedAlly = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        assertTrue(protectedAlly.path("effects").get(0).path("lifeWard").asBoolean());
+        assertEquals("caster", protectedAlly.path("effects").get(0).path("sourceActorId").asText());
+        ward.put("targetActorId", "other");
+        assertEquals(200, featureHttp(cookie, ward).statusCode());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").isEmpty());
+        assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "other")).path("effects").isEmpty());
+        caster = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "caster"));
+        caster.put("longRestRevision", 1);
+        ((ObjectNode) caster.path("hope")).put("on", 6);
+        var rest = saveDeathSheet(cookie, "caster", caster);
+        assertEquals(200, rest.statusCode(), rest.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "other")).path("effects").isEmpty());
+        ward.put("targetActorId", "ally");
+        assertEquals(200, featureHttp(cookie, ward).statusCode());
+        caster = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "caster"));
+        caster.putArray("features").addObject().put("name", "Mark last HP")
+                .putObject("automation").putArray("actions").addObject().put("id", "use").put("target", "actor")
+                .putArray("steps").addObject().put("op", "mark").put("resource", "hp").put("amount", 2);
+        compendiumDir = null;
+        store.saveSheet(campaign.getId(), "caster", caster.toString());
+        campaign.actor("ally").setOwnerId(playerId());
+        ObjectNode dying = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        ((ObjectNode) dying.path("hp")).put("on", 6);
+        var save = saveDeathSheet(cookie, "ally", dying);
+        assertEquals(200, save.statusCode(), save.body());
+        JsonNode awake = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        assertEquals(5, awake.path("hp").path("on").asInt());
+        assertTrue(awake.path("effects").isEmpty());
+        assertEquals(400, deathMoveHttp(cookie, "ally", "avoid").statusCode());
+        assertTrue(store.historyTail(campaign.getId(), 10).stream().anyMatch(m -> m.path("text").asText().contains("Life Ward from Caster consumed")));
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertEquals(200, featureHttp(cookie, ward).statusCode());
+            var marked = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "caster").put("key", "feat:Mark last HP")
+                    .put("actionId", "use").put("targetActorId", "ally"));
+            assertEquals(200, marked.statusCode(), marked.body());
+            JsonNode protectedAgain = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+            assertEquals(5, protectedAgain.path("hp").path("on").asInt());
+            assertTrue(protectedAgain.path("effects").isEmpty());
+        } finally { ws.abort(); }
+    }
+
+    private JsonNode deathFeature(JsonNode node, String name) {
+        if (name.equals(node.path("name").asText()) && node.path("automation").path("deathMove").isObject())
+            return node.deepCopy();
+        for (JsonNode child : node) {
+            JsonNode found = deathFeature(child, name);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    @Test
+    void deathExtensionsCatalogAlternativesConsumeEggVaultCardAndExpireSpectralState() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("hero").name("Hero").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ((ObjectNode) sheet.path("hp")).put("on", 6);
+        sheet.putArray("effects");
+        ObjectNode egg = (ObjectNode) deathEntry("consumables.json", "Cathartoid Egg");
+        egg.put("qty", 1);
+        sheet.putArray("inventory").add(egg);
+        sheet.putArray("loadout").add(deathEntry("domain-cards.json", "Battle-Hardened"))
+                .add(deathEntry("domain-cards.json", "Unbreakable"));
+        JsonNode spectral = deathFeature(MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()), "Spectral Form");
+        assertNotNull(spectral);
+        sheet.putArray("features").add(spectral);
+        store.saveSheet(campaign.getId(), "hero", sheet.toString());
+        String cookie = cookie();
+        var eggResponse = deathMoveHttp(cookie, "hero", "egg");
+        assertEquals(200, eggResponse.statusCode(), eggResponse.body());
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"));
+        assertEquals(0, saved.path("inventory").get(0).path("qty").asInt());
+        assertEquals(1, saved.path("inventoryRevision").asInt());
+        assertEquals(6, saved.path("hp").path("on").asInt());
+        assertTrue(saved.path("deathNarrative").asText().contains("avian"));
+        assertEquals(400, deathMoveHttp(cookie, "hero", "egg").statusCode());
+        assertEquals(200, deathMoveHttp(cookie, "hero", "spectral").statusCode());
+        saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"));
+        assertEquals(5, saved.path("hp").path("on").asInt());
+        assertTrue(saved.path("effects").get(0).path("phaseMovement").asBoolean());
+        ((ObjectNode) saved.path("hp")).put("on", 6);
+        assertEquals(200, saveDeathSheet(cookie, "hero", saved).statusCode());
+        saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"));
+        assertTrue(saved.path("effects").isEmpty());
+        assertTrue(saved.path("spectralBlocked").asBoolean());
+        assertEquals(400, deathMoveHttp(cookie, "hero", "spectral").statusCode());
+        assertEquals(200, deathMoveHttp(cookie, "hero", "battleHardened").statusCode());
+        saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"));
+        assertEquals(5, saved.path("hp").path("on").asInt());
+        assertEquals(4, saved.path("hope").path("on").asInt());
+        assertEquals(1, saved.path("usage").path("card:Battle-Hardened").path("used").asInt());
+        ((ObjectNode) saved.path("hp")).put("on", 6);
+        assertEquals(200, saveDeathSheet(cookie, "hero", saved).statusCode());
+        assertEquals(400, deathMoveHttp(cookie, "hero", "battleHardened").statusCode());
+        diceSeed(0);
+        assertEquals(200, deathMoveHttp(cookie, "hero", "unbreakable").statusCode());
+        saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"));
+        assertEquals("Battle-Hardened", saved.path("loadout").get(0).path("name").asText());
+        assertEquals("Unbreakable", saved.path("vault").get(0).path("name").asText());
+        assertEquals(1, saved.path("compendiumRevision").asInt());
+        assertEquals(2, saved.path("inventoryRevision").asInt());
+        assertTrue(store.historyTail(campaign.getId(), 20).stream().anyMatch(m -> m.path("text").asText().contains("Spectral Form ended")));
     }
 
     @Test

@@ -2,7 +2,8 @@
 // Damage on attacks, and the roll triggers (rerolls, Hope/Stress on matching dice) of the character's features.
 
 import { el } from '../login';
-import { claimRollReward, useFeature } from '../api';
+import { applyDeathRecovery, claimRollReward, useFeature } from '../api';
+import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { actionBlocker, availableRollTriggers, costText, usesLeft } from './engine';
@@ -23,10 +24,12 @@ export interface RollButtonHost {
   toast(message: string): void;
   playerId?: string;
   supportsRollRewards?: () => boolean;
+  supportsDeathMoveOptions?: () => boolean;
 }
 
 /** Context of a finished duality or damage roll. */
 export function rollContext(m: RollMessage): RollContext | null {
+  if (m.deathMove) return null;
   if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
     return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage' };
   }
@@ -141,8 +144,48 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   return box;
 }
 
+function deathButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null {
+  if (m.deathMove !== 'risk' || !m.deathResult || !m.actorId || m.fromId !== host.playerId || !host.supportsDeathMoveOptions?.()) return null;
+  const box = el('div', { class: 'roll-actions' });
+  let pending = false;
+  const paint = async () => {
+    const sheet = await host.sheet(m.actorId!);
+    box.replaceChildren();
+    const result = m.deathResult!;
+    if (!sheet || result.claimed || ((sheet.character.permanentHp ?? 0) >= sheet.character.hp.slots)) return;
+    const ref = sheet.character.pendingDeathRoll;
+    if (!ref || ref.id !== m.id || ref.ts !== m.ts) return;
+    const failed = result.outcome === 'fear' && !result.converted;
+    if (failed && !result.undying) return;
+    const button = el('button', { type: 'button', class: 'small primary' }, failed ? "Won't Stay Dead" : result.outcome === 'crit' ? 'Clear all HP and Stress' : 'Apply recovery');
+    button.disabled = pending;
+    button.addEventListener('click', () => {
+      if (pending || result.claimed) return;
+      pending = true;
+      button.disabled = true;
+      openDeathRecovery(document.body, sheet.character, m, async recovery => {
+        await sheet.save.flush?.();
+        const current = sheet.character.pendingDeathRoll;
+        if (!current || current.id !== m.id || current.ts !== m.ts) throw new Error('This death roll is no longer pending. Refresh the sheet and check chat for the resolved result.');
+        await applyDeathRecovery(m.actorId!, { id: m.id, ts: m.ts }, recovery);
+        if (recovery.undying) result.converted = true;
+        else result.claimed = true;
+        sheet.bus.notify();
+      }, () => {
+        pending = false;
+        void paint().catch((e: Error) => host.toast(e.message));
+      });
+    });
+    box.append(button);
+  };
+  box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
+  void paint().catch((e: Error) => host.toast(e.message));
+  return box;
+}
+
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
   if ('text' in m) return restButtons(m, host);
+  if (m.deathMove) return deathButtons(m, host);
   const actorId = m.actorId;
   const ctx = rollContext(m);
   const isAttack = m.source?.split(',').includes('attack');

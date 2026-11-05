@@ -1299,11 +1299,16 @@
      "text": "You have another death move option: Spectral Form. When you choose this option, you clear a Hit Point, your body becomes spectral, you have resistance to physical damage, and you can pass through objects. This form ends if you clear any more Hit Points. It also ends if you mark your last Hit Point, which forces you to take a different death move. You’re shunted to the nearest open space if you’re inside an object when the form ends.",
      "type": "subclass",
      "automation": {
+      "deathMove": { "kind": "spectral" },
+      "actions": [
+       { "id": "use", "label": "Spectral Form death move", "deathMove": "spectral" }
+      ],
       "mitigation": [
        {
         "id": "spectral",
         "label": "Spectral Form",
         "description": "While in spectral form you have resistance to physical damage.",
+        "requiresEffect": "Spectral Form",
         "when": {
          "type": "physical"
         },

@@ -17,6 +17,8 @@ export class Connection {
   keptDice = false;
   rollMultipliers = false;
   rollRewards = false;
+  deathMoves = false;
+  deathMoveOptions = false;
   readonly clock = new ClockSync();
   private ws: WebSocket | null = null;
   private attempts = 0;
@@ -59,6 +61,8 @@ export class Connection {
     this.keptDice = false;
     this.rollMultipliers = false;
     this.rollRewards = false;
+    this.deathMoves = false;
+    this.deathMoveOptions = false;
     this.events.onStatus('connecting');
     const ws = new WebSocket(this.url());
     this.ws = ws;
@@ -92,6 +96,8 @@ export class Connection {
         this.keptDice = msg.keptDice === true;
         this.rollMultipliers = msg.rollMultipliers === true;
         this.rollRewards = msg.rollRewards === true;
+        this.deathMoves = msg.deathMoves === true;
+        this.deathMoveOptions = msg.deathMoveOptions === true;
         if (this.clock.samples === 0) this.clock.seed(msg.serverTime, performance.now());
       }
       if (msg.type === 'kicked') {

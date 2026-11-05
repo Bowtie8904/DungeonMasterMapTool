@@ -10,6 +10,11 @@ public final class MoveValidator {
     /** Returns {@code null} when the move is allowed, otherwise a short reason. */
     public static String check(DmProject project, Campaign campaign, String mapId, String playerId,
                                DmProject.TokenInstance token, double x, double y) {
+        return check(project, campaign, mapId, playerId, token, x, y, false);
+    }
+
+    public static String check(DmProject project, Campaign campaign, String mapId, String playerId,
+                               DmProject.TokenInstance token, double x, double y, boolean phaseMovement) {
         if (token == null) {
             return "Unknown token";
         }
@@ -22,6 +27,20 @@ public final class MoveValidator {
         Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
         if (!OnlineStateBuilder.controllers(token, actor, campaign, mapId).contains(playerId)) {
             return "You do not control this token";
+        }
+        if (phaseMovement) {
+            double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
+            double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
+            for (DmProject.ImageLayer image : project.getImageLayers()) {
+                if (!image.isVisible() || image.getWidth() <= 0 || image.getHeight() <= 0) continue;
+                minX = Math.min(minX, image.getX());
+                minY = Math.min(minY, image.getY());
+                maxX = Math.max(maxX, image.getX() + image.getWidth());
+                maxY = Math.max(maxY, image.getY() + image.getHeight());
+            }
+            if (Double.isFinite(minX) && (x < minX || y < minY || x > maxX || y > maxY))
+                return "Outside the map";
+            return null;
         }
         double x0 = token.getX();
         double y0 = token.getY();

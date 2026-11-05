@@ -356,7 +356,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
                 String problem = project == null ? "No map open" : movementBlockReason(token);
                 if (problem == null)
-                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y);
+                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, phaseMovement(token));
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));
@@ -364,6 +364,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 }
                 app.applyMove(tokenId, x, y);
                 result.complete(OnlineSessionServer.MoveResult.accepted());
+            } catch (IOException ex) {
+                result.complete(OnlineSessionServer.MoveResult.rejected("Could not verify this character's movement effects."));
             } catch (RuntimeException ex) {
                 result.complete(OnlineSessionServer.MoveResult.rejected("Move failed"));
             }
@@ -373,7 +375,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     private String movementBlockReason(DmProject.TokenInstance token) {
         if (token == null || campaign == null) return null;
-        Campaign.Actor actor = campaign.actor(token.getActorId());
+        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
         if (actor == null) return null;
         try {
             String saved = store.loadSheet(campaign.getId(), actor.getId());
@@ -390,6 +392,18 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         return null;
     }
 
+    private boolean phaseMovement(DmProject.TokenInstance token) throws IOException {
+        if (token == null || campaign == null) return false;
+        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
+        if (actor == null) return false;
+        String saved = store.loadSheet(campaign.getId(), actor.getId());
+        if (saved == null) return false;
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(saved);
+        DeathMoves.sync(sheet);
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.has("spectralHp") && effect.path("phaseMovement").asBoolean()) return true;
+        return false;
+    }
     @Override
     public void rosterChanged() {
         Platform.runLater(app::changed);

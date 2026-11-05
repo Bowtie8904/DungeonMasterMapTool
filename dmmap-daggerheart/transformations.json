@@ -70,7 +70,10 @@
     },
     {
      "name": "Won’t Stay Dead",
-     "text": "When you choose the Risk It All death move and fail, you can **permanently mark a Hit Point** to succeed instead. When you do, you still use the Hope Die’s value to clear Hit Points and Stress. When you permanently mark your last Hit Point, you pass through the veil of death."
+     "text": "When you choose the Risk It All death move and fail, you can **permanently mark a Hit Point** to succeed instead. When you do, you still use the Hope Die’s value to clear Hit Points and Stress. When you permanently mark your last Hit Point, you pass through the veil of death.",
+     "automation": {
+      "deathMove": { "kind": "undying" }
+     }
     }
    ]
   },

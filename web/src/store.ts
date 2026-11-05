@@ -1,4 +1,4 @@
-import { GameState, DeltaOp, normalizeState, Token } from './protocol';
+import { GameState, DeltaOp, normalizeState, Token, type ServerMessage } from './protocol';
 
 export type ApplyResult = 'ok' | 'stale' | 'gap';
 
@@ -14,6 +14,14 @@ export class Store {
   lastSeq = 0;
   /** Categories touched by the last applied snapshot/delta ('*' after a snapshot). */
   changed = new Set<string>();
+
+  applyRollUpdate(update: Extract<ServerMessage, { type: 'rollUpdate' }>): boolean {
+    const roll = this.state?.chatTail?.find(entry => entry.id === update.id && entry.ts === update.ts && !('text' in entry));
+    if (!roll) return false;
+    const { type: _type, ...fields } = update;
+    Object.assign(roll, fields);
+    return true;
+  }
 
   applySnapshot(seq: number, raw: Partial<GameState>): void {
     this.state = normalizeState(raw);

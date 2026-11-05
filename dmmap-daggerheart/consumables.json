@@ -1196,7 +1196,13 @@
    "id": "cathartoid-egg",
    "name": "Cathartoid Egg",
    "rarity": "Legendary",
-   "text": "As a death move, you can break this egg. You rise again in the form of an ancient, black-winged avian with all your memories, but your only desire is now to reside in the Sanctum Mortalis."
+   "text": "As a death move, you can break this egg. You rise again in the form of an ancient, black-winged avian with all your memories, but your only desire is now to reside in the Sanctum Mortalis.",
+   "automation": {
+    "deathMove": { "kind": "egg" },
+    "actions": [
+     { "id": "use", "label": "Break Cathartoid Egg (death move)", "deathMove": "egg" }
+    ]
+   }
   },
   {
    "id": "crystals-from-beyond",

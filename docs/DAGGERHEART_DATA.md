@@ -99,6 +99,74 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   button for that downtime move. An ancestry change requires a new feature choice; feature-only changes
   retain the current ancestry. `ancestryFeature` on the sheet records the retained feature; creation choices
   and testing builds also carry it. Only that feature contributes ancestry automation and creation stats.
+- **Death-move actions:** optional `actions[].deathMove` is a string (`risk`, `avoid`, `spectral`, `egg`,
+  `battleHardened` or `unbreakable`) that redirects the button into the host-validated death-move workflow.
+  It is not a local healing/spending action. Blessed redirects to `risk`; its optional Hope spend and source
+  use are paid only when the death-move dialog is confirmed. Battle-Hardened's 1 Hope cost and Unbreakable's
+  d6 recovery/card vaulting are likewise host-owned, not duplicate `cost`/`clear` steps on the button.
+  Cancellation, unavailable sources and rejected requests spend nothing.
+- **Death-move metadata:** optional `automation.deathMove` is
+  `{kind: "hopeBonus"|"hopeSpend"|"mask"|"undying"|"spectral"|"egg"|"battleHardened"|"lifeWard"|"unbreakable",
+  moves?: ["risk"|"avoid"], bonus?: number}`. `moves` restricts a Hope adjustment to the listed basic moves;
+  `bonus` is its numeric Hope-die adjustment. Alternative/prevention kinds do not need either field.
+  Source ids/provenance and metadata determine behavior; entry/feature names are display text, not routing keys.
+  Availability is checked against the current saved sheet: owned items/consumables need positive quantity,
+  armor must be equipped, cards/spells must be in the active loadout, and features must be learned/selected.
+  Remaining source uses and resource balances are validated by the host at execution, not just when offered.
+
+  | Catalog source | Metadata and behavior |
+  |---|---|
+  | Reliquary of the Sightless Saint | `hopeBonus`, `moves: ["risk"]`, `bonus: 1`; +1 Risk Hope. |
+  | Phoenix Feather | `hopeBonus`, `moves: ["avoid"]`, `bonus: 1`; +1 Avoid Death scar check. Multiple copies do not stack. |
+  | Hallowed Heroplate / Blessed | `hopeSpend`, `moves: ["risk"]`; optional chosen Hope spend adds that amount to Risk Hope, once per long rest while equipped. |
+  | Mask of the Dance Master | `mask`, `moves: ["risk","avoid"]`, `bonus: 1`; optional one-token payment from `death-mask` grants +1 Hope after wearing confirmation. Persistent pool starts at 0 and caps at 4. |
+  | Reanimated / Won't Stay Dead | `undying`; a failed Risk result may be converted to success after confirming one permanently marked HP. |
+  | Order of the Ghost Slayer / Spectral Form | `spectral`; alternate death move clears 1 HP and creates the host-owned spectral effect. Physical mitigation requires that effect. |
+  | Cathartoid Egg | `egg`; consumes one egg and persists the narrative transformation, without inventing HP recovery or changing the character build. |
+  | Battle-Hardened | `battleHardened`; active card, 1 Hope, once per long rest, clears 1 HP instead of a death move. |
+  | Life Ward | `lifeWard`; the normal targeted action spends 3 Hope to grant an ally the protected effect described below. |
+  | Unbreakable | `unbreakable`; active card, host rolls d6 recovery when the last available HP is marked, then vaults that card. |
+
+  Mask token gain is deliberately manual: confirm a living creature died within Melee range, then use Gain
+  Mask token. GM-approved counter adjustments correct the 0–4 pool. Other health-related Mask rolls and token
+  spending remain manual; the general action-roll dialog must not silently offer/spend these death-move tokens.
+  Wearing the Mask and Life Ward's ally/Close-range requirement are table-confirmed, not inferred from coordinates.
+
+  Risk uses host-owned raw Hope/Fear d12s. **Raw matching dice are critical**, regardless of Hope adjustments;
+  otherwise **adjusted Hope >= Fear** is ordinary success. Recovery uses adjusted Hope, split between HP and
+  Stress by a sender-only, one-time chat claim; critical recovery clears all recoverable HP and Stress.
+  Death rolls do not offer ordinary action-roll Hope/Stress rewards or reactions. Avoid Death compares adjusted
+  Hope to level for its scar check. Won't Stay Dead preserves the raw dice and adjusted recovery value; converting
+  the last available HP to permanent HP instead ends in death and offers no recovery.
+  Permanent HP markers persist separately from normal marked HP and cannot be cleared by healing or rests.
+  Scar markers separately reduce Hope capacity and persist through rests/reloads; their adjustment is GM-approved.
+- **Death-related sheet fields:** `CharacterSheet.longRestRevision` is a nonnegative, monotonically increasing
+  integer incremented on each completed long rest. The host uses the caster's revision change to remove all
+  wards granted by that caster, including wards on offline/cross-owner targets; the target's long rest does not
+  expire another character's ward.
+  `pendingDeathRoll: {id, ts}` identifies the pending Risk It All roll and its timestamp for a one-time recovery
+  claim. Ordinary manual HP or Stress recovery through a sheet save invalidates that pending claim, preventing
+  duplicate recovery when older clients use manual controls instead of the chat claim.
+  `permanentHp` is the number of permanently marked HP slots, **not a reduction of maximum HP**; those slots
+  remain marked and unavailable for recovery. `spectralBlocked` records Spectral Form's trigger-specific
+  exclusion when the form ends from marking the last available HP, so the ensuing death move must use another
+  option. `deathNarrative` is a persistent string recording narrative death/transformation outcomes such as
+  Cathartoid Egg; it does not itself heal HP or alter the character build.
+- **Death-related effect fields:** effect definitions optionally carry `lifeWard: boolean`, `spectralHp: number`
+  and `phaseMovement: boolean`. Absent/false flags have no special behavior.
+  `lifeWard: true` identifies a ward owned by its **caster**, even though the effect is stored on its target.
+  Configure it as `kind: "buff", until: "manual"` so the target's rest does not expire it; the host records caster
+  ownership and ends the caster's previous ward on recast or the caster's long rest. Offline/cross-owner targets
+  are supported. At the target's full-HP death trigger (damage or manual sheet save), the ward clears 1
+  recoverable HP instead of a death move and consumes itself. Costs, target effect and chat are saved atomically.
+  `spectralHp` records the host's marked-HP baseline immediately after Spectral Form's initial 1 HP recovery;
+  further HP clearing ends the form. Marking all available HP also ends it and requires a different death move,
+  excluding Spectral Form for that trigger. `phaseMovement: true` permits actor-token movement through walls
+  and closed doors, while pause, ownership, finite-position and map-limit checks remain enforced. These fields
+  are set on the host-created Spectral Form effect, not a separate local action effect. Shunting out of solid
+  objects when the form ends remains GM-controlled; wall-segment maps cannot establish solid interiors.
+  The extension advertises optional `hello.deathMoveOptions`; the basic `hello.deathMoves` endpoint remains
+  available to older clients. All fields are additive; neither Online nor DM Link compatibility versions change.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.
@@ -215,7 +283,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   gains. Whole/mixed-ancestry feature selection must respect which feature was chosen. Endurance, High Stamina,
   Nimble, Prepared, Battlemage and At Ease are data-driven; Stoneskin remains a passive Armor Score/threshold bonus.
   `experienceBonus` asks the player which creation Experience permanently receives the bonus (Purposeful Design).
-- **manual**: not part of the maintained format. Original descriptions stay visible.
+- **manual**: optional array of guidance strings for table-confirmed prerequisites and manual adjustments.
+  These notes do not execute operations or replace the original descriptions, which stay visible.
 - Armor automatically sets damage thresholds (base major/severe + level; unarmored level and 2x level) and the armor
   slots from the armor score.
 
@@ -224,7 +293,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
 The maintained catalog covers **1,187 entries / 1,294 rule sources**, including expansion content, not just core
 classes or the named examples. A source is an individual class/heritage/transformation feature, or one gear/card/item
 entry. The counts below describe the current catalog snapshot; edit them when catalog changes affect the totals.
-“Executable” means at least one modifier, counter, action, roll option, creation/rest grant, damage-mitigation option or weapon-damage operation;
+“Executable” means at least one modifier, counter, action, roll option, creation/rest grant, damage-mitigation option, weapon-damage operation or death-move metadata;
 **it does not mean the whole feature is automated**. A cost/use-only button tracks the owner's spending, not the
 target's outcome. “Plain gear” has no feature to automate. Sources without an executable operation are
 purely narrative text.
@@ -234,9 +303,9 @@ purely narrative text.
 | Domain cards | 236 | 236 | 165 | 71 |
 | Armor | 110 | 110 | 80 | 30 |
 | Weapons | 336 | 336 | 144 | 192 |
-| Consumables | 182 | 182 | 61 | 121 |
-| Items | 174 | 174 | 81 | 93 |
-| **All categories** | **1,187** | **1,294** | **708** | **586** |
+| Consumables | 182 | 182 | 62 | 120 |
+| Items | 174 | 174 | 84 | 90 |
+| **All categories** | **1,187** | **1,294** | **713** | **581** |
 
 Classes, ancestries, communities and transformations are included in the total.
 

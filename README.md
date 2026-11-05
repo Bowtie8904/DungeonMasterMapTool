@@ -85,6 +85,27 @@ Nothing starts until you click **Start online session**, so offline play and the
   long rest and death-move controls are in the header to the right of the portrait, between the character details and vitals row. The resizable sheet
   defaults to 900 px wide (clamped to available space) and nearly the full viewport height, leaving 30 px above and below.
   The sidebar scrolls independently from the tab content; floating and pop-out sheets use the same layout.
+  **Death moves** become available when all HP are marked. Confirm **Blaze of Glory** to post the critically
+  successful final-action/death instructions, or **Risk It All** to roll Hope/Fear d12s and share the outcome
+  with a sender-only **Apply recovery** chat button (or **Clear all HP and Stress** on a critical).
+  **Avoid Death** rolls a Hope d12, applies **Unconscious**
+  and adds a permanent scar if the die is at or below your level. Unconscious blocks token movement only;
+  actions and attack targeting remain under table control. Clearing at least one marked HP or completing
+  a long rest removes it; it can also be dismissed in Effects. Scars cross out Hope slots and survive rests
+  and reloads. Use **Scars** below Hope for GM-approved adjustments/healing; record their narrative impact
+  in Background. All death-move results are public and rolled by the host.
+  Death-move options include carried Reliquary/Phoenix bonuses, optional Blessed Hope spending and one
+  Mask token after confirming the mask is worn. Mask tokens are manually gained/adjusted and capped at four.
+  Raw matching dice remain critical; otherwise adjusted Hope equal to or above Fear succeeds, using adjusted
+  Hope for recovery. Reanimated characters can confirm **Won't Stay Dead** on a failed Risk roll to permanently
+  mark one HP; permanent HP stay marked through healing/rests, and permanently marking the last HP means death.
+  **Spectral Form** clears one HP and grants physical resistance and wall/door traversal until further healing
+  or the last HP is marked; its expiry report asks the GM to reposition a token inside solid objects.
+  **Cathartoid Egg** consumes one carried egg and records the avian transformation without altering the build.
+  **Battle-Hardened** spends one Hope once per long rest to clear one HP; **Unbreakable** clears a host-rolled
+  d6 HP and moves the active card to the vault. **Life Ward** costs three Hope, protects one ally with
+  table-confirmed Close range, and automatically clears one HP instead of a death move. Wards end when used,
+  recast or their caster completes a long rest, including offline allies.
   Hover or focus Evasion, Armor or Thresholds to see their sources in an overlay above the tabs, without adding scrollbars.
   Sheets are saved on the host per actor (`<campaign>/sheets/<actorId>.json`, debounced autosave) and reload on
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.

@@ -94,6 +94,7 @@ export interface FeatureRequest {
   key: string;
   actionId: string;
   targetActorId?: string;
+  confirmRange?: boolean;
   amount?: number;
   restDie?: number;
   roll?: { id: number | string; ts: number };
@@ -105,6 +106,28 @@ export async function useFeature(request: FeatureRequest): Promise<void> {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function getDeathOptions(actorId: string): Promise<import('./daggerheart/death').DeathOptions> {
+  const res = await fetch(`/api/death-move/${encodeURIComponent(actorId)}`, { credentials: 'same-origin' });
+  if (!res.ok) throw await readError(res);
+  return res.json();
+}
+
+export async function applyDeathRecovery(actorId: string, roll: { id: number | string; ts: number }, recovery: { hp?: number; stress?: number; undying?: boolean }): Promise<void> {
+  const res = await fetch('/api/death-recovery', { method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actorId, roll, ...recovery }) });
+  if (!res.ok) throw await readError(res);
+}
+
+export async function takeDeathMove(actorId: string, move: import('./daggerheart/death').DeathMove, extras?: import('./daggerheart/death').DeathMoveExtras): Promise<void> {
+  const res = await fetch('/api/death-move', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actorId, move, ...extras }),
   });
   if (!res.ok) throw await readError(res);
 }

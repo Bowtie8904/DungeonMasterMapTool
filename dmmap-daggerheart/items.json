@@ -404,7 +404,10 @@
    "id": "phoenix-feather",
    "name": "Phoenix Feather",
    "rarity": "Uncommon",
-   "text": "If you have at least one Phoenix Feather on you when you fall unconscious, you gain a +1 bonus to the roll you make to determine whether you gain a scar."
+   "text": "If you have at least one Phoenix Feather on you when you fall unconscious, you gain a +1 bonus to the roll you make to determine whether you gain a scar.",
+   "automation": {
+    "deathMove": { "kind": "hopeBonus", "moves": ["avoid"], "bonus": 1 }
+   }
   },
   {
    "id": "box-of-many-goods",
@@ -1670,7 +1673,10 @@
    "id": "reliquary-of-the-sightless-saint",
    "name": "Reliquary of the Sightless Saint",
    "rarity": "Uncommon",
-   "text": "You gain a +1 bonus to your Hope Die when you make the Risk It All death move."
+   "text": "You gain a +1 bonus to your Hope Die when you make the Risk It All death move.",
+   "automation": {
+    "deathMove": { "kind": "hopeBonus", "moves": ["risk"], "bonus": 1 }
+   }
   },
   {
    "id": "map-of-revelation",
@@ -2100,7 +2106,26 @@
    "id": "mask-of-the-dance-master",
    "name": "Mask of the Dance Master",
    "rarity": "Rare",
-   "text": "The mask gains a token when a living creature dies within Melee range of the mask (maximum four tokens). Spend a token while wearing the mask to gain a +1 to your Hope die on a Death Move, or on a roll to prevent or remove an affliction, contagion, or condition related to you health."
+   "text": "The mask gains a token when a living creature dies within Melee range of the mask (maximum four tokens). Spend a token while wearing the mask to gain a +1 to your Hope die on a Death Move, or on a roll to prevent or remove an affliction, contagion, or condition related to you health.",
+   "automation": {
+    "deathMove": { "kind": "mask", "moves": ["risk", "avoid"], "bonus": 1 },
+    "resources": [
+     { "id": "death-mask", "label": "Mask tokens", "initial": 0, "max": 4 }
+    ],
+    "actions": [
+     {
+      "id": "gain-token",
+      "label": "Gain Mask token (confirm nearby death)",
+      "steps": [
+       { "op": "gain", "resource": "death-mask", "amount": 1 }
+      ]
+     }
+    ],
+    "manual": [
+     "Confirm that a living creature died within Melee range before gaining a token; adjust Mask tokens manually with GM approval to correct the counter (0–4).",
+     "Confirm the mask is worn before spending one token for the optional death-move Hope bonus. Other health-related rolls and their token spending remain manual; ordinary action rolls do not spend Mask tokens automatically."
+    ]
+   }
   }
  ]
 }

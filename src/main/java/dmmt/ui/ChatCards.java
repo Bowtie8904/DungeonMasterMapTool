@@ -275,7 +275,7 @@ public final class ChatCards {
     }
 
     private static Node actionBody(ActionReport report) {
-        Label banner = new Label("ACTION USED");
+        Label banner = new Label(report.title().startsWith("Death move - ") ? "DEATH MOVE" : "ACTION USED");
         banner.getStyleClass().add("chat-action-banner");
         return new VBox(banner, wrapped(report.title(), "chat-action-title"), bullets(report.lines()));
     }
@@ -554,7 +554,8 @@ public final class ChatCards {
         List<Integer> values = new ArrayList<>();
         real.path("rolls").forEach(v -> values.add(v.asInt()));
         int total = real.path("total").asInt();
-        boolean duality = !hidden && "duality".equals(m.path("kind").asText()) && values.size() >= 2;
+        boolean duality = !hidden && ("duality".equals(m.path("kind").asText())
+                || "risk".equals(m.path("deathMove").asText())) && values.size() >= 2;
         List<Detail> details = rollDetails(expression, values, duality, hidden ? null : m.path("breakdown"));
         boolean[] kept = hidden ? allTrue(values.size()) : keptRolls(expression, values);
 
@@ -666,6 +667,10 @@ public final class ChatCards {
     }
 
     static String dualityOutcome(JsonNode message, List<Integer> values) {
+        if ("risk".equals(message.path("deathMove").asText())) {
+            String outcome = message.path("deathResult").path("outcome").asText();
+            if (List.of("hope", "fear", "crit").contains(outcome)) return outcome;
+        }
         int hope = values.get(0);
         int fear = values.get(1);
         return hope == fear ? "crit" : switch (message.path("outcome").asText()) {

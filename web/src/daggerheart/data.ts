@@ -2,6 +2,7 @@
 // Rules content follows the Daggerheart SRD 1.0 (Darrington Press Community Gaming License).
 
 import type { ActiveEffect, Automation } from './engine';
+import { syncDeathState } from './death';
 
 export type TraitName = 'Agility' | 'Strength' | 'Finesse' | 'Instinct' | 'Presence' | 'Knowledge';
 
@@ -186,6 +187,12 @@ export interface CharacterSheet {
   hp: Track;
   stress: Track;
   hope: Track;
+  scars?: number;
+  permanentHp?: number;
+  spectralBlocked?: boolean;
+  deathNarrative?: string;
+  pendingDeathRoll?: { id: number; ts: number };
+  longRestRevision?: number;
   proficiency: Track;
   traits: Trait[];
   experiences: Experience[];
@@ -341,6 +348,7 @@ export function normalizeSheet(stored: Partial<CharacterSheet>, name: string): C
   const base = emptyCharacter(name);
   const sheet = { ...base, ...stored } as CharacterSheet;
   if (!stored.mancer) sheet.mancer = { done: true };
+  syncDeathState(sheet);
   return sheet;
 }
 

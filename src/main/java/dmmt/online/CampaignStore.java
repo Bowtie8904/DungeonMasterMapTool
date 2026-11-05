@@ -225,8 +225,13 @@ public final class CampaignStore {
 
     private void replaceHistoryEntryRaw(String campaignId, long id, long timestamp, ObjectNode replacement)
             throws IOException {
+        writeHistoryEntryRaw(campaignId, id, timestamp, replacement, false);
+    }
+
+    private void writeHistoryEntryRaw(String campaignId, long id, long timestamp, ObjectNode replacement,
+                                      boolean allowNew) throws IOException {
         Path file = dir(campaignId).resolve("history.jsonl");
-        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        List<String> lines = allowNew && !Files.exists(file) ? List.of() : Files.readAllLines(file, StandardCharsets.UTF_8);
         List<String> updated = new ArrayList<>(lines.size());
         boolean found = false;
         for (String line : lines) {
@@ -238,7 +243,10 @@ public final class CampaignStore {
                 updated.add(line);
             }
         }
-        if (!found) throw new IOException("Chat message no longer exists.");
+        if (!found) {
+            if (!allowNew) throw new IOException("Chat message no longer exists.");
+            updated.add(MAPPER.writeValueAsString(replacement));
+        }
         Path temp = file.resolveSibling("history.jsonl.tmp");
         try {
             Files.write(temp, updated, StandardCharsets.UTF_8);
@@ -363,12 +371,32 @@ public final class CampaignStore {
     /** Journals character changes and a roll's claim marker together for idempotent crash recovery. */
     public synchronized void saveSheetsAndRoll(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                                ObjectNode roll) throws IOException {
+        saveSheetsAndHistory(campaignId, sheets, roll, false);
+    }
+
+    /** Journals a new public result with its sheet changes; replay never duplicates the message. */
+    public synchronized void saveSheetsAndMessage(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                                  ObjectNode message) throws IOException {
+        saveSheetsAndHistory(campaignId, sheets, message, true);
+    }
+
+    private void saveSheetsAndHistory(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                      ObjectNode message, boolean newMessage) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, newMessage ? null : message,
+                newMessage && message != null ? List.of(message) : List.of());
+    }
+
+    /** Journals sheet changes, an optional updated result, and additional new reports as one transaction. */
+    public synchronized void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                                  ObjectNode replacement, List<ObjectNode> messages) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
             transaction.set(entry.getKey(), persistentSheet(entry.getValue()));
         }
-        if (roll != null) transaction.set("$roll", roll);
+        if (replacement != null) transaction.set("$roll", replacement);
+        if (messages.size() == 1) transaction.set("$message", messages.getFirst());
+        else if (!messages.isEmpty()) transaction.set("$messages", MAPPER.valueToTree(messages));
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
@@ -386,11 +414,17 @@ public final class CampaignStore {
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
-            if ("$roll".equals(entry.getKey())) continue;
+            if ("$roll".equals(entry.getKey()) || "$message".equals(entry.getKey()) || "$messages".equals(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
         if (transaction.get("$roll") instanceof ObjectNode roll)
             replaceHistoryEntryRaw(campaignId, roll.path("id").asLong(), roll.path("ts").asLong(), roll);
+        if (transaction.get("$message") instanceof ObjectNode message)
+            writeHistoryEntryRaw(campaignId, message.path("id").asLong(), message.path("ts").asLong(), message, true);
+        for (JsonNode entry : transaction.path("$messages")) {
+            if (!(entry instanceof ObjectNode message)) throw new IOException("Invalid journaled chat result.");
+            writeHistoryEntryRaw(campaignId, message.path("id").asLong(), message.path("ts").asLong(), message, true);
+        }
         Files.delete(journal);
     }
 

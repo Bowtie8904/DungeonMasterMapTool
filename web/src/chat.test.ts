@@ -44,6 +44,28 @@ describe('roll breakdowns', () => {
         ...message, label: 'Agility', source: 'trait:Agility,reaction',
       } }, 'player') as unknown as Element;
       expect(reaction.find('roll-title')?.text).toBe('Agility - Reaction roll');
+      const death = renderLogEntry({ kind: 'roll', m: {
+        ...message, kind: 'dice', deathMove: 'risk', label: 'Aria - Risk It All',
+        expression: '2d12', rolls: [9, 4], total: 13,
+        breakdown: [{ label: 'Hope die', expression: '1d12', rolls: [9], total: 9 },
+          { label: 'Fear die', expression: '1d12', rolls: [4], total: 4 }],
+        featureRoll: { name: 'Risk It All', result: 13, consequence: 'Clear 9 HP and/or Stress.' },
+      } }, 'player') as unknown as Element;
+      expect(death.find('roll-dice')?.text).toBe('Hope9Fear4');
+      expect(death.find('roll-feature-result')?.text).toBe('Clear 9 HP and/or Stress.');
+      const adjusted = renderLogEntry({ kind: 'roll', m: {
+        ...message, kind: 'dice', deathMove: 'risk', expression: '2d12', rolls: [4, 5], total: 9,
+        deathResult: { outcome: 'hope', hope: 4, fear: 5, adjustedHope: 5, bonus: 1, budget: 5, claimed: false, undying: false },
+      } }, 'player') as unknown as Element;
+      expect(adjusted.find('roll-dice')?.text).toBe('Hope4Fear5');
+      expect(adjusted.find('roll-outcome hope')?.text).toBe('With Hope');
+      expect(adjusted.text).toContain('Adjusted Hope 5 (+1 bonus)');
+      const rawCrit = renderLogEntry({ kind: 'roll', m: {
+        ...message, kind: 'dice', deathMove: 'risk', expression: '2d12', rolls: [5, 5], total: 10,
+        deathResult: { outcome: 'crit', hope: 5, fear: 5, adjustedHope: 7, bonus: 2, budget: 7, claimed: false, undying: false },
+      } }, 'player') as unknown as Element;
+      expect(rawCrit.find('roll-dice')?.text).toBe('Hope5Fear5');
+      expect(rawCrit.find('roll-outcome crit')?.text).toBe('Critical success');
     } finally { vi.unstubAllGlobals(); }
   });
 

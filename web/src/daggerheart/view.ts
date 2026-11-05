@@ -6,7 +6,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
+  effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft,
 } from './engine';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
@@ -18,6 +18,8 @@ import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
+import { canMakeDeathMove, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
+import { openDeathDialog, openScarsDialog } from './death-view';
 import { actionReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
@@ -60,6 +62,8 @@ export interface SheetViewOptions {
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[]) => void;
   onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
+  onDeathMove?: (move: DeathMove, extras?: DeathMoveExtras) => Promise<void>;
+  onDeathOptions?: () => Promise<DeathOptions>;
   actorId?: string;
   onShare?: (entry: SharedEntry, offerQuantity?: number) => void;
   onPrepareShare?: () => Promise<void>;
@@ -77,19 +81,20 @@ const PAGES: Array<[Page, string]> = [
   ['char', 'Character'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
-function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void): HTMLElement {
+export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0): HTMLElement {
   const box = el('div', { class: 'pips' });
   box.dataset.kind = kind;
   box.style.setProperty('--c', color);
   const btns: HTMLButtonElement[] = [];
   const paint = () => btns.forEach((b, i) => b.classList.toggle('on', i < track.on));
   for (let i = 0; i < track.total; i++) {
-    const locked = i >= track.slots;
-    const b = el('button', { type: 'button', class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}`, title: locked ? 'Locked - gained through advancement' : '' });
+    const locked = i >= track.slots || i < permanent;
+    const scarred = i >= track.total - scars;
+    const b = el('button', { type: 'button', disabled: locked, class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}${scarred ? ' scarred' : ''}${i < permanent ? ' permanent-hp' : ''}`, title: i < permanent ? 'Permanently marked HP — cannot be healed' : scarred ? 'Crossed out by a permanent scar' : locked ? 'Locked - gained through advancement' : '' }, i < permanent ? '×' : scarred ? 'X' : '');
     b.setAttribute('aria-label', `${kind} ${i + 1}`);
     b.addEventListener('click', () => {
       if (locked) return;
-      track.on = track.on === i + 1 ? i : i + 1;
+      track.on = Math.max(permanent, track.on === i + 1 ? i : i + 1);
       paint();
       onChange?.();
     });
@@ -125,6 +130,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const c = opts.character;
   let page: Page = 'char';
   const root = el('div', { class: 'dh' });
+  const deathDialog = (initial?: string) => openDeathDialog(document.body, c, async (move, extras) => {
+    if (!opts.onDeathMove) throw new Error('This host does not support death moves. Update the host.');
+    await opts.onDeathMove(move, extras);
+  }, opts.onDeathOptions, initial);
   const inventoryQuery = { equipment: '', loot: '' };
   const expandedDescriptions = new Set<string>();
   const descriptionObserver = new ResizeObserver(() => measureDescriptions());
@@ -215,6 +224,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   const sendRoll = (source: string, weapon?: string, rollSource?: RollSource) => (r: RollRequest): boolean => {
+    if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return false; }
     const ref = Math.random().toString(36).slice(2, 12);
     const full: RollRequest = { ...r, ref, source: r.source ?? source, ...(rollSource ? { rollSource } : {}), ...(weapon ? { weapon } : {}), ...(opts.actorId ? { actorId: opts.actorId } : {}) };
     const sent = opts.onRoll(full);
@@ -264,7 +274,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (!actions.length && !a?.resources?.length && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
     if (key.startsWith('item:') || key.startsWith('feat:')) {
-      for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolInput(r)));
+      for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
     }
     for (const action of actions) row.append(actionButton(key, a!, action, label, hooks));
     const left = a ? usesLeft(c, key, a) : null;
@@ -303,6 +313,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     b.addEventListener('click', () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
+      if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
+          && !window.confirm('Confirm at the table that you have earned this Mask token.')) return;
+      if (routeDeathAction(action, deathDialog)) return;
       if (action.ancestryChoice) {
         setBusy(true);
         void chooseAncestryFeature(root, c.ancestry, action.ancestryChoice === 'ancestry', c.ancestryFeature).then((picked) => {
@@ -314,6 +327,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         return;
       }
       if (action.target || action.check) {
+        if (a.deathMove?.kind === 'lifeWard' && !window.confirm('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
           openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(); render(); }));
@@ -343,6 +357,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         return;
       }
       if (action.sendRoll) {
+        if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return; }
         if (actionBlocker(c, key, a, action)) return;
         const base = action.sendRoll.base === 'evasion' ? derivedStats(c).evasion : 0;
         const dice = action.sendRoll.dice.replace(/@tier(?=d|\b)/g, String(tierOf(c.level)));
@@ -414,6 +429,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (opts.artwork) portrait.append(el('img', { src: opts.artwork, alt: '' }));
     else portrait.textContent = c.name.slice(0, 1).toUpperCase();
     const sub = (label: string, ...bold: string[]) => el('div', { class: 'sub' }, label, ...bold.map((b) => el('b', {}, b)));
+    const death = el('button', { class: 'small', type: 'button', title: 'Choose a death move when all HP are marked' }, 'Death move...');
+    death.disabled = !canMakeDeathMove(c);
+    death.addEventListener('click', () => deathDialog());
+    const scars = el('button', { class: 'small', type: 'button' }, `Scars (${c.scars ?? 0})`);
+    scars.addEventListener('click', () => openScarsDialog(root, c, render));
     const restActions = el(
       'div', { class: 'header-actions' },
       ...([['Short rest', 'short', 'Short rest: refreshes short-rest abilities and ends effects lasting until a rest'], ['Long rest', 'long', 'Long rest: refreshes all rest abilities and ends effects lasting until a rest']] as const)
@@ -422,7 +442,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           b.addEventListener('click', () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); }));
           return b;
         }),
-      el('button', { class: 'small', type: 'button', title: 'Offered when the last HP is marked (not available yet)', disabled: true }, 'Death move...'),
+      death,
     );
     return el(
       'header', { class: 'ident' },
@@ -441,6 +461,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             sub('Heritage: ', `${c.ancestry} ancestry, ${c.community} community${c.transformation ? `, ${c.transformation} transformation` : ''}`),
             ...(c.player ? [sub('Played by ', c.player)] : []),
             restActions,
+            ...(c.pendingDeathRoll ? [el('p', { class: 'muted' }, 'Risk recovery pending — resolve the result in chat before rolling.')] : []),
+            ...(c.deathNarrative ? [el('p', { class: 'muted' }, c.deathNarrative)] : []),
           ),
         ),
         ...(c.mancer?.done === false ? [] : [el('div', { class: 'header-vitals-row' }, vitals())]),
@@ -452,9 +474,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           levelBox(c.level, 'Level'), levelBox(tierOf(c.level), 'Tier'),
           levelUpButton(),
         ),
-        vital('Hope', pips(c.hope, 'hope', 'var(--hope)', true, refreshActions)),
+        vital('Hope', el('div', {}, pips(c.hope, 'hope', 'var(--hope)', true, refreshActions, c.scars), scars)),
         vital('Proficiency', pips(c.proficiency, 'prof', 'var(--accent)', true, refreshActions)),
-        ...extraResources.map((r) => vital(r.label, poolInput(r))),
+        ...extraResources.map((r) => vital(r.label, poolControls(r))),
       ),
     );
   }
@@ -468,6 +490,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       render();
     });
     return input;
+  }
+
+  function poolControls(r: NonNullable<Automation['resources']>[number]): HTMLElement {
+    const input = poolInput(r);
+    if (r.id !== 'death-mask') return input;
+    input.title = 'Manual Mask token adjustment (0–4); confirm the reason at the table.';
+    const gain = el('button', { type: 'button', class: 'small', disabled: (c.resources?.[r.id] ?? 0) >= 4 }, 'Gain token');
+    gain.addEventListener('click', () => {
+      if (!window.confirm('Confirm at the table that you have earned one Mask token.')) return;
+      c.resources ??= {};
+      c.resources[r.id] = Math.min(4, (c.resources[r.id] ?? 0) + 1);
+      render();
+    });
+    return el('div', { class: 'row' }, input, gain);
   }
 
   function levelUpButton(): HTMLElement {
@@ -597,7 +633,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         withSources(vital('Armor', pips(c.armorTrack, 'armor', 'var(--armor)', false, refreshActions), 'v-a'), srcs.armor, th.armorSlots, 'Armor slots'),
         withSources(thresholds,
           [...srcs.major.map((r) => ({ ...r, label: `${r.label} (major)` })), ...srcs.severe.map((r) => ({ ...r, label: `${r.label} (severe)` }))], `${th.major} / ${th.severe}`, 'Total (major / severe)'),
-        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, refreshActions), 'v-hp'),
+        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp), 'v-hp'),
         vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, refreshActions), 'v-st'),
       ),
     );
@@ -789,8 +825,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     );
     const rows = c.inventory.map((i) => {
       const use = i.use ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
-      if (use) use.disabled = i.qty <= 0;
+      if (use) {
+        use.disabled = i.qty <= 0 || !!c.pendingDeathRoll;
+        if (c.pendingDeathRoll) use.title = 'Resolve pending Risk It All recovery in chat before rolling';
+      }
       use?.addEventListener('click', () => {
+        if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return; }
         if (i.qty > 0) { i.qty--; dropIfEmpty(i); rollDamage(i.name + (i.note ? ` (${i.note})` : ''), i.use!, rollSourceFor(c, `item:${i.name}`)); render(); }
       });
       const key = `item:${i.name}`;

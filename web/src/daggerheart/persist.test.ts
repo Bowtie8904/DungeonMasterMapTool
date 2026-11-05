@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryConflict, getSheet, saveSheet } from '../api';
-import { applyInventory, autosave, updateCharacterAutomation } from './persist';
+import { applyFeatureState, applyInventory, autosave, updateCharacterAutomation } from './persist';
 import { mockCharacter } from './data';
 import type { CompendiumFile } from './compendium';
 
@@ -12,6 +12,47 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('merges partial death feature inventory without clearing equipment and honors independent card revisions', () => {
+    const c = mockCharacter();
+    const armor = c.activeArmor;
+    const weapons = c.activeWeapons;
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 1, inventoryRevision: 1,
+      inventory: [], compendiumRevision: 1, loadout: [], vault: [], longRestRevision: 3, permanentHp: 2, pendingDeathRoll: { id: 4, ts: 5 } })).toBe(true);
+    expect(c.activeArmor).toBe(armor);
+    expect(c.activeWeapons).toBe(weapons);
+    expect(c.longRestRevision).toBe(3);
+    expect(c.pendingDeathRoll).toEqual({ id: 4, ts: 5 });
+    const card = { ...mockCharacter().loadout[0], name: 'Unbreakable' };
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 2, compendiumRevision: 2, vault: [card] })).toBe(true);
+    expect(c.vault).toEqual([card]);
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 3, pendingDeathRoll: null })).toBe(true);
+    expect(c.pendingDeathRoll).toBeUndefined();
+    expect(c.permanentHp).toBe(2);
+    const hp = c.hp;
+    const inventory = c.inventory;
+    const vault = c.vault;
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 3, inventoryRevision: 99,
+      compendiumRevision: 99, hp: { ...c.hp, on: 0 }, permanentHp: 0, pendingDeathRoll: { id: 99, ts: 99 }, inventory: [], vault: [] })).toBe(false);
+    expect(c.hp).toBe(hp);
+    expect(c.inventory).toBe(inventory);
+    expect(c.vault).toBe(vault);
+    expect(c.pendingDeathRoll).toBeUndefined();
+    expect(c.permanentHp).toBe(2);
+  });
+
+  it('refreshes death metadata and routes gear actions while preserving GM modifiers', () => {
+    const c = mockCharacter();
+    c.inventory = [{ name: 'Mask', type: 'gear', qty: 1, automation: { modifiers: [{ stat: 'evasion', value: 2 }] } }];
+    updateCharacterAutomation(c, [{ format: 'dmmap-daggerheart', version: 1, label: 'Items', category: 'items', entries: [{ id: 'mask', name: 'Mask', automation: {
+      deathMove: { kind: 'mask', bonus: 1, moves: ['avoid', 'risk'] },
+      resources: [{ id: 'death-mask', label: 'Tokens', initial: 0, max: 4 }],
+      actions: [{ id: 'gain', label: 'Gain token', steps: [{ op: 'gain', resource: 'death-mask', amount: 1 }] }],
+    } }] }]);
+    expect(c.inventory[0].automation?.deathMove?.kind).toBe('mask');
+    expect(c.resources?.['death-mask']).toBe(0);
+    expect(c.inventory[0].automation?.actions).toHaveLength(1);
+    expect(c.inventory[0].automation?.modifiers).toEqual([{ stat: 'evasion', value: 2 }]);
+  });
   it('adds reaction-only gear options without replacing existing custom mechanics or duplicating options', () => {
     const c = mockCharacter();
     c.inventory = [{ name: 'Anchoring Hook', type: 'gear', qty: 1, automation: {

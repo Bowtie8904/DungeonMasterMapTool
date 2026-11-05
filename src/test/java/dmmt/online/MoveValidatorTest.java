@@ -51,4 +51,25 @@ class MoveValidatorTest {
         assertTrue(MoveValidator.crosses(0, 0, 10, 10, 0, 10, 10, 0));
         assertFalse(MoveValidator.crosses(0, 0, 1, 1, 5, 5, 6, 6));
     }
+
+    @Test
+    void spectralIgnoresWallsAndDoorsButNotOwnershipVisibilityPositionOrMapLimits() {
+        Campaign c = campaign();
+        DmProject project = new DmProject();
+        DmProject.WallSegment wall = new DmProject.WallSegment();
+        wall.setX1(5); wall.setY1(-5); wall.setX2(5); wall.setY2(5);
+        project.setWalls(List.of(wall));
+        DmProject.Interactable door = new DmProject.Interactable();
+        door.setX1(6); door.setY1(-5); door.setX2(6); door.setY2(5);
+        project.setInteractables(List.of(door));
+        assertNull(MoveValidator.check(project, c, "m", "p1", token(c, true), 10, 0, true));
+        assertNotNull(MoveValidator.check(project, c, "m", "p2", token(c, true), 10, 0, true));
+        assertNotNull(MoveValidator.check(project, c, "m", "p1", token(c, false), 10, 0, true));
+        assertNotNull(MoveValidator.check(project, c, "m", "p1", token(c, true), Double.NaN, 0, true));
+        DmProject.ImageLayer image = new DmProject.ImageLayer();
+        image.setWidth(20); image.setHeight(20); image.setVisible(true);
+        project.setImageLayers(List.of(image));
+        assertNull(MoveValidator.check(project, c, "m", "p1", token(c, true), 20, 20, true));
+        assertEquals("Outside the map", MoveValidator.check(project, c, "m", "p1", token(c, true), 21, 20, true));
+    }
 }

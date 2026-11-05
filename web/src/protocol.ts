@@ -244,6 +244,8 @@ export interface RollMessage {
   outcome?: 'hope' | 'fear';
   /** Additional result rendered on a feature-check roll card. */
   featureRoll?: { name: string; result: number; consequence: string };
+  deathMove?: 'avoid' | 'risk';
+  deathResult?: { outcome: 'hope' | 'fear' | 'crit'; hope: number; fear: number; adjustedHope: number; bonus: number; budget: number; claimed: boolean; undying: boolean; converted?: boolean };
   /** Feature actions already applied to this roll, keyed by actor and action id. */
   featureUses?: string[];
   /** Present only on host-supported rolls; persisted and updated after the roller claims the reward. */
@@ -257,6 +259,17 @@ export interface FeatureSheetMessage {
   hp?: import('./daggerheart/data').Track;
   stress?: import('./daggerheart/data').Track;
   hope?: import('./daggerheart/data').Track;
+  scars?: number;
+  permanentHp?: number;
+  longRestRevision?: number;
+  spectralBlocked?: boolean;
+  deathNarrative?: string;
+  pendingDeathRoll?: { id: number; ts: number } | null;
+  inventoryRevision?: number;
+  compendiumRevision?: number;
+  inventory?: import('./daggerheart/data').CharacterSheet['inventory'];
+  loadout?: import('./daggerheart/data').CharacterSheet['loadout'];
+  vault?: import('./daggerheart/data').CharacterSheet['vault'];
   armorTrack?: import('./daggerheart/data').Track;
   effects?: import('./daggerheart/engine').ActiveEffect[];
   usage?: import('./daggerheart/data').CharacterSheet['usage'];
@@ -318,6 +331,8 @@ export type DeltaOp =
 
 export interface Hello {
   type: 'hello';
+  deathMoves?: boolean;
+  deathMoveOptions?: boolean;
   protocol: number;
   playerId: string;
   playerName: string;
@@ -364,7 +379,7 @@ export type ServerMessage =
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
-  | { type: 'rollUpdate'; id: number; ts: number; outcome?: 'hope' | 'fear'; featureUses?: string[]; rewardClaimed?: boolean }
+  | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll'>>)
   | AudioMessage
   | { type: 'kicked'; reason?: string }
   | { type: 'error'; message: string };

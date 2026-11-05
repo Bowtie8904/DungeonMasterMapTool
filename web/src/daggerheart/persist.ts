@@ -22,6 +22,11 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     for (const item of items) {
       const rules = entries(category).find((e) => e.name === item.name)?.automation;
       if (!rules) continue;
+      if (rules.deathMove) {
+        item.automation ??= {};
+        item.automation.deathMove = structuredClone(rules.deathMove);
+        if (rules.resources) item.automation.resources = structuredClone(rules.resources);
+      }
       if (rules.rest && !item.automation?.rest) {
         item.automation ??= {};
         item.automation.rest = structuredClone(rules.rest);
@@ -37,13 +42,14 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
         if (!options.some((current) => current.id === option.id)) options.push(structuredClone(option));
       }
       for (const action of rules.actions ?? []) {
-        if (!action.timing) continue;
+        if (!action.timing && !action.deathMove && !rules.deathMove) continue;
         item.automation ??= {};
         const actions = item.automation.actions ??= [];
         const current = actions.find((a) => a.id === action.id);
         if (!current) actions.push(structuredClone(action));
         else {
           current.timing ??= action.timing;
+          current.deathMove ??= action.deathMove;
           if (action.downtime && !current.downtime) current.downtime = structuredClone(action.downtime);
         }
       }
@@ -120,12 +126,27 @@ export function featureTarget(c: CharacterSheet, key: string, actionId: string):
   return action?.target;
 }
 
+export function isLifeWard(c: CharacterSheet, key: string): boolean {
+  return automationSources(c).some(source => source.key === key && source.automation?.deathMove?.kind === 'lifeWard');
+}
+
 export interface FeatureSheetState {
   actorId: string;
   featureRevision: number;
   hp?: CharacterSheet['hp'];
   stress?: CharacterSheet['stress'];
   hope?: CharacterSheet['hope'];
+  scars?: number;
+  permanentHp?: number;
+  longRestRevision?: number;
+  spectralBlocked?: boolean;
+  deathNarrative?: string;
+  pendingDeathRoll?: CharacterSheet['pendingDeathRoll'] | null;
+  inventoryRevision?: number;
+  compendiumRevision?: number;
+  inventory?: CharacterSheet['inventory'];
+  loadout?: CharacterSheet['loadout'];
+  vault?: CharacterSheet['vault'];
   armorTrack?: CharacterSheet['armorTrack'];
   effects?: CharacterSheet['effects'];
   usage?: CharacterSheet['usage'];
@@ -134,10 +155,17 @@ export interface FeatureSheetState {
 
 export function applyFeatureState(c: CharacterSheet, update: FeatureSheetState): boolean {
   if (update.featureRevision <= ((c as CharacterSheet & { featureRevision?: number }).featureRevision ?? 0)) return false;
+  applyInventory(c, update, true);
   (c as CharacterSheet & { featureRevision?: number }).featureRevision = update.featureRevision;
   if (update.hp) c.hp = structuredClone(update.hp);
   if (update.stress) c.stress = structuredClone(update.stress);
   if (update.hope) c.hope = structuredClone(update.hope);
+  if (update.scars !== undefined) c.scars = update.scars;
+  if (update.permanentHp !== undefined) c.permanentHp = update.permanentHp;
+  if (update.longRestRevision !== undefined) c.longRestRevision = update.longRestRevision;
+  if (update.spectralBlocked !== undefined) c.spectralBlocked = update.spectralBlocked;
+  if (update.deathNarrative !== undefined) c.deathNarrative = update.deathNarrative;
+  if (update.pendingDeathRoll !== undefined) c.pendingDeathRoll = update.pendingDeathRoll ?? undefined;
   if (update.armorTrack) c.armorTrack = structuredClone(update.armorTrack);
   if (update.effects) c.effects = structuredClone(update.effects);
   if (update.usage) c.usage = structuredClone(update.usage);
@@ -173,20 +201,24 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
 }
 
 /** Returns a function to call after every possible change; it saves (debounced) only when the sheet really differs from the last save. */
-export function applyInventory(c: CharacterSheet, incoming: Partial<CharacterSheet>): boolean {
-  if ((incoming.inventoryRevision ?? 0) <= (c.inventoryRevision ?? 0)) return false;
-  c.inventoryRevision = incoming.inventoryRevision;
-  c.inventory = incoming.inventory ?? [];
-  c.activeWeapons = incoming.activeWeapons ?? [];
-  c.carriedWeapons = incoming.carriedWeapons ?? [];
-  c.carriedArmor = incoming.carriedArmor ?? [];
-  c.activeArmor = incoming.activeArmor;
+export function applyInventory(c: CharacterSheet, incoming: Partial<Omit<CharacterSheet, 'pendingDeathRoll'>>, preserveMissing = false): boolean {
+  let changed = false;
+  if ((incoming.inventoryRevision ?? 0) > (c.inventoryRevision ?? 0)) {
+    changed = true;
+    c.inventoryRevision = incoming.inventoryRevision;
+    if (incoming.inventory || !preserveMissing) c.inventory = incoming.inventory ?? [];
+    if (incoming.activeWeapons || !preserveMissing) c.activeWeapons = incoming.activeWeapons ?? [];
+    if (incoming.carriedWeapons || !preserveMissing) c.carriedWeapons = incoming.carriedWeapons ?? [];
+    if (incoming.carriedArmor || !preserveMissing) c.carriedArmor = incoming.carriedArmor ?? [];
+    if ('activeArmor' in incoming || !preserveMissing) c.activeArmor = incoming.activeArmor;
+  }
   if ((incoming.compendiumRevision ?? 0) > (c.compendiumRevision ?? 0)) {
+    changed = true;
     c.compendiumRevision = incoming.compendiumRevision;
     if (incoming.loadout) c.loadout = incoming.loadout;
     if (incoming.vault) c.vault = incoming.vault;
   }
-  return true;
+  return changed;
 }
 
 export type SheetSave = (() => void) & { flush: () => Promise<void>; refresh: () => Promise<void> };
@@ -209,8 +241,9 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
         if (e instanceof InventoryConflict) {
           applyInventory(c, e.sheet);
           applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
-            hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, armorTrack: e.sheet.armorTrack,
-            effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources });
+            hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
+            effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
+            permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
           document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
         }
         onError(`Could not save the character sheet: ${(e as Error).message}`);
@@ -235,8 +268,9 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
       }
       if (sheet.sheet && applyFeatureState(c, { actorId,
         featureRevision: (sheet.sheet as { featureRevision?: number }).featureRevision ?? 0,
-        hp: sheet.sheet.hp, stress: sheet.sheet.stress, hope: sheet.sheet.hope, armorTrack: sheet.sheet.armorTrack,
-        effects: sheet.sheet.effects, usage: sheet.sheet.usage, resources: sheet.sheet.resources })) {
+        hp: sheet.sheet.hp, stress: sheet.sheet.stress, hope: sheet.sheet.hope, scars: sheet.sheet.scars, armorTrack: sheet.sheet.armorTrack,
+        effects: sheet.sheet.effects, usage: sheet.sheet.usage, resources: sheet.sheet.resources,
+        permanentHp: sheet.sheet.permanentHp, longRestRevision: sheet.sheet.longRestRevision, spectralBlocked: sheet.sheet.spectralBlocked, deathNarrative: sheet.sheet.deathNarrative, pendingDeathRoll: sheet.sheet.pendingDeathRoll ?? null })) {
         document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
       }
     },

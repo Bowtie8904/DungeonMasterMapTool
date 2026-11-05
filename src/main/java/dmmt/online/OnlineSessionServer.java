@@ -202,6 +202,9 @@ public final class OnlineSessionServer {
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
         javalin.post("/api/feature", this::handleFeature);
+        javalin.post("/api/death-move", this::handleDeathMove);
+        javalin.get("/api/death-move/{id}", this::handleDeathOptions);
+        javalin.post("/api/death-recovery", this::handleDeathRecovery);
         javalin.post("/api/roll-reward", this::handleRollReward);
         javalin.post("/api/damage-taken", this::handleDamageTaken);
         javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
@@ -1160,16 +1163,211 @@ public final class OnlineSessionServer {
                 return;
             }
             ObjectNode saved = (ObjectNode) sheet;
+            validateDeathSave(saved, previous);
+            if (!saved.has("scars") && previous.has("scars"))
+                saved.set("scars", previous.get("scars"));
+            JsonNode scars = saved.path("scars");
+            if (!scars.isMissingNode() && (!scars.isInt() || scars.asInt() < 0
+                    || scars.asInt() > saved.path("hope").path("total").asInt(6))) {
+                json(ctx, 400, errorBody("Scars must be a whole number between zero and the total Hope slots."));
+                return;
+            }
             saved.remove("transferClaims");
             if (previous.has("transferClaims"))
                 saved.set("transferClaims", previous.get("transferClaims"));
-            store.saveSheet(c.getId(), actor.getId(), saved.toString());
+            ObjectNode beforeNormalization = saved.deepCopy();
+            Map<String, ObjectNode> changes = new java.util.LinkedHashMap<>();
+            changes.put(actor.getId(), saved);
+            List<String> deathReports = normalizeDeathChanges(changes);
+            if (!saved.equals(beforeNormalization) || changes.size() > 1
+                    || saved.path("longRestRevision").asLong() != previous.path("longRestRevision").asLong()
+                    || !saved.path("pendingDeathRoll").equals(previous.path("pendingDeathRoll"))) {
+                ObjectNode report = deathReports.isEmpty() ? null : deathStateMessage(playerId, campaign.player(playerId).getName(),
+                        actor.getName(), deathReports);
+                persistFeatureSheets(changes, report, report != null);
+                for (var entry : changes.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
+                if (report != null) deliver(report, null, false);
+            } else {
+                store.saveSheet(c.getId(), actor.getId(), saved.toString());
+            }
             stockChanged(actor.getId());
             json(ctx, 200, MAPPER.createObjectNode().put("saved", true));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read or save the character sheet."));
+        }
+    }
+
+    private void validateDeathSave(ObjectNode saved, ObjectNode previous) {
+        int permanent = previous.path("permanentHp").asInt();
+        if (saved.has("permanentHp") && (!saved.path("permanentHp").isInt() || saved.path("permanentHp").asInt() != permanent))
+            throw new IllegalArgumentException("Permanent HP can only be marked by Won't Stay Dead in chat.");
+        if (permanent > saved.path("hp").path("slots").asInt())
+            throw new IllegalArgumentException("The HP track cannot have fewer slots than permanently marked HP.");
+        if (previous.has("permanentHp")) saved.set("permanentHp", previous.get("permanentHp"));
+        if (previous.has("spectralBlocked")) saved.set("spectralBlocked", previous.get("spectralBlocked"));
+        saved.remove("pendingDeathRoll");
+        if (previous.path("pendingDeathRoll").isObject()
+                && saved.path("hp").path("on").asInt() >= previous.path("hp").path("on").asInt()
+                && saved.path("stress").path("on").asInt() >= previous.path("stress").path("on").asInt())
+            saved.set("pendingDeathRoll", previous.get("pendingDeathRoll"));
+        int rest = DeathMoves.integer(saved, "longRestRevision", previous.path("longRestRevision").asInt());
+        int oldRest = previous.path("longRestRevision").asInt();
+        if (rest < oldRest || (long) rest > (long) oldRest + 1)
+            throw new IllegalArgumentException("Refresh the sheet before reporting another long rest.");
+        if (saved.has("longRestRevision") || previous.has("longRestRevision")) saved.put("longRestRevision", rest);
+        if (saved.path("resources").has("death-mask")) {
+            int tokens = DeathMoves.integer(saved.path("resources"), "death-mask", 0);
+            if (tokens > 4) throw new IllegalArgumentException("Mask tokens must be between zero and four.");
+        }
+    }
+
+    private List<DeathMoves.Source> deathSources(ObjectNode sheet) throws IOException {
+        List<DeathMoves.Source> sources = new ArrayList<>();
+        List<JsonNode> catalogs = new ArrayList<>();
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory != null) {
+            try (var files = java.nio.file.Files.list(directory)) {
+                for (var file : files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList())
+                    catalogs.add(MAPPER.readTree(file.toFile()));
+            }
+        }
+        for (String field : List.of("features", "heritage", "loadout", "activeArmor", "inventory")) {
+            JsonNode values = sheet.path(field);
+            Iterable<JsonNode> entries = values.isArray() ? values : values.isObject() ? List.of(values) : List.of();
+            for (JsonNode entry : entries) {
+                if ("inventory".equals(field) && entry.path("qty").asInt() <= 0) continue;
+                String name = entry.path("name").asText();
+                String kind = "loadout".equals(field) ? "card" : "activeArmor".equals(field) ? "armor"
+                        : "inventory".equals(field) ? "item" : "feat";
+                JsonNode automation = directory == null ? entry.path("automation") : null;
+                for (JsonNode catalog : catalogs) {
+                    JsonNode found = findCatalogFeature(catalog, name);
+                    if (found != null) { automation = found; break; }
+                }
+                if (automation != null && automation.path("deathMove").isObject())
+                    sources.add(new DeathMoves.Source(kind + ":" + name, name, automation, entry));
+            }
+        }
+        return sources;
+    }
+
+    private synchronized void handleDeathOptions(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        try {
+            Campaign.Actor actor = ownedActor(playerId, ctx.pathParam("id"));
+            ObjectNode sheet = storedSheet(actor.getId());
+            json(ctx, 200, DeathMoves.options(sheet, deathSources(sheet)));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not load death-move options. Check the host's Daggerheart configurations."));
+        }
+    }
+
+    private synchronized void handleDeathRecovery(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Death recovery request is too large."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject() || !request.path("roll").isObject())
+                throw new IllegalArgumentException("Invalid death recovery request.");
+            Campaign.Actor actor = ownedActor(playerId, request.path("actorId").asText());
+            ObjectNode sheet = storedSheet(actor.getId());
+            ObjectNode roll = findHistoryRoll(request.path("roll"));
+            if (!playerId.equals(roll.path("fromId").asText()) || !actor.getId().equals(roll.path("actorId").asText()))
+                throw new IllegalArgumentException("Only the character who made this death roll can resolve it.");
+            JsonNode pending = sheet.path("pendingDeathRoll");
+            if (!pending.isObject() || pending.path("id").asLong(-1) != roll.path("id").asLong()
+                    || pending.path("ts").asLong(-1) != roll.path("ts").asLong())
+                throw new IllegalArgumentException("That death roll is no longer pending.");
+            boolean undying = deathSources(sheet).stream().anyMatch(s -> "undying".equals(s.kind()));
+            DeathMoves.recover(sheet, roll, request, undying);
+            commitFeatureSheets(Map.of(actor.getId(), sheet), roll);
+            sendFeatureState(actor, sheet);
+            broadcastRollUpdate(roll);
+            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid death recovery request."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not save the death recovery."));
+        }
+    }
+
+    private synchronized void handleDeathMove(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Death move request is too large."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.isObject())
+                throw new IllegalArgumentException("Invalid death move request.");
+            if (campaign == null) throw new IllegalArgumentException("No online session is running.");
+            Campaign.Actor actor = campaign.actor(request.path("actorId").asText());
+            if (actor == null || !playerId.equals(actor.getOwnerId())) {
+                json(ctx, 403, errorBody("Not your actor."));
+                return;
+            }
+            ObjectNode sheet = storedSheet(actor.getId());
+            String move = request.path("move").asText();
+            Map<String, ObjectNode> normalized = new java.util.LinkedHashMap<>();
+            normalized.put(actor.getId(), sheet);
+            List<String> pendingReports = normalizeDeathChanges(normalized);
+            if (!pendingReports.isEmpty()) {
+                ObjectNode report = deathStateMessage(playerId, campaign.player(playerId).getName(), actor.getName(), pendingReports);
+                persistFeatureSheets(normalized, report, true);
+                for (var entry : normalized.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+                deliver(report, null, false);
+                if (sheet.path("hp").path("on").asInt() < sheet.path("hp").path("slots").asInt()) {
+                    json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                    return;
+                }
+            }
+            DeathMoves.Result result = DeathMoves.take(sheet, request, deathSources(sheet), diceRandom);
+            ObjectNode message;
+            if (result.dice() == null) {
+                message = chatMessage(playerId, campaign.player(playerId).getName(), null,
+                        "ACTION USED\nDeath move - " + result.title() + "\n" + actor.getName()
+                                + "\n• " + actor.getName() + ": " + result.consequence());
+            } else {
+                ObjectNode source = MAPPER.createObjectNode().put("name", result.title())
+                        .put("source", "Death move").put("text", result.consequence());
+                message = featureRollMessage(actor, source, actor.getName() + " - " + result.title(), result.dice());
+                message.put("from", chatName(playerId, campaign.player(playerId).getName()));
+                if (List.of("risk", "avoid").contains(move)) message.put("deathMove", move);
+                message.putObject("featureRoll").put("name", result.title()).put("result", result.dice().total())
+                        .put("consequence", result.consequence());
+                message.set("breakdown", MAPPER.valueToTree(DiceRoller.breakdown(result.dice(), result.contributions(), 2)));
+                if (result.deathResult() != null) {
+                    message.set("deathResult", result.deathResult());
+                    message.put("outcome", result.deathResult().path("outcome").asText());
+                    if (!"fear".equals(result.deathResult().path("outcome").asText()) || result.deathResult().path("undying").asBoolean())
+                        sheet.putObject("pendingDeathRoll").put("id", message.path("id").asLong()).put("ts", message.path("ts").asLong());
+                }
+            }
+            commitFeatureSheets(Map.of(actor.getId(), sheet), message, true);
+            sendFeatureState(actor, sheet);
+            deliver(message, null, false);
+            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid death move request."));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not save the death move."));
         }
     }
 
@@ -1205,6 +1403,8 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            if (definition.has("deathMove"))
+                throw new IllegalArgumentException("Use the Death move dialog to resolve this feature and its costs.");
             if (definition.has("requiresEffect")) {
                 boolean active = false;
                 for (JsonNode effect : sourceSheet.path("effects"))
@@ -1218,9 +1418,25 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
             String targetMode = definition.path("target").asText("");
-            List<Campaign.Actor> targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
+            boolean lifeWard = "lifeWard".equals(automation.path("deathMove").path("kind").asText());
+            List<Campaign.Actor> targets;
+            if (lifeWard) {
+                if (!sourceSheet.path("loadout").isArray() || java.util.stream.StreamSupport.stream(sourceSheet.path("loadout").spliterator(), false)
+                        .noneMatch(card -> source.path("name").asText().equals(card.path("name").asText())))
+                    throw new IllegalArgumentException("Life Ward must be in the active loadout.");
+                Campaign.Actor target = c.actor(request.path("targetActorId").asText());
+                if (target == null || target.getOwnerId() == null || c.player(target.getOwnerId()) == null
+                        || target.getId().equals(sourceActor.getId()))
+                    throw new IllegalArgumentException("Choose an ally within Close range for Life Ward.");
+                if (!request.path("confirmRange").asBoolean())
+                    throw new IllegalArgumentException("Confirm that the ally is within Close range.");
+                targets = List.of(target);
+            } else {
+                targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
+            }
             Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
             changedSheets.put(sourceActor.getId(), sourceSheet);
+            if (lifeWard) removeLifeWards(changedSheets, sourceActor.getId());
             for (Campaign.Actor target : targets) {
                 changedSheets.computeIfAbsent(target.getId(), id -> {
                     try { return storedSheet(id); }
@@ -1284,7 +1500,7 @@ public final class OnlineSessionServer {
                 String consequence = marked ? "Marked 1 " + resourceLabel + "." : "No " + resourceLabel + " marked.";
                 changedSheets.put(sourceActor.getId(), sourceSheet);
                 commitFeatureSheets(changedSheets);
-                sendFeatureState(sourceActor, sourceSheet);
+                for (var entry : changedSheets.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
                 publishFeatureCheck(sourceActor, source, actionLabel, result, consequence);
                 json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
                 return;
@@ -1405,7 +1621,9 @@ public final class OnlineSessionServer {
         if (die.has("resource")) {
             ObjectNode sheet = recipient.equals(sourceActor) ? sourceSheet : storedSheet(recipient.getId());
             ObjectNode track = requireTrack(sheet, die.path("resource").asText());
-            applied = Math.min(improvement, Math.min(die.path("recovery").asInt(0), Math.max(0, track.path("on").asInt())));
+            int recoverable = "hp".equals(die.path("resource").asText())
+                    ? DeathMoves.recoverableHp(sheet) : Math.max(0, track.path("on").asInt());
+            applied = Math.min(improvement, Math.min(die.path("recovery").asInt(0), recoverable));
             track.put("on", track.path("on").asInt() - applied);
             die.put("recovery", Math.max(0, die.path("recovery").asInt() - applied));
             int beforeClear = die.path("cleared").asInt();
@@ -1715,7 +1933,8 @@ public final class OnlineSessionServer {
                 int before = track.path("on").asInt();
                 int amount = featureAmount(step.path("amount"), sheet);
                 if ("all".equals(step.path("amount").asText())) amount = before;
-                if ("clear".equals(operation)) track.put("on", Math.max(0, before - Math.max(0, amount)));
+                if ("clear".equals(operation)) track.put("on", Math.max("hp".equals(resource) ? sheet.path("permanentHp").asInt() : 0,
+                        before - Math.max(0, amount)));
                 else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
                 int changed = Math.abs(before - track.path("on").asInt());
                 if (changed > 0) report.add(resource.equals("hp") ? "Cleared " + changed + " HP."
@@ -1833,25 +2052,129 @@ public final class OnlineSessionServer {
         return removed;
     }
 
+    private boolean removeLifeWards(Map<String, ObjectNode> changes, String casterId) throws IOException {
+        boolean anyRemoved = false;
+        for (Campaign.Actor actor : campaign.getActors()) {
+            ObjectNode sheet = changes.get(actor.getId());
+            boolean loaded = sheet != null;
+            if (!loaded) sheet = storedSheet(actor.getId());
+            if (!(sheet.path("effects") instanceof ArrayNode effects)) continue;
+            boolean removed = false;
+            for (int i = effects.size() - 1; i >= 0; i--) {
+                JsonNode effect = effects.get(i);
+                if (effect.path("lifeWard").asBoolean() && casterId.equals(effect.path("sourceActorId").asText())) {
+                    effects.remove(i);
+                    removed = true;
+                    anyRemoved = true;
+                }
+            }
+            if (removed || loaded) changes.put(actor.getId(), sheet);
+        }
+        return anyRemoved;
+    }
+
+    private static boolean hasSpectral(JsonNode sheet) {
+        for (JsonNode effect : sheet.path("effects")) if (effect.has("spectralHp")) return true;
+        return false;
+    }
+
+    private List<String> normalizeDeathChanges(Map<String, ObjectNode> changes) throws IOException {
+        List<String> reports = new ArrayList<>();
+        for (String id : List.copyOf(changes.keySet())) {
+            ObjectNode sheet = changes.get(id);
+            ObjectNode previous = storedSheet(id);
+            if (sheet.path("longRestRevision").asLong() > previous.path("longRestRevision").asLong()) {
+                if (removeLifeWards(changes, id))
+                    reports.add(campaign.actor(id).getName() + ": long rest ended all Life Wards cast by this character.");
+            }
+        }
+        for (var entry : changes.entrySet()) {
+            ObjectNode sheet = entry.getValue();
+            ObjectNode previous = storedSheet(entry.getKey());
+            String name = campaign.actor(entry.getKey()).getName();
+            boolean spectral = hasSpectral(previous);
+            int slots = sheet.path("hp").path("slots").asInt();
+            int on = sheet.path("hp").path("on").asInt();
+            if (spectral && slots > 0 && on >= slots) {
+                sheet.put("spectralBlocked", true);
+                if (sheet.path("effects") instanceof ArrayNode effects) {
+                    for (int i = effects.size() - 1; i >= 0; i--) if (effects.get(i).has("spectralHp")) effects.remove(i);
+                }
+            }
+            if (slots > 0 && on >= slots && sheet.path("effects") instanceof ArrayNode effects) {
+                for (int i = 0; i < effects.size(); i++) {
+                    JsonNode effect = effects.get(i);
+                    if (!effect.path("lifeWard").asBoolean()) continue;
+                    Campaign.Actor caster = campaign.actor(effect.path("sourceActorId").asText());
+                    effects.remove(i);
+                    int cleared = DeathMoves.clearHp(sheet, 1);
+                    reports.add(name + ": Life Ward from " + (caster == null ? effect.path("source").asText("an ally") : caster.getName())
+                            + " consumed; cleared " + cleared + " HP" + (cleared > 0 ? " instead of a death move." : "; all HP remain permanently marked."));
+                    break;
+                }
+            }
+            DeathMoves.sync(sheet);
+            if (spectral && !hasSpectral(sheet))
+                reports.add(name + ": Spectral Form ended. If inside a solid object, the GM must reposition the token to the nearest open space.");
+        }
+        return reports;
+    }
+
     private void commitFeatureSheets(Map<String, ObjectNode> changedSheets) throws IOException {
         commitFeatureSheets(changedSheets, null);
     }
 
     private void commitFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode roll) throws IOException {
+        commitFeatureSheets(changedSheets, roll, false);
+    }
+
+    private void commitFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode message, boolean newMessage) throws IOException {
+        Map<String, ObjectNode> changes = new java.util.LinkedHashMap<>(changedSheets);
+        List<String> reports = normalizeDeathChanges(changes);
+        ObjectNode report = reports.isEmpty() ? null : deathStateMessage("dm", "DM", "Party", reports);
+        persistFeatureSheets(changes, message, newMessage, report);
+        for (var entry : changes.entrySet())
+            if (!changedSheets.containsKey(entry.getKey())) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        if (report != null) deliver(report, null, false);
+    }
+
+    private ObjectNode deathStateMessage(String fromId, String fromName, String actorName, List<String> reports) {
+        return chatMessage(fromId, fromName, null, "ACTION USED\nDeath move - Life Ward / Spectral Form\n" + actorName
+                + reports.stream().map(line -> "\n• " + line).reduce("", String::concat));
+    }
+
+    private void persistFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode message, boolean newMessage) throws IOException {
+        persistFeatureSheets(changedSheets, message, newMessage, null);
+    }
+
+    private void persistFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode message, boolean newMessage,
+                                      ObjectNode report) throws IOException {
+        List<String> stockChanges = new ArrayList<>();
+        for (var entry : changedSheets.entrySet())
+            if (entry.getValue().path("inventoryRevision").asLong() != storedSheet(entry.getKey()).path("inventoryRevision").asLong())
+                stockChanges.add(entry.getKey());
         for (ObjectNode sheet : changedSheets.values()) {
+            DeathMoves.sync(sheet);
             sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         }
-        store.saveSheetsAndRoll(campaign.getId(), changedSheets, roll);
+        List<ObjectNode> newMessages = new ArrayList<>();
+        if (newMessage && message != null) newMessages.add(message);
+        if (report != null) newMessages.add(report);
+        store.saveSheetsAndResults(campaign.getId(), changedSheets, newMessage ? null : message, newMessages);
+        stockChanges.forEach(this::stockChanged);
     }
 
     private void sendFeatureState(Campaign.Actor actor, ObjectNode sheet) {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
-        for (String field : List.of("hp", "stress", "hope", "armorTrack", "effects", "usage", "resources")) {
+        for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
+                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision",
+                "inventoryRevision", "compendiumRevision", "inventory", "loadout", "vault")) {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
+        message.set("pendingDeathRoll", sheet.has("pendingDeathRoll") ? sheet.get("pendingDeathRoll") : MAPPER.nullNode());
         for (Client client : clients.values())
             if (actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)) sendTo(client.ctx, message.toString());
     }
@@ -1930,6 +2253,8 @@ public final class OnlineSessionServer {
         if (roll.has("outcome")) update.set("outcome", roll.get("outcome"));
         update.set("featureUses", roll.withArray("featureUses"));
         if (roll.has("rewardClaimed")) update.set("rewardClaimed", roll.get("rewardClaimed"));
+        if (roll.has("deathResult")) update.set("deathResult", roll.get("deathResult"));
+        if (roll.has("deathMove") && roll.has("featureRoll")) update.set("featureRoll", roll.get("featureRoll"));
         String toId = roll.path("toId").asText("");
         String fromId = roll.path("fromId").asText("");
         if (toId.isEmpty()) {
@@ -2422,6 +2747,8 @@ public final class OnlineSessionServer {
             hello.put("keptDice", true);
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
+            hello.put("deathMoves", true);
+            hello.put("deathMoveOptions", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
             sendHandouts(handouts(), client);

@@ -1,5 +1,40 @@
 # Online Play web client
 
+Death moves use the additive `hello.deathMoves` capability and authenticated `POST /api/death-move`
+(`actorId`, `move`: `blaze`, `avoid`, `risk`). Both floating and standalone sheets flush pending saves
+first; unsupported hosts and request failures show an explicit error. The host checks ownership and
+fully marked HP, rolls the dice, and journals the sheet and public chat result together. Risk It All is
+a death-move roll, not an action roll: it offers no ordinary roll rewards or reaction buttons, and its
+HP/Stress recovery is manual on older hosts. Avoid Death adds an effect with `blocksMovement`, `until:longRest` and
+`unconsciousHp` (marked HP at application); decreasing HP removes it, including host-applied ally healing.
+Optional `scars` persist on the sheet and travel with `sheetFeature`; usable Hope is `hope.total - scars`.
+Scars are not effects and do not expire on rest. No settings or compatibility-version changes.
+
+Hosts advertising `hello.deathMoveOptions:true` provide authoritative `GET /api/death-move/{actorId}`
+choices after the sheet flushes pending saves. The shared floating/pop-out dialog lists disabled reasons,
+Reliquary bonuses, Blessed Hope spending, and optional Mask spending with explicit wearing confirmation.
+It also routes configured Spectral Form, Cathartoid Egg, Battle-Hardened and Unbreakable action buttons
+through host death-move validation. Mask counters offer table-confirmed **Gain token** and manual 0–4 adjustment.
+Narratives, range and wearing are table-controlled. Life Ward uses the existing host feature action and
+an ally picker including offline characters, after confirmation of Close range; targets retain wards through
+their rests. Every completed caster long rest increments `longRestRevision` so the host can expire their wards.
+
+Risk chat uses the host's `deathResult` outcome while displaying the original Hope/Fear dice. Sender-only
+**Apply recovery** offers numeric/slider HP and Stress allocation within the budget; criticals clear all
+recoverable marks. **Won't Stay Dead** first confirms and applies permanent HP with no healing in that request.
+Recovery uses authenticated `POST /api/death-recovery` with the original roll `{id,ts}` after save flush,
+and host claims are idempotent. Pending recovery blocks further sheet rolls. Permanent HP are distinct locked
+marks, never reduce HP capacity, and cannot be cleared by pips, actions or downtime (including rest-reroll
+recovery metadata). When all HP are permanently marked, death-move and recovery controls stop offering
+further attempts; ordinary Blaze/Risk death remains table-controlled. Spectral Form ends on further HP clearing or full HP; its full-HP trigger blocks reentry
+until HP falls below full. Its physical mitigation is effect-gated; phase movement remains host-controlled.
+Feature/inventory revisions synchronize death fields and card/egg changes into floating and pop-out sheets,
+including conflict refresh; `rollUpdate` merges death results and feature consequences into history.
+Duplicate/stale `sheetFeature` revisions are complete no-ops, including their inventory/card payloads.
+The shared Store merges roll updates for both map chat history and standalone sheet history.
+Older hosts retain the basic three moves and show explicit unsupported-feature errors for expanded actions.
+No settings or compatibility-version changes are required.
+
 Browser client for the Online Play host (plan.md section 3.41). Vanilla TypeScript, Canvas 2D, no runtime dependencies.
 
 Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the schema in

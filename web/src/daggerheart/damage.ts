@@ -6,6 +6,7 @@ import {
   Automation, DiceRoll, EffectDef, ModValue, Resource, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
+import { syncDeathState } from './death';
 
 export type DamageType = 'physical' | 'magic';
 /** 0 = none, 1 = Minor, 2 = Major, 3 = Severe, 4 = massive (twice the Severe threshold). */
@@ -374,6 +375,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     if (m.option.consumeItem && m.item && m.item.qty > 0) m.item.qty--;
     if (m.option.followUp) notes.push(`${m.option.label}: rolled ${roll(m.option.followUp.dice)} (${m.option.followUp.text})`);
   }
+  syncDeathState(c);
   return damageSummary(c, r, type, notes);
 }
 

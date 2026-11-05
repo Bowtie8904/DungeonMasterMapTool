@@ -1,9 +1,10 @@
-import { getSheet, useFeature, damageTaken } from './api';
+import { getSheet, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
 import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
 import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
-import { applyFeatureState, applyInventory, autosave, featureTarget, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, type SheetSave } from './daggerheart/persist';
+import { basicDeathOptions } from './daggerheart/death';
 import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
 import { setGmFear } from './daggerheart/engine';
@@ -73,16 +74,30 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         await changed!.flush();
         let targetActorId: string | undefined;
         if (featureTarget(sheet, key, actionId) === 'actor') {
-          const candidates = (store.state?.actors ?? []).filter(a => connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
+          const ward = isLifeWard(sheet, key);
+          if (ward && !conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
+          const candidates = (store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
           const selected = await pickActor(candidates, 'Choose a character', 'Select target');
           if (!selected) return;
           targetActorId = selected.id;
         }
-        await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}) });
+        await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
       },
       onDamageTaken: async (severity) => {
         await changed!.flush();
         await damageTaken(actorId, severity);
+      },
+      onDeathOptions: async () => {
+        await changed!.flush();
+        if (!conn.isOpen) throw new Error('Not connected. Cannot load death-move options.');
+        return conn.deathMoveOptions ? getDeathOptions(actorId) : basicDeathOptions();
+      },
+      onDeathMove: async (move, extras) => {
+        if (!conn.isOpen) throw new Error('Not connected. The death move was not made.');
+        if (!conn.deathMoves) throw new Error('This host does not support death moves. Update the host.');
+        if (!conn.deathMoveOptions && (extras || !['blaze', 'avoid', 'risk'].includes(move))) throw new Error('This host does not support expanded death moves. Update the host.');
+        await changed!.flush();
+        await takeDeathMove(actorId, move, extras);
       },
       bus,
       actorId,
@@ -142,6 +157,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
             bus.notify();
             changed?.();
           }
+          return;
+        }
+        if (m.type === 'rollUpdate') {
+          store.applyRollUpdate(m);
           return;
         }
         if (m.type === 'snapshot') store.applySnapshot(m.seq, m.state);

@@ -10,7 +10,7 @@ describe('reconnect backoff', () => {
     expect(backoffDelay(50)).toBe(15000);
   });
 });
-import { GameState } from './protocol';
+import { GameState, type RollMessage } from './protocol';
 
 describe('ClockSync', () => {
   it('keeps the offset of the lowest round trip', () => {
@@ -39,6 +39,25 @@ const snapshot = (): Partial<GameState> => ({
 });
 
 describe('Store', () => {
+  it('merges death recovery and feature consequences without losing original dice or omitted annotations', () => {
+    const s = new Store();
+    const roll: RollMessage = { id: 4, ts: 5, fromId: 'p', from: 'Player', kind: 'dice', deathMove: 'risk',
+      expression: '2d12', rolls: [4, 5], total: 9,
+      deathResult: { outcome: 'hope', hope: 4, fear: 5, adjustedHope: 5, bonus: 1, budget: 5, claimed: false, undying: false } };
+    s.applySnapshot(1, { ...snapshot(), chatTail: [{ ...roll, type: 'roll' }] });
+    const consequence = { name: 'Risk It All', result: 5, consequence: 'Cleared 2 HP and 3 Stress.' };
+    expect(s.applyRollUpdate({ type: 'rollUpdate', id: 4, ts: 5, featureRoll: consequence,
+      deathResult: { ...roll.deathResult!, claimed: true } })).toBe(true);
+    const saved = s.state!.chatTail![0] as RollMessage;
+    expect(saved.featureRoll).toEqual(consequence);
+    expect(saved.deathResult!.claimed).toBe(true);
+    expect(saved.rolls).toEqual([4, 5]);
+    expect(saved.total).toBe(9);
+    s.applyRollUpdate({ type: 'rollUpdate', id: 4, ts: 5, featureUses: ['a'] });
+    expect(saved.featureRoll).toEqual(consequence);
+    expect(saved.deathResult!.claimed).toBe(true);
+    expect(s.applyRollUpdate({ type: 'rollUpdate', id: 4, ts: 6, featureRoll: consequence })).toBe(false);
+  });
   it('replicates countdown creation, steps and last deletion while supporting older hosts', () => {
     const s = new Store();
     s.applySnapshot(1, snapshot());

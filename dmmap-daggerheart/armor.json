@@ -2348,6 +2348,7 @@
     "text": "Once per long rest, you can spend any number of Hope before you make the Risk It All death move. You gain a bonus to the result of your Hope Die equal to the number of Hope spent."
    },
    "automation": {
+    "deathMove": { "kind": "hopeSpend", "moves": ["risk"] },
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -2355,7 +2356,8 @@
     "actions": [
      {
       "id": "use",
-      "label": "Blessed"
+      "label": "Blessed",
+      "deathMove": "risk"
      }
     ]
    }
