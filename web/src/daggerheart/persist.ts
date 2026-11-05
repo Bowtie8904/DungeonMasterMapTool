@@ -66,6 +66,8 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   }
   const classes = new Set([c.className, ...multiclassesOf(c).map((m) => m.className)]);
   const subclasses = new Set([c.subclass, ...multiclassesOf(c).map((m) => m.subclass.replace(/^[^:]+:\s*/, ''))]);
+  // Old elemental cards had one "Fire" feature containing all four elements.
+  c.features = c.features.filter(f => !(f.name === 'Fire' && /Warden of the Elements/.test(f.source)));
   for (const f of [...c.features, ...c.heritage]) {
     const stage = /Subclass (foundation|specialization|mastery)/i.exec(f.source)?.[1]?.toLowerCase();
     const candidates = [
@@ -77,7 +79,7 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     const feature = candidates.flatMap((e) => e.features ?? []).find((a) => a.name === f.name);
     if (feature) {
       f.automation = feature.automation;
-      if (feature.automation?.stances) f.text = feature.text;
+      if (feature.automation?.stances || feature.automation?.grantsFeatures) f.text = feature.text;
       for (const name of feature.automation?.grantsFeatures ?? []) {
         const granted = candidates.flatMap(e => e.features ?? []).find(item => item.name === name);
         if (!granted) continue;

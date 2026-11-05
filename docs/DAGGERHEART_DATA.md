@@ -479,6 +479,54 @@ Classes, ancestries, communities and transformations are included in the total.
   Drakemantle, Vigilance, Lionheart, Demiurge and Needle Key temporary modifiers. Six weapon coatings are
   opt-in, consume one stock explicitly, and require the **coated weapon**; ongoing target damage/conditions stay manual.
 
+### Druid forms and elements
+
+`Beastform.automation.beastforms` contains the 24 categories with tier, examples, trait/bonus, Evasion,
+attack damage/range, advantages and feature automation. `evolved` specifies eligible base tiers and additive
+damage/trait/Evasion upgrades; `increaseDie` upgrades the main attack die. `hybrid` specifies category,
+advantage/feature counts and extra Stress. Hybrid source categories are distinct ordinary categories, excluding
+composite Legendary/Mythic entries; advantages and features are deduplicated by name. `beastform: true` and
+`evolution: true` actions open the picker, validate every selection before paying, and Evolution selects its
+additional trait. A form effect has `beastform`, `weapon`, and temporary `features`; equipment is never overwritten.
+Temporary features participate in passive stats, roll options, actions and mitigation and appear only while
+their effect is active. `actionRoll.trait: "beastform"` uses the active form's attack trait, including in hybrids.
+Action-created effects from a Beastform feature inherit that form as their `requiresEffect` parent.
+
+Effect `group` replaces other members of the group; `requiresEffect` expires a child when its named parent
+ends. `endOnDamage` is a minimum resolved severity (2 Major, 3 Severe), including mitigated damage whose actual
+HP marking is capped. Forms also drop on the last HP. Domain-card spells are blocked during Beastform; existing
+spells remain active. Bird's-Eye View retains its per-rest counter across form changes. Unconditional thresholds
+come from temporary features; situational advantages, Pack Hunting, Takedown, Rampage and Vicious Maul are
+player-selected options. Each form's advantages use one `duality` option listing all applicable activities.
+Venomous Bite/Strike poison and Elemental Incarnation Fire retaliation use `sendRoll` for an unmodified 1d10
+without a damage-options dialog. Poison is a separate direct physical damage roll when the target acts,
+not an optional bonus to the initial hit. Deadly Raptor sets additive `damageRules.rerollBelow` to Proficiency; the host rerolls
+each eligible damage die once, counts rerolls against its dice cap and annotates the breakdown. It is gated by
+`hello.druidAutomation`; unsupported hosts do not silently ignore the rule. The same capability gates form,
+channel and aura actions. Compatibility version constants are unchanged.
+
+`channel: "<Element>"` actions start exclusive rest-duration channel effects ending on Severe damage.
+Owned `channelBenefit: {element, effect}` metadata grants the matching Dominion effect at channel time.
+`aura: true` selects the matching `Elemental Aura: <Element>` feature's effect, requires channeling and spends
+the once-per-rest use. Switching channeling ends an aura rather than transferring it. Effects and conditional
+buttons have exact, unique names (`Channeling: Fire`, `Elemental Aura: Fire`, `Elemental Dominion: Fire`, etc.).
+The host synchronizes Earth aura grants to every saved player-owned sheet, including offline actors and the
+caster. Each grant offers an unchecked, non-stacking `trait:Strength` +1 option; players confirm Close range.
+Grants end when their source aura ends, not when another druid's aura ends. Fire Dominion adds one damage die
+to Proficiency-based damage pools (`damage.proficiencyOnly: true` excludes fixed-dice retaliation and poison).
+Earth Dominion uses mitigation `markedHpOnly` to roll per HP actually about
+to be marked (after the remaining-HP cap), subtracting one HP for each 6; Air grants +1 Evasion.
+
+`report: {amount?, dice?, text}` posts a local action consequence with `{amount}` substitution: Clarity uses
+the effective Instinct value and Warden's Protection rolls its ally count. Regeneration is a host-resolved
+`target: "actor"` action with a `1d4` clear-HP step; reports include both the rolled healing and actual recovery.
+Cannonball uses existing chat benefits with `exclusiveClaim: true` (only one throwing ally per invitation).
+`allowSourceOwner: true` permits another actor owned by the initiating player, never the initiating actor.
+The claim grants temporary Cannonball Throw features; `featureAction: {name, id}` opens the selected Agility
+or Strength attack on the throwing ally's own sheet. Damage uses that ally's Proficiency; its temporary effect
+ends after damage or at scene end. An interrupted throw remains available in Effects. Ordinary healing/song
+claims retain their prior per-player behavior.
+
 ### Explicit unsupported boundaries
 
 - **Cross-actor/GM state:** range/line of sight, companion stats, GM Fear,
@@ -497,7 +545,8 @@ Classes, ancestries, communities and transformations are included in the total.
   Other early-expiring numeric effects have explicit removal notes.
 - **Selections and permanent changes:** Bare Bones' armor replacement table, Vitality's choose-two bonuses,
   Mutagens/Transcendence choices, arbitrary chosen Experiences, scars, permanently lost slots, copied/attached/transferred
-  item features, transformation/Beastform statistics and replacing upgraded feature dice. No choice is guessed.
+  item features, unconfigured transformation statistics and replacing upgraded feature dice. Beastform choices
+  are explicitly supported as above; no choice is guessed.
 - **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values; Unstoppable,
   Wild Surge, Moon phases and Zone of Protection keep stateful die faces; variable token expenditure, rolled-table
   outcomes and automatic rest/session hooks stay manual unless an explicit button/option is listed. Grimoires

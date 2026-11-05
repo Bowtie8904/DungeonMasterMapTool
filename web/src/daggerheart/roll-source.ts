@@ -1,9 +1,10 @@
 import type { RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
+import { activeFeatures, activeWeapons } from './engine';
 
 /** Resolve action keys, including individual grimoire spells, without copying automation. */
 export function rollSourceFor(c: CharacterSheet, key: string): RollSource | undefined {
-  for (const f of [...c.features, ...c.heritage]) {
+  for (const f of [...activeFeatures(c), ...c.heritage]) {
     if (key === `feat:${f.name}`) return { name: f.name, text: f.text, source: f.source };
   }
   for (const d of [...c.loadout, ...c.vault]) {
@@ -13,7 +14,7 @@ export function rollSourceFor(c: CharacterSheet, key: string): RollSource | unde
       if (key === `card:${d.name}/${s.name}`) return { name: s.name, text: s.text, source: `${d.name} - ${source}` };
     }
   }
-  for (const w of [...c.activeWeapons, ...c.carriedWeapons]) {
+  for (const w of [...activeWeapons(c), ...c.carriedWeapons]) {
     const grantedBy = w.generated ? c.features.find(f => f.automation?.unarmedWeapon?.name === w.name) : undefined;
     if (key === `weapon:${w.name}`) return {
       name: w.name, text: w.feature ? `${w.feature.name}\n\n${w.feature.text}` : grantedBy ? `${grantedBy.name}\n\n${grantedBy.text}` : '',

@@ -14,7 +14,7 @@ import { criticalMeleeBonus } from './brawler';
 export interface RollButtonSheet {
   character: CharacterSheet;
   bus: SheetBus;
-  save: (() => void) & { flush?: () => Promise<void> };
+  save: (() => void) & { flush?: () => Promise<void>; refresh?: () => Promise<void> };
 }
 
 export interface RollButtonHost {
@@ -105,13 +105,13 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
 
 function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   const claims = m.actionBenefits;
-  if (!claims || !host.supportsPartyFeatures?.() || !host.playerId || m.fromId === host.playerId
+  if (!claims || !host.supportsPartyFeatures?.() || !host.playerId || m.fromId === host.playerId && !claims.allowSourceOwner
       || claims.sessionId !== host.sessionId?.()) return null;
   const box = el('div', { class: 'roll-actions' });
   let pending = false;
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
-    if (!claims.claimedBy.includes(host.playerId!)) {
+    if (!claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)) {
       for (const actorId of host.actorIds?.() ?? []) {
         if (!claims.actorIds.includes(actorId)) continue;
         const sheet = await host.sheet(actorId);
@@ -127,6 +127,11 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
               await sheet.save.flush?.();
               await useFeature({ actorId, key: '', actionId: 'claim', benefitId: benefit.id, roll: { id: m.id, ts: m.ts } });
               if (!claims.claimedBy.includes(host.playerId!)) claims.claimedBy.push(host.playerId!);
+              if (benefit.featureAction) {
+                await sheet.save.refresh?.();
+                if (!sheet.bus.featureAction?.(benefit.featureAction.name, benefit.featureAction.id))
+                  host.toast('Cannonball is prepared. Open its effect on your sheet to make the throw.');
+              }
             } catch (e) { host.toast((e as Error).message); }
             finally { pending = false; await paint(); }
           });

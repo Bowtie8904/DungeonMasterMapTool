@@ -2872,7 +2872,9 @@
       "actions": [
        {
         "id": "use",
-        "label": "Warden’s Protection"
+        "label": "Warden’s Protection",
+        "cost": { "hope": 2 },
+        "report": { "dice": "1d4", "text": "Clear 2 HP on each of up to {amount} allies within Close range." }
        }
       ]
      }
@@ -2904,7 +2906,8 @@
       "actions": [
        {
         "id": "use",
-        "label": "Clarity of Nature"
+        "label": "Clarity of Nature",
+        "report": { "amount": "@Instinct", "text": "Clear {amount} Stress in total, distributed between you and your allies after resting in the space." }
        }
       ]
      }
@@ -2912,7 +2915,11 @@
     {
      "name": "Regeneration",
      "text": "Touch a creature and **spend 3 Hope**. That creature clears **1d4** Hit Points.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Regeneration", "target": "actor", "cost": { "hope": 3 },
+       "steps": [{ "op": "clear", "resource": "hp", "amount": "1d4" }] }]
+     }
     }
    ]
   },
@@ -2932,23 +2939,46 @@
     {
      "name": "Elemental Dominion",
      "text": "You further embody your element. While *Channeling*, you gain the following benefit:",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "grantsFeatures": ["Elemental Dominion: Fire", "Elemental Dominion: Earth", "Elemental Dominion: Water", "Elemental Dominion: Air"] }
     },
     {
-     "name": "Fire",
-     "text": "- You gain a +1 bonus to your Proficiency for attacks and spells that deal damage.\n\n- ***Earth:*** When you would mark Hit Points, roll a **d6** per Hit Point marked. For each result of 6, reduce the number of Hit Points you mark by 1.\n\n- ***Water:*** When an attack against you succeeds, you can **mark a Stress** to make the attacker temporarily *Vulnerable**.*\n\n- ***Air:*** You gain a +1 bonus to your Evasion and can fly.",
+     "name": "Elemental Dominion: Fire",
+     "text": "While Channeling Fire, gain +1 Proficiency for attacks and spells that deal damage.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Fire", "effect": {
+      "name": "Elemental Dominion: Fire", "kind": "buff", "requiresEffect": "Channeling: Fire",
+      "text": "+1 Proficiency for attacks and spells that deal damage.", "damage": { "extraDice": 1, "dropLowest": 0, "proficiencyOnly": true }
+     } } }
+     },
+     {
+     "name": "Elemental Dominion: Earth",
+     "text": "While Channeling Earth, when you would mark HP, roll a d6 per HP. Each 6 reduces HP marked by 1.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Earth", "effect": {
+      "name": "Elemental Dominion: Earth", "kind": "buff", "requiresEffect": "Channeling: Earth",
+      "mitigation": [{ "id": "earth", "label": "Elemental Dominion: Earth", "when": { "markingHp": true },
+       "hp": -1, "markedHpOnly": true, "roll": { "count": "hp", "sides": 6, "success": 6, "each": true } }]
+     } } }
+     },
+     {
+     "name": "Elemental Dominion: Water",
+     "text": "While Channeling Water, when an attack against you succeeds, mark a Stress to make the attacker temporarily Vulnerable.",
      "type": "subclass",
      "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Fire",
-        "cost": {
-         "stress": 1
-        }
-       }
-      ]
+      "channelBenefit": { "element": "Water", "effect": { "name": "Elemental Dominion: Water", "kind": "buff", "requiresEffect": "Channeling: Water", "text": "Mark a Stress when hit to make the attacker temporarily Vulnerable." } },
+      "actions": [{ "id": "vulnerable", "label": "Make attacker Vulnerable", "requiresEffect": "Elemental Dominion: Water", "cost": { "stress": 1 },
+       "report": { "text": "The attacker is temporarily Vulnerable." } }]
      }
+     },
+     {
+     "name": "Elemental Dominion: Air",
+     "text": "While Channeling Air, gain +1 Evasion and you can fly.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Air", "effect": {
+      "name": "Elemental Dominion: Air", "kind": "buff", "requiresEffect": "Channeling: Air",
+      "text": "You can fly.", "modifiers": [{ "stat": "evasion", "value": 1 }]
+     } } }
     }
    ]
   },
@@ -2970,6 +3000,7 @@
      "text": "Once per rest while *Channeling*, you can assume an aura matching your element. The aura affects targets within Close range until your *Channeling* ends.",
      "type": "subclass",
      "automation": {
+      "grantsFeatures": ["Elemental Aura: Fire", "Elemental Aura: Earth", "Elemental Aura: Water", "Elemental Aura: Air"],
       "uses": {
        "max": 1,
        "per": "rest"
@@ -2977,25 +3008,42 @@
       "actions": [
        {
         "id": "use",
-        "label": "Elemental Aura"
+        "label": "Elemental Aura",
+        "aura": true
        }
       ]
      }
     },
     {
-     "name": "Fire",
-     "text": "- When an adversary marks 1 or more Hit Points, they must also mark a Stress.\n\n- ***Earth:*** Your allies gain a +1 bonus to Strength.\n\n- ***Water:*** When an adversary deals damage to you, you can **mark a Stress** to move them anywhere within Very Close range of where they are.\n\n- ***Air:*** When you or an ally takes damage from an attack beyond Melee range, reduce the damage by **1d8**.",
+     "name": "Elemental Aura: Fire",
+     "text": "While your Fire aura is active, adversaries within Close range that mark HP must also mark a Stress.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Fire", "kind": "buff", "until": "rest", "text": "Adversaries within Close range that mark HP must also mark a Stress." } } }
+     },
+     {
+     "name": "Elemental Aura: Earth",
+     "text": "While your Earth aura is active, allies within Close range gain +1 Strength. Each player explicitly selects the bonus when in range.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Earth", "kind": "buff", "until": "rest", "text": "Every player character may explicitly select +1 on a Strength roll while within Close range." } } }
+     },
+     {
+     "name": "Elemental Aura: Water",
+     "text": "While your Water aura is active, when an adversary within Close range damages you, mark a Stress to move them anywhere within Very Close range of their position.",
      "type": "subclass",
      "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Fire",
-        "cost": {
-         "stress": 1
-        }
-       }
-      ]
+      "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Water", "kind": "buff", "until": "rest", "text": "Mark a Stress after being damaged to move the adversary within Very Close range of their position." } },
+      "actions": [{ "id": "move", "label": "Move attacker", "requiresEffect": "Elemental Aura: Water", "cost": { "stress": 1 },
+       "report": { "text": "Move the damaging adversary anywhere within Very Close range of their current position." } }]
+     }
+     },
+     {
+     "name": "Elemental Aura: Air",
+     "text": "While your Air aura is active, when you or an ally within Close range takes damage from beyond Melee range, reduce it by 1d8.",
+     "type": "subclass",
+     "automation": {
+      "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Air", "kind": "buff", "until": "rest", "text": "Reduce damage from beyond Melee range to you or an ally within Close range by 1d8." } },
+      "actions": [{ "id": "reduce", "label": "Roll damage reduction", "requiresEffect": "Elemental Aura: Air",
+       "sendRoll": { "dice": "1d8", "label": "Elemental Aura: Air - damage reduction" } }]
      }
     }
    ]
@@ -3018,21 +3066,41 @@
      "text": "**Mark a Stress** to *Channel* one of the following elements until you take Severe damage or until your next rest:",
      "type": "subclass",
      "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Elemental Incarnation",
-        "cost": {
-         "stress": 1
-        }
-       }
-      ]
+      "grantsFeatures": ["Elemental Incarnation: Fire", "Elemental Incarnation: Earth", "Elemental Incarnation: Water", "Elemental Incarnation: Air"]
      }
     },
     {
-     "name": "Fire",
-     "text": "- When an adversary within Melee range deals damage to you, they take **1d10** magic damage.\n\n- ***Earth:*** Gain a bonus to your damage thresholds equal to your Proficiency.\n\n- ***Water:*** When you deal damage to an adversary within Melee range, all other adversaries within Very Close range must mark a Stress.\n\n- ***Air:*** You can hover, gaining advantage on Agility Rolls.",
-     "type": "subclass"
+     "name": "Elemental Incarnation: Fire",
+     "text": "Mark a Stress to Channel Fire until Severe damage or your next rest. When an adversary within Melee range damages you, they take 1d10 magic damage.",
+     "type": "subclass",
+     "automation": { "actions": [
+      { "id": "channel", "label": "Channel Fire", "channel": "Fire", "cost": { "stress": 1 },
+       "steps": [{ "op": "effect", "effect": { "name": "Channeling: Fire", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "An adversary within Melee range that damages you takes 1d10 magic damage." } }] },
+      { "id": "retaliate", "label": "Fire retaliation", "requiresEffect": "Channeling: Fire", "sendRoll": { "dice": "1d10", "label": "Elemental Incarnation: Fire - magic damage" } }
+     ] }
+     },
+     {
+     "name": "Elemental Incarnation: Earth",
+     "text": "Mark a Stress to Channel Earth until Severe damage or your next rest. Add your Proficiency to damage thresholds.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Earth", "channel": "Earth", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Earth", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3,
+       "modifiers": [{ "stat": "thresholds", "value": "@proficiency" }] } }] }] }
+     },
+     {
+     "name": "Elemental Incarnation: Water",
+     "text": "Mark a Stress to Channel Water until Severe damage or your next rest. When you damage an adversary within Melee range, all other adversaries within Very Close range mark a Stress.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Water", "channel": "Water", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Water", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "When you damage an adversary within Melee range, all other adversaries within Very Close range mark a Stress." } }] }] }
+     },
+     {
+     "name": "Elemental Incarnation: Air",
+     "text": "Mark a Stress to Channel Air until Severe damage or your next rest. You can hover and gain advantage on Agility rolls.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Air", "channel": "Air", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Air", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "You can hover.",
+       "rollOptions": [{ "id": "hover", "label": "Hover: Agility advantage", "roll": "trait:Agility", "advantage": "advantage", "defaultOn": true }] } }] }] }
     }
    ]
   },
@@ -3990,6 +4058,7 @@
        {
         "id": "use",
         "label": "Evolution",
+        "evolution": true,
         "cost": {
          "hope": 3
         }
@@ -4002,10 +4071,245 @@
      "text": "**Mark a Stress** to magically transform into a creature of your tier or lower from the Beastform list. You can drop out of this form at any time. While transformed, you can’t use weapons or cast spells from domain cards, but you can still use other features or abilities you have access to. Spells you cast before you transform stay active and last for their normal duration, and you can talk and communicate as normal. Additionally, you gain the Beastform’s features, add their Evasion bonus to your Evasion, and use the trait specified in their statistics for your attack. While you’re in a Beastform, your armor becomes part of your body and you mark Armor Slots as usual; when you drop out of a Beastform, those marked Armor Slots remain marked. If you mark your last Hit Point, you automatically drop out of this form.",
      "type": "class",
      "automation": {
+      "beastforms": [
+       {
+        "name": "Agile Scout", "tier": 1, "examples": "Fox, Mouse, Weasel", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d4",
+        "advantages": ["deceive", "locate", "sneak"],
+        "features": [
+         { "name": "Agile", "text": "Your movement is silent. Spend a Hope to move up to Far range without rolling.",
+          "automation": { "actions": [{ "id": "move", "label": "Move to Far range", "cost": { "hope": 1 }, "report": { "text": "Moved up to Far range without rolling." } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Household Friend", "tier": 1, "examples": "Cat, Dog, Rabbit", "trait": "Instinct", "bonus": 1, "evasion": 2, "damage": "d6",
+        "advantages": ["climb", "locate", "protect"],
+        "features": [
+         { "name": "Companion", "text": "When you Help an Ally, roll a d8 as your advantage die.",
+          "automation": { "actions": [{ "id": "help", "label": "Help an Ally", "sendRoll": { "dice": "1d8", "label": "Companion - Help an Ally advantage die" } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Nimble Grazer", "tier": 1, "examples": "Deer, Gazelle, Goat", "trait": "Agility", "bonus": 1, "evasion": 3, "damage": "d6",
+        "advantages": ["leap", "sneak", "sprint"],
+        "features": [
+         { "name": "Elusive Prey", "text": "When an attack would succeed against you, mark a Stress and add a d4 to your Evasion against it.",
+          "automation": { "actions": [{ "id": "evade", "label": "Elusive Prey", "cost": { "stress": 1 }, "sendRoll": { "dice": "1d4", "base": "evasion", "label": "Elusive Prey - Evasion against this attack" } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Pack Predator", "tier": 1, "examples": "Coyote, Hyena, Wolf", "trait": "Strength", "bonus": 2, "evasion": 1, "damage": "d8+2",
+        "advantages": ["attack", "sprint", "track"],
+        "features": [
+         { "name": "Hobbling Strike", "text": "After a successful Melee attack, mark a Stress to make the target temporarily Vulnerable.",
+          "automation": { "actions": [{ "id": "hobble", "label": "Hobbling Strike", "cost": { "stress": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Vulnerable." } }] } },
+         { "name": "Pack Hunting", "text": "After a successful attack against the same target as an ally acting immediately before you, add a d8 to damage.",
+          "automation": { "rollOptions": [{ "id": "pack", "label": "Pack Hunting", "roll": "damage", "dice": "1d8", "description": "Successful attack against the same target as the ally immediately before you." }] } }
+        ]
+       },
+       {
+        "name": "Aquatic Scout", "tier": 1, "examples": "Eel, Fish, Octopus", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d4",
+        "advantages": ["navigate", "sneak", "swim"],
+        "features": [
+         { "name": "Aquatic", "text": "You can breathe and move naturally underwater." },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Stalking Arachnid", "tier": 1, "examples": "Tarantula, Wolf Spider", "trait": "Finesse", "bonus": 1, "evasion": 2, "damage": "d6+1",
+        "advantages": ["attack", "climb", "sneak"],
+        "features": [
+         { "name": "Venomous Bite", "text": "On a successful Melee attack, the target is temporarily Poisoned, taking 1d10 direct physical damage each time they act.",
+          "automation": { "actions": [{ "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Bite - direct physical poison damage" } }] } },
+         { "name": "Webslinger", "text": "Create webbing supporting one creature. Succeed on a Finesse Roll to temporarily Restrain a target within Close range.",
+          "automation": { "actions": [{ "id": "web", "label": "Webslinger", "actionRoll": { "trait": "Finesse" } }] } }
+        ]
+       },
+       {
+        "name": "Armored Sentry", "tier": 2, "examples": "Armadillo, Pangolin, Turtle", "trait": "Strength", "bonus": 1, "evasion": 1, "damage": "d8+2",
+        "advantages": ["dig", "locate", "protect"],
+        "features": [
+         { "name": "Armored Shell", "text": "Resist physical damage. Mark an Armor Slot to retract; after resistance, reduce physical damage by Armor Score. Leave the shell before other actions.",
+          "automation": {
+           "mitigation": [{ "id": "resist", "label": "Armored Shell resistance", "passive": true, "when": { "type": "physical" }, "halve": true }],
+           "actions": [
+            { "id": "retract", "label": "Retract into shell", "cost": { "armor": 1 }, "steps": [{ "op": "effect", "effect": { "name": "Retracted Shell", "kind": "buff", "text": "Leave the shell before performing other actions.",
+             "mitigation": [{ "id": "shell", "label": "Retracted Shell", "passive": true, "when": { "type": "physical" }, "reduce": "@armorscore" }] } }] },
+            { "id": "leave", "label": "Leave shell", "requiresEffect": "Retracted Shell", "endEffect": "Retracted Shell" }
+           ]
+          } },
+         { "name": "Cannonball", "text": "Mark a Stress: an ally throws you at a Close adversary with an Agility or Strength attack, dealing d12+2 physical damage using their Proficiency. Spend a Hope for a second Very Close target taking half damage.",
+          "automation": { "actions": [
+           { "id": "launch", "label": "Cannonball (invite ally to throw)", "cost": { "stress": 1 }, "allowSourceOwner": true,
+            "chatBenefits": [
+             { "id": "agility", "label": "Cannonball: throw with Agility", "exclusiveClaim": true, "featureAction": { "name": "Cannonball Throw", "id": "attack" },
+              "steps": [{ "op": "effect", "effect": { "name": "Cannonball Throw", "kind": "buff", "until": "scene",
+               "features": [{ "source": "Cannonball", "name": "Cannonball Throw", "text": "Throw your ally at a target within Close range. On success, deal d12+2 physical damage using your Proficiency.",
+                "automation": { "actions": [
+                 { "id": "attack", "label": "Cannonball throw (Agility)", "actionRoll": { "trait": "Agility", "attack": true } },
+                 { "id": "damage", "label": "Cannonball damage", "damage": { "dice": "d12+2", "type": "physical" }, "endEffect": "Cannonball Throw" }
+                ] } }]
+              } }] },
+             { "id": "strength", "label": "Cannonball: throw with Strength", "exclusiveClaim": true, "featureAction": { "name": "Cannonball Throw", "id": "attack" },
+              "steps": [{ "op": "effect", "effect": { "name": "Cannonball Throw", "kind": "buff", "until": "scene",
+               "features": [{ "source": "Cannonball", "name": "Cannonball Throw", "text": "Throw your ally at a target within Close range. On success, deal d12+2 physical damage using your Proficiency.",
+                "automation": { "actions": [
+                 { "id": "attack", "label": "Cannonball throw (Strength)", "actionRoll": { "trait": "Strength", "attack": true } },
+                 { "id": "damage", "label": "Cannonball damage", "damage": { "dice": "d12+2", "type": "physical" }, "endEffect": "Cannonball Throw" }
+                ] } }]
+              } }] }
+            ] },
+           { "id": "second", "label": "Cannonball: second target", "cost": { "hope": 1 }, "report": { "text": "A second adversary within Very Close range of the first takes half the first target's damage." } }
+          ] } }
+        ]
+       },
+       {
+        "name": "Powerful Beast", "tier": 2, "examples": "Bear, Bull, Moose", "trait": "Strength", "bonus": 3, "evasion": 1, "damage": "d10+4",
+        "advantages": ["navigate", "protect", "scare"],
+        "features": [
+         { "name": "Rampage", "text": "When a damage die is 1, roll a d10 and add it. Before an attack, mark a Stress for +1 Proficiency for that attack.",
+          "automation": {
+           "rollOptions": [{ "id": "rampage", "label": "Rampage: +1 Proficiency", "roll": "attack", "proficiency": 1, "cost": { "stress": 1 } }],
+           "actions": [{ "id": "one", "label": "Rampage: bonus for a damage die of 1", "sendRoll": { "dice": "1d10", "label": "Rampage - add to damage after rolling a 1" } }]
+          } },
+         { "name": "Thick Hide", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
+        ]
+       },
+       {
+        "name": "Mighty Strider", "tier": 2, "examples": "Camel, Horse, Zebra", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d8+1",
+        "advantages": ["leap", "navigate", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." },
+         { "name": "Trample", "text": "Mark a Stress to move up to Close in a straight line and attack all targets within Melee of the line. Successful targets take d8+1 physical damage using your Proficiency and are temporarily Vulnerable.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Trample attack", "cost": { "stress": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "damage", "label": "Trample damage", "damage": { "dice": "d8+1", "type": "physical" } }
+          ] } }
+        ]
+       },
+       {
+        "name": "Striking Serpent", "tier": 2, "examples": "Cobra, Rattlesnake, Viper", "trait": "Finesse", "bonus": 1, "evasion": 2, "damage": "d8+4", "range": "Very Close",
+        "advantages": ["climb", "deceive", "sprint"],
+        "features": [
+         { "name": "Venomous Strike", "text": "Attack any number of Very Close targets. On success they are temporarily Poisoned, taking 1d10 direct physical damage each time they act.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Venomous Strike", "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Strike - direct physical poison damage" } }
+          ] } },
+         { "name": "Warning Hiss", "text": "Mark a Stress to force any number of Melee targets back to Very Close range.",
+          "automation": { "actions": [{ "id": "hiss", "label": "Warning Hiss", "cost": { "stress": 1 }, "report": { "text": "Chosen targets within Melee range move back to Very Close range." } }] } }
+        ]
+       },
+       {
+        "name": "Pouncing Predator", "tier": 2, "examples": "Cheetah, Lion, Panther", "trait": "Instinct", "bonus": 1, "evasion": 3, "damage": "d8+6",
+        "advantages": ["attack", "climb", "sneak"],
+        "features": [
+         { "name": "Fleet", "text": "Spend a Hope to move up to Far without rolling.",
+          "automation": { "actions": [{ "id": "move", "label": "Fleet", "cost": { "hope": 1 }, "report": { "text": "Moved up to Far range without rolling." } }] } },
+         { "name": "Takedown", "text": "Mark a Stress to move into Melee and attack. On success, +2 Proficiency for this attack and the target marks a Stress.",
+          "automation": { "rollOptions": [{ "id": "takedown", "label": "Takedown", "roll": "attack", "proficiency": 2, "cost": { "stress": 1 }, "description": "Move into Melee; on success the target marks a Stress." }] } }
+        ]
+       },
+       {
+        "name": "Winged Beast", "tier": 2, "examples": "Hawk, Owl, Raven", "trait": "Finesse", "bonus": 1, "evasion": 3, "damage": "d4+2",
+        "advantages": ["deceive", "locate", "scare"],
+        "features": [
+         { "name": "Bird's-Eye View", "text": "Fly at will. Once per rest while airborne, ask the GM about the scene below without rolling; the first character acting on this information has advantage.",
+          "automation": { "actions": [{ "id": "question", "label": "Bird's-Eye View: ask the GM", "uses": { "max": 1, "per": "rest" }, "report": { "text": "Ask the GM about the scene below. The first character to act on the information has advantage." } }] } },
+         { "name": "Hollow Bones", "text": "-2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": -2 }] } }
+        ]
+       },
+       {
+        "name": "Great Predator", "tier": 3, "examples": "Dire Wolf, Velociraptor, Sabertooth Tiger", "trait": "Strength", "bonus": 2, "evasion": 2, "damage": "d12+8",
+        "advantages": ["attack", "sneak", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." },
+         { "name": "Vicious Maul", "text": "After a successful attack, spend a Hope to make the target temporarily Vulnerable and gain +1 Proficiency for this attack.",
+          "automation": { "rollOptions": [{ "id": "maul", "label": "Vicious Maul", "roll": "damage", "proficiency": 1, "cost": { "hope": 1 }, "description": "After a successful attack; the target becomes temporarily Vulnerable." }] } }
+        ]
+       },
+       {
+        "name": "Mighty Lizard", "tier": 3, "examples": "Alligator, Crocodile, Gila Monster", "trait": "Instinct", "bonus": 2, "evasion": 1, "damage": "d10+7",
+        "advantages": ["attack", "sneak", "track"],
+        "features": [
+         { "name": "Physical Defense", "text": "+3 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 3 }] } },
+         { "name": "Snapping Strike", "text": "After a successful Melee attack, spend a Hope to clamp the target in your jaws, making them temporarily Restrained and Vulnerable.",
+          "automation": { "actions": [{ "id": "snap", "label": "Snapping Strike", "cost": { "hope": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained and Vulnerable in your jaws." } }] } }
+        ]
+       },
+       {
+        "name": "Great Winged Beast", "tier": 3, "examples": "Giant Eagle, Falcon", "trait": "Finesse", "bonus": 2, "evasion": 3, "damage": "d8+6",
+        "advantages": ["deceive", "distract", "locate"],
+        "features": [
+         { "name": "Bird's-Eye View", "text": "Fly at will. Once per rest while airborne, ask the GM about the scene below without rolling; the first character acting on this information has advantage.",
+          "automation": { "actions": [{ "id": "question", "label": "Bird's-Eye View: ask the GM", "uses": { "max": 1, "per": "rest" }, "report": { "text": "Ask the GM about the scene below. The first character to act on the information has advantage." } }] } },
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." }
+        ]
+       },
+       {
+        "name": "Aquatic Predator", "tier": 3, "examples": "Dolphin, Orca, Shark", "trait": "Agility", "bonus": 2, "evasion": 4, "damage": "d10+6",
+        "advantages": ["attack", "swim", "track"],
+        "features": [
+         { "name": "Aquatic", "text": "You can breathe and move naturally underwater." },
+         { "name": "Vicious Maul", "text": "After a successful attack, spend a Hope to make the target Vulnerable and gain +1 Proficiency for this attack.",
+          "automation": { "rollOptions": [{ "id": "maul", "label": "Vicious Maul", "roll": "damage", "proficiency": 1, "cost": { "hope": 1 }, "description": "After a successful attack; the target becomes Vulnerable." }] } }
+        ]
+       },
+       { "name": "Legendary Beast", "tier": 3, "evolved": { "maxTier": 1, "damage": 6, "trait": 1, "evasion": 2 } },
+       { "name": "Legendary Hybrid", "tier": 3, "examples": "Griffon, Sphinx", "trait": "Strength", "bonus": 2, "evasion": 3, "damage": "d10+8",
+        "hybrid": { "count": 2, "maxTier": 2, "advantages": 4, "features": 2, "stress": 1 } },
+       {
+        "name": "Massive Behemoth", "tier": 4, "examples": "Elephant, Mammoth, Rhinoceros", "trait": "Strength", "bonus": 3, "evasion": 1, "damage": "d12+12",
+        "advantages": ["locate", "protect", "scare", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to four willing allies when you move." },
+         { "name": "Demolish", "text": "Spend a Hope to move up to Far in a straight line and attack all targets within Melee of the line. Success: d8+10 physical damage using your Proficiency and temporarily Vulnerable.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Demolish attack", "cost": { "hope": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "damage", "label": "Demolish damage", "damage": { "dice": "d8+10", "type": "physical" } }
+          ] } },
+         { "name": "Undaunted", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
+        ]
+       },
+       {
+        "name": "Terrible Lizard", "tier": 4, "examples": "Brachiosaurus, Tyrannosaurus", "trait": "Strength", "bonus": 3, "evasion": 2, "damage": "d12+10",
+        "advantages": ["attack", "deceive", "scare", "track"],
+        "features": [
+         { "name": "Devastating Strikes", "text": "When you deal Severe damage to a Melee target, mark a Stress to force them to mark an additional HP.",
+          "automation": { "actions": [{ "id": "devastate", "label": "Devastating Strikes", "cost": { "stress": 1 }, "report": { "text": "The Melee target that took Severe damage marks one additional HP." } }] } },
+         { "name": "Massive Stride", "text": "Move up to Far without rolling. Ignore rough terrain at the GM's discretion." }
+        ]
+       },
+       {
+        "name": "Mythic Aerial Hunter", "tier": 4, "examples": "Dragon, Pterodactyl, Roc, Wyvern", "trait": "Finesse", "bonus": 3, "evasion": 4, "damage": "d10+11",
+        "advantages": ["attack", "deceive", "locate", "navigate"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to three willing allies when you move." },
+         { "name": "Deadly Raptor", "text": "Fly at will and move up to Far as part of your action. After flying straight from at least Close into Melee and attacking, reroll damage dice below your Proficiency.",
+          "automation": { "rollOptions": [{ "id": "raptor", "label": "Deadly Raptor: reroll dice below Proficiency", "roll": "damage", "description": "Move straight from at least Close into Melee and attack in the same action.", "rerollBelowProficiency": true }] } }
+        ]
+       },
+       {
+        "name": "Epic Aquatic Beast", "tier": 4, "examples": "Giant Squid, Whale", "trait": "Agility", "bonus": 3, "evasion": 3, "damage": "d10+10",
+        "advantages": ["locate", "protect", "scare", "track"],
+        "features": [
+         { "name": "Ocean Master", "text": "Breathe and move naturally underwater. On a successful Melee attack, temporarily Restrain the target.",
+          "automation": { "actions": [{ "id": "restrain", "label": "Ocean Master: Restrain", "report": { "text": "After your successful Melee attack, the target is temporarily Restrained." } }] } },
+         { "name": "Unyielding", "text": "When you would mark an Armor Slot, roll a d6. On 5+, reduce severity by one without marking the slot.",
+          "automation": { "mitigation": [{ "id": "unyielding", "label": "Unyielding", "when": { "armor": true }, "roll": { "sides": 6, "success": 5 }, "saveArmor": 1 }] } }
+        ]
+       },
+       { "name": "Mythic Beast", "tier": 4, "evolved": { "maxTier": 2, "damage": 9, "trait": 2, "evasion": 3, "increaseDie": true } },
+       { "name": "Mythic Hybrid", "tier": 4, "examples": "Chimera, Cockatrice, Manticore", "trait": "Strength", "bonus": 3, "evasion": 2, "damage": "d12+10",
+        "hybrid": { "count": 3, "maxTier": 3, "advantages": 5, "features": 3, "stress": 2 } }
+      ],
       "actions": [
        {
         "id": "use",
         "label": "Beastform",
+        "beastform": true,
         "cost": {
          "stress": 1
         }

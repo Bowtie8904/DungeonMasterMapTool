@@ -198,7 +198,7 @@ export interface ChatMessage {
   sharedCard?: import('./shared-cards').SharedCard;
   actorId?: string;
   restDice?: import('./daggerheart/rest').RestDie[];
-  actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string };
+  actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string; allowSourceOwner?: boolean };
   rollSource?: RollSource;
   /** Host announcement from the DM's End scene / New session buttons. */
   system?: 'sceneEnd' | 'newSession';
@@ -359,6 +359,7 @@ export interface Hello {
   grabQuantity?: boolean;
   keptDice?: boolean;
   brawlerRolls?: boolean;
+  druidAutomation?: boolean;
   rollMultipliers?: boolean;
   rollRewards?: boolean;
   partyFeatures?: boolean;

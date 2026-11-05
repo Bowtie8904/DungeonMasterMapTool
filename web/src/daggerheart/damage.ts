@@ -3,7 +3,7 @@
 
 import type { CharacterSheet, InventoryItem } from './data';
 import {
-  Automation, DiceRoll, EffectDef, ModValue, Resource, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncResources, usesLeft, noUsesLeftText,
+  Automation, DiceRoll, EffectDef, ModValue, Resource, activeFeatures, activeWeapons, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncEffectDependencies, syncResources, usesLeft, noUsesLeftText,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
@@ -48,6 +48,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  markedHpOnly?: boolean;
   reflectHp?: boolean;
   finalSevere?: boolean;
   recoveryChoice?: boolean;
@@ -148,8 +149,8 @@ export function availableMitigations(c: CharacterSheet): AvailableMitigation[] {
     }
   };
   if (c.activeArmor) add(`armor:${c.activeArmor.name}`, c.activeArmor.name, c.activeArmor.automation);
-  for (const w of c.activeWeapons) add(`weapon:${w.name}`, w.name, w.automation);
-  for (const f of [...c.features, ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
+  for (const w of activeWeapons(c)) add(`weapon:${w.name}`, w.name, w.automation);
+  for (const f of [...activeFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
   for (const d of c.loadout) add(`card:${d.name}`, d.name, d.automation);
   for (const i of c.inventory.filter((x) => x.qty > 0)) add(`item:${i.name}`, i.name, i.automation, i);
   for (const e of c.effects) add(`effect:${e.id}`, e.name, { mitigation: e.mitigation });
@@ -304,14 +305,16 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
     final = Math.max(0, incoming - reduce) as Severity;
     hp = final;
     const before = hp;
-    hp = Math.max(0, hp + active.filter((m) => !m.option.when?.lastHp).reduce((n, m) => n + (m.option.hp ?? 0) * effectScale(m, before), 0));
+    hp = Math.max(0, hp + active.filter((m) => !m.option.when?.lastHp && !m.option.markedHpOnly).reduce((n, m) => n + (m.option.hp ?? 0) * effectScale(m, before), 0));
   }
   const remaining = Math.max(0, c.hp.slots - c.hp.on);
   drop((m) => m.option.when?.lastHp && !(hp > 0 && hp >= remaining) ? 'Only when you would mark your last HP' : null);
   const hpBeforeReplace = Math.min(hp, remaining);
+  hp = Math.max(0, hpBeforeReplace + active.filter(m => m.option.markedHpOnly)
+    .reduce((n, m) => n + (m.option.hp ?? 0) * effectScale(m, hpBeforeReplace), 0));
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
-  drop((m) => m.option.when?.markingHp && hp <= 0 ? 'Requires marking at least one HP' : null);
+  drop((m) => m.option.when?.markingHp && hpBeforeReplace <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
 
   // 5. Costs.
@@ -369,7 +372,10 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   c.stress.on = Math.min(c.stress.slots, c.stress.on + (r.costs.stress ?? 0));
   c.hope.on = Math.max(0, c.hope.on - (r.costs.hope ?? 0));
   c.effects = c.effects.filter(e => !(e.stance && ((!r.negated && r.final >= 3) || c.hp.on >= c.hp.slots))
+    && !(e.endOnDamage && !r.negated && r.final >= e.endOnDamage)
+    && !(e.beastform && c.hp.on >= c.hp.slots)
     && !(!r.negated && r.final >= 3 && e.endOnSourceSevere && !e.sourceActorId));
+  syncEffectDependencies(c);
   for (const [res, n] of Object.entries(r.costs)) {
     if (!['hp', 'stress', 'hope', 'armor'].includes(res)) c.resources![res] = Math.max(0, (c.resources![res] ?? 0) - n);
   }

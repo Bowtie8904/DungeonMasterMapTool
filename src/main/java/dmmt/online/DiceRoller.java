@@ -87,6 +87,22 @@ public final class DiceRoller {
         for (int i = 0; i < rolls.size(); i++) {
             if (rolls.get(i) == 1) rolls.set(i, parsed.dice().get(i));
         }
+
+        return new Result(result.expression(), rolls, total(parsed, rolls));
+    }
+
+    public static Result rerollBelow(Result result, int threshold, int maxDice, Random random) {
+        if (threshold < 1 || threshold > MAX_SIDES) throw new IllegalArgumentException("Invalid reroll threshold.");
+        Terms parsed = terms(result.expression(), maxDice);
+        List<Integer> rolls = new ArrayList<>(result.rolls());
+        int rolled = rolls.size();
+        for (int i = 0; i < rolls.size(); i++) {
+            int sides = parsed.dice().get(i);
+            if (sides > 0 && rolls.get(i) < threshold) {
+                if (++rolled > maxDice) throw new IllegalArgumentException("Rerolls exceed the host's dice limit.");
+                rolls.set(i, random.nextInt(sides) + 1);
+            }
+        }
         return new Result(result.expression(), rolls, total(parsed, rolls));
     }
 

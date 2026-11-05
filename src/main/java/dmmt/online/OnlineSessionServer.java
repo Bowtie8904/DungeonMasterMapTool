@@ -1701,11 +1701,13 @@ public final class OnlineSessionServer {
                 benefitReport.put("actorId", sourceActor.getId());
                 ObjectNode claims = benefitReport.putObject("actionBenefits");
                 claims.put("sessionId", sessionId);
+                if (definition.path("allowSourceOwner").asBoolean()) claims.put("allowSourceOwner", true);
                 claims.set("options", benefits);
                 claims.putArray("claimedBy");
                 ArrayNode eligible = claims.putArray("actorIds");
                 for (Campaign.Actor actor : c.getActors())
-                    if (hasPlayerSheet(actor) && !actor.getOwnerId().equals(sourceActor.getOwnerId())) eligible.add(actor.getId());
+                    if (hasPlayerSheet(actor) && (definition.path("allowSourceOwner").asBoolean()
+                            ? !actor.getId().equals(sourceActor.getId()) : !actor.getOwnerId().equals(sourceActor.getOwnerId()))) eligible.add(actor.getId());
             }
             commitFeatureSheets(changedSheets, benefitReport == null ? originalRoll : benefitReport, benefitReport != null);
             if (hasRoll) broadcastRollUpdate(originalRoll);
@@ -1791,7 +1793,7 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("That message has no claimable benefit.");
         ObjectNode claims = (ObjectNode) message.path("actionBenefits");
         if (!containsText(claims.withArray("actorIds"), actor.getId())
-                || actor.getOwnerId().equals(message.path("fromId").asText()))
+                || !claims.path("allowSourceOwner").asBoolean() && actor.getOwnerId().equals(message.path("fromId").asText()))
             throw new IllegalArgumentException("Choose an eligible ally who received this performance.");
         if (containsText(claims.withArray("claimedBy"), actor.getOwnerId()))
             throw new IllegalArgumentException("You already claimed a benefit from this performance.");
@@ -1799,6 +1801,8 @@ public final class OnlineSessionServer {
         for (JsonNode option : claims.path("options"))
             if (option.path("id").asText().equals(request.path("benefitId").asText())) { benefit = option; break; }
         if (benefit == null) throw new IllegalArgumentException("That benefit is not available.");
+        if (benefit.path("exclusiveClaim").asBoolean() && !claims.withArray("claimedBy").isEmpty())
+            throw new IllegalArgumentException("Another ally has already accepted this action.");
         ObjectNode before = sheet.deepCopy();
         List<String> lines = new ArrayList<>();
         applyFeatureSteps(sheet, benefit.path("steps"), benefit.path("label").asText(), actor, "", lines);
@@ -1912,6 +1916,11 @@ public final class OnlineSessionServer {
             } else if (values.isObject() && name.equals(values.path("name").asText())) {
                 return values;
             }
+        }
+        if ("feat".equals(kind)) {
+            for (JsonNode effect : sheet.path("effects"))
+                for (JsonNode feature : effect.path("features"))
+                    if (name.equals(feature.path("name").asText())) return feature;
         }
         throw new IllegalArgumentException("Feature not found on the source character.");
     }
@@ -2195,7 +2204,9 @@ public final class OnlineSessionServer {
                         before - Math.max(0, amount)));
                 else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
                 int changed = Math.abs(before - track.path("on").asInt());
-                if (changed > 0) report.add(resource.equals("hp") ? "Cleared " + changed + " HP."
+                if ("clear".equals(operation) && "hp".equals(resource))
+                    report.add("Cleared " + changed + " HP (" + step.path("amount").asText() + " = " + amount + ").");
+                else if (changed > 0) report.add(resource.equals("hp") ? "Cleared " + changed + " HP."
                         : (("gain".equals(operation) ? "Gained " : "Marked ") + changed + " " + resource + "."));
                 else if ("gain".equals(operation) && amount > 0)
                     report.add("Gained no " + resource + " (already at maximum).");
@@ -2289,6 +2300,8 @@ public final class OnlineSessionServer {
         if (amount.isTextual()) {
             String text = amount.asText().strip();
             if ("all".equals(text)) return 0;
+            if (text.matches("\\d*d\\d+(?:[+-]\\d+)?"))
+                return DiceRoller.roll(text, config.maxDice(), diceRandom).total();
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
             if ("@tier".equals(text)) {
                 int level = Math.max(1, sheet.path("level").asInt(1));
@@ -2409,6 +2422,17 @@ public final class OnlineSessionServer {
             if (spectral && !hasSpectral(sheet))
                 reports.add(name + ": Spectral Form ended. If inside a solid object, the GM must reposition the token to the nearest open space.");
         }
+        Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (!hasPlayerSheet(actor)) continue;
+            party.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
+        }
+        Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
+        party.forEach((id, sheet) -> before.put(id, sheet.deepCopy()));
+        DruidEffects.synchronizeEarth(party);
+        party.forEach((id, sheet) -> {
+            if (!sheet.equals(before.get(id))) changes.put(id, sheet);
+        });
         return reports;
     }
 
@@ -2717,7 +2741,8 @@ public final class OnlineSessionServer {
                 boolean ownLocalEffect = target.getId().equals(source.getId())
                         && !effect.hasNonNull("sourceActorId");
                 boolean sourcedEffect = source.getId().equals(effect.path("sourceActorId").asText(""));
-                if (effect.path("endOnSourceSevere").asBoolean() && (ownLocalEffect || sourcedEffect)) {
+                if (effect.path("endOnSourceSevere").asBoolean() && (ownLocalEffect || sourcedEffect)
+                        || target.getId().equals(source.getId()) && effect.has("endOnDamage") && effect.path("endOnDamage").asInt() <= 3) {
                     removed = true;
                 } else {
                     kept.add(effect);
@@ -3190,6 +3215,7 @@ public final class OnlineSessionServer {
             hello.put("notes", true);
             hello.put("keptDice", true);
             hello.put("brawlerRolls", true);
+            hello.put("druidAutomation", true);
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
             hello.put("partyFeatures", true);
@@ -3520,6 +3546,11 @@ public final class OnlineSessionServer {
                         || "duality".equals(msg.path("kind").asText()))
                     throw new IllegalArgumentException("Brawler dice rules apply only to damage rolls.");
                 if (msg.path("damageRules").path("maximumOnes").asBoolean()) result = DiceRoller.maximumOnes(result, config.maxDice());
+                if (msg.path("damageRules").has("rerollBelow")) {
+                    JsonNode threshold = msg.path("damageRules").path("rerollBelow");
+                    if (!threshold.isInt()) throw new IllegalArgumentException("Invalid reroll threshold.");
+                    result = DiceRoller.rerollBelow(result, threshold.asInt(), config.maxDice(), diceRandom);
+                }
             }
             if (msg.has("contributions")) {
                 JsonNode sources = msg.path("contributions");
@@ -3553,6 +3584,9 @@ public final class OnlineSessionServer {
                 breakdown = DiceRoller.breakdown(result, contributions, config.maxDice());
                 if (msg.path("damageRules").path("maximumOnes").asBoolean() && !breakdownNotes.isEmpty())
                     breakdownNotes.getFirst().addObject().put("label", "Exacting").put("impact", "Damage dice showing 1 count as maximum; Combo Dice remain unmodified.");
+                if (msg.path("damageRules").has("rerollBelow") && !breakdownNotes.isEmpty())
+                    breakdownNotes.getFirst().addObject().put("label", "Deadly Raptor")
+                            .put("impact", "Rerolled damage dice below Proficiency (" + msg.path("damageRules").path("rerollBelow").asInt() + ") once.");
             }
             if (msg.path("damageRules").has("comboDie")) {
                 JsonNode die = msg.path("damageRules").path("comboDie");

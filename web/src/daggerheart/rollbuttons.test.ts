@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { rerollRequest, rollButtons, rollContext } from './rollbuttons';
+import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from './rollbuttons';
 import type { CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest } from './engine';
@@ -214,6 +214,30 @@ describe('cross-player roll buttons', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'a', benefitId: 'hope', roll: { id: 7, ts: 100 } });
     expect(box.queryAll('button')).toHaveLength(0);
     expect(message.actionBenefits!.claimedBy).toEqual(['ally-player']);
+  });
+
+  it('opens the throwing allies own Cannonball action and hides exclusive claims for everyone after acceptance', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+    const message: ChatMessage = { id: 8, ts: 100, fromId: 'player', from: 'Druid', text: 'Cannonball',
+      actionBenefits: { sessionId: 'session', actorIds: ['a'], claimedBy: [], allowSourceOwner: true,
+        options: [{ id: 'strength', label: 'Throw with Strength', steps: [], exclusiveClaim: true, featureAction: { name: 'Cannonball Throw', id: 'attack' } }] } };
+    const { host } = hostFor({ a: character('Thrower', undefined) });
+    const sheet: RollButtonSheet = (await host.sheet('a'))!;
+    const featureAction = vi.fn().mockReturnValue(true);
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    sheet.bus.featureAction = featureAction;
+    const supported = { ...host, playerId: 'player', supportsPartyFeatures: () => true, sessionId: () => 'session',
+      sheet: async () => ({ ...sheet, save: Object.assign(sheet.save, { refresh }) }) };
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(1);
+    await box.queryAll('button')[0].click();
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(featureAction).toHaveBeenCalledWith('Cannonball Throw', 'attack');
+    const other = rollButtons(message, { ...supported, playerId: 'another-player' }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(other.queryAll('button')).toHaveLength(0);
   });
 
   it('retains performance claims and displays errors when the host rejects a claim', async () => {

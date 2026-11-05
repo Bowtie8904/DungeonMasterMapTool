@@ -1662,6 +1662,67 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void druidRegenerationRollsHealingOnTheHostAndReportsActualRecovery() throws Exception {
+        ObjectNode source = communitySheet("Seaborne");
+        var features = source.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("druid-warden-of-renewal-foundation".equals(entry.path("id").asText()))
+                features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features"));
+        campaign.getActors().add(Campaign.Actor.builder().id("druid").name("Druid").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Patient").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "druid", source.toString());
+        ObjectNode patient = communitySheet("Seaborne");
+        store.saveSheet(campaign.getId(), "patient", patient.toString());
+        String cookie = cookie();
+        WebSocket socket = connect(cookie, new Inbox());
+        try {
+        HttpResponse<String> healed = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "druid")
+                .put("key", "feat:Regeneration").put("actionId", "use").put("targetActorId", "patient"));
+        assertEquals(200, healed.statusCode(), healed.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
+        assertTrue(saved.path("hp").path("on").asInt() >= 0);
+        assertTrue(saved.path("hp").path("on").asInt() <= 3);
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "druid")).path("hope").path("on").asInt());
+        assertTrue(store.historyTail(campaign.getId(), 20).stream()
+                .anyMatch(m -> m.path("text").asText().contains("Patient: Cleared") && m.path("text").asText().contains("1d4 = ")));
+        } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void cannonballInvitationCanBeClaimedByExactlyOneAllyUsingTheChosenTrait() throws Exception {
+        ObjectNode source = communitySheet("Seaborne");
+        var form = source.putArray("effects").addObject().put("name", "Beastform: Armored Sentry").put("beastform", true);
+        var features = form.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("druid".equals(entry.path("id").asText()))
+                for (JsonNode feature : entry.path("features"))
+                    for (JsonNode category : feature.path("automation").path("beastforms"))
+                        if ("Armored Sentry".equals(category.path("name").asText()))
+                            features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) category.path("features"));
+        campaign.getActors().add(Campaign.Actor.builder().id("druid").name("Druid").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("thrower").name("Thrower").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "druid", source.toString());
+        store.saveSheet(campaign.getId(), "thrower", communitySheet("Seaborne").toString());
+        String cookie = cookie();
+        HttpResponse<String> launched = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "druid")
+                .put("key", "feat:Cannonball").put("actionId", "launch"));
+        assertEquals(200, launched.statusCode(), launched.body());
+        ObjectNode invitation = (ObjectNode) store.historyTail(campaign.getId(), 20).stream()
+                .filter(m -> m.has("actionBenefits")).findFirst().orElseThrow();
+        assertTrue(invitation.path("actionBenefits").path("allowSourceOwner").asBoolean());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "druid")).path("stress").path("on").asInt());
+        ObjectNode claim = MAPPER.createObjectNode().put("actorId", "thrower").put("benefitId", "strength");
+        claim.putObject("roll").setAll(MAPPER.createObjectNode().put("id", invitation.path("id").asLong())
+                .put("ts", invitation.path("ts").asLong()));
+        HttpResponse<String> claimed = featureHttp(cookie, claim);
+        assertEquals(200, claimed.statusCode(), claimed.body());
+        JsonNode grant = MAPPER.readTree(store.loadSheet(campaign.getId(), "thrower")).path("effects").get(0);
+        assertEquals("Strength", grant.path("features").get(0).path("automation").path("actions").get(0).path("actionRoll").path("trait").asText());
+        assertEquals("d12+2", grant.path("features").get(0).path("automation").path("actions").get(1).path("damage").path("dice").asText());
+        assertEquals(400, featureHttp(cookie, claim).statusCode());
+    }
+
+    @Test
     void targetFeatureAppliesStepsToTargetAndDamageNotificationEndsSevereSourceEffects() throws Exception {
         Campaign.Player bob = Campaign.Player.builder().name("Bob")
                 .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();

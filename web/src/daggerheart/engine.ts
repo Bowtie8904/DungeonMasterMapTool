@@ -1,7 +1,7 @@
 // Automation engine for the dmmap-daggerheart data format (see docs/DAGGERHEART_DATA.md).
 // Pure functions over the CharacterSheet so they can be unit-tested without a DOM.
 
-import { Advantage, CharacterSheet, Feature, TraitName, TRAIT_ORDER, tierOf } from './data';
+import { Advantage, CharacterSheet, Feature, Weapon, TraitName, TRAIT_ORDER, tierOf } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 import { hpHealingFloor, syncDeathState } from './death';
@@ -30,6 +30,13 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  earthAuraGrant?: boolean;
+  group?: string;
+  requiresEffect?: string;
+  endOnDamage?: number;
+  beastform?: boolean;
+  features?: Feature[];
+  weapon?: Weapon;
   stance?: boolean;
   mitigation?: MitigationOption[];
   damage?: Automation['damage'];
@@ -57,6 +64,8 @@ export interface ChatBenefit {
   id: string;
   label: string;
   steps: Step[];
+  featureAction?: { name: string; id: string };
+  exclusiveClaim?: boolean;
 }
 
 export interface Step {
@@ -67,6 +76,11 @@ export interface Step {
 }
 
 export interface ActionDef {
+  beastform?: boolean;
+  evolution?: boolean;
+  channel?: string;
+  aura?: boolean;
+  report?: { amount?: ModValue; dice?: string; text: string };
   weaponRange?: string;
   shiftStance?: boolean;
   refocus?: boolean;
@@ -96,13 +110,14 @@ export interface ActionDef {
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   /** Sends a plain roll to the chat, for example the d4 of I See It Coming added to the Evasion against one attack. */
   sendRoll?: { dice: string; base?: 'evasion'; label: string };
-  actionRoll?: { trait?: TraitName | 'highest' | 'spellcast'; attack?: boolean; difficulty?: number };
+  actionRoll?: { trait?: TraitName | 'highest' | 'spellcast' | 'beastform'; attack?: boolean; difficulty?: number };
   ancestryChoice?: 'ancestry' | 'feature';
   endEffect?: string;
   requiresEffect?: string;
   damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
   target?: 'actor' | 'party' | 'allActors';
   chatBenefits?: ChatBenefit[];
+  allowSourceOwner?: boolean;
   transferHope?: boolean;
   check?: { dice: string; unless?: number; mark?: 'stress'; success?: number; gain?: string };
 }
@@ -118,6 +133,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  rerollBelowProficiency?: boolean;
   exclusive?: string;
   combo?: boolean;
   proficiency?: number;
@@ -170,6 +186,8 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  beastforms?: BeastformDef[];
+  channelBenefit?: { element: string; effect: EffectDef };
   unarmedWeapon?: Omit<CharacterSheet['activeWeapons'][number], 'trait'>;
   stances?: Array<{ name: string; tier: number; effect: EffectDef; chooseTrait?: boolean }>;
   criticalMelee?: { hope: number; stress: number; proficiency: number };
@@ -191,9 +209,42 @@ export interface Automation {
   resources?: ResourceDef[];
   creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[]; experienceBonus?: number };
   rollOptions?: RollOption[];
-  damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean };
+  damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean; proficiencyOnly?: boolean };
   /** Options offered in the incoming-damage dialog (see damage.ts). */
   mitigation?: MitigationOption[];
+}
+
+export interface BeastformDef {
+  name: string;
+  tier: number;
+  examples?: string;
+  trait?: TraitName;
+  bonus?: number;
+  evasion?: number;
+  damage?: string;
+  range?: string;
+  advantages?: string[];
+  features?: Array<{ name: string; text: string; automation?: Automation }>;
+  evolved?: { maxTier: number; damage: number; trait: number; evasion: number; increaseDie?: boolean };
+  hybrid?: { count: number; maxTier: number; advantages: number; features: number; stress: number };
+}
+
+export function activeFeatures(c: CharacterSheet): Feature[] {
+  return [...c.features, ...c.effects.flatMap(e => e.features ?? [])];
+}
+
+export function activeWeapons(c: CharacterSheet): Weapon[] {
+  const replacement = c.effects.find(e => e.weapon)?.weapon;
+  return replacement ? [replacement] : c.activeWeapons;
+}
+
+export function syncEffectDependencies(c: CharacterSheet): void {
+  if (c.hp.slots > 0 && c.hp.on >= c.hp.slots) c.effects = c.effects.filter(e => !e.beastform);
+  let count: number;
+  do {
+    count = c.effects.length;
+    c.effects = c.effects.filter(e => !e.requiresEffect || c.effects.some(parent => parent.name === e.requiresEffect));
+  } while (c.effects.length !== count);
 }
 
 export interface RestBenefit extends ActionDef {
@@ -229,7 +280,7 @@ export interface SheetCondition {
 }
 
 export function hasFeature(c: CharacterSheet, name: string): boolean {
-  return [...c.features, ...c.heritage].some(f => f.name === name);
+  return [...activeFeatures(c), ...c.heritage].some(f => f.name === name);
 }
 
 function conditionMatches(c: CharacterSheet, condition: SheetCondition): boolean {
@@ -255,8 +306,8 @@ export function automationSources(c: CharacterSheet): Automation[] {
   const out: Automation[] = [];
   const add = (a?: Automation) => { if (a) out.push(a); };
   add(c.activeArmor?.automation);
-  c.activeWeapons.forEach((w) => add(w.automation));
-  c.features.forEach((f) => add(f.automation));
+  activeWeapons(c).forEach((w) => add(w.automation));
+  activeFeatures(c).forEach((f) => add(f.automation));
   c.heritage.forEach((f) => add(f.automation));
   c.loadout.forEach((d) => add(d.automation));
   c.inventory.filter((i) => i.qty > 0).forEach((i) => add(i.automation));
@@ -344,8 +395,8 @@ export interface StatSource { label: string; value: number }
 function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automation; mods?: Modifier[]; weapon?: CharacterSheet['activeWeapons'][number] }> {
   return [
     ...(c.activeArmor ? [{ name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
-    ...c.activeWeapons.map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
-    ...c.features.map((f) => ({ name: f.name, auto: f.automation })),
+    ...activeWeapons(c).map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
+    ...activeFeatures(c).map((f) => ({ name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ name: f.name, auto: f.automation })),
     ...c.loadout.map((d) => ({ name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ name: i.name, auto: i.automation })),
@@ -383,6 +434,7 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
+  syncEffectDependencies(c);
   syncDeathState(c);
   syncBrawler(c);
   const stances = automationSources(c).flatMap(a => a.stances ?? []);
@@ -491,8 +543,8 @@ export function sourceActionLabel(origin: string | undefined, source: string, ac
 export function availableRollOptions(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number]): AvailableRollOption[] {
   const sources: Array<{ key: string; name: string; origin?: string; auto?: Automation; item?: CharacterSheet['inventory'][number]; weapon?: CharacterSheet['activeWeapons'][number] }> = [
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
-    ...c.activeWeapons.map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
-    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
+    ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
+    ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
@@ -506,7 +558,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     return [{ key: `effect:${e.id}:${i}`, source: e.name, automation: {}, option, active: true, prepared: { effect: e, modifier } }];
   }));
   return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
-    .filter((o) => targets.includes(o.roll))
+    .filter((o) => targets.includes(o.roll) || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
@@ -514,7 +566,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
-      ? weapon?.slot.toLowerCase() === o.weapon && c.activeWeapons.includes(weapon)
+      ? weapon?.slot.toLowerCase() === o.weapon && activeWeapons(c).includes(weapon)
       : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
     .map((option) => ({
       key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
@@ -528,7 +580,7 @@ export function rollOptionDice(c: CharacterSheet, option: RollOption): string | 
   const level = Object.keys(option.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
   let dice = level === undefined ? option.dice : option.diceByLevel![String(level)];
   for (const [feature, replacement] of Object.entries(option.diceByFeature ?? {})) {
-    if ([...c.features, ...c.heritage].some((f) => f.name === feature)) dice = replacement;
+    if (hasFeature(c, feature)) dice = replacement;
   }
   for (const condition of option.diceConditions ?? []) {
     if (!conditionMatches(c, condition)) continue;
@@ -576,7 +628,7 @@ export function effectiveAdvantage(requested: Advantage, selected: AvailableRoll
 export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOption[], experience = false): string | null {
   if (selected.filter(s => s.option.combo).length > 1) return 'Choose only one Combo Strike cost';
   const groups = selected.map(s => s.option.exclusive).filter(Boolean);
-  if (new Set(groups).size !== groups.length) return 'Choose only one cost for each additional target';
+  if (new Set(groups).size !== groups.length) return 'Choose only one cost or bonus from each exclusive group';
   const cost: Record<string, number> = experience ? { hope: 1 } : {};
   const uses = new Map<string, number>();
   const items = new Map<CharacterSheet['inventory'][number], number>();
@@ -637,7 +689,7 @@ export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['a
     { label: 'Base Proficiency', impact: `${c.proficiency.on} dice` },
     ...(proficiencyBonus ? [{ label: 'Attack-linked Proficiency', impact: diceCount(proficiencyBonus) }] : []),
     ...sources.map((s) => ({ label: s.label.slice(0, 120), impact: diceCount(s.value) })),
-    ...c.effects.filter(e => e.damage && (e.damage.extraDice || e.damage.dropLowest)).map(e => ({
+    ...c.effects.filter(e => e.damage && (!e.damage.proficiencyOnly || !weapon.fixedDice) && (e.damage.extraDice || e.damage.dropLowest)).map(e => ({
       label: e.name, impact: `Each pool: roll ${e.damage!.extraDice} extra; discard ${e.damage!.dropLowest} lowest`,
     })),
     ...(raw < 1 ? [{ label: 'Minimum Proficiency', impact: diceCount(1 - raw) }] : []),
@@ -668,6 +720,8 @@ export function addEffect(c: CharacterSheet, def: EffectDef, source?: string): A
     id: `e${Date.now().toString(36)}${effectCounter++}`,
     source,
   };
+  if (def.group) c.effects = c.effects.filter(e => e.group !== def.group);
+  syncEffectDependencies(c);
   const existing = c.effects.findIndex((e) => e.name === def.name);
   if (existing >= 0) c.effects.splice(existing, 1);
   c.effects.push(effect);
@@ -769,6 +823,7 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
   if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
   if (action.excludesFeature && hasFeature(c, action.excludesFeature)) return 'This option has been replaced by another feature';
   if (action.actionRoll?.trait === 'spellcast' && !c.traits.some(t => t.spellcast)) return 'No Spellcast trait is available';
@@ -850,7 +905,8 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       t.on = Math.min(t.slots, t.on + n);
       log.push(`marked ${n} ${step.resource}`);
     } else if (step.op === 'effect' && step.effect) {
-      addEffect(c, step.effect, label);
+      const form = c.effects.find(e => e.beastform && e.features?.some(f => key === `feat:${f.name}`));
+      addEffect(c, { ...step.effect, ...(form ? { requiresEffect: form.name } : {}) }, label);
       log.push(`${step.effect.kind === 'debuff' ? 'afflicted by' : 'gained'} ${step.effect.name}`);
     }
   }
@@ -858,6 +914,12 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     c.effects = c.effects.filter((e) => e.name !== action.endEffect);
     log.push(`ended ${action.endEffect}`);
   }
+  if (action.report) {
+    const trait = TRAIT_ORDER.find(name => action.report!.amount === `@${name}`);
+    const n = action.report.dice ? roll(action.report.dice) : trait ? traitTotal(c, trait) : evalValue(action.report.amount, c);
+    log.push(action.report.text.replace('{amount}', String(Math.max(0, n))));
+  }
+  syncEffectDependencies(c);
   syncDeathState(c);
   return log;
 }
@@ -877,7 +939,8 @@ export function damageExpression(damage: string, proficiency: number, extra: Rol
 }
 
 export function damagePool(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number]): Automation['damage'] {
-  const pools = [weapon.automation?.damage, ...c.effects.map(e => e.damage)].filter((p): p is NonNullable<Automation['damage']> => !!p);
+  const pools = [weapon.automation?.damage, ...c.effects.map(e => e.damage)]
+    .filter((p): p is NonNullable<Automation['damage']> => !!p && (!p.proficiencyOnly || !weapon.fixedDice));
   if (!pools.length) return undefined;
   return { extraDice: pools.reduce((n, p) => n + p.extraDice, 0), dropLowest: pools.reduce((n, p) => n + p.dropLowest, 0),
     maximumOnes: pools.some(p => p.maximumOnes) };
@@ -914,7 +977,7 @@ export interface RollContext {
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
-  if (t.weaponRange && !c.activeWeapons.some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
+  if (t.weaponRange && !activeWeapons(c).some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
   if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
@@ -946,8 +1009,8 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
 export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): AvailableRollTrigger[] {
   const sources: Array<{ key: string; name: string; auto?: Automation }> = [
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
-    ...c.activeWeapons.map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation })),
-    ...c.features.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation })),
+    ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),

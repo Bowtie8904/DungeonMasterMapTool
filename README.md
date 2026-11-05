@@ -254,6 +254,22 @@ Nothing starts until you click **Start online session**, so offline play and the
   Major 2, Severe 3, and 4 for damage of at least twice the Severe threshold. **Apply** marks HP and Armor Slots,
   pays Hope/Stress/HP costs, counts limited uses, consumes items and posts a damage report card to the chat. Mitigations are
   configured in the relevant compendium JSON entries.
+  **Druid automation:** Beastform and Evolution offer all 24 categories, filtered by tier, with base-form and
+  hybrid selections where required. The removable **Beastform: &lt;category&gt;** buff supplies stats and an attack
+  without altering equipped weapons. Its temporary features appear in a **Beastform** tab between Character and
+  Domain Cards; applicable advantages share one roll option listing all applicable activities, and conditional
+  attack bonuses remain explicit roll options. Poison damage and Fire retaliation buttons roll an unmodified
+  1d10 directly, without bonus selection; poison is separate damage when the poisoned creature acts. Fragile forms
+  end on Major damage, all forms end on the last HP, and domain spells cannot be cast while transformed.
+  Cannonball posts a claimable ally action: the thrower chooses Agility or Strength and rolls with their own
+  stats and Proficiency. Clarity reports total available Stress recovery, Regeneration selects a healing target,
+  and Warden's Protection reports its rolled ally count.
+  Elemental Incarnation, Aura and Dominion have uniquely named per-element features. Channeling replaces the
+  previous element and automatically enables the matching Dominion benefit. Aura is once per rest and ends
+  when channeling ends or changes. Earth aura gives every player character an **optional +1 Strength** roll
+  option: select it only within Close range. Element buttons require their matching buff; Earth Dominion appears
+  in damage mitigation, Fire adds its damage die automatically, and Air adds Evasion. Range, narrative
+  prerequisites, adversary conditions and forced movement remain table-confirmed.
   Forager and Potioncraft Kit add choices, not extra slots; explicit grants such as Celestial Trance and
   Potion of Stability still increase the number of moves. These rules use metadata,
   not runtime name/label exceptions. Other actions on the same feature or item remain available.

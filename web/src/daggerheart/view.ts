@@ -4,12 +4,14 @@ import {
   dualityExpression, handsUsed, multiclassesOf, shortTrait, signed, tierOf,
 } from './data';
 import {
-  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
+  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
   damagePool, effectiveAdvantage, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
+import { activateAura, canCastDomain, channelElement, transformBeastform } from './druid';
+import { chooseBeastform } from './druid-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 
@@ -30,7 +32,7 @@ import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
 export interface RollRequest {
-  damageRules?: { comboDie?: number; maximumOnes?: boolean };
+  damageRules?: { comboDie?: number; maximumOnes?: boolean; rerollBelow?: number };
   label: string;
   expression: string;
   kind?: 'duality';
@@ -46,6 +48,7 @@ export interface RollRequest {
 
 /** Lets other parts of the page (the compendium) change a sheet and have an open view refresh. */
 export class SheetBus {
+  featureAction?: (name: string, id: string) => boolean;
   private listeners: Array<() => void> = [];
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
@@ -58,6 +61,7 @@ export class SheetBus {
 }
 
 export interface SheetViewOptions {
+  supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
   character: CharacterSheet;
   artwork?: string;
@@ -82,9 +86,9 @@ export interface SheetViewOptions {
   onMiniStrip?: (strip: HTMLElement | null) => void;
 }
 
-type Page = 'char' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
+type Page = 'char' | 'beastform' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
 const PAGES: Array<[Page, string]> = [
-  ['char', 'Character'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
+  ['char', 'Character'], ['beastform', 'Beastform'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
 export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0): HTMLElement {
@@ -287,7 +291,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
     const bonus = rollBonus(c, targets, w, false);
     openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll('damage', w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
-      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus);
+      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation);
   };
   if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource) => {
     const spell: Weapon = { name: label, slot: 'Primary', damageType: spec.type === 'physical' ? 'phys' : 'magic', trait: 'Presence', range: '', damage: spec.dice, hands: 1, tier: 0, fixedDice: spec.fixed,
@@ -296,10 +300,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return true;
   };
   if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus) => {
-    const w = c.activeWeapons.find((x) => x.name === name);
+    const w = activeWeapons(c).find((x) => x.name === name);
     if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear, proficiencyBonus);
     else {
-      const feature = [...c.features, ...c.heritage].find((f) => f.name === name);
+      const feature = [...activeFeatures(c), ...c.heritage].find((f) => f.name === name);
       const action = feature?.automation?.actions?.find((a) => a.damage);
       if (!feature || !action) return false;
       openFeatureDamage(`feat:${name}`, feature.automation!, action, name, critical, undefined, attackFear);
@@ -307,6 +311,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return true;
   };
   opts.bus?.subscribe(() => render());
+  if (opts.bus) opts.bus.featureAction = (name, id) => {
+    const feature = activeFeatures(c).find(f => f.name === name);
+    const action = feature?.automation?.actions?.find(a => a.id === id);
+    if (!feature || !action || !feature.automation) return false;
+    actionButton(`feat:${name}`, feature.automation, action, name, {}).click();
+    return true;
+  };
   for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, () => opts.onChange?.());
 
   const cardResourceIds = (): Set<string> => new Set([...c.loadout.map((d) => d.automation), ...c.inventory.map((i) => i.automation)].flatMap((a) => a?.resources ?? []).map((r) => r.id));
@@ -338,6 +349,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function actionButton(key: string, a: Automation, action: ActionDef, label: string, hooks: { extraBlock?: () => string | null; after?: () => void }): HTMLElement {
+    if (key.startsWith('card:') && !canCastDomain(c) && action.actionRoll?.trait === 'spellcast') {
+      return el('button', { type: 'button', class: 'small', disabled: true, title: 'Cannot cast domain spells in Beastform' }, action.label);
+    }
     const cost = costText(actionCost(c, action), c);
     const b = el('button', { class: 'small primary', type: 'button' }, cost ? `${action.label} (${cost})` : action.label);
     if (action.actionRoll?.trait === 'highest') {
@@ -362,6 +376,27 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !window.confirm('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
+      if ((action.beastform || action.evolution || action.channel || action.aura) && !opts.supportsDruidAutomation?.()) {
+        opts.onLog?.('Update the host to use Druid automation.');
+        return;
+      }
+      if (action.beastform || action.evolution) {
+        chooseBeastform(c, !!action.evolution, choice => {
+          const lines = transformBeastform(c, key, a, action, choice);
+          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          page = 'beastform';
+          render();
+        });
+        return;
+      }
+      if (action.channel || action.aura) {
+        try {
+          const lines = action.channel ? channelElement(c, key, a, action) : activateAura(c, key, a, action);
+          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          render();
+        } catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
+        return;
+      }
       if (action.shiftStance) {
         chooseStance(c, (name, trait) => {
           const lines = shiftStance(c, key, a, action, name, trait);
@@ -410,7 +445,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.actionRoll) {
         const spec = action.actionRoll;
         const trait = spec.trait === 'highest' ? TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best)
-          : spec.trait === 'spellcast' ? c.traits.find(t => t.spellcast)?.name : spec.trait;
+          : spec.trait === 'spellcast' ? c.traits.find(t => t.spellcast)?.name
+            : spec.trait === 'beastform' ? activeWeapons(c)[0]?.trait : spec.trait;
         const targets = ['action', ...(trait ? [`trait:${trait}`] : []), ...(spec.attack ? ['attack'] : []),
           ...(spec.trait === 'spellcast' ? ['spellcast'] : []),
           ...(key.startsWith('card:') || key.startsWith('feat:') ? [key] : [])];
@@ -594,6 +630,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const nav = el('nav', { class: 'tabs' });
     nav.setAttribute('role', 'tablist');
     for (const [id, label] of PAGES) {
+      if (id === 'beastform' && !c.effects.some(e => e.beastform)) continue;
       const count = id === 'effects' && c.effects.length ? ` (${c.effects.length})` : '';
       const b = el('button', { class: 'tab', type: 'button' }, label + count);
       b.setAttribute('role', 'tab');
@@ -715,7 +752,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (e.clientY < r.top + zone) wrap.scrollTop -= Math.ceil((r.top + zone - e.clientY) / 4);
       else if (e.clientY > r.bottom - zone) wrap.scrollTop += Math.ceil((e.clientY - (r.bottom - zone)) / 4);
     });
-    wrap.append(page === 'char' ? charPage() : page === 'effects' ? effectsPage() : page === 'equip' ? equipPage() : page === 'loot' ? lootPage() : page === 'cards' ? cardsPage() : bgPage());
+    if (page === 'beastform' && !c.effects.some(e => e.beastform)) page = 'char';
+    wrap.append(page === 'char' ? charPage() : page === 'beastform' ? beastformPage() : page === 'effects' ? effectsPage() : page === 'equip' ? equipPage() : page === 'loot' ? lootPage() : page === 'cards' ? cardsPage() : bgPage());
     return wrap;
   }
 
@@ -723,7 +761,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const untilText = (e: ActiveEffect) => ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
     const rows = c.effects.map((e) => {
       const dismiss = el('button', { class: 'small', type: 'button' }, 'Remove');
-      dismiss.disabled = !!e.lockedHp;
+      dismiss.disabled = !!e.lockedHp || !!e.earthAuraGrant;
+      if (e.earthAuraGrant) dismiss.title = 'Ends automatically with the granting druid\'s Earth aura; select the roll option only when in range.';
       if (e.lockedHp) dismiss.title = 'This HP lock ends only when you rest.';
       dismiss.addEventListener('click', () => { c.effects.splice(c.effects.indexOf(e), 1); render(); });
       const mods = (e.modifiers ?? []).map((m) => {
@@ -737,6 +776,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
         rich(mutagenEffectSource(c, e)?.text ?? e.text),
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
+        ...(e.beastform ? [] : e.features ?? []).map(f => {
+          const node = featureCard(f);
+          const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+          if (actions) node.append(actions);
+          return node;
+        }),
         ...((e.actions?.length ?? 0) ? [el('div', { class: 'acts' },
           ...e.actions!.map(action => actionButton(`effect:${e.id}`, {}, action, e.name, {
             extraBlock: () => c.effects.includes(e) ? null : 'This effect is no longer active',
@@ -788,6 +833,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     );
   }
 
+  function beastformPage(): HTMLElement {
+    const form = c.effects.find(e => e.beastform)!;
+    const drop = el('button', { type: 'button', class: 'small' }, 'Drop Beastform');
+    drop.addEventListener('click', () => { c.effects = c.effects.filter(e => e !== form); render(); });
+    const rows = (form.features ?? []).map(f => {
+      const node = featureCard(f);
+      const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+      if (actions) node.append(actions);
+      return node;
+    });
+    return card(form.name, drop, ...(form.weapon ? [weaponSlot(form.weapon)] : []), ...rows);
+  }
+
   function weaponSlot(w: Weapon): HTMLElement {
     const mod = traitTotal(c, w.trait);
     const attack = el('button', { class: 'primary small', type: 'button' }, `Attack ${signed(mod)}`);
@@ -798,7 +856,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     unequip.hidden = !!w.generated;
     unequip.addEventListener('click', () => { c.activeWeapons.splice(c.activeWeapons.indexOf(w), 1); c.carriedWeapons.push(w); render(); });
     const actions = actionRow(`weapon:${w.name}`, w.automation, w.feature?.name ?? w.name);
-    const traitChoice = w.generated ? el('select', { ariaLabel: "Brawler's Strike trait" }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name))) : undefined;
+    const traitChoice = w.generated === 'brawler' ? el('select', { ariaLabel: "Brawler's Strike trait" }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name))) : undefined;
     if (traitChoice) {
       traitChoice.value = w.trait;
       traitChoice.addEventListener('change', () => { c.brawlerTrait = traitChoice.value as TraitName; render(); });
@@ -817,8 +875,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const used = handsUsed(c);
     const hands = el('span', { class: 'right hands', title: 'Max burden is 2 hands' }, el('span', { class: 'muted' }, 'Hands'), el('span', { class: `hand${used >= 1 ? ' on' : ''}` }), el('span', { class: `hand${used >= 2 ? ' on' : ''}` }), el('span', { class: 'muted' }, `${used} / 2`));
     const weapons = el('div', { class: 'card' }, el('h3', {}, 'Active weapons', hands));
-    const primary = c.activeWeapons.find((w) => w.slot === 'Primary');
-    const secondary = c.activeWeapons.find((w) => w.slot === 'Secondary');
+    const primary = activeWeapons(c).find((w) => w.slot === 'Primary');
+    const secondary = activeWeapons(c).find((w) => w.slot === 'Secondary');
     const emptySlot = (name: string) => el('div', { class: 'slot empty' }, el('div', { class: 'top' }, el('span', { class: 'cat' }, name), el('span', { class: 'nm', style: 'font-weight:400' }, 'Empty')));
     weapons.append(primary ? weaponSlot(primary) : emptySlot('Primary'));
     if (secondary) weapons.append(weaponSlot(secondary));
@@ -987,11 +1045,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const acts = el('div', { class: 'act' });
     if (d.spellcast && asksSpellcastRoll(s.text)) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
+      sp.disabled = !canCastDomain(c);
       sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${s.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`, `card:${s.name}`], undefined, rollSourceFor(c, `card:${d.name}/${s.name}`)));
       acts.append(sp);
     }
     if (loadout) {
-      const actions = actionRow(`card:${d.name}/${s.name}`, s.automation, s.name);
+      const actions = actionRow(`card:${d.name}/${s.name}`, s.automation, s.name, {
+        extraBlock: () => canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
+      });
       if (actions) acts.append(actions);
     }
     return el('div', { class: 'dspell' }, el('span', { class: 'sn' }, s.name), rich(s.text), ...(acts.childElementCount ? [acts] : []));
@@ -1002,11 +1063,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const spells = d.spells?.length ? d.spells : null;
     if (!spells && d.spellcast && asksSpellcastRoll(d.text)) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
+      sp.disabled = !canCastDomain(c);
       sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${d.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`], undefined, rollSourceFor(c, `card:${d.name}`)));
       acts.append(sp);
     }
     if (loadout && !spells) {
-      const actions = actionRow(`card:${d.name}`, d.automation, d.name);
+      const actions = actionRow(`card:${d.name}`, d.automation, d.name, {
+        extraBlock: () => d.type === 'Ability' || canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
+      });
       if (actions) acts.append(actions);
     }
     const move = () => {
@@ -1182,7 +1246,7 @@ function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: n
 }
 
 /** Small modal: advantage and Experience spend; posts the duality roll to the chat. */
-export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0): void {
+export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0, supportsDruidAutomation?: () => boolean): void {
   const mod = trait.reduce((n, s) => n + Number(s.expression), 0);
   let reaction = targets.includes('reaction');
   const canChooseReaction = !weapon && !pendingAction && !targets.includes('attack') && targets.some((target) => target.startsWith('trait:'));
@@ -1214,6 +1278,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const blocker = () => {
     try { selected(); } catch (e) { return (e as Error).message; }
     if (weapon && damagePool(c, weapon)?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
+    if (selected().some(s => s.option.rerollBelowProficiency) && !supportsDruidAutomation?.()) return 'Update the host to use Deadly Raptor damage rerolls.';
     if (weapon && (damagePool(c, weapon)?.maximumOnes || selected().some(s => s.option.combo)) && !supportsBrawlerRolls?.()) return 'Update the host to roll Combo Strike or Exacting damage.';
     if (selected().some((s) => s.option.multiplier) && !supportsRollMultipliers?.()) return 'This host does not support damage multipliers. Update the host to use this option.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
@@ -1230,7 +1295,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const preview = el('div', { class: 'muted' });
   const crit = el('input', { type: 'checkbox' });
   crit.checked = critical;
-  const proficiencyExtra = () => proficiencyBonus + criticalMeleeBonus(c, weapon?.name, crit.checked).proficiency;
+  const proficiencyExtra = () => proficiencyBonus + criticalMeleeBonus(c, weapon?.name, crit.checked).proficiency
+    + selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0);
   const damageType = el('select', { ariaLabel: 'Otherworldly damage type' },
     el('option', { value: 'physical' }, 'Physical damage'), el('option', { value: 'magic' }, 'Magic damage'));
   damageType.value = weapon?.damageType === 'magic' ? 'magic' : 'physical';
@@ -1298,9 +1364,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
     const request: RollRequest = weapon ? {
       label: otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
-      ...(selected().some(s => s.option.combo) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
+      ...(selected().some(s => s.option.combo || s.option.rerollBelowProficiency) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
         ...(selected().some(s => s.option.combo) ? { comboDie: comboDie(c) } : {}),
         ...(damagePool(c, weapon)?.maximumOnes ? { maximumOnes: true } : {}),
+        ...(selected().some(s => s.option.rerollBelowProficiency) ? { rerollBelow: derivedStats(c).proficiency } : {}),
       } } : {}),
       ...damageRollFormula(damageText(b).text,
         [...damageContributions(c, weapon, b, proficiencyExtra()), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])], selected()),
