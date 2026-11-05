@@ -27,6 +27,14 @@ class ChatPanelTest {
     }
 
     @Test
+    void goldCommandAcceptsOnlyPositiveWholeAmounts() {
+        assertEquals(500, ChatPanel.goldAmount("500"));
+        assertEquals(7, ChatPanel.goldAmount(" 7 "));
+        for (String invalid : new String[]{"", "0", "-5", "1.5", "abc", "1234567890"})
+            assertNull(ChatPanel.goldAmount(invalid), invalid);
+    }
+
+    @Test
     void dmDeleteIsAccessibleAndWaitsForHostEventWithoutMarkingUnread() throws Exception {
         JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"id\":1,\"ts\":10,\"from\":\"Alice\",\"text\":\"Hello\"}");
         CountDownLatch called = new CountDownLatch(1);

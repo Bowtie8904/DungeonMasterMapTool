@@ -57,8 +57,8 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   };
   restMetadata('weapons', [...c.activeWeapons, ...c.carriedWeapons]);
   restMetadata('armor', [...c.carriedArmor, ...(c.activeArmor ? [c.activeArmor] : [])]);
-  restMetadata('items', c.inventory.filter((i) => i.type !== 'consumable'));
-  restMetadata('consumables', c.inventory.filter((i) => i.type === 'consumable'));
+  restMetadata('items', c.inventory.filter((i) => !i.custom && i.type !== 'consumable'));
+  restMetadata('consumables', c.inventory.filter((i) => !i.custom && i.type === 'consumable'));
   equipment('domain-cards', [...c.loadout, ...c.vault]);
   for (const card of [...c.loadout, ...c.vault]) {
     const entry = entries('domain-cards').find((e) => e.name === card.name && e.spells?.length);
@@ -232,6 +232,7 @@ export function applyInventory(c: CharacterSheet, incoming: Partial<Omit<Charact
     if (incoming.carriedWeapons || !preserveMissing) c.carriedWeapons = incoming.carriedWeapons ?? [];
     if (incoming.carriedArmor || !preserveMissing) c.carriedArmor = incoming.carriedArmor ?? [];
     if ('activeArmor' in incoming || !preserveMissing) c.activeArmor = incoming.activeArmor;
+    if (typeof incoming.gold === 'number') c.gold = incoming.gold;
   }
   if ((incoming.compendiumRevision ?? 0) > (c.compendiumRevision ?? 0)) {
     changed = true;

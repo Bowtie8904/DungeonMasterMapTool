@@ -54,7 +54,7 @@
 .dh .thr-sep { color: var(--muted); font-size: 11px; }
 
 .dh .sheet-layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); flex: 1; min-height: 0; }
-.dh .sheet-sidebar { overflow-y: auto; min-height: 0; padding: 10px; border-right: 1px solid var(--border); background: #14181e; }
+.dh .sheet-sidebar { overflow-y: auto; min-height: 0; padding: 10px; border-right: 1px solid var(--border); background: #14181e; container: traits-side / size; }
 .dh .sheet-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .dh .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: center; }
 .dh .tab { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 14px; color: var(--muted); }
@@ -77,17 +77,27 @@
 .dh .card h3 { margin: 0 0 8px; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dh .card h3 .right { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-weight: 400; }
 
-.dh .traits { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-.dh .trait { position: relative; background: var(--panel); border: 1px solid #428b9c; box-shadow: inset 0 0 12px rgba(66,139,156,.14); border-radius: 8px; padding: 6px 3px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; min-width: 0; color: inherit; }
+.dh .traits { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(min-content, 1fr); gap: clamp(3px, 1.1cqh, 6px); min-height: min(100%, 540px); }
+.dh .trait { position: relative; background: var(--panel); border: 1px solid #428b9c; box-shadow: inset 0 0 12px rgba(66,139,156,.14); border-radius: 8px; padding: clamp(1px, 1.1cqh, 6px) 3px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; color: inherit; }
 .dh .trait:hover, .dh .trait:focus-within { border-color: #76c9dc; box-shadow: inset 0 0 12px rgba(66,139,156,.24), 0 0 5px rgba(118,201,220,.2); }
 .dh .trait .th { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; width: 100%; box-sizing: border-box; padding-left: 10px; }
 .dh .trait-mark { position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; box-sizing: border-box; border: 1px solid var(--muted); border-radius: 50%; display: grid; place-items: center; cursor: default; background: var(--panel); }
 .dh .trait-mark.marked { border-color: var(--accent); }
 .dh .trait-mark.marked::after { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--accent); }
-.dh .trait .nm { font-weight: 600; font-size: 13px; }
-.dh .trait .md { font-size: 24px; font-weight: 700; line-height: 1.15; }
+.dh .trait .nm { font-weight: 600; font-size: clamp(10.5px, 2.5cqh, 13px); line-height: 1.3; }
+.dh .trait .md { font-size: clamp(15px, 4.4cqh, 24px); font-weight: 700; line-height: 1.15; }
 .dh .trait .vb { font-size: 9.5px; letter-spacing: -.01em; color: var(--muted); opacity: .75; line-height: 1.25; min-height: 2.5em; }
 .dh .trait .spell { font-size: 12px; color: #d8c8ff; }
+@container traits-side (max-height: 470px) {
+  .dh .trait .vb { display: none; }
+}
+@container traits-side (max-height: 250px) {
+  .dh .traits { gap: 2px; }
+  .dh .trait { flex-direction: row; justify-content: space-between; gap: 4px; padding: 1px 6px 1px 4px; }
+  .dh .trait .th { width: auto; min-width: 0; flex-wrap: nowrap; justify-content: flex-start; gap: 3px; }
+  .dh .trait .nm { font-size: 11.5px; }
+  .dh .trait .md { font-size: 16px; line-height: 1.2; }
+}
 
 .dh .list { display: flex; flex-direction: column; gap: 6px; }
 .dh .row { display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; }
@@ -124,6 +134,10 @@
 .dh table.inventory-table td { overflow-wrap: anywhere; }
 .dh table.inventory-table [hidden] { display: none; }
 .dh table.inventory-table .controls-cell { text-align: right; }
+.dh .card h3 .inventory-tools { gap: 12px; min-width: 0; }
+.dh .card h3 .inventory-tools .inventory-search { max-width: 100%; min-width: 0; }
+.dh .card h3 button.add-custom-item { width: 26px; height: 26px; min-width: 26px; padding: 4px; }
+.dh .card h3 button.add-custom-item svg { width: 15px; height: 15px; }
 .dh .equipment-table th:first-child { width: 30%; }
 .dh .equipment-table .controls-cell { width: 120px; }
 .dh .loot-table th:first-child { width: auto; }
@@ -156,7 +170,9 @@
 .dh .goldbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: linear-gradient(100deg, #3a2c0c 0%, #1f1a10 55%, var(--panel2) 100%); border: 1px solid #8a6a1e; box-shadow: inset 0 0 18px rgba(245,185,66,.12), 0 0 0 1px rgba(245,185,66,.08); }
 .dh .goldbar .cat { color: var(--hope); font-weight: 700; letter-spacing: .12em; }
 .dh .goldbar .coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe9a6, #f5b942 55%, #a8741a); box-shadow: 0 0 8px rgba(245,185,66,.6); flex-shrink: 0; }
-.dh .goldbar input { text-align: center; color: var(--hope); font-weight: 700; font-size: 16px; border-color: #8a6a1e; background: #17130a; width: 64px; }
+.dh .goldbar input { text-align: center; color: var(--hope); font-weight: 700; font-size: 16px; border-color: #8a6a1e; background: #17130a; width: 64px; padding: 5px 4px; -moz-appearance: textfield; appearance: textfield; }
+.dh .goldbar input::-webkit-inner-spin-button, .dh .goldbar input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.dh .goldbar button.gold-transfer { margin-left: auto; opacity: .8; color: var(--hope); }
 .dh .goldbar .qty button { border-color: #8a6a1e; color: var(--hope); }
 .dh .qty { display: inline-flex; align-items: center; gap: 4px; }
 .dh .qty button { width: 22px; height: 22px; padding: 0; line-height: 1; }

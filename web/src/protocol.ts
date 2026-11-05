@@ -352,6 +352,8 @@ export interface Hello {
   chatCards?: boolean;
   compendiumChat?: boolean;
   transferOffers?: boolean;
+  goldTransfers?: boolean;
+  grabQuantity?: boolean;
   keptDice?: boolean;
   brawlerRolls?: boolean;
   rollMultipliers?: boolean;

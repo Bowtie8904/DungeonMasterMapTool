@@ -31,7 +31,7 @@ window.fetch = async (url, options) => {
 };
 try {
   const c = mockCharacter();
-  const common = { cardId: 'card', actorId: 'source', actorName: 'Mara', available: 2 };
+  const common = { cardId: 'card', actorId: 'source', actorName: 'Mara', available: 2, offerQuantity: 2 };
   const entries = [
     { category: 'feature', item: { ...c.features[0], automation: { actions: [{ id: 'use', label: 'Use feature' }] } } },
     { category: 'domain', item: { ...c.loadout[1], spellcast: 'Instinct', automation: { actions: [{ id: 'cast', label: 'Cast spell' }] } } },
@@ -45,7 +45,7 @@ try {
     preview.append(node);
     assert(node.textContent.includes(entry.item.name), `${entry.category}: name rendered`);
     const transferable = ['weapon', 'armor', 'item'].includes(entry.category);
-    assert(node.querySelectorAll('button').length === (transferable ? 1 : 0), `${entry.category}: no feature action buttons`);
+    assert(node.querySelectorAll('button').length === (transferable ? 2 : 0), `${entry.category}: no feature action buttons`);
     assert(!node.querySelector('.actions, .act, .dh-rolldlg'), `${entry.category}: no sheet controls`);
   }
   const stock = preview.lastElementChild;
@@ -78,6 +78,20 @@ try {
     'Active and carried weapons and armor can be dragged');
   tab('Loot');
   assert(sheet.querySelectorAll('tr.inventory-draggable').length === c.inventory.length, 'All inventory entries can be dragged');
+  sheet.querySelector('.gold-transfer').click();
+  const goldOffer = document.querySelector('dialog.inventory-picker');
+  if (goldOffer) { goldOffer.querySelector('button[type=submit]').click(); }
+  await until(() => shared?.category === 'gold');
+  assert(shared.category === 'gold', 'Gold has a transfer button');
+  await until(() => !document.querySelector('dialog.inventory-picker'));
+  sheet.querySelector('button.add-custom-item').click();
+  const custom = document.querySelector('dialog.inventory-picker');
+  assert(custom?.querySelector('select').value === 'loot' && custom.querySelector('input[type=number]').value === '1', 'Custom item dialog defaults to loot x1');
+  custom.querySelector('input:not([type=number])').value = 'Strange key';
+  custom.querySelector('button[type=submit]').click();
+  await until(() => c.inventory.some(i => i.custom && i.name === 'Strange key') && !document.querySelector('dialog.inventory-picker'));
+  const customRow = [...sheet.querySelectorAll('tr')].find(row => row.textContent.includes('Strange key'));
+  assert(customRow && ![...customRow.querySelectorAll('button')].some(b => b.textContent === 'Use'), 'Custom items have no action buttons');
   const transfer = new DataTransfer();
   sheet.querySelector('tr.inventory-draggable').dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
   const payload = JSON.parse(transfer.getData(INVENTORY_DRAG));
@@ -89,6 +103,7 @@ try {
   const app = new App(appRoot, () => {});
   app.conn = { isOpen: true, send: () => true };
   app.chatCards = true;
+  app.transferOffers = true;
   app.sheetHandles.set('source', { character: c, save: { flush: async () => { saves++; } } });
   app.chatRecipient.value = 'dm';
   const chat = appRoot.querySelector('.chat-section');
@@ -98,13 +113,27 @@ try {
   assert(posted?.body.toId === 'dm' && posted.body.category === 'item', 'Dropping in real chat posts to the selected recipient');
   app.myActors = [{ id: 'one', name: 'Rook' }, { id: 'two', name: 'Mira' }];
   app.ensureSheet = async () => ({ save: { flush: async () => {}, refresh: async () => {} }, bus: { notify: () => {} } });
-  const grabbing = app.grabCard({ ...common, ...entries[4] });
+  const grabbing = app.grabCard({ ...common, ...entries[4] }, 1);
   const picker = document.querySelector('dialog.inventory-picker');
   assert(picker?.open, 'Multiple actors get a receiving-character picker');
   picker.querySelector('select').value = 'two';
-  [...picker.querySelectorAll('button')].find(button => button.textContent === 'Grab one').click();
+  [...picker.querySelectorAll('button')].find(button => button.textContent === 'Grab').click();
   await grabbing;
-  assert(requests.some(request => request.url.endsWith('/card/grab') && request.body.actorId === 'two'), 'Grab targets the chosen owned character');
+  assert(requests.some(request => request.url.endsWith('/card/grab') && request.body.actorId === 'two' && request.body.quantity === 1), 'Grab targets the chosen owned character');
+  let oldHost = false;
+  try { await app.grabCard({ ...common, ...entries[4] }, 2); } catch { oldHost = true; }
+  assert(oldHost, 'Older hosts reject quantity grabs instead of grabbing one');
+  const goldCard = renderSharedCard({ cardId: 'gold', actorId: '', actorName: 'DM', available: 500, offerQuantity: 500, fromDm: true, category: 'gold', item: { name: 'Gold' } }, async (_card, quantity) => { goldGrab = quantity; });
+  let goldGrab;
+  preview.append(goldCard);
+  assert([...goldCard.querySelectorAll('button')].map(b => b.textContent).join() === 'Grab,Grab all', 'Gold offers show Grab and Grab all');
+  goldCard.querySelector('button').click();
+  const quantityDialog = await (async () => { await until(() => document.querySelector('dialog.grab-picker')); return document.querySelector('dialog.grab-picker'); })();
+  assert(quantityDialog.querySelector('input').value === '1', 'Grab quantity defaults to 1');
+  quantityDialog.querySelector('input').value = '120';
+  quantityDialog.querySelector('button[type=submit]').click();
+  await until(() => goldGrab === 120);
+  assert(goldGrab === 120, 'Grab dialog passes the chosen quantity');
   app.chatCards = false;
   let unsupported = false;
   try { await app.shareEntry('source', entries[4]); } catch { unsupported = true; }

@@ -471,6 +471,7 @@ public final class ChatCards {
                 }
                 appendFeature(body, item.path("feature"));
             }
+            case "gold" -> badges.add("coins");
             default -> {
                 badges.add(item.path("type").asText());
                 body.append(item.path("note").asText());
@@ -511,12 +512,20 @@ public final class ChatCards {
             root.getChildren().add(markdown(body.toString(), "chat-shared-description"));
         }
         if (offer) {
-            root.getChildren().add(wrapped(card.path("offerQuantity").asInt() + " offered", "chat-shared-offered"));
-            Label remaining = new Label(stock == null ? card.path("available").asInt() + " remaining" : "Checking stock\u2026");
+            int offered = card.path("offerQuantity").asInt();
+            Label amount = new Label(stock == null ? String.valueOf(card.path("available").asInt()) : "\u2026");
+            amount.getStyleClass().add("chat-shared-qty-number");
+            amount.setMinWidth(Region.USE_PREF_SIZE);
+            Label remaining = new Label(stock == null ? "remaining" : "checking stock");
             remaining.getStyleClass().add("chat-shared-remaining");
-            HBox stockRow = new HBox(remaining);
-            stockRow.setAlignment(Pos.CENTER_RIGHT);
+            Label offeredLabel = new Label("of " + offered + " offered");
+            offeredLabel.getStyleClass().add("chat-shared-offered");
+            HBox stockRow = new HBox(8, amount, new VBox(remaining, offeredLabel));
+            stockRow.setAlignment(Pos.CENTER_LEFT);
             stockRow.getStyleClass().add("chat-shared-stock");
+            if (stock == null && card.path("available").asInt() <= 0) {
+                amount.getStyleClass().add("empty");
+            }
             root.getChildren().add(stockRow);
             if (stock != null) {
                 int[] request = {0};
@@ -526,7 +535,12 @@ public final class ChatCards {
                         int count = stock.applyAsInt(card);
                         Platform.runLater(() -> {
                             if (request[0] == current) {
-                                remaining.setText(count + " remaining");
+                                amount.setText(String.valueOf(count));
+                                remaining.setText("remaining");
+                                amount.getStyleClass().remove("empty");
+                                if (count <= 0) {
+                                    amount.getStyleClass().add("empty");
+                                }
                             }
                         });
                     });

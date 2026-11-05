@@ -18,14 +18,14 @@ try {
   character.hp.slots = 6;
   character.features.push({
     source: 'Class feature', name: 'Class resource', text: '',
-    automation: { resources: [{ id: 'classResource', label: 'Class resource', initial: 1 }] },
+    automation: { resources: [{ id: 'classResource', label: 'Class resource', initial: 1 }, { id: 'extraResource', label: 'Extra resource', initial: 1 }, { id: 'thirdResource', label: 'Third resource', initial: 1 }] },
   });
   character.experiences.push({ name: 'Layout Experience', mod: 2 });
   const bus = new SheetBus();
   const win = new SheetWindow({ character, bus, onRoll: () => true }, character.name, () => {}, () => {});
   host.append(win.element);
   win.setOpen(true);
-  for (const [width, height] of [[1440, 1080], [1024, 768], [760, 600]]) {
+  for (const [width, height] of [[1440, 1080], [1024, 768], [900, 680], [760, 600]]) {
     host.style.width = `${width}px`;
     host.style.height = `${height}px`;
     const bounds = win.element.getBoundingClientRect();
@@ -77,6 +77,9 @@ try {
     assert(getComputedStyle(win.element.querySelector('.v-e .big')).textAlign === 'center', 'Evasion number is not centered');
     assert(sidebar.getBoundingClientRect().right <= main.getBoundingClientRect().left, 'Sidebar is not left of the main sheet');
     assert(!sidebar.querySelector('.exp'), 'Experiences still appear in the sidebar');
+    const sideBox = sidebar.getBoundingClientRect();
+    (window.__m ??= []).push([width, height, Math.round(sidebar.clientHeight), sidebar.scrollHeight].join('/'));
+    if (sidebar.clientHeight >= 175) assert(traits[5].bottom <= sideBox.bottom + 1 && sidebar.scrollHeight <= sidebar.clientHeight + 1, `Not all traits fit the ${Math.round(sidebar.clientHeight)} px sidebar at ${width}x${height}`);
     for (const tile of win.element.querySelectorAll('.trait')) {
       const mark = tile.querySelector('.trait-mark');
       const bounds = tile.getBoundingClientRect();
@@ -86,9 +89,13 @@ try {
       assert(ring.left - bounds.left <= 6 && ring.top - bounds.top <= 6, 'Trait mark is not in the top-left corner');
       const name = tile.querySelector('.nm').getBoundingClientRect();
       assert(ring.right <= name.left || ring.left >= name.right || ring.bottom <= name.top || ring.top >= name.bottom, `Trait mark overlaps ${tile.querySelector('.nm').textContent} at width ${width} (ring right ${ring.right}, name left ${name.left}, tile width ${bounds.width})`);
-      assert(getComputedStyle(tile).paddingTop === '6px' && getComputedStyle(tile).paddingBottom === '6px', 'Trait mark increased tile padding');
-      const contentHeight = [...tile.querySelectorAll('.th, .md, .vb')].reduce((sum, node) => sum + node.getBoundingClientRect().height, 0);
-      assert(Math.abs(bounds.height - contentHeight - 14) < 1, 'Trait mark increased tile height');
+      const pad = parseFloat(getComputedStyle(tile).paddingTop);
+      assert(pad >= 1 && pad <= 6 && getComputedStyle(tile).paddingBottom === getComputedStyle(tile).paddingTop, 'Trait padding is outside its responsive range');
+      for (const part of tile.querySelectorAll('.th, .md, .vb')) {
+        const r = part.getBoundingClientRect();
+        if (r.height) assert(r.top >= bounds.top + pad && r.bottom <= bounds.bottom - pad + 1 && r.left >= bounds.left && r.right <= bounds.right, `Trait content is cut off at ${width}x${height}`);
+      }
+      assert(parseFloat(getComputedStyle(tile.querySelector('.nm')).fontSize) >= 10.5 && parseFloat(getComputedStyle(tile.querySelector('.md')).fontSize) >= 15, 'Trait text shrank below readable size');
       assert(getComputedStyle(mark).borderRadius === '50%', 'Trait mark is not circular');
       assert(!tile.querySelector('input') && mark.tabIndex === -1, 'Trait mark is editable');
       mark.click();
@@ -208,8 +215,8 @@ try {
   [...popout.querySelectorAll('[role=tab]')].find((b) => b.textContent === 'Background').click();
   assert(popout.querySelector('.pages .exp')?.textContent.includes('Layout Experience'), 'Pop-out Background Experiences missing');
   popout.remove();
-  result.textContent = 'PASS: wider sheet, persistent trait-only sidebar, Background Experiences, independent sidebar scroll, class/heritage columns, pop-out layout, compact stats, no overflow, read-only marks, trait rolls and domain token controls';
+  result.textContent = 'PASS: wider sheet, persistent trait-only sidebar, Background Experiences, independent sidebar scroll, class/heritage columns, pop-out layout, shrinking trait sidebar ' + window.__m.join(' ') + ', compact stats, no overflow, read-only marks, trait rolls and domain token controls';
 } catch (error) {
-  result.textContent = 'FAIL: ' + error.stack;
+  result.textContent = 'FAIL: ' + error.stack + ' ' + (window.__m || []).join(' ');
 }
 </script></body></html>

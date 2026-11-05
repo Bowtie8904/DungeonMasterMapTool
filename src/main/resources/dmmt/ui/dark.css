@@ -1536,8 +1536,10 @@
 .chat-transfer-offer .chat-shared-source { -fx-text-fill: #8bc7ba; -fx-font-weight: bold; }
 .chat-shared-domain { -fx-background-color: linear-gradient(to bottom right, #39294066, #10172188); -fx-border-color: #9c7bc077; }
 .chat-shared-source, .chat-shared-offered { -fx-text-fill: #9da9b9; -fx-font-size: 10px; }
-.chat-shared-stock { -fx-border-color: #ffffff0c transparent transparent transparent; -fx-padding: 6 0 0 0; }
-.chat-shared-remaining { -fx-font-size: 11px; -fx-text-fill: #a6b2c3; }
+.chat-shared-stock { -fx-border-color: #ffffff0c transparent transparent transparent; -fx-padding: 8 0 0 0; }
+.chat-shared-qty-number { -fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #d9f3ec; -fx-background-color: #5da89b26; -fx-border-color: #5da89b99; -fx-border-radius: 7; -fx-background-radius: 7; -fx-padding: 1 9 1 9; -fx-min-width: 40px; -fx-alignment: center; }
+.chat-shared-qty-number.empty { -fx-text-fill: #9da9b9; -fx-background-color: transparent; -fx-border-color: #53677c66; }
+.chat-shared-remaining { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #cfe7e1; }
 .chat-badge { -fx-background-color: #53677c33; -fx-background-radius: 4; -fx-padding: 2 6; -fx-font-size: 10px; -fx-text-fill: #b7c8db; }
 .chat-rest-banner { -fx-text-fill: #7fd8b0; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
 .chat-damage-banner { -fx-text-fill: #f29a9f; -fx-font-weight: bold; }

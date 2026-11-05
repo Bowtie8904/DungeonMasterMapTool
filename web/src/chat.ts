@@ -1,7 +1,7 @@
 import { el } from './login';
 import type { ChatMessage, RollDetail, RollMessage } from './protocol';
 import { OUTCOME_LABEL, dualityResult, dualitySucceeds, signed } from './daggerheart/data';
-import { renderSharedCard, type SharedCard } from './shared-cards';
+import { renderSharedCard, type GrabQuantity, type SharedCard } from './shared-cards';
 import { parseRestReport } from './daggerheart/rest-summary';
 import { parseDamageReport } from './daggerheart/damage-summary';
 import { parseActionReport } from './daggerheart/action-summary';
@@ -118,16 +118,17 @@ function rollContent(m: RollMessage): HTMLElement {
   return body;
 }
 
-export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
+export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: SharedCard, quantity: GrabQuantity) => Promise<void>,
                                onError?: (message: string) => void,
                                rollActions?: (m: RollMessage | ChatMessage) => HTMLElement | null): HTMLElement {
   const m = e.m;
   const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const avatar = el('span', { class: 'message-avatar' }, m.from.slice(0, 1).toUpperCase());
+  const sender = m.fromId === 'dm' ? 'Gamemaster' : m.from;
+  const avatar = el('span', { class: 'message-avatar' }, sender.slice(0, 1).toUpperCase());
   avatar.setAttribute('aria-hidden', 'true');
   const header = el('header', { class: 'message-header' },
     avatar,
-    el('strong', { class: 'message-sender' }, m.from),
+    el('strong', { class: 'message-sender' }, sender),
     el('time', { dateTime: new Date(m.ts).toISOString(), title: new Date(m.ts).toLocaleString() }, time));
   const report = e.kind === 'chat' && !m.toId && !e.m.sharedCard ? parseRestReport(e.m.text) : null;
   const damage = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !report ? parseDamageReport(e.m.text) : null;

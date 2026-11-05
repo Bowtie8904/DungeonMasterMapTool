@@ -21,6 +21,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   let changed: SheetSave | undefined;
   let chatCards = false;
   let transferOffers = false;
+  let goldTransfers = false;
   const connectedPlayers = new Set<string>();
   let rulesWarning = '';
   const bus = new SheetBus();
@@ -107,6 +108,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         const share = async () => {
           if (!chatCards) throw new Error('This host does not support shared chat cards. Update the host to share cards.');
           if (transferable(entry) && !transferOffers) throw new Error('Update the host to support safe inventory links and transfer offers.');
+          if (entry.category === 'gold' && !goldTransfers) throw new Error('Update the host to transfer gold.');
           if (!conn.isOpen) throw new Error('Not connected. Your card was not posted.');
           await changed!.flush();
           await postCard(actorId, entry, undefined, quantity);
@@ -142,6 +144,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         if (m.type === 'hello') {
           chatCards = m.chatCards === true;
           transferOffers = m.transferOffers === true;
+          goldTransfers = m.goldTransfers === true;
           if (changed) void changed.refresh().catch((e: Error) => report(e.message));
           return;
         }

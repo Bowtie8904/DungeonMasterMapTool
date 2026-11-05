@@ -44,6 +44,17 @@ class CompendiumEntriesTest {
     }
 
     @Test
+    void compendiumAddsNeverMergeIntoCustomItems() throws Exception {
+        ObjectNode sheet = sheet();
+        sheet.withArray("inventory").addObject().put("name", "Potion").put("type", "consumable").put("qty", 5).put("custom", true);
+        JsonNode potion = MAPPER.readTree("{\"id\":\"p\",\"name\":\"Potion\",\"text\":\"Heal\"}");
+        assertEquals("inventory", CompendiumEntries.add(sheet, "consumables", potion));
+        assertEquals(2, sheet.path("inventory").size());
+        assertEquals(5, sheet.path("inventory").get(0).path("qty").asInt());
+        assertFalse(sheet.path("inventory").get(1).path("custom").asBoolean());
+    }
+
+    @Test
     void rejectsQuantityCapsAndUncreatedCharactersWithoutChangingTheirSheet() throws Exception {
         ObjectNode sheet = sheet();
         JsonNode potion = MAPPER.readTree("{\"id\":\"p\",\"name\":\"Potion\",\"text\":\"Heal\"}");

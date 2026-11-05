@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -2227,6 +2228,60 @@ class OnlineSessionServerTest {
         assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active weapons cannot be offered");
         request.put("category", "armor").set("item", source.path("activeArmor"));
         assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Active armor cannot be offered");
+    }
+
+    @Test
+    void goldOffersTransferChosenQuantitiesFromPlayersAndTheDm() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Mara").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Rook").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "source", "{\"gold\":10,\"inventory\":[]}");
+        store.saveSheet(campaign.getId(), "target", "{\"gold\":1,\"inventory\":[]}");
+        server.publish(state("m1", 0), "m1/l1");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode hello = inbox.next("hello");
+            assertTrue(hello.path("goldTransfers").asBoolean());
+            assertTrue(hello.path("grabQuantity").asBoolean());
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "gold");
+            request.putObject("item").put("name", "Gold");
+            assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Gold links are never posted without a quantity");
+            request.put("offerQuantity", 11);
+            assertEquals(400, cardHttp(cookie, "", request).statusCode(), "Cannot offer more gold than carried");
+            request.put("offerQuantity", 6);
+            var offer = cardHttp(cookie, "", request);
+            assertEquals(200, offer.statusCode(), offer.body());
+            String id = MAPPER.readTree(offer.body()).path("cardId").asText();
+            ObjectNode grab = MAPPER.createObjectNode().put("actorId", "target").put("quantity", 7);
+            assertEquals(409, cardHttp(cookie, "/" + id + "/grab", grab).statusCode(), "Cannot grab more than offered");
+            var grabbed = cardHttp(cookie, "/" + id + "/grab", grab.put("quantity", 4));
+            assertEquals(200, grabbed.statusCode(), grabbed.body());
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("gold").asInt());
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("gold").asInt());
+            assertEquals(2, MAPPER.readTree(cardHttp(cookie, "/" + id, null).body()).path("available").asInt());
+
+            assertNull(server.dmOfferGold(500, ""));
+            JsonNode dmCard = null;
+            while (dmCard == null) {
+                JsonNode chat = inbox.next("chat");
+                if (chat.path("sharedCard").path("fromDm").asBoolean()) dmCard = chat.path("sharedCard");
+            }
+            assertEquals("gold", dmCard.path("category").asText());
+            assertEquals(500, dmCard.path("available").asInt());
+            String dmId = dmCard.path("cardId").asText();
+            ObjectNode dmGrab = MAPPER.createObjectNode().put("actorId", "target").put("quantity", 120);
+            grabbed = cardHttp(cookie, "/" + dmId + "/grab", dmGrab);
+            assertEquals(200, grabbed.statusCode(), grabbed.body());
+            assertEquals(125, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("gold").asInt());
+            assertEquals(380, MAPPER.readTree(cardHttp(cookie, "/" + dmId, null).body()).path("available").asInt());
+            assertEquals(200, cardHttp(cookie, "/" + dmId + "/grab", MAPPER.createObjectNode().put("actorId", "source").put("all", true)).statusCode());
+            assertEquals(386, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("gold").asInt());
+            assertEquals(409, cardHttp(cookie, "/" + dmId + "/grab", dmGrab.put("quantity", 1)).statusCode(), "DM budget is exhausted");
+            assertNotNull(server.dmOfferGold(0, ""));
+        } finally {
+            ws.abort();
+        }
     }
 
     @Test

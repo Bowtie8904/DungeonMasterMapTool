@@ -208,9 +208,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
         ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value,
     );
-    const stock = entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor;
-    const available = stock.filter(item => identity(item) === identity(entry.item))
-      .reduce((n, item) => n + ('qty' in item ? item.qty : 1), 0);
+    const available = entry.category === 'gold' ? Math.max(0, Math.floor(c.gold))
+      : (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor)
+        .filter(item => identity(item) === identity(entry.item))
+        .reduce((n, item) => n + ('qty' in item ? item.qty : 1), 0);
+    if (available <= 0) return;
     if (available <= 1) { opts.onShare?.(entry, 1); return; }
     const dialog = el('dialog', { class: 'inventory-picker' });
     const input = el('input', { type: 'number', min: '1', max: String(available), step: '1', value: String(available), required: true, ariaLabel: 'Quantity to offer' });
@@ -231,6 +233,38 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     dialog.showModal();
     input.focus();
     input.select();
+  }
+
+  function addCustomItem(): void {
+    const dialog = el('dialog', { class: 'inventory-picker' });
+    const name = el('input', { type: 'text', required: true, maxLength: 120, ariaLabel: 'Item name' });
+    const note = el('textarea', { rows: 3, maxLength: 2000, ariaLabel: 'Item description' }) as HTMLTextAreaElement;
+    const type = el('select', { ariaLabel: 'Item type' }, ...(['loot', 'gear', 'consumable', 'class item'] as const).map(t => el('option', { value: t }, t)));
+    type.value = 'loot';
+    const amount = el('input', { type: 'number', min: '1', max: '99', step: '1', value: '1', required: true, ariaLabel: 'Quantity' });
+    type.addEventListener('change', () => { amount.max = type.value === 'consumable' ? '5' : '99'; });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const submit = el('button', { type: 'submit', class: 'primary' }, 'Add item');
+    const form = el('form', {}, el('h3', {}, 'Add custom item'),
+      el('label', {}, 'Name', name), el('label', {}, 'Description (optional)', note),
+      el('label', {}, 'Type', type), el('label', {}, 'Quantity', amount), el('div', { class: 'row' }, cancel, submit));
+    cancel.addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      if (!name.value.trim()) name.value = '';
+      if (!form.reportValidity()) return;
+      const item: InventoryItem = { name: name.value.trim(), type: type.value as InventoryItem['type'], qty: amount.valueAsNumber, custom: true };
+      if (note.value.trim()) item.note = note.value.trim();
+      c.inventory.push(item);
+      dialog.close();
+      opts.onChange?.();
+      render();
+    });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.showModal();
+    name.focus();
   }
 
   const sendRoll = (source: string, weapon?: string, rollSource?: RollSource) => (r: RollRequest): boolean => {
@@ -871,8 +905,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       el('span', { class: 'qty' }, adj(-1), input, adj(1)),
       el('span', { class: 'muted', style: 'font-size:11.5px' }, 'coins (10 coins = 1 handful, 10 handfuls = 1 bag, 10 bags = 1 chest)'),
     );
+    if (opts.onShare) {
+      const transfer = iconButton('transfer', 'Offer gold for transfer', () => offerEntry({ category: 'gold', item: { name: 'Gold' } }));
+      transfer.classList.add('share-icon', 'gold-transfer');
+      transfer.disabled = c.gold <= 0;
+      input.addEventListener('change', () => { transfer.disabled = c.gold <= 0; });
+      gold.querySelectorAll('.qty button').forEach(b => b.addEventListener('click', () => { transfer.disabled = c.gold <= 0; }));
+      gold.append(transfer);
+    }
     const rows = c.inventory.map((i) => {
-      const use = i.use ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
+      const use = i.use && !i.custom ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
       if (use) {
         use.disabled = i.qty <= 0 || !!c.pendingDeathRoll;
         if (c.pendingDeathRoll) use.title = 'Resolve pending Risk It All recovery in chat before rolling';
@@ -883,18 +925,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       });
       const key = `item:${i.name}`;
       const consumable = i.type === 'consumable';
-      const actions = actionRow(key, i.automation, i.name, {
+      const actions = i.custom ? null : actionRow(key, i.automation, i.name, {
         extraBlock: () => (i.qty <= 0 ? 'None left' : null),
         after: () => { if (consumable) { i.qty = Math.max(0, i.qty - 1); dropIfEmpty(i); } },
       });
       return share(el('tr', {}, el('td', {}, el('b', {}, i.name), ...(i.note ? [lootDescription(i)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, ...(use ? [use] : []), ...(actions ? [actions] : [])))), { category: 'item', item: i }, true, i.qty > 0);
     });
     const search = inventorySearch('loot', rows.map((node, i) => ({ node, text: `${c.inventory[i].name} ${c.inventory[i].note ?? ''}` })));
+    const addItem = iconButton('add', 'Add custom item', addCustomItem);
+    addItem.classList.add('share-icon', 'add-custom-item');
     return el(
       'div', {}, gold,
       el(
-        'div', { class: 'card', style: 'margin-top:14px' }, el('h3', {}, 'Inventory', search.input),
-        el('table', { class: 't inventory-table loot-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Type'), el('th', {}, 'Qty'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows)),
+        'div', { class: 'card', style: 'margin-top:14px' },         el('h3', {}, 'Inventory', el('span', { class: 'right inventory-tools' }, search.input, addItem)),
+                el('table', { class: 't inventory-table loot-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Type'), el('th', {}, 'Qty'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows)),
         search.none,
         el('p', { class: 'muted', style: 'font-size:11.5px;margin:6px 0 0' }, 'Consumables are single-use; at most 5 of each. Loot stays until sold, discarded or lost.'),
       ),

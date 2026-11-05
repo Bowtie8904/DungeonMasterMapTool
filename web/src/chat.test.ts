@@ -66,6 +66,9 @@ describe('roll breakdowns', () => {
       } }, 'player') as unknown as Element;
       expect(rawCrit.find('roll-dice')?.text).toBe('Hope5Fear5');
       expect(rawCrit.find('roll-outcome crit')?.text).toBe('Critical success');
+      const dm = renderLogEntry({ kind: 'roll', m: { ...message, fromId: 'dm', from: 'DM' } }, 'player') as unknown as Element;
+      expect(dm.find('message-sender')?.text).toBe('Gamemaster');
+      expect(dm.find('message-avatar')?.text).toBe('G');
     } finally { vi.unstubAllGlobals(); }
   });
 

@@ -9,12 +9,13 @@ export type SharedEntry =
   | { category: 'domain'; item: DomainCard }
   | { category: 'weapon'; item: Weapon }
   | { category: 'armor'; item: Armor }
-  | { category: 'item'; item: InventoryItem };
-export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number; offerQuantity?: number; badges?: string[]; sections?: Array<{ name?: string; text: string }> };
+  | { category: 'item'; item: InventoryItem }
+  | { category: 'gold'; item: { name: string } };
+export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorName: string; available: number; offerQuantity?: number; fromDm?: boolean; claimed?: number; badges?: string[]; sections?: Array<{ name?: string; text: string }> };
 export const INVENTORY_DRAG = 'application/x-dmmt-inventory';
 
 export function transferable(entry: SharedEntry): boolean {
-  return (entry.category === 'weapon' && !entry.item.generated) || entry.category === 'armor' || entry.category === 'item';
+  return (entry.category === 'weapon' && !entry.item.generated) || entry.category === 'armor' || entry.category === 'item' || entry.category === 'gold';
 }
 
 export async function postCard(actorId: string, entry: SharedEntry, toId?: string, offerQuantity?: number): Promise<void> {
@@ -65,7 +66,36 @@ export async function waitForInventoryDrag(token: string): Promise<void> {
   if (error) throw new Error(error);
 }
 
-export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, all: boolean) => Promise<void>,
+export type GrabQuantity = number | 'all';
+
+/** Asks how many units to grab; resolves null when cancelled. */
+export function pickGrabQuantity(card: SharedCard): Promise<number | null> {
+  if (card.available <= 1) return Promise.resolve(1);
+  return new Promise(resolve => {
+    const dialog = el('dialog', { class: 'inventory-picker grab-picker' });
+    const input = el('input', { type: 'number', min: '1', max: String(card.available), step: '1', value: '1', required: true, ariaLabel: 'Quantity to grab' });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const submit = el('button', { type: 'submit', class: 'primary' }, 'Grab');
+    const form = el('form', {}, el('h3', {}, `Grab ${card.item.name}`),
+      el('label', {}, `Quantity (up to ${card.available})`, input), el('div', { class: 'row' }, cancel, submit));
+    let result: number | null = null;
+    cancel.addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      result = input.valueAsNumber;
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => { dialog.remove(); resolve(result); }, { once: true });
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.showModal();
+    input.focus();
+    input.select();
+  });
+}
+
+export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, quantity: GrabQuantity) => Promise<void>,
                                  onError?: (message: string) => void): HTMLElement {
   const body = el('div', { class: 'shared-description' });
   const featureBlock = (name: string, text: string) => el('div', { class: 'shared-feature-block' },
@@ -94,6 +124,9 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, a
       badges.push(card.item.type);
       if (card.item.note) body.append(rich(card.item.note));
       break;
+    case 'gold':
+      badges.push('coins');
+      break;
   }
   if (card.sections) {
     body.replaceChildren(...card.sections.map(section =>
@@ -106,19 +139,26 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, a
     el('h3', {}, card.item.name),
     el('div', { class: 'shared-badges' }, ...displayBadges.map(text => el('span', {}, text))), body);
   if (offer) {
-    root.append(el('div', { class: 'shared-offered' }, `${card.offerQuantity} offered`));
-    const count = el('span', { class: 'muted' }, `${card.available} remaining`);
+    const amount = el('b', { class: 'shared-qty-n' }, String(card.available));
+    const label = el('span', { class: 'shared-qty-label' }, ' remaining');
+    const count = el('div', { class: 'shared-qty', title: `${card.offerQuantity} offered in total` }, amount,
+      el('span', { class: 'shared-qty-text' }, label, el('span', { class: 'shared-qty-offered' }, ` of ${card.offerQuantity} offered`)));
+    count.classList.toggle('empty', card.available <= 0);
     let busy = false;
     let known = true;
     const buttons: HTMLButtonElement[] = [];
     const paint = () => { buttons.forEach(b => { b.disabled = busy || !known || !onGrab || card.available <= 0; }); };
     for (const all of [false, true]) {
-      const grab = el('button', { type: 'button', class: 'inventory-action', title: `Transfer ${all ? 'all remaining units' : 'one unit'} into your inventory` }, all ? 'Grab all' : 'Grab one');
+      const grab = el('button', { type: 'button', class: 'inventory-action', title: all ? 'Transfer all remaining units into your inventory' : 'Choose how many units to transfer into your inventory' }, all ? 'Grab all' : 'Grab');
       grab.addEventListener('click', () => {
         if (!onGrab || busy) return;
         busy = true;
         paint();
-        void onGrab(card, all).catch(e => onError?.((e as Error).message)).finally(async () => {
+        const run = async () => {
+          const quantity = all ? 'all' : await pickGrabQuantity(card);
+          if (quantity !== null) await onGrab(card, quantity);
+        };
+        void run().catch(e => onError?.((e as Error).message)).finally(async () => {
           await refresh();
           busy = false;
           paint();
@@ -127,7 +167,7 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, a
       buttons.push(grab);
     }
     paint();
-    root.append(el('div', { class: 'shared-stock' }, count, ...buttons));
+    root.append(count, el('div', { class: 'shared-stock' }, ...buttons));
     let request = 0;
     const refresh = async () => {
       const current = ++request;
@@ -138,12 +178,15 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, a
         if (request !== current) return;
         card.available = stock.available;
         known = true;
-        count.textContent = `${card.available} remaining`;
+        amount.textContent = String(card.available);
+        label.textContent = ' remaining';
+        count.classList.toggle('empty', card.available <= 0);
         paint();
       } catch (e) {
         if (request !== current) return;
         paint();
-        count.textContent = 'Availability unavailable';
+        amount.textContent = '?';
+        label.textContent = ' availability unavailable';
         count.title = (e as Error).message;
       }
     };

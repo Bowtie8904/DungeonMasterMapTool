@@ -122,7 +122,8 @@ try {
   assert(offer.textContent.includes('Transfer offer from Mara') && offer.textContent.includes('2 remaining'), 'offers identify the character and remaining quantity');
   offer.querySelectorAll('button')[1].click();
   await frame();
-  assert(grabbed[0] === true, 'Grab all sends an explicit bulk claim');
+  assert(grabbed[0] === 'all', 'Grab all sends an explicit bulk claim');
+  assert(offer.querySelector('.shared-qty-n')?.textContent === '0' && offer.querySelector('.shared-qty.empty'), 'remaining quantity is shown as a prominent count');
   assert([...offer.querySelectorAll('button')].every(b => b.disabled) && offer.textContent.includes('0 remaining'), 'exhausted offer stays readable with both controls disabled');
   result.textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
 } catch (error) {

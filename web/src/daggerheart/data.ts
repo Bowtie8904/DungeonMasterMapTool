@@ -58,6 +58,8 @@ export interface InventoryItem {
   /** dice expression for a Use button (potions) */
   use?: string;
   capped?: boolean;
+  /** Player-authored item: never linked to or refreshed from the compendium, and has no actions. */
+  custom?: boolean;
   /** Compendium automation: its actions replace the plain dice Use button */
   automation?: Automation;
 }

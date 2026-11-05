@@ -2659,6 +2659,8 @@ public final class OnlineSessionServer {
                 category = request.path("category").asText();
                 sheet = storedSheet(actorId);
                 item = ChatCards.resolve(sheet, category, request.path("item"));
+                if (ChatCards.GOLD.equals(category) && !request.has("offerQuantity"))
+                    throw new IllegalArgumentException("Gold can only be offered for transfer.");
             }
             int offerQuantity = 0;
             if (request.has("offerQuantity")) {
@@ -2682,9 +2684,17 @@ public final class OnlineSessionServer {
     private ObjectNode publishSharedCard(String playerId, String playerName, String actorId, String actorName,
                                          String category, ObjectNode item, int offerQuantity, String to,
                                          boolean compendium) throws IOException {
+        return publishSharedCard(playerId, playerName, actorId, actorName, category, item, offerQuantity, to, compendium, false);
+    }
+
+    private ObjectNode publishSharedCard(String playerId, String playerName, String actorId, String actorName,
+                                         String category, ObjectNode item, int offerQuantity, String to,
+                                         boolean compendium, boolean fromDm) throws IOException {
         ObjectNode card = MAPPER.createObjectNode().put("cardId", java.util.UUID.randomUUID().toString())
                 .put("actorId", actorId).put("actorName", actorName).put("category", category);
         card.set("item", item);
+        if (fromDm)
+            card.put("fromDm", true);
         if (compendium) {
             card.set("badges", item.remove("badges"));
             card.set("sections", item.remove("sections"));
@@ -2694,9 +2704,12 @@ public final class OnlineSessionServer {
         card.put("available", offerQuantity);
         String description = item.path("text").asText(item.path("note").asText(
                 item.path("feature").path("text").asText("")));
+        String offer = offerQuantity <= 0 ? "" : ChatCards.GOLD.equals(category)
+                ? actorName + " offers " + offerQuantity + " gold"
+                : actorName + " offers " + offerQuantity + " x ";
         ObjectNode message = chatMessage(playerId, playerName, to,
-                (offerQuantity > 0 ? actorName + " offers " + offerQuantity + " x " : "")
-                        + item.path("name").asText() + (description.isBlank() ? "" : "\n" + description));
+                (ChatCards.GOLD.equals(category) && offerQuantity > 0 ? offer
+                        : offer + item.path("name").asText() + (description.isBlank() ? "" : "\n" + description)));
         message.set("sharedCard", card);
         store.appendHistoryChecked(campaign.getId(), message);
         sharedCards.put(card.path("cardId").asText(), message);
@@ -2704,7 +2717,7 @@ public final class OnlineSessionServer {
         return card;
     }
 
-    private JsonNode visibleCard(String playerId, String cardId) {
+    private JsonNode sharedCardMessage(String cardId) {
         JsonNode message = sharedCards.get(cardId);
         if (message == null) {
             for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE)) {
@@ -2715,6 +2728,11 @@ public final class OnlineSessionServer {
                 }
             }
         }
+        return message;
+    }
+
+    private JsonNode visibleCard(String playerId, String cardId) {
+        JsonNode message = sharedCardMessage(cardId);
         if (message != null) {
             String to = message.path("toId").asText("");
             if (to.isEmpty() || playerId.equals(to) || playerId.equals(message.path("fromId").asText()))
@@ -2729,8 +2747,9 @@ public final class OnlineSessionServer {
             return;
         try {
             JsonNode card = visibleCard(playerId, ctx.pathParam("id"));
-            int count = campaign.actor(card.path("actorId").asText()) == null ? 0
-                                                                              : ChatCards.remaining(storedSheet(card.path("actorId").asText()), card);
+            int count = card.path("fromDm").asBoolean(false) ? dmRemaining(card)
+                    : campaign.actor(card.path("actorId").asText()) == null ? 0
+                    : ChatCards.remaining(storedSheet(card.path("actorId").asText()), card);
             json(ctx, 200, MAPPER.createObjectNode().put("available", count));
         } catch (IllegalArgumentException e) {
             json(ctx, 404, errorBody(e.getMessage()));
@@ -2748,7 +2767,15 @@ public final class OnlineSessionServer {
             if (request == null || !request.isObject()) throw new IllegalArgumentException("Invalid grab request.");
             if (request.has("all") && !request.get("all").isBoolean())
                 throw new IllegalArgumentException("Invalid grab quantity.");
+            JsonNode requested = request.get("quantity");
+            if (requested != null && (!requested.isIntegralNumber() || !requested.canConvertToInt() || requested.asInt() <= 0))
+                throw new IllegalArgumentException("Grab a whole quantity of at least 1.");
             JsonNode card = visibleCard(playerId, ctx.pathParam("id"));
+            if (card.path("fromDm").asBoolean(false)) {
+                grabDmOffer(playerId, card, request, requested);
+                json(ctx, 200, MAPPER.createObjectNode().put("transferred", true));
+                return;
+            }
             String sourceId = card.path("actorId").asText();
             Campaign.Actor sourceActor = campaign.actor(sourceId);
             Campaign.Actor targetActor = ownedActor(playerId, request.path("actorId").asText());
@@ -2762,7 +2789,7 @@ public final class OnlineSessionServer {
             int remaining = ChatCards.remaining(source, card);
             if (remaining <= 0)
                 throw new IllegalArgumentException("This is not an available transfer offer. Ask the owner to offer the item.");
-            int quantity = request.path("all").asBoolean(false) ? remaining : 1;
+            int quantity = grabQuantity(request, requested, remaining);
             ChatCards.transfer(source, target, card.path("category").asText(), card.path("item"), quantity);
             String cardId = card.path("cardId").asText();
             ObjectNode claims = source.withObject("/transferClaims");
@@ -2780,11 +2807,68 @@ public final class OnlineSessionServer {
         }
     }
 
+    private static int grabQuantity(JsonNode request, JsonNode requested, int remaining) {
+        if (request.path("all").asBoolean(false))
+            return remaining;
+        int quantity = requested == null ? 1 : requested.asInt();
+        if (quantity > remaining)
+            throw new IllegalArgumentException("Only " + remaining + " remaining to grab.");
+        return quantity;
+    }
+
+    private void grabDmOffer(String playerId, JsonNode card, JsonNode request, JsonNode requested) throws IOException {
+        if (!ChatCards.GOLD.equals(card.path("category").asText()))
+            throw new IllegalArgumentException("This is not an available transfer offer.");
+        Campaign.Actor targetActor = ownedActor(playerId, request.path("actorId").asText());
+        ObjectNode target = storedSheet(targetActor.getId());
+        if (target.isEmpty())
+            throw new IllegalArgumentException("Create and save the receiving character first.");
+        int remaining = dmRemaining(card);
+        if (remaining <= 0)
+            throw new IllegalArgumentException("There is no more to grab.");
+        int quantity = grabQuantity(request, requested, remaining);
+        ChatCards.creditGold(target, quantity);
+        target.put("inventoryRevision", target.path("inventoryRevision").asLong(0) + 1);
+        String cardId = card.path("cardId").asText();
+        if (!(sharedCardMessage(cardId) instanceof ObjectNode current))
+            throw new IllegalArgumentException("Shared card is unavailable.");
+        ObjectNode updated = current.deepCopy();
+        ObjectNode shared = (ObjectNode)updated.get("sharedCard");
+        shared.put("claimed", shared.path("claimed").asInt(0) + quantity);
+        shared.put("available", remaining - quantity);
+        store.saveSheetsAndRoll(campaign.getId(), Map.of(targetActor.getId(), target), updated);
+        sharedCards.put(cardId, updated);
+        inventoryChanged(targetActor, target);
+        stockChanged("");
+    }
+
+    /** DM offers have no source sheet; their budget is tracked on the persisted card itself. */
+    private int dmRemaining(JsonNode card) {
+        JsonNode current = sharedCardMessage(card.path("cardId").asText());
+        JsonNode shared = current == null ? card : current.path("sharedCard");
+        return Math.max(0, shared.path("offerQuantity").asInt(0) - shared.path("claimed").asInt(0));
+    }
+
+    /** Posts a DM transfer offer of coins that players can grab into their own characters. */
+    public synchronized String dmOfferGold(int amount, String toPlayerId) {
+        if (campaign == null)
+            return "No online session is running.";
+        if (amount <= 0)
+            return "Offer a whole amount of gold of at least 1.";
+        try {
+            ObjectNode card = publishSharedCard("dm", "DM", "", "Gamemaster", ChatCards.GOLD, ChatCards.goldItem(), amount,
+                    toPlayerId == null ? "" : toPlayerId, false, true);
+            return card == null ? "Could not post the gold offer." : null;
+        } catch (IOException e) {
+            return "Could not post the gold offer: " + e.getMessage();
+        }
+    }
+
     private void inventoryChanged(Campaign.Actor actor, ObjectNode sheet) {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetInventory").put("actorId", actor.getId());
         ObjectNode inventory = message.putObject("inventory");
         for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor",
-                "compendiumRevision", "loadout", "vault")) {
+                "compendiumRevision", "loadout", "vault", "gold")) {
             if (sheet.has(field))
                 inventory.set(field, sheet.get(field));
         }
@@ -2804,6 +2888,8 @@ public final class OnlineSessionServer {
     public synchronized int cardRemaining(JsonNode sharedCard) {
         String actorId = sharedCard.path("actorId").asText();
         try {
+            if (campaign != null && sharedCard.path("fromDm").asBoolean(false))
+                return dmRemaining(sharedCard);
             return campaign == null || campaign.actor(actorId) == null ? 0
                     : ChatCards.remaining(storedSheet(actorId), sharedCard);
         } catch (IOException e) {
@@ -2964,6 +3050,8 @@ public final class OnlineSessionServer {
             hello.put("chatCards", true);
             hello.put("compendiumChat", true);
             hello.put("transferOffers", true);
+            hello.put("goldTransfers", true);
+            hello.put("grabQuantity", true);
             hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);

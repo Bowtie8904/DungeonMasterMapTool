@@ -129,7 +129,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   tile's top-left corner shows a dot when marked without increasing the tile height; only level-ups mark or clear traits, not manual clicks. Short rest,
   long rest and death-move controls are in the header to the right of the portrait, between the character details and vitals row. The resizable sheet
   defaults to 900 px wide (clamped to available space) and nearly the full viewport height, leaving 30 px above and below.
-  The sidebar scrolls independently from the tab content; floating and pop-out sheets use the same layout.
+  Trait cards shrink with the available sidebar height (hiding example actions, then switching to compact one-line rows) so all six stay readable on small screens or with extra class resources; only if even that does not fit, the sidebar scrolls independently from the tab content; floating and pop-out sheets use the same layout.
   **Death moves** become available when all HP are marked. Confirm **Blaze of Glory** to post the critically
   successful final-action/death instructions, or **Risk It All** to roll Hope/Fear d12s and share the outcome
   with a sender-only **Apply recovery** chat button (or **Clear all HP and Stress** on a critical).
@@ -336,7 +336,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
-  Chat messages appear as individual sender-headed cards. Roll cards show styled dice, a combined bonus and a
+  Chat messages appear as individual sender-headed cards (the DM is shown as Gamemaster). Roll cards show styled dice, a combined bonus and a
   prominent total; expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
@@ -357,20 +357,26 @@ Nothing starts until you click **Start online session**, so offline play and the
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
   `online.chat`), with an unread dot, recipient dropdown and `/roll`. The **secret roll** button (or `/secret 2d6`)
   shows players only `?` instead of numbers while dice type and count stay visible; the DM sees the real result.
+  The DM can type `/gold 500` to post a gold transfer offer (to the selected recipient) that players grab
+  into their characters.
   Only the DM has a subtle trash icon on chat cards to delete messages and rolls for everyone, including
   saved history. Players cannot delete messages. Deleting a transfer offer also prevents further claims.
 - **Share to chat:** subtle chat icons on sheet features, domain cards and equipment post formatted descriptions
   without cast/roll/use/equip actions. You can also drag weapons, armor, items and consumables from the sheet
   onto Chat. These links never let anyone take the item. Use the separate **Transfer** icon on carried,
   unequipped equipment or loot to post a clearly labeled transfer offer. For multiple units, choose a quantity
-  (defaults to all available). Offers show how much remains and subtle **Grab one** / **Grab all** buttons;
-  choose the receiving character if you own several. Offering does not remove or reserve stock. Claims are
+  (defaults to all available). Offers show how much remains and subtle **Grab** / **Grab all** buttons; **Grab**
+  asks how many to take (default 1). Choose the receiving character if you own several. Gold has its own
+  **Transfer** icon next to the gold counter and works the same way. Offering does not remove or reserve stock. Claims are
   limited to the offered quantity and live unequipped stock; a full recipient inventory rejects the transfer
   without moving anything. Transfers update open sheets/pop-outs and are saved by the host.
 - **Equipment and loot:** row actions are grouped at the right edge: chat, transfer and delete icons on the first line, with the blue-outlined action button (Equip, Use, Drink…) on a second line to save width (delete removes carried equipment or loot). Items whose quantity reaches 0
   (use or action) are removed; the − stepper may rest at 0 so accidental clicks lose nothing. Grabbed transfers remove emptied source stacks. Active gear keeps its chat icon in the card's top-right corner.
   Search carried equipment or loot by name and description (all search words must match).
   Loot descriptions are limited to two lines; use **Show more** / **Show less** to expand them inside the row.
+  The subtle **+** next to the Inventory search box adds a custom item (name, optional description, type -
+  loot by default - and quantity, default 1). Custom items have no action buttons and never appear in or
+  merge with the compendium.
 - **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
   tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.

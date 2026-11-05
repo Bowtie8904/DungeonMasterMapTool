@@ -1719,6 +1719,9 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override public int remaining(com.fasterxml.jackson.databind.JsonNode sharedCard) {
                 return onlineController == null ? 0 : onlineController.cardRemaining(sharedCard);
             }
+            @Override public String offerGold(int amount, String toPlayerId) {
+                return onlineController == null ? "Not hosting." : onlineController.offerGold(amount, toPlayerId);
+            }
             @Override public List<dmmt.ui.ChatPanel.Recipient> recipients() {
                 if (onlineController == null) return List.of();
                 return onlineController.roster().stream().filter(r -> r.connections() > 0)

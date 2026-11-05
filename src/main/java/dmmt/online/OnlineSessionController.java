@@ -600,6 +600,12 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    /** Posts a DM gold transfer offer; returns an error message or {@code null}. */
+    public String offerGold(int amount, String toPlayerId) {
+        OnlineSessionServer current = server;
+        return current == null ? "No online session is running." : current.dmOfferGold(amount, toPlayerId);
+    }
+
     /** Rolls dice as the DM; returns an error message or {@code null}. */
     public String rollDice(String expression, String toPlayerId, boolean secret) {
         OnlineSessionServer current = server;

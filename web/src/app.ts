@@ -6,7 +6,7 @@ import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, type SheetSave } from './daggerheart/persist';
 import { basicDeathOptions } from './daggerheart/death';
-import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type SharedCard, type SharedEntry } from './shared-cards';
+import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type GrabQuantity, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
 import { renderEffects } from './effects';
@@ -43,6 +43,8 @@ export class App {
   private chatCards = false;
   private compendiumChat = false;
   private transferOffers = false;
+  private goldTransfers = false;
+  private grabQuantity = false;
   private drawingHistory: DrawingEdit[] = [];
   private pendingDrawings = new Map<string, { inverse: DrawingEdit; undo: boolean; after?: Overlay; record: boolean }>();
   private historyMap = '';
@@ -384,6 +386,7 @@ export class App {
   private async shareEntry(actorId: string, entry: SharedEntry, offerQuantity?: number): Promise<void> {
     if (!this.chatCards) throw new Error('This host does not support shared chat cards. Update the host to share cards.');
     if (transferable(entry) && !this.transferOffers) throw new Error('Update the host to support safe inventory links and transfer offers.');
+    if (entry.category === 'gold' && !this.goldTransfers) throw new Error('Update the host to transfer gold.');
     if (!this.conn.isOpen) throw new Error('Not connected. Your card was not posted.');
     if (this.chatRecipient.selectedOptions[0]?.disabled) throw new Error('That player is offline. Choose a recipient before sharing.');
     const handle = this.sheetHandles.get(actorId);
@@ -392,16 +395,18 @@ export class App {
     this.showSection('chat');
   }
 
-  private async grabCard(card: SharedCard, all: boolean): Promise<void> {
+  private async grabCard(card: SharedCard, quantity: GrabQuantity): Promise<void> {
+    if (quantity !== 'all' && quantity !== 1 && !this.grabQuantity) throw new Error('Update the host to grab a chosen quantity.');
     const actors = this.myActors.filter(a => a.id !== card.actorId);
-    if (!actors.length) throw new Error('You need a different owned character to receive this item.');
-    const picked = await pickActor(actors, `Receive ${card.item.name}`, all ? 'Grab all' : 'Grab one');
+    if (!actors.length) throw new Error(`You need a different owned character to receive this ${card.category === 'gold' ? 'gold' : 'item'}.`);
+    const picked = await pickActor(actors, `Receive ${card.item.name}`, quantity === 'all' ? 'Grab all' : 'Grab');
     const actor = picked ? actors.find(a => a.id === picked.id) : null;
     if (!actor) return;
     const handle = await this.ensureSheet(actor);
     await handle.save.flush();
     try {
-      await cardRequest(`/${encodeURIComponent(card.cardId)}/grab`, { actorId: actor.id, all });
+      await cardRequest(`/${encodeURIComponent(card.cardId)}/grab`,
+        quantity === 'all' ? { actorId: actor.id, all: true } : { actorId: actor.id, all: false, quantity });
       await handle.save.refresh();
       handle.bus.notify();
       this.toast(`${card.item.name} transferred to ${actor.name}.`);
@@ -767,6 +772,8 @@ export class App {
         this.chatCards = msg.chatCards === true;
         this.compendiumChat = msg.compendiumChat === true;
         this.transferOffers = msg.transferOffers === true;
+        this.goldTransfers = msg.goldTransfers === true;
+        this.grabQuantity = msg.grabQuantity === true;
         for (const handle of this.sheetHandles.values()) {
           void handle.save.refresh().then(() => handle.bus.notify()).catch((e: Error) => this.toast(e.message));
         }
@@ -1097,7 +1104,7 @@ export class App {
     const cards = this.log.map((e) => {
       let card = this.logCards.get(e);
       if (!card) {
-        card = renderLogEntry(e, this.playerId, (card, all) => this.grabCard(card, all), (message) => this.toast(message), (m) => this.rollActions(m));
+        card = renderLogEntry(e, this.playerId, (card, quantity) => this.grabCard(card, quantity), (message) => this.toast(message), (m) => this.rollActions(m));
         this.logCards.set(e, card);
         card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
       }

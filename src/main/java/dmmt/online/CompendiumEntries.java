@@ -60,7 +60,8 @@ final class CompendiumEntries {
                 int held = 0;
                 ObjectNode existing = null;
                 for (JsonNode row : sheet.withArray("inventory")) {
-                    if (entry.path("name").equals(row.path("name")) && type.equals(row.path("type").asText())) {
+                    if (!row.path("custom").asBoolean(false) && entry.path("name").equals(row.path("name"))
+                            && type.equals(row.path("type").asText())) {
                         held += Math.max(0, row.path("qty").asInt());
                         if (row instanceof ObjectNode object) existing = object;
                     }

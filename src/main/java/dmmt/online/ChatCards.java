@@ -14,8 +14,28 @@ final class ChatCards {
     private ChatCards() {
     }
 
+    static final String GOLD = "gold";
+
     static boolean transferable(String category) {
-        return List.of("weapon", "armor", "item").contains(category);
+        return List.of("weapon", "armor", "item", GOLD).contains(category);
+    }
+
+    static ObjectNode goldItem() {
+        return com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("name", "Gold");
+    }
+
+    static int gold(JsonNode sheet) {
+        return Math.max(0, sheet.path("gold").asInt(0));
+    }
+
+    /** Adds coins without a source sheet, as for DM gold offers. */
+    static void creditGold(ObjectNode target, int quantity) {
+        if (quantity <= 0)
+            throw new IllegalArgumentException("There is no more to grab.");
+        long total = (long)gold(target) + quantity;
+        if (total > Integer.MAX_VALUE)
+            throw new IllegalArgumentException("The receiving character cannot hold that much gold.");
+        target.put("gold", (int)total);
     }
 
     static ObjectNode compendiumItem(JsonNode document, String entryId) {
@@ -132,6 +152,8 @@ final class ChatCards {
         ObjectNode key = identity(item);
         if (!transferable(category))
             return 0;
+        if (GOLD.equals(category))
+            return gold(sheet);
         String field = switch (category) {
             case "weapon" -> "carriedWeapons";
             case "armor" -> "carriedArmor";
@@ -153,6 +175,8 @@ final class ChatCards {
     }
 
     static ObjectNode resolve(JsonNode sheet, String category, JsonNode item) {
+        if (GOLD.equals(category))
+            return goldItem();
         ObjectNode key = identity(item);
         return entries(sheet, category).stream().filter(e -> identity(e).equals(key))
                                        .findFirst().map(ChatCards::identity)
@@ -166,6 +190,11 @@ final class ChatCards {
     static void transfer(ObjectNode source, ObjectNode target, String category, JsonNode item, int quantity) {
         if (!transferable(category) || quantity <= 0 || available(source, category, item) < quantity) {
             throw new IllegalArgumentException("There is no more to grab.");
+        }
+        if (GOLD.equals(category)) {
+            creditGold(target, quantity);
+            source.put("gold", gold(source) - quantity);
+            return;
         }
         ObjectNode key = identity(item);
         String destination = switch (category) {

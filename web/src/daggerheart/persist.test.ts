@@ -114,6 +114,26 @@ describe('chat inventory synchronization', () => {
     expect(a.actions![0].timing).toBe('action');
   });
 
+  it('never attaches compendium automation to custom items', () => {
+    const c = mockCharacter();
+    c.inventory = [{ name: 'Custom recipe', type: 'gear', qty: 1, custom: true }];
+    updateCharacterAutomation(c, [{
+      format: 'dmmap-daggerheart', version: 1, label: 'Items', category: 'items', entries: [{ id: 'recipe', name: 'Custom recipe', automation: {
+        actions: [{ id: 'craft', label: 'Craft', timing: 'downtime' }], rest: { extraMoves: 1 },
+      } }],
+    }]);
+    expect(c.inventory[0].automation).toBeUndefined();
+  });
+
+  it('applies transferred gold with newer inventory generations only', () => {
+    const c = mockCharacter();
+    c.gold = 3;
+    expect(applyInventory(c, { inventoryRevision: 2, gold: 9 })).toBe(true);
+    expect(c.gold).toBe(9);
+    expect(applyInventory(c, { inventoryRevision: 2, gold: 1 })).toBe(false);
+    expect(c.gold).toBe(9);
+  });
+
   it('updates only inventory and ignores older or duplicate generations', () => {
     const c = mockCharacter();
     c.notes = 'Unsaved notes';
