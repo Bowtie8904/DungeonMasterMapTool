@@ -1351,7 +1351,7 @@ public final class OnlineSessionServer {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 if (hasRoll && definition.has("outcome"))
                     reportLines.add(0, "Changed the original roll to " + ("hope".equals(definition.path("outcome").asText()) ? "Hope" : "Fear") + ".");
-                publishActionReport(sourceActor, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                publishActionReport(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
             }
             json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
         } catch (FeatureIoException e) {
@@ -1438,7 +1438,7 @@ public final class OnlineSessionServer {
         } else if (improvement == 0) {
             report.add("No improvement; kept the original result.");
         }
-        publishActionReport(sourceActor, actionReportTitle(sourceSheet, source, "Reroll downtime die"), report, null);
+        publishActionReport(sourceActor, source, actionReportTitle(sourceSheet, source, "Reroll downtime die"), report, null);
     }
 
     private void broadcastChatUpdate(ObjectNode message) {
@@ -1561,6 +1561,8 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("Only the original roller can claim this character's reward.");
             if (!"duality".equals(roll.path("kind").asText()) || !roll.path("rewardClaimed").isBoolean())
                 throw new IllegalArgumentException("This roll does not support reward claims.");
+            if (List.of(roll.path("source").asText("").split(",")).contains("reaction"))
+                throw new IllegalArgumentException("Reaction rolls do not grant Hope or clear Stress.");
             if (roll.path("rewardClaimed").asBoolean())
                 throw new IllegalArgumentException("This roll's reward was already claimed.");
             int hope = roll.path("rolls").path(0).asInt(0);
@@ -1611,13 +1613,29 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
         String source = roll.path("source").asText("");
         String on = trigger.path("on").asText("");
+        for (JsonNode excluded : trigger.path("excludeRolls")) {
+            if (List.of(source.split(",")).contains(excluded.asText()))
+                throw new IllegalArgumentException("This feature does not apply to that roll.");
+        }
+        boolean duality = "duality".equals(roll.path("kind").asText());
+        if ("duality".equals(on) && !duality)
+            throw new IllegalArgumentException("This feature requires a Duality roll.");
         if (!"duality".equals(on) && !List.of(source.split(",")).contains(on))
             throw new IllegalArgumentException("This feature does not apply to that roll.");
+        if (trigger.path("weaponAttack").asBoolean()
+                && (!List.of(source.split(",")).contains("attack") || roll.path("weapon").asText("").isBlank()))
+            throw new IllegalArgumentException("This feature requires a weapon attack.");
         if (trigger.has("weapon") && !trigger.path("weapon").asText().equals(roll.path("weapon").asText()))
             throw new IllegalArgumentException("This feature requires a " + trigger.path("weapon").asText() + " attack.");
         ArrayNode uses = roll.withArray("featureUses");
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
         if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
+        if (!duality) {
+            if (!"damage".equals(on) || !"always".equals(trigger.path("when").asText("always"))
+                    || trigger.has("outcome") || trigger.has("reroll"))
+                throw new IllegalArgumentException("This feature requires a Duality roll.");
+            return;
+        }
         int hope = roll.path("rolls").path(0).asInt(Integer.MIN_VALUE);
         int fear = roll.path("rolls").path(1).asInt(Integer.MIN_VALUE);
         if (hope < 1 || fear < 1) throw new IllegalArgumentException("The original roll has no valid Hope and Fear dice.");
@@ -1861,12 +1879,23 @@ public final class OnlineSessionServer {
         return String.join(" - ", parts);
     }
 
-    private void publishActionReport(Campaign.Actor actor, String title, List<String> lines, ObjectNode roll) {
+    private void publishActionReport(Campaign.Actor actor, JsonNode source, String title, List<String> lines, ObjectNode roll) {
         String text = "ACTION USED\n" + title + "\n" + actor.getName()
                 + lines.stream().map(line -> "\n• " + line).reduce("", String::concat);
         String toId = roll == null ? null : roll.path("toId").asText(null);
         ObjectNode message = chatMessage(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName(), toId, clip(text));
+        message.set("rollSource", featureSourceDescription(source));
         deliver(message, toId);
+    }
+
+    private ObjectNode featureSourceDescription(JsonNode source) {
+        ObjectNode description = MAPPER.createObjectNode();
+        for (String field : new String[]{"name", "text", "source"}) {
+            String value = source.path(field).asText("source".equals(field) ? "Feature" : "");
+            int limit = "text".equals(field) ? 16_000 : 240;
+            description.put(field, value.substring(0, Math.min(value.length(), limit)));
+        }
+        return description;
     }
 
     private void publishFeatureCheck(Campaign.Actor actor, JsonNode source, String label, DiceRoller.Result result,
@@ -1884,8 +1913,7 @@ public final class OnlineSessionServer {
                 .put("total", result.total()).put("label", label).put("kind", "dice").put("actorId", actor.getId());
         ArrayNode rolls = out.putArray("rolls");
         result.rolls().forEach(rolls::add);
-        out.putObject("rollSource").put("name", sourceName).put("text", source.path("text").asText(""))
-                .put("source", source.path("source").asText("Feature"));
+        out.set("rollSource", featureSourceDescription(source));
         ArrayNode breakdown = out.putArray("breakdown");
         ObjectNode detail = breakdown.addObject().put("label", sourceName).put("expression", result.expression()).put("total", result.total());
         detail.set("rolls", rolls.deepCopy());
@@ -2392,6 +2420,7 @@ public final class OnlineSessionServer {
             hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
+            hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
@@ -2700,7 +2729,8 @@ public final class OnlineSessionServer {
         }
         if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^(?:2d12|1d(?:12|20)\\+1d(?:12|20))(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
             out.put("kind", "duality");
-            out.put("rewardClaimed", false);
+            if (!List.of(out.path("source").asText("").split(",")).contains("reaction"))
+                out.put("rewardClaimed", false);
             if (msg.path("difficulty").isInt()) {
                 out.put("difficulty", msg.path("difficulty").asInt());
             }

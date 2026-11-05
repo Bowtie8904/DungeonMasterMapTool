@@ -116,6 +116,8 @@ public final class ChatCards {
             return details;
         }
         int index = 0;
+        boolean doubled = expression.startsWith("(") && expression.endsWith(")*2");
+        if (doubled) expression = expression.substring(1, expression.length() - 3);
         Matcher matcher = TERM.matcher(expression);
         while (matcher.find()) {
             String term = matcher.group(0);
@@ -147,7 +149,8 @@ public final class ChatCards {
                 details.add(new Detail("Modifier", term, List.of(), Integer.parseInt(term.replace("+", "")), List.of()));
             }
         }
-        return details;
+        return doubled ? details.stream().map(d -> new Detail(d.label(), "(" + d.expression() + ")*2",
+                d.rolls(), d.total() * 2, d.notes())).toList() : details;
     }
 
     public static String signed(int n) {
@@ -591,7 +594,8 @@ public final class ChatCards {
                 if (kept[i]) kept_sum += values.get(i);
             }
         }
-        int modifier = total - kept_sum;
+        boolean doubled = !hidden && expression.startsWith("(") && expression.endsWith(")*2");
+        int modifier = total / (doubled ? 2 : 1) - kept_sum;
         HBox equation = new HBox(8);
         equation.setAlignment(Pos.CENTER_LEFT);
         dice.setMinWidth(0);
@@ -602,6 +606,12 @@ public final class ChatCards {
             mod.getStyleClass().add(modifier < 0 ? "chat-roll-modifier-negative" : "chat-roll-modifier");
             mod.setMinWidth(Region.USE_PREF_SIZE);
             equation.getChildren().add(mod);
+            if (doubled) {
+                Label multiplier = new Label("x2 (all)");
+                multiplier.getStyleClass().add("chat-roll-modifier");
+                multiplier.setMinWidth(Region.USE_PREF_SIZE);
+                equation.getChildren().add(multiplier);
+            }
         }
         Label equals = new Label("=");
         equals.getStyleClass().add("chat-roll-equals");
@@ -619,6 +629,7 @@ public final class ChatCards {
 
         String title = m.has("label") ? m.path("label").asText()
                 : hidden || secretToPlayers ? "Secret roll" : duality ? "Duality roll" : "Dice roll";
+        if (List.of(m.path("source").asText("").split(",")).contains("reaction")) title += " - Reaction roll";
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("chat-roll-title");
         VBox body = new VBox(12, titleLabel, equation);

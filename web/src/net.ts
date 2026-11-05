@@ -15,6 +15,7 @@ export function backoffDelay(attempt: number): number {
 /** Auto-reconnecting WebSocket with clock sync. */
 export class Connection {
   keptDice = false;
+  rollMultipliers = false;
   rollRewards = false;
   readonly clock = new ClockSync();
   private ws: WebSocket | null = null;
@@ -56,6 +57,7 @@ export class Connection {
 
   private open(): void {
     this.keptDice = false;
+    this.rollMultipliers = false;
     this.rollRewards = false;
     this.events.onStatus('connecting');
     const ws = new WebSocket(this.url());
@@ -88,6 +90,7 @@ export class Connection {
       }
       if (msg.type === 'hello') {
         this.keptDice = msg.keptDice === true;
+        this.rollMultipliers = msg.rollMultipliers === true;
         this.rollRewards = msg.rollRewards === true;
         if (this.clock.samples === 0) this.clock.seed(msg.serverTime, performance.now());
       }

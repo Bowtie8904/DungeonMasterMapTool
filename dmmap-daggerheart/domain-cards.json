@@ -4390,6 +4390,7 @@
       "id": "hope",
       "label": "Stealth Expertise: change Fear into Hope",
       "on": "action",
+      "excludeRolls": ["attack"],
       "when": "fear",
       "outcome": "hope",
       "audience": "any",

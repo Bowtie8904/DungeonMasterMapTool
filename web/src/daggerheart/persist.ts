@@ -30,6 +30,12 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
         item.automation ??= {};
         item.automation.mitigation = structuredClone(rules.mitigation);
       }
+      for (const option of rules.rollOptions ?? []) {
+        if (option.roll !== 'reaction') continue;
+        item.automation ??= {};
+        const options = item.automation.rollOptions ??= [];
+        if (!options.some((current) => current.id === option.id)) options.push(structuredClone(option));
+      }
       for (const action of rules.actions ?? []) {
         if (!action.timing) continue;
         item.automation ??= {};

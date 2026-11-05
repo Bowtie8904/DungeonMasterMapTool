@@ -8,6 +8,14 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('explains doubled damage without treating the multiplier as another flat bonus', () => {
+    const details = rollDetails({ ...message, kind: undefined, expression: '(3d8kh2+2+2d4+24)*2', rolls: [1, 8, 4, 2, 3], total: 86 });
+    expect(details.map((d) => d.total)).toEqual([24, 4, 10, 48]);
+    expect(details.flatMap((d) => d.rolls)).toEqual([1, 8, 4, 2, 3]);
+    expect(details.map((d) => d.expression)).toEqual(['(3d8kh2)*2', '(+2)*2', '(+2d4)*2', '(+24)*2']);
+    expect(keptRolls('(3d8kh2+2+2d4+24)*2', [1, 8, 4, 2, 3])).toEqual([false, true, true, true, true]);
+  });
+
   it('shows only the feature consequence below the dice, without repeating its name or result', () => {
     class Element {
       className = '';
@@ -32,6 +40,10 @@ describe('roll breakdowns', () => {
         expect(line.children).toEqual([consequence]);
         expect(card.find('roll-title')?.text).toBe('Unshakable');
       }
+      const reaction = renderLogEntry({ kind: 'roll', m: {
+        ...message, label: 'Agility', source: 'trait:Agility,reaction',
+      } }, 'player') as unknown as Element;
+      expect(reaction.find('roll-title')?.text).toBe('Agility - Reaction roll');
     } finally { vi.unstubAllGlobals(); }
   });
 

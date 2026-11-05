@@ -19,6 +19,10 @@
         "value": 1
        },
        {
+        "roll": "reaction",
+        "value": 1
+       },
+       {
         "roll": "damage",
         "value": 1
        }
@@ -129,7 +133,8 @@
       ],
       "rollOptions": [
        { "id": "feed-fear", "label": "Spend a token (Fear d20)", "roll": "action", "cost": { "feedTokens": 1 }, "fearDie": 20 },
-       { "id": "hungry", "label": "No Feed tokens (disadvantage)", "roll": "action", "resourceEmpty": "feedTokens", "defaultOn": true, "advantage": "disadvantage" }
+       { "id": "hungry", "label": "No Feed tokens (disadvantage)", "roll": "action", "resourceEmpty": "feedTokens", "defaultOn": true, "advantage": "disadvantage" },
+       { "id": "hungry-reaction", "label": "No Feed tokens (disadvantage)", "roll": "reaction", "resourceEmpty": "feedTokens", "defaultOn": true, "advantage": "disadvantage" }
       ],
       "rollTriggers": [
        {

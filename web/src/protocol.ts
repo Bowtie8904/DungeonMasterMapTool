@@ -333,6 +333,7 @@ export interface Hello {
   compendiumChat?: boolean;
   transferOffers?: boolean;
   keptDice?: boolean;
+  rollMultipliers?: boolean;
   rollRewards?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;

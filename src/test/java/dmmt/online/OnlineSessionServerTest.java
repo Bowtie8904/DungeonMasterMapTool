@@ -89,6 +89,135 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void stealthExpertiseRejectsOwnAndAllyAttacksButAcceptsNonAttackFearActions() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("stealth").name("Stealth").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        var loadout = sheet.putArray("loadout");
+        for (JsonNode card : MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries"))
+            if ("Stealth Expertise".equals(card.path("name").asText())) loadout.add(card.deepCopy());
+        assertEquals(1, loadout.size());
+        store.saveSheet(campaign.getId(), "stealth", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (String actor : List.of("stealth", "ally")) {
+                for (String source : List.of("attack,action,trait:Agility", "action,trait:Agility")) {
+                    diceSeed(0);
+                    ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                            .put("expression", "2d12").put("source", source).put("actorId", actor).toString(), true).join();
+                    JsonNode roll = inbox.next("roll");
+                    assertTrue(roll.path("rolls").path(1).asInt() > roll.path("rolls").path(0).asInt());
+                    ObjectNode request = MAPPER.createObjectNode().put("actorId", "stealth")
+                            .put("key", "card:Stealth Expertise").put("actionId", "hope");
+                    request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                    JsonNode before = MAPPER.readTree(store.loadSheet(campaign.getId(), "stealth"));
+                    var response = featureHttp(cookie, request);
+                    if (source.startsWith("attack")) {
+                        assertEquals(400, response.statusCode(), response.body());
+                        assertEquals(before, MAPPER.readTree(store.loadSheet(campaign.getId(), "stealth")));
+                    } else {
+                        assertEquals(200, response.statusCode(), response.body());
+                        assertEquals(before.path("stress").path("on").asInt() + 1,
+                                MAPPER.readTree(store.loadSheet(campaign.getId(), "stealth")).path("stress").path("on").asInt());
+                    }
+                }
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void assassinReactionsValidateRollKindsPayCostsAndPersistTheMark() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("assassin").name("Assassin").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Assassin");
+        sheet.put("subclass", "Executioners Guild");
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if (entry.path("id").asText().startsWith("assassin"))
+                for (JsonNode feature : entry.path("features")) {
+                    ObjectNode learned = feature.deepCopy();
+                    learned.put("source", "Assassin".equals(entry.path("name").asText())
+                            ? "Class feature - Assassin" : "Subclass " + entry.path("stage").asText() + " - Executioners Guild");
+                    features.add(learned);
+                }
+        }
+        sheet.withObject("/resources").put("poison", 2);
+        store.saveSheet(campaign.getId(), "assassin", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "assassin").put("key", "feat:Marked For Death").put("actionId", "use");
+            assertTrue(inbox.next("hello").path("rollMultipliers").asBoolean());
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"attack,action\",\"actorId\":\"assassin\"}", true).join();
+            JsonNode unarmed = inbox.next("roll");
+            request.set("roll", MAPPER.createObjectNode().put("id", unarmed.path("id").asLong()).put("ts", unarmed.path("ts").asLong()));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"attack,action\",\"weapon\":\"Dagger\",\"actorId\":\"assassin\",\"rollSource\":{\"name\":\"Dagger\",\"text\":\"Weapon description\",\"source\":\"Weapon\"}}", true).join();
+            JsonNode attack = inbox.next("roll");
+            request.set("roll", MAPPER.createObjectNode().put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong()));
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "assassin"));
+            assertEquals(4, saved.path("stress").path("on").asInt());
+            assertEquals("Marked for Death", saved.path("effects").path(0).path("name").asText());
+            assertEquals("rest", saved.path("effects").path(0).path("until").asText());
+            JsonNode markReport = inbox.next("chat");
+            JsonNode markedFeature = java.util.stream.StreamSupport.stream(features.spliterator(), false)
+                    .filter(feature -> "Marked For Death".equals(feature.path("name").asText())).findFirst().orElseThrow();
+            assertEquals(markedFeature.path("name"), markReport.path("rollSource").path("name"));
+            assertEquals(markedFeature.path("text"), markReport.path("rollSource").path("text"));
+            assertEquals("Class feature - Assassin", markReport.path("rollSource").path("source").asText());
+            assertFalse(markReport.has("toId"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+
+            request.put("key", "feat:Toxic Concoctions").put("actionId", "poison");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "assassin")).path("resources").path("poison").asInt());
+            assertEquals("Toxic Concoctions", inbox.next("chat").path("rollSource").path("name").asText());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+
+            request.put("key", "feat:True Strike").put("actionId", "use");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "assassin"));
+            assertEquals(4, saved.path("hope").path("on").asInt());
+            assertEquals(1, saved.path("usage").path("feat:True Strike").path("used").asInt());
+            assertEquals("True Strike", inbox.next("chat").path("rollSource").path("name").asText());
+
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"(1d8+2)*2\",\"source\":\"damage\",\"weapon\":\"Dagger\",\"actorId\":\"assassin\",\"toId\":\"dm\"}", true).join();
+            JsonNode damage = inbox.next("roll");
+            assertEquals(1, damage.path("rolls").size());
+            assertEquals((damage.path("rolls").path(0).asInt() + 2) * 2, damage.path("total").asInt());
+            request.set("roll", MAPPER.createObjectNode().put("id", damage.path("id").asLong()).put("ts", damage.path("ts").asLong()));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.put("key", "feat:Marked For Death");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.put("key", "feat:Death Strike");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "assassin")).path("stress").path("on").asInt());
+            JsonNode deathReport = inbox.next("chat");
+            assertEquals("dm", deathReport.path("toId").asText());
+            JsonNode deathFeature = java.util.stream.StreamSupport.stream(features.spliterator(), false)
+                    .filter(feature -> "Death Strike".equals(feature.path("name").asText())).findFirst().orElseThrow();
+            assertEquals(deathFeature.path("name"), deathReport.path("rollSource").path("name"));
+            assertEquals(deathFeature.path("text"), deathReport.path("rollSource").path("text"));
+            assertEquals("Subclass specialization - Executioners Guild", deathReport.path("rollSource").path("source").asText());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            for (JsonNode feature : features) ((ObjectNode) feature).put("text", "Changed after use");
+            store.saveSheet(campaign.getId(), "assassin", sheet.toString());
+            List<JsonNode> history = new CampaignStore(store.root()).historyTail(campaign.getId(), 50);
+            assertTrue(history.contains(markReport));
+            assertTrue(history.contains(deathReport));
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void feedValidatesFangsAndAmountPaysStressCapsTokensAndRejectsDuplicateClaims() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("vampire").name("Vampire").ownerId(playerId()).build());
         ObjectNode sheet = transformationSheet("Vampire");
@@ -549,6 +678,24 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void reactionRollsCannotClaimHopeOrCriticalStressRecoveryEvenWithLegacyRewardMarker() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Hero").ownerId(playerId()).build());
+        rewardSheet(3, 2);
+        String cookie = cookie();
+        for (int fear : new int[]{3, 10}) {
+            ObjectNode roll = rewardRoll(5100 + fear, 10, fear);
+            roll.put("source", "trait:Agility,reaction");
+            store.replaceHistoryEntry(campaign.getId(), roll.path("id").asLong(), 1234, roll);
+            var response = rewardHttp(cookie, "reward-actor", roll);
+            assertEquals(400, response.statusCode());
+            assertTrue(response.body().contains("Reaction rolls"), response.body());
+        }
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(3, sheet.path("hope").path("on").asInt());
+        assertEquals(2, sheet.path("stress").path("on").asInt());
+    }
+
+    @Test
     void rollRewardsValidateOutcomeOwnershipCapsAndPersistOneClaimAcrossReloads() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Hero").ownerId(playerId()).build());
         rewardSheet(3, 2);
@@ -613,6 +760,14 @@ class OnlineSessionServerTest {
         WebSocket ws = connect(cookie, inbox);
         try {
             assertTrue(inbox.next("hello").path("rollRewards").asBoolean());
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"trait:Agility,reaction","actorId":"reward-actor"}
+                    """, true).join();
+            JsonNode reaction = inbox.next("roll");
+            assertEquals("trait:Agility,reaction", reaction.path("source").asText());
+            assertEquals("duality", reaction.path("kind").asText());
+            assertFalse(reaction.has("rewardClaimed"));
+            assertEquals(400, rewardHttp(cookie, "reward-actor", reaction).statusCode());
             JsonNode roll = null;
             for (int attempt = 0; attempt < 50; attempt++) {
                 ws.sendText("""

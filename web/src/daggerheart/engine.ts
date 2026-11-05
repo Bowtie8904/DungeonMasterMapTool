@@ -76,6 +76,7 @@ export interface ResourceDef {
   max?: ModValue;
   session?: boolean;
   longRestLoss?: number;
+  resetOn?: 'shortRest' | 'longRest' | 'rest';
 }
 
 export interface RollOption extends ActionDef {
@@ -83,6 +84,8 @@ export interface RollOption extends ActionDef {
   value?: ModValue;
   dice?: string;
   diceByLevel?: Record<string, string>;
+  diceByFeature?: Record<string, string>;
+  multiplier?: 2;
   description?: string;
   uses?: Automation['uses'];
   consumeItem?: boolean;
@@ -96,13 +99,14 @@ export interface RollOption extends ActionDef {
   hopeDie?: 20;
   fearDie?: 20;
   resourceEmpty?: string;
-  input?: { label: string; default: number; min: number; max: number };
+  input?: { label: string; default: number; min: number; max: number; source?: 'attackFear' };
   quantity?: { resource: string; label: string };
 }
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
   on: string;
+  excludeRolls?: string[];
   when?: 'always' | 'fear' | 'hope' | 'hopeOrCritical' | 'failure' | 'hopeDie' | 'dieMatches';
   die?: number;
   matchResource?: string;
@@ -116,6 +120,7 @@ export interface RollTrigger extends ActionDef {
   audience?: 'self' | 'ally' | 'any';
   outcome?: 'hope' | 'fear';
   weapon?: string;
+  weaponAttack?: boolean;
   tokenGain?: { resource: string; max: number };
 }
 
@@ -315,6 +320,10 @@ export interface RollBonus {
   contributions: RollContribution[];
 }
 
+export function rollTargets(targets: string[], reaction: boolean): string[] {
+  return [reaction ? 'reaction' : 'action', ...targets.filter((target) => target !== 'action' && target !== 'reaction')];
+}
+
 /** Collects roll modifiers matching any of the targets (for example ['attack', 'trait:Finesse']). */
 export function rollBonus(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number], withConsumables = true): RollBonus {
   const out: RollBonus = { value: 0, dice: [], applied: [], names: [], contributions: [] };
@@ -425,7 +434,21 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
 
 export function rollOptionDice(c: CharacterSheet, option: RollOption): string | undefined {
   const level = Object.keys(option.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
-  return level === undefined ? option.dice : option.diceByLevel![String(level)];
+  let dice = level === undefined ? option.dice : option.diceByLevel![String(level)];
+  for (const [feature, replacement] of Object.entries(option.diceByFeature ?? {})) {
+    if ([...c.features, ...c.heritage].some((f) => f.name === feature)) dice = replacement;
+  }
+  return dice?.replace(/@tier/g, String(tierOf(c.level)));
+}
+
+export function damageRollFormula(expression: string, contributions: RollContribution[], selected: AvailableRollOption[]): { expression: string; contributions: RollContribution[] } {
+  const doubling = selected.filter((s) => s.option.multiplier === 2);
+  if (!doubling.length) return { expression, contributions };
+  const notes = doubling.map((s) => ({ label: rollOptionLabel(s), impact: 'Double the rolled damage total' }));
+  return {
+    expression: `(${expression})*2`,
+    contributions: contributions.map((part) => ({ ...part, expression: `(${part.expression})*2`, notes: [...(part.notes ?? []), ...notes] })),
+  };
 }
 
 export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: AvailableRollOption[]): RollBonus {
@@ -550,6 +573,11 @@ export type RestKind = 'short' | 'long';
 /** Expires effects and refreshes limited-use abilities for a rest. */
 export function applyRest(c: CharacterSheet, kind: RestKind): void {
   syncResources(c);
+  for (const r of resourceDefinitions(c)) {
+    if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
+      c.resources![r.id] = evalValue(r.initial, c);
+    }
+  }
   if (kind === 'long') for (const r of resourceDefinitions(c)) {
     if (r.longRestLoss) c.resources![r.id] = Math.max(0, c.resources![r.id] - r.longRestLoss);
   }
@@ -741,14 +769,19 @@ export interface RollContext {
   total: number;
   outcome?: 'hope' | 'fear';
   weapon?: string;
+  kind?: 'duality' | 'damage';
 }
 
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
+  if (t.on === 'duality' && ctx.kind === 'damage') return false;
   if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
   if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
   if (t.weapon && t.weapon !== ctx.weapon) return false;
+  if (t.weaponAttack && (!ctx.weapon || !ctx.source.split(',').includes('attack'))) return false;
+  if (ctx.kind === 'damage' && t.when && t.when !== 'always') return false;
   // Players never know the difficulty, so any roll may have failed (Hope rolls and criticals included).
   const failed = true;
   switch (t.when ?? 'always') {

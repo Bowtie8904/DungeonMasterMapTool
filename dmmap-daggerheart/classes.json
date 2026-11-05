@@ -594,6 +594,16 @@
          "hope": 1
         }
        }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "True Strike",
+        "on": "attack",
+        "when": "failure",
+        "cost": { "hope": 1 },
+        "description": "Turn this failed attack into a success. Confirm the result with the GM."
+       }
       ]
      }
     },
@@ -630,6 +640,15 @@
          "stress": 1
         }
        }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Death Strike",
+        "on": "damage",
+        "cost": { "stress": 1 },
+        "description": "Use only after dealing Severe damage. The target marks an additional Hit Point."
+       }
       ]
      }
     },
@@ -656,7 +675,18 @@
     {
      "name": "First Strike",
      "text": "The first time in a scene you succeed on an attack, you deal double damage.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "first-strike",
+        "label": "First Strike (double damage)",
+        "roll": "damage",
+        "multiplier": 2,
+        "description": "Select only for your first successful attack in the scene."
+       }
+      ]
+     }
     },
     {
      "name": "Ambush",
@@ -1831,7 +1861,19 @@
     {
      "name": "Venomancer",
      "text": "You also know these poisons:\n\n- ***Blight Seed:***The target gains a −3 penalty to their damage thresholds until the end of the scene. This effect can’t stack.\n\n- ***Fear Leaf:*** You deal extra damage equal to the result of your Fear Die on this attack.\n\n- ***Corpse Thorn:*** The target gains disadvantage on reaction rolls until the end of the scene.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "fear-leaf",
+        "label": "Fear Leaf",
+        "roll": "damage",
+        "input": { "label": "Fear Die result on the attack", "default": 1, "min": 1, "max": 20, "source": "attackFear" },
+        "cost": { "poison": 1 },
+        "description": "Successful weapon attack; choose Fear Leaf poison. Do not spend another token with Afflict with poison for the same poison."
+       }
+      ]
+     }
     },
     {
      "name": "Adder’s Blessing",
@@ -1880,14 +1922,37 @@
    "features": [
     {
      "name": "Toxic Concoctions",
-     "text": "**Mark a Stress** to place **1d4+1** tokens on this card. When you make a successful weapon attack, you can spend a token to afflict the target with a poison. You know these poisons:",
+     "text": "**Mark a Stress** to place **1d4+1** tokens on this card. When you make a successful weapon attack, you can spend a token to afflict the target with a poison. You know these poisons:\n\n- ***Ghost Petal: *** The target becomes temporarily *Vulnerable*.\n\n- ***Grave Spore:*** The target must also mark a Stress.\n\n- ***Leech Weed:*** You deal an extra **1d6** damage on this attack.\n\nWhen you take a long rest, clear all unspent tokens.",
      "type": "subclass",
      "automation": {
       "resources": [
        {
         "id": "poison",
         "label": "Poison tokens",
-        "initial": 0
+        "initial": 0,
+        "resetOn": "longRest"
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "leech-weed",
+        "label": "Leech Weed",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "poison": 1
+        },
+        "description": "Successful weapon attack; choose Leech Weed poison. Do not spend another token with Afflict with poison for the same poison."
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "poison",
+        "label": "Afflict with poison",
+        "on": "attack",
+        "weaponAttack": true,
+        "cost": { "poison": 1 },
+        "description": "Use after a successful weapon attack to afflict the target with a poison you know. Leech Weed and Fear Leaf damage options spend their own token instead."
        }
       ],
       "actions": [
@@ -1907,40 +1972,10 @@
        },
        {
         "id": "poison",
-        "label": "Afflict with poison (manual)",
+        "label": "Afflict with poison",
         "cost": {
          "poison": 1
         }
-       },
-       {
-        "id": "clear",
-        "label": "Long rest: clear poison",
-        "steps": [
-         {
-          "op": "clear",
-          "resource": "poison",
-          "amount": "all"
-         }
-        ]
-       }
-      ]
-     }
-    },
-    {
-     "name": "Ghost Petal",
-     "text": "- The target becomes temporarily *Vulnerable*.\n\n- ***Grave Spore:*** The target must also mark a Stress.\n\n- ***Leech Weed:*** You deal an extra **1d6** damage on this attack.\n\nWhen you take a long rest, clear all unspent tokens.",
-     "type": "subclass",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "leech-weed",
-        "label": "Leech Weed",
-        "roll": "damage",
-        "dice": "1d6",
-        "cost": {
-         "poison": 1
-        },
-        "description": "Successful weapon attack; choose Leech Weed poison."
        }
       ]
      }
@@ -2494,20 +2529,8 @@
    "features": [
     {
      "name": "Gifted Performer",
-     "text": "Describe how you perform for others. You can play each song once per long rest:",
-     "type": "subclass",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Gifted Performer"
-       }
-      ]
-     }
+     "text": "Describe how you perform for others. You can play each song once per long rest.",
+     "type": "subclass"
     },
     {
      "name": "Relaxing Song",
@@ -3439,7 +3462,50 @@
         "label": "Marked For Death",
         "cost": {
          "stress": 1
-        }
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Marked for Death",
+           "kind": "buff",
+           "until": "rest",
+           "text": "One adversary is marked. Select the damage bonus only against that adversary. Remove this effect when the adversary is defeated or the GM spends Fear equal to your tier to clear the mark."
+          }
+         }
+        ]
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Marked For Death",
+        "on": "attack",
+        "weaponAttack": true,
+        "cost": { "stress": 1 },
+        "description": "Use after a successful weapon attack to mark that target.",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Marked for Death",
+           "kind": "buff",
+           "until": "rest",
+           "text": "One adversary is marked. Select the damage bonus only against that adversary. Remove this effect when the adversary is defeated or the GM spends Fear equal to your tier to clear the mark."
+          }
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "marked-for-death",
+        "label": "Marked for Death",
+        "roll": "damage",
+        "requiresEffect": "Marked for Death",
+        "dice": "@tierd4",
+        "diceByFeature": { "Ambush": "@tierd6", "Backstab": "@tierd8" },
+        "description": "Select only when damaging the adversary you have marked."
        }
       ]
      }

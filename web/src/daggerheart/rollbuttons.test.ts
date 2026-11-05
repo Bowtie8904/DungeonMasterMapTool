@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { rollButtons } from './rollbuttons';
+import { rerollRequest, rollButtons } from './rollbuttons';
 import type { CharacterSheet } from './data';
 import type { RollMessage } from '../protocol';
 import { applyRest } from './engine';
@@ -108,6 +108,68 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it.each(['hope', 'duality'] as const)('preserves the reaction marker when rerolling %s', reroll => {
+    const request = rerollRequest({ ...original, source: 'reaction,trait:Agility' }, {
+      key: 'test', source: 'Reroll', automation: {}, trigger: { id: 'reroll', label: 'Reroll', on: 'duality', reroll },
+    });
+    expect(request?.source?.split(',')).toContain('reaction');
+    expect(request?.source?.split(',')).not.toContain('action');
+  });
+
+  it.each([
+    [[3, 9], false, 9],
+    [[7, 7], true, 7],
+    [[4, 18], false, 18],
+  ] as const)('passes the clicked attack Fear Die into Damage (%s)', async (rolls, critical, fear) => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const damage = vi.fn(() => true);
+    const box = rollButtons({ ...original, source: 'attack,action', weapon: 'Dagger', rolls: [...rolls] },
+      { ...host, sheet: async () => ({ ...sheet!, bus: { damage } }) } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find((b) => b.text === 'Damage')!.click();
+    expect(damage).toHaveBeenCalledWith('Dagger', critical, fear);
+  });
+
+  it('offers damage reactions on single-die damage, without Duality rewards or triggers', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Bob', { name: 'Death Strike', automation: { rollTriggers: [
+      { id: 'use', label: 'Death Strike', on: 'damage', cost: { stress: 1 } },
+      { id: 'duality', label: 'Not for damage', on: 'duality' },
+    ] } });
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, kind: undefined, source: 'damage', expression: '1d8', rolls: [5], total: 5, rewardClaimed: false },
+      { ...host, playerId: original.fromId, supportsRollRewards: () => true } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').map((b) => b.text)).toEqual(['Death Strike (1 Stress)']);
+    await box.queryAll('button')[0].click();
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
+      actorId: 'actor-b', key: 'feat:Death Strike', actionId: 'use', roll: { id: original.id, ts: original.ts },
+    });
+  });
+
+  it('disables poison reactions without tokens and filters out attacks without a weapon', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', { name: 'Toxic Concoctions', automation: {
+      resources: [{ id: 'poison', label: 'Poison tokens', initial: 0 }],
+      rollTriggers: [{ id: 'poison', label: 'Afflict with poison', on: 'attack', weaponAttack: true, cost: { poison: 1 } }],
+    } });
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, source: 'attack,action', weapon: 'Dagger' }, host as never) as unknown as FakeElement;
+    const unarmed = rollButtons({ ...original, source: 'attack,action' }, host as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(unarmed.queryAll('button')).toHaveLength(0);
+    expect(box.queryAll('button').find((b) => b.text.startsWith('Afflict'))?.disabled).toBe(true);
+    c.resources!.poison = 1;
+    for (const refresh of box.listeners.get('refresh-roll-actions') ?? []) await refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').find((b) => b.text.startsWith('Afflict'))?.disabled).toBe(false);
+  });
+
   it('uses a styled Feed popup with inline validation, cancellation, retry and single submission', async () => {
     const body = new FakeElement('body');
     vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });
@@ -249,7 +311,18 @@ describe('cross-player roll buttons', () => {
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
       actorId: 'actor-b', roll: { id: original.id, ts: original.ts },
     });
+
     expect(c.hope.on).toBe(2);
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
+  it.each([[9, 3], [8, 8]])('never offers standard rewards on reaction rolls (%s)', async (hope, fear) => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const { host } = hostFor({ 'actor-b': character('Bob', undefined) });
+    const box = rollButtons({ ...original, source: 'trait:Agility,reaction', rolls: [hope, fear], rewardClaimed: false }, {
+      ...host, playerId: 'player-b', supportsRollRewards: () => true,
+    } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(box.queryAll('button')).toHaveLength(0);
   });
 

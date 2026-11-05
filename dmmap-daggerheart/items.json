@@ -774,7 +774,13 @@
    "id": "anchoring-hook",
    "name": "Anchoring Hook",
    "rarity": "Common",
-   "text": "When you make a reaction roll to avoid being moved against your will, you can deploy this anchor to gain advantage on the roll, and resistance to any damage you take from the movement."
+   "text": "When you make a reaction roll to avoid being moved against your will, you can deploy this anchor to gain advantage on the roll, and resistance to any damage you take from the movement.",
+   "automation": {
+    "rollOptions": [
+     { "id": "anchor", "label": "Avoid forced movement", "roll": "reaction", "advantage": "advantage",
+      "description": "Use only to avoid being moved against your will. Resistance to damage from that movement is resolved in the damage dialog." }
+    ]
+   }
   },
   {
    "id": "ancient-runestone",

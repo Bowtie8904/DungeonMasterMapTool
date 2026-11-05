@@ -82,6 +82,15 @@ class ChatCardsTest {
     }
 
     @Test
+    void derivesDoubledDamageDetailsWithoutAddingAnExtraModifier() {
+        var details = ChatCards.rollDetails("(3d8kh2+2+2d4+24)*2", List.of(1, 8, 4, 2, 3), false, null);
+        assertEquals(List.of(24, 4, 10, 48), details.stream().map(ChatCards.Detail::total).toList());
+        assertEquals(List.of(1, 8, 4, 2, 3), details.stream().flatMap(d -> d.rolls().stream()).toList());
+        assertEquals(List.of("(3d8kh2)*2", "(+2)*2", "(+2d4)*2", "(+24)*2"),
+                details.stream().map(ChatCards.Detail::expression).toList());
+    }
+
+    @Test
     void derivesDetailsFromExpression() {
         var details = ChatCards.rollDetails("2d6+3", List.of(4, 5), false, null);
         assertEquals(2, details.size());

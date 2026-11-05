@@ -38,6 +38,7 @@ describe('community catalog automation', () => {
 
   class DialogElement {
     className = '';
+    hidden = false;
     value = '';
     type = '';
     checked = false;
@@ -56,6 +57,8 @@ describe('community catalog automation', () => {
         else this.children.push(node);
       }
     }
+    replaceChildren(...nodes: DialogElement[]): void { this.children = nodes; }
+    setAttribute(): void {}
     addEventListener(type: string, callback: () => void): void {
       this.listeners.set(type, [...(this.listeners.get(type) ?? []), callback]);
     }
@@ -93,6 +96,115 @@ describe('community catalog automation', () => {
   }
 
   describe('community roll dialog wiring', () => {
+    it.each([true, false])('switches trait rolls to reaction, filtering bonuses and paying only sent selections (%s)', sent => {
+      const c = emptyCharacter('Elf');
+      c.stress.slots = 6;
+      c.heritage = [{ source: 'Ancestry - Elf', name: 'Quick Reactions', text: '', automation: {
+        rollOptions: [{ id: 'reaction', label: 'Quick Reactions', roll: 'reaction', advantage: 'advantage', cost: { stress: 1 } }],
+      } }];
+      c.features = [{ source: 'Community - Orderborne', name: 'Action only', text: '', automation: {
+        modifiers: [{ roll: 'action', value: 3 }, { roll: 'reaction', value: 1 }],
+        rollOptions: [{ id: 'action', label: 'Action option', roll: 'action', value: 2 }],
+      } }];
+      const body = new DialogElement('body');
+      vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
+      const send = vi.fn((_request: RollRequest) => sent);
+      openRollDialog(body as unknown as HTMLElement, c, 'Agility', [{ label: 'Agility', expression: '2' }],
+        rollBonus(c, ['trait:Agility', 'action'], undefined, false), send, () => undefined, ['trait:Agility', 'action']);
+      expect(body.text).not.toContain('Quick Reactions');
+      const mode = (text: string) => body.find(e => e.tag === 'button' && e.text === text).fire('click');
+      mode('Reaction roll');
+      expect(body.text).toContain('Quick Reactions');
+      expect(body.text).not.toContain('Action option');
+      const selectReaction = () => {
+        const checkbox = body.find(e => e.tag === 'label' && e.text.includes('Quick Reactions')).find(e => e.tag === 'input');
+        checkbox.checked = true;
+        checkbox.fire('change');
+      };
+      selectReaction();
+      expect(c.stress.on).toBe(0);
+      mode('Normal roll');
+      expect(body.text).not.toContain('Quick Reactions');
+      expect(body.text).toContain('Action option');
+      mode('Reaction roll');
+      expect(body.find(e => e.tag === 'label' && e.text.includes('Quick Reactions')).find(e => e.tag === 'input').checked).toBe(false);
+      selectReaction();
+      body.find(e => e.tag === 'button' && e.text === 'Roll to chat').fire('click');
+      expect(send.mock.calls[0][0]).toMatchObject({
+        source: 'reaction,trait:Agility', kind: 'duality', expression: '2d12+1d6+3',
+      });
+      expect(c.stress.on).toBe(sent ? 1 : 0);
+    });
+
+    it.each([undefined, 9, 20, 0, 21, 1.5, NaN])('prefills only attack-linked Fear Leaf inputs and keeps them editable (%s)', attackFear => {
+      const c = emptyCharacter('Assassin');
+      c.resources = { poison: 2 };
+      c.features = [{ source: 'Poisoners Guild', name: 'Venomancer', text: '', automation: {
+        resources: [{ id: 'poison', label: 'Poison tokens', initial: 0 }],
+        rollOptions: [
+          { id: 'leaf', label: 'Fear Leaf', roll: 'damage', cost: { poison: 1 },
+            input: { label: 'Fear Die', default: 1, min: 1, max: 20, source: 'attackFear' } },
+          { id: 'other', label: 'Other input', roll: 'damage', input: { label: 'Other', default: 2, min: 1, max: 20 } },
+        ],
+      } }];
+      const weapon = { name: 'Dagger', slot: 'Primary' as const, trait: 'Finesse' as const, damage: 'd8', damageType: 'phys' as const, range: 'Melee', hands: 1 as const, tier: 1 };
+      const body = new DialogElement('body');
+      vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
+      const send = vi.fn((_request: RollRequest) => true);
+      openRollDialog(body as unknown as HTMLElement, c, 'Damage', [], rollBonus(c, ['damage']), send, () => undefined,
+        ['damage'], weapon, undefined, undefined, false, undefined, undefined, attackFear);
+      const amount = body.find(element => element.tag === 'label' && element.text.startsWith('Fear Die'))
+        .find(element => element.tag === 'input');
+      expect(amount.value).toBe(String(attackFear === 9 || attackFear === 20 ? attackFear : 1));
+      const other = body.find(element => element.tag === 'label' && element.text.startsWith('Other') && element.children.some(child => child.type === 'number'))
+        .find(element => element.tag === 'input');
+      expect(other.value).toBe('2');
+      const checkbox = body.find(element => element.tag === 'label' && element.text.includes('Fear Leaf'))
+        .find(element => element.tag === 'input');
+      expect(checkbox.checked).toBe(false);
+      expect(c.resources.poison).toBe(2);
+      amount.value = '6';
+      amount.fire('input');
+      checkbox.checked = true;
+      checkbox.fire('change');
+      body.find(element => element.tag === 'button' && element.text === 'Roll to chat').fire('click');
+      expect(send.mock.calls[0][0].expression).toBe('1d8+6');
+      expect(c.resources.poison).toBe(1);
+    });
+
+    it.each([true, false])('gates damage doubling on the host capability (%s)', supported => {
+      const c = emptyCharacter('Assassin');
+      c.proficiency.on = 2;
+      c.features = [{ source: 'Executioners Guild', name: 'First Strike', text: '', automation: {
+        rollOptions: [{ id: 'double', label: 'First Strike', roll: 'damage', multiplier: 2 }],
+      } }];
+      const weapon = { name: 'Dagger', slot: 'Primary' as const, trait: 'Finesse' as const, damage: 'd8+2', damageType: 'phys' as const, range: 'Melee', hands: 1 as const, tier: 1 };
+      const body = new DialogElement('body');
+      vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
+      const send = vi.fn((_request: RollRequest) => true);
+      openRollDialog(body as unknown as HTMLElement, c, 'Damage', [], rollBonus(c, ['damage']), send, () => undefined,
+        ['damage'], weapon, undefined, undefined, true, undefined, () => supported);
+      const checkbox = body.find(element => element.tag === 'label' && element.text.includes('First Strike'))
+        .find(element => element.tag === 'input');
+      checkbox.checked = true;
+      checkbox.fire('change');
+      const go = body.find(element => element.tag === 'button' && element.text === 'Roll to chat');
+      expect(go.disabled).toBe(!supported);
+      go.fire('click');
+      if (supported) {
+        expect(send.mock.calls[0][0]).toMatchObject({
+          expression: '(2d8+2+16)*2',
+          contributions: expect.arrayContaining([
+            expect.objectContaining({ expression: '(2d8)*2' }),
+            expect.objectContaining({ expression: '(16)*2' }),
+          ]),
+        });
+      } else {
+        expect(send).not.toHaveBeenCalled();
+        expect(body.text).toContain('Update the host');
+      }
+    });
+
     it('sends Dedicated with a real d20 Hope die and consumes its rest use', () => {
       const { c, send, go } = rollDialog('Orderborne');
       go.fire('click');

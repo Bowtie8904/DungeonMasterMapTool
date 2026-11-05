@@ -24,6 +24,13 @@ function character(name: string) {
 }
 
 describe('transformation automation', () => {
+  it('applies Gifted to reaction rolls without stacking its action bonus', () => {
+    const c = character('Demigod');
+    expect(rollBonus(c, ['reaction', 'trait:Agility']).value).toBe(1);
+    expect(rollBonus(c, ['action', 'trait:Agility']).value).toBe(1);
+    expect(rollBonus(c, ['damage']).value).toBe(1);
+  });
+
   it('applies Ghost physical resistance without stacking and doubles magic before reductions', () => {
     const c = character('Ghost');
     const options = availableMitigations(c);
@@ -44,10 +51,15 @@ describe('transformation automation', () => {
     const hungry = availableRollOptions(c, ['action']).find((o) => o.option.id === 'hungry')!;
     expect(hungry.option.defaultOn).toBe(true);
     expect(suggestedAdvantage([hungry])).toBe(-1);
+    const reaction = availableRollOptions(c, ['reaction', 'trait:Agility']);
+    expect(reaction).toHaveLength(1);
+    expect(suggestedAdvantage(reaction)).toBe(-1);
+    expect(reaction.some((o) => o.option.fearDie === 20)).toBe(false);
     expect(availableRollOptions(c, ['damage'])).toHaveLength(0);
     let spend = availableRollOptions(c, ['action']).find((o) => o.option.fearDie === 20)!;
     expect(selectionBlocker(c, [spend])).toBeTruthy();
     c.resources!.feedTokens = 3;
+    expect(availableRollOptions(c, ['reaction', 'trait:Agility'])).toHaveLength(0);
     expect(availableRollOptions(c, ['action']).some((o) => o.option.id === 'hungry')).toBe(false);
     spend = availableRollOptions(c, ['action']).find((o) => o.option.fearDie === 20)!;
     commitRollOptions(c, [spend]);

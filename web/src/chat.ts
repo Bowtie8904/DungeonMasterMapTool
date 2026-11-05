@@ -30,7 +30,9 @@ export function rollDetails(m: RollMessage): RollDetail[] {
   const rolls = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   let index = 0;
   const details: RollDetail[] = [];
-  for (const match of m.expression.matchAll(/([+-]?)(?:(\d*)d(\d+)(?:kh(\d+))?|(\d+))/gi)) {
+  const doubled = m.expression.startsWith('(') && m.expression.endsWith(')*2');
+  const formula = doubled ? m.expression.slice(1, -3) : m.expression;
+  for (const match of formula.matchAll(/([+-]?)(?:(\d*)d(\d+)(?:kh(\d+))?|(\d+))/gi)) {
     const expression = match[0];
     if (match[3]) {
       const count = Number(match[2] || 1);
@@ -51,7 +53,7 @@ export function rollDetails(m: RollMessage): RollDetail[] {
       details.push({ label: 'Modifier', expression, rolls: [], total: Number(expression) });
     }
   }
-  return details;
+  return doubled ? details.map((d) => ({ ...d, expression: `(${d.expression})*2`, total: d.total * 2 })) : details;
 }
 
 function rollContent(m: RollMessage): HTMLElement {
@@ -76,13 +78,15 @@ function rollContent(m: RollMessage): HTMLElement {
       dice.append(tile);
     }
   }
-  const modifier = m.total - (duality ? values[0] + values[1] : values.reduce((n, v, i) => n + (kept[i] ? v : 0), 0));
+  const doubled = !secret && m.expression.startsWith('(') && m.expression.endsWith(')*2');
+  const modifier = m.total / (doubled ? 2 : 1) - (duality ? values[0] + values[1] : values.reduce((n, v, i) => n + (kept[i] ? v : 0), 0));
   const equation = el('div', { class: 'roll-equation' }, dice,
     ...(secret ? [] : [el('span', { class: `roll-modifier${modifier < 0 ? ' negative' : ''}`, title: duality ? 'Combined modifiers, including bonus dice' : 'Combined modifiers' }, signed(modifier))]),
+    ...(doubled ? [el('span', { class: 'roll-modifier', title: 'Double the entire rolled damage, including modifiers' }, 'x2 (all)')] : []),
     el('span', { class: 'roll-equals' }, '='),
     el('div', { class: 'roll-total' }, el('span', {}, 'TOTAL'), el('strong', {}, secret ? '?' : String(m.total))));
   const body = el('div', { class: 'roll-body' },
-    el('div', { class: 'roll-title' }, m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')), equation);
+    el('div', { class: 'roll-title' }, `${m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')}${m.source?.split(',').includes('reaction') ? ' - Reaction roll' : ''}`), equation);
   if (secret) return body;
   if (duality) {
     const r = dualityResult(values, m.total);

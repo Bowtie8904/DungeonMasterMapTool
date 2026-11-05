@@ -4,7 +4,7 @@ import { emptyCharacter, type CharacterSheet } from './data';
 import type { CompendiumFile } from './compendium';
 import {
   actionBlocker, availableRollOptions, availableRollTriggers, commitRollOptions, damageExpression,
-  effectiveAdvantage, rollBonus, runAction, selectedRollBonus, selectionBlocker, suggestedAdvantage, usesLeft, type Automation,
+  effectiveAdvantage, rollBonus, rollTargets, runAction, selectedRollBonus, selectionBlocker, suggestedAdvantage, usesLeft, type Automation,
 } from './engine';
 import { applyDamage, availableMitigations, computeDamage, mitigationBlocker } from './damage';
 
@@ -27,9 +27,44 @@ function character(ancestry: string): CharacterSheet {
 }
 
 describe('ancestry automation and matching catalog rules', () => {
+  it('offers Anchoring Hook only on reactions and only while in stock', () => {
+    const c = character('elf');
+    const hook = catalog('items').entries.find((entry) => entry.id === 'anchoring-hook')!;
+    c.inventory = [{ name: hook.name, type: 'gear', qty: 1, automation: hook.automation }];
+    expect(availableRollOptions(c, ['action', 'trait:Agility'])).toHaveLength(0);
+    expect(availableRollOptions(c, ['reaction', 'trait:Agility']).map((option) => option.source))
+      .toEqual(['Quick Reactions', 'Anchoring Hook']);
+    c.inventory[0].qty = 0;
+    expect(availableRollOptions(c, ['reaction']).map((option) => option.source)).toEqual(['Quick Reactions']);
+  });
+
+  it('separates reaction-only and action-only chat triggers while retaining generic Duality triggers', () => {
+    const c = character('elf');
+    c.features = [{ source: 'Test', name: 'Modes', text: '', automation: { rollTriggers: [
+      { id: 'action', label: 'Action only', on: 'action' },
+      { id: 'reaction', label: 'Reaction only', on: 'reaction' },
+      { id: 'either', label: 'Either', on: 'duality' },
+    ] } }];
+    const ctx = { source: 'reaction,trait:Agility', hope: 8, fear: 4, total: 12 };
+    expect(availableRollTriggers(c, ctx).map((trigger) => trigger.trigger.id)).toEqual(['reaction', 'either']);
+    expect(availableRollTriggers(c, { ...ctx, source: 'action,trait:Agility' }).map((trigger) => trigger.trigger.id))
+      .toEqual(['action', 'either']);
+  });
+
+  it('replaces action with reaction and keeps the mode ahead of bounded source descriptions', () => {
+    const targets = ['spellcast', 'trait:Instinct', `card:${'Long spell name'.repeat(8)}`, 'action'];
+    const reaction = rollTargets(targets, true);
+    expect(reaction).not.toContain('action');
+    expect(reaction).toContain('trait:Instinct');
+    expect(reaction.join(',').slice(0, 80).split(',')).toContain('reaction');
+    expect(rollTargets(reaction, false)).not.toContain('reaction');
+    expect(rollTargets(reaction, false)[0]).toBe('action');
+  });
+
   it('offers Quick Reactions as an optional reaction-roll advantage costing one Stress', () => {
     const c = character('elf');
-    const options = availableRollOptions(c, ['action', 'trait:Agility']);
+    expect(availableRollOptions(c, ['action', 'trait:Agility'])).toHaveLength(0);
+    const options = availableRollOptions(c, ['reaction', 'trait:Agility']);
     const reaction = options.find(o => o.source === 'Quick Reactions')!;
     expect(reaction.option).toMatchObject({
       label: 'Quick Reactions (reaction roll)', cost: { stress: 1 }, advantage: 'advantage',
@@ -44,7 +79,7 @@ describe('ancestry automation and matching catalog rules', () => {
     expect(c.stress.on).toBe(1);
     c.stress.on = c.stress.slots;
     expect(selectionBlocker(c, [reaction])).toBeTruthy();
-    expect(rules('elf', 'Quick Reactions').actions![0].cost).toEqual({ stress: 1 });
+    expect(rules('elf', 'Quick Reactions').actions).toBeUndefined();
   });
 
   it('never counts per-scene uses anywhere in the maintained catalog', () => {
@@ -210,5 +245,17 @@ describe('ancestry automation and matching catalog rules', () => {
     for (const [category, name] of [['items', 'Skeleton Key'], ['items', 'Veilcloak'], ['armor', 'Deep-Forged Coral Armor']]) {
       expect(find(category, name).rollOptions![0].advantage).toBe('advantage');
     }
+  });
+
+  it('excludes attacks from Stealth Expertise without excluding non-attack Fear actions', () => {
+    const c = character('galapa');
+    const card = catalog('domain-cards').entries.find((e) => e.name === 'Stealth Expertise')!;
+    c.loadout = [{ name: card.name, text: card.text!, domain: 'Midnight', type: 'Ability', level: 4, recall: 0, automation: card.automation }];
+    const ctx = { source: 'action,trait:Agility', hope: 3, fear: 9, total: 12 };
+    expect(availableRollTriggers(c, ctx).filter((t) => t.source === card.name)).toHaveLength(1);
+    for (const source of ['attack,action,trait:Agility', 'action,attack,spellcast', 'attack']) {
+      expect(availableRollTriggers(c, { ...ctx, source }).filter((t) => t.source === card.name)).toHaveLength(0);
+    }
+    expect(availableRollTriggers(c, { ...ctx, hope: 10 }).filter((t) => t.source === card.name)).toHaveLength(0);
   });
 });

@@ -12,6 +12,28 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('adds reaction-only gear options without replacing existing custom mechanics or duplicating options', () => {
+    const c = mockCharacter();
+    c.inventory = [{ name: 'Anchoring Hook', type: 'gear', qty: 1, automation: {
+      modifiers: [{ stat: 'evasion', value: 2 }],
+    } }];
+    const files: CompendiumFile[] = [{
+      format: 'dmmap-daggerheart', version: 1, label: 'Items', category: 'items', entries: [{
+        id: 'anchoring-hook', name: 'Anchoring Hook', automation: {
+          rollOptions: [{ id: 'anchor', label: 'Avoid forced movement', roll: 'reaction', advantage: 'advantage' }],
+        },
+      }],
+    }];
+    updateCharacterAutomation(c, files);
+    const rules = c.inventory[0].automation!;
+    expect(rules.rollOptions).toHaveLength(1);
+    rules.rollOptions![0].label = 'GM label';
+    updateCharacterAutomation(c, files);
+    expect(rules.rollOptions).toHaveLength(1);
+    expect(rules.rollOptions![0].label).toBe('GM label');
+    expect(rules.modifiers).toEqual([{ stat: 'evasion', value: 2 }]);
+  });
+
   it('merges DM domain additions without replacing pending card edits on ordinary inventory updates', () => {
     const c = mockCharacter();
     c.notes = 'Pending notes';

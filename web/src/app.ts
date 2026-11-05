@@ -1130,6 +1130,7 @@ export class App {
             },
             artwork: a.artwork,
             supportsKeptDice: () => this.conn.keptDice,
+            supportsRollMultipliers: () => this.conn.rollMultipliers,
             onRoll: (r) => {
               const sent = this.conn.send({ type: 'roll', ...r });
               if (!sent) this.toast('Not connected. Your roll was not sent.');

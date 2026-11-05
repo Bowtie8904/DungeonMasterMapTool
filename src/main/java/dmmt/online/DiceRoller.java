@@ -21,7 +21,7 @@ public final class DiceRoller {
     private record Keep(int offset, int count, int kept) {
     }
 
-    private record Terms(List<Integer> dice, int modifier, List<Keep> keeps) {
+    private record Terms(List<Integer> dice, int modifier, List<Keep> keeps, int multiplier) {
     }
 
     private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)(?:kh(\\d+))?|(\\d+))");
@@ -58,6 +58,9 @@ public final class DiceRoller {
         int index = 0;
         for (Contribution contribution : contributions) {
             Terms part = terms(contribution.expression(), maxDice);
+            if (part.multiplier() != expected.multiplier()) {
+                throw new IllegalArgumentException("Roll breakdown does not match the damage multiplier");
+            }
             for (Keep keep : part.keeps()) {
                 keeps.add(new Keep(index + keep.offset(), keep.count(), keep.kept()));
             }
@@ -86,13 +89,18 @@ public final class DiceRoller {
                     .limit(keep.count() - keep.kept()).sum();
             total -= sign * discarded;
         }
-        return total;
+        return total * terms.multiplier();
     }
 
     private static Terms terms(String expression, int maxDice) {
         expression = expression == null ? "" : expression.trim().toLowerCase(Locale.ROOT).replace(" ", "");
         if (expression.isEmpty() || expression.length() > 100) {
             throw new IllegalArgumentException("Invalid dice expression");
+        }
+        int multiplier = 1;
+        if (expression.startsWith("(") && expression.endsWith(")*2")) {
+            expression = expression.substring(1, expression.length() - 3);
+            multiplier = 2;
         }
         Matcher matcher = TERM.matcher(expression);
         int position = 0;
@@ -133,7 +141,8 @@ public final class DiceRoller {
             first = false;
             position = matcher.end();
         }
-        return new Terms(sidesList, total, keeps);
+        if (first) throw new IllegalArgumentException("Invalid dice expression");
+        return new Terms(sidesList, total, keeps, multiplier);
     }
 
     private static int parse(String digits) {

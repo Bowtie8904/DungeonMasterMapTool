@@ -5,7 +5,7 @@ import { el } from '../login';
 import { claimRollReward, useFeature } from '../api';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { availableRollTriggers, costText, usesLeft } from './engine';
+import { actionBlocker, availableRollTriggers, costText, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 
@@ -25,8 +25,11 @@ export interface RollButtonHost {
   supportsRollRewards?: () => boolean;
 }
 
-/** Context of a finished duality roll, or null when the message is not a duality roll. */
+/** Context of a finished duality or damage roll. */
 export function rollContext(m: RollMessage): RollContext | null {
+  if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
+    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage' };
+  }
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
   return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon } as RollContext;
@@ -74,7 +77,8 @@ function openTokenGain(t: AvailableRollTrigger, cost: string, submit: (amount: n
 export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
   const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
-  if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+') ? '1d20' : '1d12', source: 'reroll' };
+  if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+') ? '1d20' : '1d12',
+    source: m.source?.split(',').includes('reaction') ? 'reroll,reaction' : 'reroll' };
   original ??= {
     label: m.label ?? 'Roll',
     expression: m.expression,
@@ -149,8 +153,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
   const paint = (sheets: Array<{ actorId: string; sheet: RollButtonSheet }>) => {
     const buttons: HTMLElement[] = [];
     const rolledActor = actorId ? sheets.find((entry) => entry.actorId === actorId) : undefined;
-    const critical = !!ctx && ctx.hope === ctx.fear;
-    const withHope = !!ctx && (critical || (ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) === 'hope');
+    const critical = !!ctx && ctx.kind !== 'damage' && ctx.hope === ctx.fear;
+    const withHope = !!ctx && ctx.kind !== 'damage' && !ctx.source.split(',').includes('reaction')
+      && (critical || (ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) === 'hope');
     if (rolledActor && withHope && m.fromId === host.playerId && host.supportsRollRewards?.() && m.rewardClaimed === false) {
       const { character: c, save } = rolledActor.sheet;
       const reward = el('button', { class: 'small primary', type: 'button' },
@@ -178,7 +183,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
     }
     if (rolledActor && isAttack && m.weapon) {
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
-      damage.addEventListener('click', () => { if (!rolledActor.sheet.bus.damage?.(m.weapon!, !!ctx && ctx.hope === ctx.fear)) host.toast(`${m.weapon} is no longer equipped.`); });
+      damage.addEventListener('click', () => { if (!rolledActor.sheet.bus.damage?.(m.weapon!, critical, ctx?.kind !== 'damage' ? ctx?.fear : undefined)) host.toast(`${m.weapon} is no longer equipped.`); });
       buttons.push(damage);
     }
 
@@ -198,7 +203,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const cost = costText(t.trigger.cost, c);
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
-        b.title = t.trigger.description ?? t.source;
+        const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
+        b.disabled = !!blocked;
+        b.title = blocked ?? t.trigger.description ?? t.source;
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;

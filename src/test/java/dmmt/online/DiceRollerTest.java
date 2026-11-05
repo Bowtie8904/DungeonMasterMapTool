@@ -9,6 +9,29 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void doublesRolledDamageIncludingKeptDiceBonusesAndCriticalWithoutExtraRolls() {
+        var result = DiceRoller.roll("(3d8kh2+2+2d4+24)*2", 5, faces(1, 8, 4, 2, 3));
+        assertEquals(List.of(1, 8, 4, 2, 3), result.rolls());
+        assertEquals(86, result.total());
+        var details = DiceRoller.breakdown(result, List.of(
+                new DiceRoller.Contribution("Weapon", "(3d8kh2)*2"),
+                new DiceRoller.Contribution("Modifier", "(2)*2"),
+                new DiceRoller.Contribution("Marked", "(2d4)*2"),
+                new DiceRoller.Contribution("Critical", "(24)*2")), 5);
+        assertEquals(List.of(24, 4, 10, 48), details.stream().map(DiceRoller.Detail::total).toList());
+        assertEquals(result.total(), details.stream().mapToInt(DiceRoller.Detail::total).sum());
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.breakdown(result,
+                List.of(new DiceRoller.Contribution("False multiplier", "3d8kh2+2+2d4+24")), 5));
+        var ordinary = DiceRoller.roll("d8", 1, faces(5));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.breakdown(ordinary,
+                List.of(new DiceRoller.Contribution("False multiplier", "(d8)*2")), 1));
+        for (String expression : List.of("()*2", "(d8)*0", "(d8)*3", "((d8)*2)*2", "(d8+)*2", "d8*2")) {
+            assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll(expression, 5, faces()), expression);
+        }
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll("(3d8)*2", 2, faces()));
+    }
+
+    @Test
     void keepsHighestWithoutReorderingOrOmittingDiscardedDice() {
         var result = DiceRoller.roll("/roll 4D6KH3 + 6", 4, faces(4, 1, 6, 3));
         assertEquals("4d6kh3+6", result.expression());

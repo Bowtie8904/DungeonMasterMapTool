@@ -34,6 +34,8 @@ Nothing starts until you click **Start online session**, so offline play and the
     folders, or **drag an actor straight onto the map** to place it there (like the token browser).
   - **Connected:** connected players with their open tabs and ping; right-click to kick.
 - **Roll context:** feature actions and Spellcast rolls have a subtle, collapsed **Source** section in chat.
+  Reports from chat action buttons (including Marked For Death and Death Strike) also show the activated
+  feature's description and origin, retained in saved chat history rather than the original weapon's source.
   Expand it to read the feature, card or individual grimoire spell without opening the sheet.
   Spellcast titles name their source; descriptions stay with history, follow-up spell damage and rerolls.
 - **Testing characters (Daggerheart):** right-click the Actors tree or a folder and choose **New testing
@@ -99,6 +101,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   is disabled, except a critical can still clear marked Stress; capped rewards are not consumed.
   Rerolls produce a single roll card. Session-limited features reset when the DM stops and starts hosting,
   not when a player reconnects; per-scene use counters are not tracked.
+  Changing Hope, Stress, HP, Armor, Proficiency, gold or a resource pool on the sheet immediately enables or
+  disables the affected feature, item and card action buttons; no tab switch is needed.
   Ignition is a primary-weapon damage option, paid once while its removable buff is active. Retract preselects
   physical resistance and action-roll disadvantage and prevents player token movement (the DM can still move it).
   Surefooted, Natural Climber and Hunter's Nose appear as applicable trait-roll options; suggested advantage or
@@ -193,6 +197,12 @@ Nothing starts until you click **Start online session**, so offline play and the
   Feature action cards name their origin without duplicated feature names (for example, **Hearthborne - Close-Knit**).
   Roll-option labels also keep qualifiers without repeating the feature name, such as **Elf - Quick Reactions (reaction roll)**
   and **Orderborne - Dedicated (Hope d20)**.
+  Trait roll dialogs offer **Normal roll / Reaction roll** beneath advantage/disadvantage. Reaction rolls are
+  marked in player and DM chat and never award the standard Hope or critical Stress recovery.
+  Reaction-only options (Elf Quick Reactions and Anchoring Hook) appear only in Reaction mode;
+  action-only options such as Dedicated are hidden there. Switching modes discards previous bonus selections.
+  Demigod Gifted and Vampire no-token disadvantage apply to both kinds; spending Feed tokens for a Fear d20
+  remains action-only. Situational requirements (such as avoiding forced movement) still need player confirmation.
   Orderborne Dedicated can replace the Hope die with a d20 from the roll dialog; Reborne Found Family spends
   1 Hope for an editable ally Experience bonus (default +2). Seaborne Know the Tide has a level-capped token counter
   on its feature, a gain button on Fear rolls and a quantity selector when spending tokens; tokens survive reconnects
@@ -221,6 +231,18 @@ Nothing starts until you click **Start online session**, so offline play and the
   consumables: a "+1 to your next Agility roll" potion in the inventory appears unticked (ticking it uses up one
   potion when the roll is sent), and a potion you already drank appears pre-ticked and is spent by that roll.
   See the format reference for the complete catalog audit and configuration examples.
+  **Assassin:** weapon-attack chat cards offer **Marked For Death** (1 Stress, starts an effect) and
+  **Afflict with poison** (1 poison token). While the mark is active, any damage dialog offers tier-count
+  d4s, upgraded to d6s by Ambush and d8s by Backstab; select it only against the marked adversary.
+  **First Strike** optionally doubles the final damage, including bonuses and critical damage.
+  **Death Strike** is available on damage results and the feature; confirm Severe damage with the GM.
+  **True Strike** is available on attack results, sharing its Hope cost and long-rest limit with the feature.
+  Poison tokens clear automatically on a long rest. **Fear Leaf** offers an editable attack Fear Die result
+  as bonus damage, prefilled from that attack when opening Damage from its chat card (direct sheet damage
+  keeps the manual default). Fear Leaf and Leech Weed damage options each spend their own token: do not also use
+  Afflict with poison for that same poison. First-success, hit and target conditions remain player-confirmed;
+  remove the mark when its target dies or the GM clears it with Fear. Older hosts disable damage doubling
+  with an update-required message; restart the updated host and reload browser clients for these changes.
   The account becomes available when its last tab disconnects, on logout or when you kick the player.
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
@@ -245,6 +267,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
+  Midnight's **Stealth Expertise** reaction is offered on non-attack Fear action rolls only, for yourself
+  or an ally; moving unnoticed and the ally's range still require player confirmation.
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
   `online.chat`), with an unread dot, recipient dropdown and `/roll`. The **secret roll** button (or `/secret 2d6`)
   shows players only `?` instead of numbers while dice type and count stay visible; the DM sees the real result.

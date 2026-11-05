@@ -56,6 +56,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   and sheet/feature saves, strips them from sheet files and transaction journals, and resets them on new hosting.
   Know the Tide uses this with `max: "@level"`; its Fear-roll trigger gains tokens once per roll.
   `longRestLoss` subtracts that many tokens automatically on each long rest, floored at zero (Feed).
+  `resetOn: "longRest"|"shortRest"|"rest"` restores the pool to `initial` on that rest;
+  a long rest also counts as a short rest. Toxic Concoctions uses `initial: 0, resetOn: "longRest"`.
 - **uses**: `max` per `shortRest`, `longRest`, `rest` or `session`. Every hosting run starts a new session;
   reconnecting does not. Per-scene counters are deliberately not tracked, including old saved scene limits.
   Scene-duration effects still exist and are removable in Effects. Source-wide uses are shared by its actions/options; a roll option's own `uses` is an independent
@@ -120,6 +122,10 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   use the same convention; a repeated name followed by a parenthetical qualifier, colon or spaced-dash suffix
   replaces the shorter name rather than duplicating it. Roll-option labels use this convention too
   (for example `Orderborne - Dedicated (Hope d20)`). The readable `ACTION USED` chat format is unchanged.
+  Host-generated reports from chat reactions and downtime rerolls also attach `rollSource: {name, text, source}`
+  from the activated feature, not the original attack's weapon. Snapshots retain the feature description and
+  origin in saved history even after later sheet edits; names/origins are bounded to 240 characters and text
+  to 16,000. Reactions preserve the original roll's whisper recipient.
 - **rollTriggers**: optional array of {id, label, on, when?, die?, matchResource?, cost?, steps?, reroll?, advantage?, description?} shown as buttons under rolls in chat. `audience` defaults to `"self"`; `"ally"` offers it on other players' rolls and `"any"` on both. `on` is `duality`, `action`, `attack`, `spellcast` or `trait:<Name>`; `when` is `always` (default), `fear`, `hope`, `failure` (shown on every roll, since players never know the difficulty), `hopeDie` (with `die`) or `dieMatches` (a Duality Die equals the number in the `matchResource` pool). `outcome: "hope"` changes the original roll's outcome without changing dice or total; Hope/Fear-dependent buttons and outcome badges read that override, while equal dice remain critical. `requiresEffect`/`endEffect` gate a trigger on, and end, an active effect (Ranger's Focus). `on` may also be `card:<Card Name>` for a domain card's own Spellcast roll. A trigger with `damage: {dice, fixed?, extraDice?, type?}` opens the damage dialog (`fixed` uses the dice count as written, otherwise it scales with Proficiency; `extraDice` adds Proficiency dice) and only pays its cost/steps when the damage is sent. Actions may carry their own `uses: {max, per}` (per-action limit) and `sendRoll: {dice, base: 'evasion', label}` which posts a plain roll to the chat without changing the sheet (I See It Coming). Spell cards only get a Spellcast button when their text asks for the roll. The roll dialog uses Advantage / Normal / Disadvantage buttons and a Critical checkbox for damage. `reroll` `hope` rolls a new Hope Die; `duality` repeats the roll (`advantage` adds a d6). Rerolls produce only a roll card, never a duplicate action message. Attack rolls also get a Damage button that behaves like the sheet's, including configured ancestry weapons.
 - **Roll rewards:** `outcome: "hope"` never grants Hope automatically. The original roller claims +1 Hope
   from the updated chat card, once per roll. Critical rolls instead claim +1 Hope and clear 1 Stress.
@@ -131,6 +137,26 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   The feature request adds it to the capped pool atomically with the cost and per-roll
   claim (Feed); hit success and ability to bleed are player-confirmed. `when: "hopeOrCritical"` includes equal
   Duality Dice (Wolf Form); existing `when: "hope"` continues to exclude criticals.
+  `on: "damage"` offers a reaction on damage results, including single-die rolls, without inventing
+  Hope/Fear dice or offering Duality-only reactions. Damage triggers use `when: "always"` (default);
+  the host enforces the roll kind, ownership, costs and one use per roll (Death Strike).
+  `weaponAttack: true` requires an attack source with a named weapon (Marked For Death, Toxic Concoctions).
+  Success, target state and damage severity remain player-confirmed, not inferred from dice or prose.
+  `excludeRolls: ["attack"]` suppresses a trigger whenever any excluded target appears in the roll source,
+  even when its `on` target also matches. Both browser and host enforce this for Stealth Expertise,
+  including reactions to allies' attacks; non-attack Fear action rolls remain eligible.
+- **Reaction rolls:** the existing comma-separated roll `source` uses `reaction` instead of `action`,
+  retaining trait/spellcast targets. `roll: "reaction"` gates optional bonuses and modifiers to reaction rolls;
+  `on: "reaction"` gates chat triggers. Declare separate entries for bonuses explicitly applying to both kinds.
+  The host never offers or accepts standard Hope/critical Stress-clear rewards for reaction rolls.
+  Quick Reactions is a reaction-only option, not a standalone Stress-spend action; Anchoring Hook is an optional
+  reaction advantage with its forced-movement condition player-confirmed. Missing reaction-only equipment options
+  are refreshed from the catalog without overwriting existing customized option ids.
+  Gifted applies to action/reaction/damage, and empty Feed tokens impose disadvantage on action/reaction;
+  Feed's Fear d20 remains action-only. Other reaction-related content (Mucin of Slipperiness restraint resistance,
+  Wraith Trap's stored spirits/psychic condition, Repudiate, Counterspell, Hideous Retribution and Attack of Opportunity)
+  remains manual where no roll automation is declared; use the relevant trait's Reaction mode.
+  No new required message field or compatibility-version change; old rolls without `reaction` retain their behavior.
 - **rollOptions**: optional array of `{id, label, roll, value?, dice?, diceByLevel?, cost?, steps?, description?,
   uses?, consumeItem?, weapon?, effect?}`. `effect` (`{name, kind, until}`) is started by the first roll that ticks
   the option (paying its cost); while that effect is active the option is pre-ticked and free. Entries that support
@@ -161,6 +187,24 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `fearDie: 20` independently replaces the Fear d12 with a d20 (Feed); Hope and Fear can both be d20.
   `resourceEmpty: "<id>"` offers an option only at zero tokens. Combined with `defaultOn` and
   `advantage: "disadvantage"`, it suggests hunger disadvantage without removing the player's override.
+  `dice` and its replacements support `@tier` as a dice count (`"@tierd4"`).
+  `diceByFeature: {"Ambush":"@tierd6","Backstab":"@tierd8"}` replaces the dice when the character has
+  that learned feature; the last matching entry wins. This keeps subclass upgrades in JSON.
+  `multiplier: 2` doubles the entire damage roll after bonuses and critical damage, never the number of dice.
+  It does not stack with another doubling option. The host advertises `hello.rollMultipliers`; older hosts
+  block sending this option with an update-required message. The bounded expression form is `(expression)*2`;
+  named contributions use the same multiplier, which the host validates and applies to the actual rolled dice.
+  Browser and DM chat show the multiplier separately from flat modifiers, preserving raw and discarded dice.
+  Damage dialogs for spells also include ordinary `damage` options.
+  Marked For Death gates its optional bonus with `requiresEffect`; its effect expires on a rest and must be
+  removed manually when the adversary dies or the GM spends Fear. First Strike's first-success condition and
+  Death Strike's Severe-damage condition remain manual. True Strike's chat and sheet actions share source uses.
+  Fear Leaf uses `input` for the attack's Fear Die result (1-20), not the GM Fear pool or a new roll.
+  `input.source: "attackFear"` prefills it from the attack chat card whose Damage button was clicked.
+  The value remains editable and the option stays unticked; direct sheet damage or missing/invalid context
+  uses `input.default`. Other numeric inputs are unaffected; context is not retained between dialogs.
+  Fear Leaf and Leech Weed options each cost one poison token; Afflict with poison is an alternative way
+  to spend a token for a poison, not an additional required payment.
 - **damage**: `{extraDice: number, dropLowest: number}` on a weapon changes **only that source weapon's base
   damage dice**, never bonus dice from coatings/options or another equipped weapon. Powerful/Massive use
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged
