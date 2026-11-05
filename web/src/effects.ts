@@ -16,8 +16,30 @@ export interface EffectSource {
   text: string;
 }
 
+/** Resolve brewed effects from current rules, including effects saved before descriptions were added. */
+export function mutagenEffectSource(c: CharacterSheet, e: ActiveEffect): EffectSource | null {
+  const features = [...c.features, ...c.heritage];
+  for (const feature of features) {
+    for (const action of feature.automation?.actions ?? []) {
+      if (!action.mutagens) continue;
+      const benefit = action.mutagens.benefits.find(b => b.effect.name === e.name);
+      if (benefit && e.source === feature.name)
+        return { title: benefit.effect.name, text: benefit.effect.text ?? e.text ?? '' };
+      if (e.lockedHp && (e.source === feature.name || e.source === e.name)) {
+        const source = features.find(f => f.name === e.name);
+        return { title: `From ${e.name}`, text: source?.text ?? e.text ?? '' };
+      }
+      if (e.name === feature.name && e.source === feature.name)
+        return { title: feature.name, text: e.text ?? '' };
+    }
+  }
+  return null;
+}
+
 /** The action that started the effect, with its description when available. */
 export function effectSource(c: CharacterSheet, e: ActiveEffect): EffectSource | null {
+  const mutagen = mutagenEffectSource(c, e);
+  if (mutagen) return mutagen;
   const name = e.source?.trim().toLowerCase();
   let sourceText: string | undefined;
   if (name) {
@@ -61,6 +83,8 @@ export function renderEffects(
         onToggle();
       });
       const remove = el('button', { class: 'effect-remove', type: 'button', title: `Remove ${e.name}` }, '\u00D7');
+      remove.disabled = !!e.lockedHp;
+      if (e.lockedHp) remove.title = 'This HP lock ends only when you rest.';
       remove.setAttribute('aria-label', `Remove ${e.name}`);
       remove.addEventListener('click', () => { expanded.delete(key); onRemove(g, e); });
       const row = el('div', { class: `effect-row ${e.kind}${open ? ' open' : ''}` }, el('div', { class: 'effect-head' }, label, remove));

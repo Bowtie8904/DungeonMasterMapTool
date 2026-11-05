@@ -88,6 +88,146 @@ class OnlineSessionServerTest {
         return sheet;
     }
 
+    @Test
+    void shadowedGritRejectsReactionsButAllowsFearActionRolls() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("hunter").name("Hunter").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Blood Hunter").put("subclass", "Order of the Ghost Slayer");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("blood-hunter-order-of-the-ghost-slayer-foundation".equals(entry.path("id").asText()))
+                features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        store.saveSheet(campaign.getId(), "hunter", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) < random.nextInt(12)) break;
+                seed++;
+            }
+            for (String source : List.of("reaction,trait:Agility", "action,reaction,trait:Agility", "action,trait:Agility")) {
+                diceSeed(seed);
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", "2d12").put("actorId", "hunter").put("source", source);
+                ws.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "hunter")
+                        .put("key", "feat:Shadowed Grit").put("actionId", "hope");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, request);
+                assertEquals(source.contains("reaction") ? 400 : 200, response.statusCode(), response.body());
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "hunter"));
+                assertEquals(source.contains("reaction") ? 3 : 4, saved.path("stress").path("on").asInt());
+                assertEquals(source.contains("reaction") ? 5 : 6, saved.path("hope").path("on").asInt());
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void grimPsychometryRequiresSuccessfulFeatureRollAndChargesStressOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("hunter").name("Hunter").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Blood Hunter");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("blood-hunter".equals(entry.path("id").asText()))
+                features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        store.saveSheet(campaign.getId(), "hunter", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long unequalSeed = 0;
+            while (true) {
+                var random = new java.util.Random(unequalSeed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                unequalSeed++;
+            }
+            for (String expression : List.of("2d12-100", "2d12+100")) {
+                diceSeed(unequalSeed);
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", expression).put("actorId", "hunter")
+                        .put("source", "action,trait:Agility,spellcast,feat:Grim Psychometry").put("difficulty", 12);
+                ws.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "hunter")
+                        .put("key", "feat:Grim Psychometry").put("actionId", "vision");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, request);
+                if (expression.contains("-")) {
+                    assertEquals(400, response.statusCode(), response.body());
+                    assertTrue(response.body().contains("successful"));
+                    assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "hunter")).path("stress").path("on").asInt());
+                } else {
+                    assertEquals(200, response.statusCode(), response.body());
+                    JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "hunter"));
+                    assertEquals(4, saved.path("stress").path("on").asInt());
+                    assertEquals("Grim Psychometry", saved.path("effects").path(0).path("name").asText());
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                }
+            }
+            long criticalSeed = 0;
+            while (true) {
+                var random = new java.util.Random(criticalSeed);
+                if (random.nextInt(12) == random.nextInt(12)) break;
+                criticalSeed++;
+            }
+            diceSeed(criticalSeed);
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12-100","actorId":"hunter",
+                     "source":"action,spellcast,feat:Grim Psychometry","difficulty":12}
+                    """, true).join();
+            JsonNode critical = inbox.next("roll");
+            ObjectNode claim = MAPPER.createObjectNode().put("actorId", "hunter")
+                    .put("key", "feat:Grim Psychometry").put("actionId", "vision");
+            claim.putObject("roll").put("id", critical.path("id").asLong()).put("ts", critical.path("ts").asLong());
+            assertEquals(200, featureHttp(cookie, claim).statusCode());
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
+    void volatileToxinsBlocksHealingAndManualRemovalButReleasesOnEitherRest() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("mutant").name("Mutant").ownerId(playerId()).build());
+        String cookie = cookie();
+        for (boolean longRest : List.of(false, true)) {
+            ObjectNode sheet = communitySheet("Seaborne");
+            sheet.put("permanentHp", 1);
+            sheet.putArray("effects").addObject().put("id", "locked").put("name", "Volatile Toxins")
+                    .put("kind", "debuff").put("until", "rest").put("lockedHp", 1);
+            store.saveSheet(campaign.getId(), "mutant", sheet.toString());
+            assertEquals(2, DeathMoves.recoverableHp(sheet));
+            assertEquals(2, DeathMoves.clearHp(sheet, 99));
+            assertEquals(2, sheet.path("hp").path("on").asInt());
+            sheet.withObject("/hp").put("on", 0);
+            var save = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/mutant"))
+                    .header("Cookie", cookie);
+            var healed = http.send(save.PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, healed.statusCode(), healed.body());
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mutant"));
+            assertEquals(2, saved.path("hp").path("on").asInt());
+            saved.putArray("effects");
+            var removed = http.send(save.PUT(HttpRequest.BodyPublishers.ofString(saved.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, removed.statusCode(), removed.body());
+            assertTrue(removed.body().contains("locked until"));
+            if (longRest) saved.put("longRestRevision", 1);
+            else saved.put("shortRestsInRow", 1);
+            saved.withObject("/hp").put("on", 1);
+            var rested = http.send(save.PUT(HttpRequest.BodyPublishers.ofString(saved.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, rested.statusCode(), rested.body());
+            JsonNode afterRest = MAPPER.readTree(store.loadSheet(campaign.getId(), "mutant"));
+            assertEquals(1, afterRest.path("hp").path("on").asInt());
+            assertEquals(1, afterRest.path("permanentHp").asInt());
+            assertEquals(0, afterRest.path("effects").size());
+        }
+    }
+
     private String allyCookie(String id) throws Exception {
         campaign.getPlayers().add(Campaign.Player.builder().id(id).name("Ally")
                 .passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build());

@@ -40,7 +40,7 @@
 .dh .vital .lbl { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .dh .vital .big { font-size: 22px; font-weight: 700; line-height: 1.15; }
 .dh .pips { display: flex; flex-wrap: nowrap; gap: 3px; margin-top: 4px; }
-.dh .pip { flex: 0 1 14px; min-width: 8px; aspect-ratio: 1; height: auto; border-radius: 3px; border: 2px solid var(--c, var(--muted)); background: transparent; padding: 0; cursor: pointer; }
+.dh .pip { flex: 0 1 14px; min-width: 8px; aspect-ratio: 1; height: auto; border-radius: 3px; border: 2px solid var(--c, var(--muted)); background: transparent; padding: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; }
 .dh .pips[data-kind='armor'] { display: grid; grid-template-columns: repeat(6, minmax(8px, 14px)); }
 .dh .pip.round { border-radius: 50%; }
 .dh .pip.on { background: var(--c); }
@@ -207,6 +207,7 @@
 .dh-rest-body { display: flex; flex-direction: column; gap: 8px; }
 .dh-rest-slot { display: grid; grid-template-columns: 110px minmax(0, 1fr) 160px; gap: 6px; align-items: center; font-size: 12px; }
 .dh-rest-slot select { max-width: none; width: 100%; min-width: 0; }
+.dh-mutagen-choices { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
 .dh-adv-row { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 .dh-adv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .dh-roll-type { grid-template-columns: repeat(2, 1fr); }

@@ -114,6 +114,7 @@ describe('DM-marked testing characters', () => {
     applyTestingBuild(d, c, b);
     expect(c.resources?.testingPool).toBe(6);
     c.effects.push({ id: 'old', name: 'Old pool effect', kind: 'buff', source: 'Test pool - Spend' });
+    c.effects.push({ id: 'locked', name: 'Volatile Toxins', kind: 'debuff', source: 'Test pool', lockedHp: 1, until: 'rest' });
     c.usage['feat:Test pool:action:spend'] = { used: 1, per: 'session' };
     const next = classEntries(d)[1];
     applyTestingBuild(d, c, { ...b, className: next.name, subclass: subclassesOf(d, next.name)[0] });
@@ -121,6 +122,8 @@ describe('DM-marked testing characters', () => {
     expect(c.resources?.testingPool).toBeUndefined();
     expect(c.usage['feat:Test pool:action:spend']).toBeUndefined();
     expect(c.effects.some((e) => e.id === 'old')).toBe(false);
+    expect(c.effects.some((e) => e.id === 'locked')).toBe(true);
+    expect(c.hp.on).toBeGreaterThanOrEqual(1);
   });
 
   it('uses the host marker on reload and refreshes the build, not a forged sheet marker', async () => {

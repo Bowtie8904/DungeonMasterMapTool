@@ -1232,6 +1232,7 @@
         "id": "hope",
         "label": "Shadowed Grit: gain a Hope",
         "on": "duality",
+        "excludeRolls": ["reaction"],
         "when": "fear",
         "description": "The GM gained a Fear from this roll.",
         "cost": {
@@ -1272,6 +1273,11 @@
        {
         "id": "use",
         "label": "Veilwalker",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Veilwalker", "kind": "buff", "until": "scene",
+         "text": "Advantage on your next attack in this scene.",
+         "rollOptions": [{ "id": "attack", "label": "Veilwalker advantage", "roll": "attack", "defaultOn": true, "advantage": "advantage", "endEffect": "Veilwalker" }]
+        } }],
         "cost": {
          "hope": 2
         }
@@ -1355,7 +1361,8 @@
     {
      "name": "Feral Hide",
      "text": "While in your Wolf Form, you gain a bonus to your Damage Thresholds equal to your Tier.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "modifiers": [{ "stat": "thresholds", "value": "@tier", "requiresEffect": "Wolf Form" }] }
     },
     {
      "name": "Lycan Regeneration",
@@ -1391,12 +1398,19 @@
     {
      "name": "Werewolf",
      "text": "You gain the Werewolf Transformation card. Your rolls to perceive via hearing and scent have advantage.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "rollOptions": [
+      { "id": "hearing-scent", "label": "Hearing or scent", "roll": "action", "advantage": "advantage", "description": "Only when perceiving through hearing or scent." }
+     ] }
     },
     {
      "name": "Control the Beast",
      "text": "While in your Wolf Form, you can apply that form’s bonus die to your Agility and Strength Action Rolls.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "rollOptions": [
+      { "id": "agility", "label": "Wolf Form bonus", "roll": "trait:Agility", "requiresEffect": "Wolf Form", "excludeRolls": ["attack", "reaction"], "dice": "1d10" },
+      { "id": "strength", "label": "Wolf Form bonus", "roll": "trait:Strength", "requiresEffect": "Wolf Form", "excludeRolls": ["attack", "reaction"], "dice": "1d10" }
+     ] }
     }
    ]
   },
@@ -1447,8 +1461,51 @@
        {
         "id": "use",
         "label": "Mutagens",
-        "cost": {
-         "stress": 1
+        "timing": "downtime",
+        "downtime": { "additional": true },
+        "mutagens": {
+         "traitBonus": 1,
+         "traitBonusByFeature": { "Mastered Mutagens": 2 },
+         "maxBenefitsByFeature": { "Volatile Toxins": 2 },
+         "extraBenefitCost": { "hp": 1 },
+         "benefits": [
+          { "id": "celerity", "effect": {
+           "name": "Celerity", "kind": "buff", "until": "rest",
+           "text": "Mark a Stress to end Restrained or Vulnerable on yourself.",
+           "actions": [
+            { "id": "restrained", "label": "End Restrained", "requiresEffect": "Restrained", "cost": { "stress": 1 }, "endEffect": "Restrained" },
+            { "id": "vulnerable", "label": "End Vulnerable", "requiresEffect": "Vulnerable", "cost": { "stress": 1 }, "endEffect": "Vulnerable" }
+           ]
+          } },
+          { "id": "durable", "effect": {
+           "name": "Durable", "kind": "buff", "until": "rest", "text": "Your Armor Score increases by 2.", "modifiers": [{ "stat": "armorScore", "value": 2 }]
+          } },
+          { "id": "hunter-senses", "effect": {
+           "name": "Hunter's Senses", "kind": "buff", "until": "rest", "text": "See in complete darkness; advantage when tracking a creature.",
+           "rollOptions": [{ "id": "track", "label": "Tracking advantage", "roll": "action", "advantage": "advantage", "description": "Only when tracking a creature." }]
+          } },
+          { "id": "nerves-of-steel", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Nerves of Steel", "kind": "buff", "until": "rest", "text": "Spend 2 Hope instead of marking a Stress.",
+           "actions": [{ "id": "hope", "label": "Spend Hope instead of Stress", "cost": { "hope": 2 } }]
+          } },
+          { "id": "rapidity", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Rapidity", "kind": "buff", "until": "rest", "text": "Your Evasion increases by 1.", "modifiers": [{ "stat": "evasion", "value": 1 }]
+          } },
+          { "id": "ironskin", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Ironskin", "kind": "buff", "until": "rest", "text": "Your Severe damage threshold increases by your Proficiency.", "modifiers": [{ "stat": "severeThreshold", "value": "@proficiency" }]
+          } },
+          { "id": "aetherblood", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Aetherblood", "kind": "buff", "until": "rest", "text": "See invisible creatures and objects, transparent visual illusions, and the true form of magically transformed creatures and objects within line of sight."
+          } },
+          { "id": "fury", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Fury", "kind": "buff", "until": "rest",
+           "text": "When you make an attack roll, mark a Stress to add your Proficiency to the roll.",
+           "rollOptions": [{ "id": "attack", "label": "Fury", "roll": "attack", "value": "@proficiency", "cost": { "stress": 1 } }]
+          } },
+          { "id": "steelflesh", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Steelflesh", "kind": "buff", "until": "rest", "text": "Your Major damage threshold increases by your Proficiency.", "modifiers": [{ "stat": "majorThreshold", "value": "@proficiency" }]
+          } }
+         ]
         }
        }
       ]
@@ -1472,18 +1529,7 @@
     {
      "name": "Mastered Mutagens",
      "text": "The trait bonus and penalty you get from your Mutagens feature changes to +2 and −2, respectively. When you choose a mutagen benefit, your options also include the following:\n\n- **Aetherblood. **Within your line of sight, you can see creatures and objects that are invisible, and visual illusions appear transparent to you. If a creature or an object within your line of sight has been transformed by magic, you can see its true form.\n\n- **Fury.** When you make an attack roll, you can **mark a Stress** to gain a bonus to the roll equal to your Proficiency.\n\n- **Steelflesh.** Your Major damage threshold increases by a number equal to your Proficiency.",
-     "type": "subclass",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Mastered Mutagens",
-        "cost": {
-         "stress": 1
-        }
-       }
-      ]
-     }
+     "type": "subclass"
     }
    ]
   },
@@ -3787,6 +3833,11 @@
        {
         "id": "use",
         "label": "Blood Maledict",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Blood Maledict", "kind": "buff", "until": "rest", "endOnSourceSevere": true,
+         "text": "Advantage on action rolls against your chosen target. Ends on Severe damage, a rest, or reuse.",
+         "rollOptions": [{ "id": "target", "label": "Blood Maledict advantage", "roll": "action", "advantage": "advantage", "description": "Only against the chosen target." }]
+        } }],
         "cost": {
          "hope": 3
         }
@@ -3803,6 +3854,15 @@
        {
         "id": "use",
         "label": "Crimson Rite",
+        "costConditions": [{ "feature": "Chasing Death", "unmarkedHp": { "min": 1, "max": 3 }, "cost": { "hp": 0 } }],
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Crimson Rite", "kind": "buff", "until": "rest",
+         "text": "Optional extra damage for your enchanted strikes; weapon and damage type are table-managed.",
+         "rollOptions": [{
+          "id": "damage", "label": "Crimson Rite", "roll": "damage", "dice": "1d6", "diceByLevel": { "5": "2d6", "8": "3d6" },
+          "diceConditions": [{ "feature": "Chasing Death", "unmarkedHp": { "min": 1, "max": 1 }, "dieSize": 8 }]
+         }]
+        } }],
         "cost": {
          "hp": 1
         }
@@ -3813,7 +3873,18 @@
     {
      "name": "Grim Psychometry",
      "text": "While inspecting a creature, a location, or an object within Very Close range, make a Spellcast Roll (12) . On a success, mark a Stress to have a vision of the most recent violence involving the target, and until you finish a rest, you have advantage on any action roll to recall lore about things in the vision.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "actions": [{ "id": "spellcast", "label": "Spellcast (12)", "actionRoll": { "trait": "spellcast", "difficulty": 12 } }],
+      "rollTriggers": [{
+       "id": "vision", "label": "Grim Psychometry: mark Stress for a vision", "on": "feat:Grim Psychometry", "when": "success", "difficulty": 12,
+       "cost": { "stress": 1 },
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Grim Psychometry", "kind": "buff", "until": "rest", "text": "Advantage when recalling lore about things in the vision.",
+        "rollOptions": [{ "id": "lore", "label": "Vision lore advantage", "roll": "action", "advantage": "advantage", "description": "Only to recall lore about things in the vision." }]
+       } }]
+      }]
+     }
     }
    ]
   },

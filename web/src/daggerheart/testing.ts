@@ -88,6 +88,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   const removed = [...keys(c)].filter((key) => !nextKeys.has(key));
   const removedNames = new Set(removed.map((key) => key.slice(key.indexOf(':') + 1)));
   c.effects = c.effects.filter((e) => {
+    if (e.lockedHp) return true;
     const source = e.source;
     return !source || ![...removedNames].some((name) => source === name || source.startsWith(`${name} - `));
   });

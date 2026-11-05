@@ -10,7 +10,12 @@ export interface DeathOptions {
 }
 
 export function recoverableHp(c: CharacterSheet): number {
-  return Math.max(0, c.hp.on - (c.permanentHp ?? 0));
+  return Math.max(0, c.hp.on - hpHealingFloor(c));
+}
+
+export function hpHealingFloor(c: CharacterSheet): number {
+  return Math.min(c.hp.slots, (c.permanentHp ?? 0)
+    + c.effects.reduce((sum, effect) => sum + Math.max(0, effect.lockedHp ?? 0), 0));
 }
 
 export function basicDeathOptions(): DeathOptions {
@@ -23,7 +28,7 @@ export function canMakeDeathMove(c: CharacterSheet): boolean {
 
 export function syncDeathState(c: CharacterSheet): void {
   c.permanentHp = Math.max(0, Math.min(c.hp.slots, Math.floor(c.permanentHp ?? 0)));
-  c.hp.on = Math.max(c.permanentHp, Math.min(c.hp.slots, c.hp.on));
+  c.hp.on = Math.max(hpHealingFloor(c), Math.min(c.hp.slots, c.hp.on));
   c.scars = Math.max(0, Math.min(c.hope.total, Math.floor(c.scars ?? 0)));
   c.hope.slots = Math.max(0, c.hope.total - c.scars);
   c.hope.on = Math.min(c.hope.on, c.hope.slots);

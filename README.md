@@ -38,6 +38,15 @@ Nothing starts until you click **Start online session**, so offline play and the
   feature's description and origin, retained in saved chat history rather than the original weapon's source.
   Expand it to read the feature, card or individual grimoire spell without opening the sheet.
   Spellcast titles name their source; descriptions stay with history, follow-up spell damage and rerolls.
+- **Blood Hunter automation (Daggerheart):** Blood Maledict, Crimson Rite and Veilwalker create buffs with
+  optional roll bonuses; Chasing Death adjusts Rite costs and dice from current HP. Grim Psychometry checks
+  Spellcast against 12 and offers its Stress-cost vision in chat only on success. Lycan bonuses require Wolf
+  Form; players still select the Werewolf transformation themselves. Mutagens adds a free, restricted option
+  to either rest, with chosen trait increases/decreases and automatically unlocked benefits. Mastery changes
+  traits to +2/-2; Volatile Toxins permits two benefits and locks its marked HP until the next rest of either kind.
+  Downtime choices and individual buffs describe each benefit; Volatile Toxins expands to its own feature
+  description. Benefit actions, roll options and stat changes appear on the resulting buffs. Shadowed Grit
+  is offered only on Fear-generating rolls, never reactions.
 - **Testing characters (Daggerheart):** right-click the Actors tree or a folder and choose **New testing
   character**, then assign its **Owner** as usual. The assigned player (including a player account used by the DM)
   opens its sheet and uses **Edit testing build** to freely switch level, class/subclass, subclass stage,

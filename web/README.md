@@ -41,6 +41,16 @@ Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the sc
 `docs/DAGGERHEART_DATA.md`. `engine.ts` exposes configured trait/attack/damage actions, suggested roll modes,
 effect-gated mitigation and explicit Hope/Fear outcome overrides; `view.ts` shares those dialogs with chat
 follow-ups. Target healing/buffs and cross-player reactions execute on the host against current sheets.
+Blood Hunter rules use conditional current-HP costs/dice, effect-gated stats and success-gated Psychometry
+chat claims. The rest dialog provides a free restricted Mutagens brewing slot with trait/benefit selectors;
+feature upgrades unlock choices and +2/-2 automatically. Volatile Toxins locks marked HP until the next
+short or long rest, blocking manual clearing, healing and host death recovery without reducing capacity.
+Brewing choices display benefit descriptions; expanded buffs resolve their individual descriptions from
+current rules, including saved brews. Volatile Toxins shows its own feature text. Shadowed Grit excludes reactions.
+No automatic Werewolf transformation selection is performed. See `docs/DAGGERHEART_DATA.md` for the
+additive metadata contracts; Online and DM Link compatibility versions and global settings are unchanged.
+`checks/blood-hunter.html` exercises the real rest and roll dialogs, cancellation, benefit limits, locked
+HP controls, Psychometry's Spellcast routing, Chasing Death costs/dice and Veilwalker's next-attack option.
 Session-limited uses reset per hosting run rather than browser reconnect; scene use limits are not tracked.
 `hello.rollRewards:true` and a host-created `rewardClaimed:false` marker enable the original roller's
 one-time chat reward button: +1 Hope on Hope results, +1 Hope and clear 1 Stress on criticals.

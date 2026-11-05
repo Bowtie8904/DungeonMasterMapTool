@@ -4,7 +4,7 @@ import {
   dualityExpression, handsUsed, multiclassesOf, shortTrait, signed, tierOf,
 } from './data';
 import {
-  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
+  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
   effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
@@ -18,10 +18,11 @@ import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
-import { canMakeDeathMove, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
+import { canMakeDeathMove, hpHealingFloor, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
 import { openDeathDialog, openScarsDialog } from './death-view';
 import { actionReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
+import { mutagenEffectSource } from '../effects';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
@@ -82,20 +83,24 @@ const PAGES: Array<[Page, string]> = [
   ['char', 'Character'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
-export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0): HTMLElement {
+export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0): HTMLElement {
   const box = el('div', { class: 'pips' });
   box.dataset.kind = kind;
   box.style.setProperty('--c', color);
   const btns: HTMLButtonElement[] = [];
   const paint = () => btns.forEach((b, i) => b.classList.toggle('on', i < track.on));
   for (let i = 0; i < track.total; i++) {
-    const locked = i >= track.slots || i < permanent;
+    const locked = i >= track.slots || i < permanent + temporary;
     const scarred = i >= track.total - scars;
     const b = el('button', { type: 'button', disabled: locked, class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}${scarred ? ' scarred' : ''}${i < permanent ? ' permanent-hp' : ''}`, title: i < permanent ? 'Permanently marked HP — cannot be healed' : scarred ? 'Crossed out by a permanent scar' : locked ? 'Locked - gained through advancement' : '' }, i < permanent ? '×' : scarred ? 'X' : '');
     b.setAttribute('aria-label', `${kind} ${i + 1}`);
+    if (i >= permanent && i < permanent + temporary) {
+      b.title = 'Marked HP locked by Volatile Toxins until your next rest';
+      b.textContent = 'X';
+    }
     b.addEventListener('click', () => {
       if (locked) return;
-      track.on = Math.max(permanent, track.on === i + 1 ? i : i + 1);
+      track.on = Math.max(permanent + temporary, track.on === i + 1 ? i : i + 1);
       paint();
       onChange?.();
     });
@@ -295,7 +300,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function actionButton(key: string, a: Automation, action: ActionDef, label: string, hooks: { extraBlock?: () => string | null; after?: () => void }): HTMLElement {
-    const cost = costText(action.cost, c);
+    const cost = costText(actionCost(c, action), c);
     const b = el('button', { class: 'small primary', type: 'button' }, cost ? `${action.label} (${cost})` : action.label);
     if (action.actionRoll?.trait === 'highest') {
       const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
@@ -309,6 +314,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const current = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       b.disabled = !!current;
       b.title = current ?? '';
+      const currentCost = costText(actionCost(c, action), c);
+      if (action.actionRoll?.trait !== 'highest') b.textContent = currentCost ? `${action.label} (${currentCost})` : action.label;
     });
     const setBusy = (value: boolean) => { busy = value; b.disabled = value; };
     b.addEventListener('click', () => {
@@ -348,9 +355,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       }
       if (action.actionRoll) {
         const spec = action.actionRoll;
-        const trait = spec.trait === 'highest' ? TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best) : spec.trait;
+        const trait = spec.trait === 'highest' ? TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best)
+          : spec.trait === 'spellcast' ? c.traits.find(t => t.spellcast)?.name : spec.trait;
         const targets = ['action', ...(trait ? [`trait:${trait}`] : []), ...(spec.attack ? ['attack'] : []),
-          ...(key.startsWith('card:') ? [key] : [])];
+          ...(spec.trait === 'spellcast' ? ['spellcast'] : []),
+          ...(key.startsWith('card:') || key.startsWith('feat:') ? [key] : [])];
         const bonus = rollBonus(c, targets, undefined, false);
         const damage = a.actions?.find((candidate) => candidate.damage)?.damage;
         const weapon = spec.attack && damage ? featureWeapon(label, damage) : undefined;
@@ -637,7 +646,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         withSources(vital('Armor', pips(c.armorTrack, 'armor', 'var(--armor)', false, refreshActions), 'v-a'), srcs.armor, th.armorSlots, 'Armor slots'),
         withSources(thresholds,
           [...srcs.major.map((r) => ({ ...r, label: `${r.label} (major)` })), ...srcs.severe.map((r) => ({ ...r, label: `${r.label} (severe)` }))], `${th.major} / ${th.severe}`, 'Total (major / severe)'),
-        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp), 'v-hp'),
+        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp, hpHealingFloor(c) - (c.permanentHp ?? 0)), 'v-hp'),
         vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, refreshActions), 'v-st'),
       ),
     );
@@ -660,6 +669,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const untilText = (e: ActiveEffect) => ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
     const rows = c.effects.map((e) => {
       const dismiss = el('button', { class: 'small', type: 'button' }, 'Remove');
+      dismiss.disabled = !!e.lockedHp;
+      if (e.lockedHp) dismiss.title = 'This HP lock ends only when you rest.';
       dismiss.addEventListener('click', () => { c.effects.splice(c.effects.indexOf(e), 1); render(); });
       const mods = (e.modifiers ?? []).map((m) => {
         const v = m.dice ? `+${m.dice}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
@@ -669,7 +680,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         'div', { class: `feat${e.kind === 'buff' ? ' hope' : ''}`, style: e.kind === 'debuff' ? 'border-left:3px solid var(--hp, #c55)' : '' },
         el('div', { class: 'src' }, `${e.kind === 'buff' ? 'Buff' : 'Debuff'} - ${untilText(e)}${e.source ? ` - from ${e.source}` : ''}`),
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
-        rich(e.text),
+        rich(mutagenEffectSource(c, e)?.text ?? e.text),
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
         ...((e.actions?.length ?? 0) ? [el('div', { class: 'acts' },
           ...e.actions!.map(action => actionButton(`effect:${e.id}`, {}, action, e.name, {

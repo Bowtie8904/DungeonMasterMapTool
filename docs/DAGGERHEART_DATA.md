@@ -188,6 +188,18 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   The extension advertises optional `hello.deathMoveOptions`; the basic `hello.deathMoves` endpoint remains
   available to older clients. All fields are additive; neither Online nor DM Link compatibility versions change.
 - **rest**: optional `{extraMoves, longMovesInShort, passives, modifiers}` on any automation source.
+  A downtime action with `downtime.additional: true` gets its own optional restricted slot, containing only that
+  action, rather than consuming a normal move or granting an unrestricted extra move.
+  `actions[].mutagens` declares `{traitBonus, traitBonusByFeature?, maxBenefitsByFeature?, extraBenefitCost?,
+  benefits: [{id, requiresFeature?, effect}]}`. Its rest pick adds
+  `mutagens: {increase, decrease, benefits: [id]}`. The two traits must differ; benefit ids must be distinct,
+  unlocked and within the feature-derived limit. Brewing executes after rest refresh/recovery; selecting more
+  than one benefit pays `extraBenefitCost`, and its HP cost becomes an `until: "rest"` effect with `lockedHp`.
+  That effect cannot be manually dismissed. Permanent HP plus active `lockedHp` sets the healing/pip floor,
+  including host-applied healing, death recovery and downtime rerolls. Old rest-duration locks release before
+  that rest's recovery; newly brewed buffs and locks last until the following rest. Skipping brewing still
+  expires old buffs. Sheet saves retain locks unless a short/long rest was completed.
+  Testing-build changes also retain HP locks until rest, even when their originating feature is removed.
   `extraMoves` grants unrestricted additional slots; `longMovesInShort` allows one long-rest move in a short rest.
   `passives` contain `{id, label, defaultOn, rest?, cost?, steps?, extraMoves?, reroll?, consumeItem?, move?, bonus?, condition?}`.
   These are inline opt-in/out checkboxes with source-scoped ids. Extra-move costs are paid when confirming;
@@ -281,6 +293,16 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `dice` and its replacements support `@tier` as a dice count (`"@tierd4"`).
   `diceByFeature: {"Ambush":"@tierd6","Backstab":"@tierd8"}` replaces the dice when the character has
   that learned feature; the last matching entry wins. This keeps subclass upgrades in JSON.
+  `diceConditions: [{feature?, unmarkedHp?: {min,max}, dice?, dieSize?}]` applies matching overrides after
+  level/feature scaling. `dieSize` changes the die faces without changing the scaled dice count.
+  Actions/options support `costConditions: [{feature?, unmarkedHp?: {min,max}, cost}]`, merging matching
+  resource overrides into the base cost. Bounds are inclusive and re-evaluated from current HP.
+  Passive modifiers support `requiresEffect`, including stat breakdowns. Roll options also support
+  `excludeRolls` to prevent applying Wolf Form's bonus twice on an attack already receiving its die.
+  `actionRoll.trait: "spellcast"` selects the character's Spellcast trait and includes `spellcast` plus the
+  feature key in the roll targets. `rollTriggers.when: "success"` requires a known difficulty, supplied by
+  `rollTriggers.difficulty` or the original roll; raw matching Duality dice also succeed. Browser and host
+  both enforce the result, while existing `failure` triggers retain their table-confirmed semantics.
   `multiplier: 2` doubles the entire damage roll after bonuses and critical damage, never the number of dice.
   It does not stack with another doubling option. The host advertises `hello.rollMultipliers`; older hosts
   block sending this option with an update-required message. The bounded expression form is `(expression)*2`;
@@ -333,6 +355,28 @@ purely narrative text.
 Classes, ancestries, communities and transformations are included in the total.
 
 ### Curated mappings
+
+- **Blood Hunter:** Blood Maledict grants a rest-duration action-advantage option against the chosen target;
+  Severe damage or reuse ends/replaces it. Crimson Rite grants optional level-scaled damage without a weapon
+  or damage-type selection; it expires on rest. Chasing Death waives the HP cost at 1-3 unmarked HP and uses
+  d8s at exactly one unmarked HP, preserving level-scaled dice counts and changing back after healing.
+  Grim Psychometry rolls the Spellcast trait against 12; only a successful feature roll offers the once-per-roll
+  Stress-cost vision claim and lore-advantage buff. Veilwalker preselects next-attack advantage and removes its
+  buff when that option is used (or on rest/scene expiry). Werewolf offers hearing/scent advantage, but never
+  adds a transformation automatically. Control the Beast offers the Wolf Form d10 on non-attack Agility/Strength
+  action rolls; Feral Hide adds Tier to both thresholds only with Wolf Form.
+  Mutagens is an optional free additional brewing move at either rest. Choose distinct +1/-1 traits (+2/-2
+  with Mastered Mutagens) and one unlocked benefit, or two with Volatile Toxins for one HP locked until the
+  next rest of either kind. Improved and Mastered Mutagens unlock their extra choices automatically.
+  Each benefit's `effect.text` describes both its downtime choice and its expanded buff. Saved mutagen buffs
+  resolve descriptions from current definitions; Volatile Toxins uses its own feature text rather than Mutagens.
+  Shadowed Grit uses `excludeRolls: ["reaction"]` to suppress and reject reaction-roll claims.
+  Celerity pays Stress to remove Restrained/Vulnerable effects; Durable adds 2 Armor Score; Hunter's Senses
+  suggests tracking advantage; Nerves of Steel has a 2-Hope replacement-cost button; Rapidity adds 1 Evasion;
+  Ironskin/Steelflesh add Proficiency to Severe/Major thresholds; Fury is a Stress-cost attack bonus equal to
+  Proficiency; Aetherblood remains a narrative buff. Range, chosen Maledict target, hearing/scent, tracking,
+  vision content and replacing a Stress payment remain player-confirmed. New metadata is additive; no
+  settings or DM Link compatibility change.
 
 - **Bard:** Rally grants one d6/d8 (level 5) session effect to every player-owned actor with a sheet;
   Epic Poetry upgrades it to d10. Spend it optionally on action, reaction or damage rolls, or use its

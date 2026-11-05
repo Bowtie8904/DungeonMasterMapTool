@@ -1,17 +1,48 @@
 // Daggerheart downtime: which moves a rest offers and what choosing them does to the sheet.
-import { CharacterSheet, tierOf } from './data';
+import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
 import {
-  ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, applyRest, evalValue, rollLocal, runAction, syncDerived,
+  ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, addEffect, applyRest, evalValue, hasFeature, rollLocal, runAction, syncDerived,
 } from './engine';
 import { formatRestReport } from './rest-summary';
 import type { CompendiumEntry } from './compendium';
 import type { AncestryChoice } from './ancestry-choice';
 import { replaceAncestry } from './rules';
-import { syncDeathState } from './death';
+import { hpHealingFloor } from './death';
 
-export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string; ancestryChoice?: ActionDef['ancestryChoice'] }
+export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string; ancestryChoice?: ActionDef['ancestryChoice']; mutagens?: ActionDef['mutagens'] }
 export interface RestSlot { label: string; moves: RestMove[] }
-export interface RestPick { move: string; ally?: boolean; ancestry?: AncestryChoice }
+export interface MutagenPick { increase: TraitName; decrease: TraitName; benefits: string[] }
+export interface RestPick { move: string; ally?: boolean; ancestry?: AncestryChoice; mutagens?: MutagenPick }
+
+export function mutagenChoices(c: CharacterSheet, definition: NonNullable<ActionDef['mutagens']>) {
+  let traitBonus = definition.traitBonus;
+  let maxBenefits = 1;
+  for (const [feature, value] of Object.entries(definition.traitBonusByFeature ?? {})) if (hasFeature(c, feature)) traitBonus = value;
+  for (const [feature, value] of Object.entries(definition.maxBenefitsByFeature ?? {})) if (hasFeature(c, feature)) maxBenefits = value;
+  return { traitBonus, maxBenefits, benefits: definition.benefits.filter(b => !b.requiresFeature || hasFeature(c, b.requiresFeature)) };
+}
+
+function brewMutagens(c: CharacterSheet, source: Source, action: ActionDef, pick?: MutagenPick): string {
+  const definition = action.mutagens!;
+  const options = mutagenChoices(c, definition);
+  if (!pick || !TRAIT_ORDER.includes(pick.increase) || !TRAIT_ORDER.includes(pick.decrease) || pick.increase === pick.decrease)
+    throw new Error('Mutagens: choose two different traits to increase and decrease.');
+  if (!pick.benefits.length || pick.benefits.length > options.maxBenefits || new Set(pick.benefits).size !== pick.benefits.length
+      || pick.benefits.some(id => !options.benefits.some(b => b.id === id)))
+    throw new Error(`Mutagens: choose 1-${options.maxBenefits} distinct available benefits.`);
+  const cost = pick.benefits.length > 1 ? definition.extraBenefitCost : undefined;
+  const result = runAction(c, source.key, source.automation, { ...action, cost }, source.name, rollLocal, 'rest');
+  if (result === null) throw new Error(actionBlocker(c, source.key, source.automation, { ...action, cost }, 'rest') ?? 'Mutagens could not be brewed.');
+  addEffect(c, { name: 'Mutagens', kind: 'buff', until: 'rest',
+    text: `+${options.traitBonus} ${pick.increase}, -${options.traitBonus} ${pick.decrease}.`,
+    modifiers: [{ stat: `trait.${pick.increase}`, value: options.traitBonus }, { stat: `trait.${pick.decrease}`, value: -options.traitBonus }],
+  }, source.name);
+  for (const id of pick.benefits) addEffect(c, structuredClone(options.benefits.find(b => b.id === id)!.effect), source.name);
+  const hpCost = evalValue(cost?.hp, c);
+  if (hpCost > 0) addEffect(c, { name: 'Volatile Toxins', kind: 'debuff', until: 'rest', lockedHp: hpCost,
+    text: c.features.find(f => f.name === 'Volatile Toxins')?.text ?? 'This marked HP cannot be cleared until your next rest.' }, 'Volatile Toxins');
+  return `${result}; +${options.traitBonus} ${pick.increase}, -${options.traitBonus} ${pick.decrease}; ${pick.benefits.map(id => options.benefits.find(b => b.id === id)!.effect.name).join(', ')}`;
+}
 
 /** A passive benefit of the sheet that the player may switch off for this rest (e.g. not using the bedroll). */
 export interface RestPassive { id: string; label: string; defaultOn: boolean }
@@ -96,11 +127,11 @@ export function passiveOn(c: CharacterSheet, kind: RestKind, o: RestOptions, id:
   return !!p && (o.passives?.[id] ?? p.defaultOn);
 }
 
-function downtimeActions(c: CharacterSheet, kind: RestKind): RestMove[] {
+function downtimeActions(c: CharacterSheet, kind: RestKind, additional = false): RestMove[] {
   return sources(c).flatMap((s) => (s.automation.actions ?? [])
-    .filter((a) => a.timing === 'downtime'
+    .filter((a) => a.timing === 'downtime' && !!a.downtime?.additional === additional
       && (!a.downtime?.rest || a.downtime.rest === kind) && !actionBlocker(c, s.key, s.automation, a, 'rest'))
-    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.label}`, ancestryChoice: a.ancestryChoice })));
+    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.label}`, ancestryChoice: a.ancestryChoice, mutagens: a.mutagens })));
 }
 
 export function availableMoves(c: CharacterSheet, kind: RestKind): RestMove[] {
@@ -119,6 +150,7 @@ export function restSlots(c: CharacterSheet, kind: RestKind, o: RestOptions = {}
       for (let i = 0; i < (b.extraMoves ?? 0); i++) slots.push({ label: `Extra move (${s.name})`, moves });
     }
   }
+  for (const move of downtimeActions(c, kind, true)) slots.push({ label: `Additional move (${move.label})`, moves: [move] });
   return slots;
 }
 
@@ -143,6 +175,8 @@ export function resolveRest(c: CharacterSheet, kind: RestKind, picks: RestPick[]
 function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[], o: RestOptions, roll: DiceRoll): RestResult {
   const restBlock = shortRestBlocker(c, kind);
   if (restBlock) throw new Error(restBlock);
+  // Locks from the previous brew release before this rest's healing moves.
+  c.effects = c.effects.filter(e => !e.lockedHp || e.until !== 'rest');
   syncDerived(c);
   const tier = tierOf(c.level);
   const lines: string[] = [];
@@ -168,7 +202,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
     const second = roll(expr);
     return { value: Math.max(first, second), text: `${first}/${second}, kept ${Math.max(first, second)}` };
   };
-  const floor = (t: typeof c.hp) => t === c.hp ? c.permanentHp ?? 0 : 0;
+  const floor = (t: typeof c.hp) => t === c.hp ? hpHealingFloor(c) : 0;
   const clear = (t: typeof c.hp, n: number): number => { const k = Math.min(Math.max(0, t.on - floor(t)), Math.max(0, n)); t.on -= k; return k; };
   const recovery = (t: typeof c.hp, resource: RestDie['resource'], n: number): number => {
     const die = rolledDice[rolledDice.length - 1];
@@ -245,6 +279,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         const s = sources(c).find((x) => x.key === key);
         const a = s?.automation.actions?.find((x) => x.id === actionId);
         if (!s || !a) throw new Error('Downtime move no longer available');
+        if (a.mutagens) break; // Brew after refreshing this rest, so new effects/costs survive.
         if (a.ancestryChoice) {
           if (!p.ancestry || !o.ancestries) throw new Error('Choose an ancestry feature for this downtime move.');
           if (a.ancestryChoice === 'feature' && p.ancestry.ancestry !== c.ancestry) throw new Error('Only Skin Deep must choose a feature of your current ancestry.');
@@ -292,10 +327,19 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   applyRest(c, kind);
   // Effects created by a downtime move last until the next rest, not this one.
   c.effects.push(...gainedEffects.filter((e) => !c.effects.some((current) => current.id === e.id)));
-  if (c.hp.on === hpBefore && c.stress.on === stressBefore) {
+  const noRecovery = c.hp.on === hpBefore && c.stress.on === stressBefore;
+  for (const p of chosen) {
+    const move = slots.flatMap(slot => slot.moves).find(m => m.id === p.move);
+    if (!move?.mutagens) continue;
+    const [key, actionId] = p.move.slice(4).split('|');
+    const source = sources(c).find(s => s.key === key)!;
+    const action = source.automation.actions!.find(a => a.id === actionId)!;
+    lines.push(brewMutagens(c, source, action, p.mutagens));
+  }
+  if (noRecovery) {
     for (const { s, b } of selected.filter(({ b }) => b.condition === 'noRecovery')) execute(s, b);
   }
-  syncDeathState(c);
+  syncDerived(c);
   return { lines, dice: rolledDice };
 }
 

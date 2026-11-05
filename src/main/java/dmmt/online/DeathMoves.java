@@ -240,7 +240,13 @@ final class DeathMoves {
     }
 
     static int recoverableHp(JsonNode sheet) {
-        return Math.max(0, sheet.path("hp").path("on").asInt() - sheet.path("permanentHp").asInt());
+        return Math.max(0, sheet.path("hp").path("on").asInt() - hpHealingFloor(sheet));
+    }
+
+    static int hpHealingFloor(JsonNode sheet) {
+        int floor = sheet.path("permanentHp").asInt();
+        for (JsonNode effect : sheet.path("effects")) floor += Math.max(0, effect.path("lockedHp").asInt());
+        return Math.min(sheet.path("hp").path("slots").asInt(), floor);
     }
 
     static int clearHp(ObjectNode sheet, int amount) {
@@ -303,8 +309,8 @@ final class DeathMoves {
     }
 
     static void sync(ObjectNode sheet) {
-        if (sheet.path("hp") instanceof ObjectNode hp && sheet.has("permanentHp"))
-            hp.put("on", Math.max(sheet.path("permanentHp").asInt(), hp.path("on").asInt()));
+        if (sheet.path("hp") instanceof ObjectNode hp)
+            hp.put("on", Math.max(hpHealingFloor(sheet), hp.path("on").asInt()));
         if (sheet.has("scars") && sheet.path("hope") instanceof ObjectNode hope) {
             int slots = Math.max(0, hopeTotal(sheet) - sheet.path("scars").asInt());
             hope.put("slots", slots);

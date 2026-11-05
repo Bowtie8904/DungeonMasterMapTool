@@ -1219,6 +1219,18 @@ public final class OnlineSessionServer {
         if (rest < oldRest || (long) rest > (long) oldRest + 1)
             throw new IllegalArgumentException("Refresh the sheet before reporting another long rest.");
         if (saved.has("longRestRevision") || previous.has("longRestRevision")) saved.put("longRestRevision", rest);
+        boolean completedRest = rest == oldRest + 1
+                || saved.path("shortRestsInRow").asInt() == previous.path("shortRestsInRow").asInt() + 1
+                && saved.path("shortRestsInRow").asInt() <= 3;
+        if (!completedRest) {
+            for (JsonNode effect : previous.path("effects")) {
+                if (effect.path("lockedHp").asInt() <= 0) continue;
+                boolean retained = false;
+                for (JsonNode current : saved.path("effects"))
+                    if (effect.path("id").equals(current.path("id")) && effect.equals(current)) retained = true;
+                if (!retained) throw new IllegalArgumentException("Volatile Toxins HP stays locked until your next rest.");
+            }
+        }
         if (saved.path("resources").has("death-mask")) {
             int tokens = DeathMoves.integer(saved.path("resources"), "death-mask", 0);
             if (tokens > 4) throw new IllegalArgumentException("Mask tokens must be between zero and four.");
@@ -1959,6 +1971,11 @@ public final class OnlineSessionServer {
         if (!"hope".equals(actualOutcome) && !"fear".equals(actualOutcome))
             actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
         String when = trigger.path("when").asText("always");
+        if ("success".equals(when)) {
+            JsonNode difficulty = trigger.has("difficulty") ? trigger.path("difficulty") : roll.path("difficulty");
+            if (!difficulty.isNumber() || hope != fear && roll.path("total").asDouble() < difficulty.asDouble())
+                throw new IllegalArgumentException("This feature requires a successful roll.");
+        }
         if ("hope".equals(when) && !"hope".equals(actualOutcome)
                 || "hopeOrCritical".equals(when) && !"hope".equals(actualOutcome) && !"crit".equals(actualOutcome)
                 || "fear".equals(when) && !"fear".equals(actualOutcome)
@@ -2039,7 +2056,7 @@ public final class OnlineSessionServer {
                 int before = track.path("on").asInt();
                 int amount = featureAmount(step.path("amount"), sheet);
                 if ("all".equals(step.path("amount").asText())) amount = before;
-                if ("clear".equals(operation)) track.put("on", Math.max("hp".equals(resource) ? sheet.path("permanentHp").asInt() : 0,
+                if ("clear".equals(operation)) track.put("on", Math.max("hp".equals(resource) ? DeathMoves.hpHealingFloor(sheet) : 0,
                         before - Math.max(0, amount)));
                 else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
                 int changed = Math.abs(before - track.path("on").asInt());

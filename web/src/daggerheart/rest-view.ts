@@ -1,10 +1,10 @@
 import { el } from '../login';
-import type { CharacterSheet } from './data';
+import { CharacterSheet, TRAIT_ORDER } from './data';
 import type { RestKind } from './engine';
 import { chooseAncestryFeature } from './ancestry-choice';
 import {
   RestOptions, RestPick, RestResult, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
-  shortRestBlocker,
+  shortRestBlocker, mutagenChoices,
 } from './rest';
 
 /** Downtime dialog: pick moves, then rest. Cancelling leaves the sheet untouched. */
@@ -19,18 +19,20 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
 
-  const check = (label: string, get: () => boolean | undefined, set: (v: boolean) => void, disabled = false): HTMLElement => {
+  const check = (label: string, get: () => boolean | undefined, set: (v: boolean) => void, disabled = false, description?: string): HTMLElement => {
     const input = el('input', { type: 'checkbox' });
     input.checked = !!get();
     input.disabled = disabled;
     input.addEventListener('change', () => { set(input.checked); draw(); });
-    return el('label', { class: 'dh-roll-option' }, input, el('span', {}, label));
+    return el('label', { class: 'dh-roll-option' }, input, el('span', {}, label,
+      ...(description ? [el('small', { class: 'muted' }, description)] : [])));
   };
 
   function draw(): void {
-    const slots = restSlots(c, kind, o);
+    const preview = structuredClone(c);
+    const slots = restSlots(preview, kind, o);
     picks.length = slots.length;
-    const blocker = shortRestBlocker(c, kind);
+    const blocker = shortRestBlocker(preview, kind);
     const rows = slots.map((slot, i) => {
       const pick = picks[i] ??= { move: '' };
       if (pick.move && !slot.moves.some((m) => m.id === pick.move)) pick.move = '';
@@ -43,7 +45,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       const select = el('select', {}, el('option', { value: '' }, 'None'), ...options);
       select.value = pick.move;
       select.addEventListener('change', () => {
-        pick.move = select.value; pick.ally = false; delete pick.ancestry;
+        pick.move = select.value; pick.ally = false; delete pick.ancestry; delete pick.mutagens;
         const move = slot.moves.find((m) => m.id === pick.move);
         if (move?.ancestryChoice) {
           const ancestry = picks.slice(0, i).reduce((name, p) => p.ancestry?.ancestry ?? name, c.ancestry);
@@ -57,6 +59,26 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
         } else draw();
       });
       const move = slot.moves.find((m) => m.id === pick.move);
+      const mutagens: HTMLElement[] = [];
+      if (move?.mutagens) {
+        const choices = mutagenChoices(preview, move.mutagens);
+        const selection = pick.mutagens ??= { increase: 'Agility', decrease: 'Strength', benefits: [] };
+        for (const [field, label] of [['increase', `Increase (+${choices.traitBonus})`], ['decrease', `Decrease (-${choices.traitBonus})`]] as const) {
+          const traits = el('select', { ariaLabel: label }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name)));
+          traits.value = selection[field];
+          traits.addEventListener('change', () => {
+            selection[field] = TRAIT_ORDER.find(name => name === traits.value)!;
+            draw();
+          });
+          mutagens.push(el('label', {}, label, traits));
+        }
+        mutagens.push(el('div', { class: 'muted' }, `Choose up to ${choices.maxBenefits} benefit${choices.maxBenefits > 1 ? 's (two costs 1 locked HP until your next rest)' : ''}.`));
+        for (const benefit of choices.benefits) {
+          mutagens.push(check(benefit.effect.name, () => selection.benefits.includes(benefit.id), selected => {
+            selection.benefits = selected ? [...selection.benefits, benefit.id] : selection.benefits.filter(id => id !== benefit.id);
+          }, !selection.benefits.includes(benefit.id) && selection.benefits.length >= choices.maxBenefits, benefit.effect.text));
+        }
+      }
       const ally = move?.ally ? (() => {
         const t = el('select', {}, el('option', { value: 'self' }, 'Self'), el('option', { value: 'ally' }, 'An ally (chat only)'));
         t.value = pick.ally ? 'ally' : 'self';
@@ -64,11 +86,14 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
         return t;
       })() : null;
       return el('div', { class: 'dh-rest-slot' }, el('span', { class: 'muted' }, slot.label), select, ...(ally ? [ally] : []),
-        ...(pick.ancestry ? [el('span', { class: 'muted' }, `${pick.ancestry.ancestry} - ${pick.ancestry.feature}`)] : []));
+        ...(pick.ancestry ? [el('span', { class: 'muted' }, `${pick.ancestry.ancestry} - ${pick.ancestry.feature}`)] : []),
+        ...(mutagens.length ? [el('div', { class: 'dh-mutagen-choices' }, ...mutagens)] : []));
     });
-    const longInShort = kind === 'short' && canTakeLongMovesInShortRest(c);
-    const passives = restPassives(c, kind);
-    const invalid = picks.some((p, i) => p.move && moveBlocker(kind, picks, i, p.move));
+    const longInShort = kind === 'short' && canTakeLongMovesInShortRest(preview);
+    const passives = restPassives(preview, kind);
+    const invalid = picks.some((p, i) => p.move && (moveBlocker(kind, picks, i, p.move)
+      || slots[i].moves.find(m => m.id === p.move)?.mutagens
+        && (!p.mutagens?.benefits.length || p.mutagens.increase === p.mutagens.decrease)));
     body.replaceChildren(
       el('div', { class: 'muted' }, kind === 'long'
         ? 'Each character gets 2 downtime moves; the same move cannot be chosen twice. Long rest: all rest abilities refresh.'
@@ -77,7 +102,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       ...(blocker ? [el('div', { class: 'error' }, blocker)] : []),
       ...rows,
       ...(passives.length ? [el('div', { class: 'dh-rest-passives' }, ...passives.map((p) =>
-        check(p.label, () => passiveOn(c, kind, o, p.id), (v) => { (o.passives ??= {})[p.id] = v; })))] : []),
+        check(p.label, () => passiveOn(preview, kind, o, p.id), (v) => { (o.passives ??= {})[p.id] = v; })))] : []),
     );
     go.disabled = !!blocker || invalid;    error.textContent = '';
   }

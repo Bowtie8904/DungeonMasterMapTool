@@ -37,7 +37,7 @@ export function rollContext(m: RollMessage): RollContext | null {
   }
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
-  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon } as RollContext;
+  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon, difficulty: m.difficulty } as RollContext;
 }
 
 function newRef(): string {

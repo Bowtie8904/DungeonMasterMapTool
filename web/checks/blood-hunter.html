@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Blood Hunter runtime check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import catalog from '../../dmmap-daggerheart/classes.json';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { hpHealingFloor } from '../src/daggerheart/death.ts';
+import { rollBonus } from '../src/daggerheart/engine.ts';
+import { openRollDialog, renderSheetView } from '../src/daggerheart/view.ts';
+import { openRestDialog } from '../src/daggerheart/rest-view.ts';
+import { renderEffects } from '../src/effects.ts';
+import '../src/daggerheart/sheet.css';
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const c = emptyCharacter('Hunter');
+  c.className = 'Blood Hunter';
+  c.subclass = 'Order of the Mutant';
+  c.mancer.done = true;
+  c.hp.slots = 7;
+  c.hp.total = 12;
+  c.proficiency.on = 3;
+  c.traits[0].spellcast = true;
+  c.features = catalog.entries.filter(e => e.id === 'blood-hunter' || e.id.startsWith('blood-hunter-order-of-the-mutant-'))
+    .flatMap(e => e.features.map(f => ({ ...structuredClone(f), source: 'Blood Hunter' })));
+  const host = document.querySelector('#host');
+  const dialog = () => document.querySelector('.dh-rolldlg');
+  const button = text => [...document.querySelectorAll('button')].find(b => b.textContent === text || b.textContent.startsWith(text + ' ('));
+  const choose = (select, value) => { select.value = value; select.dispatchEvent(new Event('change')); };
+  const check = text => {
+    const label = [...dialog().querySelectorAll('label')].find(label => label.textContent.includes(text));
+    const input = label.querySelector('input');
+    input.checked = true;
+    input.dispatchEvent(new Event('change'));
+  };
+  let done = 0, sent;
+  const before = JSON.stringify(c);
+  const open = () => openRestDialog(host, c, 'long', () => { done++; });
+  open();
+  assert(dialog().querySelectorAll('.dh-rest-slot').length === 3, 'Missing free Mutagens slot');
+  const slot = () => dialog().querySelectorAll('.dh-rest-slot')[2];
+  assert(slot().querySelector('select').options.length === 2, 'Mutagens slot offers unrestricted moves');
+  choose(slot().querySelector('select'), 'act:feat:Mutagens|use');
+  assert(slot().querySelectorAll('input[type=checkbox]').length === 9, 'Mastery benefits not unlocked');
+  for (const label of slot().querySelectorAll('.dh-mutagen-choices .dh-roll-option')) {
+    assert(label.querySelector('small')?.textContent.trim(), 'Mutagen choice has no description');
+  }
+  assert(slot().textContent.includes('Your Armor Score increases by 2.'), 'Durable description missing');
+  assert(slot().textContent.includes('Increase (+2)'), 'Mastered trait increase missing');
+  assert(button('Take long rest').disabled, 'Unselected benefits allowed');
+  check('Durable');
+  check('Rapidity');
+  assert(slot().querySelectorAll('input:disabled').length === 7, 'Third benefit not blocked');
+  button('Cancel').click();
+  assert(JSON.stringify(c) === before && done === 0, 'Cancel mutated the sheet');
+  open();
+  choose(slot().querySelector('select'), 'act:feat:Mutagens|use');
+  check('Durable');
+  check('Rapidity');
+  button('Take long rest').click();
+  assert(!dialog() && done === 1 && c.hp.on === 1 && hpHealingFloor(c) === 1, 'Brew lost cost or lock');
+  host.append(renderSheetView({ character: c, onRoll: request => { sent = request; return true; } }));
+  const hp = host.querySelector('.pips[data-kind=hp] button');
+  assert(hp.disabled && hp.title.includes('Volatile Toxins'), 'Locked HP pip is editable or mislabeled');
+  const pipStyle = getComputedStyle(hp);
+  assert(['flex', 'inline-flex'].includes(pipStyle.display) && pipStyle.alignItems === 'center' && pipStyle.justifyContent === 'center',
+    'HP marker is not centered');
+  button('Effects').click();
+  const effect = [...host.querySelectorAll('.feat')].find(e => e.textContent.includes('Volatile Toxins'));
+  assert(effect.querySelector('button').disabled, 'HP lock can be dismissed');
+  assert(effect.textContent.includes(c.features.find(f => f.name === 'Volatile Toxins').text.replaceAll('**', '').split('\n')[0]),
+    'Volatile Toxins sheet description missing');
+  const overlay = document.createElement('aside');
+  host.append(overlay);
+  const expanded = new Set(c.effects.map(e => `hunter:${e.id}`));
+  renderEffects(overlay, [{ actorId: 'hunter', name: c.name, character: c }], expanded, () => {}, () => {});
+  const durable = [...overlay.querySelectorAll('.effect-row')].find(row => row.querySelector('.effect-name').textContent === 'Durable');
+  assert(durable.textContent.includes('Your Armor Score increases by 2.') && !durable.textContent.includes('You employ mutagenic toxins'),
+    'Durable overlay shows wrong description');
+  const volatile = [...overlay.querySelectorAll('.effect-row')].find(row => row.querySelector('.effect-name').textContent === 'Volatile Toxins');
+  assert(volatile.textContent.includes('You can choose two mutagen benefits instead of one.') && !volatile.textContent.includes('You employ mutagenic toxins'),
+    'Volatile Toxins overlay shows wrong feature');
+  assert(volatile.querySelector('.effect-remove').disabled, 'Overlay permits dismissing HP lock');
+  overlay.remove();
+  button('Character').click();
+  button('Spellcast (12)').click();
+  button('Roll to chat').click();
+  assert(sent.difficulty === 12 && sent.source.includes('feat:Grim Psychometry') && sent.source.includes('spellcast'),
+    'Psychometry lost feature source or fixed difficulty');
+  assert(sent.source.includes('trait:Agility'), 'Psychometry did not use the Spellcast trait');
+  c.features.push(...catalog.entries.filter(e => e.id.startsWith('blood-hunter-order-of-the-ghost-slayer-'))
+    .flatMap(e => e.features.map(f => ({ ...structuredClone(f), source: 'Blood Hunter' }))));
+  c.level = 8;
+  c.hp.on = 6;
+  c.hope.on = 6;
+  host.replaceChildren(renderSheetView({ character: c, onRoll: request => { sent = request; return true; } }));
+  assert(button('Crimson Rite').textContent === 'Crimson Rite', 'Chasing Death did not waive displayed HP cost');
+  button('Crimson Rite').click();
+  assert(c.hp.on === 6, 'Free Crimson Rite marked HP');
+  const send = request => { sent = request; return true; };
+  const weapon = { name: 'Blade', damage: 'd6', slot: 'Primary', damageType: 'phys', trait: 'Agility', range: 'Melee', hands: 1, tier: 1 };
+  openRollDialog(host, c, 'Damage', [], rollBonus(c, ['damage']), send, () => {}, ['damage'], weapon);
+  check('Crimson Rite');
+  button('Roll to chat').click();
+  assert(sent.expression.includes('3d8'), 'Chasing Death did not upgrade actual damage dice');
+  button('Veilwalker').click();
+  openRollDialog(host, c, 'Attack', [], rollBonus(c, ['action', 'attack']), send, () => {}, ['action', 'attack']);
+  const veil = [...dialog().querySelectorAll('label')].find(label => label.textContent.includes('Veilwalker'));
+  assert(veil.querySelector('input').checked, 'Veilwalker was not preselected');
+  button('Roll to chat').click();
+  assert(sent.expression.includes('1d6') && !c.effects.some(e => e.name === 'Veilwalker'), 'Next attack did not spend Veilwalker advantage');
+  result.textContent = 'PASS: restricted free rest slot, nine unlocked choices, mastery traits, benefit cap, cancellation, HP lock, Psychometry Spellcast, Chasing Death costs/dice, next-attack Veilwalker';
+} catch (error) { result.textContent = 'FAIL: ' + error.stack; }
+</script></body></html>
