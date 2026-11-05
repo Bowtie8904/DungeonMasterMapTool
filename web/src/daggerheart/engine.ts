@@ -5,6 +5,7 @@ import { Advantage, CharacterSheet, Feature, TraitName, TRAIT_ORDER, tierOf } fr
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 import { hpHealingFloor, syncDeathState } from './death';
+import { syncBrawler } from './brawler';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -13,6 +14,7 @@ export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'se
 export type ModValue = number | string;
 
 export interface Modifier {
+  traitValue?: TraitName;
   /** Passive stat: evasion, armorScore, majorThreshold, severeThreshold, thresholds, proficiency, loadoutMax, traits, trait.<Name> */
   stat?: string;
   /** Roll target: attack, damage, spellcast, trait:<Name> */
@@ -28,6 +30,9 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  stance?: boolean;
+  mitigation?: MitigationOption[];
+  damage?: Automation['damage'];
   name: string;
   kind: 'buff' | 'debuff';
   until?: Until;
@@ -62,6 +67,11 @@ export interface Step {
 }
 
 export interface ActionDef {
+  weaponRange?: string;
+  shiftStance?: boolean;
+  refocus?: boolean;
+  requiresFeature?: string;
+  excludesFeature?: string;
   deathMove?: string;
   id: string;
   label: string;
@@ -94,7 +104,7 @@ export interface ActionDef {
   target?: 'actor' | 'party' | 'allActors';
   chatBenefits?: ChatBenefit[];
   transferHope?: boolean;
-  check?: { dice: string; unless: number; mark: 'stress' };
+  check?: { dice: string; unless?: number; mark?: 'stress'; success?: number; gain?: string };
 }
 
 export interface ResourceDef {
@@ -108,6 +118,9 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  exclusive?: string;
+  combo?: boolean;
+  proficiency?: number;
   roll: string;
   value?: ModValue;
   dice?: string;
@@ -157,6 +170,9 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  unarmedWeapon?: Omit<CharacterSheet['activeWeapons'][number], 'trait'>;
+  stances?: Array<{ name: string; tier: number; effect: EffectDef; chooseTrait?: boolean }>;
+  criticalMelee?: { hope: number; stress: number; proficiency: number };
   grantsFeatures?: string[];
   usesOverrides?: Record<string, number>;
   actionBenefits?: Record<string, ChatBenefit[]>;
@@ -175,7 +191,7 @@ export interface Automation {
   resources?: ResourceDef[];
   creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[]; experienceBonus?: number };
   rollOptions?: RollOption[];
-  damage?: { extraDice: number; dropLowest: number };
+  damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean };
   /** Options offered in the incoming-damage dialog (see damage.ts). */
   mitigation?: MitigationOption[];
 }
@@ -368,6 +384,10 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
   syncDeathState(c);
+  syncBrawler(c);
+  const stances = automationSources(c).flatMap(a => a.stances ?? []);
+  c.effects = c.effects.filter(e => !e.stance || c.hp.on < c.hp.slots
+    && c.knownStances?.includes(e.name) && stances.some(s => s.name === e.name && s.tier <= tierOf(c.level)));
   syncResources(c);
   const d = derivedStats(c);
   c.armorTrack.slots = Math.min(c.armorTrack.total, d.armorSlots);
@@ -395,7 +415,7 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
     if (!modifierActive(c, m)) return;
     if (!m.roll || !targets.includes(m.roll)) return;
     if (m.consume && !withConsumables) return;
-    const v = evalValue(m.value, c);
+    const v = m.traitValue ? traitTotal(c, m.traitValue) : evalValue(m.value, c);
     out.value += v;
     const level = Object.keys(m.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
     const dice = level === undefined ? m.dice : m.diceByLevel![String(level)];
@@ -430,7 +450,7 @@ export function configuredRollOption(c: CharacterSheet, selection: AvailableRoll
   const { option } = selection;
   if (!option.input && !option.quantity) return selection;
   const min = option.input?.min ?? 1;
-  const max = option.input?.max ?? (c.resources?.[option.quantity!.resource] ?? 0);
+  const max = option.input?.max ?? (option.quantity?.resource === 'hope' ? c.hope.on : c.resources?.[option.quantity!.resource] ?? 0);
   const value = input ?? option.input?.default ?? 1;
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${option.input?.label ?? option.quantity?.label}: choose a whole number from ${min} to ${max}`);
   return { ...selection, option: { ...option,
@@ -487,6 +507,9 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
   }));
   return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
     .filter((o) => targets.includes(o.roll))
+    .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
+    .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
+    .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
     .filter((o) => !o.excludeRolls?.some(target => targets.includes(target)))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
@@ -551,6 +574,9 @@ export function effectiveAdvantage(requested: Advantage, selected: AvailableRoll
 }
 
 export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOption[], experience = false): string | null {
+  if (selected.filter(s => s.option.combo).length > 1) return 'Choose only one Combo Strike cost';
+  const groups = selected.map(s => s.option.exclusive).filter(Boolean);
+  if (new Set(groups).size !== groups.length) return 'Choose only one cost for each additional target';
   const cost: Record<string, number> = experience ? { hope: 1 } : {};
   const uses = new Map<string, number>();
   const items = new Map<CharacterSheet['inventory'][number], number>();
@@ -599,16 +625,21 @@ export function traitContributions(c: CharacterSheet, name: TraitName): RollCont
   ];
 }
 
-export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number], bonus: RollBonus): RollContribution[] {
-  const proficiency = derivedStats(c).proficiency;
-  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] }, weapon.automation?.damage, weapon.fixedDice);
+export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number], bonus: RollBonus, proficiencyBonus = 0): RollContribution[] {
+  const proficiency = derivedStats(c).proficiency + proficiencyBonus;
+  const pool = damagePool(c, weapon);
+  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] }, pool, weapon.fixedDice);
   const parts = /^(\d+d\d+(?:kh\d+)?)([+-]\d+)?$/i.exec(base);
   const sources = statSources(c, 'proficiency');
   const raw = c.proficiency.on + sources.reduce((n, s) => n + s.value, 0);
   const diceCount = (n: number) => `${n >= 0 ? '+' : ''}${n} ${Math.abs(n) === 1 ? 'die' : 'dice'}`;
   const notes = [
     { label: 'Base Proficiency', impact: `${c.proficiency.on} dice` },
+    ...(proficiencyBonus ? [{ label: 'Attack-linked Proficiency', impact: diceCount(proficiencyBonus) }] : []),
     ...sources.map((s) => ({ label: s.label.slice(0, 120), impact: diceCount(s.value) })),
+    ...c.effects.filter(e => e.damage && (e.damage.extraDice || e.damage.dropLowest)).map(e => ({
+      label: e.name, impact: `Each pool: roll ${e.damage!.extraDice} extra; discard ${e.damage!.dropLowest} lowest`,
+    })),
     ...(raw < 1 ? [{ label: 'Minimum Proficiency', impact: diceCount(1 - raw) }] : []),
     ...(weapon.automation?.damage ? [{ label: weapon.feature?.name ?? weapon.name, impact: `Roll ${weapon.automation.damage.extraDice} extra; discard ${weapon.automation.damage.dropLowest} lowest` }] : []),
   ];
@@ -733,6 +764,8 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
+  if (action.excludesFeature && hasFeature(c, action.excludesFeature)) return 'This option has been replaced by another feature';
   if (action.actionRoll?.trait === 'spellcast' && !c.traits.some(t => t.spellcast)) return 'No Spellcast trait is available';
   if (action.deathMove && c.hp.slots > 0 && (c.permanentHp ?? 0) >= c.hp.slots) return 'All Hit Points are permanently marked; this character has crossed the veil of death.';
   if (action.deathMove && (c.hp.on < c.hp.slots || c.pendingDeathRoll)) return 'Requires all HP marked and no pending death recovery';
@@ -826,13 +859,23 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
 
 /** Parses a weapon damage string like "d8+1" or "1d10+2" against the proficiency (dice count). */
 export function damageExpression(damage: string, proficiency: number, extra: RollBonus, pool?: Automation['damage'], fixed = false): string {
-  const m = /^(\d*)d(\d+)([+-]\d+)?$/i.exec(damage.replace(/\s/g, ''));
-  const count = fixed && m ? Number(m[1] || 1) : proficiency + (pool?.extraDice ?? 0);
-  const keep = count - (pool?.dropLowest ?? 0);
-  let e = m ? `${count}d${m[2]}${pool?.dropLowest ? `kh${keep}` : ''}${m[3] ?? ''}` : damage;
+  let e = damage.replace(/\s/g, '');
+  if (/^(?:\d*d\d+\+)*\d*d\d+(?:[+-]\d+)?$/i.test(e)) {
+    e = e.replace(/(\d*)d(\d+)/gi, (_term, count: string, sides: string) => {
+      const n = (fixed ? Number(count || 1) : proficiency) + (pool?.extraDice ?? 0);
+      return `${n}d${sides}${pool?.dropLowest ? `kh${n - pool.dropLowest}` : ''}`;
+    });
+  }
   if (extra.value) e += extra.value > 0 ? `+${extra.value}` : `${extra.value}`;
   for (const d of extra.dice) e += `+${d.startsWith('d') ? `1${d}` : d}`;
   return e;
+}
+
+export function damagePool(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number]): Automation['damage'] {
+  const pools = [weapon.automation?.damage, ...c.effects.map(e => e.damage)].filter((p): p is NonNullable<Automation['damage']> => !!p);
+  if (!pools.length) return undefined;
+  return { extraDice: pools.reduce((n, p) => n + p.extraDice, 0), dropLowest: pools.reduce((n, p) => n + p.dropLowest, 0),
+    maximumOnes: pools.some(p => p.maximumOnes) };
 }
 
 /** Extra damage of a critical hit: the maximum result of the (kept) damage dice, never the modifiers. */
@@ -866,6 +909,7 @@ export interface RollContext {
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.weaponRange && !c.activeWeapons.some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
   if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;

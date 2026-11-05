@@ -17,7 +17,7 @@ it('negotiates death option capability additively and clears it on reconnect to 
     send(): void {}
     close(): void {}
     hello(expanded?: boolean): void {
-      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded }) });
+      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded, brawlerRolls: expanded }) });
     }
   }
   vi.stubGlobal('WebSocket', FakeSocket);
@@ -25,15 +25,19 @@ it('negotiates death option capability additively and clears it on reconnect to 
   const conn = new Connection({ onOpen: () => {}, onStatus: () => {}, onMessage: () => {} }, () => 0);
   conn.start();
   expect(conn.deathMoveOptions).toBe(false);
+  expect(conn.brawlerRolls).toBe(false);
   sockets[0].hello(true);
   expect(conn.deathMoves).toBe(true);
   expect(conn.deathMoveOptions).toBe(true);
+  expect(conn.brawlerRolls).toBe(true);
   sockets[0].hello();
   expect(conn.deathMoveOptions).toBe(false);
+  expect(conn.brawlerRolls).toBe(false);
   sockets[0].hello(true);
   conn.stop();
   conn.start();
   expect(conn.deathMoveOptions).toBe(false);
+  expect(conn.brawlerRolls).toBe(false);
   sockets[1].hello();
   expect(conn.deathMoves).toBe(true);
   expect(conn.deathMoveOptions).toBe(false);

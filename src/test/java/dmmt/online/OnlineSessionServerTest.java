@@ -1345,6 +1345,106 @@ class OnlineSessionServerTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    @Test
+    void pummeljoyCriticalMeleeRewardsAreAtomicCappedAndClaimedOnlyOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Brawler").ownerId(playerId()).build());
+        rewardSheet(2, 3);
+        compendiumDir = Path.of("dmmap-daggerheart");
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        sheet.putArray("features").addObject().put("name", "Pummeljoy");
+        sheet.putArray("activeWeapons").addObject().put("name", "Brawler's Strike").put("range", "Melee");
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+        String cookie = cookie();
+        ObjectNode roll = rewardRoll(5500, 7, 7);
+        roll.put("source", "attack,action").put("weapon", "Brawler's Strike");
+        store.replaceHistoryEntry(campaign.getId(), 5500, 1234, roll);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        JsonNode updated = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(4, updated.path("hope").path("on").asInt());
+        assertEquals(1, updated.path("stress").path("on").asInt());
+        assertEquals(400, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        ObjectNode ranged = rewardRoll(5501, 7, 7);
+        ranged.put("source", "attack,action").put("weapon", "Bow");
+        store.replaceHistoryEntry(campaign.getId(), 5501, 1234, ranged);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", ranged).statusCode());
+        updated = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(5, updated.path("hope").path("on").asInt());
+        assertEquals(0, updated.path("stress").path("on").asInt());
+    }
+
+    @Test
+    void brawlerDamageResolvesExactingThenUnmodifiedComboOnHostWithAccurateBreakdown() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertTrue(inbox.next("hello").path("brawlerRolls").asBoolean());
+            diceSeed(42);
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d8+2d6+3").put("source", "damage");
+            msg.putObject("damageRules").put("maximumOnes", true).put("comboDie", 4);
+            msg.putArray("contributions").addObject().put("label", "Strike").put("expression", "2d8+2d6+3");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode result = inbox.next("roll");
+            int total = 0;
+            for (JsonNode part : result.path("breakdown")) total += part.path("total").asInt();
+            assertEquals(result.path("total").asInt(), total);
+            assertEquals(2, result.path("breakdown").size());
+            JsonNode combo = result.path("breakdown").path(1);
+            int count = combo.path("rolls").size();
+            assertTrue(count >= 2);
+            assertTrue(combo.path("rolls").path(count - 1).asInt() < combo.path("rolls").path(count - 2).asInt());
+            int sum = 0;
+            for (JsonNode face : combo.path("rolls")) sum += face.asInt();
+            assertEquals(sum, combo.path("total").asInt());
+            msg.put("source", "attack").put("kind", "duality");
+            ws.sendText(msg.toString(), true).join();
+            assertTrue(inbox.next("error").toString().contains("only to damage"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void invigoratingChecksEachAttackOnceCapsFocusAndRequiresItsActiveStance() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("martial").name("Martial Artist").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.putObject("resources").put("focus", 5);
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("brawler-martial-artist-foundation".equals(entry.path("id").asText()))
+                features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects").addObject().put("name", "Invigorating").put("id", "stance").put("stance", true);
+        store.saveSheet(campaign.getId(), "martial", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (new java.util.Random(seed).nextInt(4) != 3) seed++;
+            for (int i = 0; i < 2; i++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"attack,action","actorId":"martial"}
+                        """, true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "martial").put("key", "feat:Stance Fighter").put("actionId", "invigorating");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                diceSeed(seed);
+                var response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "martial")).path("resources").path("focus").asInt());
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                inbox.next("roll"); // The host's d4 check report.
+            }
+            sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "martial"));
+            sheet.putArray("effects");
+            store.saveSheet(campaign.getId(), "martial", sheet.toString());
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,action","actorId":"martial"}
+                    """, true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "martial").put("key", "feat:Stance Fighter").put("actionId", "invigorating");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode rewardRoll(long id, int hope, int fear) throws Exception {
         ObjectNode roll = MAPPER.createObjectNode().put("type", "roll").put("id", id).put("ts", 1234)
                 .put("fromId", playerId()).put("actorId", "reward-actor").put("kind", "duality")

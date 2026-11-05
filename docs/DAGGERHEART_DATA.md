@@ -20,6 +20,55 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 
 ## Automation block
 
+### Brawler and martial stance metadata
+
+`classes.json` maintains Brawler mechanics without inferring rules from feature prose:
+
+- `unarmedWeapon` is a weapon template without a trait. When no real primary or secondary is equipped,
+  the sheet synthesizes it with `generated: "brawler"`, remembers `brawlerTrait`, and shows its Evasion buff.
+  Generated weapons are never added to carried equipment.
+- `criticalMelee: {hope, stress, proficiency}` adds to the standard critical rewards and attack-linked
+  damage Proficiency only for Melee weapon attacks. Rewards remain a single host-authoritative claim.
+- Roll options support `weaponRange`, `requiresFeature`, `excludesFeature`, `exclusive` (mutually exclusive
+  cost group), `combo: true`, and `proficiency` (attack-only bonus carried to that attack's Damage button).
+  `quantity.resource: "hope"` uses the current Hope track, initially selects a quantity of 1, and scales costs.
+  Selecting Combo Strike does not add ordinary dice: the optional `damageRules.comboDie` request asks
+  the host to roll an unmodified nondecreasing chain, including the final lower face, after normal damage.
+  This extra damage is neither maximized for a critical nor multiplied. Excessive chains explicitly fail
+  at the host's dice limit instead of returning a partial result.
+- `stances: [{name, tier, chooseTrait?, effect}]` declares the known-stance choices. Creation persists
+  `stances` in its choices and `knownStances` on the sheet; level history records newly learned `stances`.
+  Two distinct tier-1 choices are required at foundation (including multiclass acquisition), then one
+  unknown stance from the current tier or below per level. `shiftStance` actions pay their configured cost
+  after a known-stance picker; `refocus` actions replace Focus with the highest of Instinct d6s, once per
+  rest using their own `uses`. At Instinct 0 or lower, clear Focus to 0 without rolling.
+  Martial Artist's separate `Focus` foundation feature owns the resource and Refocus action.
+  Stance Fighter declares `grantsFeatures: ["Focus"]` to upgrade existing sheets without resetting
+  Focus or its spent Refocus use. It retains shifting, stance definitions and their exact rules text.
+  Only a selected stance with `chooseTrait: true` shows a trait picker (Favored).
+- A stance effect has `stance: true`, `until: "scene"` and descriptive `text`. Exactly one is active;
+  Severe final damage and marking the last HP drop it. End-of-scene removal uses the Effects tab.
+  `chooseTrait` adds a `roll: "damage"` modifier with `traitValue` set to the selected trait, including
+  its current passive bonuses. Effects can supply `rollOptions`, `actions`,
+  `mitigation` and `damage: {extraDice, dropLowest, maximumOnes?}`. Extra/kept dice apply independently
+  to each base weapon pool (including both Brawler's Strike pools). `maximumOnes` becomes the optional
+  `damageRules.maximumOnes` request, resolved before keeping dice on the host, never on Combo Dice.
+  `hello.brawlerRolls` gates these optional damage rules; older clients retain ordinary rolls.
+  Loading a sheet refreshes its active stance descriptions without replacing chosen-trait modifiers.
+  Generated weapon roll sources include the granting feature's rules when the weapon has no feature text.
+- Stance Fighter's `rollTriggers` use `requiresEffect` and optional `weaponRange`. Invigorating uses
+  `check: {dice: "1d4", success: 4, gain: "focus"}` for a capped, once-per-attack host check; successful-hit
+  and positional prerequisites stay player-confirmed. Non-fixed trigger `damage` opens the normal
+  Proficiency damage dialog (Focus Cannon), without paying the originating roll's cost again.
+- Mitigation can use `reflectHp` (report the actual HP for Eye for an Eye), `finalSevere` plus
+  `recoveryChoice` (automatic Hope-or-Stress recovery after applying damage), and `insteadOfArmor`
+  (Stable's Focus-funded severity reduction, mutually exclusive with marking Armor).
+  Target HP/Stress and forced movement stay table-managed because attack chat has no target actor.
+
+No settings, required protocol fields or LAN compatibility versions change.
+
+### General automation fields
+
 ```json
 {
   "modifiers": [ { "stat": "evasion", "value": -2 }, { "roll": "trait:Finesse", "value": 1, "consume": true } ],

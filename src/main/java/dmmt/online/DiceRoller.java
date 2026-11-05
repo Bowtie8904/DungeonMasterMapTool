@@ -61,6 +61,7 @@ public final class DiceRoller {
             if (part.multiplier() != expected.multiplier()) {
                 throw new IllegalArgumentException("Roll breakdown does not match the damage multiplier");
             }
+
             for (Keep keep : part.keeps()) {
                 keeps.add(new Keep(index + keep.offset(), keep.count(), keep.kept()));
             }
@@ -78,6 +79,28 @@ public final class DiceRoller {
             throw new IllegalArgumentException("Roll breakdown does not match the dice expression");
         }
         return details;
+    }
+
+    public static Result maximumOnes(Result result, int maxDice) {
+        Terms parsed = terms(result.expression(), maxDice);
+        List<Integer> rolls = new ArrayList<>(result.rolls());
+        for (int i = 0; i < rolls.size(); i++) {
+            if (rolls.get(i) == 1) rolls.set(i, parsed.dice().get(i));
+        }
+        return new Result(result.expression(), rolls, total(parsed, rolls));
+    }
+
+    public static List<Integer> combo(int sides, int maxDice, Random random) {
+        if (!List.of(4, 6, 8, 10, 12).contains(sides)) throw new IllegalArgumentException("Invalid Combo Die.");
+        List<Integer> faces = new ArrayList<>();
+        int previous = 0;
+        while (true) {
+            if (faces.size() >= maxDice) throw new IllegalArgumentException("Combo Strike exceeded the host's dice limit. No partial result was applied.");
+            int face = random.nextInt(sides) + 1;
+            faces.add(face);
+            if (face < previous) return faces;
+            previous = face;
+        }
     }
 
     private static int total(Terms terms, List<Integer> rolls) {

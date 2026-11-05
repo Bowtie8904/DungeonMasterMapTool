@@ -6,8 +6,10 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  effectiveAdvantage, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectiveAdvantage, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
+import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
+import { chooseStance } from './brawler-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 
@@ -28,6 +30,7 @@ import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
 export interface RollRequest {
+  damageRules?: { comboDie?: number; maximumOnes?: boolean };
   label: string;
   expression: string;
   kind?: 'duality';
@@ -47,7 +50,7 @@ export class SheetBus {
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
   /** Opens the damage dialog for an equipped weapon; set by the rendered sheet. */
-  damage?: (weapon: string, critical?: boolean, attackFear?: number) => boolean;
+  damage?: (weapon: string, critical?: boolean, attackFear?: number, proficiencyBonus?: number) => boolean;
   /** Opens the damage dialog for a spell; onSent runs once the roll was sent. */
   spellDamage?: (label: string, spec: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' }, critical: boolean, onSent: () => void, rollSource?: RollSource) => boolean;
   subscribe(fn: () => void): void { this.listeners.push(fn); }
@@ -55,6 +58,7 @@ export class SheetBus {
 }
 
 export interface SheetViewOptions {
+  supportsBrawlerRolls?: () => boolean;
   character: CharacterSheet;
   artwork?: string;
   /** Sends a roll to the shared roll log; returns false when it could not be sent. */
@@ -246,10 +250,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined)), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
-  const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number) => {
+  const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
     const bonus = rollBonus(c, targets, w, false);
     openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll('damage', w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
-      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear);
+      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus);
   };
   if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource) => {
     const spell: Weapon = { name: label, slot: 'Primary', damageType: spec.type === 'physical' ? 'phys' : 'magic', trait: 'Presence', range: '', damage: spec.dice, hands: 1, tier: 0, fixedDice: spec.fixed,
@@ -257,9 +261,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     openWeaponDamage(spell, critical, ['damage', 'spelldamage'], onSent, rollSource);
     return true;
   };
-  if (opts.bus) opts.bus.damage = (name, critical, attackFear) => {
+  if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus) => {
     const w = c.activeWeapons.find((x) => x.name === name);
-    if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear);
+    if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear, proficiencyBonus);
     else {
       const feature = [...c.features, ...c.heritage].find((f) => f.name === name);
       const action = feature?.automation?.actions?.find((a) => a.damage);
@@ -282,7 +286,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (key.startsWith('item:') || key.startsWith('feat:')) {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
     }
-    for (const action of actions) row.append(actionButton(key, a!, action, label, hooks));
+    for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) row.append(actionButton(key, a!, action, label, hooks));
     const left = a ? usesLeft(c, key, a) : null;
     if (left !== null && a?.uses) row.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
     return row;
@@ -324,6 +328,22 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !window.confirm('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
+      if (action.shiftStance) {
+        chooseStance(c, (name, trait) => {
+          const lines = shiftStance(c, key, a, action, name, trait);
+          opts.onLog?.(formatActionReport({ title: 'Stance Fighter', character: c.name, lines }), rollSourceFor(c, key));
+          render();
+        }, () => render());
+        return;
+      }
+      if (action.refocus) {
+        try {
+          const lines = refocus(c, key, a, action, rollLocal);
+          opts.onLog?.(formatActionReport({ title: 'Refocus', character: c.name, lines }), rollSourceFor(c, key));
+          render();
+        } catch (e) { opts.onLog?.((e as Error).message); }
+        return;
+      }
       if (action.ancestryChoice) {
         setBusy(true);
         void chooseAncestryFeature(root, c.ancestry, action.ancestryChoice === 'ancestry', c.ancestryFeature).then((picked) => {
@@ -673,7 +693,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (e.lockedHp) dismiss.title = 'This HP lock ends only when you rest.';
       dismiss.addEventListener('click', () => { c.effects.splice(c.effects.indexOf(e), 1); render(); });
       const mods = (e.modifiers ?? []).map((m) => {
-        const v = m.dice ? `+${m.dice}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
+        const v = m.traitValue ? `${m.traitValue} (${signed(traitTotal(c, m.traitValue))})`
+          : m.dice ? `+${m.dice}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
         return m.stat ? `${m.stat.replace('trait.', '')} ${v}` : `next ${(m.roll ?? '').replace('trait:', '')} roll ${v}`;
       });
       return el(
@@ -740,12 +761,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const dmg = el('button', { class: 'small', type: 'button' }, 'Damage');
     dmg.addEventListener('click', () => openWeaponDamage(w));
     const unequip = el('button', { class: 'small', type: 'button' }, 'Unequip');
+    unequip.hidden = !!w.generated;
     unequip.addEventListener('click', () => { c.activeWeapons.splice(c.activeWeapons.indexOf(w), 1); c.carriedWeapons.push(w); render(); });
     const actions = actionRow(`weapon:${w.name}`, w.automation, w.feature?.name ?? w.name);
+    const traitChoice = w.generated ? el('select', { ariaLabel: "Brawler's Strike trait" }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name))) : undefined;
+    if (traitChoice) {
+      traitChoice.value = w.trait;
+      traitChoice.addEventListener('change', () => { c.brawlerTrait = traitChoice.value as TraitName; render(); });
+    }
     return share(el(
       'div', { class: 'slot' },
       el('div', { class: 'top' }, el('span', { class: 'cat' }, w.slot), el('span', { class: 'nm' }, w.name)),
       weaponBadges(w),
+      ...(traitChoice ? [el('label', {}, 'Attack trait', traitChoice)] : []),
       ...(w.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, w.feature.name), rich(w.feature.text))] : []),
       el('div', { class: 'inventory-controls' }, attack, dmg, ...(actions ? [actions] : []), unequip),
     ), { category: 'weapon', item: w });
@@ -794,6 +822,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function equipWeapon(w: Weapon): void {
     // a two-handed weapon replaces everything; otherwise make room for it
+    c.activeWeapons = c.activeWeapons.filter(x => !x.generated);
     if (w.hands === 2) c.carriedWeapons.push(...c.activeWeapons.splice(0));
     else {
       c.carriedWeapons.push(...c.activeWeapons.filter((x) => x.hands === 2 || x.slot === w.slot));
@@ -1109,7 +1138,7 @@ function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: n
 }
 
 /** Small modal: advantage and Experience spend; posts the duality roll to the chat. */
-export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number): void {
+export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0): void {
   const mod = trait.reduce((n, s) => n + Number(s.expression), 0);
   let reaction = targets.includes('reaction');
   const canChooseReaction = !weapon && !pendingAction && !targets.includes('attack') && targets.some((target) => target.startsWith('trait:'));
@@ -1140,7 +1169,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   };
   const blocker = () => {
     try { selected(); } catch (e) { return (e as Error).message; }
-    if (weapon?.automation?.damage?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
+    if (weapon && damagePool(c, weapon)?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
+    if (weapon && (damagePool(c, weapon)?.maximumOnes || selected().some(s => s.option.combo)) && !supportsBrawlerRolls?.()) return 'Update the host to roll Combo Strike or Exacting damage.';
     if (selected().some((s) => s.option.multiplier) && !supportsRollMultipliers?.()) return 'This host does not support damage multipliers. Update the host to use this option.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
     if (selected().some((s) => !active.some((a) => a.key === s.key && a.option.id === s.option.id && a.active === s.active))) return 'A selected bonus changed. Reopen this roll dialog.';
@@ -1156,8 +1186,13 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const preview = el('div', { class: 'muted' });
   const crit = el('input', { type: 'checkbox' });
   crit.checked = critical;
+  const proficiencyExtra = () => proficiencyBonus + criticalMeleeBonus(c, weapon?.name, crit.checked).proficiency;
+  const damageType = el('select', { ariaLabel: 'Otherworldly damage type' },
+    el('option', { value: 'physical' }, 'Physical damage'), el('option', { value: 'magic' }, 'Magic damage'));
+  damageType.value = weapon?.damageType === 'magic' ? 'magic' : 'physical';
+  const otherworldly = !!weapon && c.effects.some(e => e.stance && e.name === 'Otherworldly');
   const damageText = (b: RollBonus) => {
-    const base = damageExpression(weapon!.damage, derivedStats(c).proficiency, b, weapon!.automation?.damage, weapon!.fixedDice);
+    const base = damageExpression(weapon!.damage, derivedStats(c).proficiency + proficiencyExtra(), b, damagePool(c, weapon!), weapon!.fixedDice);
     const extra = crit.checked ? criticalBonus(base) : 0;
     return { base, extra, text: extra ? `${base}+${extra}` : base };
   };
@@ -1193,7 +1228,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const initial = s.option.input?.source === 'attackFear' && typeof attackFear === 'number' && Number.isInteger(attackFear)
       && attackFear >= s.option.input.min && attackFear <= s.option.input.max ? attackFear : s.option.input?.default ?? 1;
     const amount = s.option.input || s.option.quantity ? el('input', { type: 'number', step: '1',
-      min: String(s.option.input?.min ?? 1), max: String(s.option.input?.max ?? c.resources?.[s.option.quantity!.resource] ?? 0),
+      min: String(s.option.input?.min ?? 1), max: String(s.option.input?.max ?? (s.option.quantity?.resource === 'hope' ? c.hope.on : c.resources?.[s.option.quantity!.resource] ?? 0)),
       value: String(initial), ariaLabel: s.option.input?.label ?? s.option.quantity!.label }) : undefined;
     if (amount) {
       values.set(i, amount.valueAsNumber);
@@ -1218,12 +1253,16 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const actualAdvantage = effectiveAdvantage(requestedAdvantage, selected());
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
     const request: RollRequest = weapon ? {
-      label,
+      label: otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
+      ...(selected().some(s => s.option.combo) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
+        ...(selected().some(s => s.option.combo) ? { comboDie: comboDie(c) } : {}),
+        ...(damagePool(c, weapon)?.maximumOnes ? { maximumOnes: true } : {}),
+      } } : {}),
       ...damageRollFormula(damageText(b).text,
-        [...damageContributions(c, weapon, b), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])], selected()),
+        [...damageContributions(c, weapon, b, proficiencyExtra()), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])], selected()),
     } : {
       label,
-      source: currentTargets().join(','),
+      source: [...currentTargets(), ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : [])].join(','),
       expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12, selected().some((s) => s.option.fearDie === 20) ? 20 : 12) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
       kind: 'duality',
       contributions: [
@@ -1283,6 +1322,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
           el('div', { class: 'dh-adv dh-roll-type', role: 'group', ariaLabel: 'Roll type' }, ...modeButtons))] : []),
         el('label', {}, 'Experience (spend 1 Hope)', exp),
       ]),
+      ...(otherworldly ? [el('label', {}, 'Otherworldly: damage type', damageType)] : []),
       optionFieldset,
       preview,
       error,

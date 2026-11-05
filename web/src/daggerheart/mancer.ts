@@ -6,6 +6,8 @@ import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
 import { ancestryPicker } from './ancestry-choice';
 import { ancestryFeatureChoices } from './rules';
+import { levelUpStances } from './rules';
+import { stanceProblems } from './brawler';
 import {
   ADVANCEMENT_TYPES, MAX_LEVEL, RulesData, STAGES, TRAIT_VALUES, achievementsAt, advancementCost, advancementLeft, applyLevelUp, buildCharacter,
   classEntries, creationAllowances, creationCardProblems, creationExperienceProblems, creationProblems, emptyChoices, experienceProblems, findClass, guideFor, levelUpCards, levelUpProblems, loadRulesData, setTransformation, shortSubclass,
@@ -272,6 +274,19 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
             (f?.features ?? []).map((x) => el('span', { class: 'meta' }, badge(x.name, 'feat'))), false, () => subclassPanel(data, name)));
         }
         body.append(grid);
+      },
+    });
+    const stanceCatalog = subclassCard(data, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
+    if (stanceCatalog.length) list.push({
+      key: 'stances', title: 'Choose two martial stances', hint: 'Choose two different tier 1 stances.',
+      problem: () => stanceProblems(stanceCatalog, ch.stances ?? [], 2, 1)[0] ?? null,
+      render: (body, _touch, redraw) => {
+        const selected = ch.stances ??= [];
+        body.append(el('div', { class: 'cho-grid' }, ...stanceCatalog.filter(s => s.tier === 1).map(s =>
+          choice(s.name, s.effect.text ?? '', selected.includes(s.name), () => {
+            ch.stances = selected.includes(s.name) ? selected.filter(name => name !== s.name) : selected.length < 2 ? [...selected, s.name] : selected;
+            redraw();
+          }))));
       },
     });
 
@@ -589,6 +604,7 @@ const ADV_INFO: Record<AdvancementType, [string, string]> = {
   subclass: ['Upgrade your subclass', 'Unlock the next level of your subclass.'],
   proficiency: ['Raise your Proficiency', '+1 Proficiency (costs 2 points).'],
   multiclass: ['Multiclass', 'Take a second class\'s domain, feature and subclass Foundation (costs 2 points).'],
+  combo: ['Increase Combo Die', 'Increase your Combo Die by one step (once in this tier).'],
 };
 
 /** Opens the level-up guide for the next level. The sheet is updated in place and the choices are remembered in its level history. */
@@ -739,6 +755,19 @@ export async function openLevelUp(host: HTMLElement, c: CharacterSheet, onDone: 
       }
     });
 
+    const stances = levelUpStances(data, c, rec);
+    if (stances.count) list.push({
+      key: 'stances', title: 'Learn martial stances', hint: `Choose ${stances.count} new stance(s) from tier ${tierOf(level)} or below.`,
+      problem: () => stanceProblems(stances.catalog, rec.stances ?? [], stances.count, tierOf(level), c.knownStances)[0] ?? null,
+      render: (body, _touch, redraw) => {
+        const selected = rec.stances ??= [];
+        body.append(el('div', { class: 'cho-grid' }, ...stances.catalog.filter(s => s.tier <= tierOf(level) && !c.knownStances?.includes(s.name)).map(s =>
+          choice(`${s.name} (tier ${s.tier})`, s.effect.text ?? '', selected.includes(s.name), () => {
+            rec.stances = selected.includes(s.name) ? selected.filter(name => name !== s.name) : selected.length < stances.count ? [...selected, s.name] : selected;
+            redraw();
+          }))));
+      },
+    });
     const pool = () => cardPool().filter((e) => e.name === rec.card || !pickedCards().includes(e.name));
     list.push({
       key: 'card', title: 'Take a new domain card', hint: `A card of level ${level} or lower from your domains. It goes into your loadout if there is room, otherwise into the vault.`,

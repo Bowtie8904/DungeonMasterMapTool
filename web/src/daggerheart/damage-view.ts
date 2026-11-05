@@ -54,6 +54,13 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     const r = computeDamage(c, options, input);
     const free = Math.max(0, c.armorTrack.slots - c.armorTrack.on);
     body.replaceChildren();
+    if (r.applied.some(m => m.option.recoveryChoice)) {
+      const recovery = el('select', { ariaLabel: 'Not Done Yet recovery' },
+        el('option', { value: 'hope' }, 'Gain 1 Hope'), el('option', { value: 'stress' }, 'Clear 1 Stress'));
+      recovery.value = r.recovery ?? 'hope';
+      recovery.addEventListener('change', () => { input.recovery = recovery.value === 'stress' ? 'stress' : 'hope'; draw(); });
+      body.append(el('label', {}, 'Not Done Yet (automatic on Severe damage)', recovery));
+    }
 
     // Base Armor Slot.
     const armorBox = el('input', { type: 'checkbox' }) as HTMLInputElement;

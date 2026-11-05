@@ -1504,6 +1504,23 @@ public final class OnlineSessionServer {
                 JsonNode check = definition.path("check");
                 DiceRoller.Result result = DiceRoller.roll(check.path("dice").asText(""), config.maxDice(), diceRandom);
                 int die = result.rolls().isEmpty() ? 0 : result.rolls().getFirst();
+                if (check.has("gain")) {
+                    if (die == check.path("success").asInt()) {
+                        ArrayNode steps = MAPPER.createArrayNode();
+                        steps.addObject().put("op", "gain").put("resource", check.path("gain").asText()).put("amount", 1);
+                        applyFeatureSteps(sourceSheet, steps, actionLabel, sourceActor, key, reportLines);
+                    } else reportLines.add("No resource gained.");
+                    if (originalRoll != null) {
+                        originalRoll.withArray("featureUses").add(sourceActor.getId() + ":" + key + ":" + actionId);
+                        sourceSheet.put("featureRevision", sourceSheet.path("featureRevision").asLong() + 1);
+                        store.saveSheetsAndRoll(c.getId(), changedSheets, originalRoll);
+                        broadcastRollUpdate(originalRoll);
+                    } else commitFeatureSheets(changedSheets);
+                    sendFeatureState(sourceActor, sourceSheet);
+                    publishFeatureCheck(sourceActor, source, actionLabel, result, String.join(" ", reportLines));
+                    json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                    return;
+                }
                 boolean marked = die != check.path("unless").asInt(Integer.MIN_VALUE);
                 String mark = check.path("mark").asText("stress");
                 if (!isTrack(mark)) throw new IllegalArgumentException("Invalid feature check consequence.");
@@ -1904,11 +1921,12 @@ public final class OnlineSessionServer {
             boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
             if (!critical && !withHope)
                 throw new IllegalArgumentException("Only Hope or critical results have a reward.");
-            int gained = gainTrack(sheet, "hope", 1);
+            JsonNode meleeReward = critical ? criticalMeleeReward(sheet, roll) : MAPPER.createObjectNode();
+            int gained = gainTrack(sheet, "hope", 1 + meleeReward.path("hope").asInt());
             int cleared = 0;
             if (critical) {
                 ObjectNode stress = requireTrack(sheet, "stress");
-                cleared = Math.min(1, Math.max(0, stress.path("on").asInt()));
+                cleared = Math.min(1 + meleeReward.path("stress").asInt(), Math.max(0, stress.path("on").asInt()));
                 stress.put("on", stress.path("on").asInt() - cleared);
             }
             if (gained <= 0 && cleared == 0)
@@ -1928,6 +1946,20 @@ public final class OnlineSessionServer {
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not save the roll reward. Reload before retrying."));
         }
+    }
+
+    private JsonNode criticalMeleeReward(ObjectNode sheet, ObjectNode roll) {
+        if (!List.of(roll.path("source").asText("").split(",")).contains("attack")) return MAPPER.createObjectNode();
+        boolean melee = false;
+        for (JsonNode weapon : sheet.path("activeWeapons")) {
+            if (weapon.path("name").asText().equals(roll.path("weapon").asText()) && "melee".equalsIgnoreCase(weapon.path("range").asText())) melee = true;
+        }
+        if (!melee) return MAPPER.createObjectNode();
+        for (JsonNode feature : sheet.path("features")) {
+            JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(), feature.path("name").asText(), feature.path("automation"));
+            if (auto.path("criticalMelee").isObject()) return auto.path("criticalMelee");
+        }
+        return MAPPER.createObjectNode();
     }
 
     private void validateTrigger(Campaign.Actor sourceActor, String key, JsonNode trigger, ObjectNode roll) throws IOException {
@@ -1955,6 +1987,12 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature requires a weapon attack.");
         if (trigger.has("weapon") && !trigger.path("weapon").asText().equals(roll.path("weapon").asText()))
             throw new IllegalArgumentException("This feature requires a " + trigger.path("weapon").asText() + " attack.");
+        if (trigger.has("weaponRange")) {
+            boolean matching = false;
+            for (JsonNode weapon : storedSheet(sourceActor.getId()).path("activeWeapons"))
+                if (weapon.path("name").asText().equals(roll.path("weapon").asText()) && trigger.path("weaponRange").asText().equalsIgnoreCase(weapon.path("range").asText())) matching = true;
+            if (!matching) throw new IllegalArgumentException("This feature requires a " + trigger.path("weaponRange").asText() + " weapon attack.");
+        }
         ArrayNode uses = roll.withArray("featureUses");
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
         if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
@@ -2916,6 +2954,7 @@ public final class OnlineSessionServer {
             hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
+            hello.put("brawlerRolls", true);
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
             hello.put("partyFeatures", true);
@@ -3159,6 +3198,12 @@ public final class OnlineSessionServer {
             to = chatRecipient(msg);
             rollSource = rollSource(msg);
             result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
+            if (msg.has("damageRules")) {
+                if (!msg.path("damageRules").isObject() || !List.of(msg.path("source").asText("").split(",")).contains("damage")
+                        || "duality".equals(msg.path("kind").asText()))
+                    throw new IllegalArgumentException("Brawler dice rules apply only to damage rolls.");
+                if (msg.path("damageRules").path("maximumOnes").asBoolean()) result = DiceRoller.maximumOnes(result, config.maxDice());
+            }
             if (msg.has("contributions")) {
                 JsonNode sources = msg.path("contributions");
                 if (!sources.isArray() || sources.isEmpty() || sources.size() > 64) {
@@ -3189,6 +3234,19 @@ public final class OnlineSessionServer {
                     breakdownNotes.add(notes);
                 }
                 breakdown = DiceRoller.breakdown(result, contributions, config.maxDice());
+                if (msg.path("damageRules").path("maximumOnes").asBoolean() && !breakdownNotes.isEmpty())
+                    breakdownNotes.getFirst().addObject().put("label", "Exacting").put("impact", "Damage dice showing 1 count as maximum; Combo Dice remain unmodified.");
+            }
+            if (msg.path("damageRules").has("comboDie")) {
+                JsonNode die = msg.path("damageRules").path("comboDie");
+                if (!die.isInt()) throw new IllegalArgumentException("Invalid Combo Die.");
+                List<Integer> combo = DiceRoller.combo(die.asInt(), config.maxDice() - result.rolls().size(), diceRandom);
+                int extra = combo.stream().mapToInt(Integer::intValue).sum();
+                if (breakdown == null) breakdown = new ArrayList<>(List.of(new DiceRoller.Detail("Damage", result.expression(), result.rolls(), result.total())));
+                breakdown.add(new DiceRoller.Detail("Combo Strike rolls", combo.size() + "d" + die.asInt(), combo, extra));
+                List<Integer> all = new ArrayList<>(result.rolls());
+                all.addAll(combo);
+                result = new DiceRoller.Result(result.expression() + "+" + extra, all, result.total() + extra);
             }
         } catch (IllegalArgumentException e) {
             sendTo(client.ctx, error(e.getMessage()));

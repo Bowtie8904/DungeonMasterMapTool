@@ -7,6 +7,7 @@ import {
 import { CompendiumEntry, addToSheet, armorFrom, cardFrom, fetchCompendiumCategory, weaponFrom } from './compendium';
 import { Automation, syncDerived } from './engine';
 import { CLASS_GUIDES, ClassGuide, GENERIC_GUIDE } from './guide';
+import { martialStances, stanceProblems } from './brawler';
 
 export interface RulesData {
   classes: CompendiumEntry[];
@@ -213,6 +214,8 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   const p: string[] = [];
   if (!findClass(d, ch.className)) p.push('Choose a class.');
   if (!ch.subclass) p.push('Choose a subclass.');
+  const stances = subclassCard(d, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
+  if (stances.length) p.push(...stanceProblems(stances, ch.stances ?? [], 2, 1));
   if (!ch.ancestry || !ch.community) p.push('Choose an ancestry and a community.');
   if (ch.transformation === 'Shapeshifter' && !ancestryFeatureChoices(d.ancestries, ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry).some((f) => f.name === ch.ancestryFeature)) p.push('Choose the ancestry feature to retain.');
   if (!traitsValid(ch.traits)) p.push('Assign +2, +1, +1, 0, 0 and -1 to your six traits.');
@@ -267,6 +270,11 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   const foundation = subclassCard(d, ch.subclass, 'foundation');
   c.subclass = shortSubclass(ch.subclass);
   for (const f of foundation?.features ?? []) c.features.push(toFeature(`Subclass foundation - ${c.subclass}`, f));
+  if (martialStances(c).length) {
+    const errors = stanceProblems(martialStances(c), ch.stances ?? [], 2, 1);
+    if (errors.length && !prev?.testingCharacter) throw new Error(errors.join(' '));
+    c.knownStances = [...(ch.stances ?? [])];
+  }
   markSpellcast(c, foundation?.spellcastTrait);
 
   c.ancestry = ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry;
@@ -334,6 +342,7 @@ export const ADVANCEMENT_RULES: Record<AdvancementType, SlotRule> = {
   subclass: { perTier: [0, 1, 1], cost: 1 },
   proficiency: { perTier: [0, 1, 1], cost: 2 },
   multiclass: { perTier: [0, 1, 1], cost: 2 },
+  combo: { perTier: [1, 1, 1], cost: 1 },
 };
 
 export const ADVANCEMENT_TYPES = Object.keys(ADVANCEMENT_RULES) as AdvancementType[];
@@ -357,6 +366,12 @@ export function subclassStageOf(c: CharacterSheet): Stage {
 export function advancementLeft(c: CharacterSheet, type: AdvancementType, level: number, pending: Advancement[] = []): number {
   const tier = tierOf(level);
   const used = usedAdvancements(c);
+  if (type === 'combo') {
+    if (!c.features.some(f => f.automation?.rollOptions?.some(o => o.combo))) return 0;
+    const currentTier = tierOf(level);
+    const taken = (c.levelUps ?? []).filter(l => tierOf(l.level) === currentTier).flatMap(l => l.advancements).filter(a => a.type === 'combo').length;
+    return Math.max(0, 1 - taken - pending.filter(a => a.type === 'combo').length);
+  }
   for (const a of pending) used[a.type]++;
   const slots = (t: AdvancementType) => ADVANCEMENT_RULES[t].perTier.slice(0, Math.max(0, tier - 1)).reduce((a, b) => a + b, 0) - used[t];
   if (type === 'subclass' || type === 'multiclass') {
@@ -391,6 +406,8 @@ export function ownedCards(c: CharacterSheet): string[] {
 export function levelUpProblems(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): string[] {
   const p: string[] = [];
   if (rec.level !== c.level + 1 || rec.level > MAX_LEVEL) p.push('Wrong level.');
+  const stanceSelection = levelUpStances(d, c, rec);
+  if (stanceSelection.count) p.push(...stanceProblems(stanceSelection.catalog, rec.stances ?? [], stanceSelection.count, tierOf(rec.level), c.knownStances));
   const ach = achievementsAt(rec.level);
   if (ach.experience && !rec.experience?.trim()) p.push('Write the new Experience.');
   const cost = rec.advancements.reduce((n, a) => n + advancementCost(a.type), 0);
@@ -418,14 +435,29 @@ export function levelUpProblems(d: RulesData, c: CharacterSheet, rec: LevelUpRec
   return p;
 }
 
+export function levelUpStances(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): { catalog: NonNullable<Automation['stances']>; count: number } {
+  const catalog = martialStances(c);
+  if (catalog.length) return { catalog, count: 1 };
+  const foundation = rec.advancements.find(a => a.multiclass)?.multiclass?.subclass;
+  const added = foundation ? subclassCard(d, foundation, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [] : [];
+  return { catalog: added.filter(s => s.tier === 1), count: added.length ? 2 : 0 };
+}
+
 /** Applies a validated level-up record to the sheet and remembers it in the level history. */
 export function applyLevelUp(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): void {
+  const stanceSelection = levelUpStances(d, c, rec);
+  if (stanceSelection.count) {
+    const errors = stanceProblems(stanceSelection.catalog, rec.stances ?? [], stanceSelection.count, tierOf(rec.level), c.knownStances);
+    if (errors.length) throw new Error(errors.join(' '));
+    c.knownStances = [...(c.knownStances ?? []), ...rec.stances!];
+  }
   const ach = achievementsAt(rec.level);
   c.level = rec.level;
   if (ach.experience) {
     c.proficiency.on = Math.min(c.proficiency.total, c.proficiency.on + 1);
     if (rec.experience?.trim()) c.experiences.push({ name: rec.experience.trim(), mod: 2 });
   }
+
   if (ach.clearTraits) for (const t of c.traits) t.marked = false;
   const addCard = (name: string, replace?: string) => {
     const entry = d.cards.find((e) => e.name === name);

@@ -77,6 +77,7 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     const feature = candidates.flatMap((e) => e.features ?? []).find((a) => a.name === f.name);
     if (feature) {
       f.automation = feature.automation;
+      if (feature.automation?.stances) f.text = feature.text;
       for (const name of feature.automation?.grantsFeatures ?? []) {
         const granted = candidates.flatMap(e => e.features ?? []).find(item => item.name === name);
         if (!granted) continue;
@@ -88,6 +89,19 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
       const entry = candidates.find((e) => e.name === f.name);
       if (entry) f.automation = entry.automation;
     }
+  }
+  if (c.features.some(f => f.name === 'Focus' && f.automation?.actions?.some(a => a.refocus))) {
+    const previous = c.usage['feat:Stance Fighter:action:refocus'];
+    if (previous) {
+      const current = c.usage['feat:Focus:action:refocus'];
+      c.usage['feat:Focus:action:refocus'] = { ...previous, used: Math.max(previous.used, current?.used ?? 0) };
+      delete c.usage['feat:Stance Fighter:action:refocus'];
+    }
+  }
+  const stances = c.features.flatMap(f => f.automation?.stances ?? []);
+  for (const effect of c.effects.filter(e => e.stance)) {
+    const stance = stances.find(s => s.name === effect.name);
+    if (stance) effect.text = stance.effect.text;
   }
   syncResources(c);
   for (const source of automationSources(c)) stripSceneUses(source.automation);

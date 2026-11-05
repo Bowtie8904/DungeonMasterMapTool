@@ -14,8 +14,9 @@ export function rollSourceFor(c: CharacterSheet, key: string): RollSource | unde
     }
   }
   for (const w of [...c.activeWeapons, ...c.carriedWeapons]) {
+    const grantedBy = w.generated ? c.features.find(f => f.automation?.unarmedWeapon?.name === w.name) : undefined;
     if (key === `weapon:${w.name}`) return {
-      name: w.name, text: w.feature ? `${w.feature.name}\n\n${w.feature.text}` : '',
+      name: w.name, text: w.feature ? `${w.feature.name}\n\n${w.feature.text}` : grantedBy ? `${grantedBy.name}\n\n${grantedBy.text}` : '',
       source: `${w.trait} - ${w.range} - ${w.damage} ${w.damageType}`,
     };
   }

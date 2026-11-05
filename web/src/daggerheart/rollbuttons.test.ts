@@ -111,6 +111,45 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('carries Honed Proficiency from only the clicked attack into damage', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const damage = vi.fn(() => true);
+    const box = rollButtons({ ...original, source: 'attack,action,proficiency:1', weapon: 'Dagger' },
+      { ...host, sheet: async () => ({ ...sheet!, bus: { damage } }) } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find(b => b.text === 'Damage')!.click();
+    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 1);
+  });
+
+  it('opens Focus Cannon damage only on its own Instinct roll without paying Focus again', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', { name: 'Focus Cannon', automation: {
+      rollTriggers: [{ id: 'damage', label: 'Focus Cannon damage', on: 'feat:Focus Cannon', damage: { dice: 'd20+3', type: 'magic' } }],
+    } });
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const spellDamage = vi.fn(() => true);
+    const box = rollButtons({ ...original, source: 'action,trait:Instinct,feat:Focus Cannon' },
+      { ...host, sheet: async () => ({ ...sheet!, bus: { spellDamage } }) } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find(b => b.text === 'Focus Cannon damage')!.click();
+    expect(spellDamage).toHaveBeenCalledWith('Focus Cannon damage', { dice: 'd20+3', type: 'magic' }, false, expect.any(Function), undefined);
+  });
+
+  it('labels Pummeljoy critical Melee claims with both additional rewards', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', { name: 'Pummeljoy', automation: { criticalMelee: { hope: 1, stress: 1, proficiency: 1 } } });
+    c.activeWeapons = [{ name: 'Strike', range: 'Melee' }] as CharacterSheet['activeWeapons'];
+    const { host } = hostFor({ 'actor-b': c });
+    const box = rollButtons({ ...original, source: 'attack,action', weapon: 'Strike', rolls: [7, 7], rewardClaimed: false },
+      { ...host, playerId: 'player-b', supportsRollRewards: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').some(b => b.text === 'Gain 2 Hope / Clear 2 Stress')).toBe(true);
+  });
+
   it.each([
     ['Relaxing Song', 'heal', 'Within Close range: clear 1 HP', 'hp', 'clear', 1],
     ['Heartbreaking Song', 'hope', 'Within Close range: gain 1 Hope', 'hope', 'gain', 1],
@@ -280,7 +319,7 @@ describe('cross-player roll buttons', () => {
       { ...host, sheet: async () => ({ ...sheet!, bus: { damage } }) } as never) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     await box.queryAll('button').find((b) => b.text === 'Damage')!.click();
-    expect(damage).toHaveBeenCalledWith('Dagger', critical, fear);
+    expect(damage).toHaveBeenCalledWith('Dagger', critical, fear, 0);
   });
 
   it('offers damage reactions on single-die damage, without Duality rewards or triggers', async () => {

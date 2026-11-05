@@ -1,6 +1,8 @@
 import { CharacterSheet, TestingBuild, TestingStage } from './data';
 import { cardFrom, CompendiumEntry } from './compendium';
 import { resourceDefinitions, syncDerived } from './engine';
+import { martialStances } from './brawler';
+import { tierOf } from './data';
 import {
   buildCharacter, classEntries, creationAllowances, emptyChoices, findClass, guideFor, MAX_LEVEL, RulesData,
   shortSubclass, STAGES, subclassCard, subclassesOf, suggestedTraits,
@@ -109,6 +111,8 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   c.proficiency.on = b.level < 2 ? 1 : b.level < 5 ? 2 : b.level < 8 ? 3 : 4;
   c.traits = base.traits;
   c.features = base.features;
+  const stances = martialStances(c);
+  c.knownStances = stances.length ? stances.filter(s => s.tier <= tierOf(b.level)).map(s => s.name) : undefined;
   c.heritage = base.heritage;
   c.loadout = base.loadout;
   c.vault = [];

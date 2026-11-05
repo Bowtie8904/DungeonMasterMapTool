@@ -9,6 +9,7 @@ import type { CharacterSheet } from './data';
 import { actionBlocker, availableRollTriggers, costText, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
+import { criticalMeleeBonus } from './brawler';
 
 export interface RollButtonSheet {
   character: CharacterSheet;
@@ -242,8 +243,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       && (critical || (ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) === 'hope');
     if (rolledActor && withHope && m.fromId === host.playerId && host.supportsRollRewards?.() && m.rewardClaimed === false) {
       const { character: c, save } = rolledActor.sheet;
+      const extra = criticalMeleeBonus(c, m.weapon, critical);
       const reward = el('button', { class: 'small primary', type: 'button' },
-        critical ? 'Gain 1 Hope / Clear 1 Stress' : 'Gain 1 Hope');
+        critical ? `Gain ${1 + extra.hope} Hope / Clear ${1 + extra.stress} Stress` : 'Gain 1 Hope');
       reward.disabled = claiming || (c.hope.on >= c.hope.slots && (!critical || c.stress.on <= 0));
       reward.title = reward.disabled ? 'Already at maximum Hope with no available reward' : 'Claim this roll reward once';
       reward.addEventListener('click', async () => {
@@ -267,7 +269,10 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
     }
     if (rolledActor && isAttack && m.weapon) {
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
-      damage.addEventListener('click', () => { if (!rolledActor.sheet.bus.damage?.(m.weapon!, critical, ctx?.kind !== 'damage' ? ctx?.fear : undefined)) host.toast(`${m.weapon} is no longer equipped.`); });
+      damage.addEventListener('click', () => {
+        const proficiency = Number(m.source?.split(',').find(tag => /^proficiency:\d+$/.test(tag))?.split(':')[1] ?? 0);
+        if (!rolledActor.sheet.bus.damage?.(m.weapon!, critical, ctx?.kind !== 'damage' ? ctx?.fear : undefined, proficiency)) host.toast(`${m.weapon} is no longer equipped.`);
+      });
       buttons.push(damage);
     }
 
@@ -294,6 +299,12 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.damage && !t.trigger.damage.fixed) {
+            const opened = sheet.bus.spellDamage?.(t.trigger.label, t.trigger.damage, critical, () => { sheet.save(); }, m.rollSource);
+            if (!opened) host.toast('Open this character sheet to roll feature damage.');
+            b.disabled = false;
+            return;
+          }
           if (t.trigger.tokenGain) {
             openTokenGain(t, cost, async (amount) => {
               await sheet.save.flush?.();

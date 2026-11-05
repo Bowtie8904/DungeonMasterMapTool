@@ -1146,6 +1146,7 @@ export class App {
             },
             artwork: a.artwork,
             supportsKeptDice: () => this.conn.keptDice,
+            supportsBrawlerRolls: () => this.conn.brawlerRolls,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {

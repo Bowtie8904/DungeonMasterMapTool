@@ -23,6 +23,7 @@ export interface Track {
 }
 
 export interface Weapon {
+  generated?: string;
   name: string;
   slot: 'Primary' | 'Secondary';
   damageType: 'phys' | 'magic';
@@ -97,6 +98,7 @@ export interface Experience {
 
 /** Everything the player decided in the Character Mancer, kept so the choices can be reviewed and edited. */
 export interface CreationChoices {
+  stances?: string[];
   className: string;
   /** Compendium name of the subclass, e.g. "Ranger: Wayfinder" */
   subclass: string;
@@ -125,7 +127,7 @@ export interface CreationChoices {
   description: string;
 }
 
-export type AdvancementType = 'traits' | 'hp' | 'stress' | 'experiences' | 'card' | 'evasion' | 'subclass' | 'proficiency' | 'multiclass';
+export type AdvancementType = 'traits' | 'hp' | 'stress' | 'experiences' | 'card' | 'evasion' | 'subclass' | 'proficiency' | 'multiclass' | 'combo';
 
 export interface Advancement {
   type: AdvancementType;
@@ -140,6 +142,7 @@ export interface Advancement {
 }
 
 export interface LevelUpRecord {
+  stances?: string[];
   /** Level reached */
   level: number;
   /** Tier achievement: the new Experience gained at levels 2, 5 and 8 */
@@ -152,6 +155,8 @@ export interface LevelUpRecord {
 }
 
 export interface CharacterSheet {
+  knownStances?: string[];
+  brawlerTrait?: TraitName;
   /** Authoritative marker supplied by the actor's host, not a player toggle. */
   testingCharacter?: boolean;
   testingBuild?: TestingBuild;

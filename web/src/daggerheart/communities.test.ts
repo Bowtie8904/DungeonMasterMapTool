@@ -21,6 +21,13 @@ function community(name: string) {
 }
 
 describe('community catalog automation', () => {
+  it('offers Highborne Privilege only for non-attack action rolls', () => {
+    const c = community('Highborne');
+    expect(availableRollOptions(c, ['action', 'trait:Presence']).some(o => o.source === 'Privilege')).toBe(true);
+    expect(availableRollOptions(c, ['attack', 'action', 'trait:Presence']).some(o => o.source === 'Privilege')).toBe(false);
+    expect(availableRollOptions(c, ['reaction', 'trait:Presence']).some(o => o.source === 'Privilege')).toBe(false);
+  });
+
   it.each(['Wanderborne', 'Warborne'])('%s spends Hope and shares its session-use counter', name => {
     const c = community(name);
     const f = c.heritage[0];

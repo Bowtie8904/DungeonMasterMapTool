@@ -47,6 +47,31 @@ Nothing starts until you click **Start online session**, so offline play and the
   Downtime choices and individual buffs describe each benefit; Volatile Toxins expands to its own feature
   description. Benefit actions, roll options and stat changes appear on the resulting buffs. Shadowed Grit
   is offered only on Fear-generating rolls, never reactions.
+- **Brawler automation (Daggerheart):** with both weapon slots empty, **I Am The Weapon** equips a generated
+  **Brawler's Strike**, offers its attack-trait choice, scales both d8 and d6 pools with Proficiency, and shows
+  the +1 Evasion buff. **Combo Strike** is an optional Melee damage-roll cost; the host rolls until a lower
+  Combo Die appears and adds every face, including that final die, without modifying Combo Dice. Its die
+  can advance once per tier. **Overwhelm** appears on attack chat, **Surrounded** has an editable Hope cost
+  starting at 1, **Eye for an Eye** appears in incoming damage, and **Pummeljoy** upgrades critical Melee
+  rewards and that attack's damage Proficiency. **Not Done Yet** automatically offers Hope or Stress
+  recovery when the final damage is Severe.
+  **Martial Artist:** choose two tier-1 stances in character creation and another tier-eligible stance each
+  level. The separate **Focus** feature tracks Focus (maximum 6) and refocuses once per rest during calm.
+  **Stance Fighter** opens a known-stance picker, showing a trait choice only for Favored.
+  Older characters can fill their missing stance choices there; testing builds know
+  every stance at their tier. A shift costs 1 Focus, replaces the previous descriptive stance buff, and
+  ends on Severe damage, the last HP, manual dismissal, or scene end (remove it in Effects).
+  At Instinct 0 or lower, refocusing clears Focus to 0 without rolling.
+  Existing sheets retain their Focus and spent Refocus use when the controls move to the Focus feature.
+  Stance descriptions use the supplied rules verbatim; Brawler's Strike chat sources include I Am The Weapon.
+  All sixteen stances have their applicable stats, roll options, mitigation or chat/feature actions wired;
+  positional conditions, attack success, target Severe damage and target track changes remain
+  table-confirmed. Aggressive adds an extra die and drops the lowest **in each weapon damage pool**;
+  Exacting replaces damage ones with their maximum on the host but never changes Combo Dice.
+  **Keen Defenses** reports Evasion for one attack; **Focus Cannon** has a costed Instinct roll, standalone
+  damage, and damage on its own chat card. **Flow State** adds Stress-funded shifting and Focus-funded
+  Combo Strike. Update the host for Combo Strike and Exacting; older hosts disable these unsupported rolls.
+- **Highborne Privilege:** the situational advantage option is available on non-attack action rolls, never attacks.
 - **Testing characters (Daggerheart):** right-click the Actors tree or a folder and choose **New testing
   character**, then assign its **Owner** as usual. The assigned player (including a player account used by the DM)
   opens its sheet and uses **Edit testing build** to freely switch level, class/subclass, subclass stage,

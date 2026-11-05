@@ -9,6 +9,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void comboIncludesEqualFacesAndTheFinalLowerDieAndNeverModifiesThem() {
+        assertEquals(List.of(1, 3, 3, 4, 2), DiceRoller.combo(4, 10, faces(1, 3, 3, 4, 2)));
+        assertEquals(List.of(8, 2), DiceRoller.combo(8, 10, faces(8, 2)));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.combo(5, 10, faces()));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.combo(4, 3, faces(1, 2, 4)));
+    }
+
+    @Test
+    void exactingReplacesOnesBeforeKeepingLowestPerMixedPoolWithoutChangingModifiers() {
+        var result = DiceRoller.maximumOnes(DiceRoller.roll("3d8kh2+3d6kh2+1", 6, faces(1, 7, 2, 1, 3, 4)), 6);
+        assertEquals(List.of(8, 7, 2, 6, 3, 4), result.rolls());
+        assertEquals(26, result.total());
+        var details = DiceRoller.breakdown(result, List.of(
+                new DiceRoller.Contribution("Strike", "3d8kh2+3d6kh2"),
+                new DiceRoller.Contribution("Bonus", "1")), 6);
+        assertEquals(result.total(), details.stream().mapToInt(DiceRoller.Detail::total).sum());
+        var doubled = DiceRoller.maximumOnes(DiceRoller.roll("(1d8+1)*2", 1, faces(1)), 1);
+        assertEquals(18, doubled.total());
+    }
+
+    @Test
     void doublesRolledDamageIncludingKeptDiceBonusesAndCriticalWithoutExtraRolls() {
         var result = DiceRoller.roll("(3d8kh2+2+2d4+24)*2", 5, faces(1, 8, 4, 2, 3));
         assertEquals(List.of(1, 8, 4, 2, 3), result.rolls());

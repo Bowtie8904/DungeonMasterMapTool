@@ -350,6 +350,7 @@ export interface Hello {
   compendiumChat?: boolean;
   transferOffers?: boolean;
   keptDice?: boolean;
+  brawlerRolls?: boolean;
   rollMultipliers?: boolean;
   rollRewards?: boolean;
   partyFeatures?: boolean;

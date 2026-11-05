@@ -120,6 +120,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       },
       onRoll: (r) => conn.send({ type: 'roll', ...r }),
       supportsKeptDice: () => conn.keptDice,
+      supportsBrawlerRolls: () => conn.brawlerRolls,
       supportsRollMultipliers: () => conn.rollMultipliers,
     });
     view.classList.add('dh-popout');

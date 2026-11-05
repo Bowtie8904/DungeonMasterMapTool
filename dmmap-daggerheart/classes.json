@@ -819,12 +819,20 @@
     {
      "name": "Pummeljoy",
      "text": "When you critically succeed on a Melee weapon attack, you gain an additional Hope, clear an additional Stress, and gain a +1 bonus to your Proficiency for that attack.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "criticalMelee": { "hope": 1, "stress": 1, "proficiency": 1 } }
     },
     {
      "name": "Not Done Yet",
      "text": "When you take Severe damage, you can gain a Hope or clear a Stress.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "mitigation": [{
+       "id": "recover", "label": "Not Done Yet", "passive": true,
+       "when": { "severity": ["severe", "massive"] }, "finalSevere": true,
+       "recoveryChoice": true
+      }]
+     }
     }
    ]
   },
@@ -843,7 +851,12 @@
     {
      "name": "Surrounded",
      "text": "When you make an attack with a Melee weapon, you can **spend any number of Hope **to target an equal number of additional creatures within Melee range.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "rollOptions": [{
+      "id": "targets", "label": "Target additional creatures", "roll": "attack", "weaponRange": "Melee",
+      "quantity": { "resource": "hope", "label": "Additional targets / Hope (default 1)" },
+      "cost": { "hope": 1 }, "description": "Each Hope targets one additional creature within Melee range."
+     }] }
     },
     {
      "name": "Eye for an Eye",
@@ -854,6 +867,11 @@
        "max": 1,
        "per": "rest"
       },
+      "mitigation": [{
+       "id": "retaliate", "label": "Eye for an Eye", "when": { "markingHp": true },
+       "cost": { "stress": 1 }, "uses": "source", "reflectHp": true,
+       "description": "Confirm the adversary is within Melee range; they mark the same HP you mark."
+      }],
       "actions": [
        {
         "id": "use",
@@ -897,6 +915,10 @@
      "text": "When you succeed on an attack against a target, you can ** spend a Hope **to throw the target within Close range or to force them to mark a Stress.",
      "type": "subclass",
      "automation": {
+      "rollTriggers": [{
+       "id": "overwhelm", "label": "Overwhelm: throw or mark Stress", "on": "attack",
+       "cost": { "hope": 1 }, "description": "Use only after a successful attack. Throw the target within Close range or force them to mark a Stress."
+      }],
       "actions": [
        {
         "id": "use",
@@ -973,12 +995,26 @@
     {
      "name": "Keen Defenses",
      "text": "When you’re targeted by an attack, you can **spend a Focus** to gain a bonus to your Evasion equal to your tier against the attack.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "actions": [{
+      "id": "defend", "label": "Keen Defenses", "cost": { "focus": 1 },
+      "sendRoll": { "dice": "@tier", "base": "evasion", "label": "Keen Defenses: Evasion against this attack" }
+     }] }
     },
     {
      "name": "Focus Cannon",
      "text": "**Spend a Focus** to make an Instinct Roll against an adversary within Far range. On a success, deal **d20+3** magic damage using your Proficiency.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       { "id": "attack", "label": "Focus Cannon: Instinct roll", "cost": { "focus": 1 }, "actionRoll": { "trait": "Instinct" } },
+       { "id": "damage", "label": "Focus Cannon: damage", "damage": { "dice": "d20+3", "type": "magic" } }
+      ],
+      "rollTriggers": [{
+       "id": "damage", "label": "Focus Cannon: damage (on success)", "on": "feat:Focus Cannon",
+       "damage": { "dice": "d20+3", "type": "magic" }
+      }]
+     }
     }
    ]
   },
@@ -996,8 +1032,55 @@
    "features": [
     {
      "name": "Stance Fighter",
-     "text": "You can channel your inner resolve to shift into martial stances that grant you special benefits in combat.\nTake the Martial Stances sheet and choose two martial stances from Tier 1. Each time you level up your character, choose an additional stance from your tier or lower.",
-     "type": "subclass"
+     "text": "You can channel your inner resolve to shift into martial stances that grant you special benefits in combat.\nTake the Martial Stances sheet and choose two martial stances from Tier 1. Each time you level up your character, choose an additional stance from your tier or lower.\nYou can spend a Focus to shift into a martial stance and gain its effects. You can shift only into stances you’ve marked as known. When you shift into a stance, it’s considered your active stance until you drop out of it.\nYou can’t shift into or have more than one active stance at a time. Until you shift into a stance, you are not considered to be in a stance or to have an active stance.\nIf you are already in a stance when you shift into a different stance, you automatically drop out of the previously active stance. You also drop out of your active stance when you take Severe damage or mark your last Hit Point. Otherwise, you drop out of your active stance at the end of the scene. When you drop out of a stance, you lose any ongoing benefits it provides.",
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Focus"],
+      "actions": [
+       { "id": "shift", "label": "Shift stance", "shiftStance": true, "cost": { "focus": 1 } },
+       { "id": "flow-shift", "label": "Flow State: shift stance", "shiftStance": true, "requiresFeature": "Flow State", "cost": { "stress": 1 } }
+      ],
+      "rollTriggers": [
+       { "id": "invigorating", "label": "Invigorating: successful attack", "on": "attack", "requiresEffect": "Invigorating", "check": { "dice": "1d4", "success": 4, "gain": "focus" } },
+       { "id": "grapple-focus", "label": "Grappling: Restrain or throw (successful Melee hit)", "on": "attack", "requiresEffect": "Grappling", "weaponRange": "Melee", "cost": { "focus": 1 } },
+       { "id": "grapple-stress", "label": "Grappling: Restrain or throw (successful Melee hit)", "on": "attack", "requiresEffect": "Grappling", "weaponRange": "Melee", "cost": { "stress": 1 } },
+       { "id": "scary", "label": "Scary: target marks a Stress (on success)", "on": "attack", "requiresEffect": "Scary" },
+       { "id": "crushing", "label": "Crushing: target marks +1 HP (Severe damage)", "on": "damage", "requiresEffect": "Crushing", "cost": { "hope": 1 } }
+      ],
+      "stances": [
+       { "name": "Favored", "tier": 1, "chooseTrait": true, "effect": { "name": "Favored", "kind": "buff", "text": "Gain a bonus to damage rolls equal to a trait of your choice." } },
+       { "name": "Invigorating", "tier": 1, "effect": { "name": "Invigorating", "kind": "buff", "text": "On a successful attack, roll a d4. On a result of 4, gain a Focus." } },
+       { "name": "Quick", "tier": 1, "effect": { "name": "Quick", "kind": "buff", "text": "When you make an attack, you can spend a Focus or mark a Stress to target another creature within range with that attack.",
+        "rollOptions": [
+         { "id": "quick-focus", "label": "Quick: additional target", "roll": "attack", "exclusive": "quick", "cost": { "focus": 1 } },
+         { "id": "quick-stress", "label": "Quick: additional target", "roll": "attack", "exclusive": "quick", "cost": { "stress": 1 } }
+        ] } },
+       { "name": "Reliable", "tier": 1, "effect": { "name": "Reliable", "kind": "buff", "text": "Gain a +1 bonus to your attack rolls.", "modifiers": [{ "roll": "attack", "value": 1 }] } },
+       { "name": "Aggressive", "tier": 2, "effect": { "name": "Aggressive", "kind": "buff", "text": "Gain a −1 penalty to your Evasion. On a successful attack, roll an additional damage die and discard the lowest result.", "modifiers": [{ "stat": "evasion", "value": -1 }], "damage": { "extraDice": 1, "dropLowest": 1 } } },
+       { "name": "Anchored", "tier": 2, "effect": { "name": "Anchored", "kind": "buff", "text": "Gain a +2 bonus to your damage thresholds. While in this stance, you can’t be moved against your will.", "modifiers": [{ "stat": "thresholds", "value": 2 }] } },
+       { "name": "Defensive", "tier": 2, "effect": { "name": "Defensive", "kind": "buff", "text": "Attack rolls targeting you from within Melee range have disadvantage unless the attacker marks a Stress to negate the disadvantage." } },
+       { "name": "Otherworldly", "tier": 2, "effect": { "name": "Otherworldly", "kind": "buff", "text": "On a successful attack, you can deal physical or magic damage." } },
+       { "name": "Grappling", "tier": 3, "effect": { "name": "Grappling", "kind": "buff", "text": "On a successful attack within Melee range, you can spend a Focus or mark a Stress to temporarily Restrain the target or throw the target up to Close range." } },
+       { "name": "Scary", "tier": 3, "effect": { "name": "Scary", "kind": "buff", "text": "On a successful attack, the target must mark a Stress." } },
+       { "name": "Stable", "tier": 3, "effect": { "name": "Stable", "kind": "buff", "text": "You can spend a Focus instead of an Armor Slot to reduce damage.", "mitigation": [{ "id": "stable", "label": "Stable: spend Focus instead of Armor", "cost": { "focus": 1 }, "severity": 1, "insteadOfArmor": true }] } },
+       { "name": "Vigilant", "tier": 3, "effect": { "name": "Vigilant", "kind": "buff", "text": "When you are targeted by an attack, you can mark a Stress to gain a d6 bonus to your Evasion against the attack.", "actions": [{ "id": "vigilant", "label": "Vigilant: defend", "cost": { "stress": 1 }, "sendRoll": { "dice": "1d6", "base": "evasion", "label": "Vigilant: Evasion against this attack" } }] } },
+       { "name": "Crushing", "tier": 4, "effect": { "name": "Crushing", "kind": "buff", "text": "When you deal Severe damage, you can spend a Hope to force the target to mark an additional Hit Point." } },
+       { "name": "Exacting", "tier": 4, "effect": { "name": "Exacting", "kind": "buff", "text": "When you roll a 1 on a damage die, you can treat it as the highest value on the die instead.", "damage": { "extraDice": 0, "dropLowest": 0, "maximumOnes": true } } },
+       { "name": "Honed", "tier": 4, "effect": { "name": "Honed", "kind": "buff", "text": "Spend a Focus before you make an attack roll to gain a +1 bonus to your Proficiency for that attack.", "rollOptions": [{ "id": "honed", "label": "Honed: +1 Proficiency for this attack", "roll": "attack", "cost": { "focus": 1 }, "proficiency": 1 }] } },
+       { "name": "Isolating", "tier": 4, "effect": { "name": "Isolating", "kind": "buff", "text": "Gain advantage on attack rolls when there are no other creatures within Very Close range of you or your target.", "rollOptions": [{ "id": "isolated", "label": "Isolating: no nearby creatures", "roll": "attack", "advantage": "advantage", "description": "Confirm no other creatures are within Very Close range of you or your target." }] } }
+      ]
+     }
+    },
+    {
+     "name": "Focus",
+     "text": "Focus represents your character’s poise, clarity, and control. Once per rest during a moment of calm, you can clear your mind and refocus your martial instincts. Clear your Focus track, then roll a number of d6s equal to your Instinct and gain Focus equal to the highest result rolled. You can hold a maximum of 6 Focus.",
+     "type": "subclass",
+     "automation": {
+      "resources": [{ "id": "focus", "label": "Focus", "initial": 0, "max": 6 }],
+      "actions": [
+       { "id": "refocus", "label": "Refocus (moment of calm)", "refocus": true, "uses": { "max": 1, "per": "rest" } }
+      ]
+     }
     }
    ]
   },
@@ -3730,21 +3813,19 @@
     {
      "name": "I Am The Weapon",
      "text": "Your barehanded attacks are as strong as any blade. You have a primary weapon called Brawler’s Strike equipped while you have no other Active Weapons. It uses a trait of your choice, has Melee range, and deals **d8+d6** physical damage using your Proficiency (both the d8 and d6 scale off your Proficiency). While this weapon is active, you gain a +1 bonus to your Evasion.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "unarmedWeapon": { "name": "Brawler's Strike", "slot": "Primary", "damageType": "phys", "range": "Melee", "damage": "d8+d6", "hands": 1, "tier": 1 }
+     }
     },
     {
      "name": "Combo Strike",
      "text": "After rolling damage on a successful attack with a Melee weapon, you can **mark a Stress** to start a combo strike. When you do, roll your Combo Die and note the result, then continue rolling your Combo Die until the result of your latest roll is lower than the roll that preceded it. You deal extra damage equal to the total of all rolled Combo Die results on this attack. The results can’t be modified by any means.\nYour Combo Die starts as a **d4**. Once per tier, you can increase your Combo Die by one step as a level advancement option.",
      "type": "class",
      "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Combo Strike",
-        "cost": {
-         "stress": 1
-        }
-       }
+      "rollOptions": [
+       { "id": "stress", "label": "Combo Strike", "roll": "damage", "weaponRange": "Melee", "combo": true, "cost": { "stress": 1 } },
+       { "id": "focus", "label": "Flow State: Combo Strike", "roll": "damage", "weaponRange": "Melee", "combo": true, "requiresFeature": "Flow State", "cost": { "focus": 1 } }
       ]
      }
     }

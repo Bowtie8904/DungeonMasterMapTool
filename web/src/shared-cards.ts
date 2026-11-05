@@ -14,7 +14,7 @@ export type SharedCard = SharedEntry & { cardId: string; actorId: string; actorN
 export const INVENTORY_DRAG = 'application/x-dmmt-inventory';
 
 export function transferable(entry: SharedEntry): boolean {
-  return entry.category === 'weapon' || entry.category === 'armor' || entry.category === 'item';
+  return (entry.category === 'weapon' && !entry.item.generated) || entry.category === 'armor' || entry.category === 'item';
 }
 
 export async function postCard(actorId: string, entry: SharedEntry, toId?: string, offerQuantity?: number): Promise<void> {

@@ -48,6 +48,10 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  reflectHp?: boolean;
+  finalSevere?: boolean;
+  recoveryChoice?: boolean;
+  insteadOfArmor?: boolean;
   id: string;
   label: string;
   description?: string;
@@ -94,6 +98,7 @@ export interface AvailableMitigation {
 }
 
 export interface DamageInput {
+  recovery?: 'hope' | 'stress';
   damage: number;
   type: DamageType;
   armor: boolean;
@@ -106,6 +111,7 @@ export interface DamageInput {
 }
 
 export interface DamageResult {
+  recovery?: 'hope' | 'stress';
   input: number;
   damage: number;
   major: number;
@@ -146,6 +152,7 @@ export function availableMitigations(c: CharacterSheet): AvailableMitigation[] {
   for (const f of [...c.features, ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
   for (const d of c.loadout) add(`card:${d.name}`, d.name, d.automation);
   for (const i of c.inventory.filter((x) => x.qty > 0)) add(`item:${i.name}`, i.name, i.automation, i);
+  for (const e of c.effects) add(`effect:${e.id}`, e.name, { mitigation: e.mitigation });
   return out;
 }
 
@@ -279,6 +286,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   const armorBlocked = blockers.length ? `${blockers[0].source}: ${blockers[0].option.label}` : null;
   const free = Math.max(0, c.armorTrack.slots - c.armorTrack.on);
   const base = input.armor && !armorBlocked && !negated && incoming > 0;
+  drop(m => m.option.insteadOfArmor && input.armor ? 'Choose Focus or an Armor Slot, not both' : null);
   drop((m) => m.option.when?.armor && !base ? 'Requires marking an Armor Slot' : null);
   const anyArmor = active.some((m) => m.option.armorSlots === 'any');
   const extra = active.reduce((n, m) => n + (typeof m.option.armorSlots === 'number' ? m.option.armorSlots : 0), 0);
@@ -305,6 +313,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
   drop((m) => m.option.when?.markingHp && hp <= 0 ? 'Requires marking at least one HP' : null);
+  drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
 
   // 5. Costs.
   const costs: Record<string, number> = {};
@@ -319,6 +328,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   const quantities: Record<string, number> = {};
   for (const m of active) if (m.option.quantity) quantities[m.id] = qty(m);
   const result: DamageResult = {
+    recovery: input.recovery ?? (c.hope.on < c.hope.slots ? 'hope' : 'stress'),
     input: Math.max(0, Math.floor(input.damage || 0)), damage: negated ? 0 : damage, major, severe, incoming, final, negated, hp, hpBeforeReplace,
     armorAllowed, armorUsed, armorMarked, armorBlocked, anyArmor, applied: active, inactive, costs, quantities, rolls, used, error: null,
   };
@@ -359,12 +369,25 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   c.hp.on = Math.min(c.hp.slots, c.hp.on + r.hp + (r.costs.hp ?? 0));
   c.stress.on = Math.min(c.stress.slots, c.stress.on + (r.costs.stress ?? 0));
   c.hope.on = Math.max(0, c.hope.on - (r.costs.hope ?? 0));
-  if (!r.negated && r.final >= 3) c.effects = c.effects.filter((e) => !e.endOnSourceSevere || !!e.sourceActorId);
+  c.effects = c.effects.filter(e => !(e.stance && ((!r.negated && r.final >= 3) || c.hp.on >= c.hp.slots))
+    && !(!r.negated && r.final >= 3 && e.endOnSourceSevere && !e.sourceActorId));
   for (const [res, n] of Object.entries(r.costs)) {
     if (!['hp', 'stress', 'hope', 'armor'].includes(res)) c.resources![res] = Math.max(0, (c.resources![res] ?? 0) - n);
   }
   const notes: string[] = [];
   for (const m of r.applied) {
+    if (m.option.reflectHp) notes.push(`Eye for an Eye: the adversary within Melee range marks ${r.hp} HP.`);
+    if (m.option.recoveryChoice) {
+      if (r.recovery === 'stress') {
+        const n = Math.min(1, c.stress.on);
+        c.stress.on -= n;
+        notes.push(`Not Done Yet: cleared ${n} Stress.`);
+      } else {
+        const n = Math.min(1, c.hope.slots - c.hope.on);
+        c.hope.on += n;
+        notes.push(`Not Done Yet: gained ${n} Hope.`);
+      }
+    }
     if (m.option.effect) addEffect(c, m.option.effect, m.source);
     const u = usageKey(m);
     if (u) {
