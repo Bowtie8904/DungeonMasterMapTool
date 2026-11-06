@@ -26,6 +26,10 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Hope-dependent sheet refresh:** manually changing Hope pips immediately refreshes derived stats, their source tooltips, the mini strip and action availability. Conjure Shield must lose/gain its Proficiency Evasion bonus when Hope crosses below/above 2 without reopening the sheet. Preserve page scroll, persistence and existing compatibility/settings contracts; rebuild the browser bundle.
+
+- **Wizard online automation:** Adept is an optional duality-roll choice requiring an Experience, doubling its modifier and replacing its Hope cost with 1 Stress. Honed Expertise automatically rolls a d6 when using an Experience and refunds that Experience's cost on 5+, including Adept's Stress (intentional extension of the printed Hope-only rule). Show the d6 and refund outcome in chat without adding it to the action total; canceled or unsent rolls spend nothing. Conjure Shield adds Proficiency to Evasion only at 2+ Hope, including the stat breakdown. Face Your Fear upgrades to 2d10 with Fueled by Fear and 3d10 with Have No Fear. Thrive in Chaos is offered on damage-result chat cards, costs 1 Stress and reports that the target marks an additional HP; attack success remains player-confirmed. Keep metadata in classes.json, preserve settings and compatibility versions, update documentation and rebuild the packaged web bundle.
+
 - [x] DD2VTT import and managed project copy flow
 - [x] JavaFX bootstrap fixed and app runs with explicit launcher entrypoint
 - [x] DM overlay and multi-monitor player selection

@@ -16,6 +16,7 @@ export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'se
 export type ModValue = number | string;
 
 export interface Modifier {
+  hopeMin?: number;
   traitValue?: TraitName;
   /** Passive stat: evasion, armorScore, majorThreshold, severeThreshold, thresholds, proficiency, loadoutMax, traits, trait.<Name> */
   stat?: string;
@@ -164,6 +165,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  experience?: { resource: 'stress'; multiplier: number };
   preserveEffect?: string;
   condition?: SheetCondition;
   secondaryWeaponDie?: boolean;
@@ -234,6 +236,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  experienceRefund?: { dice: string; min: number };
   lunarPhases?: Array<{ faces: number[]; effect: EffectDef }>;
   ignoreWeaponBurden?: boolean;
   partyDowntime?: boolean;
@@ -359,7 +362,8 @@ export function actionCost(c: CharacterSheet, action: ActionDef): ActionDef['cos
 }
 
 function modifierActive(c: CharacterSheet, modifier: Modifier): boolean {
-  return !modifier.requiresEffect || c.effects.some(e => e.name === modifier.requiresEffect);
+  return (modifier.hopeMin === undefined || c.hope.on >= modifier.hopeMin)
+    && (!modifier.requiresEffect || c.effects.some(e => e.name === modifier.requiresEffect));
 }
 
 /** Automation of everything currently contributing passive modifiers. */
@@ -729,10 +733,12 @@ export function effectiveAdvantage(requested: Advantage, selected: AvailableRoll
 }
 
 export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOption[], experience = false): string | null {
+  if (selected.some(s => s.option.experience) && !experience) return 'Select an Experience to use Adept';
+  if (selected.filter(s => s.option.experience).length > 1) return 'Choose only one Experience cost replacement';
   if (selected.filter(s => s.option.combo).length > 1) return 'Choose only one Combo Strike cost';
   const groups = selected.map(s => s.option.exclusive).filter(Boolean);
   if (new Set(groups).size !== groups.length) return 'Choose only one cost or bonus from each exclusive group';
-  const cost: Record<string, number> = experience ? { hope: 1 } : {};
+  const cost: Record<string, number> = experience ? { [experienceResource(selected)]: 1 } : {};
   const uses = new Map<string, number>();
   const items = new Map<CharacterSheet['inventory'][number], number>();
   for (const s of selected) {
@@ -755,10 +761,13 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
 }
 
 /** Commit only after the send succeeded and the entire selection was checked together. */
-export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false, targets: string[] = []): void {
+export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false, targets: string[] = [], refundExperience = false): void {
   const blocker = selectionBlocker(c, selected, experience);
   if (blocker) throw new Error(blocker);
-  if (experience) c.hope.on--;
+  if (experience && !refundExperience) {
+    if (experienceResource(selected) === 'stress') c.stress.on++;
+    else c.hope.on--;
+  }
   for (const s of selected) {
     if (s.prepared) {
       const { effect, modifier } = s.prepared;
@@ -772,6 +781,27 @@ export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOpti
     if (s.option.consumeItem && s.item) s.item.qty--;
   }
   if (targets.includes('damage')) c.effects = c.effects.filter(e => !e.endOnDealtDamage || selected.some(s => s.option.preserveEffect === e.name));
+}
+
+export function experienceResource(selected: AvailableRollOption[]): 'hope' | 'stress' {
+  return selected.find(s => s.option.experience)?.option.experience?.resource ?? 'hope';
+}
+
+export function experienceModifier(mod: number, selected: AvailableRollOption[]): number {
+  return mod * (selected.find(s => s.option.experience)?.option.experience?.multiplier ?? 1);
+}
+
+export function rollExperienceRefund(c: CharacterSheet, selected: AvailableRollOption[], roll: DiceRoll = rollLocal): { refunded: boolean; contribution: RollContribution } | undefined {
+  const feature = [...activeFeatures(c), ...c.heritage].find(f => f.automation?.experienceRefund);
+  const rule = feature?.automation?.experienceRefund;
+  if (!feature || !rule) return undefined;
+  const result = roll(rule.dice);
+  const refunded = result >= rule.min;
+  const resource = experienceResource(selected) === 'stress' ? 'Stress' : 'Hope';
+  return { refunded, contribution: {
+    label: `${feature.name}: ${rule.dice} = ${result}`.slice(0, 120), expression: '0',
+    notes: [{ label: 'Experience cost', impact: refunded ? `1 ${resource} refunded` : `1 ${resource} spent` }],
+  } };
 }
 
 export function traitContributions(c: CharacterSheet, name: TraitName): RollContribution[] {

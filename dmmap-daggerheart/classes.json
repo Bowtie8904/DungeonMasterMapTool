@@ -2419,7 +2419,10 @@
     {
      "name": "Honed Expertise",
      "text": "When you use an Experience, roll a **d6**. On a result of 5 or higher, you can use it without spending Hope.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "experienceRefund": { "dice": "1d6", "min": 5 }
+     }
     }
    ]
   },
@@ -2486,7 +2489,18 @@
     {
      "name": "Adept",
      "text": "When you Utilize an Experience, you can **mark a Stress** instead of spending a Hope. If you do, double your Experience modifier for that roll.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "adept",
+        "label": "Adept",
+        "roll": "duality",
+        "experience": { "resource": "stress", "multiplier": 2 },
+        "description": "Requires an Experience. Mark 1 Stress instead of spending 1 Hope and double its modifier."
+       }
+      ]
+     }
     }
    ]
   },
@@ -2506,7 +2520,12 @@
     {
      "name": "Conjure Shield",
      "text": "You can maintain a protective barrier of magic. While you have at least 2 Hope, you add your Proficiency to your Evasion.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       { "stat": "evasion", "value": "@proficiency", "hopeMin": 2 }
+      ]
+     }
     },
     {
      "name": "Fueled by Fear",
@@ -2549,7 +2568,8 @@
         "label": "Face Your Fear",
         "roll": "damage",
         "dice": "1d10",
-        "description": "Successful attack with Fear; upgrades to 2d10/3d10 are manual."
+        "diceByFeature": { "Fueled by Fear": "2d10", "Have No Fear": "3d10" },
+        "description": "Use after a successful attack with Fear. Extra magic damage."
        }
       ]
      }
@@ -2581,6 +2601,15 @@
         "cost": {
          "stress": 1
         }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Thrive in Chaos",
+        "on": "damage",
+        "cost": { "stress": 1 },
+        "description": "Use after a successful attack. The target marks an additional Hit Point."
        }
       ]
      }

@@ -392,6 +392,13 @@ Nothing starts until you click **Start online session**, so offline play and the
   Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
   offer a Spellcast button when they ask for one; token cards (Umbral Veil, Flight, ...) track tokens; I See It Coming
   rolls its d4 into the chat. The roll window uses Advantage / Normal / Disadvantage buttons.
+  Wizard **Adept** is an optional roll choice requiring an Experience: double its modifier and mark 1 Stress
+  instead of spending Hope. **Honed Expertise** automatically checks a d6, reports it in the roll breakdown,
+  and refunds the Experience cost on 5+ (including Adept's Stress). **Conjure Shield** updates Evasion at 2+ Hope.
+  Manual Hope changes immediately refresh the Shield bonus and its Evasion breakdown.
+  **Face Your Fear** scales automatically to 2d10/3d10 with **Fueled by Fear / Have No Fear**.
+  Damage-result cards offer **Thrive in Chaos**, marking 1 Stress and reporting the target's additional HP;
+  the player confirms the successful-attack requirement.
   Warlock **Favor** appears once in class resources; successful Hope action rolls offer **Gain Favor instead of Hope**
   as an exclusive roll reward. **Deathless Embrace**, **Deadly Vengeance** (also in mitigation) and **Otherworldly Ire**
   roll level-scaled Patron Dice from themed input dialogs and explain their results in chat; Embrace applies healing.

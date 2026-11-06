@@ -7,7 +7,7 @@ import {
 } from './data';
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
-  availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
+  availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund,
   damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
@@ -729,7 +729,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const vital = (label: string, body: HTMLElement, cls = '') => el('div', { class: `vital ${cls}`.trim() }, el('div', { class: 'lbl' }, label), body);
 
   function hopePips(): HTMLElement {
-    const track = pips(c.hope, 'hope', 'var(--hope)', true, refreshActions, c.scars);
+    const track = pips(c.hope, 'hope', 'var(--hope)', true, render, c.scars);
     if (hasCompanionTraining(c, 'light-in-the-dark')) {
       const slot = track.children[c.hope.slots - 1] as HTMLElement | undefined;
       if (slot) {
@@ -1534,7 +1534,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const b = combined();
     preview.textContent = weapon
       ? damageRollFormula(damageText(b).text, [], selected()).expression
-      : `Modifier ${signed(mod + b.value + (exp.value === '' ? 0 : experiences[Number(exp.value)]?.mod ?? 0))}${b.dice.length ? `; extra dice ${b.dice.join(', ')}` : ''}`;
+      : `Modifier ${signed(mod + b.value + experienceModifier(exp.value === '' ? 0 : experiences[Number(exp.value)]?.mod ?? 0, selected()))}${b.dice.length ? `; extra dice ${b.dice.join(', ')}` : ''}`;
     error.textContent = blocker() ?? '';
     go.disabled = !!error.textContent;
   };
@@ -1578,7 +1578,9 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     if (block) { error.textContent = block; go.disabled = true; return; }
     const e = weapon || exp.value === '' ? undefined : experiences[Number(exp.value)];
     const b = combined();
-    const total = mod + b.value + (e?.mod ?? 0);
+    const expMod = experienceModifier(e?.mod ?? 0, selected());
+    const refund = e ? rollExperienceRefund(c, selected()) : undefined;
+    const total = mod + b.value + expMod;
     const requestedAdvantage = Number(advantage) as Advantage;
     const actualAdvantage = effectiveAdvantage(requestedAdvantage, selected());
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
@@ -1605,10 +1607,11 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
           notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),
         ...trait,
         ...b.contributions,
-        ...(e ? [{ label: `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} - ${e.name}`.slice(0, 120), expression: String(e.mod) }] : []),
+        ...(e ? [{ label: `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} - ${e.name}${selected().some(s => s.option.experience) ? ' (Adept: doubled)' : ''}`.slice(0, 120), expression: String(expMod) }] : []),
+        ...(refund ? [refund.contribution] : []),
       ],
     };
-    if (onRoll(request)) { commitRollOptions(c, selected(), !!e, targets); close(); onSent(); }
+    if (onRoll(request)) { commitRollOptions(c, selected(), !!e, targets, refund?.refunded); close(); onSent(); }
     else error.textContent = 'Not connected. The roll was not sent and no costs were paid.';
   });
   const optionFieldset = el('fieldset', {}, el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());
@@ -1652,7 +1655,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll with'), adv),
         ...(canChooseReaction ? [el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll type'),
           el('div', { class: 'dh-adv dh-roll-type', role: 'group', ariaLabel: 'Roll type' }, ...modeButtons))] : []),
-        el('label', {}, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (spend 1 Hope)`, exp),
+        el('label', {}, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (${options.some(s => s.option.experience) ? '1 Hope, or 1 Stress with Adept' : 'spend 1 Hope'})`, exp),
       ]),
       ...(otherworldly ? [el('label', {}, 'Otherworldly: damage type', damageType)] : []),
       optionFieldset,

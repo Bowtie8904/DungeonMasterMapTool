@@ -558,6 +558,21 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `dice` and its replacements support `@tier` as a dice count (`"@tierd4"`).
   `diceByFeature: {"Ambush":"@tierd6","Backstab":"@tierd8"}` replaces the dice when the character has
   that learned feature; the last matching entry wins. This keeps subclass upgrades in JSON.
+  Wizard Face Your Fear uses the same mapping for Fueled by Fear (2d10) and Have No Fear (3d10).
+  `experience: {resource: "stress", multiplier: 2}` on a duality option requires a selected Experience,
+  replaces its 1 Hope cost with 1 Stress and doubles its modifier (Adept). This replacement cost is
+  included in combined affordability checks, not duplicated in the option's `cost`.
+  Automation-level `experienceRefund: {dice: "1d6", min: 5}` automatically rolls when submitting
+  an Experience-backed roll (Honed Expertise). The client-local die and refund outcome appear in a
+  zero-value breakdown entry, without affecting the action total. A qualifying result refunds the
+  Experience cost only, including Adept's Stress; unrelated selected-option costs remain payable.
+  Affordability is checked before the refund roll. Cancellation and failed sends pay nothing.
+  Refunding Adept Stress is an intentional extension of Honed Expertise's printed Hope-only rule.
+  Passive modifiers support `hopeMin: 2`, evaluated live for both derived stats and their breakdowns
+  (Conjure Shield's `evasion` modifier with `value: "@proficiency"`).
+  Thrive in Chaos uses an ordinary `on: "damage"` roll trigger costing 1 Stress; the existing host
+  action validates the damage message, pays the cost and posts the feature report. Successful-attack
+  and additional target HP conditions remain player-confirmed.
   `diceConditions: [{feature?, unmarkedHp?: {min,max}, dice?, dieSize?}]` applies matching overrides after
   level/feature scaling. `dieSize` changes the die faces without changing the scaled dice count.
   Actions/options support `costConditions: [{feature?, unmarkedHp?: {min,max}, cost}]`, merging matching

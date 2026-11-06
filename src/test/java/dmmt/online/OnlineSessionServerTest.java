@@ -1990,6 +1990,48 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void thriveInChaosRequiresDamagePaysStressAndPostsOneFeatureReport() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("wizard").name("Wizard").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Wizard").put("subclass", "School of War");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if ("wizard-school-of-war-mastery".equals(entry.path("id").asText()))
+                for (JsonNode feature : entry.path("features")) {
+                    ObjectNode learned = feature.deepCopy();
+                    learned.put("source", "Subclass mastery - School of War");
+                    features.add(learned);
+                }
+        }
+        store.saveSheet(campaign.getId(), "wizard", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "wizard")
+                    .put("key", "feat:Thrive in Chaos").put("actionId", "use");
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"attack,action\",\"actorId\":\"wizard\"}", true).join();
+            JsonNode attack = inbox.next("roll");
+            request.set("roll", MAPPER.createObjectNode().put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong()));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "wizard")).path("stress").path("on").asInt());
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"1d8\",\"source\":\"damage\",\"actorId\":\"wizard\",\"toId\":\"dm\"}", true).join();
+            JsonNode damage = inbox.next("roll");
+            request.set("roll", MAPPER.createObjectNode().put("id", damage.path("id").asLong()).put("ts", damage.path("ts").asLong()));
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "wizard")).path("stress").path("on").asInt());
+            JsonNode report = inbox.next("chat");
+            assertEquals("dm", report.path("toId").asText());
+            assertEquals("Thrive in Chaos", report.path("rollSource").path("name").asText());
+            assertTrue(report.path("rollSource").path("text").asText().contains("additional Hit Point"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "wizard")).path("stress").path("on").asInt());
+            assertTrue(new CampaignStore(store.root()).historyTail(campaign.getId(), 50).contains(report));
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void assassinReactionsValidateRollKindsPayCostsAndPersistTheMark() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("assassin").name("Assassin").ownerId(playerId()).build());
         ObjectNode sheet = communitySheet("Seaborne");

@@ -157,11 +157,12 @@ export function describeAutomation(a?: Automation): string[] {
   const out: string[] = [];
   for (const m of a.modifiers ?? []) {
     const v = typeof m.value === 'number' ? (m.value >= 0 ? `+${m.value}` : `${m.value}`) : m.dice ? `+${m.dice}` : String(m.value);
-    if (m.stat) out.push(`${m.stat} ${v}`);
+    if (m.stat) out.push(`${m.stat} ${v}${m.hopeMin === undefined ? '' : ` (while at ${m.hopeMin}+ Hope)`}`);
     else if (m.roll) out.push(`${m.roll} rolls ${v}${m.consume ? ' (next roll only)' : ''}`);
   }
   if (a.uses) out.push(`${a.uses.max} use(s) per ${a.uses.per}`);
   if (a.restReroll) out.push('Chat: reroll a short-rest downtime die and keep the higher result');
+  if (a.experienceRefund) out.push(`Experience: roll ${a.experienceRefund.dice}; on ${a.experienceRefund.min}+ refund its Hope or Stress cost`);
   for (const ac of a.actions ?? []) out.push(`Button: ${ac.label}`);
   for (const resource of a.resources ?? []) out.push(`${resource.label}: starts at ${resource.initial}${resource.max !== undefined ? `, maximum ${resource.max}` : ''}${resource.session ? ', resets when the GM starts a new session' : ''}`);
   if (a.creation) {
@@ -172,6 +173,7 @@ export function describeAutomation(a?: Automation): string[] {
     if (a.creation.domains?.length) out.push(`At creation: additional domains ${a.creation.domains.join(', ')}`);
   }
   for (const option of a.rollOptions ?? []) {
+    if (option.experience) out.push(`Experience required: ${option.label} costs 1 Stress instead of Hope and multiplies its modifier by ${option.experience.multiplier}`);
     const cost = Object.entries(option.cost ?? {}).map(([resource, amount]) => `${amount} ${resource}`).join(', ');
     out.push(`Optional ${option.roll} bonus: ${option.label}${cost ? ` (cost: ${cost}${option.quantity ? ' per token' : ''})` : ''}${option.hopeDie ? `; Hope d${option.hopeDie}` : ''}${option.input ? `; ${option.input.label} (default +${option.input.default})` : ''}${option.quantity ? '; choose how many tokens to spend' : ''}`);
   }

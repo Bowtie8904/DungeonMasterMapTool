@@ -1,5 +1,18 @@
 # Online Play web client
 
+Wizard automation is maintained in `dmmap-daggerheart/classes.json`. Adept is an optional duality-roll
+choice requiring a selected Experience; it doubles that modifier and replaces the 1 Hope cost with
+1 Stress. Honed Expertise automatically rolls a client-local d6 at submission, showing the result
+and refund outcome in a zero-value breakdown entry (never added to the action total). A 5+ refunds
+the Experience cost, including Adept's Stress; this intentionally extends the printed Hope-only refund.
+Combined costs must be affordable before rolling, and cancellation/disconnected sends spend nothing.
+Conjure Shield automatically adds Proficiency to Evasion at 2+ Hope, including the stat breakdown.
+Manual Hope pip changes immediately refresh Evasion, its source tooltip and the mini strip.
+Face Your Fear's optional magic damage upgrades to 2d10/3d10 with Fueled by Fear / Have No Fear.
+Thrive in Chaos uses the existing host-validated damage-chat feature action: mark 1 Stress and report
+the target's additional HP, with successful attacks player-confirmed. No new settings, wire fields
+or compatibility-version changes.
+
 Death moves use the additive `hello.deathMoves` capability and authenticated `POST /api/death-move`
 (`actorId`, `move`: `blaze`, `avoid`, `risk`). Both floating and standalone sheets flush pending saves
 first; unsupported hosts and request failures show an explicit error. The host checks ownership and
