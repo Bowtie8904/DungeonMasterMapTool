@@ -253,6 +253,7 @@ export interface Automation {
   stances?: Array<{ name: string; tier: number; effect: EffectDef; chooseTrait?: boolean }>;
   criticalMelee?: { hope: number; stress: number; proficiency: number };
   grantsFeatures?: string[];
+  groupGrantedFeatures?: boolean;
   usesOverrides?: Record<string, number>;
   actionBenefits?: Record<string, ChatBenefit[]>;
   deathMove?: { kind: 'hopeBonus' | 'hopeSpend' | 'mask' | 'undying' | 'spectral' | 'egg' | 'battleHardened' | 'lifeWard' | 'unbreakable'; moves?: ('risk' | 'avoid')[]; bonus?: number };
@@ -1065,7 +1066,9 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       const n = step.amount === 'all' ? t.on : amount(1);
       const cleared = Math.min(Math.max(0, t.on - (step.resource === 'hp' ? hpHealingFloor(c) : 0)), Math.max(0, n));
       t.on -= cleared;
-      log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : 'Stress'}${typeof step.amount === 'string' && step.amount !== 'all' ? ` (${step.amount})` : ''}`);
+      const detail = typeof step.amount === 'string' && step.amount !== 'all' && !/^[+-]?\d+$/.test(step.amount.trim())
+        ? ` (${step.amount})` : '';
+      log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : 'Stress'}${detail}`);
     } else if (step.op === 'gain' && t && step.resource) {
       const n = Math.max(0, amount(1));
       const before = t.on;

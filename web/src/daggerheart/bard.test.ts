@@ -4,7 +4,7 @@ import type { CompendiumFile } from './compendium';
 import { emptyCharacter } from './data';
 import {
   addEffect, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions,
-  runAction, selectedRollBonus, rollBonus, selectionBlocker, usesLeft, usesMax,
+  runAction, runActionDetailed, selectedRollBonus, rollBonus, selectionBlocker, usesLeft, usesMax,
 } from './engine';
 import { updateCharacterAutomation } from './persist';
 
@@ -21,6 +21,19 @@ function bard() {
 }
 
 describe('Bard automation', () => {
+  it('omits fixed recovery breakdowns while retaining dice and variable explanations', () => {
+    const c = bard();
+    c.hp.slots = 6;
+    c.hp.on = 4;
+    const song = c.features.find(f => f.name === 'Relaxing Song')!;
+    expect(runActionDetailed(c, 'feat:Relaxing Song', song.automation!, song.automation!.actions![0], song.name))
+      .toEqual(['cleared 1 HP']);
+    const action = (amount: number | string) => ({ id: 'test', label: 'Heal', steps: [{ op: 'clear' as const, resource: 'hp', amount }] });
+    expect(runActionDetailed(c, 'feat:test', {}, action(' 1 '), 'Heal')).toEqual(['cleared 1 HP']);
+    expect(runActionDetailed(c, 'feat:test', {}, action('1d4'), 'Heal', () => 2)).toEqual(['cleared 2 HP (1d4)']);
+    expect(runActionDetailed(c, 'feat:test', {}, action('@level'), 'Heal')).toEqual(['cleared 0 HP (@level)']);
+  });
+
   it('gives each song an independent long-rest limit and upgrades it without resetting uses', () => {
     const c = bard();
     const virtuoso = c.features.find(f => f.name === 'Virtuoso')!;

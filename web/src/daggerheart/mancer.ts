@@ -5,6 +5,7 @@ import { noticeDialog } from '../dialogs';
 import { Advancement, AdvancementType, CharacterSheet, CompanionChoices, CompanionTraining, CreationChoices, LevelUpRecord, RangerCompanion, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
 import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
+import { groupFeatures } from './feature-groups';
 import { ancestryPicker } from './ancestry-choice';
 import { ancestryFeatureChoices, creationIgnoresWeaponBurden } from './rules';
 import { levelUpStances } from './rules';
@@ -123,13 +124,14 @@ function hoverDetail(target: HTMLElement, detail: () => Node): void {
 const badge = (t: string, cls = '') => el('i', { class: `tag ${cls}`.trim() }, t);
 
 /** Side panel content: a title, optional description and a list of features. */
-function detailPanel(title: string, tags: string[], text: string | undefined, features: Array<{ name: string; text: string; type?: string }> = []): HTMLElement {
+function detailPanel(title: string, tags: string[], text: string | undefined, features: Array<{ name: string; text: string; type?: string; automation?: import('./engine').Automation }> = []): HTMLElement {
   return el(
     'div', { class: 'side' },
     el('h4', {}, title),
     ...(tags.length ? [el('div', { class: 'side-tags' }, ...tags.filter(Boolean).map((t) => badge(t)))] : []),
     ...(text ? [rich(text, 'side-text')] : []),
-    ...features.map((f) => el('div', { class: 'side-feat' }, el('h5', {}, f.name, ...(f.type && f.type !== 'passive' ? [badge(f.type)] : [])), rich(f.text))),
+    ...groupFeatures(features).map(({ feature: f, children }) => el('div', { class: 'side-feat' }, el('h5', {}, f.name, ...(f.type && f.type !== 'passive' ? [badge(f.type)] : [])), rich(f.text),
+      ...children.map(child => el('div', { class: 'feature-section' }, el('h5', {}, child.name), rich(child.text))))),
   );
 }
 
@@ -385,7 +387,7 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
         for (const name of subclassesOf(data, ch.className)) {
           const f = subclassCard(data, name, 'foundation');
           grid.append(choice(shortSubclass(name), clip(f?.text, 140), ch.subclass === name, () => { ch.subclass = name; redraw(); },
-            (f?.features ?? []).map((x) => el('span', { class: 'meta' }, badge(x.name, 'feat'))), false, () => subclassPanel(data, name)));
+            groupFeatures(f?.features ?? []).map(({ feature }) => el('span', { class: 'meta' }, badge(feature.name, 'feat'))), false, () => subclassPanel(data, name)));
         }
         body.append(grid);
       },

@@ -271,6 +271,7 @@ button.share-icon:disabled { opacity: .25; }
 .cmp-detail .tag { font-size: 11px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; }
 .cmp-detail .feat { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; }
 .cmp-detail .feat .ft { font-weight: 600; }
+.cmp-detail .cmp-feature-section { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
 .shared-feature-block { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; margin-top: 6px; }
 .shared-feature-name { font-weight: 600; }
 .cmp-text p { margin: 4px 0; font-size: 13px; }

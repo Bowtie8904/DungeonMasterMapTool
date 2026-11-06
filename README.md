@@ -342,7 +342,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   Cannonball posts a claimable ally action: the thrower chooses Agility or Strength and rolls with their own
   stats and Proficiency. Clarity reports total available Stress recovery, Regeneration selects a healing target,
   and Warden's Protection reports its rolled ally count.
-  Elemental Incarnation, Aura and Dominion have uniquely named per-element features. Channeling replaces the
+  Elemental Incarnation, Aura and Dominion each display their elements together on one feature card, with
+  their individual buttons; their underlying per-element features remain separate. Channeling replaces the
   previous element and automatically enables the matching Dominion benefit. Aura is once per rest and ends
   when channeling ends or changes. Earth aura gives every player character an **optional +1 Strength** roll
   option: select it only within Close range. Element buttons require their matching buff; Earth Dominion appears
@@ -488,7 +489,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   an update prompt rather than silently ignoring these actions. No settings or compatibility-version changes.
   **Bard automation:** Rally grants every player-owned character with a sheet a session-only die, including
   offline allies. Spend it in action/reaction/damage rolls or clear Stress from the Effects tab; any use removes it.
-  Troubadour songs have separate buttons and long-rest limits, automatically doubled by Virtuoso.
+  Gifted Performer's songs appear together on one feature card, with separate buttons and long-rest limits,
+  automatically doubled by Virtuoso.
+  Recovery reports omit redundant calculations for fixed amounts while retaining rolled healing details.
   Relaxing/Heartbreaking Songs apply the bard's recovery/Hope and show Clear 1 HP/Gain 1 Hope buttons
   directly on their chat messages for other players, usable once per player per performance;
   Maestro adds a Hope-or-Stress choice to Rally, and Rousing Speech lets allies clear 2 Stress.

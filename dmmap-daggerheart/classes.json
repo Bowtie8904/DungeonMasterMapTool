@@ -2920,7 +2920,8 @@
      "text": "Describe how you perform for others. You can play each song once per long rest.",
      "type": "subclass",
      "automation": {
-      "grantsFeatures": ["Relaxing Song", "Epic Song", "Heartbreaking Song"]
+      "grantsFeatures": ["Relaxing Song", "Epic Song", "Heartbreaking Song"],
+      "groupGrantedFeatures": true
      }
     },
     {
@@ -3194,7 +3195,7 @@
      "name": "Elemental Dominion",
      "text": "You further embody your element. While *Channeling*, you gain the following benefit:",
      "type": "subclass",
-     "automation": { "grantsFeatures": ["Elemental Dominion: Fire", "Elemental Dominion: Earth", "Elemental Dominion: Water", "Elemental Dominion: Air"] }
+     "automation": { "grantsFeatures": ["Elemental Dominion: Fire", "Elemental Dominion: Earth", "Elemental Dominion: Water", "Elemental Dominion: Air"], "groupGrantedFeatures": true }
     },
     {
      "name": "Elemental Dominion: Fire",
@@ -3255,6 +3256,7 @@
      "type": "subclass",
      "automation": {
       "grantsFeatures": ["Elemental Aura: Fire", "Elemental Aura: Earth", "Elemental Aura: Water", "Elemental Aura: Air"],
+      "groupGrantedFeatures": true,
       "uses": {
        "max": 1,
        "per": "rest"
@@ -3320,7 +3322,8 @@
      "text": "**Mark a Stress** to *Channel* one of the following elements until you take Severe damage or until your next rest:",
      "type": "subclass",
      "automation": {
-      "grantsFeatures": ["Elemental Incarnation: Fire", "Elemental Incarnation: Earth", "Elemental Incarnation: Water", "Elemental Incarnation: Air"]
+      "grantsFeatures": ["Elemental Incarnation: Fire", "Elemental Incarnation: Earth", "Elemental Incarnation: Water", "Elemental Incarnation: Air"],
+      "groupGrantedFeatures": true
      }
     },
     {

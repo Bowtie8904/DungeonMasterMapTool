@@ -5,6 +5,8 @@ import { emptyCharacter } from './data';
 import type { RollMessage } from '../protocol';
 import type { CompendiumFile } from './compendium';
 import { renderSheetView } from './view';
+import { groupFeatures } from './feature-groups';
+import { updateCharacterAutomation } from './persist';
 
 class Element {
   className = '';
@@ -26,6 +28,10 @@ class Element {
   listeners = new Map<string, () => unknown>();
   constructor(readonly tag: string) {}
   append(...children: Array<Element | string>): void { this.children.push(...children); }
+  insertBefore(child: Element, before: Element | null): void {
+    const index = before ? this.children.indexOf(before) : -1;
+    if (index < 0) this.children.push(child); else this.children.splice(index, 0, child);
+  }
   replaceChildren(...children: Array<Element | string>): void { this.children = children; }
   addEventListener(event: string, handler: () => unknown): void { this.listeners.set(event, handler); }
   setAttribute(name: string, value: string): void { this.attributes[name] = value; }
@@ -33,7 +39,17 @@ class Element {
   close(): void { this.open = false; this.listeners.get('close')?.(); }
   remove(): void { this.removed = true; }
   focus(): void {}
-  querySelector(): null { return null; }
+  querySelector(selector: string): Element | null {
+    if (!selector.startsWith('.')) return null;
+    const name = selector.slice(1);
+    for (const child of this.children) {
+      if (typeof child === 'string') continue;
+      if (child.className.split(' ').includes(name)) return child;
+      const nested = child.querySelector(selector);
+      if (nested) return nested;
+    }
+    return null;
+  }
   querySelectorAll(selector: string): Element[] {
     const tags = selector.split(',');
     return this.children.flatMap(child => typeof child === 'string' ? [] :
@@ -57,6 +73,110 @@ function setup() {
 const roll: RollMessage = { id: 1, ts: 1, fromId: 'player', from: 'Player', source: 'damage,magicdamage',
   expression: '2d8+1d4+3', rolls: [2, 6, 4], total: 15 };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+describe('Grouped class features', () => {
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+
+  it('groups only the four opted-in feature families, retaining Focus as its own feature', () => {
+    const groups = catalog.entries.flatMap(entry => groupFeatures(entry.features ?? []))
+      .filter(group => group.children.length);
+    expect(groups.map(group => [group.feature.name, group.children.length])).toEqual([
+      ['Gifted Performer', 3], ['Elemental Dominion', 4], ['Elemental Aura', 4], ['Elemental Incarnation', 4],
+    ]);
+    const martial = catalog.entries.find(e => e.id === 'brawler-martial-artist-foundation')!;
+    expect(groupFeatures(martial.features!).map(group => group.feature.name)).toEqual(['Stance Fighter', 'Focus']);
+  });
+
+  it('does not hide missing, duplicate, or unrelated features', () => {
+    const parent = { name: 'Parent', source: 'one', automation: { groupGrantedFeatures: true, grantsFeatures: ['Child', 'Missing'] } };
+    const child = { name: 'Child', source: 'one' };
+    const other = { name: 'Child', source: 'two' };
+    expect(groupFeatures([other, parent, child])).toEqual([
+      { feature: other, children: [] }, { feature: parent, children: [child] },
+    ]);
+    const duplicate = { ...child };
+    expect(groupFeatures([parent, child, duplicate])).toEqual([
+      { feature: parent, children: [] }, { feature: child, children: [] }, { feature: duplicate, children: [] },
+    ]);
+    const secondParent = { ...parent, name: 'Another parent' };
+    expect(groupFeatures([parent, secondParent, child]).every(group => group.children.length === 0)).toBe(true);
+  });
+
+  it('renders song sections with independent counters and buttons after one song is used', async () => {
+    setup();
+    const c = emptyCharacter('Bard');
+    c.className = 'Bard';
+    c.mancer = { done: true };
+    c.features = catalog.entries.find(e => e.id === 'bard-troubadour-foundation')!.features!
+      .map(f => ({ ...structuredClone(f), source: 'Subclass foundation - Troubadour' }));
+    const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
+    const parent = root.querySelectorAll('div').find(e => e.className === 'feat' && e.text().includes('Gifted Performer'))!;
+    const sections = () => root.querySelectorAll('div').filter(e => e.className === 'feature-section');
+    expect(parent.querySelectorAll('div').filter(e => e.className === 'feature-section')).toHaveLength(3);
+    expect(sections().map(section => section.text())).toEqual(expect.arrayContaining([
+      expect.stringContaining('Relaxing Song'), expect.stringContaining('Epic Song'), expect.stringContaining('Heartbreaking Song'),
+    ]));
+    expect(sections().every(section => section.text().includes('1/1 per long rest'))).toBe(true);
+    await root.querySelectorAll('button').find(b => b.text() === 'Epic Song')!.click();
+    expect(c.usage['feat:Epic Song'].used).toBe(1);
+    expect(c.usage['feat:Relaxing Song']).toBeUndefined();
+    expect(sections().find(section => section.text().includes('Epic Song'))!.text()).toContain('0/1 per long rest');
+    expect(sections().find(section => section.text().includes('Relaxing Song'))!.text()).toContain('1/1 per long rest');
+  });
+
+  it('refreshes legacy parent metadata and retains spent song uses', () => {
+    const c = emptyCharacter('Bard');
+    c.className = 'Bard';
+    c.subclass = 'Troubadour';
+    c.features = catalog.entries.find(e => e.id === 'bard-troubadour-foundation')!.features!
+      .map(f => ({ ...structuredClone(f), source: 'Subclass foundation - Troubadour' }));
+    delete c.features[0].automation!.groupGrantedFeatures;
+    c.usage['feat:Relaxing Song'] = { used: 1, per: 'longRest' };
+    updateCharacterAutomation(c, [catalog]);
+    const group = groupFeatures(c.features).find(g => g.feature.name === 'Gifted Performer')!;
+    expect(group.children).toHaveLength(3);
+    expect(c.usage['feat:Relaxing Song'].used).toBe(1);
+  });
+
+  it('keeps individual song chat links on their own sections', () => {
+    setup();
+    const c = emptyCharacter('Bard');
+    c.className = 'Bard';
+    c.mancer = { done: true };
+    c.features = catalog.entries.find(e => e.id === 'bard-troubadour-foundation')!.features!
+      .map(f => ({ ...structuredClone(f), source: 'Subclass foundation - Troubadour' }));
+    const onShare = vi.fn();
+    const root = renderSheetView({ character: c, onRoll: () => false, onShare }) as unknown as Element;
+    const sections = root.querySelectorAll('div').filter(e => e.className === 'feature-section');
+    const song = sections.find(section => section.text().includes('Epic Song'))!;
+    const share = song.querySelectorAll('button').find(button => button.attributes['aria-label'] === 'Post Epic Song to chat')!;
+    share.click();
+    expect(onShare).toHaveBeenCalledWith({ category: 'feature', item: c.features.find(f => f.name === 'Epic Song') });
+  });
+
+  it('renders every elemental action within its corresponding parent and retains the aura limit', () => {
+    setup();
+    const c = emptyCharacter('Druid');
+    c.className = 'Druid';
+    c.mancer = { done: true };
+    c.features = catalog.entries.filter(e => e.id.startsWith('druid-warden-of-the-elements-'))
+      .flatMap(e => (e.features ?? []).map(f => ({ ...structuredClone(f), source: `Subclass ${e.stage} - Warden of the Elements` })));
+    c.usage['feat:Elemental Aura'] = { used: 1, per: 'rest' };
+    const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
+    const parents = root.querySelectorAll('div').filter(e => e.className === 'feat');
+    for (const name of ['Elemental Incarnation', 'Elemental Aura', 'Elemental Dominion']) {
+      const card = parents.find(e => e.text().includes(name))!;
+      expect(card.querySelectorAll('div').filter(e => e.className === 'feature-section')).toHaveLength(4);
+    }
+    const aura = parents.find(e => e.text().includes('Elemental Aura'))!;
+    expect(aura.text()).toContain('0/1 per rest');
+    const buttons = root.querySelectorAll('button').map(button => button.text());
+    for (const label of ['Channel Fire', 'Channel Earth', 'Channel Water', 'Channel Air', 'Fire retaliation',
+      'Move attacker', 'Roll damage reduction', 'Make attacker Vulnerable']) {
+      expect(buttons.some(text => text.startsWith(label))).toBe(true);
+    }
+  });
+});
 
 describe('Warlock feature controls', () => {
   it('renders one Favor resource and the standard blue Boon button without Favor feature actions', () => {

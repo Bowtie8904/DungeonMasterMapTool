@@ -1485,6 +1485,8 @@ class OnlineSessionServerTest {
                 var response = featureHttp(cookie, action);
                 assertEquals(200, response.statusCode(), response.body());
                 JsonNode message = inbox.next("chat");
+                assertTrue(message.path("text").asText().contains("Cleared 1 HP."), message.toString());
+                assertFalse(message.path("text").asText().contains("(1 = 1)"), message.toString());
                 assertEquals(3 - use, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hp").path("on").asInt());
                 ObjectNode claim = benefitRequest("ally", message, "heal");
                 assertEquals(200, featureHttp(allyCookie, claim).statusCode());
@@ -3008,6 +3010,14 @@ class OnlineSessionServerTest {
         assertEquals(1, sheet.path("hope").path("on").asInt());
         assertEquals(1, sheet.path("stress").path("on").asInt());
         assertEquals(1, sheet.path("featureRevision").asInt());
+    }
+
+    @Test
+    void hpRecoveryReportsKeepOnlyMeaningfulBreakdowns() {
+        assertEquals("Cleared 1 HP.", OnlineSessionServer.hpRecoveryReport(1, MAPPER.valueToTree(1), 1));
+        assertEquals("Cleared 0 HP.", OnlineSessionServer.hpRecoveryReport(0, MAPPER.valueToTree(" 1 "), 1));
+        assertEquals("Cleared 1 HP (1d4 = 3).", OnlineSessionServer.hpRecoveryReport(1, MAPPER.valueToTree("1d4"), 3));
+        assertEquals("Cleared 1 HP (@level = 2).", OnlineSessionServer.hpRecoveryReport(1, MAPPER.valueToTree("@level"), 2));
     }
 
     @Test

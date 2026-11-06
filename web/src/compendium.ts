@@ -1,6 +1,7 @@
 import { el } from './login';
 import { iconButton } from './icons';
 import { pickActor } from './actor-picker';
+import { groupFeatures } from './daggerheart/feature-groups';
 import {
   ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, fetchCompendiumCategory, fetchCompendiumIndex,
   matchesSearch, type CompendiumFetch,
@@ -73,7 +74,7 @@ const damage = (e: CompendiumEntry): string => {
   return `${d.dice}${d.bonus ? (d.bonus > 0 ? `+${d.bonus}` : `${d.bonus}`) : ''} ${d.type}`;
 };
 const featureText = (e: CompendiumEntry): string => e.feature ? `${e.feature.name}: ${e.feature.text}` : '';
-const featureNames = (e: CompendiumEntry): string => (e.features ?? []).map((f) => f.name).join(', ');
+const featureNames = (e: CompendiumEntry): string => groupFeatures(e.features ?? []).map(({ feature }) => feature.name).join(', ');
 const tier = (e: CompendiumEntry): string | undefined => e.tier ? `Tier ${e.tier}` : undefined;
 const starter = (e: CompendiumEntry): string | undefined => e.starter ? 'Starter gear' : undefined;
 const plain = (text: string | undefined): string => (text ?? '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
@@ -368,8 +369,9 @@ export class CompendiumPanel {
     if (badges.childElementCount) box.append(badges);
     if (e.text) box.append(markdownBlock(e.text));
     if (e.feature) box.append(el('div', { class: 'feat' }, el('div', { class: 'ft' }, e.feature.name), markdownBlock(e.feature.text)));
-    for (const f of e.features ?? []) {
-      const card = el('div', { class: 'feat' }, el('div', { class: 'ft' }, f.name), markdownBlock(f.text));
+    for (const { feature: f, children } of groupFeatures(e.features ?? [])) {
+      const card = el('div', { class: 'feat' }, el('div', { class: 'ft' }, f.name), markdownBlock(f.text),
+        ...children.map(child => el('div', { class: 'cmp-feature-section' }, el('div', { class: 'ft' }, child.name), markdownBlock(child.text))));
       box.append(card);
     }
     return box;

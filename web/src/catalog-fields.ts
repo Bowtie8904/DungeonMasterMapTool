@@ -169,6 +169,7 @@ export const FIELD_HELP: Record<string, string> = {
   deathMove: 'Supported death prevention/recovery rule; costs and HP prerequisites are host-validated.',
   moves: 'Death moves to which the bonus applies (risk/avoid).',
   grantsFeatures: 'Exact linked feature names added/refreshed while this feature is learned; does not reset counters.',
+  groupGrantedFeatures: 'Display the granted features as sections of this feature; their actions and counters remain independent.',
   usesOverrides: 'Source-key-to-maximum map that raises another feature’s use limit without resetting it.',
   actionBenefits: 'Source-key-to-chat-benefit map added to another feature’s report.',
   chatBenefits: 'After an action, offer allies one of these benefits in chat. Claims are host-validated.',

@@ -296,7 +296,11 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   limit. A rest limit is not a custom resource recharge rule.
   `usesOverrides: {"feat:<Feature>": number}` raises another source's maximum while the granting feature
   is learned (Virtuoso), without resetting its usage. `grantsFeatures: ["<Feature>", ...]` refreshes linked
-  catalog features on existing sheets (the split Gifted Performer songs), retaining their counters.
+  catalog features on existing sheets (the Gifted Performer songs), retaining their counters.
+  `groupGrantedFeatures: true` presents unambiguous linked features from the same source as sections of
+  their parent on the sheet, in creation and in the browser compendium. The features remain separate
+  automation sources, with independent actions, counters and chat-sharing controls. Missing or ambiguous
+  children are not hidden. Leave it unset when a grant is a separate rules feature, such as Focus.
 - **Sorcerer selections:** `elementChoice: ["Air", ...]` on a foundation feature adds a required creation
   step, persisted as `element` on the choices and sheet. Existing sheets without a choice can set it once
   on the feature. Action `chooseEffects: {count, options: [{id, label, effect, chooseTrait?}]}` requires

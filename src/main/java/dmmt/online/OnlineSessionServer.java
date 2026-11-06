@@ -2730,8 +2730,9 @@ public final class OnlineSessionServer {
                         before - Math.max(0, amount)));
                 else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
                 int changed = Math.abs(before - track.path("on").asInt());
-                if ("clear".equals(operation) && "hp".equals(resource))
-                    report.add("Cleared " + changed + " HP (" + step.path("amount").asText() + " = " + amount + ").");
+                if ("clear".equals(operation) && "hp".equals(resource)) {
+                    report.add(hpRecoveryReport(changed, step.path("amount"), amount));
+                }
                 else if (changed > 0) report.add(("clear".equals(operation) ? "Cleared " : "gain".equals(operation) ? "Gained " : "Marked ")
                         + changed + " " + ("hp".equals(resource) ? "HP" : "stress".equals(resource) ? "Stress" : resource) + ".");
                 else if ("gain".equals(operation) && amount > 0)
@@ -2819,6 +2820,12 @@ public final class OnlineSessionServer {
         JsonNode value = sheet.path(field);
         if (!(value instanceof ObjectNode track)) throw new IllegalArgumentException("Resource unavailable: " + resource);
         return track;
+    }
+
+    static String hpRecoveryReport(int changed, JsonNode amountSpec, int amount) {
+        String expression = amountSpec.asText().strip();
+        boolean fixed = amountSpec.isNumber() || expression.matches("[+-]?\\d+");
+        return "Cleared " + changed + " HP" + (fixed ? "" : " (" + expression + " = " + amount + ")") + ".";
     }
 
     private int featureAmount(JsonNode amount, ObjectNode sheet) {

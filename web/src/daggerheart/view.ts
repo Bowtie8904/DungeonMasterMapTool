@@ -19,6 +19,7 @@ import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
+import { groupFeatures } from './feature-groups';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
@@ -1007,7 +1008,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function charPage(): HTMLElement {
-    const feat = (f: Feature) => {
+    const feat = (f: Feature, children: Feature[] = []) => {
       const node = featureCard(f, f.hope && !f.automation?.actions ? () => {
         if (c.hope.on < (f.cost ?? 0)) return;
         c.hope.on -= f.cost ?? 0;
@@ -1029,6 +1030,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         node.append(el('label', { class: 'row' }, 'Element', select));
       }
       if (actions) node.append(actions);
+      for (const child of children) {
+        const section = el('div', { class: 'feature-section' },
+          el('div', { class: 'src' }, el('span', { class: 'feature-section-name' }, child.name)),
+          rich(child.text));
+        const childActions = actionRow(`feat:${child.name}`, child.automation, child.name);
+        if (childActions) section.append(childActions);
+        node.append(share(section, { category: 'feature', item: child }));
+      }
       return share(node, { category: 'feature', item: f });
     };
     const tf = el('button', { class: 'small', type: 'button', title: 'A character can have one transformation; it counts as heritage' }, c.transformation ? `Transformation: ${c.transformation} (change)` : 'Add a transformation');
@@ -1038,8 +1047,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     });
     return el(
       'div', { class: 'cols char-cols' },
-      el('div', {}, card('Class & subclass features', null, ...c.features.map(feat))),
-      el('div', {}, card('Heritage features', tf, ...c.heritage.map(feat))),
+      el('div', {}, card('Class & subclass features', null, ...groupFeatures(c.features).map(({ feature, children }) => feat(feature, children)))),
+      el('div', {}, card('Heritage features', tf, ...groupFeatures(c.heritage).map(({ feature, children }) => feat(feature, children)))),
     );
   }
 
