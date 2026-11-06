@@ -13,6 +13,8 @@ import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
 import { activateAura, canCastDomain, channelElement, transformBeastform } from './druid';
 import { chooseBeastform } from './druid-view';
+import { channelRawPower, chooseActionEffects } from './sorcerer';
+import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 
@@ -63,6 +65,7 @@ export class SheetBus {
 }
 
 export interface SheetViewOptions {
+  supportsSorcererAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
@@ -293,7 +296,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
     const bonus = rollBonus(c, targets, w, false);
-    openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll('damage', w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
+    openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll(['damage', ...(w.damageType === 'magic' ? ['magicdamage'] : []), ...(targets.includes('spelldamage') ? ['spelldamage'] : [])].join(','), w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
       () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation, opts.supportsSeraphAutomation);
   };
   if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource) => {
@@ -337,9 +340,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
       for (const r of a?.effectCounters ?? []) row.append(el('span', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, counterResource(r)));
     }
-    for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) row.append(actionButton(key, a!, action, label, hooks));
+    const sharedUses = a?.uses && actions.some(action => action.usesSource === false)
+      ? el('span', { class: 'row actions', ariaLabel: `${label} limited actions` }) : row;
+    for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) {
+      (action.usesSource === false ? row : sharedUses).append(actionButton(key, a!, action, label, hooks));
+    }
     const left = a ? usesLeft(c, key, a) : null;
-    if (left !== null && a?.uses) row.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
+    if (left !== null && a?.uses) sharedUses.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
+    if (sharedUses !== row) row.append(sharedUses);
     return row;
   }
 
@@ -383,6 +391,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
+      if (action.channelRawPower || action.chooseEffects) {
+        const report = (lines: string[]) => {
+          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          hooks.after?.();
+          render();
+        };
+        if (action.channelRawPower) chooseChannelCard(c, (card, benefit) => report(channelRawPower(c, key, a, action, card, benefit)));
+        else chooseFeatureEffects(action, (ids, trait) => report(chooseActionEffects(c, key, a, action, ids, trait)));
+        return;
+      }
       if ((action.beastform || action.evolution || action.channel || action.aura) && !opts.supportsDruidAutomation?.()) {
         opts.onLog?.('Update the host to use Druid automation.');
         return;
@@ -950,6 +968,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         render();
       } : undefined);
       const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+      if (f.automation?.elementChoice && (c.element || c.mancer?.choices?.element)) {
+        node.append(el('p', { class: 'muted' }, `Element: ${c.element || c.mancer?.choices?.element}`));
+      } else if (f.automation?.elementChoice) {
+        const select = el('select', { ariaLabel: 'Elementalist element' }, el('option', { value: '' }, 'Choose your element'),
+          ...f.automation.elementChoice.map(element => el('option', { value: element }, element)));
+        select.value = c.element ?? c.mancer?.choices?.element ?? '';
+        select.addEventListener('change', () => {
+          if (!select.value) return;
+          c.element = select.value;
+          if (c.mancer?.choices) c.mancer.choices.element = select.value;
+          render();
+        });
+        node.append(el('label', { class: 'row' }, 'Element', select));
+      }
       if (actions) node.append(actions);
       return share(node, { category: 'feature', item: f });
     };

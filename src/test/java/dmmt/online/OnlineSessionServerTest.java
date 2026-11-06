@@ -139,6 +139,182 @@ class OnlineSessionServerTest {
         return sheet;
     }
 
+    private ObjectNode sorcererSheet() throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Sorcerer").put("subclass", "Primal Origin");
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if (!"sorcerer".equals(entry.path("id").asText()) && !entry.path("id").asText().startsWith("sorcerer-primal-origin-")) continue;
+            for (JsonNode feature : entry.path("features")) {
+                ObjectNode learned = feature.deepCopy();
+                learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Sorcerer"
+                        : "Subclass " + entry.path("stage").asText() + " - Primal Origin");
+                features.add(learned);
+            }
+        }
+        sheet.putArray("activeWeapons").addObject().put("name", "Wand").put("damageType", "magic");
+        return sheet;
+    }
+
+    @Test
+    void sorcererDamageSelectionEditsTheOriginalRollAtomicallyAndRejectsStaleDuplicateAndPhysicalChoices() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("sorcerer").name("Sorcerer").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "sorcerer", sorcererSheet().toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("sorcererAutomation").asBoolean());
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("actorId", "sorcerer")
+                    .put("source", "damage").put("weapon", "Wand").put("expression", "(2d8+1d4+3)*2").put("toId", "dm");
+            var contributions = msg.putArray("contributions");
+            contributions.addObject().put("label", "Weapon").put("expression", "(2d8)*2");
+            contributions.addObject().put("label", "Bonus die").put("expression", "(1d4)*2");
+            contributions.addObject().put("label", "Flat bonus").put("expression", "(3)*2");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "sorcerer").put("key", "feat:Volatile Magic").put("actionId", "reroll");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            request.set("expectedDice", roll.path("rolls"));
+            request.putArray("dice").add(0).add(0);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "sorcerer")).path("hope").path("on").asInt());
+            request.putArray("dice").add(0).add(2);
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            assertEquals(roll.path("id"), update.path("id"));
+            assertEquals(roll.path("rolls").path(1), update.path("rolls").path(1));
+            int total = (update.path("rolls").path(0).asInt() + update.path("rolls").path(1).asInt()
+                    + update.path("rolls").path(2).asInt() + 3) * 2;
+            assertEquals(total, update.path("total").asInt());
+            assertEquals(total, java.util.stream.StreamSupport.stream(update.path("breakdown").spliterator(), false)
+                    .mapToInt(detail -> detail.path("total").asInt()).sum());
+            JsonNode rerollReport = inbox.next("chat");
+            String rerollText = rerollReport.path("text").asText();
+            assertEquals("dm", rerollReport.path("toId").asText());
+            assertEquals("Volatile Magic", rerollReport.path("rollSource").path("name").asText());
+            for (int i : List.of(0, 2)) assertTrue(rerollText.contains("Rerolled damage die " + (i + 1) + ": "
+                    + roll.path("rolls").path(i).asInt() + " -> " + update.path("rolls").path(i).asInt() + "."));
+            assertTrue(rerollText.contains("Damage total: " + roll.path("total").asInt() + " -> " + total + "."));
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "sorcerer")).path("hope").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.put("key", "feat:Manipulate Magic").put("actionId", "damage");
+            request.putArray("dice").add(1);
+            request.putArray("expectedDice").add(-1);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.set("expectedDice", update.path("rolls"));
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode doubled = inbox.next("rollUpdate");
+            assertEquals(update.path("rolls").path(1).asInt() * 2, doubled.path("rolls").path(1).asInt());
+            assertEquals(total + update.path("rolls").path(1).asInt() * 2, doubled.path("total").asInt());
+            JsonNode doubleReport = inbox.next("chat");
+            assertEquals("dm", doubleReport.path("toId").asText());
+            assertEquals("Manipulate Magic", doubleReport.path("rollSource").path("name").asText());
+            assertTrue(doubleReport.path("text").asText().contains("Doubled damage die 2: "
+                    + update.path("rolls").path(1).asInt() + " -> " + doubled.path("rolls").path(1).asInt() + "."));
+            assertTrue(doubleReport.path("text").asText().contains("Damage total: " + total + " -> " + doubled.path("total").asInt() + "."));
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "sorcerer")).path("stress").path("on").asInt());
+            JsonNode persisted = store.historyTail(campaign.getId(), 20).stream()
+                    .filter(entry -> entry.path("id").equals(roll.path("id"))).findFirst().orElseThrow();
+            assertEquals(doubled.path("rolls"), persisted.path("rolls"));
+            assertEquals(doubled.path("total"), persisted.path("total"));
+            assertTrue(store.historyTail(campaign.getId(), 20).contains(rerollReport));
+            assertTrue(store.historyTail(campaign.getId(), 20).contains(doubleReport));
+            msg.put("weapon", "Sword");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode physical = inbox.next("roll");
+            request.withObject("/roll").set("id", physical.path("id"));
+            request.withObject("/roll").set("ts", physical.path("ts"));
+            request.set("expectedDice", physical.path("rolls"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void manipulateMagicSelectsOneActionBenefitAndPaysStressOnceWithoutChangingDualityDice() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("sorcerer").name("Sorcerer").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "sorcerer", sorcererSheet().toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            for (String choice : List.of("bonus", "reach", "target")) {
+                ws.sendText("""
+                        {"type":"roll","actorId":"sorcerer","source":"spellcast,action","kind":"duality","expression":"2d12+3"}
+                        """, true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "sorcerer").put("key", "feat:Manipulate Magic")
+                        .put("actionId", "action");
+                request.putObject("roll").set("id", roll.path("id"));
+                request.withObject("/roll").set("ts", roll.path("ts"));
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                request.put("choiceId", choice);
+                var response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode updated = inbox.next("rollUpdate");
+                assertEquals(roll.path("rolls"), updated.path("rolls"));
+                assertEquals(roll.path("total").asInt() + ("bonus".equals(choice) ? 2 : 0), updated.path("total").asInt());
+                String report = inbox.next("chat").path("text").asText();
+                if ("bonus".equals(choice)) {
+                    assertTrue(report.contains("Added 2 to the original roll."));
+                    assertFalse(report.contains("2 = 2"));
+                }
+                request.put("choiceId", "target".equals(choice) ? "bonus" : "target");
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+            }
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "sorcerer")).path("stress").path("on").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void enchantedAidSwapsAllySpellcastDiceIndependentlyOfHelpAndOnlyOncePerLongRest() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("sorcerer").name("Sorcerer").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "sorcerer", sorcererSheet().toString());
+        store.saveSheet(campaign.getId(), "ally", communitySheet("Seaborne").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            JsonNode roll;
+            do {
+                ws.sendText("""
+                        {"type":"roll","actorId":"ally","source":"spellcast,action","kind":"duality","expression":"2d12"}
+                        """, true).join();
+                roll = inbox.next("roll");
+            } while (roll.path("rolls").path(0).equals(roll.path("rolls").path(1)));
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "sorcerer").put("key", "feat:Enchanted Aid").put("actionId", "swap");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            assertEquals(roll.path("rolls").path(0), update.path("rolls").path(1));
+            assertEquals(roll.path("rolls").path(1), update.path("rolls").path(0));
+            assertEquals(roll.path("total"), update.path("total"));
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "sorcerer"));
+            assertEquals(1, saved.path("usage").path("feat:Enchanted Aid").path("used").asInt());
+            assertEquals(5, saved.path("hope").path("on").asInt());
+            assertEquals(3, saved.path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            do {
+                ws.sendText("""
+                        {"type":"roll","actorId":"ally","source":"spellcast,action","kind":"duality","expression":"2d12"}
+                        """, true).join();
+                roll = inbox.next("roll");
+            } while (roll.path("rolls").path(0).equals(roll.path("rolls").path(1)));
+            request.withObject("/roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
     @Test
     void sacredResonanceDoublesMatchingBonusDiceAndKeepsBreakdownConsistent() throws Exception {
         Inbox inbox = new Inbox();
@@ -812,6 +988,7 @@ class OnlineSessionServerTest {
             JsonNode update = inbox.next("rollUpdate");
             int extra = update.path("total").asInt() - original.path("total").asInt();
             assertTrue(extra >= 1 && extra <= 4);
+            assertTrue(inbox.next("chat").path("text").asText().contains("Added 1d4 = " + extra + " to the original roll."));
             assertEquals("1d4", update.path("breakdown").path(update.path("breakdown").size() - 1).path("expression").asText());
             assertFalse(update.has("outcome"));
             assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hope").path("on").asInt());

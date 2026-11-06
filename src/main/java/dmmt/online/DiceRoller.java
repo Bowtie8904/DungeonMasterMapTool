@@ -132,6 +132,30 @@ public final class DiceRoller {
         return new Result(result.expression(), rolls, total(parsed, rolls));
     }
 
+    public static int totalFor(String expression, List<Integer> rolls, int maxDice) {
+        Terms parsed = terms(expression, maxDice);
+        if (parsed.dice().size() != rolls.size())
+            throw new IllegalArgumentException("The damage dice no longer match their formula.");
+        return total(parsed, rolls);
+    }
+
+    /** Edits selected damage dice without losing keep-highest or whole-roll multipliers. */
+    public static Result editDice(Result result, List<Integer> selected, boolean reroll, int maxDice, Random random) {
+        Terms parsed = terms(result.expression(), maxDice);
+        if (parsed.dice().size() != result.rolls().size())
+            throw new IllegalArgumentException("The damage dice no longer match their formula.");
+        if (selected.isEmpty() || !reroll && selected.size() != 1
+                || new java.util.HashSet<>(selected).size() != selected.size())
+            throw new IllegalArgumentException("Choose " + (reroll ? "one or more distinct dice." : "exactly one die."));
+        List<Integer> values = new ArrayList<>(result.rolls());
+        for (int index : selected) {
+            if (index < 0 || index >= values.size() || parsed.dice().get(index) <= 0)
+                throw new IllegalArgumentException("Choose a positive damage die.");
+            values.set(index, reroll ? random.nextInt(parsed.dice().get(index)) + 1 : Math.multiplyExact(values.get(index), 2));
+        }
+        return new Result(result.expression(), values, total(parsed, values));
+    }
+
     public static List<Integer> combo(int sides, int maxDice, Random random) {
         if (!List.of(4, 6, 8, 10, 12).contains(sides)) throw new IllegalArgumentException("Invalid Combo Die.");
         List<Integer> faces = new ArrayList<>();

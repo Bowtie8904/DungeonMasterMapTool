@@ -391,6 +391,13 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
       },
     });
     const companion = creationCompanionRules(data, ch);
+    const elements = subclassCard(data, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.elementChoice ?? []) ?? [];
+    if (elements.length) list.push({
+      key: 'element', title: 'Choose your element', hint: 'Your Elementalist magic takes the shape of this element.',
+      problem: () => elements.includes(ch.element ?? '') ? null : 'Choose one element.',
+      render: (body, _touch, redraw) => body.append(el('div', { class: 'cho-grid' }, ...elements.map(element =>
+        choice(element, '', ch.element === element, () => { ch.element = element; redraw(); })))),
+    });
     if (companion) list.push(...companionSetupSteps(ch.companion ??= emptyCompanionChoices(), companion));
     const stanceCatalog = subclassCard(data, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
     if (stanceCatalog.length) list.push({

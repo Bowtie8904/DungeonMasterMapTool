@@ -111,6 +111,25 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('gates Sorcerer damage selections on host support without changing manual actions', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Sorcerer', { name: 'Volatile Magic', automation: {
+      actions: [{ id: 'use', label: 'Volatile Magic', cost: { hope: 3 } }],
+      rollTriggers: [{ id: 'reroll', label: 'Volatile Magic', on: 'damage', magicOnly: true, damageDice: 'reroll' }],
+    } });
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, kind: 'damage', source: 'damage,magicdamage' };
+    const old = rollButtons(message, { ...host, playerId: 'player-b' }) as unknown as FakeElement;
+    const supported = rollButtons(message, { ...host, playerId: 'player-b', supportsSorcererAutomation: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const oldButton = old.queryAll('button').find(b => b.text === 'Volatile Magic')!;
+    const newButton = supported.queryAll('button').find(b => b.text === 'Volatile Magic')!;
+    expect(oldButton.disabled).toBe(true);
+    expect(oldButton.title).toContain('Update the host');
+    expect(newButton.disabled).toBe(false);
+    expect(c.features[0].automation!.actions).toHaveLength(1);
+  });
+
   it('offers the Fear alternative beside Hope, gates old hosts, and excludes reactions and criticals', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const confirm = vi.fn(() => { throw new Error('Native prompts are forbidden'); });

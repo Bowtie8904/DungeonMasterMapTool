@@ -209,6 +209,12 @@
 .dh .qa .q { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
 
 /* roll popup */
+dialog.dh-sorcerer-dialog { margin: auto; width: min(660px, calc(100vw - 32px)); }
+dialog.dh-sorcerer-dialog::backdrop { background: rgba(0,0,0,.6); }
+.dh-sorcerer-dialog [aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.dh-sorcerer-dialog button.roll-die { min-width: 62px; padding: 8px; }
+.dh-sorcerer-dialog .dcard { text-align: left; }
+.dh-sorcerer-dialog [hidden] { display: none !important; }
 .dh-rolldlg-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; }
 .dh-rolldlg { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: min(440px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
 .dh-rolldlg h4 { margin: 0; font-size: 15px; }

@@ -121,6 +121,9 @@ export interface FeatureRequest {
   amount?: number;
   restDie?: number;
   benefitId?: string;
+  choiceId?: string;
+  dice?: number[];
+  expectedDice?: number[];
   roll?: { id: number | string; ts: number };
 }
 

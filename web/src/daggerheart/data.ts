@@ -113,6 +113,7 @@ export interface Experience {
 
 /** Everything the player decided in the Character Mancer, kept so the choices can be reviewed and edited. */
 export interface CreationChoices {
+  element?: string;
   companion?: CompanionChoices;
   stances?: string[];
   className: string;
@@ -173,6 +174,7 @@ export interface LevelUpRecord {
 }
 
 export interface CharacterSheet {
+  element?: string;
   companion?: RangerCompanion;
   knownStances?: string[];
   brawlerTrait?: TraitName;

@@ -16,6 +16,15 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Sorcerer automation:** select damage dice in chat for Volatile Magic rerolls or Manipulate Magic doubling;
+  Manipulate Magic also offers reach, +2, and additional-target choices on eligible action rolls. Channel Raw
+  Power selects and vaults a domain card for Hope or a one-use damage bonus. Elementalist saves a creation
+  element and offers Hope-cost bonuses; Transcendence grants two selected buffs. Minor Illusion, Natural
+  Evasion and Enchanted Aid roll their dice in chat. Damage-die edits also post a before/after summary.
+  Enchanted Aid's unlimited d8 Help roll is independent of its manual/chat Spellcast swap, which share
+  a clearly grouped once-per-long-rest counter. Arcane Charge has paid/free activation and a default-on
+  magic-damage mitigation choice; its long-rest buff can be spent for +10 magic damage. Narrative
+  prerequisites and the alternative +3 reaction Difficulty remain table-managed.
 - **Player map layout:** no top-center session, map or account header obscures the map. A slightly transparent
   connection badge sits in the bottom-left **Connected players** overlay, including while reconnecting.
 - **Player token controls:** left-click a controlled token with Select, or box-select several. Selected tokens

@@ -82,6 +82,10 @@ export interface Step {
 }
 
 export interface ActionDef {
+  usesSource?: boolean;
+  magicOnly?: boolean;
+  channelRawPower?: EffectDef;
+  chooseEffects?: { count: number; options: Array<{ id: string; label: string; effect: EffectDef; chooseTrait?: boolean }> };
   rollDicePool?: boolean;
   weaponRanges?: string[];
   requiresCompanion?: boolean;
@@ -177,8 +181,10 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  magicAction?: boolean;
+  damageDice?: 'reroll' | 'double';
+  choices?: Array<{ id: string; label: string; addDice?: string }>;
   dualityDieBonus?: { die: 'hope' | 'fear'; value: number };
-  usesSource?: boolean;
   advanceEffect?: string;
   swapDuality?: boolean;
   addDice?: string;
@@ -203,6 +209,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  elementChoice?: string[];
   dicePool?: { id: string; label: string; count: ModValue; sides: number; extraByFeature?: Record<string, number> };
   hopeReward?: { removeFear: number; roll: string };
   companion?: CompanionRules;
@@ -614,6 +621,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
     .filter((o) => !o.weaponRanges || !!weapon && !targets.includes('spelldamage') && o.weaponRanges.some(range => range.toLowerCase() === weapon.range.toLowerCase()))
     .filter((o) => !o.excludeRolls?.some(target => targets.includes(target)))
+    .filter((o) => !o.magicOnly || weapon?.damageType === 'magic' || targets.includes('magicdamage') || targets.includes('spelldamage'))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
@@ -876,6 +884,7 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (action.usesSource === false) a = { ...a, uses: undefined };
   if ((action.companion || action.requiresCompanion) && !companionAvailable(c)) return 'Your companion is unavailable';
   if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
   if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
@@ -918,6 +927,7 @@ export function runAction(c: CharacterSheet, key: string, a: Automation, action:
 /** Like {@link runAction}, but returns the individual effects (empty when nothing visible happened). */
 export function runActionDetailed(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal, context: 'sheet' | 'rest' = 'sheet'): string[] | null {
   if (actionBlocker(c, key, a, action, context)) return null;
+  if (action.usesSource === false) a = { ...a, uses: undefined };
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const log: string[] = [];
   const resolvedCost = actionCost(c, action);
@@ -1054,6 +1064,11 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  const targets = ctx.source.split(',');
+  const magic = targets.includes('magicdamage') || targets.includes('spelldamage')
+    || activeWeapons(c).some(w => w.name === ctx.weapon && w.damageType === 'magic');
+  if (t.magicOnly && !magic) return false;
+  if (t.magicAction && !(targets.includes('spellcast') || targets.includes('attack') && magic)) return false;
   if (t.on === 'companion' && !companionAvailable(c)) return false;
   if (t.swapDuality && (ctx.kind === 'damage' || ctx.hope === ctx.fear)) return false;
   const companion = companionWeapon(c);

@@ -571,7 +571,16 @@
       "actions": [
        {
         "id": "use",
-        "label": "Transcendence"
+        "label": "Transcendence",
+        "chooseEffects": {
+         "count": 2,
+         "options": [
+          { "id": "severe", "label": "+4 Severe threshold", "effect": { "name": "Transcendence: Severe threshold", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "severeThreshold", "value": 4 }] } },
+          { "id": "trait", "label": "+1 to a trait", "chooseTrait": true, "effect": { "name": "Transcendence: Trait", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "trait.@choice", "value": 1 }] } },
+          { "id": "proficiency", "label": "+1 Proficiency", "effect": { "name": "Transcendence: Proficiency", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "proficiency", "value": 1 }] } },
+          { "id": "evasion", "label": "+2 Evasion", "effect": { "name": "Transcendence: Evasion", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "evasion", "value": 2 }] } }
+         ]
+        }
        }
       ]
      }
@@ -600,6 +609,7 @@
        {
         "id": "use",
         "label": "Natural Evasion",
+        "sendRoll": { "dice": "1d6", "label": "Natural Evasion: add to Evasion against this attack" },
         "cost": {
          "stress": 1
         }
@@ -627,6 +637,7 @@
      "text": "Choose one of the following elements at character creation: air, earth, fire, lightning, water.\nYou can shape this element into harmless effects. Additionally, **spend a Hope** and describe how your control over this element helps an action roll you’re about to make, then either gain a +2 bonus to the roll or a +3 bonus to the roll’s damage.",
      "type": "subclass",
      "automation": {
+      "elementChoice": ["Air", "Earth", "Fire", "Lightning", "Water"],
       "rollOptions": [
        {
         "id": "elemental-action",
@@ -2230,10 +2241,23 @@
        {
         "id": "use",
         "label": "Arcane Charge",
+        "steps": [{ "op": "effect", "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }],
         "cost": {
          "hope": 2
         }
+       },
+       {
+        "id": "magic-damage",
+        "label": "Charged by magic damage",
+        "steps": [{ "op": "effect", "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }]
        }
+      ],
+      "mitigation": [
+       { "id": "charge", "label": "Arcane Charge: become Charged", "defaultOn": true, "when": { "type": "magic", "severity": ["minor", "major", "severe", "massive"] },
+        "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }
+      ],
+      "rollOptions": [
+       { "id": "damage", "label": "Spend Charge", "roll": "damage", "magicOnly": true, "requiresEffect": "Charged", "endEffect": "Charged", "value": 10 }
       ]
      }
     }
@@ -2257,15 +2281,22 @@
      "text": "You can enhance the magic of others with your essence. When you Help an Ally with a Spellcast Roll, you can roll a **d8** as your advantage die. Once per long rest, after an ally has made a Spellcast Roll with your help, you can swap the results of their Duality Dice.",
      "type": "subclass",
      "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
-      },
+      "uses": { "max": 1, "per": "longRest" },
       "actions": [
        {
         "id": "use",
-        "label": "Enchanted Aid"
+        "label": "Help an Ally: d8",
+        "usesSource": false,
+        "sendRoll": { "dice": "1d8", "label": "Enchanted Aid: advantage die" }
+       },
+       {
+        "id": "manual-swap",
+        "label": "Swap Duality dice"
        }
+      ],
+      "rollTriggers": [
+       { "id": "swap", "label": "Enchanted Aid: swap Duality dice", "on": "spellcast", "audience": "ally", "swapDuality": true,
+        "description": "Use only if you helped this ally's Spellcast roll. Independent of the d8 Help roll." }
       ]
      }
     }
@@ -2297,6 +2328,16 @@
          "stress": 1
         }
        }
+      ],
+      "rollTriggers": [
+       { "id": "action", "label": "Manipulate Magic", "on": "action", "magicAction": true, "cost": { "stress": 1 },
+        "choices": [
+         { "id": "reach", "label": "Extend reach by one range" },
+         { "id": "bonus", "label": "+2 to this roll", "addDice": "2" },
+         { "id": "target", "label": "Hit an additional target within range" }
+        ]
+       },
+       { "id": "damage", "label": "Manipulate Magic: double a die", "on": "damage", "magicOnly": true, "cost": { "stress": 1 }, "damageDice": "double" }
       ]
      }
     }
@@ -3784,6 +3825,9 @@
          "hope": 3
         }
        }
+      ],
+      "rollTriggers": [
+       { "id": "reroll", "label": "Volatile Magic", "on": "damage", "magicOnly": true, "cost": { "hope": 3 }, "damageDice": "reroll" }
       ]
      }
     },
@@ -3795,7 +3839,10 @@
     {
      "name": "Minor Illusion",
      "text": "Make a **Spellcast Roll (10)**. On a success, you create a minor visual illusion no larger than yourself within Close range. This illusion is convincing to anyone at Close range or farther.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "actions": [{ "id": "spellcast", "label": "Spellcast (10)", "actionRoll": { "trait": "spellcast", "difficulty": 10 } }]
+     }
     },
     {
      "name": "Channel Raw Power",
@@ -3809,7 +3856,11 @@
       "actions": [
        {
         "id": "use",
-        "label": "Channel Raw Power"
+        "label": "Channel Raw Power",
+        "channelRawPower": { "name": "Channel Raw Power", "kind": "buff", "until": "manual",
+         "text": "Spend this bonus on one damaging spell.",
+         "rollOptions": [{ "id": "damage", "label": "Channel Raw Power", "roll": "damage", "magicOnly": true, "value": "@cardLevel", "endEffect": "Channel Raw Power", "description": "Use on one spell that deals damage." }]
+        }
        }
       ]
      }

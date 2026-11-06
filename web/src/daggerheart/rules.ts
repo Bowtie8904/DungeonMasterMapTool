@@ -216,6 +216,8 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   const p: string[] = [];
   if (!findClass(d, ch.className)) p.push('Choose a class.');
   if (!ch.subclass) p.push('Choose a subclass.');
+  const elements = subclassCard(d, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.elementChoice ?? []) ?? [];
+  if (elements.length && !elements.includes(ch.element ?? '')) p.push('Choose your Elementalist element.');
   const companion = creationCompanionRules(d, ch);
   if (companion) p.push(...(ch.companion ? companionChoiceProblems(ch.companion) : ['Set up your companion.']));
   const stances = subclassCard(d, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
@@ -274,6 +276,11 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   const foundation = subclassCard(d, ch.subclass, 'foundation');
   c.subclass = shortSubclass(ch.subclass);
   for (const f of foundation?.features ?? []) c.features.push(toFeature(`Subclass foundation - ${c.subclass}`, f));
+  if (foundation?.features?.some(f => f.automation?.elementChoice)) {
+    const elements = foundation.features.flatMap(f => f.automation?.elementChoice ?? []);
+    if (!elements.includes(ch.element ?? '') && !prev?.testingCharacter) throw new Error('Choose your Elementalist element.');
+    c.element = ch.element;
+  }
   if (martialStances(c).length) {
     const errors = stanceProblems(martialStances(c), ch.stances ?? [], 2, 1);
     if (errors.length && !prev?.testingCharacter) throw new Error(errors.join(' '));

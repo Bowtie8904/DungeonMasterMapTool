@@ -281,6 +281,26 @@ and checks safe, independent source disclosures and source propagation from feat
 Spellcast, individual grimoire spells and follow-up spell damage.
 Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
 never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
+Sorcerer features use themed selection dialogs, not extra confirmations. Volatile Magic selects any number
+of individual magic-damage dice to reroll in the original chat card. Manipulate Magic selects reach, +2
+to the action result, or an additional target on eligible attacks/Spellcast rolls; its damage action doubles
+one selected die. Both keep the manual feature button. Host dice edits preserve other dice, flat bonuses,
+keep-highest rules, whole-roll doubling and saved history, with stale selections and repeat uses rejected.
+Both damage-die edits post an action report with the selected faces and damage total before/after,
+visible to the original roll's audience. Flat post-roll bonuses display just their amount, not `2 = 2`;
+rolled bonuses retain their formula and result.
+Channel Raw Power displays active domain cards and vaults the selected card for level-based Hope or a
+one-use +2-per-card-level magic-damage option (only select it for a spell). Transcendence chooses exactly two
+rest-duration passive buffs, with a trait picker for its trait bonus. Elementalist chooses an element during
+creation and shows it on the feature; existing characters without a saved choice can select it there.
+Its optional action +2 / damage +3 each costs 1 Hope. Minor Illusion rolls against 10; Natural Evasion
+posts a d6. Enchanted Aid's unlimited d8 Help roll never spends the independent long-rest Spellcast swap.
+Its manual swap button shares the chat swap's counter; that counter is grouped with the swap, not Help.
+Arcane Charge's Hope-cost button, free magic-damage button and default-on magic mitigation all grant the
+same long-rest Charged buff; its optional +10 magic-damage bonus consumes it. Remove the buff manually
+when taking the alternative +3 reaction Difficulty. The new chat-edit dialogs require
+`hello.sorcererAutomation:true`; older hosts show an update hint. Existing compatibility versions and
+settings are unchanged.
 The catalog editor preserves unsaved drafts on cancellation, including when closing its embedded DM window.
 `checks/sheet-layout.html` checks the vertical trait sidebar on every tab and Experiences in Background,
 two-column class/heritage features, compact stats, wider viewport-height floating sheet, pop-out layout,

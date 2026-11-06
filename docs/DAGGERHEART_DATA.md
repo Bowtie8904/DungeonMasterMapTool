@@ -224,6 +224,33 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `usesOverrides: {"feat:<Feature>": number}` raises another source's maximum while the granting feature
   is learned (Virtuoso), without resetting its usage. `grantsFeatures: ["<Feature>", ...]` refreshes linked
   catalog features on existing sheets (the split Gifted Performer songs), retaining their counters.
+- **Sorcerer selections:** `elementChoice: ["Air", ...]` on a foundation feature adds a required creation
+  step, persisted as `element` on the choices and sheet. Existing sheets without a choice can set it once
+  on the feature. Action `chooseEffects: {count, options: [{id, label, effect, chooseTrait?}]}` requires
+  exactly `count` distinct choices; `chooseTrait` replaces `@choice` in a modifier's stat path with the
+  selected trait (Transcendence). These are normal removable effects with configured rest expiry.
+  Action `channelRawPower: <EffectDef>` chooses an active domain card and vaults it. The player chooses
+  capped Hope equal to its level or the defined effect, whose roll-option values resolve to twice that
+  level. The catalog's `@cardLevel` value is a selection placeholder, not a general modifier expression.
+  `magicOnly: true` restricts an optional roll bonus or chat trigger to magic damage; weapon metadata and
+  additive `magicdamage` / `spelldamage` source tags identify it. `magicAction: true` restricts a chat
+  action to Spellcast or a magic-weapon attack. Narrative spell/target prerequisites remain table-managed.
+  A trigger's `choices: [{id, label, addDice?}]` offers one popup choice and sends `choiceId` to
+  `/api/feature`; the host resolves its definition, adds any configured bonus to the original result, and
+  shares one per-roll claim across all choices. `damageDice: "reroll"|"double"` selects global zero-based
+  `dice` indexes and sends `expectedDice` (the displayed roll snapshot) with the normal roll reference.
+  The host rejects empty, duplicated, stale, out-of-range, negative or unmodifiable Combo Dice selections.
+  Double requires exactly one die. Selected faces update in place with provenance notes; unaffected
+  dice, flat bonuses, keep-highest rules and whole-roll multipliers are preserved. Dice edits also emit
+  an action-used report with each selected face and the total before/after, respecting the original
+  roll's audience; they do not create a second damage roll. Flat `addDice` bonuses report just the total,
+  while actual dice retain formula/result detail. `hello.sorcererAutomation` gates these new chat dialogs;
+  existing clients ignore the additive fields. Online Play and DM Link compatibility versions are unchanged.
+  Sheet actions with `usesSource: false` bypass their source's shared counter (their own `uses`, if any,
+  still apply); mixed action rows group the source counter with its limited actions, not bypass actions.
+  Enchanted Aid's manual and chat swaps share the source's long-rest counter without limiting its d8 Help roll.
+  Arcane Charge uses existing
+  mitigation `defaultOn`, magic `when`, effect steps and `requiresEffect`/`endEffect` damage options.
 - **actions**: normally a button on the feature/item/card. `timing: "downtime"` offers the action only as a rest
   move; `timing: "rest"` hides standalone controls for benefits handled by `rest` metadata. Missing `timing`
   retains normal behavior (`timing: "action"` explicitly preserves a GM's normal-action override);

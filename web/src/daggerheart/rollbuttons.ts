@@ -10,6 +10,7 @@ import { actionBlocker, automationSources, availableRollTriggers, costText, uses
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
+import { chooseRollModification } from './sorcerer-view';
 
 export interface RollButtonSheet {
   character: CharacterSheet;
@@ -29,6 +30,7 @@ export interface RollButtonHost {
   supportsGuardianRolls?: () => boolean;
   supportsDualityDieBonus?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
+  supportsSorcererAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -323,7 +325,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.key.startsWith('effect:pool-') && !host.supportsSeraphAutomation?.()
+        const unsupported = (t.trigger.damageDice || t.trigger.choices) && !host.supportsSorcererAutomation?.()
+          ? 'Update the host to use Sorcerer roll actions.'
+          : t.key.startsWith('effect:pool-') && !host.supportsSeraphAutomation?.()
           ? 'Update the host to spend Prayer Dice on chat rolls.'
           : (t.trigger.advanceEffect || t.trigger.swapDuality) && !host.supportsGuardianRolls?.()
           ? 'Update the host to use Guardian roll actions.'
@@ -334,6 +338,14 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.damageDice || t.trigger.choices) {
+            chooseRollModification(m, t.trigger, async choice => {
+              await sheet.save.flush?.();
+              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts },
+                ...choice });
+            }, () => { b.disabled = false; });
+            return;
+          }
           if (t.trigger.damage && !t.trigger.damage.fixed) {
             const opened = sheet.bus.spellDamage?.(t.trigger.label, t.trigger.damage, critical, () => { sheet.save(); }, m.rollSource);
             if (!opened) host.toast('Open this character sheet to roll feature damage.');

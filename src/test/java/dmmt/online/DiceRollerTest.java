@@ -9,6 +9,25 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void selectedDamageDiceRetainOtherFacesKeepsMixedSidesAndWholeRollMultipliers() {
+        var original = DiceRoller.roll("(2d8kh1+1d4+3)*2", 3, faces(2, 6, 4));
+        var rerolled = DiceRoller.editDice(original, List.of(0, 2), true, 3, faces(8, 1));
+        assertEquals(List.of(8, 6, 1), rerolled.rolls());
+        assertEquals(24, rerolled.total());
+        var doubled = DiceRoller.editDice(original, List.of(0), false, 3, faces());
+        assertEquals(List.of(4, 6, 4), doubled.rolls());
+        assertEquals(original.total(), doubled.total());
+        doubled = DiceRoller.editDice(original, List.of(1), false, 3, faces());
+        assertEquals(List.of(2, 12, 4), doubled.rolls());
+        assertEquals(38, doubled.total());
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(original, List.of(0, 0), true, 3, faces()));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(original, List.of(0, 1), false, 3, faces()));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(original, List.of(3), true, 3, faces()));
+        var negative = DiceRoller.roll("d8-d6", 2, faces(6, 2));
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(negative, List.of(1), true, 2, faces()));
+    }
+
+    @Test
     void sacredResonanceMatchesAllKeptDiceAcrossSourcesWithoutDoublingModifiers() {
         var result = DiceRoller.roll("3d8kh2+2d6+9", 5, faces(1, 5, 5, 5, 3));
         assertEquals(List.of(0, 5, 5, 5, 0), DiceRoller.matchingDiceBonuses(result, 5));

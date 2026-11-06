@@ -24,6 +24,7 @@ export class Connection {
   guardianRolls = false;
   dualityDieBonus = false;
   seraphAutomation = false;
+  sorcererAutomation = false;
   sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
@@ -79,6 +80,7 @@ export class Connection {
     this.guardianRolls = false;
     this.dualityDieBonus = false;
     this.seraphAutomation = false;
+    this.sorcererAutomation = false;
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.sheetSync = false;
@@ -121,6 +123,7 @@ export class Connection {
         this.guardianRolls = msg.guardianRolls === true;
         this.dualityDieBonus = msg.dualityDieBonus === true;
         this.seraphAutomation = msg.seraphAutomation === true;
+        this.sorcererAutomation = msg.sorcererAutomation === true;
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;
