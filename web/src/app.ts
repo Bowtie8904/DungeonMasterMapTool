@@ -882,6 +882,11 @@ export class App {
       case 'cardStock':
         this.refreshCardStock(msg.actorId);
         break;
+      case 'catalogChanged':
+        void this.compendium.reload().catch((error: Error) => this.toast(error.message));
+        for (const handle of this.sheetHandles.values())
+          void handle.save.flush().then(() => handle.save.refresh()).catch((error: Error) => this.toast(error.message));
+        break;
       case 'sheetChanged': {
         const handle = this.sheetHandles.get(msg.actorId);
         if (handle) void handle.save.refresh().catch((error: Error) => this.toast(error.message));

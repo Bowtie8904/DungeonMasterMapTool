@@ -13,13 +13,14 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   const equipment = (category: string, items: Array<{ name: string; automation?: import('./engine').Automation }>) => {
     for (const item of items) {
       const entry = entries(category).find((e) => e.name === item.name);
-      if (entry) item.automation = entry.automation;
+      if (entry && !('catalog' in item)) item.automation = entry.automation;
     }
   };
   // Class, heritage, transformation and domain card rules are shared content and follow the compendium on every load.
   // Only missing rest and damage-mitigation metadata is added to equipment; existing GM-authored mechanics are preserved.
   const restMetadata = (category: string, items: Array<{ name: string; automation?: import('./engine').Automation }>) => {
     for (const item of items) {
+      if ('catalog' in item) continue;
       const rules = entries(category).find((e) => e.name === item.name)?.automation;
       if (!rules) continue;
       if (rules.deathMove) {
@@ -61,6 +62,7 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   restMetadata('consumables', c.inventory.filter((i) => !i.custom && i.type === 'consumable'));
   equipment('domain-cards', [...c.loadout, ...c.vault]);
   for (const card of [...c.loadout, ...c.vault]) {
+    if (card.catalog) continue;
     const entry = entries('domain-cards').find((e) => e.name === card.name && e.spells?.length);
     if (entry) { card.text = entry.text ?? card.text; card.spells = structuredClone(entry.spells); }
   }
@@ -69,6 +71,7 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   // Old elemental cards had one "Fire" feature containing all four elements.
   c.features = c.features.filter(f => !(f.name === 'Fire' && /Warden of the Elements/.test(f.source)));
   for (const f of [...c.features, ...c.heritage]) {
+    if (f.catalog) continue;
     const stage = /Subclass (foundation|specialization|mastery)/i.exec(f.source)?.[1]?.toLowerCase()
       ?? (/^Multiclass .* foundation$/i.test(f.source) ? 'foundation' : undefined);
     const candidates = [

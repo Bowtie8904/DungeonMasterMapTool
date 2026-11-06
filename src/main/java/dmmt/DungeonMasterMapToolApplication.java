@@ -1779,7 +1779,8 @@ public class DungeonMasterMapToolApplication extends Application {
         compendiumButton.getStyleClass().add("rail-toggle");
         compendiumButton.setOnAction(event -> {
             if (!compendiumButton.isSelected()) {
-                compendiumWindow.close();
+                compendiumWindow.requestClose();
+                compendiumButton.setSelected(compendiumWindow.isShowing());
             } else if (onlineController != null && onlineController.running()) {
                 compendiumWindow.show(mapCenter, onlineController.server(), () -> compendiumButton.setSelected(false));
             } else {

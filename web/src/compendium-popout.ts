@@ -79,6 +79,8 @@ export function startToolPopout(root: HTMLElement, tool: 'note' | 'compendium', 
           notes.setSession(true, message.campaignId ?? '', message.playerId);
           void notes.openStandalone(path).catch((error: Error) => report(error.message));
         }
+      } else if (message.type === 'catalogChanged') {
+        if (compendium) void compendium.reload().catch((error: Error) => report(error.message));
       } else if (message.type === 'snapshot' || message.type === 'delta') {
         if (message.type === 'snapshot') store.applySnapshot(message.seq, message.state);
         else if (store.applyDelta(message.seq, message.ops) === 'gap') conn.send({ type: 'resync', lastSeq: store.lastSeq });

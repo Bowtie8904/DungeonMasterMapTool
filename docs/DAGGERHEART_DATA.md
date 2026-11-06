@@ -1,7 +1,7 @@
 # Daggerheart data format
 
 `dmmap-daggerheart/*.json` is the maintained Daggerheart catalog and source of truth. Edit these files directly
-when correcting data or adding entries; there is no converter or source-export dependency. The folder is configured
+when correcting data or adding entries, or use **DM Compendium > Edit JSON catalogs**; there is no converter or source-export dependency. The folder is configured
 with `online.daggerheartDirectory`. The host serves it at `GET /api/compendium` and
 `GET /api/compendium/{category}`.
 
@@ -17,6 +17,50 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 | consumables, items | `rarity`, `text`, `automation` |
 
 `starter: true` (weapons, armor) marks the basic gear the Character Mancer offers.
+
+## Guided DM editor and live catalog links
+
+While hosting, the DM compendium's **Edit JSON catalogs** view edits all nine files above, including automation,
+features and grimoire spells. Select an entry or use **New entry** / **Duplicate as new**. Plain-language field
+help explains scope, costs and limits. **Overview** holds identity, category statistics and a live formatted preview;
+**Features** presents named features/spells in a list with a dedicated editor. **Automation** selects entry-wide
+or feature/spell-owned rules and presents cards with focused activation, conditions, effects and costs/limits.
+**Advanced** holds uncommon entry fields and custom keys. Deeper groups open breadcrumb-addressable panels,
+not nested accordions. Save/draft status remain outside the scrollable content, and same-panel structural edits
+retain scroll position. Typed inputs, optional-field pickers and ordered-list controls edit the existing structure
+without requiring JSON syntax. List templates come from maintained rules;
+review their IDs, labels, prerequisites and costs rather than treating a copied example as a new mechanic.
+Action effects also offer **Add effect** presets for restoring tracks, gaining/spending Hope, changing a custom
+resource or applying a modifier effect; edit their amounts, pool IDs and durations to match the intended rule.
+Custom resource-map keys are supported, but an arbitrary field name does not invent runtime behavior.
+
+The compendium and editor explicitly theme all input types, feature text areas, dropdowns and placeholders,
+including disabled fields, with contrasting light text on dark backgrounds in both browsers and the embedded DM view.
+
+**Save to JSON** updates the actual configured file with validation, a content-revision check and atomic replacement.
+It preserves other entries, file metadata and unknown fields. Existing entry IDs are immutable; new IDs must be
+unique. Names must be unique within a category (subclass stages may share a name). Failed saves keep the draft.
+**Reload file**, navigation and closing protect unsaved work. Player cookies and character-sheet DM grants cannot
+authorize catalog edits: `GET/PUT /api/dm/catalog/{category}` requires the loopback DM-compendium capability.
+
+Catalog writes emit an additive `catalogChanged` notification. Browser/DM compendiums reload their caches;
+open sheets flush pending player edits and request current rules. The host also resolves rules on sheet reads,
+saves and authoritative feature actions, so closed/offline sheets use current JSON after reopening/restarting.
+Sheet reads project the latest rules without rewriting character files; the next sheet save persists that projection.
+This is not a character rebuild: tracks, resource values, quantities, spent-use counters, choices, advancements
+and notes remain intact. Class starting values and `automation.creation` grants are not reapplied.
+
+Optional sheet `catalog: {category, id, values, featureId?}` links retain the last catalog-owned field values.
+Only unchanged catalog-owned values are replaced, preserving manual overrides. Legacy sheets match exact
+equipment/card names or learned feature names and sources. Custom inventory is excluded. The editor retains
+an internal `_editorOriginal` entry snapshot to refresh legacy copies and resolve renames, and assigns hidden
+`_catalogFeatureId` identities to feature/spell blocks so ordered-list edits do not change a learned block's identity.
+Do not edit these internal fields by hand. Entry/feature renames keep linked counters; fields such as
+`requiresFeature` that explicitly reference a feature name still need their exact references updated.
+
+No new setting or rail tool is introduced: hide/open access remains `online.compendium`, including the local API.
+The optional notification and sheet metadata are backward-compatible; neither Online Play nor DM Link compatibility
+versions change. Older clients can continue reading catalog files and saved sheets.
 
 ## Automation block
 

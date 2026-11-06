@@ -1324,6 +1324,59 @@ class OnlineSessionServerTest {
         return URI.create(server.dmCompendiumUrl()).getFragment();
     }
 
+    @Test
+    void dmCatalogEditsRequireTheHostAndRefreshExistingSheetsWithoutResettingThem() throws Exception {
+        String token = dmCompendiumData();
+        server.publish(state("m1", 0), "m1/l1");
+        Path file = compendiumDir.resolve("items.json");
+        ObjectNode document = (ObjectNode) MAPPER.readTree(file.toFile());
+        document.put("format", "dmmap-daggerheart").put("version", 1);
+        java.nio.file.Files.writeString(file, document.toString());
+        ObjectNode savedSheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
+        CompendiumEntries.add(savedSheet, "items", document.path("entries").get(0));
+        savedSheet.putObject("hope").put("slots", 6).put("on", 2);
+        savedSheet.putObject("usage").putObject("item:Host torch").put("used", 1).put("per", "session");
+        store.saveSheet(campaign.getId(), "target", savedSheet.toString());
+        String url = "http://127.0.0.1:" + port + "/api/dm/catalog/items";
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(url)).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        String cookie = cookie();
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(url)).header("Cookie", cookie).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        var read = http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, read.statusCode(), read.body());
+        JsonNode loaded = MAPPER.readTree(read.body());
+        ObjectNode entry = ((ObjectNode) loaded.path("file").path("entries").get(0)).deepCopy();
+        entry.put("name", "Renamed torch").put("text", "New rules");
+        entry.putObject("automation").putObject("uses").put("max", 2).put("per", "session");
+        ObjectNode request = MAPPER.createObjectNode().put("revision", loaded.path("revision").asText()).put("existingId", "torch");
+        request.set("entry", entry);
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello"); inbox.next("snapshot"); inbox.next("roster");
+            var edit = http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token)
+                    .PUT(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, edit.statusCode(), edit.body());
+            assertEquals("catalogChanged", inbox.next("catalogChanged").path("type").asText());
+            assertEquals("New rules", MAPPER.readTree(file.toFile()).path("entries").get(0).path("text").asText());
+            assertEquals(409, http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token)
+                    .PUT(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+            var current = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/target"))
+                    .header("Cookie", cookie).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, current.statusCode(), current.body());
+            JsonNode sheet = MAPPER.readTree(current.body()).path("sheet");
+            assertEquals("Renamed torch", sheet.path("inventory").get(0).path("name").asText());
+            assertEquals("New rules", sheet.path("inventory").get(0).path("note").asText());
+            assertEquals(2, sheet.path("inventory").get(0).path("automation").path("uses").path("max").asInt());
+            assertEquals(1, sheet.path("usage").path("item:Renamed torch").path("used").asInt());
+            assertEquals(2, sheet.path("hope").path("on").asInt());
+            assertEquals("Keep me", sheet.path("notes").asText());
+            var persist = saveDeathSheet(cookie, "target", (ObjectNode) sheet);
+            assertEquals(200, persist.statusCode(), persist.body());
+            assertEquals("Renamed torch", MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("name").asText());
+        } finally { ws.abort(); }
+    }
+
     private HttpResponse<String> dmSheetHttp(String actorId, String token, JsonNode body, String version) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/sheet/" + actorId))
                 .header("Authorization", "Bearer " + token);

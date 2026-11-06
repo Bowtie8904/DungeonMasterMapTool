@@ -261,6 +261,8 @@ public final class OnlineSessionServer {
         javalin.get("/api/compendium", this::handleCompendiumIndex);
         javalin.get("/api/compendium/{category}", this::handleCompendiumCategory);
         javalin.get("/api/dm/compendium/actors", this::handleDmCompendiumActors);
+        javalin.get("/api/dm/catalog/{category}", ctx -> handleCatalogEditor(ctx, false));
+        javalin.put("/api/dm/catalog/{category}", ctx -> handleCatalogEditor(ctx, true));
         javalin.post("/api/dm/compendium/add", ctx -> handleDmCompendiumAction(ctx, false));
         javalin.post("/api/dm/compendium/link", ctx -> handleDmCompendiumAction(ctx, true));
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
@@ -376,6 +378,47 @@ public final class OnlineSessionServer {
                 actors.addObject().put("id", actor.getId()).put("name", actor.getName() + " (" + owner.getName() + ")");
         }
         json(ctx, 200, actors);
+    }
+
+    private synchronized void handleCatalogEditor(Context ctx, boolean save) {
+        if (!requireDmCompendium(ctx)) return;
+        ctx.header("Cache-Control", "no-store");
+        try {
+            CatalogEditor.Document document;
+            if (save) {
+                if (ctx.bodyAsBytes().length > CatalogEditor.MAX_BYTES) {
+                    json(ctx, 413, errorBody("Catalog edit is too large."));
+                    return;
+                }
+                JsonNode request = MAPPER.readTree(ctx.body());
+                if (request == null || !(request.get("entry") instanceof ObjectNode entry)
+                        || !request.path("revision").isTextual() || !request.path("existingId").isTextual())
+                    throw new CatalogEditor.Rejected(400, "Specify an entry, file revision and existing ID (empty for a new entry).");
+                document = CatalogEditor.save(host.compendiumDirectory(), ctx.pathParam("category"),
+                        request.path("revision").asText(), request.path("existingId").asText(), entry);
+                broadcast(MAPPER.createObjectNode().put("type", "catalogChanged").toString());
+            } else document = CatalogEditor.read(host.compendiumDirectory(), ctx.pathParam("category"));
+            ObjectNode response = MAPPER.createObjectNode().put("revision", document.revision());
+            response.set("file", CatalogEditor.editable(document.file()));
+            json(ctx, 200, response);
+        } catch (CatalogEditor.Rejected e) {
+            json(ctx, e.status(), errorBody(e.getMessage()));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid catalog JSON. Correct the file or request before retrying."));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read or atomically save the catalog JSON file. Check file permissions; your draft is retained."));
+        }
+    }
+
+    private void refreshCatalogSheet(ObjectNode sheet) throws IOException {
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory == null || !java.nio.file.Files.isDirectory(directory)) return;
+        List<ObjectNode> files = new java.util.ArrayList<>();
+        for (String category : CatalogEditor.CATEGORIES) {
+            if (java.nio.file.Files.isRegularFile(directory.resolve(category + ".json")))
+                files.add(CatalogEditor.read(directory, category).file());
+        }
+        CatalogSheets.refresh(sheet, files);
     }
 
     private JsonNode compendiumDocument(String category) throws IOException {
@@ -1146,6 +1189,22 @@ public final class OnlineSessionServer {
         }
         ObjectNode body = MAPPER.createObjectNode();
         body.set("categories", categories);
+        // The DM window polls the index; a content revision also covers changes made outside the editor.
+        if (isDmCompendium(ctx)) {
+            try {
+                StringBuilder revisions = new StringBuilder();
+                if (dir != null) for (String category : CatalogEditor.CATEGORIES) {
+                    java.nio.file.Path file = dir.resolve(category + ".json");
+                    if (java.nio.file.Files.isRegularFile(file))
+                        revisions.append(category).append(CampaignStore.sha256(java.nio.file.Files.readAllBytes(file)));
+                }
+                body.put("revision", CampaignStore.sha256(revisions.toString().getBytes(StandardCharsets.UTF_8)));
+            } catch (IOException e) {
+                json(ctx, 500, errorBody("Could not read catalog revisions."));
+                return;
+            }
+        }
+        ctx.header("Cache-Control", "no-store");
         json(ctx, 200, body);
     }
 
@@ -1161,6 +1220,7 @@ public final class OnlineSessionServer {
             return;
         }
         try {
+            ctx.header("Cache-Control", "no-store");
             ctx.status(200).contentType("application/json").result(java.nio.file.Files.readAllBytes(file));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Compendium unavailable"));
@@ -1189,7 +1249,9 @@ public final class OnlineSessionServer {
             if (stored == null) {
                 body.putNull("sheet");
             } else {
-                body.set("sheet", MAPPER.readTree(stored));
+                ObjectNode sheet = (ObjectNode) MAPPER.readTree(stored);
+                refreshCatalogSheet(sheet);
+                body.set("sheet", sheet);
             }
             body.put("version", sheetVersion(stored));
         } catch (IOException e) {
@@ -1223,6 +1285,7 @@ public final class OnlineSessionServer {
                 json(ctx, 400, errorBody("Sheet must be a JSON object"));
                 return;
             }
+            refreshCatalogSheet((ObjectNode) sheet);
             ObjectNode previous = storedSheet(actor.getId());
             String expected = ctx.header("If-Match");
             if (expected != null && !expected.equals(sheetVersion(store.loadSheet(c.getId(), actor.getId())))) {
@@ -1246,6 +1309,7 @@ public final class OnlineSessionServer {
                 return;
             }
             ObjectNode saved = (ObjectNode) sheet;
+            refreshCatalogSheet(saved);
             validateDeathSave(saved, previous);
             if (!saved.has("scars") && previous.has("scars"))
                 saved.set("scars", previous.get("scars"));
@@ -2834,6 +2898,7 @@ public final class OnlineSessionServer {
         JsonNode sheet = MAPPER.readTree(stored);
         if (!(sheet instanceof ObjectNode object))
             throw new IOException("Invalid stored sheet");
+        refreshCatalogSheet(object);
         return object;
     }
 

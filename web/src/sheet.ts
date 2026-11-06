@@ -166,6 +166,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           for (const player of m.players) if (player.connections > 0) connectedPlayers.add(player.playerId);
           return;
         }
+        if (m.type === 'catalogChanged') {
+          if (changed) void changed.flush().then(() => changed!.refresh()).catch((error: Error) => report(error.message));
+          return;
+        }
         if (m.type === 'sheetChanged') {
           if (m.actorId === actorId && changed) void changed.refresh().catch((e: Error) => report(e.message));
           return;

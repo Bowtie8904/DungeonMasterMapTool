@@ -53,8 +53,10 @@ public final class CompendiumWindow {
         }
     }
 
-    void requestClose() {
-        if (closing) return;
+    public void requestClose() {
+        if (closing || frame == null) return;
+        if (!sheetWindow && Boolean.TRUE.equals(view.getEngine().executeScript("typeof window.dmmtCanCloseCatalog === 'function'"))
+                && !Boolean.TRUE.equals(view.getEngine().executeScript("window.dmmtCanCloseCatalog()"))) return;
         if (!sheetWindow || !Boolean.TRUE.equals(view.getEngine().executeScript("typeof window.dmmtFlushSheet === 'function'"))) {
             close();
             return;
@@ -72,6 +74,8 @@ public final class CompendiumWindow {
         }
     }
 
+    public boolean isShowing() { return frame != null; }
+
     private void show(StackPane desktop, OnlineSessionServer server, String windowTitle, String url, Runnable closed) {
         if (frame != null && session == server) {
             frame.toFront();
@@ -83,6 +87,13 @@ public final class CompendiumWindow {
         this.closed = closed;
         view = new WebView();
         view.setContextMenuEnabled(false);
+        view.getEngine().setConfirmHandler(message -> {
+            var alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION,
+                    message, javafx.scene.control.ButtonType.OK, javafx.scene.control.ButtonType.CANCEL);
+            alert.initOwner(desktop.getScene().getWindow());
+            alert.setHeaderText(sheetWindow ? "Confirm character action" : "Unsaved catalog changes");
+            return alert.showAndWait().orElse(javafx.scene.control.ButtonType.CANCEL) == javafx.scene.control.ButtonType.OK;
+        });
         Label title = new Label(windowTitle);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

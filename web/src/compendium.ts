@@ -179,6 +179,18 @@ export class CompendiumPanel {
 
   refreshActors(): void { this.render(); }
 
+  async reload(): Promise<void> {
+    this.files.clear();
+    this.error = '';
+    try {
+      this.index = await fetchCompendiumIndex(this.host.request);
+      if (!this.index.some(item => item.category === this.category)) this.category = this.index[0]?.category ?? '';
+      if (this.category) await this.load(this.category);
+    } catch (error) { this.error = (error as Error).message; }
+    this.render();
+    if (this.error) throw new Error(this.error);
+  }
+
   /** Called when the window becomes visible; loads the category list once. */
   async open(): Promise<void> {
     if (this.index || this.loading) return;

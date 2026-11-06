@@ -266,6 +266,12 @@ Folder holding campaigns: players (password hashes), actors, actor folders, artw
 
 Folder with the Daggerheart compendium JSON files (classes, ancestries, armor, weapons, domain cards, consumables, ...) that players browse in the Compendium tab of the online client and that drive sheet automation. Every `*.json` file in the folder becomes a compendium category, so homebrew files can be added next to the shipped ones; the format is described in `docs/DAGGERHEART_DATA.md`. Relative paths resolve against the folder of the settings file.
 
+The hosting DM's **Compendium > Edit JSON catalogs** writes entries and automation directly to the nine standard
+JSON files in this directory. The directory must be writable for saves; stale external edits are rejected without
+discarding the draft. Saved rules refresh compendiums and linked sheets automatically without resetting player
+state or reapplying character-creation starting stats. The editor shares the `online.compendium` hidden-control
+setting and local API access; it introduces no separate setting.
+
 **Keywords:** online, daggerheart, compendium, armor, weapons, domain cards, homebrew, dmmap-daggerheart.
 
 ### `online.pauseKey`

@@ -374,6 +374,7 @@ export interface HandoutFile { id: string; name: string; folder: string; ext: st
 import type { AudioMessage } from './audio';
 
 export type ServerMessage =
+  | { type: 'catalogChanged' }
   | { type: 'sheetChanged'; actorId: string }
   | Hello
   | { type: 'cardStock'; actorId: string }

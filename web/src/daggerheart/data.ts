@@ -23,6 +23,7 @@ export interface Track {
 }
 
 export interface Weapon {
+  catalog?: CatalogLink;
   generated?: string;
   name: string;
   slot: 'Primary' | 'Secondary';
@@ -39,6 +40,7 @@ export interface Weapon {
 }
 
 export interface Armor {
+  catalog?: CatalogLink;
   name: string;
   /** Armor Score: usable armor slots */
   score: number;
@@ -51,6 +53,7 @@ export interface Armor {
 }
 
 export interface InventoryItem {
+  catalog?: CatalogLink;
   name: string;
   note?: string;
   type: 'gear' | 'consumable' | 'class item' | 'loot';
@@ -72,6 +75,7 @@ export interface Spell {
 }
 
 export interface DomainCard {
+  catalog?: CatalogLink;
   level: number;
   domain: string;
   type: 'Ability' | 'Spell' | 'Grimoire';
@@ -85,12 +89,21 @@ export interface DomainCard {
 }
 
 export interface Feature {
+  catalog?: CatalogLink;
   source: string;
   name: string;
   text: string;
   hope?: boolean;
   cost?: number;
   automation?: Automation;
+}
+
+export interface CatalogLink {
+  category: string;
+  id: string;
+  feature?: number;
+  featureId?: string;
+  values: Record<string, unknown>;
 }
 
 export interface Experience {

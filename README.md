@@ -247,6 +247,23 @@ Nothing starts until you click **Start online session**, so offline play and the
     offline (create the character sheet first). Additions persist immediately and update open player sheets;
     quantity caps are enforced. The window closes when hosting ends. Hide the icon in Settings with
     `online.compendium` under hidden controls; the local API control `online.compendium` remains available.
+  - **Guided JSON catalog editor:** in the DM compendium, choose **Edit JSON catalogs**. Browse/search all nine
+    catalogs, edit an entry, or use **New entry** / **Duplicate as new**. **Overview**, **Features**,
+    **Automation** and **Advanced** tabs organize the entry by task. Named features use a list/detail layout;
+    automation uses rule cards and focused panels with activation, conditions, effects and costs/limits.
+    Breadcrumbs navigate deeper structures without nested accordions. Every field has inline guidance;
+    typed inputs, optional-field pickers and ordered lists work without raw JSON. Save stays visible,
+    and structural edits retain the current panel's scroll position.
+    **Add effect** offers concrete operations such as restoring HP, spending Hope or applying a modifier effect.
+    Search boxes, feature text areas, numeric fields and dropdowns use readable dark-theme text and placeholders.
+    **Save to JSON** validates and atomically updates the configured file. Existing entry IDs cannot change;
+    conflicting external edits are rejected and your draft remains available. **Reload file** discards a draft
+    only after confirmation. Unsaved navigation/closing is protected.
+    Saved catalog rules refresh open compendiums and linked sheets automatically. Current HP/Stress/Hope,
+    quantities, spent uses, player choices, advancements and manual overrides are preserved; creation starting
+    stats affect new characters only. Custom inventory entries are never linked. Offline/closed sheets resolve
+    the latest rules when loaded, and updated catalog metadata is included on their next save.
+    This editor is DM-only and shares the compendium's existing hide setting and local API control.
   - **Handouts:** while hosting, a **Handouts** icon below the Compendium opens a file browser for images. The DM
     can create folders, add images from disk or the clipboard, rename, copy, delete and drag files and folders
     between folders (Ctrl copies), and share files with individual players or everyone. Granted files appear in the
