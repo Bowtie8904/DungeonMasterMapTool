@@ -6,9 +6,29 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CharacterSheetRulesTest {
     private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    void spellcastTotalIncludesActivePassiveBonusesButNotCarriedOrExpiredSources() throws Exception {
+        var sheet = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree("""
+                {"traits":[{"name":"Presence","mod":3,"spellcast":true}],
+                 "activeArmor":{"automation":{"modifiers":[{"stat":"traits","value":1}]}},
+                 "activeWeapons":[{"automation":{"modifiers":[{"stat":"trait.Presence","value":1}]}}],
+                 "carriedWeapons":[{"automation":{"modifiers":[{"stat":"traits","value":100}]}}],
+                 "features":[{"automation":{"modifiers":[{"stat":"trait.Presence","value":2},
+                    {"stat":"traits","value":100,"requiresEffect":"Expired"}]}}],
+                 "inventory":[{"qty":0,"automation":{"modifiers":[{"stat":"traits","value":100}]}}],
+                 "effects":[{"name":"Focus","modifiers":[{"stat":"trait.Presence","value":"@tier","requiresEffect":"Focus"}]}],
+                 "level":5}
+                """);
+        assertEquals(10, CharacterSheetRules.spellcastTotal(sheet, 0));
+        sheet.withArray("effects").addObject().putObject("weapon").putObject("automation")
+                .putArray("modifiers").addObject().put("stat", "trait.Presence").put("value", 3);
+        assertEquals(12, CharacterSheetRules.spellcastTotal(sheet, 0));
+    }
 
     @Test
     void normalLoadoutKeepsItsLimitAndRespectsLegitimateCapacityBonuses() throws Exception {

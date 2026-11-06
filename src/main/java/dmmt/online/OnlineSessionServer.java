@@ -1317,6 +1317,7 @@ public final class OnlineSessionServer {
             ObjectNode saved = (ObjectNode) sheet;
             refreshCatalogSheet(saved);
             validateDeathSave(saved, previous);
+            WitchEffects.validateSave(saved, previous);
             if (!saved.has("scars") && previous.has("scars"))
                 saved.set("scars", previous.get("scars"));
             JsonNode scars = saved.path("scars");
@@ -1588,6 +1589,8 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            if (definition.path("automatic").asBoolean())
+                throw new IllegalArgumentException("This feature resolves automatically when its roll is made.");
             if (definition.path("choices").isArray()) {
                 JsonNode choice = null;
                 for (JsonNode candidate : definition.path("choices"))
@@ -1611,7 +1614,8 @@ public final class OnlineSessionServer {
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
             else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
                     && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
-                    && !definition.path("menacingReach").asBoolean())
+                    && !definition.path("menacingReach").asBoolean()
+                    && !"talisman".equals(definition.path("witchAction").asText()))
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
             String targetMode = definition.path("target").asText("");
@@ -1681,6 +1685,20 @@ public final class OnlineSessionServer {
                     : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
             useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
             resolveWarlockAction(sourceSheet, definition, request, reportLines);
+            if ("talisman".equals(definition.path("witchAction").asText())) {
+                JsonNode amount = request.path("amount");
+                if (!amount.isInt() || amount.asInt() < 1)
+                    throw new IllegalArgumentException("Choose a positive whole number of Hope for the Enchanted Talisman.");
+                applyFeatureCost(sourceSheet, MAPPER.createObjectNode().put("hope", amount.asInt()));
+                sourceSheet.withObject("/resources").put("enchanted-talisman", amount.asInt());
+                removeEffects(sourceSheet, "Enchanted Talisman source", null, null);
+                sourceSheet.withArray("effects").addObject().put("id", "witch-" + java.util.UUID.randomUUID())
+                        .put("witchGrant", "talisman").put("name", "Enchanted Talisman source")
+                        .put("kind", "buff").put("until", "rest").put("sourceKey", key)
+                        .put("tokenResource", "enchanted-talisman");
+                reportLines.add("Spent " + amount.asInt() + " Hope to create an Enchanted Talisman with "
+                        + amount.asInt() + " tokens.");
+            }
 
             if (hasRoll && definition.has("damageDice")) {
                 editDamageDice(originalRoll, definition, request, reportLines);
@@ -2812,6 +2830,9 @@ public final class OnlineSessionServer {
                 return DiceRoller.roll(text, config.maxDice(), diceRandom).total();
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
             if ("@proficiency".equals(text)) return Math.max(0, sheet.path("proficiency").path("on").asInt());
+            if ("@spellcast".equals(text)) {
+                return CharacterSheetRules.spellcastTotal(sheet, campaign.getFear());
+            }
             if ("@tier".equals(text)) {
                 int level = Math.max(1, sheet.path("level").asInt(1));
                 return level == 1 ? 1 : level <= 4 ? 2 : level <= 7 ? 3 : 4;
@@ -2938,6 +2959,9 @@ public final class OnlineSessionServer {
         }
         Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
         party.forEach((id, sheet) -> before.put(id, sheet.deepCopy()));
+        Map<String, ObjectNode> previousParty = new java.util.LinkedHashMap<>();
+        for (String id : party.keySet()) previousParty.put(id, storedSheet(id));
+        WitchEffects.synchronize(party, previousParty);
         DruidEffects.synchronizeEarth(party);
         Map<String, ObjectNode> warriors = new java.util.LinkedHashMap<>(party);
         for (Campaign.Actor actor : campaign.getActors())
@@ -3188,7 +3212,7 @@ public final class OnlineSessionServer {
                     + lines.stream().map(line -> "\n• " + line).reduce("", String::concat);
             ObjectNode message = chatMessage("dm", "DM", null, clip(text));
             message.put("system", session ? "newSession" : "sceneEnd");
-            persistFeatureSheets(changed, message, true);
+            commitFeatureSheets(changed, message, true);
             for (var entry : changed.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
             deliver(message, null, false);
             return null;
@@ -3475,7 +3499,12 @@ public final class OnlineSessionServer {
             claims.put(cardId, claims.path(cardId).asInt(0) + quantity);
             source.put("inventoryRevision", source.path("inventoryRevision").asLong(0) + 1);
             target.put("inventoryRevision", target.path("inventoryRevision").asLong(0) + 1);
-            store.transferSheets(campaign.getId(), sourceId, source, targetActor.getId(), target);
+            Map<String, ObjectNode> transferred = new java.util.LinkedHashMap<>();
+            transferred.put(sourceId, source);
+            transferred.put(targetActor.getId(), target);
+            commitFeatureSheets(transferred);
+            sendFeatureState(sourceActor, source);
+            sendFeatureState(targetActor, target);
             inventoryChanged(sourceActor, source);
             inventoryChanged(targetActor, target);
             json(ctx, 200, MAPPER.createObjectNode().put("transferred", true).put("quantity", quantity));
@@ -3751,6 +3780,7 @@ public final class OnlineSessionServer {
             hello.put("seraphAutomation", true);
             hello.put("sorcererAutomation", true);
             hello.put("warlockAutomation", true);
+            hello.put("witchAutomation", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -4204,7 +4234,58 @@ public final class OnlineSessionServer {
             }
         }
         sessionRolls.add(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
-        deliver(out, to);
+        try {
+            boolean persisted = applyAutomaticFeatureTriggers(client, out);
+            deliver(out, to, !persisted);
+        } catch (IOException | IllegalArgumentException e) {
+            sessionRolls.remove(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
+            sendTo(client.ctx, error("Could not apply the automatic feature: " + e.getMessage()));
+        }
+    }
+
+    private synchronized boolean applyAutomaticFeatureTriggers(Client client, ObjectNode roll) throws IOException {
+        if (!"duality".equals(roll.path("kind").asText())) return false;
+        Campaign.Actor actor = campaign.actor(roll.path("actorId").asText());
+        if (actor == null || !client.playerId.equals(actor.getOwnerId())) return false;
+        ObjectNode sheet = storedSheet(actor.getId());
+        boolean changed = false;
+        for (String key : roll.path("source").asText("").split(",")) {
+            if (!key.startsWith("feat:")) continue;
+            JsonNode source;
+            boolean available = false;
+            for (String field : List.of("features", "heritage"))
+                for (JsonNode feature : sheet.path(field))
+                    if (key.equals("feat:" + feature.path("name").asText())) available = true;
+            for (JsonNode effect : sheet.path("effects"))
+                for (JsonNode feature : effect.path("features"))
+                    if (key.equals("feat:" + feature.path("name").asText())) available = true;
+            if (!available) continue;
+            source = featureSource(sheet, key);
+            JsonNode automation = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            for (JsonNode trigger : automation.path("rollTriggers")) {
+                if (!trigger.path("automatic").asBoolean() || !key.equals(trigger.path("on").asText())
+                        || !"success".equals(trigger.path("when").asText())
+                        || !"self".equals(trigger.path("audience").asText("self"))
+                        || trigger.has("cost") || trigger.has("uses") || !trigger.path("steps").isArray()) continue;
+                boolean effectOnly = !trigger.path("steps").isEmpty();
+                for (JsonNode step : trigger.path("steps"))
+                    if (!"effect".equals(step.path("op").asText()) || !step.path("effect").isObject()) effectOnly = false;
+                if (!effectOnly) continue;
+                JsonNode difficulty = trigger.has("difficulty") ? trigger.path("difficulty") : roll.path("difficulty");
+                if (!difficulty.isNumber()) throw new IllegalArgumentException("Automatic feature success requires a numeric difficulty.");
+                int hope = roll.path("rolls").path(0).asInt();
+                int fear = roll.path("rolls").path(1).asInt();
+                if (hope != fear && roll.path("total").asDouble() < difficulty.asDouble()) continue;
+                validateTrigger(actor, key, trigger, roll);
+                applyFeatureSteps(sheet, trigger.path("steps"), source.path("name").asText(), actor, key, new ArrayList<>());
+                roll.withArray("featureUses").add(actor.getId() + ":" + key + ":" + trigger.path("id").asText());
+                changed = true;
+            }
+        }
+        if (!changed) return false;
+        commitFeatureSheets(Map.of(actor.getId(), sheet), roll, true);
+        sendFeatureState(actor, sheet);
+        return true;
     }
 
     private ObjectNode rollSource(JsonNode msg) {

@@ -32,6 +32,13 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  witchGrant?: 'circle' | 'moonbeam' | 'talisman';
+  witchLinked?: 'circle' | 'moonbeam' | 'talisman';
+  activationId?: string;
+  resources?: ResourceDef[];
+  tokenResource?: string;
+  endOnMarkedHp?: boolean;
+  endOnDealtDamage?: boolean;
   partyDowntimeGrant?: boolean;
   dicePool?: string;
   requiresCompanion?: boolean;
@@ -84,6 +91,7 @@ export interface Step {
 }
 
 export interface ActionDef {
+  witchAction?: 'talisman' | 'lunarRoll' | 'lunarAdvance';
   patronDice?: 'heal' | 'vengeance' | 'ire';
   spendFavor?: boolean;
   menacingReach?: boolean;
@@ -143,6 +151,8 @@ export interface ActionDef {
 }
 
 export interface ResourceDef {
+  cardOnly?: boolean;
+  whileEffect?: string;
   sessionHope?: boolean;
   id: string;
   label: string;
@@ -154,6 +164,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  preserveEffect?: string;
   condition?: SheetCondition;
   secondaryWeaponDie?: boolean;
   diceResource?: string;
@@ -190,6 +201,7 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  automatic?: boolean;
   failedOnly?: boolean;
   rerollResourceDice?: string;
   primaryWeapon?: boolean;
@@ -222,6 +234,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  lunarPhases?: Array<{ faces: number[]; effect: EffectDef }>;
   ignoreWeaponBurden?: boolean;
   partyDowntime?: boolean;
   classResourceOnly?: boolean;
@@ -230,7 +243,7 @@ export interface Automation {
   hopeReward?: { removeFear?: number; favor?: number; resource?: string; amount?: number; roll: string };
   companion?: CompanionRules;
   companionTraining?: number;
-  effectCounters?: Array<{ label: string; effect: string }>;
+  effectCounters?: Array<{ label: string; effect: string; cardOnly?: boolean }>;
   beastforms?: BeastformDef[];
   channelBenefit?: { element: string; effect: EffectDef };
   unarmedWeapon?: Omit<CharacterSheet['activeWeapons'][number], 'trait'>;
@@ -284,6 +297,7 @@ export function activeWeapons(c: CharacterSheet): Weapon[] {
 }
 
 export function syncEffectDependencies(c: CharacterSheet): void {
+  c.effects = c.effects.filter(e => !e.tokenResource || (c.resources?.[e.tokenResource] ?? 0) > 0);
   c.effects = c.effects.filter(e => !e.requiresCompanion || companionAvailable(c));
   if (c.hp.slots > 0 && c.hp.on >= c.hp.slots) c.effects = c.effects.filter(e => !e.beastform);
   let count: number;
@@ -316,6 +330,7 @@ export interface RestMoveModifier {
 export interface ActiveEffect extends EffectDef {
   id: string;
   source?: string;
+  hpMaintenance?: number;
 }
 
 const TRAIT_SET = new Set<string>(TRAIT_ORDER);
@@ -361,7 +376,7 @@ export function automationSources(c: CharacterSheet): Automation[] {
 }
 
 export function resourceDefinitions(c: CharacterSheet): ResourceDef[] {
-  return [...new Map(automationSources(c).flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
+  return [...new Map([...automationSources(c), ...c.effects].flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
 }
 
 export function poolDice(c: CharacterSheet, pool: NonNullable<Automation['dicePool']>): ActiveEffect[] {
@@ -393,7 +408,7 @@ export function syncResources(c: CharacterSheet): void {
   c.resources ??= {};
   for (const r of resourceDefinitions(c)) {
     const max = r.max === undefined ? Infinity : Math.max(0, evalValue(r.max, c));
-    const value = c.resources[r.id] ?? evalValue(r.initial, c);
+    const value = r.whileEffect && !c.effects.some(e => e.name === r.whileEffect) ? 0 : c.resources[r.id] ?? evalValue(r.initial, c);
     c.resources[r.id] = Math.max(0, Math.min(max, value));
   }
 }
@@ -635,7 +650,8 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     return [{ key: `effect:${e.id}:${i}`, source: e.name, automation: {}, option, active: true, prepared: { effect: e, modifier } }];
   }));
   return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
-    .filter((o) => targets.includes(o.roll) || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
+    .filter((o) => targets.includes(o.roll) || o.roll === 'trait' && targets.some(t => t.startsWith('trait:'))
+      || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
     .filter((o) => !o.condition || conditionMatches(c, o.condition))
@@ -739,7 +755,7 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
 }
 
 /** Commit only after the send succeeded and the entire selection was checked together. */
-export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false): void {
+export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false, targets: string[] = []): void {
   const blocker = selectionBlocker(c, selected, experience);
   if (blocker) throw new Error(blocker);
   if (experience) c.hope.on--;
@@ -755,6 +771,7 @@ export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOpti
     runAction(c, s.key, s.automation, { ...s.option, steps }, s.source);
     if (s.option.consumeItem && s.item) s.item.qty--;
   }
+  if (targets.includes('damage')) c.effects = c.effects.filter(e => !e.endOnDealtDamage || selected.some(s => s.option.preserveEffect === e.name));
 }
 
 export function traitContributions(c: CharacterSheet, name: TraitName): RollContribution[] {
@@ -921,6 +938,9 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
   if (action.excludesFeature && hasFeature(c, action.excludesFeature)) return 'This option has been replaced by another feature';
   if (action.actionRoll?.trait === 'spellcast' && !c.traits.some(t => t.spellcast)) return 'No Spellcast trait is available';
+  if (action.witchAction === 'talisman' && c.hope.on < 1) return 'Not enough Hope';
+  if (action.witchAction === 'lunarAdvance' && !c.effects.some(e => e.group === 'lunar-phases')) return 'Roll your Lunar Phases die first';
+  if (action.sendRoll?.dice.includes('@spellcast') && evalValue('@spellcast', c) < 1) return 'Requires a positive Spellcast trait to roll dice';
   if (action.deathMove && c.hp.slots > 0 && (c.permanentHp ?? 0) >= c.hp.slots) return 'All Hit Points are permanently marked; this character has crossed the veil of death.';
   if (action.deathMove && (c.hp.on < c.hp.slots || c.pendingDeathRoll)) return 'Requires all HP marked and no pending death recovery';
   if (context !== 'rest' && isRestOnlyAction(action) && !action.ancestryChoice) return 'Choose this move in the rest dialog';
@@ -958,6 +978,11 @@ export function runAction(c: CharacterSheet, key: string, a: Automation, action:
 /** Like {@link runAction}, but returns the individual effects (empty when nothing visible happened). */
 export function runActionDetailed(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, roll: DiceRoll = rollLocal, context: 'sheet' | 'rest' = 'sheet'): string[] | null {
   if (actionBlocker(c, key, a, action, context)) return null;
+  const lunar = action.witchAction === 'lunarRoll' || action.witchAction === 'lunarAdvance';
+  const previousFace = c.effects.find(e => e.group === 'lunar-phases')?.counter?.value ?? 0;
+  const face = lunar ? action.witchAction === 'lunarRoll' ? roll('1d6') : previousFace % 6 + 1 : 0;
+  const phase = lunar ? a.lunarPhases?.find(p => p.faces.includes(face)) : undefined;
+  if (lunar && !phase) throw new Error(`No Lunar Phases effect configured for ${face}.`);
   if (action.usesSource === false) a = { ...a, uses: undefined };
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const log: string[] = [];
@@ -971,6 +996,10 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     c.usage[key] = u;
   }
   if (action.rollDicePool && a.dicePool) log.push(...rollDicePool(c, a.dicePool, roll));
+  if (phase) {
+    addEffect(c, { ...structuredClone(phase.effect), group: 'lunar-phases', counter: { value: face, max: 6 }, until: 'session' }, label);
+    log.push(`Lunar Phases: ${action.witchAction === 'lunarRoll' ? 'rolled' : 'increased to'} ${face}. ${phase.effect.text}`);
+  }
   if (action.companion === 'comfortHope') {
     const gained = Math.min(1, Math.max(0, c.hope.slots - c.hope.on));
     c.hope.on += gained;
@@ -1154,7 +1183,7 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];
-  return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => triggerApplies(c, t, ctx))
+  return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => !t.automatic && triggerApplies(c, t, ctx))
     .map((trigger) => ({ key: s.key, source: s.name,
       automation: trigger.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, trigger })));
 }

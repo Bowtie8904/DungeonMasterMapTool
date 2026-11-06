@@ -17,6 +17,35 @@ const data: RulesData = {
 const tester = () => Object.assign(emptyCharacter('Test hero'), { testingCharacter: true });
 
 describe('DM-marked testing characters', () => {
+  it('accepts unrestricted integer traits and preserves them across rebuilds and reloads', async () => {
+    const c = tester();
+    const b = defaultTestingBuild(data);
+    const traits = Object.fromEntries(c.traits.map((t, i) => [t.name, [-12, 0, 15, 15, 42, -3][i]]));
+    applyTestingBuild(data, c, b, traits);
+    expect(Object.fromEntries(c.traits.map(t => [t.name, t.mod]))).toEqual(traits);
+    const next = classEntries(data).find(cls => cls.name !== b.className)!;
+    applyTestingBuild(data, c, { ...b, className: next.name, subclass: subclassesOf(data, next.name)[0] });
+    expect(Object.fromEntries(c.traits.map(t => [t.name, t.mod]))).toEqual(traits);
+    expect(c.traits.filter(t => t.spellcast).map(t => t.name)).toEqual([subclassCard(data, c.testingBuild!.subclass, 'foundation')!.spellcastTrait]);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true, json: async () => url.startsWith('/api/sheet/') ? { sheet: c, testingCharacter: true } : load(url.slice('/api/compendium/'.length)),
+    })));
+    try {
+      const loaded = await loadCharacter('a', 'Test hero');
+      expect(Object.fromEntries(loaded.traits.map(t => [t.name, t.mod]))).toEqual(traits);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('rejects invalid trait values before changing the sheet', () => {
+    const c = tester();
+    const before = structuredClone(c);
+    const traits = Object.fromEntries(c.traits.map(t => [t.name, 1]));
+    for (const value of [NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => applyTestingBuild(data, c, defaultTestingBuild(data), { ...traits, Agility: value })).toThrow('whole number');
+      expect(c).toEqual(before);
+    }
+  });
+
   it('rejects ordinary sheets without mutating them', () => {
     const c = emptyCharacter('Normal');
     const before = structuredClone(c);

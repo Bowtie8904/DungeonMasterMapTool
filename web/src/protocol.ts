@@ -369,6 +369,7 @@ export interface Hello {
   seraphAutomation?: boolean;
   sorcererAutomation?: boolean;
   warlockAutomation?: boolean;
+  witchAutomation?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

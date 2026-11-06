@@ -27,6 +27,7 @@ export class Connection {
   seraphAutomation = false;
   sorcererAutomation = false;
   warlockAutomation = false;
+  witchAutomation = false;
   sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
@@ -85,6 +86,7 @@ export class Connection {
     this.seraphAutomation = false;
     this.sorcererAutomation = false;
     this.warlockAutomation = false;
+    this.witchAutomation = false;
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.sheetSync = false;
@@ -130,6 +132,7 @@ export class Connection {
         this.seraphAutomation = msg.seraphAutomation === true;
         this.sorcererAutomation = msg.sorcererAutomation === true;
         this.warlockAutomation = msg.warlockAutomation === true;
+        this.witchAutomation = msg.witchAutomation === true;
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;

@@ -50,6 +50,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  preserveEffect?: string;
   patronDice?: 'vengeance';
   companionIntercept?: boolean;
   companionArmored?: boolean;
@@ -323,6 +324,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
   drop((m) => m.option.when?.markingHp && hpBeforeReplace <= 0 ? 'Requires marking at least one HP' : null);
+  drop(m => m.option.preserveEffect && hp <= 0 ? 'No HP will be marked; the effect is already maintained' : null);
   drop(m => m.option.patronDice === 'vengeance' && hp <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
 
@@ -384,7 +386,12 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   c.hp.on = Math.min(c.hp.slots, c.hp.on + r.hp + (r.costs.hp ?? 0));
   c.stress.on = Math.min(c.stress.slots, c.stress.on + (r.costs.stress ?? 0));
   c.hope.on = Math.max(0, c.hope.on - (r.costs.hope ?? 0));
+  if (r.hp > 0) for (const effect of c.effects) {
+    if (effect.endOnMarkedHp && r.applied.some(m => m.option.preserveEffect === effect.name))
+      effect.hpMaintenance = (effect.hpMaintenance ?? 0) + 1;
+  }
   c.effects = c.effects.filter(e => !(e.stance && ((!r.negated && r.final >= 3) || c.hp.on >= c.hp.slots))
+    && !(e.endOnMarkedHp && r.hp > 0 && !r.applied.some(m => m.option.preserveEffect === e.name))
     && !(e.endOnDamage && !r.negated && r.final >= e.endOnDamage)
     && !(e.beastform && c.hp.on >= c.hp.slots)
     && !(!r.negated && r.final >= 3 && e.endOnSourceSevere && !e.sourceActorId));

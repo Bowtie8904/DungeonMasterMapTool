@@ -76,6 +76,256 @@ class OnlineSessionServerTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private ObjectNode witchHostSheet() throws Exception {
+        return (ObjectNode) MAPPER.readTree("""
+                {"className":"Witch","hope":{"on":6,"slots":6},"hp":{"on":0,"slots":6},
+                 "stress":{"on":0,"slots":6},"traits":[{"name":"Presence","mod":3,"spellcast":true}],
+                 "effects":[],"inventory":[],"resources":{},"usage":{},
+                 "features":[{"name":"Enchanted Talisman","automation":{
+                   "uses":{"max":1,"per":"rest"},
+                   "resources":[{"id":"enchanted-talisman","initial":0,"resetOn":"rest","whileEffect":"Enchanted Talisman source"}],
+                   "actions":[{"id":"use","label":"Enchanted Talisman","witchAction":"talisman"}]}},
+                  {"name":"Walk Between Worlds","automation":{
+                   "uses":{"max":1,"per":"rest"},
+                   "resources":[{"id":"walk-between-worlds","label":"Walk Between Worlds","initial":0,"whileEffect":"Walk Between Worlds"}],
+                   "rollTriggers":[{"id":"enter","label":"Walk Between Worlds","on":"feat:Walk Between Worlds",
+                     "when":"success","difficulty":13,"cost":{"stress":1},
+                     "steps":[{"op":"clear","resource":"walk-between-worlds","amount":"all"},
+                       {"op":"gain","resource":"walk-between-worlds","amount":"@spellcast"},
+                       {"op":"effect","effect":{"name":"Walk Between Worlds","kind":"buff","until":"scene","tokenResource":"walk-between-worlds"}}]}]}}]}
+                """);
+    }
+
+    @Test
+    void witchHostTalismanActionTransfersSpendsAtomicallyRejectsStaleCopiesAndExpiresOnRest() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("witch").name("Witch").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("holder").name("Holder").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "witch", witchHostSheet().toString());
+        ObjectNode ally = witchHostSheet();
+        ally.putArray("features");
+        store.saveSheet(campaign.getId(), "holder", ally.toString());
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "witch")
+                .put("key", "feat:Enchanted Talisman").put("actionId", "use");
+        for (JsonNode amount : List.of(MAPPER.nullNode(), MAPPER.valueToTree(0), MAPPER.valueToTree(-1),
+                MAPPER.valueToTree(1.5), MAPPER.valueToTree(7))) {
+            action.set("amount", amount);
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+        }
+        assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("hope").path("on").asInt());
+        action.put("amount", 3);
+        var activation = featureHttp(cookie, action);
+        assertEquals(200, activation.statusCode(), activation.body());
+        assertEquals(400, featureHttp(cookie, action).statusCode());
+        ObjectNode witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        assertEquals(3, witch.path("hope").path("on").asInt());
+        assertEquals(3, witch.path("resources").path("enchanted-talisman").asInt());
+        assertEquals(1, witch.path("usage").path("feat:Enchanted Talisman").path("used").asInt());
+        JsonNode item = witch.path("inventory").get(0);
+        String mirror = "talisman-tokens:witch:" + item.path("witchTalisman").path("activationId").asText();
+        ObjectNode offer = MAPPER.createObjectNode().put("actorId", "witch").put("category", "item").put("offerQuantity", 1);
+        offer.set("item", item);
+        var offered = cardHttp(cookie, "", offer);
+        assertEquals(200, offered.statusCode(), offered.body());
+        String cardId = MAPPER.readTree(offered.body()).path("cardId").asText();
+        ObjectNode grab = MAPPER.createObjectNode().put("actorId", "holder");
+        var transfer = cardHttp(cookie, "/" + cardId + "/grab", grab);
+        assertEquals(200, transfer.statusCode(), transfer.body());
+        assertEquals(409, cardHttp(cookie, "/" + cardId + "/grab", grab).statusCode());
+        ObjectNode holder = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "holder"));
+        assertEquals(item, holder.path("inventory").get(0));
+        assertEquals(3, holder.path("resources").path(mirror).asInt());
+        ObjectNode stale = holder.deepCopy();
+        holder.withObject("/resources").put(mirror, 1);
+        var spend = saveDeathSheet(cookie, "holder", holder);
+        assertEquals(200, spend.statusCode(), spend.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("resources").path("enchanted-talisman").asInt());
+        assertEquals(409, saveDeathSheet(cookie, "holder", stale).statusCode());
+        holder = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "holder"));
+        ObjectNode copied = holder.deepCopy();
+        copied.withArray("inventory").add(item.deepCopy());
+        assertEquals(400, saveDeathSheet(cookie, "holder", copied).statusCode());
+        holder.withObject("/resources").put(mirror, 2);
+        assertEquals(400, saveDeathSheet(cookie, "holder", holder).statusCode());
+        witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        witch.put("shortRestsInRow", 1);
+        witch.putObject("usage");
+        var rest = saveDeathSheet(cookie, "witch", witch);
+        assertEquals(200, rest.statusCode(), rest.body());
+        holder = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "holder"));
+        assertTrue(holder.path("inventory").isEmpty());
+        assertTrue(holder.path("effects").isEmpty());
+        assertEquals(0, holder.path("resources").path(mirror).asInt());
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("resources").path("enchanted-talisman").asInt());
+        assertEquals(0, MAPPER.readTree(cardHttp(cookie, "/" + cardId, null).body()).path("available").asInt());
+        action.put("amount", 1);
+        assertEquals(200, featureHttp(cookie, action).statusCode());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("inventory").size());
+    }
+
+    @Test
+    void witchHostCircleAndMoonbeamPersistOfflineGrantsAndManualDismissal() throws Exception {
+        campaign.getPlayers().add(Campaign.Player.builder().id("offline-player").name("Offline player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("witch").name("Witch").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("offline").name("Offline").ownerId("offline-player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("npc").name("NPC").build());
+        ObjectNode witch = witchHostSheet();
+        witch.withObject("/resources").put("circle-of-power", 3);
+        witch.withArray("effects").addObject().put("id", "circle").put("witchGrant", "circle")
+                .put("name", "Circle of Power").put("kind", "buff").put("until", "rest");
+        witch.withArray("effects").addObject().put("id", "moon").put("witchGrant", "moonbeam")
+                .put("name", "Moonbeam source").put("kind", "buff").put("until", "scene");
+        store.saveSheet(campaign.getId(), "witch", witch.toString());
+        store.saveSheet(campaign.getId(), "offline", witchHostSheet().toString());
+        store.saveSheet(campaign.getId(), "npc", witchHostSheet().toString());
+        String cookie = cookie();
+        var read = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/witch"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, read.statusCode(), read.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "offline")).path("effects").size());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "npc")).path("effects").isEmpty());
+        witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        for (int i = witch.withArray("effects").size() - 1; i >= 0; i--)
+            if (witch.withArray("effects").get(i).has("witchLinked")) witch.withArray("effects").remove(i);
+        var dismissed = saveDeathSheet(cookie, "witch", witch);
+        assertEquals(200, dismissed.statusCode(), dismissed.body());
+        witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        assertEquals(2, witch.path("effects").size());
+        witch.withObject("/resources").put("circle-of-power", 0);
+        assertEquals(200, saveDeathSheet(cookie, "witch", witch).statusCode());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "offline")).path("effects").size());
+        assertNull(server.endScene());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "offline")).path("effects").isEmpty());
+    }
+
+    @Test
+    void witchHostWalkBetweenWorldsTriggerClearsThenGainsSpellcastAndConsumesOneRestUse() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("witch").name("Witch").ownerId(playerId()).build());
+        ObjectNode witch = witchHostSheet();
+        witch.withObject("/resources").put("walk-between-worlds", 9);
+        witch.withArray("features").addObject().put("name", "Passive Spellcast bonus")
+                .putObject("automation").putArray("modifiers").addObject().put("stat", "trait.Presence").put("value", 2);
+        store.saveSheet(campaign.getId(), "witch", witch.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("witchAutomation").asBoolean());
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12+30","source":"action,spellcast,feat:Walk Between Worlds","actorId":"witch"}
+                    """, true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode enter = MAPPER.createObjectNode().put("actorId", "witch")
+                    .put("key", "feat:Walk Between Worlds").put("actionId", "enter");
+            enter.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            var response = featureHttp(cookie, enter);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(400, featureHttp(cookie, enter).statusCode());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+            assertEquals(5, saved.path("resources").path("walk-between-worlds").asInt());
+            assertEquals(1, saved.path("stress").path("on").asInt());
+            assertEquals(1, saved.path("usage").path("feat:Walk Between Worlds").path("used").asInt());
+            assertEquals("Walk Between Worlds", saved.path("effects").get(0).path("name").asText());
+            assertEquals("scene", saved.path("effects").get(0).path("until").asText());
+            assertNull(server.endScene());
+            saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+            assertTrue(saved.path("effects").isEmpty());
+            assertEquals(0, saved.path("resources").path("walk-between-worlds").asInt());
+            assertEquals(1, saved.path("usage").path("feat:Walk Between Worlds").path("used").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void witchHostGlamourPreservesPaidStressAndEndsOnUnpaidHpMarks() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("witch").name("Witch").ownerId(playerId()).build());
+        ObjectNode witch = witchHostSheet();
+        witch.withArray("effects").addObject().put("id", "glamour").put("name", "Night's Glamour")
+                .put("kind", "buff").put("until", "scene").put("endOnMarkedHp", true);
+        store.saveSheet(campaign.getId(), "witch", witch.toString());
+        String cookie = cookie();
+        witch.withObject("/hp").put("on", 1);
+        witch.withObject("/stress").put("on", 1);
+        var paid = saveDeathSheet(cookie, "witch", witch);
+        assertEquals(200, paid.statusCode(), paid.body());
+        witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        assertEquals("Night's Glamour", witch.path("effects").get(0).path("name").asText());
+        witch.withObject("/hp").put("on", 2);
+        ((ObjectNode) witch.path("effects").get(0)).put("hpMaintenance", 1);
+        var recoveredStress = saveDeathSheet(cookie, "witch", witch);
+        assertEquals(200, recoveredStress.statusCode(), recoveredStress.body());
+        witch = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+        assertEquals("Night's Glamour", witch.path("effects").get(0).path("name").asText(),
+                "A maintenance receipt preserves Glamour even when Stress recovery offsets the payment");
+        witch.withObject("/hp").put("on", 3);
+        var unpaid = saveDeathSheet(cookie, "witch", witch);
+        assertEquals(200, unpaid.statusCode(), unpaid.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("effects").isEmpty());
+    }
+
+    @Test
+    void witchHostGlamourAutomaticallyActivatesOnlyOnItsOwnSuccessfulRollIncludingCriticals() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("witch").name("Witch").ownerId(playerId()).build());
+        ObjectNode witch = witchHostSheet();
+        witch.withArray("features").add(MAPPER.readTree("""
+                {"name":"Night’s Glamour","automation":{"rollTriggers":[{
+                 "id":"glamour","automatic":true,"on":"feat:Night’s Glamour","when":"success","difficulty":13,
+                 "steps":[{"op":"effect","effect":{"name":"Night's Glamour","kind":"buff","until":"manual"}}]}]}}
+                """));
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long nonCriticalSeed = 0, criticalSeed = 0;
+            while (true) {
+                var random = new java.util.Random(nonCriticalSeed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                nonCriticalSeed++;
+            }
+            while (true) {
+                var random = new java.util.Random(criticalSeed);
+                if (random.nextInt(12) == random.nextInt(12)) break;
+                criticalSeed++;
+            }
+            for (int scenario = 0; scenario < 4; scenario++) {
+                store.saveSheet(campaign.getId(), "witch", witch.toString());
+                diceSeed(scenario == 3 ? criticalSeed : nonCriticalSeed);
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("actorId", "witch").put("expression", scenario == 1 || scenario == 3 ? "2d12-30" : "2d12+30")
+                        .put("source", scenario == 0 ? "action,spellcast,feat:Other spell" : "action,spellcast,feat:Night’s Glamour");
+                ws.sendText(message.toString(), true).join();
+                boolean expected = scenario >= 2;
+                if (expected) assertEquals(1, inbox.next("sheetFeature").path("effects").size());
+                JsonNode roll = inbox.next("roll");
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+                assertEquals(expected ? 1 : 0, saved.path("effects").size(), "scenario " + scenario);
+                assertEquals(expected ? 1 : 0, roll.path("featureUses").size());
+                assertEquals(0, saved.path("stress").path("on").asInt());
+                assertEquals(0, saved.path("usage").size());
+                ObjectNode manual = MAPPER.createObjectNode().put("actorId", "witch")
+                        .put("key", "feat:Night’s Glamour").put("actionId", "glamour");
+                manual.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                assertEquals(400, featureHttp(cookie, manual).statusCode());
+                if (expected) {
+                    assertEquals("Night's Glamour", saved.path("effects").get(0).path("name").asText());
+                    assertEquals(409, saveDeathSheet(cookie, "witch", witch.deepCopy()).statusCode(),
+                            "A pre-roll debounced save cannot overwrite the automatic grant");
+                    ObjectNode current = (ObjectNode) saved;
+                    current.withObject("/hope").put("on", 5);
+                    var followUp = saveDeathSheet(cookie, "witch", current);
+                    assertEquals(200, followUp.statusCode(), followUp.body());
+                    current = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "witch"));
+                    assertEquals("Night's Glamour", current.path("effects").get(0).path("name").asText());
+                    current.withArray("effects").removeAll();
+                    assertEquals(200, saveDeathSheet(cookie, "witch", current).statusCode());
+                    assertEquals(400, featureHttp(cookie, manual).statusCode(),
+                            "An old successful roll cannot recreate the expired Glamour");
+                    assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "witch")).path("effects").isEmpty());
+                }
+            }
+            assertEquals(4, store.historyTail(campaign.getId(), 20).size(), "No extra automatic action chat report");
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode warriorSheet(String subclass) throws Exception {
         ObjectNode sheet = communitySheet("Seaborne");
         sheet.put("className", "Warrior").put("subclass", "Call of the " + subclass).put("level", 5);

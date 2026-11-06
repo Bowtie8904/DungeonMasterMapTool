@@ -53,6 +53,7 @@ export interface Armor {
 }
 
 export interface InventoryItem {
+  witchTalisman?: { sourceActorId: string; activationId: string };
   catalog?: CatalogLink;
   name: string;
   note?: string;

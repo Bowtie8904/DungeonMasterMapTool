@@ -796,6 +796,7 @@
      "text": "Once per rest, mark a circle on the ground outlining a Very Close area around you, and place a number of tokens equal to your Spellcast trait on this card. While within this circle, you and your allies gain a +2 bonus to damage thresholds, attack rolls, and Evasion. Remove a token each time you or an ally within the circle makes an action roll or evades an attack. This spell lasts until the last token is removed or you exit the circle.",
      "type": "subclass",
      "automation": {
+      "resources": [{ "id": "circle-of-power", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Circle of Power", "cardOnly": true }],
       "uses": {
        "max": 1,
        "per": "rest"
@@ -803,7 +804,16 @@
       "actions": [
        {
         "id": "use",
-        "label": "Circle of Power"
+        "label": "Circle of Power",
+        "steps": [
+         { "op": "clear", "resource": "circle-of-power", "amount": "all" },
+         { "op": "gain", "resource": "circle-of-power", "amount": "@spellcast" },
+         { "op": "effect", "effect": { "name": "Circle of Power", "kind": "buff", "until": "rest", "witchGrant": "circle", "tokenResource": "circle-of-power", "text": "You and allies within the circle gain +2 thresholds, Evasion and attack rolls. Spend a token whenever someone in the circle makes an action roll or evades an attack. Remove this effect when you leave the circle." } }
+        ]
+       },
+       {
+        "id": "spend", "label": "Spend a circle token", "usesSource": false,
+        "requiresEffect": "Circle of Power", "cost": { "circle-of-power": 1 }
        }
       ]
      }
@@ -828,6 +838,7 @@
      "text": "During a moment of calm, make a **Spellcast Roll (13)**. Once per rest on a success, you can **mark a Stress** to step beyond the veil of death and converse with any nearby spirits. Place a number of tokens equal to your Spellcast trait on this card and remove one each time a spirit answers a question. When the last token is removed or at the end of the scene, you return to the Mortal Realm in the same spot you left it.",
      "type": "subclass",
      "automation": {
+      "resources": [{ "id": "walk-between-worlds", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Walk Between Worlds", "cardOnly": true }],
       "uses": {
        "max": 1,
        "per": "rest"
@@ -835,18 +846,30 @@
       "actions": [
        {
         "id": "use",
-        "label": "Walk Between Worlds",
-        "cost": {
-         "stress": 1
-        }
+        "label": "Walk Between Worlds (13)", "usesSource": false,
+        "actionRoll": { "trait": "spellcast", "difficulty": 13 }
+       },
+       {
+        "id": "spend", "label": "Spirit answers: spend a token", "usesSource": false,
+        "requiresEffect": "Walk Between Worlds", "cost": { "walk-between-worlds": 1 }
        }
-      ]
+      ],
+      "rollTriggers": [{
+       "id": "enter", "label": "Step beyond the veil", "on": "feat:Walk Between Worlds", "when": "success", "difficulty": 13,
+       "cost": { "stress": 1 },
+       "steps": [
+        { "op": "clear", "resource": "walk-between-worlds", "amount": "all" },
+        { "op": "gain", "resource": "walk-between-worlds", "amount": "@spellcast" },
+        { "op": "effect", "effect": { "name": "Walk Between Worlds", "kind": "buff", "until": "scene", "tokenResource": "walk-between-worlds", "text": "Converse with nearby spirits. Spend one token per answer; return to the same spot when the last token is spent or the scene ends." } }
+       ]
+      }]
      }
     },
     {
      "name": "Vexing Malison",
      "text": "You have advantage on attacks against *Hexed* creatures.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "rollOptions": [{ "id": "hexed", "label": "Vexing Malison: Hexed target", "roll": "attack", "advantage": "advantage", "description": "Select only when attacking a Hexed creature." }] }
     }
    ]
   },
@@ -873,6 +896,7 @@
      "text": "Once per rest, you can imbue a small item with your protective essence. ** Spend any number of Hope **to place an equal number of tokens on this card. When the person holding the talisman takes damage, spend a token to reduce the number of Hit Points they mark by one. Clear all tokens from this card when you take a rest.",
      "type": "subclass",
      "automation": {
+      "resources": [{ "id": "enchanted-talisman", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Enchanted Talisman source", "cardOnly": true }],
       "uses": {
        "max": 1,
        "per": "rest"
@@ -880,7 +904,7 @@
       "actions": [
        {
         "id": "use",
-        "label": "Enchanted Talisman"
+        "label": "Imbue talisman", "witchAction": "talisman"
        }
       ]
      }
@@ -1182,20 +1206,23 @@
    "features": [
     {
      "name": "Lunar Phases",
-     "text": "At the beginning of each session, roll a **d6** and place it on this card. You gain the matching effect until the end of session.\nOnce per rest, you can **spend a Hope** to increase the value of this die by one. If you increase the value of a 6, it becomes a 1.",
+     "text": "At the beginning of each session, roll a **d6** and place it on this card. You gain the matching effect until the end of session.\nOnce per rest, you can **spend a Hope** to increase the value of this die by one. If you increase the value of a 6, it becomes a 1.\n\n- **1:** Spend a Hope to negate Minor damage.\n- **2-3:** +2 to damage rolls.\n- **4:** +3 to damage thresholds.\n- **5-6:** +1 to Evasion.",
      "type": "subclass",
      "automation": {
-      "uses": {
-       "max": 1,
-       "per": "rest"
-      },
+      "effectCounters": [{ "label": "Lunar die", "effect": "Lunar Phases", "cardOnly": true }],
+      "lunarPhases": [
+       { "faces": [1], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "Spend a Hope to negate Minor damage.", "mitigation": [{ "id": "minor", "label": "Lunar Phases: negate Minor damage", "when": { "severity": ["minor"] }, "cost": { "hope": 1 }, "negate": true }] } },
+       { "faces": [2, 3], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+2 to damage rolls.", "modifiers": [{ "roll": "damage", "value": 2 }] } },
+       { "faces": [4], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+3 to Major and Severe damage thresholds.", "modifiers": [{ "stat": "thresholds", "value": 3 }] } },
+       { "faces": [5, 6], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+1 to Evasion.", "modifiers": [{ "stat": "evasion", "value": 1 }] } }
+      ],
       "actions": [
        {
-        "id": "use",
-        "label": "Lunar Phases",
-        "cost": {
-         "hope": 1
-        }
+        "id": "roll", "label": "Roll Lunar Phases d6", "witchAction": "lunarRoll", "uses": { "max": 1, "per": "session" }
+       },
+       {
+        "id": "advance", "label": "Increase lunar die", "witchAction": "lunarAdvance",
+        "uses": { "max": 1, "per": "rest" }, "cost": { "hope": 1 }
        }
       ]
      }
@@ -1227,7 +1254,8 @@
       "actions": [
        {
         "id": "use",
-        "label": "Moonbeam"
+        "label": "Moonbeam",
+        "steps": [{ "op": "effect", "effect": { "name": "Moonbeam source", "kind": "buff", "until": "scene", "witchGrant": "moonbeam", "text": "Allies within Close range gain +1 to Spellcast Rolls and see through illusions. Ends at scene end." } }]
        }
       ]
      }
@@ -1255,7 +1283,22 @@
     {
      "name": "Night’s Glamour",
      "text": "Make a **Spellcast Roll (13)** to *Glamour* yourself in a bewitching facade. While *Glamoured*, you have advantage on rolls that leverage your illusory appearance. Additionally, adversaries within Close range must mark a Stress to attack you.\nUnless you **mark a Stress** to maintain your *Glamour*, it drops when you mark a Hit Point or deal damage.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "roll", "label": "Night's Glamour (13)", "actionRoll": { "trait": "spellcast", "difficulty": 13 } }],
+      "rollTriggers": [{
+       "id": "glamour", "label": "Become Glamoured", "on": "feat:Night’s Glamour", "when": "success", "difficulty": 13, "automatic": true,
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Night's Glamour", "kind": "buff", "until": "manual", "endOnMarkedHp": true, "endOnDealtDamage": true,
+        "text": "Advantage on rolls leveraging your illusory appearance. Adversaries within Close range must mark Stress to attack you. Mark Stress to maintain this Glamour when you mark HP or deal damage; otherwise it drops.",
+        "rollOptions": [
+         { "id": "appearance", "label": "Glamour: leverage your appearance", "roll": "trait", "advantage": "advantage", "description": "Select only when your illusory appearance helps." },
+         { "id": "maintain", "label": "Maintain Glamour when dealing damage", "roll": "damage", "cost": { "stress": 1 }, "preserveEffect": "Night's Glamour" }
+        ],
+        "mitigation": [{ "id": "maintain", "label": "Maintain Glamour", "when": { "markingHp": true }, "cost": { "stress": 1 }, "preserveEffect": "Night's Glamour", "description": "Mark a Stress to keep your Glamour when this damage marks HP." }]
+       } }]
+      }]
+     }
     }
    ]
   },
@@ -4038,7 +4081,7 @@
     },
     {
      "name": "Commune",
-     "text": "Once per long rest during a moment of calm, you can commune with an ancestor, a deity, a spirit, or an otherworldly being. Ask them a question, then roll a number of **d6s** equal to your Spellcast trait. Choose one of the results and reference the chart below for the effect.",
+     "text": "Once per long rest during a moment of calm, you can commune with an ancestor, a deity, a spirit, or an otherworldly being. Ask them a question, then roll a number of **d6s** equal to your Spellcast trait. Choose one of the results and reference the chart below for the effect.\n\n- **1-3:** You taste a flavor, smell a scent, or feel a sensation relevant to the answer.\n- **4-5:** You hear sounds or see a vision relevant to the answer.\n- **6:** You psychically experience a scene relevant to the answer as if you were there.",
      "type": "class",
      "automation": {
       "uses": {
@@ -4048,7 +4091,7 @@
       "actions": [
        {
         "id": "use",
-        "label": "Commune"
+        "label": "Commune", "sendRoll": { "dice": "@spellcastd6", "label": "Commune" }
        }
       ]
      }

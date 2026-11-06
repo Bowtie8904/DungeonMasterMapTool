@@ -86,7 +86,9 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
       if (f.name === 'Battle-Bonded' && !feature.automation) {
         c.effects = c.effects.filter(e => e.name !== 'Battle-Bonded (one attack)');
       }
-      if (feature.automation?.stances || feature.automation?.grantsFeatures || feature.automation?.companion) f.text = feature.text;
+      const witchChart = ['Commune', 'Lunar Phases'].includes(feature.name)
+        && candidates.some(e => (e.id === 'witch' || e.parent === 'Witch') && e.features?.includes(feature));
+      if (feature.automation?.stances || feature.automation?.grantsFeatures || feature.automation?.companion || witchChart) f.text = feature.text;
       for (const name of feature.automation?.grantsFeatures ?? []) {
         const granted = candidates.flatMap(e => e.features ?? []).find(item => item.name === name);
         if (!granted) continue;

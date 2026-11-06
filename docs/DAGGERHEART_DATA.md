@@ -64,6 +64,51 @@ versions change. Older clients can continue reading catalog files and saved shee
 
 ## Automation block
 
+### Witch metadata
+
+Commune's `sendRoll.dice: "@spellcastd6"` resolves the current total Spellcast trait as the dice count;
+the long-rest use is spent only after the roll is sent. Its description includes the sensory-result chart.
+Walk Between Worlds and Night's Glamour use `actionRoll {trait: "spellcast", difficulty: 13}` with
+feature-source-specific `when: "success"` triggers. The Walk roll has `usesSource: false`; only its
+chat action entering beyond the veil spends Stress and the rest use. Glamour's free `automatic: true`
+trigger is applied by the host on success without an additional button.
+
+Token resources declare `whileEffect` with their source effect's name and `resetOn: "rest"`.
+Witch resources and Lunar `effectCounters` declare `cardOnly: true`: counters appear only on their
+own feature cards, not as class resources in the header. Linked talisman mirrors are also excluded
+from the header; their values remain available internally for damage mitigation.
+An effect's `tokenResource` removes it when its pool reaches zero. Together these clear Walk tokens on
+End scene and Circle/Talisman tokens on expiry; token-spend actions use `usesSource: false`.
+Circle and Moonbeam source effects declare `witchGrant: "circle"|"moonbeam"`; the host distributes
+source-linked benefits to campaign characters, including offline owners. Circle bonuses are passive
+thresholds/Evasion and a preselected attack option; Moonbeam preselects +1 Spellcast until scene end.
+Recipients may dismiss out-of-range grants without having them reapplied during that activation.
+
+`witchAction: "talisman"` asks for Hope and uses the authoritative feature endpoint to create a
+transferable, creator-linked loot item. Its holder's mitigation spends the original witch's tokens,
+not an independent copy. Transfer, token spending and expiry reconcile inventories and effects on the
+host. Depletion or the creator's rest removes the item from its current holder.
+Inventory stores `witchTalisman {sourceActorId, activationId}`; linked buffs carry `witchLinked`,
+`sourceActorId` and `activationId`. Each held talisman has an independent host-mirrored
+`talisman-tokens:<sourceActorId>:<activationId>` resource, so spending one cannot debit another creator.
+Source marker metadata `witchRecipients` retains manual party-grant dismissals for that activation;
+`witchTalismanCreated` prevents recreating a moved item. These host-maintained fields are not catalog rules.
+
+Glamour uses `endOnMarkedHp` and `endOnDealtDamage`. A mitigation/roll option's `preserveEffect` pays
+Stress to keep the named buff. No incoming HP means no maintenance cost. `roll: "trait"` matches
+trait-bearing action/reaction rolls; appearance-based advantage stays optional and player-confirmed.
+The runtime effect's `hpMaintenance` counter records paid incoming-damage maintenance independently
+of simultaneous Stress recovery; an unchanged receipt cannot preserve it through a later hit.
+
+Lunar Phases declares `lunarPhases[] {faces, effect}` plus `witchAction: "lunarRoll"|"lunarAdvance"`.
+Its session roll and rest-limited Hope-cost increase have independent action limits. The active effect's
+`counter` stores the d6 face, displayed by `effectCounters`; increasing 6 wraps to 1 and replaces the buff.
+Face 1 supplies Hope-cost Minor-damage negation, 2-3 passive +2 damage, 4 passive +3 thresholds, and
+5-6 passive +1 Evasion. Only New session refreshes the session roll; rests preserve the face.
+
+The additive `hello.witchAutomation` capability gates the linked workflows and success actions on
+older hosts. No settings or DM Link compatibility version changes are needed.
+
 ### Warrior metadata
 
 Combat Training declares `ignoreWeaponBurden: true`, applied by creation and equipment while retaining

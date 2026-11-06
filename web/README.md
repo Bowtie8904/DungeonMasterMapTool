@@ -94,6 +94,9 @@ Daggerheart testing actors are created only by the desktop DM (Actors tree conte
 by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately
 from saved sheet data; players cannot promote ordinary actors through PUT. Marked sheets show a testing badge
 and **Edit testing build** instead of normal level-up. `daggerheart/testing.ts` rebuilds class/subclass stages,
+with unrestricted integer number spinners for all six base traits in the editor. Trait edits apply only on
+Apply, accept negative values, and survive build changes and reloads without creation-array limits.
+The builder also supports
 unrestricted multiclasses, heritage, domains, all-level active domain cards and custom resource definitions from
 the compendium, preserving equipment, personal data and retained resource values. `testingBuild` persists the
 selected build and is reapplied on load; removed-source effects, usage and pools are discarded. Test cards cannot
@@ -281,6 +284,20 @@ and checks safe, independent source disclosures and source propagation from feat
 Spellcast, individual grimoire spells and follow-up spell damage.
 Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
 never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
+Witch automation rolls Commune's Spellcast-trait d6s and includes the sensory chart. Walk Between Worlds
+Witch token counters and the Lunar die appear only on their feature cards, never as header class resources. Walk Between Worlds
+and Night's Glamour roll against 13; spirit entry has a success-only chat action, while Glamour is
+automatically applied on success. Spirit/Circle tokens have manual
+spend buttons; Circle grants party thresholds/Evasion and a preselected attack bonus, while Moonbeam
+grants a preselected scene-duration Spellcast bonus. Range remains player-confirmed; recipients may
+remove out-of-range buffs without automatic reapplication. Talisman creation asks for Hope and creates
+transferable loot; the holder's incoming-damage mitigation atomically spends the creating witch's tokens.
+Depletion or the creator's rest removes the item wherever it was transferred. Glamour offers optional
+appearance-based advantage and Stress-cost maintenance when marking HP or dealing damage; otherwise it
+drops. Lunar Phases tracks its session d6 and once-per-rest Hope-cost increase (6 wraps to 1), automatically
+replacing its mitigation/damage/threshold/Evasion buff. Updated linked workflows and success actions
+require `hello.witchAutomation`; older hosts show an update message. See `docs/DAGGERHEART_DATA.md`.
+
 Warrior automation keeps Slayer Dice in the header resource, not feature buttons/counters. Hope action
 rolls offer an exclusive Slayer Die reward; attack/damage roll options select a count and roll/spend that
 many d6s. New session converts unspent pool dice into Hope. Weapon Specialist's Hope-cost secondary

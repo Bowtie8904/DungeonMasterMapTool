@@ -1097,6 +1097,7 @@ export class App {
       supportsSeraphAutomation: () => this.conn.seraphAutomation,
       supportsSorcererAutomation: () => this.conn.sorcererAutomation,
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
+      supportsWitchAutomation: () => this.conn.witchAutomation,
       supportsWarriorAutomation: () => this.conn.warriorAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
@@ -1212,6 +1213,7 @@ export class App {
             supportsSeraphAutomation: () => this.conn.seraphAutomation,
             supportsSorcererAutomation: () => this.conn.sorcererAutomation,
             supportsWarlockAutomation: () => this.conn.warlockAutomation,
+            supportsWitchAutomation: () => this.conn.witchAutomation,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {

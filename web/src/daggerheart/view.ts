@@ -1,5 +1,6 @@
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
+import { chooseTalismanHope } from './witch-view';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
   dualityExpression, handsUsed, ignoresWeaponBurden, multiclassesOf, shortTrait, signed, tierOf,
@@ -68,6 +69,7 @@ export class SheetBus {
 export interface SheetViewOptions {
   supportsSorcererAutomation?: () => boolean;
   supportsWarlockAutomation?: () => boolean;
+  supportsWitchAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
@@ -345,7 +347,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const sharedUses = a?.uses && actions.some(action => action.usesSource === false)
       ? el('span', { class: 'row actions', ariaLabel: `${label} limited actions` }) : row;
     for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) {
-      (action.usesSource === false ? row : sharedUses).append(actionButton(key, a!, action, label, hooks));
+      const button = actionButton(key, a!, action, label, hooks);
+      const remaining = action.uses ? usesLeft(c, `${key}:action:${action.id}`, { uses: action.uses }) : null;
+      (action.usesSource === false ? row : sharedUses).append(action.uses
+        ? el('span', { class: 'row' }, button, el('span', { class: 'muted', style: 'font-size:11.5px' }, `${remaining}/${action.uses.max} per ${action.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`))
+        : button);
     }
     const left = a ? usesLeft(c, key, a) : null;
     if (left !== null && a?.uses) sharedUses.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
@@ -389,6 +395,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     b.addEventListener('click', async () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
+      if ((action.witchAction || a.resources?.some(r => r.whileEffect) || action.steps?.some(s => s.effect?.witchGrant) || a.rollTriggers?.some(t => t.automatic))
+          && !opts.supportsWitchAutomation?.()) {
+        opts.onLog?.('Update the host to use Witch automation.');
+        return;
+      }
+      if (action.witchAction === 'talisman') {
+        if (!opts.onFeature) { opts.onLog?.('Update the host to create an Enchanted Talisman.'); return; }
+        chooseTalismanHope(c, async amount => {
+          await opts.onFeature!(key, action.id, amount);
+          hooks.after?.();
+          render();
+        });
+        return;
+      }
       if (action.confirm && !await confirmDialog(action.confirm, action.label)) return;
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
@@ -508,7 +528,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return; }
         if (actionBlocker(c, key, a, action)) return;
         const base = action.sendRoll.base === 'evasion' ? derivedStats(c).evasion : 0;
-        const dice = action.sendRoll.dice.replace(/@tier(?=d|\b)/g, String(tierOf(c.level)));
+        const dice = action.sendRoll.dice.replace(/@tier(?=d|\b)/g, String(tierOf(c.level)))
+          .replace(/@spellcast(?=d|\b)/g, String(Math.max(0, evalValue('@spellcast', c))));
         const sent = opts.onRoll({
           label: action.sendRoll.label.slice(0, 80), expression: `${base}+${dice}`,
           contributions: [...(action.sendRoll.base ? [{ label: 'Evasion', expression: String(base) }] : []), { label: `${label} ${dice}`.slice(0, 120), expression: dice }],
@@ -518,7 +539,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (!sent) { opts.onLog?.('Not connected. The roll was not sent and nothing was spent.'); return; }
       }
       const title = actionReportTitle(c, key, label, action.label);
-      const effects = runActionDetailed(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`);
+      let effects: string[] | null;
+      try { effects = runActionDetailed(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`); }
+      catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); return; }
       if (effects === null) return;
       hooks.after?.();
       opts.onLog?.(formatActionReport({ title, character: c.name, lines: effects.length ? effects : ['used'] }), rollSourceFor(c, key));
@@ -574,7 +597,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function header(): HTMLElement {
     const hidden = cardResourceIds();
-    const extraResources = resourceDefinitions(c).filter((r) => !hidden.has(r.id));
+    for (const effect of c.effects.filter(e => e.witchLinked)) {
+      for (const resource of effect.resources ?? []) hidden.add(resource.id);
+    }
+    const extraResources = resourceDefinitions(c).filter((r) => !r.cardOnly && !hidden.has(r.id));
     const portrait = el('div', { class: 'portrait', title: 'Character image' });
     if (opts.artwork) portrait.append(el('img', { src: opts.artwork, alt: '' }));
     else portrait.textContent = c.name.slice(0, 1).toUpperCase();
@@ -627,7 +653,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         vital('Hope', el('div', {}, hopePips(), scars)),
         vital('Proficiency', pips(c.proficiency, 'prof', 'var(--accent)', true, refreshActions)),
         ...extraResources.map((r) => vital(r.label, poolControls(r))),
-        ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? [])
+        ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? []).filter(r => !r.cardOnly)
           .map(r => vital(r.label, counterResource(r))),
         ...activeFeatures(c).flatMap(f => f.automation?.dicePool ? [vital(f.automation.dicePool.label, dicePoolControls(f.automation.dicePool))] : []),
       ),
@@ -1582,7 +1608,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         ...(e ? [{ label: `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} - ${e.name}`.slice(0, 120), expression: String(e.mod) }] : []),
       ],
     };
-    if (onRoll(request)) { commitRollOptions(c, selected(), !!e); close(); onSent(); }
+    if (onRoll(request)) { commitRollOptions(c, selected(), !!e, targets); close(); onSent(); }
     else error.textContent = 'Not connected. The roll was not sent and no costs were paid.';
   });
   const optionFieldset = el('fieldset', {}, el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());

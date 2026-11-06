@@ -25,6 +25,7 @@ export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, on
     const data = await loadRulesData();
     if (!overlay.isConnected) return;
     const draft: TestingBuild = structuredClone(c.testingBuild ?? defaultTestingBuild(data));
+    const traits = Object.fromEntries(c.traits.map(t => [t.name, t.mod]));
     const field = (label: string, values: string[], selected: string, change: (value: string) => void): HTMLElement => {
       const select = el('select', { ariaLabel: label });
       for (const value of values) {
@@ -56,6 +57,11 @@ export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, on
         draw();
       });
       body.replaceChildren(el('label', { class: 'dh-wiz-row' }, 'Level', level), ...classFields(draft, 'Primary'));
+      body.append(el('h3', {}, 'Traits'), ...c.traits.map(trait => {
+        const input = el('input', { type: 'number', step: '1', value: Number.isFinite(traits[trait.name]) ? String(traits[trait.name]) : '', ariaLabel: `Testing ${trait.name}` });
+        input.addEventListener('input', () => { traits[trait.name] = input.valueAsNumber; validate(); });
+        return el('label', { class: 'dh-wiz-row' }, trait.name, input);
+      }));
       draft.multiclasses.forEach((m, i) => {
         const remove = el('button', { type: 'button' }, `Remove multiclass ${i + 1}`);
         remove.addEventListener('click', () => { draft.multiclasses.splice(i, 1); draw(); });
@@ -75,11 +81,12 @@ export async function openTestingEditor(host: HTMLElement, c: CharacterSheet, on
     };
     const validate = () => {
       const problems = testingBuildProblems(data, draft);
+      if (Object.values(traits).some(value => !Number.isSafeInteger(value))) problems.push('Enter a whole number for each trait.');
       error.textContent = problems.join(' ');
       apply.disabled = problems.length > 0;
     };
     apply.addEventListener('click', () => {
-      try { applyTestingBuild(data, c, draft); onDone(); close(); }
+      try { applyTestingBuild(data, c, draft, traits); onDone(); close(); }
       catch (e) { error.textContent = (e as Error).message; }
     });
     draw();

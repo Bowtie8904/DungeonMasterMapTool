@@ -38,13 +38,15 @@ export function testingBuildProblems(d: RulesData, b: TestingBuild): string[] {
 }
 
 /** Rebuild only rule-owned fields; keep equipment, notes and the state of retained sources. */
-export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: TestingBuild): void {
+export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: TestingBuild, traitValues?: Record<string, number>): void {
   if (c.testingCharacter !== true) throw new Error('Only a DM-marked testing character can use the testing builder.');
   const problems = testingBuildProblems(d, build);
+  if (traitValues && c.traits.some(t => !Number.isSafeInteger(traitValues[t.name]))) problems.push('Enter a whole number for each trait.');
   if (problems.length) throw new Error(problems.join(' '));
   const b = structuredClone(build);
   const traits = suggestedTraits(guideFor(b.className));
   if (c.testingBuild) for (const trait of c.traits) traits[trait.name] = trait.mod;
+  if (traitValues) for (const trait of c.traits) traits[trait.name] = traitValues[trait.name];
   const choices = {
     ...emptyChoices(), ...b, name: c.name, pronouns: c.pronouns,
     primary: guideFor(b.className).primary, armor: guideFor(b.className).armor,

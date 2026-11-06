@@ -58,6 +58,17 @@ Nothing starts until you click **Start online session**, so offline play and the
   feature's description and origin, retained in saved chat history rather than the original weapon's source.
   Expand it to read the feature, card or individual grimoire spell without opening the sheet.
   Spellcast titles name their source; descriptions stay with history, follow-up spell damage and rerolls.
+- **Witch automation (Daggerheart):** Commune rolls its Spellcast-trait d6s in chat with the sensory chart.
+  Witch tokens and the Lunar die are tracked only on their feature cards, not as header class resources.
+  Enchanted Talisman asks for Hope, tracks protective tokens and creates transferable loot; its holder can
+  spend those tokens in incoming damage, automatically reducing the creating witch's pool. Depletion or
+  the witch's rest removes the item. Walk Between Worlds and Night's Glamour roll Spellcast against 13
+  with a success-only spirit-entry chat action and an automatic Glamour buff on success. Spirit/Circle tokens have spend buttons; Circle grants party-wide
+  thresholds, Evasion and preselected attack bonuses. Moonbeam grants a scene-duration Spellcast bonus.
+  Vexing Malison and Glamour offer situational advantage. Glamour can be maintained for Stress when
+  taking or dealing damage. Lunar Phases tracks its session d6, its Hope-cost once-per-rest increase,
+  and the current mitigation/damage/threshold/Evasion benefit. Range remains table-confirmed; remove
+  out-of-range buffs manually. Witch actions require an updated host.
 - **Blood Hunter automation (Daggerheart):** Blood Maledict, Crimson Rite and Veilwalker create buffs with
   optional roll bonuses; Chasing Death adjusts Rite costs and dice from current HP. Grim Psychometry checks
   Spellcast against 12 and offers its Stress-cost vision in chat only on success. Lycan bonuses require Wolf
@@ -101,6 +112,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   Equipment and notes survive build changes; obsolete features, resources and their effects are removed.
   The editor uses the full available dialog height for its scrolling form, with validation messages and
   Cancel/Apply controls kept in the footer.
+  All six base traits can be set freely with integer number spinners, including negative values; Apply saves
+  them without the normal creation-array or advancement limits.
   Testing characters are visibly marked and permanently testing-only: players cannot enable testing on normal
   actors, and normal character creation, advancement and loadout limits still apply.
 - **Actor tokens** are stored in the map file; older builds still open such maps. Actor tokens of other campaigns

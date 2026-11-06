@@ -57,6 +57,37 @@ final class CharacterSheetRules {
                 : null;
     }
 
+    static int spellcastTotal(com.fasterxml.jackson.databind.node.ObjectNode sheet, int fear) {
+        JsonNode spellcast = null;
+        for (JsonNode trait : sheet.path("traits"))
+            if (trait.path("spellcast").asBoolean()) { spellcast = trait; break; }
+        if (spellcast == null) return 0;
+        String stat = "trait." + spellcast.path("name").asText();
+        List<JsonNode> sources = new ArrayList<>();
+        sources.add(sheet.path("activeArmor").path("automation"));
+        JsonNode replacementWeapon = null;
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.path("weapon").isObject()) { replacementWeapon = effect.path("weapon"); break; }
+        if (replacementWeapon != null) sources.add(replacementWeapon.path("automation"));
+        else for (JsonNode weapon : sheet.path("activeWeapons")) sources.add(weapon.path("automation"));
+        for (String field : List.of("features", "heritage", "loadout", "inventory")) {
+            for (JsonNode entry : sheet.path(field))
+                if (!"inventory".equals(field) || entry.path("qty").asInt() > 0) sources.add(entry.path("automation"));
+        }
+        for (JsonNode effect : sheet.path("effects")) {
+            sources.add(effect);
+            for (JsonNode feature : effect.path("features")) sources.add(feature.path("automation"));
+        }
+        double total = spellcast.path("mod").asDouble();
+        for (JsonNode source : sources) for (JsonNode modifier : source.path("modifiers")) {
+            if (!stat.equals(modifier.path("stat").asText()) && !"traits".equals(modifier.path("stat").asText())) continue;
+            if (modifier.has("requiresEffect")
+                    && !DruidEffects.hasEffect(sheet, modifier.path("requiresEffect").asText())) continue;
+            total += value(modifier.path("value"), sheet, fear);
+        }
+        return (int) total;
+    }
+
     private static double value(JsonNode value, JsonNode sheet, int fear) {
         if (value.isNumber()) return value.asDouble();
         String expression = value.asText("").trim().toLowerCase(Locale.ROOT);

@@ -33,6 +33,7 @@ export interface RollButtonHost {
   supportsSeraphAutomation?: () => boolean;
   supportsSorcererAutomation?: () => boolean;
   supportsWarlockAutomation?: () => boolean;
+  supportsWitchAutomation?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
@@ -370,7 +371,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.trigger.rerollResourceDice && !host.supportsWarriorAutomation?.()
+        const unsupported = (t.trigger.steps?.some(s => s.effect?.tokenResource || s.effect?.endOnMarkedHp) && !host.supportsWitchAutomation?.())
+          ? 'Update the host to use Witch roll actions.'
+          : t.trigger.rerollResourceDice && !host.supportsWarriorAutomation?.()
           ? 'Update the host to reroll Slayer Dice.'
           : (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable) && !host.supportsWarlockAutomation?.()
           ? 'Update the host to use Warlock automation.'
