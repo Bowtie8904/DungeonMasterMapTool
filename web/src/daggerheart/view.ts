@@ -6,7 +6,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  damagePool, effectiveAdvantage, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -326,10 +326,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
-    if (!actions.length && !a?.resources?.length && !a?.uses) return null;
+    if (!actions.length && !a?.resources?.length && !a?.effectCounters?.length && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
     if (key.startsWith('item:') || key.startsWith('feat:')) {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
+      for (const r of a?.effectCounters ?? []) row.append(el('span', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, counterResource(r)));
     }
     for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) row.append(actionButton(key, a!, action, label, hooks));
     const left = a ? usesLeft(c, key, a) : null;
@@ -580,6 +581,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         vital('Hope', el('div', {}, pips(c.hope, 'hope', 'var(--hope)', true, refreshActions, c.scars), scars)),
         vital('Proficiency', pips(c.proficiency, 'prof', 'var(--accent)', true, refreshActions)),
         ...extraResources.map((r) => vital(r.label, poolControls(r))),
+        ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? [])
+          .map(r => vital(r.label, counterResource(r))),
       ),
     );
   }
@@ -593,6 +596,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       render();
     });
     return input;
+  }
+
+  function counterResource(r: NonNullable<Automation['effectCounters']>[number]): HTMLElement {
+    return el('output', { ariaLabel: r.label }, effectCounterText(c, r.effect));
   }
 
   function poolControls(r: NonNullable<Automation['resources']>[number]): HTMLElement {
@@ -775,6 +782,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'src' }, `${e.kind === 'buff' ? 'Buff' : 'Debuff'} - ${untilText(e)}${e.source ? ` - from ${e.source}` : ''}`),
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
         rich(mutagenEffectSource(c, e)?.text ?? e.text),
+        ...(e.counter ? [el('div', { class: 'badges' }, tag(`Die: ${e.counter.value} / d${effectCounterMax(c, e)}`))] : []),
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
         ...(e.beastform ? [] : e.features ?? []).map(f => {
           const node = featureCard(f);

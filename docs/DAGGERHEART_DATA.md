@@ -438,6 +438,23 @@ Classes, ancestries, communities and transformations are included in the total.
   recovery, mutually exclusive per player. Range/narrative conditions remain table-confirmed; Epic Song's
   adversary Vulnerable condition remains manual. Heart of a Poet is a finished-action d4 button, not a
   pre-roll option. Epic Poetry's Help-an-Ally action spends the usual 1 Hope and rolls a d10 advantage die.
+- **Guardian:** Unstoppable's scene effect has `counter: {value: 1, max: 4, maxByLevel: {"5": 6}}`.
+  Feature `effectCounters: [{label: "Unstoppable Die", effect: "Unstoppable"}]` displays a read-only class
+  resource in the header and feature controls, reading the active effect's value and level-scaled die size
+  directly (Inactive without the buff). It does not create a second saved resource value.
+  Effect roll options with `effectValue: true` add that effect's current counter value; its damage bonus and
+  physical-severity mitigation are default-on options. The mitigation description explains the physical-only
+  one-threshold reduction (Severe to Major, Major to Minor, Minor to None). Saved effects refresh mitigation
+  descriptions from their feature's current action metadata without resetting the counter or mechanics.
+  `advanceEffect` on a damage trigger advances the
+  named counter once per roll and removes the effect on overflow. `usesSource: false` separates this reaction
+  from the activation's long-rest limit; it does not refresh or spend that activation. Qualifying HP damage
+  and immunity to Restrained/Vulnerable remain player-confirmed. Scene end removes the buff.
+  Act of Reprisal uses a situational damage option with `proficiency: 1`.
+  Nemesis grants one rest-duration Prioritized effect for 2 Hope; its `swapDuality: true` attack trigger
+  exchanges the actual Hope/Fear results, updates breakdown/outcome and preserves the total. Matching dice
+  cannot be swapped and each roll permits only one use. The prioritized adversary is table-confirmed.
+  Additive `hello.guardianRolls` gates new chat actions on older hosts; no compatibility version changes.
 - **Warlock:** initial 3 Favor, **uncapped**; downtime tribute gains `@spellcast`. After a **successful action roll
   with Hope**, choose **one** button: gain Favor instead without awarding Hope (also works when Hope is full),
   or replace Hope already awarded by spending it to gain Favor. Do not use these after other Hope gains.
@@ -547,7 +564,7 @@ claims retain their prior per-player behavior.
   Mutagens/Transcendence choices, arbitrary chosen Experiences, scars, permanently lost slots, copied/attached/transferred
   item features, unconfigured transformation statistics and replacing upgraded feature dice. Beastform choices
   are explicitly supported as above; no choice is guessed.
-- **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values; Unstoppable,
+- **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values;
   Wild Surge, Moon phases and Zone of Protection keep stateful die faces; variable token expenditure, rolled-table
   outcomes and automatic rest/session hooks stay manual unless an explicit button/option is listed. Grimoires
     (`Book of ...`) have no card-level automation; each spell in `spells[]` is its own feature with its own

@@ -372,6 +372,19 @@ Nothing starts until you click **Start online session**, so offline play and the
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
+  **Guardian automation:** Unstoppable creates a scene buff with a tracked d4 (d6 from level 5), starting at 1.
+  **Unstoppable Die** is visibly tracked beside the other class resources and on the feature: current value
+  and die size while active, **Inactive** after it ends. This read-only display follows the buff counter.
+  Its value is a default-on damage option; physical severity reduction is a default-on mitigation option.
+  The mitigation explains the one-threshold reduction (Severe to Major, Major to Minor, Minor to None);
+  magic damage is unaffected.
+  After a damage roll deals at least 1 HP, use its chat button to increase the die once for that roll.
+  The buff ends on die overflow or scene end; its description reminds you of Restrained/Vulnerable immunity.
+  Act of Reprisal offers situational +1 Proficiency in damage rolls. Nemesis spends 2 Hope for a Prioritized
+  buff until your next rest, enabling a once-per-attack chat button that swaps the actual Hope/Fear dice.
+  Only use it against your prioritized adversary; using Nemesis again replaces the previous target.
+  Reload existing sheets for updated rules. Guardian chat actions require an updated host; older hosts show
+  an update prompt rather than silently ignoring these actions. No settings or compatibility-version changes.
   **Bard automation:** Rally grants every player-owned character with a sheet a session-only die, including
   offline allies. Spend it in action/reaction/damage rolls or clear Stress from the Effects tab; any use removes it.
   Troubadour songs have separate buttons and long-rest limits, automatically doubled by Virtuoso.

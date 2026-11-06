@@ -363,6 +363,7 @@ export interface Hello {
   rollMultipliers?: boolean;
   rollRewards?: boolean;
   partyFeatures?: boolean;
+  guardianRolls?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

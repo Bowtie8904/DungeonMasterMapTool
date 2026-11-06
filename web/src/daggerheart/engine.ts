@@ -30,6 +30,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  counter?: { value: number; max: number; maxByLevel?: Record<string, number> };
   earthAuraGrant?: boolean;
   group?: string;
   requiresEffect?: string;
@@ -133,6 +134,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  effectValue?: boolean;
   rerollBelowProficiency?: boolean;
   exclusive?: string;
   combo?: boolean;
@@ -164,6 +166,9 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  usesSource?: boolean;
+  advanceEffect?: string;
+  swapDuality?: boolean;
   addDice?: string;
   on: string;
   excludeRolls?: string[];
@@ -186,6 +191,7 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  effectCounters?: Array<{ label: string; effect: string }>;
   beastforms?: BeastformDef[];
   channelBenefit?: { element: string; effect: EffectDef };
   unarmedWeapon?: Omit<CharacterSheet['activeWeapons'][number], 'trait'>;
@@ -549,7 +555,8 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
-      rollOptions: e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions,
+      rollOptions: (e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions)
+        ?.map(o => o.effectValue ? { ...o, value: e.counter?.value ?? 0 } : o),
     } })),
   ];
   const prepared: AvailableRollOption[] = c.effects.flatMap((e) => (e.modifiers ?? []).flatMap((modifier, i) => {
@@ -715,6 +722,7 @@ let effectCounter = 0;
 export function addEffect(c: CharacterSheet, def: EffectDef, source?: string): ActiveEffect {
   const effect: ActiveEffect = {
     ...def,
+    ...(def.counter ? { counter: { ...def.counter } } : {}),
     until: def.until ?? 'manual',
     modifiers: (def.modifiers ?? []).map((m) => ({ ...m })),
     id: `e${Date.now().toString(36)}${effectCounter++}`,
@@ -976,7 +984,19 @@ export interface RollContext {
 
 export interface AvailableRollTrigger { key: string; source: string; automation: Automation; trigger: RollTrigger }
 
+export function effectCounterMax(c: CharacterSheet, effect: EffectDef): number {
+  const counter = effect.counter;
+  const level = Object.keys(counter?.maxByLevel ?? {}).map(Number).filter(n => n <= c.level).sort((a, b) => b - a)[0];
+  return level === undefined ? counter?.max ?? 0 : counter!.maxByLevel![String(level)];
+}
+
+export function effectCounterText(c: CharacterSheet, name: string): string {
+  const effect = c.effects.find(e => e.name === name && e.counter);
+  return effect ? `${effect.counter!.value} / d${effectCounterMax(c, effect)}` : 'Inactive';
+}
+
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.swapDuality && (ctx.kind === 'damage' || ctx.hope === ctx.fear)) return false;
   if (t.weaponRange && !activeWeapons(c).some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
@@ -1016,5 +1036,6 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
   ];
   return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => triggerApplies(c, t, ctx))
-    .map((trigger) => ({ key: s.key, source: s.name, automation: s.auto!, trigger })));
+    .map((trigger) => ({ key: s.key, source: s.name,
+      automation: trigger.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, trigger })));
 }

@@ -111,6 +111,30 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('gates Guardian chat actions on host support and retains them after spending the activation', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', { name: 'Unstoppable', automation: {
+      uses: { max: 1, per: 'longRest' },
+      rollTriggers: [{ id: 'advance', label: 'Increase die', on: 'damage', requiresEffect: 'Unstoppable',
+        advanceEffect: 'Unstoppable', usesSource: false }],
+    } });
+    c.effects = [{ id: 'unstoppable', name: 'Unstoppable', kind: 'buff', counter: { value: 1, max: 4 } }];
+    c.usage['feat:Unstoppable'] = { used: 1, per: 'longRest' };
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, kind: undefined, source: 'damage' };
+    const unsupported = rollButtons(message, { ...host, playerId: 'player-b' }) as unknown as FakeElement;
+    const supported = rollButtons(message, { ...host, playerId: 'player-b', supportsGuardianRolls: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const blocked = unsupported.queryAll('button').find(b => b.text === 'Increase die')!;
+    expect(blocked.disabled).toBe(true);
+    expect(blocked.title).toContain('Update the host');
+    expect(supported.queryAll('button').find(b => b.text === 'Increase die')!.disabled).toBe(false);
+    const used = rollButtons({ ...message, featureUses: ['actor-b:feat:Unstoppable:advance'] },
+      { ...host, playerId: 'player-b', supportsGuardianRolls: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(used.queryAll('button').some(b => b.text === 'Increase die')).toBe(false);
+  });
+
   it('carries Honed Proficiency from only the clicked attack into damage', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Bob', undefined);

@@ -105,6 +105,15 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     const stance = stances.find(s => s.name === effect.name);
     if (stance) effect.text = stance.effect.text;
   }
+  const effectDefinitions = [...c.features, ...c.heritage].flatMap(f => f.automation?.actions ?? [])
+    .flatMap(a => a.steps ?? []).flatMap(step => step.effect ? [step.effect] : []);
+  for (const effect of c.effects) {
+    const definition = effectDefinitions.find(e => e.name === effect.name);
+    for (const mitigation of effect.mitigation ?? []) {
+      const current = definition?.mitigation?.find(m => m.id === mitigation.id);
+      if (current?.description) mitigation.description = current.description;
+    }
+  }
   syncResources(c);
 }
 

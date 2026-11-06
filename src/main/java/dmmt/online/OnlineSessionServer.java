@@ -1594,7 +1594,8 @@ public final class OnlineSessionServer {
                 reportLines.add("Gave " + amount.asInt() + " Hope to " + targets.getFirst().getName() + ".");
             }
             applyFeatureCost(sourceSheet, definition.path("cost"));
-            JsonNode uses = definition.path("uses").isObject() ? definition.path("uses") : automation.path("uses");
+            JsonNode uses = definition.path("uses").isObject() ? definition.path("uses")
+                    : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
             useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
 
             if (definition.path("check").isObject()) {
@@ -1653,6 +1654,55 @@ public final class OnlineSessionServer {
                 }
             }
 
+            if (hasRoll && definition.path("swapDuality").asBoolean()) {
+                ArrayNode dice = originalRoll.withArray("rolls");
+                JsonNode hope = dice.get(0);
+                JsonNode fear = dice.get(1);
+                dice.set(0, fear);
+                dice.set(1, hope);
+                originalRoll.put("outcome", fear.asInt() > hope.asInt() ? "hope" : "fear");
+                int index = 0;
+                for (JsonNode detail : originalRoll.path("breakdown")) {
+                    if (!(detail instanceof ObjectNode part)) continue;
+                    ArrayNode values = part.withArray("rolls");
+                    int before = 0, after = 0;
+                    for (int i = 0; i < values.size(); i++, index++) {
+                        before += values.get(i).asInt();
+                        if (index < 2) values.set(i, dice.get(index));
+                        after += values.get(i).asInt();
+                    }
+                    part.put("total", part.path("total").asInt() + after - before);
+                }
+                reportLines.add("Swapped the original Hope and Fear dice; the total is unchanged.");
+            }
+            if (hasRoll && definition.has("advanceEffect")) {
+                String name = definition.path("advanceEffect").asText();
+                ObjectNode effect = null;
+                for (JsonNode candidate : sourceSheet.path("effects"))
+                    if (name.equals(candidate.path("name").asText()) && candidate instanceof ObjectNode object) effect = object;
+                if (effect == null || !effect.path("counter").isObject())
+                    throw new IllegalArgumentException("The tracked effect is no longer active.");
+                ObjectNode counter = effect.withObject("/counter");
+                int max = counter.path("max").asInt();
+                int best = 0;
+                var levels = counter.path("maxByLevel").fields();
+                while (levels.hasNext()) {
+                    var entry = levels.next();
+                    int threshold = Integer.parseInt(entry.getKey());
+                    if (threshold <= sourceSheet.path("level").asInt(1) && threshold > best) {
+                        best = threshold;
+                        max = entry.getValue().asInt();
+                    }
+                }
+                int value = counter.path("value").asInt() + 1;
+                if (value > max) {
+                    removeEffects(sourceSheet, name, null, null);
+                    reportLines.add("Ended " + name + " (die exceeded d" + max + ").");
+                } else {
+                    counter.put("value", value);
+                    reportLines.add(name + " die increased to " + value + " (d" + max + ").");
+                }
+            }
             if (hasRoll && definition.has("outcome")) {
                 String outcome = definition.path("outcome").asText("");
                 if (!"hope".equals(outcome) && !"fear".equals(outcome))
@@ -2104,13 +2154,15 @@ public final class OnlineSessionServer {
         if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
         if (!duality) {
             if (!"damage".equals(on) || !"always".equals(trigger.path("when").asText("always"))
-                    || trigger.has("outcome") || trigger.has("reroll"))
+                    || trigger.has("outcome") || trigger.has("reroll") || trigger.path("swapDuality").asBoolean())
                 throw new IllegalArgumentException("This feature requires a Duality roll.");
             return;
         }
         int hope = roll.path("rolls").path(0).asInt(Integer.MIN_VALUE);
         int fear = roll.path("rolls").path(1).asInt(Integer.MIN_VALUE);
         if (hope < 1 || fear < 1) throw new IllegalArgumentException("The original roll has no valid Hope and Fear dice.");
+        if (trigger.path("swapDuality").asBoolean() && hope == fear)
+            throw new IllegalArgumentException("Swapping matching Hope and Fear dice has no effect.");
         String actualOutcome = roll.path("outcome").asText("");
         if (!"hope".equals(actualOutcome) && !"fear".equals(actualOutcome))
             actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
@@ -3219,6 +3271,7 @@ public final class OnlineSessionServer {
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
             hello.put("partyFeatures", true);
+            hello.put("guardianRolls", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);

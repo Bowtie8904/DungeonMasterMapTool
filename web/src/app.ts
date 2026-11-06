@@ -1088,6 +1088,7 @@ export class App {
       playerId: this.playerId,
       supportsRollRewards: () => this.conn.rollRewards,
       supportsPartyFeatures: () => this.conn.partyFeatures,
+      supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
       actorIds: () => this.myActors.map(a => a.id),

@@ -2745,9 +2745,18 @@
         "label": "Nemesis",
         "cost": {
          "hope": 2
-        }
+        },
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Prioritized", "kind": "buff", "until": "rest",
+         "text": "Nemesis: one prioritized adversary until your next rest. Use Swap Hope and Fear only on attacks against that adversary; using Nemesis again replaces the previous target."
+        } }]
        }
-      ]
+      ],
+      "rollTriggers": [{
+       "id": "swap", "label": "Nemesis: swap Hope and Fear", "on": "attack",
+       "requiresEffect": "Prioritized", "swapDuality": true,
+       "description": "Only against your prioritized adversary."
+      }]
      }
     }
    ]
@@ -2767,7 +2776,13 @@
     {
      "name": "Act of Reprisal",
      "text": "When an adversary damages an ally within Melee range, you gain a +1 bonus to your Proficiency for the next successful attack you make against that adversary.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "reprisal", "label": "+1 Proficiency", "roll": "damage", "proficiency": 1,
+       "description": "Only for the next successful attack against the adversary who damaged an ally within Melee range."
+      }]
+     }
     }
    ]
   },
@@ -4437,6 +4452,7 @@
      "text": "Once per long rest, you can become *Unstoppable*. You gain an Unstoppable Die. At level 1, your Unstoppable Die is a **d4**. Place it on your character sheet in the space provided, starting with the 1 value facing up. After you make a damage roll that deals 1 or more Hit Points to a target, increase the Unstoppable Die value by one. When the die’s value would exceed its maximum value or when the scene ends, remove the die and drop out of *Unstoppable*. At level 5, your Unstoppable Die increases to a **d6**.\nWhile *Unstoppable*, you gain the following benefits:\n\n- You reduce the severity of physical damage by one threshold (Severe to Major, Major to Minor, Minor to None).\n\n- You add the current value of the Unstoppable Die to your damage roll.\n\n- You can’t be *Restrained* or *Vulnerable*.",
      "type": "class",
      "automation": {
+      "effectCounters": [{ "label": "Unstoppable Die", "effect": "Unstoppable" }],
       "uses": {
        "max": 1,
        "per": "longRest"
@@ -4444,9 +4460,28 @@
       "actions": [
        {
         "id": "use",
-        "label": "Unstoppable"
+        "label": "Unstoppable",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Unstoppable", "kind": "buff", "until": "scene",
+         "counter": { "value": 1, "max": 4, "maxByLevel": { "5": 6 } },
+         "text": "Add the current Unstoppable Die value to damage and reduce physical damage severity by one threshold. You cannot be Restrained or Vulnerable. Advance the die after a damage roll deals at least 1 HP; the buff ends on overflow or at scene end.",
+         "rollOptions": [{
+          "id": "damage", "label": "Unstoppable Die", "roll": "damage",
+          "effectValue": true, "defaultOn": true
+         }],
+         "mitigation": [{
+          "id": "physical", "label": "Unstoppable", "defaultOn": true,
+           "description": "Reduces physical damage severity by one threshold: Severe to Major, Major to Minor, Minor to None. Magic damage is unaffected.",
+          "when": { "type": "physical" }, "severity": 1
+         }]
+        } }]
        }
-      ]
+      ],
+      "rollTriggers": [{
+       "id": "advance", "label": "Unstoppable: dealt HP - increase die", "on": "damage",
+       "requiresEffect": "Unstoppable", "advanceEffect": "Unstoppable", "usesSource": false,
+       "description": "Use only after this damage roll dealt at least 1 HP to a target."
+      }]
      }
     }
    ]

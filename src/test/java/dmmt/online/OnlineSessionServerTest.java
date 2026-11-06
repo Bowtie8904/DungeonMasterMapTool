@@ -94,6 +94,133 @@ class OnlineSessionServerTest {
         return sheet;
     }
 
+    private ObjectNode guardianSheet(int level) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Guardian").put("subclass", "Vengeance").put("level", level);
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if ("guardian".equals(entry.path("id").asText()) || entry.path("id").asText().startsWith("guardian-vengeance-")) {
+                for (JsonNode feature : entry.path("features")) {
+                    ObjectNode learned = feature.deepCopy();
+                    learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Guardian"
+                            : "Subclass " + entry.path("stage").asText() + " - Vengeance");
+                    features.add(learned);
+                }
+            }
+        }
+        return sheet;
+    }
+
+    private void guardianBuff(ObjectNode sheet, String featureName) {
+        for (JsonNode feature : sheet.path("features")) {
+            if (!featureName.equals(feature.path("name").asText())) continue;
+            ObjectNode effect = feature.path("automation").path("actions").path(0).path("steps").path(0).path("effect").deepCopy();
+            effect.put("id", "guardian-buff");
+            sheet.withArray("effects").add(effect);
+        }
+    }
+
+    @Test
+    void unstoppableAdvancesOncePerDamageRollEndsOnOverflowAndSceneEnd() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("guardian").name("Guardian").ownerId(playerId()).build());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("guardianRolls").asBoolean());
+            for (int level : List.of(1, 5)) {
+                ObjectNode sheet = guardianSheet(level);
+                guardianBuff(sheet, "Unstoppable");
+                sheet.withObject("/usage").putObject("feat:Unstoppable").put("used", 1).put("per", "longRest");
+                int max = level == 1 ? 4 : 6;
+                ((ObjectNode) sheet.path("effects").path(0).path("counter")).put("value", max - 1);
+                store.saveSheet(campaign.getId(), "guardian", sheet.toString());
+                for (int value = max; value <= max + 1; value++) {
+                    ws.sendText("""
+                            {"type":"roll","expression":"1d6","source":"damage","actorId":"guardian","label":"Damage"}
+                            """, true).join();
+                    JsonNode roll = inbox.next("roll");
+                    ObjectNode request = MAPPER.createObjectNode().put("actorId", "guardian")
+                            .put("key", "feat:Unstoppable").put("actionId", "advance");
+                    request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                    var response = featureHttp(cookie, request);
+                    assertEquals(200, response.statusCode(), response.body());
+                    JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "guardian"));
+                    assertEquals(1, saved.path("usage").path("feat:Unstoppable").path("used").asInt());
+                    if (value <= max) assertEquals(value, saved.path("effects").path(0).path("counter").path("value").asInt());
+                    else assertEquals(0, saved.path("effects").size());
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                }
+            }
+            ObjectNode sheet = guardianSheet(5);
+            guardianBuff(sheet, "Unstoppable");
+            store.saveSheet(campaign.getId(), "guardian", sheet.toString());
+            server.endScene();
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "guardian")).path("effects").size());
+            ws.sendText("""
+                    {"type":"roll","expression":"1d6","source":"damage","actorId":"guardian","label":"Damage"}
+                    """, true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "guardian")
+                    .put("key", "feat:Unstoppable").put("actionId", "advance");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void nemesisSwapsActualAttackDiceAndBreakdownOnceWithAnActiveBuff() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("guardian").name("Guardian").ownerId(playerId()).build());
+        ObjectNode sheet = guardianSheet(10);
+        guardianBuff(sheet, "Nemesis");
+        store.saveSheet(campaign.getId(), "guardian", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode roll = null;
+            for (int i = 0; i < 20; i++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12+2","source":"attack,action","actorId":"guardian",
+                        "contributions":[{"label":"Hope","expression":"1d12"},{"label":"Fear","expression":"1d12"},
+                        {"label":"Modifier","expression":"2"}]}
+                        """, true).join();
+                JsonNode candidate = inbox.next("roll");
+                if (candidate.path("rolls").path(0).asInt() != candidate.path("rolls").path(1).asInt()) { roll = candidate; break; }
+            }
+            assertNotNull(roll);
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "guardian")
+                    .put("key", "feat:Nemesis").put("actionId", "swap");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            assertEquals(roll.path("rolls").path(1), update.path("rolls").path(0));
+            assertEquals(roll.path("rolls").path(0), update.path("rolls").path(1));
+            assertEquals(roll.path("total"), update.path("total"));
+            assertEquals(roll.path("rolls").path(1), update.path("breakdown").path(0).path("rolls").path(0));
+            assertEquals(update.path("rolls").path(0).asInt(), update.path("breakdown").path(0).path("total").asInt());
+            assertEquals(update.path("rolls").path(0).asInt() > update.path("rolls").path(1).asInt() ? "hope" : "fear",
+                    update.path("outcome").asText());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            JsonNode savedRoll = store.historyTail(campaign.getId(), 50).stream()
+                    .filter(entry -> entry.path("id").asLong() == update.path("id").asLong()
+                            && entry.path("ts").asLong() == update.path("ts").asLong()).findFirst().orElseThrow();
+            assertEquals(update.path("rolls"), savedRoll.path("rolls"));
+            sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "guardian"));
+            assertEquals(5, sheet.path("hope").path("on").asInt());
+            sheet.putArray("effects");
+            store.saveSheet(campaign.getId(), "guardian", sheet.toString());
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,action","actorId":"guardian"}
+                    """, true).join();
+            JsonNode next = inbox.next("roll");
+            request.putObject("roll").put("id", next.path("id").asLong()).put("ts", next.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
     @Test
     void shadowedGritRejectsReactionsButAllowsFearActionRolls() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("hunter").name("Hunter").ownerId(playerId()).build());

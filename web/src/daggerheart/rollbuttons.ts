@@ -26,6 +26,7 @@ export interface RollButtonHost {
   playerId?: string;
   supportsRollRewards?: () => boolean;
   supportsPartyFeatures?: () => boolean;
+  supportsGuardianRolls?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -298,7 +299,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.trigger.addDice && !host.supportsPartyFeatures?.() ? 'Update the host to add dice to finished rolls.' : undefined;
+        const unsupported = (t.trigger.advanceEffect || t.trigger.swapDuality) && !host.supportsGuardianRolls?.()
+          ? 'Update the host to use Guardian roll actions.'
+          : t.trigger.addDice && !host.supportsPartyFeatures?.() ? 'Update the host to add dice to finished rolls.' : undefined;
         b.disabled = !!blocked || !!unsupported;
         b.title = unsupported ?? blocked ?? t.trigger.description ?? t.source;
         b.addEventListener('click', async () => {
