@@ -343,7 +343,17 @@ Nothing starts until you click **Start online session**, so offline play and the
   offer the "all" versions and Work on a Project), plus extra moves and move types granted by your ancestry, community,
   class, domain cards and items (Clank Efficient and Recovery allow one long move in a short rest, Warlock tribute, Forager,
   Potioncraft Kit, Martial Preparation, ...). Passive benefits you own (Premium Bedroll, Hardy, ...) are listed as
-  checkboxes you can untick if you don't use them. Confirming rests, expires effects, resets uses and posts a styled
+  checkboxes you can untick if you don't use them. **Warrior:** Combat Training allows a two-handed primary
+  plus a secondary weapon. Courage is on failed Fear rolls, never reactions; Rise to the Challenge preselects
+  the d20 Hope Die at two or fewer unmarked HP, labeled **Hope d20** in the roll options. Slayer has only its header resource: Hope rolls can grant a
+  Slayer Die instead, and attack/damage options choose how many to spend. **New session** converts unspent
+  Slayer Dice to Hope. Weapon Specialist adds one secondary-weapon damage die for 1 Hope without a use
+  limit; its separate once-per-long-rest roll button rerolls only Slayer Dice showing 1. Its feature shows
+  that usage counter, not action buttons. Martial Preparation gives all campaign characters its downtime
+  move, including offline actors, without extra slots. Characters without a Slayer pool receive a removable,
+  one-use d6 buff for attack or damage; Slayers gain a pool die. The feature has no die counter.
+  Other passive rest benefits remain
+  optional. Confirming rests expires effects, resets uses and posts a styled
     rest report card in the chat (not a typed message) with every move and roll; three short rests in a row require a long rest. Using an item or feature (e.g. drinking a potion) posts a distinct "Action used" card instead of a plain message. Entries without automation stay readable text. Maintain compendium data and automation directly in `dmmap-daggerheart/*.json`; see `docs/DAGGERHEART_DATA.md` for the format.
   **Community features:** Duneborne Oasis offers per-die reroll buttons on current-session short-rest reports,
   including allies' reports, keeping the higher result and updating the original report and additional recovery.

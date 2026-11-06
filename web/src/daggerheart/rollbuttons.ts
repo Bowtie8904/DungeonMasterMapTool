@@ -6,7 +6,7 @@ import { applyDeathRecovery, claimRollReward, useFeature } from '../api';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { actionBlocker, automationSources, availableRollTriggers, costText, usesLeft } from './engine';
+import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
@@ -33,6 +33,7 @@ export interface RollButtonHost {
   supportsSeraphAutomation?: () => boolean;
   supportsSorcererAutomation?: () => boolean;
   supportsWarlockAutomation?: () => boolean;
+  supportsWarriorAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -40,12 +41,14 @@ export interface RollButtonHost {
 /** Context of a finished duality or damage roll. */
 export function rollContext(m: RollMessage): RollContext | null {
   if (m.deathMove) return null;
+  const resourceOnes = (m.breakdown ?? []).filter(detail => detail.rolls.includes(1))
+    .flatMap(detail => (detail.notes ?? []).filter(note => note.label === 'Dice resource').map(note => note.impact));
   if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
-    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage' };
+    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes };
   }
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
-  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon, difficulty: m.difficulty } as RollContext;
+  return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon, difficulty: m.difficulty, resourceOnes } as RollContext;
 }
 
 function newRef(): string {
@@ -278,6 +281,27 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
 
       });
       buttons.push(reward);
+      const slayer = !critical && automationSources(c).map(a => a.hopeReward)
+        .find(r => r?.resource === 'slayer-dice' && ctx!.source.split(',').includes(r.roll));
+      if (slayer) {
+        const definition = resourceDefinitions(c).find(r => r.id === slayer.resource);
+        const full = !!definition && definition.max !== undefined && (c.resources?.[definition.id] ?? 0) >= evalValue(definition.max, c);
+        const gain = el('button', { class: 'small primary', type: 'button' }, 'Gain a Slayer Die instead of Hope');
+        gain.disabled = claiming || full || !host.supportsWarriorAutomation?.();
+        gain.title = full ? 'Slayer Dice pool is full' : !host.supportsWarriorAutomation?.() ? 'Update the host to use Warrior automation.' : 'Claim this roll reward once';
+        gain.addEventListener('click', async () => {
+          if (claiming || m.rewardClaimed) return;
+          claiming = true;
+          gain.disabled = true;
+          try {
+            await save.flush?.();
+            await claimRollReward(rolledActor.actorId, { id: m.id, ts: m.ts }, 'slayer');
+            m.rewardClaimed = true;
+          } catch (e) { host.toast((e as Error).message); }
+          finally { claiming = false; await paintFor(); }
+        });
+        buttons.push(gain);
+      }
       const alternative = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
         .find(r => r?.removeFear && ctx!.source.split(',').includes(r.roll));
       if (alternative) {
@@ -346,7 +370,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable) && !host.supportsWarlockAutomation?.()
+        const unsupported = t.trigger.rerollResourceDice && !host.supportsWarriorAutomation?.()
+          ? 'Update the host to reroll Slayer Dice.'
+          : (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable) && !host.supportsWarlockAutomation?.()
           ? 'Update the host to use Warlock automation.'
           : (t.trigger.damageDice || t.trigger.choices) && !host.supportsSorcererAutomation?.()
           ? 'Update the host to use Sorcerer roll actions.'

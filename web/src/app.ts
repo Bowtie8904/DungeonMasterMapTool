@@ -1097,6 +1097,7 @@ export class App {
       supportsSeraphAutomation: () => this.conn.seraphAutomation,
       supportsSorcererAutomation: () => this.conn.sorcererAutomation,
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
+      supportsWarriorAutomation: () => this.conn.warriorAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,

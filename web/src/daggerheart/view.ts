@@ -2,7 +2,7 @@ import { el } from '../login';
 import { confirmDialog } from '../dialogs';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
-  dualityExpression, handsUsed, multiclassesOf, shortTrait, signed, tierOf,
+  dualityExpression, handsUsed, ignoresWeaponBurden, multiclassesOf, shortTrait, signed, tierOf,
 } from './data';
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
@@ -1060,7 +1060,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function equipPage(): HTMLElement {
     const used = handsUsed(c);
-    const hands = el('span', { class: 'right hands', title: 'Max burden is 2 hands' }, el('span', { class: 'muted' }, 'Hands'), el('span', { class: `hand${used >= 1 ? ' on' : ''}` }), el('span', { class: `hand${used >= 2 ? ' on' : ''}` }), el('span', { class: 'muted' }, `${used} / 2`));
+    const hands = ignoresWeaponBurden(c)
+      ? el('span', { class: 'right hands muted' }, 'Weapon burden ignored')
+      : el('span', { class: 'right hands', title: 'Max burden is 2 hands' }, el('span', { class: 'muted' }, 'Hands'), el('span', { class: `hand${used >= 1 ? ' on' : ''}` }), el('span', { class: `hand${used >= 2 ? ' on' : ''}` }), el('span', { class: 'muted' }, `${used} / 2`));
     const weapons = el('div', { class: 'card' }, el('h3', {}, 'Active weapons', hands));
     const primary = activeWeapons(c).find((w) => w.slot === 'Primary');
     const secondary = activeWeapons(c).find((w) => w.slot === 'Secondary');
@@ -1102,7 +1104,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function equipWeapon(w: Weapon): void {
     // a two-handed weapon replaces everything; otherwise make room for it
     c.activeWeapons = c.activeWeapons.filter(x => !x.generated);
-    if (w.hands === 2) c.carriedWeapons.push(...c.activeWeapons.splice(0));
+    if (ignoresWeaponBurden(c)) {
+      c.carriedWeapons.push(...c.activeWeapons.filter(x => x.slot === w.slot));
+      c.activeWeapons = c.activeWeapons.filter(x => x.slot !== w.slot);
+    } else if (w.hands === 2) c.carriedWeapons.push(...c.activeWeapons.splice(0));
     else {
       c.carriedWeapons.push(...c.activeWeapons.filter((x) => x.hands === 2 || x.slot === w.slot));
       c.activeWeapons = c.activeWeapons.filter((x) => x.hands !== 2 && x.slot !== w.slot);

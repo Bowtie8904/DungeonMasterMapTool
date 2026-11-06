@@ -78,6 +78,9 @@ function sources(c: CharacterSheet): Source[] {
     if (automation) out.push({ key, name, automation, item });
   };
   for (const f of [...c.features, ...companionFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
+  for (const effect of c.effects) {
+    if (effect.actions?.length) add(`effect:${effect.id}`, effect.name, { actions: effect.actions });
+  }
   for (const d of c.loadout) {
     add(`card:${d.name}`, d.name, d.automation);
     for (const s of d.spells ?? []) add(`card:${d.name}/${s.name}`, s.name, s.automation);

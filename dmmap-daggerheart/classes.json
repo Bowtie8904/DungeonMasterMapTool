@@ -196,7 +196,13 @@
     {
      "name": "Rise to the Challenge",
      "text": "You are vigilant in the face of mounting danger. While you have 2 or fewer Hit Points unmarked, you can roll a **d20** as your Hope Die.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "challenge", "label": "Rise to the Challenge (Hope d20)", "roll": "duality",
+       "hopeDie": 20, "defaultOn": true, "condition": { "unmarkedHp": { "min": 0, "max": 2 } }
+      }]
+     }
     }
    ]
   },
@@ -217,10 +223,15 @@
      "text": "When you fail a roll with Fear, you gain a Hope.",
      "type": "subclass",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
         "id": "gain",
         "label": "Failed roll with Fear: gain Hope",
+        "failedOnly": true,
+        "on": "duality",
+        "when": "fear",
+        "excludeRolls": ["reaction"],
+        "description": "Use only if this roll failed. Reaction rolls do not generate Fear.",
         "steps": [
          {
           "op": "gain",
@@ -280,24 +291,28 @@
      "text": "You’re an inspirational warrior to all who travel with you. Your party gains access to the Martial Preparation downtime move. To use this move during a rest, describe how you instruct and train with your party. You and each ally who chooses this downtime move gain a **d6** Slayer Die. A PC with a Slayer Die can spend it to roll the die and add the result to an attack or damage roll of their choice.",
      "type": "subclass",
      "automation": {
-      "resources": [
-       {
-        "id": "slayer-dice",
-        "label": "Slayer Dice",
-        "initial": 0,
-        "max": "@proficiency"
-       }
-      ],
+      "partyDowntime": true,
       "actions": [
        {
         "id": "train",
-        "label": "gain a d6 Slayer Die",
+        "label": "Train together: gain a d6 Slayer Die",
         "timing": "downtime",
         "steps": [
          {
           "op": "gain",
           "resource": "slayer-dice",
-          "amount": 1
+          "amount": 1,
+          "fallbackEffect": {
+           "name": "Martial Preparation: Slayer Die",
+           "kind": "buff",
+           "until": "manual",
+           "unique": true,
+           "text": "Spend this d6 Slayer Die on one attack or damage roll.",
+           "rollOptions": [
+            { "id": "attack", "label": "Slayer Die", "roll": "attack", "dice": "1d6", "diceResource": "slayer-dice", "endEffect": "Martial Preparation: Slayer Die" },
+            { "id": "damage", "label": "Slayer Die", "roll": "damage", "dice": "1d6", "diceResource": "slayer-dice", "endEffect": "Martial Preparation: Slayer Die" }
+           ]
+          }
          }
         ]
        }
@@ -327,15 +342,15 @@
        "max": 1,
        "per": "longRest"
       },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Weapon Specialist",
-        "cost": {
-         "hope": 1
-        }
-       }
-      ]
+      "rollOptions": [{
+       "id": "secondary", "label": "Add a secondary weapon die (successful attack)",
+       "roll": "damage", "secondaryWeaponDie": true, "cost": { "hope": 1 }, "usesSource": false,
+       "description": "Use after a successful attack. Add one damage die from your equipped secondary weapon."
+      }],
+      "rollTriggers": [{
+       "id": "reroll", "label": "Reroll Slayer Dice showing 1",
+       "on": "any", "rerollResourceDice": "slayer-dice"
+      }]
      }
     }
    ]
@@ -357,67 +372,37 @@
      "text": "You gain a pool of dice called Slayer Dice. On a roll with Hope, you can place a **d6** on this card instead of gaining a Hope, adding the die to the pool. You can store a number of Slayer Dice equal to your Proficiency. When you make an attack roll or damage roll, you can spend any number of these Slayer Dice, rolling them and adding their result to the roll. At the end of each session, clear any unspent Slayer Dice on this card and gain a Hope per die cleared.",
      "type": "subclass",
      "automation": {
+      "classResourceOnly": true,
+      "hopeReward": { "resource": "slayer-dice", "amount": 1, "roll": "action" },
       "resources": [
        {
         "id": "slayer-dice",
         "label": "Slayer Dice",
         "initial": 0,
-        "max": "@proficiency"
-       }
-      ],
-      "actions": [
-       {
-        "id": "store",
-        "label": "Roll with Hope: store Slayer Die instead (do not gain Hope)",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "slayer-dice",
-          "amount": 1
-         }
-        ]
-       },
-       {
-        "id": "replace",
-        "label": "Roll with Hope: replace gained Hope with Slayer Die",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "slayer-dice",
-          "amount": 1
-         }
-        ],
-        "cost": {
-         "hope": 1
-        }
-       },
-       {
-        "id": "clear",
-        "label": "Clear unspent Slayer Dice",
-        "steps": [
-         {
-          "op": "clear",
-          "resource": "slayer-dice",
-          "amount": "all"
-         }
-        ]
+        "max": "@proficiency",
+        "session": true,
+        "sessionHope": true
        }
       ],
       "rollOptions": [
        {
         "id": "slayer-attack",
-        "label": "Slayer Die",
+        "label": "Slayer Dice",
         "roll": "attack",
         "dice": "1d6",
+        "diceResource": "slayer-dice",
+        "quantity": { "resource": "slayer-dice", "label": "Slayer Dice to spend" },
         "cost": {
          "slayer-dice": 1
         }
        },
        {
         "id": "slayer-damage",
-        "label": "Slayer Die",
+        "label": "Slayer Dice",
         "roll": "damage",
         "dice": "1d6",
+        "diceResource": "slayer-dice",
+        "quantity": { "resource": "slayer-dice", "label": "Slayer Dice to spend" },
         "cost": {
          "slayer-dice": 1
         }
@@ -3764,13 +3749,14 @@
      "text": "You ignore burden when equipping weapons. When you deal physical damage, you gain a bonus to your damage roll equal to your level.",
      "type": "class",
      "automation": {
+      "ignoreWeaponBurden": true,
       "rollOptions": [
        {
         "id": "training",
         "label": "Combat Training",
         "roll": "damage",
         "value": "@level",
-        "description": "Physical damage only; ignoring weapon burden is manual."
+        "description": "Physical damage only; weapon burden is ignored when equipping weapons."
        }
       ]
      }

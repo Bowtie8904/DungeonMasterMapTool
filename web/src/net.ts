@@ -21,6 +21,7 @@ export class Connection {
   rollMultipliers = false;
   rollRewards = false;
   partyFeatures = false;
+  warriorAutomation = false;
   guardianRolls = false;
   dualityDieBonus = false;
   seraphAutomation = false;
@@ -78,6 +79,7 @@ export class Connection {
     this.rollMultipliers = false;
     this.rollRewards = false;
     this.partyFeatures = false;
+    this.warriorAutomation = false;
     this.guardianRolls = false;
     this.dualityDieBonus = false;
     this.seraphAutomation = false;
@@ -122,6 +124,7 @@ export class Connection {
         this.rollMultipliers = msg.rollMultipliers === true;
         this.rollRewards = msg.rollRewards === true;
         this.partyFeatures = msg.partyFeatures === true;
+        this.warriorAutomation = msg.warriorAutomation === true;
         this.guardianRolls = msg.guardianRolls === true;
         this.dualityDieBonus = msg.dualityDieBonus === true;
         this.seraphAutomation = msg.seraphAutomation === true;

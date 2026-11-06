@@ -64,6 +64,34 @@ versions change. Older clients can continue reading catalog files and saved shee
 
 ## Automation block
 
+### Warrior metadata
+
+Combat Training declares `ignoreWeaponBurden: true`, applied by creation and equipment while retaining
+one primary and one secondary slot. Rise to the Challenge uses `condition: {unmarkedHp: {min: 0, max: 2}}`
+with `hopeDie: 20` and `defaultOn: true`. Courage uses a Fear `rollTrigger` with `failedOnly: true` and
+`excludeRolls: ["reaction"]`; an unknown Difficulty leaves failure player-confirmed.
+
+Slayer declares `classResourceOnly: true` and no actions, plus
+`hopeReward: {resource: "slayer-dice", amount: 1, roll: "action"}`. Its `session: true, sessionHope: true`
+resource converts unspent dice into capped Hope before New session clears the pool. Scene endings,
+reconnects and hosting restarts do not convert dice. Attack/damage options declare
+`quantity: {resource: "slayer-dice", label: "Slayer Dice to spend"}` and `diceResource: "slayer-dice"`.
+The roll breakdown retains a `Dice resource` note identifying these dice independently of source labels.
+Weapon Specialist's `secondaryWeaponDie: true` damage option adds exactly one equipped secondary weapon
+die (not its flat bonus), costs 1 Hope and uses `usesSource: false`. Its independent source-wide
+`uses: {max: 1, per: "longRest"}` limits `rerollResourceDice: "slayer-dice"` on finished attacks/damage
+to rerolling only those dice showing 1. The original roll, total, breakdown and history update atomically
+with the spent use; duplicate requests and rolls without eligible dice are rejected.
+Slayer reward/reroll chat actions require the additive `hello.warriorAutomation` capability.
+
+Martial Preparation declares `partyDowntime: true`: the host maintains a `partyDowntimeGrant` effect
+with the granting feature's downtime actions on every other campaign sheet, including offline actors.
+It does not add slots or a resource counter. Its gain step's `fallbackEffect` is applied only if the target
+does not define that resource; otherwise the normal pool gain is used. The fallback's attack/damage
+options share `endEffect`, consuming the one d6 buff. Grants are reconciled on sheet reads and changes;
+removing the granting feature removes access, not previously earned dice. This is additive Online Play
+behavior, not a settings or DM Link compatibility change.
+
 ### Ranger companion metadata
 
 Beastbound's foundation feature declares `automation.companion`: starting `evasion`, `stress`, `maxStress`,
@@ -477,7 +505,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `hopeDie: 20` replaces only the Hope d12 with a d20 (Dedicated), retaining the Fear d12, modifiers and normal
   Duality outcomes/rewards. `input: {label, default, min, max}` accepts an integer flat bonus (Found Family:
   ally Experience, default +2). `quantity: {resource, label}` accepts a positive integer up to the available pool,
-  multiplying the option's flat bonus and all costs by that quantity (Know the Tide). Invalid quantities block
+  multiplying the option's flat bonus, added dice count and all costs by that quantity (Know the Tide, Slayer). Invalid quantities block
   sending; cancellation and failed sends spend nothing. Source-wide uses remain shared with sheet actions.
   `fearDie: 20` independently replaces the Fear d12 with a d20 (Feed); Hope and Fear can both be d20.
   `resourceEmpty: "<id>"` offers an option only at zero tokens. Combined with `defaultOn` and
@@ -622,7 +650,7 @@ Classes, ancestries, communities and transformations are included in the total.
   subfeatures are explicit. Adversary HP/Stress application and unknown success/target conditions remain
   player/GM-confirmed; no settings or compatibility-version changes.
 - **Other class/heritage sources:** permanent Stalwart, Shell, Rugged, Ascendant and Fleeting Shadow bonuses;
-  creation grants; Battle Ritual, Courage, Limit Breaker, Deadly Determination and Frontline Tank resource actions;
+  creation grants; Battle Ritual, Limit Breaker, Deadly Determination and Frontline Tank resource actions;
   Rogue's Dodge effect; No Mercy as an effect-based attack option (pre-ticked while active); optional Tusks, Kick, Elementalist, Wings of Light, Sneak Attack,
   Combat Training, Adrenaline and Face Your Fear. Later upgrades that replace another feature's die are manual
   where not encoded on the originating option.

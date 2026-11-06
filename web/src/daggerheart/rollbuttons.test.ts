@@ -111,6 +111,37 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers an exclusive Slayer reward at full Hope, blocks full pools and old hosts, and excludes reactions', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Warrior', { name: 'Slayer', automation: {
+      classResourceOnly: true, hopeReward: { resource: 'slayer-dice', amount: 1, roll: 'action' },
+      resources: [{ id: 'slayer-dice', label: 'Slayer Dice', initial: 0, max: 3 }],
+    } });
+    c.hope.on = c.hope.slots;
+    c.resources!['slayer-dice'] = 1;
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, rolls: [10, 3], rewardClaimed: false };
+    const supported = { ...host, playerId: original.fromId, supportsRollRewards: () => true, supportsWarriorAutomation: () => true };
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    const old = rollButtons(message, { ...supported, supportsWarriorAutomation: () => false }) as unknown as FakeElement;
+    const reaction = rollButtons({ ...message, source: 'action,reaction' }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const gain = box.queryAll('button').find(b => b.text === 'Gain a Slayer Die instead of Hope')!;
+    expect(gain.disabled).toBe(false);
+    expect(box.queryAll('button').find(b => b.text === 'Gain 1 Hope')!.disabled).toBe(true);
+    expect(old.queryAll('button').find(b => b.text === gain.text)!.disabled).toBe(true);
+    expect(reaction.text).not.toContain('Slayer Die instead');
+    await gain.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ reward: 'slayer' });
+    expect(box.text).not.toContain('Slayer Die instead');
+    c.resources!['slayer-dice'] = 3;
+    const full = rollButtons({ ...message, rewardClaimed: false }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(full.queryAll('button').find(b => b.text === gain.text)!.disabled).toBe(true);
+  });
+
   it('offers Favor as an exclusive Hope reward at full Hope and gates old hosts', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));

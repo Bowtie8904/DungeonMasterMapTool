@@ -76,6 +76,162 @@ class OnlineSessionServerTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private ObjectNode warriorSheet(String subclass) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Warrior").put("subclass", "Call of the " + subclass).put("level", 5);
+        sheet.putObject("proficiency").put("on", 3).put("slots", 6);
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("warrior".equals(entry.path("id").asText()) || entry.path("id").asText().startsWith("warrior-call-of-the-" + subclass.toLowerCase(java.util.Locale.ROOT))) {
+                for (JsonNode feature : entry.path("features")) {
+                    ObjectNode learned = feature.deepCopy();
+                    learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Warrior"
+                            : "Subclass " + entry.path("stage").asText() + " - Call of the " + subclass);
+                    features.add(learned);
+                }
+            }
+        return sheet;
+    }
+
+    @Test
+    void slayerRewardIsExclusiveRejectsReactionsAndConvertsUnspentDiceOnNewSessionOnly() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Warrior").ownerId(playerId()).build());
+        ObjectNode sheet = warriorSheet("Slayer");
+        sheet.withObject("/resources").put("slayer-dice", 1);
+        sheet.withObject("/hope").put("on", 6);
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+        String cookie = cookie();
+        ObjectNode roll = rewardRoll(5500, 10, 3);
+        roll.put("source", "action,attack");
+        store.replaceHistoryEntry(campaign.getId(), 5500, 1234, roll);
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "reward-actor").put("reward", "slayer");
+        request.putObject("roll").put("id", 5500).put("ts", 1234);
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(2, saved.path("resources").path("slayer-dice").asInt());
+        assertEquals(6, saved.path("hope").path("on").asInt());
+        assertEquals(400, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        for (int i = 0; i < 3; i++) {
+            roll = rewardRoll(5501 + i, i == 0 ? 2 : 10, i == 1 ? 10 : 3);
+            roll.put("source", i == 2 ? "reaction,action" : "action");
+            store.replaceHistoryEntry(campaign.getId(), 5501 + i, 1234, roll);
+            request.withObject("/roll").put("id", 5501 + i);
+            response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                    .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode(), response.body());
+        }
+        sheet = (ObjectNode) saved;
+        sheet.withObject("/hope").put("on", 3);
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+        assertNull(server.endScene());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("resources").path("slayer-dice").asInt());
+        assertNull(server.newSession());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(0, saved.path("resources").path("slayer-dice").asInt());
+        assertEquals(5, saved.path("hope").path("on").asInt());
+        assertNull(server.newSession());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("hope").path("on").asInt());
+    }
+
+    @Test
+    void weaponSpecialistRerollsOnlySlayerOnesOncePerLongRestOnAttackAndDamage() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warrior").name("Warrior").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warrior", warriorSheet("Slayer").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("warriorAutomation").asBoolean());
+            for (String source : List.of("attack,action", "damage")) {
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("actorId", "warrior")
+                        .put("source", source).put("expression", "2d12+2d6");
+                if (source.contains("attack")) message.put("kind", "duality");
+                var parts = message.putArray("contributions");
+                parts.addObject().put("label", "Hope").put("expression", "1d12");
+                parts.addObject().put("label", "Fear").put("expression", "1d12");
+                parts.addObject().put("label", "Slayer").put("expression", "2d6").putArray("notes")
+                        .addObject().put("label", "Dice resource").put("impact", "slayer-dice");
+                long seed = 0;
+                while (true) {
+                    var random = new java.util.Random(seed);
+                    random.nextInt(12); random.nextInt(12);
+                    if (random.nextInt(6) == 0) break;
+                    seed++;
+                }
+                diceSeed(seed);
+                ws.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "warrior")
+                        .put("key", "feat:Weapon Specialist").put("actionId", "reroll");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode update = inbox.next("rollUpdate");
+                assertEquals(roll.path("rolls").path(0), update.path("rolls").path(0));
+                assertEquals(roll.path("rolls").path(1), update.path("rolls").path(1));
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "warrior"));
+                assertEquals(1, saved.path("usage").path("feat:Weapon Specialist").path("used").asInt());
+                assertEquals("longRest", saved.path("usage").path("feat:Weapon Specialist").path("per").asText());
+                saved.putObject("usage");
+                store.saveSheet(campaign.getId(), "warrior", saved.toString());
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void martialPreparationAccessIsPersistedForOfflineCampaignActorsOnSheetRead() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warrior").name("Warrior").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("offline").name("Offline").ownerId("offline-owner").build());
+        store.saveSheet(campaign.getId(), "warrior", warriorSheet("Slayer").toString());
+        ObjectNode ally = communitySheet("Seaborne");
+        ally.putArray("effects");
+        store.saveSheet(campaign.getId(), "offline", ally.toString());
+        String cookie = cookie();
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/warrior"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "offline"));
+        assertEquals("train", saved.path("effects").path(0).path("actions").path(0).path("id").asText());
+        assertTrue(saved.path("effects").path(0).path("partyDowntimeGrant").asBoolean());
+        assertFalse(saved.path("resources").has("slayer-dice"));
+        String previous = store.loadSheet(campaign.getId(), "offline");
+        response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/warrior"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(previous, store.loadSheet(campaign.getId(), "offline"));
+    }
+
+    @Test
+    void courageRejectsReactionsAndClaimsEachFailedFearRollOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warrior").name("Warrior").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warrior", warriorSheet("Brave").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (String source : List.of("reaction,action", "action")) {
+                diceSeed(0);
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", "2d12").put("actorId", "warrior").put("source", source);
+                ws.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                assertTrue(roll.path("rolls").path(0).asInt() < roll.path("rolls").path(1).asInt());
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "warrior")
+                        .put("key", "feat:Courage").put("actionId", "gain");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, request);
+                assertEquals(source.contains("reaction") ? 400 : 200, response.statusCode(), response.body());
+                assertEquals(source.contains("reaction") ? 5 : 6,
+                        MAPPER.readTree(store.loadSheet(campaign.getId(), "warrior")).path("hope").path("on").asInt());
+                if (!source.contains("reaction")) assertEquals(400, featureHttp(cookie, request).statusCode());
+            }
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode bardSheet(String subclass) throws Exception {
         ObjectNode sheet = communitySheet("Seaborne");
         sheet.put("className", "Bard").put("subclass", subclass).put("level", 5);

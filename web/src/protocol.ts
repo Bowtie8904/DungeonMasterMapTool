@@ -363,6 +363,7 @@ export interface Hello {
   rollMultipliers?: boolean;
   rollRewards?: boolean;
   partyFeatures?: boolean;
+  warriorAutomation?: boolean;
   guardianRolls?: boolean;
   dualityDieBonus?: boolean;
   seraphAutomation?: boolean;

@@ -281,6 +281,18 @@ and checks safe, independent source disclosures and source propagation from feat
 Spellcast, individual grimoire spells and follow-up spell damage.
 Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
 never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
+Warrior automation keeps Slayer Dice in the header resource, not feature buttons/counters. Hope action
+rolls offer an exclusive Slayer Die reward; attack/damage roll options select a count and roll/spend that
+many d6s. New session converts unspent pool dice into Hope. Weapon Specialist's Hope-cost secondary
+weapon die has no use limit; a separate once-per-long-rest chat button rerolls only Slayer Dice showing 1,
+preserving Duality dice, other damage dice, bonuses and the original audience/history.
+These chat actions require `hello.warriorAutomation`; older hosts show an actionable update message.
+Combat Training ignores burden in creation/equipment while preserving primary/secondary slots.
+Courage requires a failed Fear action roll (player-confirmed when Difficulty is unknown), never a reaction.
+Rise to the Challenge automatically ticks the d20 Hope option while at most two HP are unmarked.
+Martial Preparation's downtime move is granted to every campaign sheet, including offline actors, with no
+extra move slot. It adds a die to an existing Slayer pool, otherwise a single removable d6 buff with shared
+attack/damage consumption. Its feature has no die counter. `daggerheart/warrior.test.ts` covers these rules.
 Sorcerer features use themed selection dialogs, not extra confirmations. Volatile Magic selects any number
 of individual magic-damage dice to reroll in the original chat card. Manipulate Magic selects reach, +2
 to the action result, or an additional target on eligible attacks/Spellcast rolls; its damage action doubles

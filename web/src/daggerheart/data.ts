@@ -304,7 +304,12 @@ export function tierOf(level: number): number {
 }
 
 export function handsUsed(c: CharacterSheet): number {
+  if (ignoresWeaponBurden(c)) return 0;
   return c.activeWeapons.reduce((n, w) => n + w.hands, 0);
+}
+
+export function ignoresWeaponBurden(c: CharacterSheet): boolean {
+  return [...c.features, ...c.heritage].some(f => f.automation?.ignoreWeaponBurden);
 }
 
 export function signed(n: number): string {

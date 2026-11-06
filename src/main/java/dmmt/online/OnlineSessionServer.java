@@ -1245,6 +1245,12 @@ public final class OnlineSessionServer {
         body.put("testingCharacter", actor.isTestingCharacter());
         ctx.header("Cache-Control", "no-store");
         try {
+            Map<String, ObjectNode> grants = new java.util.LinkedHashMap<>();
+            normalizeDeathChanges(grants);
+            if (!grants.isEmpty()) {
+                persistFeatureSheets(grants, null, false);
+                for (var entry : grants.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
+            }
             String stored = store.loadSheet(c.getId(), actor.getId());
             if (stored == null) {
                 body.putNull("sheet");
@@ -1678,6 +1684,10 @@ public final class OnlineSessionServer {
 
             if (hasRoll && definition.has("damageDice")) {
                 editDamageDice(originalRoll, definition, request, reportLines);
+            }
+            if (hasRoll && definition.has("rerollResourceDice")) {
+                WarriorAutomation.rerollOnes(originalRoll, definition.path("rerollResourceDice").asText(),
+                        config.maxDice(), diceRandom, reportLines);
             }
 
             if (definition.path("check").isObject()) {
@@ -2355,6 +2365,40 @@ public final class OnlineSessionServer {
             boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
             if (!critical && !withHope)
                 throw new IllegalArgumentException("Only Hope or critical results have a reward.");
+            if ("slayer".equals(request.path("reward").asText())) {
+                JsonNode slayerSource = null;
+                JsonNode reward = null;
+                for (JsonNode feature : sheet.path("features")) {
+                    JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(),
+                            feature.path("name").asText(), feature.path("automation"));
+                    JsonNode candidate = auto.path("hopeReward");
+                    if ("slayer-dice".equals(candidate.path("resource").asText())
+                            && List.of(roll.path("source").asText("").split(",")).contains(candidate.path("roll").asText())) {
+                        slayerSource = feature;
+                        reward = candidate;
+                    }
+                }
+                if (slayerSource == null || critical)
+                    throw new IllegalArgumentException("This roll has no Slayer Die reward.");
+                String resource = reward.path("resource").asText();
+                JsonNode definition = findResourceDefinition(sheet, resource);
+                if (definition == null || sheet.path("resources").path(resource).asInt() >= featureAmount(definition.path("max"), sheet))
+                    throw new IllegalArgumentException("The Slayer Dice pool is full or unavailable.");
+                List<String> lines = new ArrayList<>();
+                ArrayNode steps = MAPPER.createArrayNode();
+                steps.addObject().put("op", "gain").put("resource", resource).set("amount", reward.path("amount"));
+                applyFeatureSteps(sheet, steps, "Slayer", actor, "feat:Slayer", lines);
+                lines.add("Instead of gaining Hope from this roll.");
+                roll.put("rewardClaimed", true);
+                ObjectNode report = actionReportMessage(actor, slayerSource, "Slayer", lines, roll);
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
+                sendFeatureState(actor, sheet);
+                broadcastRollUpdate(roll);
+                deliver(report, report.path("toId").asText(null), false);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             if ("favor".equals(request.path("reward").asText())) {
                 JsonNode favorSource = null;
                 JsonNode favorReward = null;
@@ -2498,6 +2542,12 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
         String source = roll.path("source").asText("");
         List<String> tags = List.of(source.split(","));
+        if (trigger.path("failedOnly").asBoolean() && roll.has("difficulty")
+                && roll.path("total").asDouble() >= roll.path("difficulty").asDouble())
+            throw new IllegalArgumentException("This feature requires a failed roll.");
+        if (trigger.has("rerollResourceDice") && (!(tags.contains("attack") || tags.contains("damage"))
+                || !WarriorAutomation.hasOnes(roll, trigger.path("rerollResourceDice").asText())))
+            throw new IllegalArgumentException("This attack or damage roll has no Slayer Dice showing 1.");
         boolean magic = tags.contains("magicdamage") || tags.contains("spelldamage");
         if (!magic && rolledActor != null) {
             ObjectNode rolledSheet = storedSheet(rolledActorId);
@@ -2761,6 +2811,7 @@ public final class OnlineSessionServer {
             if (text.matches("\\d*d\\d+(?:[+-]\\d+)?"))
                 return DiceRoller.roll(text, config.maxDice(), diceRandom).total();
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
+            if ("@proficiency".equals(text)) return Math.max(0, sheet.path("proficiency").path("on").asInt());
             if ("@tier".equals(text)) {
                 int level = Math.max(1, sheet.path("level").asInt(1));
                 return level == 1 ? 1 : level <= 4 ? 2 : level <= 7 ? 3 : 4;
@@ -2888,6 +2939,15 @@ public final class OnlineSessionServer {
         Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
         party.forEach((id, sheet) -> before.put(id, sheet.deepCopy()));
         DruidEffects.synchronizeEarth(party);
+        Map<String, ObjectNode> warriors = new java.util.LinkedHashMap<>(party);
+        for (Campaign.Actor actor : campaign.getActors())
+            if (!warriors.containsKey(actor.getId()) && store.loadSheet(campaign.getId(), actor.getId()) != null)
+                warriors.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
+        warriors.forEach((id, sheet) -> before.putIfAbsent(id, sheet.deepCopy()));
+        WarriorAutomation.synchronizeDowntime(warriors);
+        warriors.forEach((id, sheet) -> {
+            if (!sheet.equals(before.get(id))) changes.put(id, sheet);
+        });
         party.forEach((id, sheet) -> {
             if (!sheet.equals(before.get(id))) changes.put(id, sheet);
         });
@@ -3103,8 +3163,15 @@ public final class OnlineSessionServer {
                 if (sheet.get("resources") instanceof ObjectNode resources) {
                     for (String id : resourceIds) {
                         if (resources.path(id).asInt(0) != 0) {
+                            JsonNode definition = findResourceDefinition(sheet, id);
+                            if (definition != null && definition.path("sessionHope").asBoolean()) {
+                                int dice = Math.max(0, resources.path(id).asInt());
+                                int gained = gainTrack(sheet, "hope", dice);
+                                cleared.add(dice + " Slayer Dice (gained " + gained + " Hope)");
+                            } else {
+                                cleared.add(id.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + id.substring(1));
+                            }
                             resources.put(id, 0);
-                            cleared.add(id.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + id.substring(1));
                         }
                     }
                 }
@@ -3678,6 +3745,7 @@ public final class OnlineSessionServer {
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
             hello.put("partyFeatures", true);
+            hello.put("warriorAutomation", true);
             hello.put("guardianRolls", true);
             hello.put("dualityDieBonus", true);
             hello.put("seraphAutomation", true);

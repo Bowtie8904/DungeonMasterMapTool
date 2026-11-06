@@ -32,6 +32,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  partyDowntimeGrant?: boolean;
   dicePool?: string;
   requiresCompanion?: boolean;
   counter?: { value: number; max: number; maxByLevel?: Record<string, number> };
@@ -75,6 +76,7 @@ export interface ChatBenefit {
 }
 
 export interface Step {
+  fallbackEffect?: EffectDef;
   op: 'clear' | 'gain' | 'mark' | 'effect';
   resource?: Resource;
   amount?: number | string;
@@ -141,6 +143,7 @@ export interface ActionDef {
 }
 
 export interface ResourceDef {
+  sessionHope?: boolean;
   id: string;
   label: string;
   initial: ModValue;
@@ -151,6 +154,9 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  condition?: SheetCondition;
+  secondaryWeaponDie?: boolean;
+  diceResource?: string;
   matchingDice?: boolean;
   effectValue?: boolean;
   rerollBelowProficiency?: boolean;
@@ -184,6 +190,8 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  failedOnly?: boolean;
+  rerollResourceDice?: string;
   primaryWeapon?: boolean;
   repeatable?: boolean;
   magicAction?: boolean;
@@ -214,10 +222,12 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  ignoreWeaponBurden?: boolean;
+  partyDowntime?: boolean;
   classResourceOnly?: boolean;
   elementChoice?: string[];
   dicePool?: { id: string; label: string; count: ModValue; sides: number; extraByFeature?: Record<string, number> };
-  hopeReward?: { removeFear?: number; favor?: number; roll: string };
+  hopeReward?: { removeFear?: number; favor?: number; resource?: string; amount?: number; roll: string };
   companion?: CompanionRules;
   companionTraining?: number;
   effectCounters?: Array<{ label: string; effect: string }>;
@@ -569,6 +579,10 @@ export function configuredRollOption(c: CharacterSheet, selection: AvailableRoll
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${option.input?.label ?? option.quantity?.label}: choose a whole number from ${min} to ${max}`);
   return { ...selection, option: { ...option,
     value: option.input ? value : evalValue(option.value, c) * value,
+    ...(option.quantity ? {
+      dice: rollOptionDice(c, option)?.replace(/(\d*)d(\d+)/gi, (_term, count: string, sides: string) => `${Number(count || 1) * value}d${sides}`),
+      diceByLevel: undefined, diceByFeature: undefined, diceConditions: undefined,
+    } : {}),
     cost: option.quantity ? Object.fromEntries(Object.entries(option.cost ?? {}).map(([key, cost]) => [key, evalValue(cost, c) * value])) : option.cost,
   } };
 }
@@ -624,6 +638,8 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => targets.includes(o.roll) || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
+    .filter((o) => !o.condition || conditionMatches(c, o.condition))
+    .filter((o) => !o.secondaryWeaponDie || activeWeapons(c).some(w => w.slot === 'Secondary' && /\d*d\d+/i.test(w.damage)))
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
     .filter((o) => !o.weaponRanges || !!weapon && !targets.includes('spelldamage') && o.weaponRanges.some(range => range.toLowerCase() === weapon.range.toLowerCase()))
     .filter((o) => !o.excludeRolls?.some(target => targets.includes(target)))
@@ -635,13 +651,18 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
       : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
     .map((option) => ({
       key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
-      source: s.name, origin: s.origin, automation: option.uses ? { ...s.auto!, uses: option.uses } : s.auto!, option,
+      source: s.name, origin: s.origin, automation: option.uses ? { ...s.auto!, uses: option.uses } : option.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, option,
       item: s.item,
       active: !!option.effect && c.effects.some((e) => e.name === option.effect!.name),
     })))];
 }
 
 export function rollOptionDice(c: CharacterSheet, option: RollOption): string | undefined {
+  if (option.secondaryWeaponDie) {
+    const damage = activeWeapons(c).find(w => w.slot === 'Secondary')?.damage;
+    const sides = /\d*d(\d+)/i.exec(damage ?? '')?.[1];
+    return sides ? `1d${sides}` : undefined;
+  }
   const level = Object.keys(option.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
   let dice = level === undefined ? option.dice : option.diceByLevel![String(level)];
   for (const [feature, replacement] of Object.entries(option.diceByFeature ?? {})) {
@@ -675,7 +696,8 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
     out.value += value;
     if (dice) out.dice.push(dice);
     out.names.push(label);
-    out.contributions.push({ label, expression: `${value}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}` });
+    out.contributions.push({ label, expression: `${value}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}`,
+      ...(option.diceResource ? { notes: [{ label: 'Dice resource', impact: option.diceResource }] } : {}) });
   }
   return out;
 }
@@ -907,7 +929,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return noUsesLeftText(a.uses?.per);
   for (const step of action.steps ?? []) {
-    if (step.resource && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
+    if (step.resource && !step.fallbackEffect && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
   }
   return costBlocker(c, actionCost(c, action));
 }
@@ -961,6 +983,11 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     log.push(`cleared ${cleared} owner Stress and ${companionCleared} companion Stress`);
   }
   for (const step of action.steps ?? []) {
+    if (step.fallbackEffect && !(step.resource && track(c, step.resource)) && !resourceDefinitions(c).some(r => r.id === step.resource)) {
+      addEffect(c, structuredClone(step.fallbackEffect), label);
+      log.push(`gained ${step.fallbackEffect.name}`);
+      continue;
+    }
     const t = step.resource ? track(c, step.resource) : null;
     const amount = (fallback: number) => typeof step.amount === 'number' ? step.amount
       : step.amount && /\d*d\d+/i.test(step.amount)
@@ -1048,6 +1075,7 @@ export function isTrait(name: string): name is TraitName {
 }
 
 export interface RollContext {
+  resourceOnes?: string[];
   /** Comma separated roll targets of the original roll, for example `attack,trait:Agility,action`. */
   source: string;
   hope: number;
@@ -1073,6 +1101,9 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.failedOnly && ctx.difficulty !== undefined && ctx.total >= ctx.difficulty) return false;
+  if (t.rerollResourceDice && (!(ctx.source.split(',').some(target => target === 'attack' || target === 'damage'))
+      || !ctx.resourceOnes?.includes(t.rerollResourceDice))) return false;
   const targets = ctx.source.split(',');
   if (t.primaryWeapon && !activeWeapons(c).some(w => w.slot === 'Primary' && w.name === ctx.weapon)) return false;
   if (t.spendFavor && ctx.difficulty !== undefined && ctx.total < ctx.difficulty) return false;

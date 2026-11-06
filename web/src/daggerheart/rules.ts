@@ -227,11 +227,15 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   if (!traitsValid(ch.traits)) p.push('Assign +2, +1, +1, 0, 0 and -1 to your six traits.');
   const primary = d.weapons.find((e) => e.name === ch.primary);
   if (!primary) p.push('Choose a primary weapon.');
-  else if (primary.weapon?.burden && /two/i.test(primary.weapon.burden) && ch.secondary) p.push('A two-handed weapon leaves no hand for a secondary weapon.');
+  else if (!creationIgnoresWeaponBurden(d, ch) && primary.weapon?.burden && /two/i.test(primary.weapon.burden) && ch.secondary) p.push('A two-handed weapon leaves no hand for a secondary weapon.');
   if (!d.armor.some((e) => e.name === ch.armor)) p.push('Choose armor.');
   p.push(...creationExperienceProblems(d, ch));
   p.push(...creationCardProblems(d, ch));
   return p;
+}
+
+export function creationIgnoresWeaponBurden(d: RulesData, ch: CreationChoices): boolean {
+  return findClass(d, ch.className)?.features?.some(f => f.automation?.ignoreWeaponBurden) ?? false;
 }
 
 function toFeature(source: string, f: { name: string; text: string; type?: string; automation?: Automation }): Feature {
