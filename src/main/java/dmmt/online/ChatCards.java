@@ -145,7 +145,30 @@ final class ChatCards {
             sheet.path(field).forEach(entries::add);
         if ("armor".equals(category) && sheet.path("activeArmor").isObject())
             entries.add(sheet.get("activeArmor"));
+        if ("weapon".equals(category)) {
+            ObjectNode companion = companionWeapon(sheet);
+            if (companion != null) entries.add(companion);
+        }
         return entries;
+    }
+
+    private static ObjectNode companionWeapon(JsonNode sheet) {
+        JsonNode pet = sheet.path("companion");
+        boolean granted = false;
+        for (JsonNode feature : sheet.path("features"))
+            if (feature.path("automation").path("companion").isObject()) granted = true;
+        if (!granted || !pet.isObject()) return null;
+        String trait = "Agility";
+        for (JsonNode candidate : sheet.path("traits"))
+            if (candidate.path("spellcast").asBoolean()) { trait = candidate.path("name").asText(); break; }
+        ObjectNode weapon = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
+                .put("generated", "companion").put("name", pet.path("name").asText() + ": " + pet.path("attack").asText())
+                .put("slot", "Primary").put("hands", 1).put("damageType", pet.path("damageType").asText())
+                .put("trait", trait).put("range", pet.path("range").asText()).put("damage", pet.path("damage").asText())
+                .put("tier", 1);
+        weapon.putObject("feature").put("name", "Companion")
+                .put("text", "Commands use your Spellcast trait. Attacks inherit your applicable benefits, including Ranger's Focus.");
+        return weapon;
     }
 
     static int available(JsonNode sheet, String category, JsonNode item) {

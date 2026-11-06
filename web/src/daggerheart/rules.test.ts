@@ -8,6 +8,7 @@ import { CLASS_GUIDES } from './guide';
 import {
   advancementLeft, applyLevelUp, buildCharacter, classEntries, creationProblems, emptyChoices, levelUpCards, levelUpProblems, RulesData,
   startingCards, subclassesOf, suggestedTraits, setTransformation, starterGear, tier1, creationAllowances,
+  creationCompanionRules,
 } from './rules';
 
 const load = (f: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', f), 'utf8')).entries;
@@ -21,6 +22,7 @@ function choicesFor(className: string) {
   const ch = emptyChoices();
   ch.className = className;
   ch.subclass = subclassesOf(data, className)[0];
+  if (creationCompanionRules(data, ch)) ch.companion = { name: 'Ash', animal: 'Wolf', attack: 'Bite', damageType: 'phys', experiences: ['Scout', 'Loyal'] };
   ch.ancestry = 'Human';
   ch.community = data.communities[0].name;
   ch.traits = suggestedTraits(g);

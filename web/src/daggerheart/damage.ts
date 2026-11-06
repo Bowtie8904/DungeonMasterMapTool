@@ -7,6 +7,7 @@ import {
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
+import { companionAvailable, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 
 export type DamageType = 'physical' | 'magic';
 /** 0 = none, 1 = Minor, 2 = Major, 3 = Severe, 4 = massive (twice the Severe threshold). */
@@ -48,6 +49,8 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  companionIntercept?: boolean;
+  companionArmored?: boolean;
   markedHpOnly?: boolean;
   reflectHp?: boolean;
   finalSevere?: boolean;
@@ -184,6 +187,8 @@ function usageKey(m: AvailableMitigation): { key: string; auto: Automation } | n
 /** Conditions that do not depend on the damage being calculated. */
 export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, type: DamageType): string | null {
   const o = m.option;
+  if (o.companionIntercept && !companionAvailable(c)) return 'Your companion is unavailable';
+  if (o.companionArmored && !hasCompanionTraining(c, 'armored')) return 'Your companion has not learned Armored';
   if (o.excludesEffect && c.effects.some((e) => e.name === o.excludesEffect)) return 'Effect is already active';
   if (o.requiresEffect && !c.effects.some((e) => e.name === o.requiresEffect)) return 'Required effect is no longer active';
   const u = usageKey(m);
@@ -334,12 +339,16 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
     input: Math.max(0, Math.floor(input.damage || 0)), damage: negated ? 0 : damage, major, severe, incoming, final, negated, hp, hpBeforeReplace,
     armorAllowed, armorUsed, armorMarked, armorBlocked, anyArmor, applied: active, inactive, costs, quantities, rolls, used, error: null,
   };
-  result.error = damageBlocker(c, result);
+  result.error = damageBlocker(c, result, input.type);
   return result;
 }
 
-function damageBlocker(c: CharacterSheet, r: DamageResult): string | null {
+function damageBlocker(c: CharacterSheet, r: DamageResult, type: DamageType): string | null {
   syncResources(c);
+  for (const m of r.applied.filter(m => m.option.companionIntercept)) {
+    const why = mitigationBlocker(c, m, type);
+    if (why) return why;
+  }
   const armor = r.armorMarked + (r.costs.armor ?? 0);
   if (armor > c.armorTrack.slots - c.armorTrack.on) return 'Not enough free Armor Slots';
   if ((r.costs.hope ?? 0) > c.hope.on) return 'Not enough Hope';
@@ -365,7 +374,7 @@ function damageBlocker(c: CharacterSheet, r: DamageResult): string | null {
 
 /** Marks HP and Armor Slots, pays costs, counts uses, consumes items. Returns the chat summary, or null when blocked. */
 export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType, roll: DiceRoll = rollLocal): string | null {
-  if (damageBlocker(c, r)) return null;
+  if (damageBlocker(c, r, type)) return null;
   const armor = r.armorMarked + (r.costs.armor ?? 0);
   c.armorTrack.on = Math.min(c.armorTrack.slots, c.armorTrack.on + armor);
   c.hp.on = Math.min(c.hp.slots, c.hp.on + r.hp + (r.costs.hp ?? 0));
@@ -381,6 +390,9 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   }
   const notes: string[] = [];
   for (const m of r.applied) {
+    if (m.option.companionIntercept) notes.push(m.option.companionArmored
+      ? 'Armored: marked one owner Armor Slot instead of companion Stress for Loyal Friend.'
+      : markCompanionDamage(c));
     if (m.option.reflectHp) notes.push(`Eye for an Eye: the adversary within Melee range marks ${r.hp} HP.`);
     if (m.option.recoveryChoice) {
       if (r.recovery === 'stress') {
@@ -403,6 +415,8 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     if (m.option.consumeItem && m.item && m.item.qty > 0) m.item.qty--;
     if (m.option.followUp) notes.push(`${m.option.label}: rolled ${roll(m.option.followUp.dice)} (${m.option.followUp.text})`);
   }
+  const bonded = resolveBonded(c, roll);
+  if (bonded) notes.push(bonded);
   syncDeathState(c);
   return damageSummary(c, r, type, notes);
 }

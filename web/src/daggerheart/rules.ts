@@ -8,6 +8,8 @@ import { CompendiumEntry, addToSheet, armorFrom, cardFrom, fetchCompendiumCatego
 import { Automation, syncDerived } from './engine';
 import { CLASS_GUIDES, ClassGuide, GENERIC_GUIDE } from './guide';
 import { martialStances, stanceProblems } from './brawler';
+import { applyCompanionTraining, buildCompanion, companionChoiceProblems, companionRules, companionTrainingProblems } from './companion';
+import type { CompanionRules } from './companion';
 
 export interface RulesData {
   classes: CompendiumEntry[];
@@ -214,6 +216,8 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   const p: string[] = [];
   if (!findClass(d, ch.className)) p.push('Choose a class.');
   if (!ch.subclass) p.push('Choose a subclass.');
+  const companion = creationCompanionRules(d, ch);
+  if (companion) p.push(...(ch.companion ? companionChoiceProblems(ch.companion) : ['Set up your companion.']));
   const stances = subclassCard(d, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
   if (stances.length) p.push(...stanceProblems(stances, ch.stances ?? [], 2, 1));
   if (!ch.ancestry || !ch.community) p.push('Choose an ancestry and a community.');
@@ -276,6 +280,12 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
     c.knownStances = [...(ch.stances ?? [])];
   }
   markSpellcast(c, foundation?.spellcastTrait);
+  const companion = companionRules(c);
+  if (companion && !prev?.testingCharacter) {
+    const problems = ch.companion ? companionChoiceProblems(ch.companion) : ['Set up your companion.'];
+    if (problems.length) throw new Error(problems.join(' '));
+    c.companion = buildCompanion(ch.companion!, companion);
+  }
 
   c.ancestry = ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry;
   ancestryFeatures(d, ch).forEach((f, i) => {
@@ -409,6 +419,7 @@ export function levelUpProblems(d: RulesData, c: CharacterSheet, rec: LevelUpRec
   const stanceSelection = levelUpStances(d, c, rec);
   if (stanceSelection.count) p.push(...stanceProblems(stanceSelection.catalog, rec.stances ?? [], stanceSelection.count, tierOf(rec.level), c.knownStances));
   const ach = achievementsAt(rec.level);
+  p.push(...companionLevelUpProblems(d, c, rec));
   if (ach.experience && !rec.experience?.trim()) p.push('Write the new Experience.');
   const cost = rec.advancements.reduce((n, a) => n + advancementCost(a.type), 0);
   if (cost !== 2) p.push('Choose advancements worth two points.');
@@ -445,6 +456,9 @@ export function levelUpStances(d: RulesData, c: CharacterSheet, rec: LevelUpReco
 
 /** Applies a validated level-up record to the sheet and remembers it in the level history. */
 export function applyLevelUp(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): void {
+  const companionProblems = companionLevelUpProblems(d, c, rec);
+  if (companionProblems.length) throw new Error(companionProblems.join(' '));
+  const companionCount = companionLevelUpCount(d, c, rec);
   const stanceSelection = levelUpStances(d, c, rec);
   if (stanceSelection.count) {
     const errors = stanceProblems(stanceSelection.catalog, rec.stances ?? [], stanceSelection.count, tierOf(rec.level), c.knownStances);
@@ -508,6 +522,34 @@ export function applyLevelUp(d: RulesData, c: CharacterSheet, rec: LevelUpRecord
   }
   if (rec.card) addCard(rec.card);
   if (rec.swap?.out && rec.swap.in) addCard(rec.swap.in, rec.swap.out);
+  if (c.companion && companionRules(c)) {
+    if (ach.experience) c.companion.experienceStats.push({ name: rec.companionExperience!.trim(), mod: 2 });
+    applyCompanionTraining(c, rec.companionTraining ?? [], companionCount);
+  }
   (c.levelUps ??= []).push(structuredClone(rec));
   syncDerived(c);
+}
+
+export function creationCompanionRules(d: RulesData, ch: CreationChoices): CompanionRules | undefined {
+  return subclassCard(d, ch.subclass, 'foundation')?.features?.find(f => f.automation?.companion)?.automation?.companion;
+}
+
+export function companionLevelUpCount(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): number {
+  if (!companionRules(c)) return 0;
+  const next = rec.advancements.some(a => a.type === 'subclass')
+    ? STAGES[STAGES.indexOf(subclassStageOf(c)) + 1] : undefined;
+  const extra = next ? subclassCard(d, `${c.className}: ${c.subclass}`, next)?.features?.reduce((n, f) => n + (f.automation?.companionTraining ?? 0), 0) ?? 0 : 0;
+  return 1 + extra;
+}
+
+export function companionLevelUpProblems(d: RulesData, c: CharacterSheet, rec: LevelUpRecord): string[] {
+  const rules = companionRules(c);
+  if (!rules || !c.companion) return [];
+  const pet = structuredClone(c.companion);
+  const ach = achievementsAt(rec.level);
+  if (ach.experience) {
+    if (!rec.companionExperience?.trim()) return ['Write the new companion Experience.'];
+    pet.experienceStats.push({ name: rec.companionExperience.trim(), mod: 2 });
+  }
+  return companionTrainingProblems(rules, pet, rec.companionTraining ?? [], companionLevelUpCount(d, c, rec));
 }

@@ -6,6 +6,8 @@ import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 import { hpHealingFloor, syncDeathState } from './death';
 import { syncBrawler } from './brawler';
+import { clearCompanionStress, companionAvailable, companionFeatures, companionWeapon, returnCompanion, syncCompanion } from './companion';
+import type { CompanionRules } from './companion';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -30,6 +32,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  requiresCompanion?: boolean;
   counter?: { value: number; max: number; maxByLevel?: Record<string, number> };
   earthAuraGrant?: boolean;
   group?: string;
@@ -77,6 +80,9 @@ export interface Step {
 }
 
 export interface ActionDef {
+  requiresCompanion?: boolean;
+  confirm?: string;
+  companion?: 'comfortHope' | 'comfortStress';
   beastform?: boolean;
   evolution?: boolean;
   channel?: string;
@@ -191,6 +197,8 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  companion?: CompanionRules;
+  companionTraining?: number;
   effectCounters?: Array<{ label: string; effect: string }>;
   beastforms?: BeastformDef[];
   channelBenefit?: { element: string; effect: EffectDef };
@@ -236,7 +244,7 @@ export interface BeastformDef {
 }
 
 export function activeFeatures(c: CharacterSheet): Feature[] {
-  return [...c.features, ...c.effects.flatMap(e => e.features ?? [])];
+  return [...c.features, ...companionFeatures(c), ...c.effects.flatMap(e => e.features ?? [])];
 }
 
 export function activeWeapons(c: CharacterSheet): Weapon[] {
@@ -245,6 +253,7 @@ export function activeWeapons(c: CharacterSheet): Weapon[] {
 }
 
 export function syncEffectDependencies(c: CharacterSheet): void {
+  c.effects = c.effects.filter(e => !e.requiresCompanion || companionAvailable(c));
   if (c.hp.slots > 0 && c.hp.on >= c.hp.slots) c.effects = c.effects.filter(e => !e.beastform);
   let count: number;
   do {
@@ -440,6 +449,7 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
+  syncCompanion(c);
   syncEffectDependencies(c);
   syncDeathState(c);
   syncBrawler(c);
@@ -740,6 +750,7 @@ export type RestKind = 'short' | 'long';
 
 /** Expires effects and refreshes limited-use abilities for a rest. */
 export function applyRest(c: CharacterSheet, kind: RestKind): void {
+  if (kind === 'long') returnCompanion(c);
   syncResources(c);
   for (const r of resourceDefinitions(c)) {
     if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
@@ -831,6 +842,7 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if ((action.companion || action.requiresCompanion) && !companionAvailable(c)) return 'Your companion is unavailable';
   if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
   if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
   if (action.excludesFeature && hasFeature(c, action.excludesFeature)) return 'This option has been replaced by another feature';
@@ -882,6 +894,17 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
     u.used++;
     c.usage[key] = u;
+  }
+  if (action.companion === 'comfortHope') {
+    const gained = Math.min(1, Math.max(0, c.hope.slots - c.hope.on));
+    c.hope.on += gained;
+    log.push(`gained ${gained} Hope`);
+  }
+  if (action.companion === 'comfortStress') {
+    const cleared = Math.min(1, c.stress.on);
+    c.stress.on -= cleared;
+    const companionCleared = clearCompanionStress(c, 1);
+    log.push(`cleared ${cleared} owner Stress and ${companionCleared} companion Stress`);
   }
   for (const step of action.steps ?? []) {
     const t = step.resource ? track(c, step.resource) : null;
@@ -996,8 +1019,10 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.on === 'companion' && !companionAvailable(c)) return false;
   if (t.swapDuality && (ctx.kind === 'damage' || ctx.hope === ctx.fear)) return false;
-  if (t.weaponRange && !activeWeapons(c).some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
+  const companion = companionWeapon(c);
+  if (t.weaponRange && ![...activeWeapons(c), ...(companion ? [companion] : [])].some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
   if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;

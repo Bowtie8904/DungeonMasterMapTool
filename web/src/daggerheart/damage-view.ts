@@ -6,10 +6,10 @@ import {
 } from './damage';
 
 /** Incoming-damage dialog: enter damage, pick mitigation, preview the HP to mark, then apply. */
-export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void): void {
-  const options = availableMitigations(c);
+export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null }): void {
+  const options = availableMitigations(c).filter(m => !initial?.excludeCompanionIntercept || !m.option.companionIntercept);
   const input: DamageInput = {
-    damage: 0, type: 'physical', armor: false, armorCount: 1, selected: new Set(options.filter((m) => m.option.defaultOn).map((m) => m.id)),
+    damage: initial?.damage ?? 0, type: initial?.type ?? 'physical', armor: false, armorCount: 1, selected: new Set(options.filter((m) => m.option.defaultOn).map((m) => m.id)),
     quantities: {}, rolls: {},
   };
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -18,7 +18,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
 
-  const amount = el('input', { type: 'number', min: '0', step: '1', value: '' }) as HTMLInputElement;
+  const amount = el('input', { type: 'number', min: '0', step: '1', value: initial ? String(initial.damage) : '' }) as HTMLInputElement;
   amount.addEventListener('input', () => { input.damage = Math.max(0, Math.floor(Number(amount.value) || 0)); draw(); });
   const typeButtons = (['physical', 'magic'] as DamageType[]).map((t) => {
     const b = el('button', { type: 'button', class: 'dh-adv-btn norm' }, t === 'physical' ? 'Physical' : 'Magic');
@@ -88,7 +88,13 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         const staticWhy = mitigationBlocker(c, m, input.type);
         box.checked = input.selected.has(m.id);
         box.disabled = !!staticWhy && !box.checked;
-        box.addEventListener('change', () => { if (box.checked) input.selected.add(m.id); else input.selected.delete(m.id); draw(); });
+        box.addEventListener('change', () => {
+          if (box.checked) {
+            if (m.option.companionIntercept) for (const other of choices.filter(o => o.option.companionIntercept)) input.selected.delete(other.id);
+            input.selected.add(m.id);
+          } else input.selected.delete(m.id);
+          draw();
+        });
         const info = meta(m);
         const text = el('span', {}, el('b', {}, m.option.label), el('span', { class: 'muted' }, ` - ${m.source}${info ? ` (${info})` : ''}`));
         if (m.option.description) text.append(el('small', { class: 'muted' }, m.option.description));
@@ -139,6 +145,10 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     error.textContent = r.error ?? '';
     apply.disabled = !!r.error || input.damage <= 0;
     apply.onclick = () => {
+      const guard = initial?.guard?.();
+      if (guard) { error.textContent = guard; return; }
+      if (r.applied.some(m => m.option.companionIntercept)
+        && !window.confirm('Confirm this is attack damage and you are within Close range of your available companion. They take the damage instead, using the selected Stress or Armored option.')) return;
       const summary = applyDamage(c, r, input.type);
       if (!summary) { error.textContent = 'Could not apply damage'; return; }
       close();

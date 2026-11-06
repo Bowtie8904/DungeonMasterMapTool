@@ -2106,16 +2106,30 @@ public final class OnlineSessionServer {
 
     private JsonNode criticalMeleeReward(ObjectNode sheet, ObjectNode roll) {
         if (!List.of(roll.path("source").asText("").split(",")).contains("attack")) return MAPPER.createObjectNode();
-        boolean melee = false;
-        for (JsonNode weapon : sheet.path("activeWeapons")) {
-            if (weapon.path("name").asText().equals(roll.path("weapon").asText()) && "melee".equalsIgnoreCase(weapon.path("range").asText())) melee = true;
-        }
-        if (!melee) return MAPPER.createObjectNode();
+        if (!matchingWeaponRange(sheet, roll, "Melee")) return MAPPER.createObjectNode();
         for (JsonNode feature : sheet.path("features")) {
             JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(), feature.path("name").asText(), feature.path("automation"));
             if (auto.path("criticalMelee").isObject()) return auto.path("criticalMelee");
         }
         return MAPPER.createObjectNode();
+    }
+
+    private boolean matchingWeaponRange(ObjectNode sheet, ObjectNode roll, String range) {
+        for (JsonNode weapon : sheet.path("activeWeapons")) {
+            if (weapon.path("name").asText().equals(roll.path("weapon").asText())
+                    && range.equalsIgnoreCase(weapon.path("range").asText())) return true;
+        }
+        JsonNode companion = sheet.path("companion");
+        if (!companion.isObject() || companion.path("unavailable").asBoolean()
+                || companion.path("stress").path("slots").asInt() <= companion.path("stress").path("on").asInt()) return false;
+        boolean granted = false;
+        for (JsonNode feature : sheet.path("features")) {
+            JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(), feature.path("name").asText(), feature.path("automation"));
+            if (auto.path("companion").isObject()) granted = true;
+        }
+        return granted && List.of(roll.path("source").asText("").split(",")).contains("companion")
+                && (companion.path("name").asText() + ": " + companion.path("attack").asText()).equals(roll.path("weapon").asText())
+                && range.equalsIgnoreCase(companion.path("range").asText());
     }
 
     private void validateTrigger(Campaign.Actor sourceActor, String key, JsonNode trigger, ObjectNode roll) throws IOException {
@@ -2138,16 +2152,21 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature requires a Duality roll.");
         if (!"duality".equals(on) && !List.of(source.split(",")).contains(on))
             throw new IllegalArgumentException("This feature does not apply to that roll.");
+        if ("companion".equals(on)) {
+            ObjectNode sheet = storedSheet(sourceActor.getId());
+            JsonNode companion = sheet.path("companion");
+            if (!companion.isObject() || companion.path("unavailable").asBoolean()
+                    || companion.path("stress").path("on").asInt() >= companion.path("stress").path("slots").asInt())
+                throw new IllegalArgumentException("Your companion is unavailable until the next long rest.");
+        }
         if (trigger.path("weaponAttack").asBoolean()
                 && (!List.of(source.split(",")).contains("attack") || roll.path("weapon").asText("").isBlank()))
             throw new IllegalArgumentException("This feature requires a weapon attack.");
         if (trigger.has("weapon") && !trigger.path("weapon").asText().equals(roll.path("weapon").asText()))
             throw new IllegalArgumentException("This feature requires a " + trigger.path("weapon").asText() + " attack.");
         if (trigger.has("weaponRange")) {
-            boolean matching = false;
-            for (JsonNode weapon : storedSheet(sourceActor.getId()).path("activeWeapons"))
-                if (weapon.path("name").asText().equals(roll.path("weapon").asText()) && trigger.path("weaponRange").asText().equalsIgnoreCase(weapon.path("range").asText())) matching = true;
-            if (!matching) throw new IllegalArgumentException("This feature requires a " + trigger.path("weaponRange").asText() + " weapon attack.");
+            if (!matchingWeaponRange(storedSheet(sourceActor.getId()), roll, trigger.path("weaponRange").asText()))
+                throw new IllegalArgumentException("This feature requires a " + trigger.path("weaponRange").asText() + " weapon attack.");
         }
         ArrayNode uses = roll.withArray("featureUses");
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();

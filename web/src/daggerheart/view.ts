@@ -15,7 +15,8 @@ import { chooseBeastform } from './druid-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 
-import { openLevelUp, openMancer, openTransformation } from './mancer';
+import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
+import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { inline, rich } from './rich';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
@@ -86,9 +87,9 @@ export interface SheetViewOptions {
   onMiniStrip?: (strip: HTMLElement | null) => void;
 }
 
-type Page = 'char' | 'beastform' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
+type Page = 'char' | 'companion' | 'beastform' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
 const PAGES: Array<[Page, string]> = [
-  ['char', 'Character'], ['beastform', 'Beastform'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
+  ['char', 'Character'], ['companion', 'Companion'], ['beastform', 'Beastform'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
 export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0): HTMLElement {
@@ -285,7 +286,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource) => {
     const allTargets = [...targets, 'action'];
     const bonus = rollBonus(c, allTargets, weapon, false);
-    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined)), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
+    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined)), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
@@ -300,7 +301,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return true;
   };
   if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus) => {
-    const w = activeWeapons(c).find((x) => x.name === name);
+    const companion = companionWeapon(c);
+    const w = companion?.name === name ? companion : activeWeapons(c).find((x) => x.name === name);
+    if (w?.generated === 'companion' && !companionAvailable(c)) { opts.onLog?.('Your companion is unavailable.'); return false; }
     if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear, proficiencyBonus);
     else {
       const feature = [...activeFeatures(c), ...c.heritage].find((f) => f.name === name);
@@ -374,6 +377,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     b.addEventListener('click', () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
+      if (action.confirm && !window.confirm(action.confirm)) return;
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !window.confirm('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
@@ -487,6 +491,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     hideSourceTooltip();
     const scroll = root.querySelector('.pages')?.scrollTop ?? 0;
     const sidebarScroll = root.querySelector('.sheet-sidebar')?.scrollTop ?? 0;
+    const bonded = resolveBonded(c, rollLocal);
+    if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
     actionRefreshers = [];
     root.replaceChildren(header(), ...(c.mancer?.done === false ? [startBanner()] : c.transformation === 'Shapeshifter' && !c.ancestryFeature ? [ancestryBanner()] : [
@@ -578,7 +584,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           levelBox(c.level, 'Level'), levelBox(tierOf(c.level), 'Tier'),
           levelUpButton(),
         ),
-        vital('Hope', el('div', {}, pips(c.hope, 'hope', 'var(--hope)', true, refreshActions, c.scars), scars)),
+        vital('Hope', el('div', {}, hopePips(), scars)),
         vital('Proficiency', pips(c.proficiency, 'prof', 'var(--accent)', true, refreshActions)),
         ...extraResources.map((r) => vital(r.label, poolControls(r))),
         ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? [])
@@ -633,10 +639,25 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const levelBox = (v: number, l: string) => el('div', { class: 'level-box' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l));
   const vital = (label: string, body: HTMLElement, cls = '') => el('div', { class: `vital ${cls}`.trim() }, el('div', { class: 'lbl' }, label), body);
 
+  function hopePips(): HTMLElement {
+    const track = pips(c.hope, 'hope', 'var(--hope)', true, refreshActions, c.scars);
+    if (hasCompanionTraining(c, 'light-in-the-dark')) {
+      const slot = track.children[c.hope.slots - 1] as HTMLElement | undefined;
+      if (slot) {
+        slot.classList.add('companion-hope');
+        slot.textContent = '\u2726';
+        slot.title = `Light in the Dark - ${c.companion!.name}${slot.classList.contains('scarred') ? ' (crossed out by a scar)' : ''}`;
+        slot.setAttribute('aria-label', slot.title);
+      }
+    }
+    return track;
+  }
+
   function tabs(): HTMLElement {
     const nav = el('nav', { class: 'tabs' });
     nav.setAttribute('role', 'tablist');
     for (const [id, label] of PAGES) {
+      if (id === 'companion' && !companionRules(c)) continue;
       if (id === 'beastform' && !c.effects.some(e => e.beastform)) continue;
       const count = id === 'effects' && c.effects.length ? ` (${c.effects.length})` : '';
       const b = el('button', { class: 'tab', type: 'button' }, label + count);
@@ -760,8 +781,85 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       else if (e.clientY > r.bottom - zone) wrap.scrollTop += Math.ceil((e.clientY - (r.bottom - zone)) / 4);
     });
     if (page === 'beastform' && !c.effects.some(e => e.beastform)) page = 'char';
-    wrap.append(page === 'char' ? charPage() : page === 'beastform' ? beastformPage() : page === 'effects' ? effectsPage() : page === 'equip' ? equipPage() : page === 'loot' ? lootPage() : page === 'cards' ? cardsPage() : bgPage());
+    if (page === 'companion' && !companionRules(c)) page = 'char';
+    wrap.append(page === 'char' ? charPage() : page === 'companion' ? companionPage() : page === 'beastform' ? beastformPage() : page === 'effects' ? effectsPage() : page === 'equip' ? equipPage() : page === 'loot' ? lootPage() : page === 'cards' ? cardsPage() : bgPage());
     return wrap;
+  }
+
+  function companionPage(): HTMLElement {
+    const pet = c.companion;
+    if (!pet) {
+      const create = el('button', { type: 'button', class: 'primary' }, 'Create companion');
+      create.addEventListener('click', () => { void openCompanionMancer(root, c, render); });
+      return el('div', { class: 'dh-start' }, create);
+    }
+    const w = companionWeapon(c)!;
+    const available = companionAvailable(c);
+    const edit = (label: string, value: string, set: (value: string) => void) => {
+      const input = el('input', { value, ariaLabel: label, required: true });
+      input.addEventListener('change', () => {
+        if (!input.value.trim()) { input.value = value; opts.onLog?.(`${label} cannot be empty.`); return; }
+        set(input.value.trim()); render();
+      });
+      return el('label', { class: 'field' }, label, input);
+    };
+    const command = el('button', { type: 'button', class: 'small primary', disabled: !available }, 'Command');
+    command.addEventListener('click', () => rollDuality(`Command - ${pet.name}`, w.trait, ['companion', 'spellcast', `trait:${w.trait}`]));
+    const takeDamage = el('button', { type: 'button', class: 'small', disabled: !available }, 'Take damage');
+    takeDamage.addEventListener('click', () => openCompanionDamage());
+    const stress = pips(pet.stress, 'companion Stress', 'var(--stress)', false, render);
+    if (!available) stress.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
+    const learned = companionFeatures(c).map(f => {
+      const feature = featureCard(f);
+      const count = pet.training.filter(t => companionRules(c)!.options.find(o => o.id === t.id)?.name === f.name).length;
+      if (count > 1) feature.querySelector('.ft')?.append(tag(`x${count}`));
+      const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+      if (actions) feature.append(actions);
+      return feature;
+    });
+    return el('div', { class: 'cols companion-page' },
+      el('div', {},
+        card('Companion', null, el('div', { class: 'fields' },
+          edit('Name', pet.name, value => { pet.name = value; }),
+          edit('Animal', pet.animal, value => { pet.animal = value; })),
+          el('div', { class: 'row' }, vital('Evasion', el('div', { class: 'big' }, String(pet.evasion))), vital('Stress', stress)),
+          el('p', { class: available ? 'muted' : 'error' }, available ? 'Available' : 'Unavailable until the start of your next long rest.'),
+          el('div', { class: 'actions' }, command, takeDamage)),
+        card('Active attack', null, weaponSlot(w),
+          edit('Standard attack', pet.attack, value => { pet.attack = value; })),
+        card('Companion Experiences', null, ...pet.experienceStats.map((experience, i) =>
+          el('div', { class: 'row exp' }, edit(`Experience ${i + 1}`, experience.name, value => { experience.name = value; }),
+            el('span', { class: 'mod' }, signed(experience.mod)))))),
+      el('div', {}, card('Training', null, ...(learned.length ? learned : [el('p', { class: 'muted' }, 'Companion training is chosen during your level-ups.')])),
+        card('Working together', null, rich('Any positive damage marks one companion Stress. Marking the last slot makes your companion unavailable until the next long rest, when they return with one Stress cleared. Downtime moves that clear your Stress also clear an equal amount for your available companion.'))));
+  }
+
+  function openCompanionDamage(): void {
+    const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: 'Companion damage' });
+    const amount = el('input', { type: 'number', min: '1', step: '1', value: '1', ariaLabel: 'Damage taken' });
+    const type = el('select', { ariaLabel: 'Damage type' }, el('option', { value: 'physical' }, 'Physical'), el('option', { value: 'magic' }, 'Magic'));
+    const armored = el('input', { type: 'checkbox', disabled: !hasCompanionTraining(c, 'armored') || c.armorTrack.on >= c.armorTrack.slots });
+    const error = el('div', { class: 'error', role: 'alert' });
+    const apply = el('button', { type: 'button', class: 'primary' }, 'Apply');
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    cancel.addEventListener('click', () => dialog.close());
+    apply.addEventListener('click', () => {
+      if (!Number.isInteger(amount.valueAsNumber) || amount.valueAsNumber < 1) { error.textContent = 'Enter positive whole-number damage.'; return; }
+      if (!companionAvailable(c)) { error.textContent = 'Your companion is unavailable.'; return; }
+      try {
+        const summary = markCompanionDamage(c, armored.checked);
+        opts.onLog?.(summary);
+        dialog.close(); render();
+      }
+      catch (e) { error.textContent = (e as Error).message; }
+    });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.append(el('h4', {}, 'Companion takes damage'),
+      el('label', {}, 'Damage taken', amount), type,
+      el('label', { class: 'dh-roll-option' }, armored, el('span', {}, 'Armored: mark one owner Armor Slot instead of Stress')),
+      error, el('div', { class: 'acts' }, cancel, apply));
+    document.body.append(dialog);
+    dialog.showModal();
   }
 
   function effectsPage(): HTMLElement {
@@ -855,10 +953,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function weaponSlot(w: Weapon): HTMLElement {
+    const companion = w.generated === 'companion';
     const mod = traitTotal(c, w.trait);
     const attack = el('button', { class: 'primary small', type: 'button' }, `Attack ${signed(mod)}`);
-    attack.addEventListener('click', () => rollDuality(`Attack - ${w.name} (${w.trait})`, w.trait, ['attack', `trait:${w.trait}`], w));
+    attack.disabled = companion && !companionAvailable(c);
+    attack.addEventListener('click', () => rollDuality(`Attack - ${w.name} (${w.trait})`, w.trait, [...(companion ? ['companion', 'spellcast'] : []), 'attack', `trait:${w.trait}`], w));
     const dmg = el('button', { class: 'small', type: 'button' }, 'Damage');
+    dmg.disabled = companion && !companionAvailable(c);
     dmg.addEventListener('click', () => openWeaponDamage(w));
     const unequip = el('button', { class: 'small', type: 'button' }, 'Unequip');
     unequip.hidden = !!w.generated;
@@ -1267,7 +1368,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     return b;
   });
   const adv = el('div', { class: 'dh-adv', role: 'group', ariaLabel: 'Roll with' }, ...advButtons);
-  const exp = el('select', {}, el('option', { value: '' }, 'None'), ...c.experiences.map((x, i) => el('option', { value: String(i) }, x.name)));
+  const experiences = targets.includes('companion') ? c.companion?.experienceStats ?? [] : c.experiences;
+  const exp = el('select', {}, el('option', { value: '' }, 'None'), ...experiences.map((x, i) => el('option', { value: String(i) }, `${x.name} (${signed(x.mod)})`)));
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
@@ -1322,7 +1424,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const b = combined();
     preview.textContent = weapon
       ? damageRollFormula(damageText(b).text, [], selected()).expression
-      : `Modifier ${signed(mod + b.value + (exp.value === '' ? 0 : c.experiences[Number(exp.value)]?.mod ?? 0))}${b.dice.length ? `; extra dice ${b.dice.join(', ')}` : ''}`;
+      : `Modifier ${signed(mod + b.value + (exp.value === '' ? 0 : experiences[Number(exp.value)]?.mod ?? 0))}${b.dice.length ? `; extra dice ${b.dice.join(', ')}` : ''}`;
     error.textContent = blocker() ?? '';
     go.disabled = !!error.textContent;
   };
@@ -1364,7 +1466,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   go.addEventListener('click', () => {
     const block = blocker();
     if (block) { error.textContent = block; go.disabled = true; return; }
-    const e = weapon || exp.value === '' ? undefined : c.experiences[Number(exp.value)];
+    const e = weapon || exp.value === '' ? undefined : experiences[Number(exp.value)];
     const b = combined();
     const total = mod + b.value + (e?.mod ?? 0);
     const requestedAdvantage = Number(advantage) as Advantage;
@@ -1392,7 +1494,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
           notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),
         ...trait,
         ...b.contributions,
-        ...(e ? [{ label: `Experience - ${e.name}`.slice(0, 120), expression: String(e.mod) }] : []),
+        ...(e ? [{ label: `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} - ${e.name}`.slice(0, 120), expression: String(e.mod) }] : []),
       ],
     };
     if (onRoll(request)) { commitRollOptions(c, selected(), !!e); close(); onSent(); }
@@ -1439,7 +1541,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll with'), adv),
         ...(canChooseReaction ? [el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll type'),
           el('div', { class: 'dh-adv dh-roll-type', role: 'group', ariaLabel: 'Roll type' }, ...modeButtons))] : []),
-        el('label', {}, 'Experience (spend 1 Hope)', exp),
+        el('label', {}, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (spend 1 Hope)`, exp),
       ]),
       ...(otherworldly ? [el('label', {}, 'Otherworldly: damage type', damageType)] : []),
       optionFieldset,

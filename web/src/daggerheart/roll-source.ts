@@ -1,9 +1,15 @@
 import type { RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { activeFeatures, activeWeapons } from './engine';
+import { companionWeapon } from './companion';
 
 /** Resolve action keys, including individual grimoire spells, without copying automation. */
 export function rollSourceFor(c: CharacterSheet, key: string): RollSource | undefined {
+  const companion = companionWeapon(c);
+  if (companion && (key === 'companion' || key === `weapon:${companion.name}`)) return {
+    name: companion.name, source: `Companion - ${companion.trait} - ${companion.range} - ${companion.damage} ${companion.damageType}`,
+    text: 'Command with a Spellcast Roll. Spend Hope to add an applicable companion Experience. Attacks use the owner\'s Proficiency and applicable benefits, including Ranger\'s Focus. A successful Hope command grants advantage only if the next action builds on the success.',
+  };
   for (const f of [...activeFeatures(c), ...c.heritage]) {
     if (key === `feat:${f.name}`) return { name: f.name, text: f.text, source: f.source };
   }

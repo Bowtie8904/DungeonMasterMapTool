@@ -100,6 +100,7 @@ export interface Experience {
 
 /** Everything the player decided in the Character Mancer, kept so the choices can be reviewed and edited. */
 export interface CreationChoices {
+  companion?: CompanionChoices;
   stances?: string[];
   className: string;
   /** Compendium name of the subclass, e.g. "Ranger: Wayfinder" */
@@ -144,6 +145,8 @@ export interface Advancement {
 }
 
 export interface LevelUpRecord {
+  companionTraining?: CompanionTraining[];
+  companionExperience?: string;
   stances?: string[];
   /** Level reached */
   level: number;
@@ -157,6 +160,7 @@ export interface LevelUpRecord {
 }
 
 export interface CharacterSheet {
+  companion?: RangerCompanion;
   knownStances?: string[];
   brawlerTrait?: TraitName;
   /** Authoritative marker supplied by the actor's host, not a player toggle. */
@@ -218,6 +222,31 @@ export interface CharacterSheet {
   notes: string;
   backgroundQuestions: string[];
   connections: string[];
+}
+
+export interface CompanionChoices {
+  name: string;
+  animal: string;
+  attack: string;
+  damageType: 'phys' | 'magic';
+  experiences: string[];
+}
+
+export interface CompanionTraining {
+  id: string;
+  experience?: number;
+  increase?: 'damage' | 'range';
+}
+
+export interface RangerCompanion extends CompanionChoices {
+  experienceStats: Experience[];
+  training: CompanionTraining[];
+  stress: Track;
+  evasion: number;
+  damage: string;
+  range: string;
+  unavailable?: boolean;
+  bondedAttempted?: boolean;
 }
 
 export const TRAIT_ACTIONS: Record<TraitName, string> = {

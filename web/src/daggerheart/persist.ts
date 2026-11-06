@@ -69,7 +69,8 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   // Old elemental cards had one "Fire" feature containing all four elements.
   c.features = c.features.filter(f => !(f.name === 'Fire' && /Warden of the Elements/.test(f.source)));
   for (const f of [...c.features, ...c.heritage]) {
-    const stage = /Subclass (foundation|specialization|mastery)/i.exec(f.source)?.[1]?.toLowerCase();
+    const stage = /Subclass (foundation|specialization|mastery)/i.exec(f.source)?.[1]?.toLowerCase()
+      ?? (/^Multiclass .* foundation$/i.test(f.source) ? 'foundation' : undefined);
     const candidates = [
       ...entries('classes').filter((e) => stage
         ? e.kind === 'subclass' && e.stage === stage && classes.has(e.parent ?? '') && subclasses.has(e.name.replace(/^[^:]+:\s*/, ''))
@@ -79,7 +80,10 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     const feature = candidates.flatMap((e) => e.features ?? []).find((a) => a.name === f.name);
     if (feature) {
       f.automation = feature.automation;
-      if (feature.automation?.stances || feature.automation?.grantsFeatures) f.text = feature.text;
+      if (f.name === 'Battle-Bonded' && !feature.automation) {
+        c.effects = c.effects.filter(e => e.name !== 'Battle-Bonded (one attack)');
+      }
+      if (feature.automation?.stances || feature.automation?.grantsFeatures || feature.automation?.companion) f.text = feature.text;
       for (const name of feature.automation?.grantsFeatures ?? []) {
         const granted = candidates.flatMap(e => e.features ?? []).find(item => item.name === name);
         if (!granted) continue;

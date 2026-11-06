@@ -1,13 +1,16 @@
 // Guided wizards: the Character Mancer (creation) and the Level-up guide. One decision per step, remembered on the sheet.
 
 import { el } from '../login';
-import { Advancement, AdvancementType, CharacterSheet, CreationChoices, LevelUpRecord, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
+import { Advancement, AdvancementType, CharacterSheet, CompanionChoices, CompanionTraining, CreationChoices, LevelUpRecord, RangerCompanion, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
 import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
 import { ancestryPicker } from './ancestry-choice';
 import { ancestryFeatureChoices } from './rules';
 import { levelUpStances } from './rules';
 import { stanceProblems } from './brawler';
+import { applyCompanionTraining, buildCompanion, companionChoiceProblems, companionEntitlements, companionRules, companionTrainingProblems, emptyCompanionChoices } from './companion';
+import type { CompanionRules } from './companion';
+import { companionLevelUpCount, creationCompanionRules } from './rules';
 import {
   ADVANCEMENT_TYPES, MAX_LEVEL, RulesData, STAGES, TRAIT_VALUES, achievementsAt, advancementCost, advancementLeft, applyLevelUp, buildCharacter,
   classEntries, creationAllowances, creationCardProblems, creationExperienceProblems, creationProblems, emptyChoices, experienceProblems, findClass, guideFor, levelUpCards, levelUpProblems, loadRulesData, setTransformation, shortSubclass,
@@ -217,6 +220,116 @@ function transformationSide(data: RulesData, name: string): HTMLElement | null {
 }
 // ---- Character Mancer ----
 
+function companionSetupSteps(ch: CompanionChoices, rules: CompanionRules): Step[] {
+  return [
+    {
+      key: 'companion-identity', title: 'Meet your companion', hint: `Choose an animal with your GM. Starting Evasion ${rules.evasion}; ${rules.stress} Stress slots.`,
+      problem: () => ch.name.trim() && ch.animal.trim() ? null : 'Give your companion a name and animal type.',
+      render: (body, touch) => {
+        body.append(
+          el('label', { class: 'dh-wiz-q' }, 'Companion name', textInput(ch.name, 'Name', v => { ch.name = v; }, touch)),
+          el('label', { class: 'dh-wiz-q' }, 'Animal', textInput(ch.animal, 'e.g. wolf, owl, fox', v => { ch.animal = v; }, touch)),
+        );
+      },
+    },
+    {
+      key: 'companion-experiences', title: 'Companion Experiences', hint: 'Describe your companion\'s training and your shared history. Each Experience starts at +2.',
+      problem: () => ch.experiences.every(n => n.trim()) ? null : 'Write every companion Experience.',
+      render: (body, touch) => ch.experiences.forEach((n, i) => body.append(el('label', { class: 'dh-wiz-q' }, `Experience ${i + 1} (+2)`,
+        textInput(n, 'e.g. Scout, Loyal Until the End', v => { ch.experiences[i] = v; }, touch)))),
+    },
+    {
+      key: 'companion-attack', title: 'Companion attack', hint: `Damage starts at ${rules.damage}, range ${rules.range}. Damage dice use your Proficiency; commands use your Spellcast trait.`,
+      problem: () => ch.attack.trim() ? null : 'Describe the standard attack.',
+      render: (body, touch, redraw) => {
+        body.append(el('label', { class: 'dh-wiz-q' }, 'Standard attack', textInput(ch.attack, 'e.g. Bite, Talons', v => { ch.attack = v; }, touch)),
+          el('div', { class: 'cho-row' }, ...(['phys', 'magic'] as const).map(type => choice(type === 'phys' ? 'Physical damage' : 'Magic damage', '',
+            ch.damageType === type, () => { ch.damageType = type; redraw(); }))));
+      },
+    },
+  ];
+}
+
+function companionTrainingStep(rules: CompanionRules, pet: () => RangerCompanion, picks: () => CompanionTraining[], count: number): Step {
+  return {
+    key: 'companion-training', title: 'Train your companion', hint: `Choose ${count} training option(s). Extra subclass training is gained once, when that subclass upgrade is learned.`,
+    problem: () => companionTrainingProblems(rules, pet(), picks(), count)[0] ?? null,
+    render: (body, _touch, redraw) => {
+      const selected = picks();
+      for (let i = selected.length - 1; i >= 0; i--) if (!selected[i]?.id) selected.splice(i, 1);
+      selected.splice(count);
+      const companion = pet();
+      const grid = el('div', { class: 'cho-grid' });
+      for (const option of rules.options) {
+        const chosen = selected.filter(p => p.id === option.id).length;
+        const left = Math.max(0, option.max - companion.training.filter(p => p.id === option.id).length - chosen);
+        const canAdd = left > 0 && selected.length < count;
+        const b = choice(option.name + (chosen ? ` x${chosen}` : ''), option.text, chosen > 0,
+          () => { selected.push({ id: option.id }); redraw(); },
+          [el('span', { class: 'meta' }, badge(`${left} left`))], !canAdd);
+        if (!canAdd) b.classList.add('full');
+        if (chosen) {
+          const undo = el('button', { type: 'button', class: 'undo', ariaLabel: `Remove one ${option.name}` }, 'Remove one');
+          undo.addEventListener('click', () => {
+            selected.splice(selected.map(p => p.id).lastIndexOf(option.id), 1);
+            redraw();
+          });
+          grid.append(el('div', { class: 'cho-wrap' }, b, undo));
+        } else grid.append(b);
+      }
+      body.append(el('div', { class: 'dh-wiz-note' }, `Training chosen: ${selected.length} / ${count}`), grid);
+      for (let i = 0; i < selected.length; i++) {
+        const pick = selected[i];
+        const option = rules.options.find(o => o.id === pick.id);
+        if (!option?.choose) continue;
+        const row = section(`Training ${i + 1}: ${option.name}`, rich(option.text));
+        if (option?.choose === 'experience') {
+          row.append(el('div', { class: 'cho-grid', ariaLabel: 'Companion Experience to improve' },
+            ...companion.experienceStats.map((e, index) => {
+              const mod = e.mod + selected.slice(0, i).filter(p => p.id === option.id && p.experience === index).length;
+              return choice(e.name, `${signed(mod)} -> ${signed(mod + 1)}`, pick.experience === index,
+                () => { pick.experience = index; redraw(); });
+            })));
+        }
+        if (option?.choose === 'attack') {
+          row.append(el('div', { class: 'cho-row' }, ...(['damage', 'range'] as const).map(increase => choice(
+            increase === 'damage' ? 'Increase damage die' : 'Increase range', '', pick.increase === increase,
+            () => { pick.increase = increase; redraw(); }))));
+        }
+        body.append(row);
+      }
+    },
+  };
+}
+
+export async function openCompanionMancer(host: HTMLElement, c: CharacterSheet, onDone: () => void): Promise<void> {
+  const rules = companionRules(c);
+  if (!rules || c.companion) return;
+  const ch = emptyCompanionChoices();
+  const earned = companionEntitlements(c);
+  ch.experiences = Array.from({ length: earned.experiences }, () => '');
+  const training: CompanionTraining[] = [];
+  const pet = () => buildCompanion(ch, rules);
+  runWizard({
+    host, heading: 'Companion Mancer', finishLabel: 'Create companion',
+    steps: () => [
+      ...companionSetupSteps(ch, rules),
+      ...(earned.training ? [companionTrainingStep(rules, pet, () => training, earned.training)] : []),
+      {
+        key: 'companion-review', title: 'Ready to join you',
+        problem: () => companionChoiceProblems(ch, earned.experiences)[0] ?? companionTrainingProblems(rules, pet(), training, earned.training)[0] ?? null,
+        render: body => body.append(section(ch.name, `${ch.animal} - ${ch.attack} (${ch.damageType})`, rich('Commands use your Spellcast trait. Spend Hope on a companion Experience. A successful Hope command grants advantage only if your next action builds on that success.'))),
+      },
+    ],
+    onFinish: () => {
+      if (c.companion) throw new Error('A companion was already created. Reload the sheet.');
+      c.companion = pet();
+      applyCompanionTraining(c, training, earned.training);
+      onDone();
+    },
+  });
+}
+
 /** Opens the creation wizard for the sheet. The sheet object is updated in place when the player finishes. */
 export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: () => void): Promise<void> {
   const data = await loadWithNotice(host);
@@ -276,6 +389,8 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
         body.append(grid);
       },
     });
+    const companion = creationCompanionRules(data, ch);
+    if (companion) list.push(...companionSetupSteps(ch.companion ??= emptyCompanionChoices(), companion));
     const stanceCatalog = subclassCard(data, ch.subclass, 'foundation')?.features?.flatMap(f => f.automation?.stances ?? []) ?? [];
     if (stanceCatalog.length) list.push({
       key: 'stances', title: 'Choose two martial stances', hint: 'Choose two different tier 1 stances.',
@@ -523,6 +638,7 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
           el('div', { class: 'dh-wiz-sum' },
             row('Name', `${ch.name}${ch.pronouns ? ` (${ch.pronouns})` : ''}`),
             row('Class', `${ch.className} - ${shortSubclass(ch.subclass)}`),
+            ...(companion && ch.companion ? [row('Companion', `${ch.companion.name} - ${ch.companion.animal}, ${ch.companion.attack}`)] : []),
             row('Heritage', `${ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry}, ${ch.community}`),
             ...(ch.transformation ? [row('Transformation', ch.transformation)] : []),
             row('Traits', TRAIT_ORDER.map((n) => `${n.slice(0, 3)} ${signed(ch.traits[n])}`).join('  ')),
@@ -755,6 +871,21 @@ export async function openLevelUp(host: HTMLElement, c: CharacterSheet, onDone: 
       }
     });
 
+    const companion = companionRules(c);
+    if (companion && c.companion) {
+      if (ach.experience) list.push({
+        key: 'companion-experience', title: 'Your companion learns too', hint: 'Your new Experience also gives your companion a new +2 Experience.',
+        problem: () => rec.companionExperience?.trim() ? null : 'Write the new companion Experience.',
+        render: (body, touch) => body.append(el('label', { class: 'dh-wiz-q' }, 'Companion Experience (+2)',
+          textInput(rec.companionExperience ?? '', 'New companion Experience', v => { rec.companionExperience = v; }, touch))),
+      });
+      const pet = () => {
+        const preview = structuredClone(c.companion!);
+        if (ach.experience) preview.experienceStats.push({ name: rec.companionExperience ?? 'New Experience', mod: 2 });
+        return preview;
+      };
+      list.push(companionTrainingStep(companion, pet, () => rec.companionTraining ??= [], companionLevelUpCount(data, c, rec)));
+    }
     const stances = levelUpStances(data, c, rec);
     if (stances.count) list.push({
       key: 'stances', title: 'Learn martial stances', hint: `Choose ${stances.count} new stance(s) from tier ${tierOf(level)} or below.`,
@@ -817,6 +948,8 @@ export async function openLevelUp(host: HTMLElement, c: CharacterSheet, onDone: 
         rows.push(row('Damage thresholds', '+1 (automatic)'));
         if (rec.card) rows.push(row('New domain card', rec.card));
         if (rec.swap?.out && rec.swap.in) rows.push(row('Card swap', `${rec.swap.out} -> ${rec.swap.in}`));
+        if (rec.companionExperience) rows.push(row('Companion Experience', rec.companionExperience));
+        if (rec.companionTraining?.length) rows.push(row('Companion training', rec.companionTraining.map(p => companion?.options.find(o => o.id === p.id)?.name ?? p.id).join(', ')));
         body.append(el('div', { class: 'dh-wiz-sum' }, ...rows));
       },
     });

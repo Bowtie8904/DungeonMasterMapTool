@@ -28,6 +28,13 @@ describe('community catalog automation', () => {
     expect(availableRollOptions(c, ['reaction', 'trait:Presence']).some(o => o.source === 'Privilege')).toBe(false);
   });
 
+  it('offers Underborne Low-Light Living for non-attack action rolls only', () => {
+    const c = community('Underborne');
+    expect(availableRollOptions(c, ['action', 'trait:Instinct']).some(o => o.source === 'Low-Light Living')).toBe(true);
+    expect(availableRollOptions(c, ['attack', 'action', 'trait:Instinct']).some(o => o.source === 'Low-Light Living')).toBe(false);
+    expect(availableRollOptions(c, ['reaction', 'trait:Instinct']).some(o => o.source === 'Low-Light Living')).toBe(false);
+  });
+
   it.each(['Wanderborne', 'Warborne'])('%s spends Hope and shares its session-use counter', name => {
     const c = community(name);
     const f = c.heritage[0];

@@ -1564,6 +1564,90 @@ class OnlineSessionServerTest {
         assertEquals(0, updated.path("stress").path("on").asInt());
     }
 
+    private ObjectNode companionRewardSheet() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        rewardSheet(1, 3);
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("ranger-beastbound-foundation".equals(entry.path("id").asText()))
+                for (JsonNode feature : entry.path("features")) features.add(feature.deepCopy());
+        features.addObject().put("name", "Pummeljoy");
+        ObjectNode companion = sheet.putObject("companion").put("name", "Ash").put("attack", "Bite").put("range", "Melee");
+        companion.putObject("stress").put("on", 0).put("slots", 3);
+        sheet.putArray("effects");
+        sheet.putObject("usage");
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+        return sheet;
+    }
+
+    @Test
+    void companionMeleeAttackInheritsOwnerCriticalBenefitsButNotWhenUnavailableOrOutOfRange() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Ranger").ownerId(playerId()).build());
+        companionRewardSheet();
+        String cookie = cookie();
+        ObjectNode roll = rewardRoll(5600, 7, 7);
+        roll.put("source", "companion,attack,spellcast,action").put("weapon", "Ash: Bite");
+        store.replaceHistoryEntry(campaign.getId(), 5600, 1234, roll);
+        assertEquals(200, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(3, saved.path("hope").path("on").asInt());
+        assertEquals(1, saved.path("stress").path("on").asInt());
+        for (String state : List.of("range", "unavailable")) {
+            ObjectNode sheet = companionRewardSheet();
+            if ("range".equals(state)) ((ObjectNode) sheet.path("companion")).put("range", "Far");
+            else ((ObjectNode) sheet.path("companion")).put("unavailable", true);
+            store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+            long id = "range".equals(state) ? 5601 : 5602;
+            ObjectNode other = rewardRoll(id, 7, 7);
+            other.put("source", "companion,attack,spellcast,action").put("weapon", "Ash: Bite");
+            store.replaceHistoryEntry(campaign.getId(), id, 1234, other);
+            assertEquals(200, rewardHttp(cookie, "reward-actor", other).statusCode());
+            saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+            assertEquals(2, saved.path("hope").path("on").asInt());
+            assertEquals(2, saved.path("stress").path("on").asInt());
+        }
+    }
+
+    @Test
+    void companionHopeCommandOffersOnePersistedAdvantageReactionAndRejectsUnavailableCompanions() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Ranger").ownerId(playerId()).build());
+        companionRewardSheet();
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (boolean unavailable : List.of(false, true)) {
+                if (unavailable) {
+                    ObjectNode sheet = companionRewardSheet();
+                    ((ObjectNode) sheet.path("companion")).put("unavailable", true);
+                    store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+                }
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"companion,spellcast,action","actorId":"reward-actor"}
+                        """, true).join();
+                ObjectNode roll = (ObjectNode) inbox.next("roll");
+                roll.putArray("rolls").add(9).add(3);
+                roll.put("total", 12);
+                store.replaceHistoryEntry(campaign.getId(), roll.path("id").asLong(), roll.path("ts").asLong(), roll);
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "reward-actor")
+                        .put("key", "feat:Companion").put("actionId", "build-on-companion");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                HttpResponse<String> response = featureHttp(cookie, request);
+                if (unavailable) {
+                    assertEquals(400, response.statusCode());
+                    assertTrue(response.body().contains("unavailable"), response.body());
+                } else {
+                    assertEquals(200, response.statusCode(), response.body());
+                    JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+                    assertEquals("Build on companion success", saved.path("effects").path(0).path("name").asText());
+                    assertEquals("advantage", saved.path("effects").path(0).path("rollOptions").path(0).path("advantage").asText());
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                }
+            }
+        } finally { ws.abort(); }
+    }
+
     @Test
     void brawlerDamageResolvesExactingThenUnmodifiedComboOnHostWithAccurateBreakdown() throws Exception {
         Inbox inbox = new Inbox();

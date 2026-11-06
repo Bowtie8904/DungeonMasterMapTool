@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Ranger creation check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { emptyChoices, startingCards, suggestedTraits, creationAllowances } from '../src/daggerheart/rules.ts';
+import { CLASS_GUIDES } from '../src/daggerheart/guide.ts';
+import { openMancer } from '../src/daggerheart/mancer.ts';
+import { renderSheetView } from '../src/daggerheart/view.ts';
+import '../src/daggerheart/sheet.css';
+const result = document.querySelector('#result');
+try {
+  const modules = import.meta.glob('../../dmmap-daggerheart/*.json', { eager: true, import: 'default' });
+  const files = Object.fromEntries(Object.entries(modules).map(([path, file]) => [path.split('/').at(-1).replace('.json', ''), file]));
+  const data = Object.fromEntries(Object.entries(files).map(([key, value]) => [key === 'domain-cards' ? 'cards' : key, value.entries]));
+  const realFetch = window.fetch;
+  window.fetch = async input => {
+    const category = String(input).split('/').at(-1);
+    return files[category] ? new Response(JSON.stringify(files[category]), {status: 200}) : realFetch(input);
+  };
+  const c = emptyCharacter('Ranger');
+  const ch = emptyChoices();
+  Object.assign(ch, { name: 'New ranger', className: 'Ranger', subclass: 'Ranger: Beastbound', ancestry: 'Human',
+    community: data.communities[0].name, traits: suggestedTraits(CLASS_GUIDES.Ranger),
+    primary: CLASS_GUIDES.Ranger.primary, armor: CLASS_GUIDES.Ranger.armor, classItem: 'Trophy',
+    experiences: ['Scout', 'Hunter'], companion: { name: 'Ash', animal: 'Wolf', attack: 'Bite', damageType: 'phys', experiences: ['Loyal', 'Scout'] } });
+  ch.cards = startingCards(data, ch).slice(0, creationAllowances(data, ch).domainCards).map(e => e.name);
+  c.mancer.choices = ch;
+  const host = document.querySelector('#host');
+  await openMancer(host, c, () => host.replaceChildren(renderSheetView({character: c, onRoll: () => true})));
+  for (let i = 0; i < 40 && document.querySelector('.dh-wiz'); i++) {
+    const next = document.querySelector('.dh-wiz-foot button.primary');
+    if (next.disabled) throw new Error(`Blocked at ${document.querySelector('.dh-wiz h2').textContent}: ${document.querySelector('.dh-wiz-warn').textContent}`);
+    next.click();
+  }
+  if (!c.mancer.done || c.hp.slots !== 6) throw new Error(`Completed Ranger HP: ${JSON.stringify(c.hp)}`);
+  const hp = host.querySelectorAll('.pips[data-kind=hp] button:not(:disabled)');
+  if (hp.length !== 6) throw new Error(`Rendered usable HP slots: ${hp.length}`);
+  result.textContent = 'PASS';
+} catch (error) { result.textContent = `FAIL: ${error.stack}`; }
+</script></body></html>

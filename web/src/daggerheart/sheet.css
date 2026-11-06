@@ -269,7 +269,8 @@
 .dh-wiz-body { padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .dh-wiz-foot { padding: 10px 18px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .dh-wiz-warn { color: #ffb74d; font-size: 12.5px; flex: 1; text-align: right; }
-.dh-wiz-sec { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 4px 0 -6px; }
+.dh-wiz-sec { font-size: 13px; letter-spacing: normal; text-transform: none; color: var(--muted); margin: 4px 0 -6px; }
+.dh-wiz-sec > h4 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .dh-wiz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .dh-wiz-chips .chip { border-radius: 14px !important; }
 .dh-wiz-chips .chip.on { background: #1f6f93 !important; border-color: #2c8fba !important; }
@@ -368,3 +369,13 @@ table.gear tr.pick.sel { background: #2a2412; box-shadow: inset 3px 0 0 var(--ho
   border: 2px double currentColor;
   cursor: not-allowed;
 }
+.dh .companion-hope {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 4px var(--accent);
+  font-size: 10px;
+  line-height: 1;
+}
+.dh .companion-page .field {
+  flex: 1;
+}
+.dh .pips[data-kind='companion Stress'] { display: grid; grid-template-columns: repeat(6, 14px); }

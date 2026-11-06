@@ -8,6 +8,7 @@ import type { CompendiumEntry } from './compendium';
 import type { AncestryChoice } from './ancestry-choice';
 import { replaceAncestry } from './rules';
 import { hpHealingFloor } from './death';
+import { clearCompanionStress, companionFeatures, returnCompanion } from './companion';
 
 export interface RestMove { id: string; label: string; /** the move can be aimed at an ally (chat only) */ ally?: boolean; hint?: string; ancestryChoice?: ActionDef['ancestryChoice']; mutagens?: ActionDef['mutagens'] }
 export interface RestSlot { label: string; moves: RestMove[] }
@@ -76,7 +77,7 @@ function sources(c: CharacterSheet): Source[] {
   const add = (key: string, name: string, automation: Automation | undefined, item?: Source['item']) => {
     if (automation) out.push({ key, name, automation, item });
   };
-  for (const f of [...c.features, ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
+  for (const f of [...c.features, ...companionFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
   for (const d of c.loadout) {
     add(`card:${d.name}`, d.name, d.automation);
     for (const s of d.spells ?? []) add(`card:${d.name}/${s.name}`, s.name, s.automation);
@@ -180,6 +181,10 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   syncDerived(c);
   const tier = tierOf(c.level);
   const lines: string[] = [];
+  if (kind === 'long') {
+    const returned = returnCompanion(c);
+    if (returned) lines.push(returned);
+  }
   const rolledDice: RestDie[] = [];
   const hpBefore = c.hp.on;
   const stressBefore = c.stress.on;
@@ -236,6 +241,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const modifiers = sources(c).flatMap((s) => (s.automation.rest?.modifiers ?? []).map((m) => ({ s, m })));
 
   for (const p of chosen) {
+    const companionStressBefore = c.stress.on;
     const applicable = modifiers.filter(({ m }) => m.move === p.move
       && (!m.rest || m.rest === kind) && (!m.target || (m.target === 'ally' && p.ally)));
     const moveBenefits = selected.filter(({ b }) => b.move === p.move);
@@ -313,6 +319,8 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
       if (b.steps?.length || b.cost) execute(s, b);
       if (b.consumeItem) consume(s);
     }
+    const companionCleared = clearCompanionStress(c, Math.max(0, companionStressBefore - c.stress.on));
+    if (companionCleared) lines.push(`${c.companion!.name}: clears ${companionCleared} Stress with your downtime move.`);
   }
 
   for (const { s, b } of selected.filter(({ b }) => !b.extraMoves && !b.move && !b.reroll && b.condition !== 'noRecovery')) {

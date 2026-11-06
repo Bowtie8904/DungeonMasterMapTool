@@ -15,6 +15,30 @@ class ChatCardsTest {
     }
 
     @Test
+    void companionAttackCanBeSharedFromSavedStateButNotTransferredOrSpoofed() throws Exception {
+        ObjectNode source = sheet("""
+                {"features":[{"automation":{"companion":{}}}],
+                "traits":[{"name":"Instinct","spellcast":true}],
+                "companion":{"name":"Ash","attack":"Bite","damageType":"magic","range":"Close","damage":"d8"},
+                "activeWeapons":[],"carriedWeapons":[]}
+                """);
+        ObjectNode attack = sheet("""
+                {"generated":"companion","name":"Ash: Bite","slot":"Primary","hands":1,
+                "damageType":"magic","trait":"Instinct","range":"Close","damage":"d8","tier":1,
+                "feature":{"name":"Companion","text":"Commands use your Spellcast trait. Attacks inherit your applicable benefits, including Ranger's Focus."}}
+                """);
+        assertEquals(attack, ChatCards.resolve(source, "weapon", attack));
+        assertEquals(0, ChatCards.available(source, "weapon", attack));
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.transfer(source, sheet("{}"), "weapon", attack));
+        ObjectNode forged = attack.deepCopy().put("damage", "d20");
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.resolve(source, "weapon", forged));
+        ((ObjectNode) source.path("companion")).put("unavailable", true);
+        assertEquals(attack, ChatCards.resolve(source, "weapon", attack), "Descriptions remain shareable while unavailable");
+        source.putArray("features");
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.resolve(source, "weapon", attack));
+    }
+
+    @Test
     void compendiumDescriptionsPreserveStatsAndFeaturesWithoutChangingSource() throws Exception {
         ObjectNode document = sheet("""
                 {"label":"Classes","entries":[{"id":"bard","name":"Bard","domains":["Grace","Codex"],

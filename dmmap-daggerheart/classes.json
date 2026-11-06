@@ -20,7 +20,8 @@
     {
      "name": "Advanced Training",
      "text": "Choose two additional level-up options for your companion.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "companionTraining": 2 }
     },
     {
      "name": "Loyal Friend",
@@ -34,7 +35,32 @@
       "actions": [
        {
         "id": "use",
-        "label": "Loyal Friend"
+        "label": "Loyal Friend",
+        "requiresCompanion": true
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "loyal-friend",
+        "label": "Loyal Friend: companion intercepts",
+        "description": "Confirm this is attack damage that would mark your last HP and you are within Close range of your available companion. They take the damage instead, marking one Stress.",
+        "companionIntercept": true,
+        "when": { "lastHp": true },
+        "replaceHp": true,
+        "insteadOfArmor": true,
+        "uses": "source"
+       },
+       {
+        "id": "loyal-friend-armored",
+        "label": "Loyal Friend: Armored companion intercepts",
+        "description": "Confirm attack damage would mark your last HP and you are within Close range. Your companion intercepts; Armored marks one owner Armor Slot instead of companion Stress.",
+        "companionIntercept": true,
+        "companionArmored": true,
+        "cost": { "armor": 1 },
+        "when": { "lastHp": true },
+        "replaceHp": true,
+        "insteadOfArmor": true,
+        "uses": "source"
        }
       ]
      }
@@ -57,7 +83,8 @@
     {
      "name": "Expert Training",
      "text": "Choose an additional level-up option for your companion.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "companionTraining": 1 }
     },
     {
      "name": "Battle-Bonded",
@@ -81,8 +108,57 @@
    "features": [
     {
      "name": "Companion",
-     "text": "You have an animal companion of your choice (at the GM’s discretion). They stay by your side unless you tell them otherwise.\nTake the Ranger Companion sheet. When you level up your character, choose a level-up option for your companion from this sheet as well.",
-     "type": "subclass"
+     "text": "You have an animal companion of your choice (at the GM’s discretion). They stay by your side unless you tell them otherwise.\nTake the Ranger Companion sheet. When you level up your character, choose a level-up option for your companion from this sheet as well.\n\n**Commanding your companion:** Make a Spellcast Roll to connect with your companion and command them to take action. You can spend a Hope to add an applicable Companion Experience to the roll.\n\n**Building on their success:** If the command succeeds with Hope and your next action builds on what your companion accomplished, you gain advantage on that next action's roll. This is not automatic advantage after every companion roll: the command must succeed with Hope, and your very next action must build on that success.",
+     "type": "subclass",
+     "automation": {
+      "companion": {
+       "evasion": 10, "stress": 3, "maxStress": 6,
+       "damage": "d6", "range": "Melee",
+       "dice": ["d6", "d8", "d10", "d12"],
+       "ranges": ["Melee", "Very Close", "Close", "Far", "Very Far"],
+       "options": [
+        { "id": "intelligent", "name": "Intelligent", "max": 3, "choose": "experience", "text": "Permanently increase one companion Experience by +1." },
+        { "id": "light-in-the-dark", "name": "Light in the Dark", "max": 1, "stat": "hope", "value": 1, "text": "Your character has one additional Hope slot." },
+        {
+         "id": "creature-comfort", "name": "Creature Comfort", "max": 1,
+         "text": "Once per rest, in a quiet moment with your companion, gain one Hope or both clear one Stress.",
+         "automation": {
+          "uses": { "max": 1, "per": "rest" },
+          "actions": [
+           { "id": "hope", "label": "Gain Hope", "companion": "comfortHope", "confirm": "Confirm you have a quiet moment to give your companion love and attention." },
+           { "id": "stress", "label": "Both clear Stress", "companion": "comfortStress", "confirm": "Confirm you have a quiet moment to give your companion love and attention." }
+          ]
+         }
+        },
+        { "id": "armored", "name": "Armored", "max": 1, "text": "When your companion takes damage, you may mark one owner Armor Slot instead of companion Stress." },
+        { "id": "vicious", "name": "Vicious", "max": 3, "choose": "attack", "text": "Increase the companion damage die or attack range by one step." },
+        { "id": "resilient", "name": "Resilient", "max": 3, "stat": "stress", "value": 1, "text": "Gain one additional companion Stress slot." },
+        { "id": "bonded", "name": "Bonded", "max": 1, "text": "When you mark your last HP, roll one d6 per unmarked companion Stress slot and mark those slots. Any 6 clears your last HP and returns you to the scene." },
+        { "id": "aware", "name": "Aware", "max": 3, "stat": "evasion", "value": 2, "text": "Permanently increase companion Evasion by +2." }
+       ]
+      },
+      "rollTriggers": [
+       {
+        "id": "build-on-companion",
+        "label": "Build on companion success",
+        "on": "companion",
+        "when": "hope",
+        "description": "Confirm the companion command succeeded with Hope. Only use the advantage if your next action builds on that success.",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Build on companion success", "kind": "buff", "until": "manual", "unique": true,
+           "text": "Advantage only on your next action if it builds on the companion's successful Hope command. Remove if the next action does not build on it.",
+           "rollOptions": [
+            { "id": "companion-advantage", "label": "Build on companion success", "roll": "action", "advantage": "advantage", "endEffect": "Build on companion success", "description": "Your next action builds on the companion's success." }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
     }
    ]
   },
@@ -3441,10 +3517,13 @@
      "text": "**Spend 3 Hope** when you succeed on an attack with a weapon to use that same roll against two additional adversaries within range of the attack.",
      "type": "hope",
      "automation": {
-      "actions": [
+      "actions": [{ "id": "use", "label": "Hold Them Off", "cost": { "hope": 3 } }],
+      "rollOptions": [
        {
         "id": "use",
         "label": "Hold Them Off",
+        "roll": "damage",
+        "description": "Use after a successful weapon attack: apply that same attack roll to two additional adversaries within its range.",
         "cost": {
          "hope": 3
         }

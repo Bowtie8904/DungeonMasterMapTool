@@ -214,6 +214,28 @@ Nothing starts until you click **Start online session**, so offline play and the
   on Hope/critical rolls. Howling Rampage rolls tier d20 physical damage and ends the form.
   Steps with detail previews keep an empty panel visible before selection, so hovering, focusing and selecting
   options only updates its contents without shifting the layout (including on narrow screens).
+- **Beastbound Ranger companions:** the **Companion** tab appears between Character and Domain Cards.
+  The Character Mancer creates your animal; existing and multiclass Beastbound characters use **Create companion**
+  to open a focused companion wizard, including earned training. Track name, animal, Experiences, Evasion,
+  Stress, standard attack, damage type, die and range. Commands and attacks use your Spellcast trait,
+  attacks use your Proficiency and applicable benefits (including Ranger's Focus), and the roll popup spends
+  Hope on companion Experiences. Successful Hope commands offer a chat follow-up for conditional advantage.
+  The Beastbound **Companion** feature explains that advantage applies only to your next action when it
+  builds on the companion's successful Hope command.
+  Level-ups include companion training and milestone Experiences, with extra training when Expert/Advanced
+  Training is learned. Training uses selectable cards like normal advancements, with descriptions,
+  selection counts and **Remove one** controls; Experience and attack details also use cards.
+  **Light in the Dark** adds a specially marked Hope slot after the normal usable slots and before scars.
+  Companion attacks use the active-weapon card layout and chat-sharing controls.
+  Creature Comfort, Armored, Bonded, Battle-Bonded and both directions of Loyal Friend are supported;
+  Battle-Bonded is checked passively at the table. The Loyal Friend button announces its use to chat and
+  spends its long-rest use; resolve redirected damage manually. Hold Them Off is a damage roll option
+  costing 3 Hope after a successful weapon attack, alongside its normal action button.
+  Loyal Friend announces immediately without a confirmation prompt. Companion attacks can be posted to chat
+  from saved companion state but cannot be transferred as inventory. Range, successful hits and quiet moments are checked at the table. **Take damage** marks one companion
+  Stress regardless of damage amount, or an owner Armor Slot with Armored (including Loyal Friend interceptions). Full Stress makes the animal
+  unavailable until the next long rest; it returns with one Stress cleared. Stress-clearing downtime moves
+  also recover your available companion. Companion state is saved with its owner and shared by sheet pop-outs.
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the maintained Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**

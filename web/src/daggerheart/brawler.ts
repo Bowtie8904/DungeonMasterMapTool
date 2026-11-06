@@ -1,5 +1,6 @@
 import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
 import { ActionDef, Automation, DiceRoll, addEffect, automationSources, runActionDetailed, syncResources, traitTotal } from './engine';
+import { companionAvailable, companionWeapon } from './companion';
 
 export function martialStances(c: CharacterSheet): NonNullable<Automation['stances']> {
   return automationSources(c).flatMap(a => a.stances ?? []);
@@ -63,7 +64,8 @@ export function comboDie(c: CharacterSheet): number {
 }
 
 export function criticalMeleeBonus(c: CharacterSheet, weapon: string | undefined, critical: boolean): NonNullable<Automation['criticalMelee']> {
-  const melee = c.activeWeapons.some(w => w.name === weapon && w.range.toLowerCase() === 'melee');
+  const companion = companionAvailable(c) ? companionWeapon(c) : undefined;
+  const melee = [...c.activeWeapons, ...(companion ? [companion] : [])].some(w => w.name === weapon && w.range.toLowerCase() === 'melee');
   return critical && melee ? automationSources(c).find(a => a.criticalMelee)?.criticalMelee ?? { hope: 0, stress: 0, proficiency: 0 }
     : { hope: 0, stress: 0, proficiency: 0 };
 }

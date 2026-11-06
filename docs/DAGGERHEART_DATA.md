@@ -20,6 +20,43 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 
 ## Automation block
 
+### Ranger companion metadata
+
+Beastbound's foundation feature declares `automation.companion`: starting `evasion`, `stress`, `maxStress`,
+`damage`, `range`, ordered `dice`/`ranges`, and `options[] {id, name, text, max, choose?, stat?, value?, automation?}`.
+The official companion sheet allows three selections each of Intelligent, Vicious, Resilient and Aware;
+other options have one. `choose: "experience"` increases a selected Experience; `choose: "attack"` raises
+the die or range by one step. `stat: "hope"` marks Light in the Dark's additional owner Hope slot;
+`stress` and `evasion` increase companion stats. Names/prose are not used to discover the companion subclass.
+
+Expert Training and Advanced Training declare `companionTraining: 1` and `2`: additional choices **when
+acquired**, not on every subsequent level. Creation stores optional `mancer.choices.companion`; the owner
+sheet stores optional `companion` state and level records store `companionTraining`/`companionExperience`.
+Deferred setup catches up training and tier-milestone Experiences since subclass acquisition.
+Multiclass acquisition itself counts as a companion level-up; there is no retrospective pre-acquisition training.
+
+Creature Comfort uses shared once-per-rest actions with `companion: "comfortHope"|"comfortStress"`.
+Loyal Friend's sheet action uses `requiresCompanion` and the standard action announcement, without a confirmation, to spend
+its long-rest use without changing damage tracks. Battle-Bonded has no activation; players check its
+conditional Evasion passively. Hold Them Off retains its normal action and also uses a damage `rollOptions` entry costing 3 Hope.
+Loyal Friend's `companionIntercept` mitigation uses `when.lastHp`, `replaceHp`, `insteadOfArmor` and the
+same source-wide long-rest use for the other direction. These are local sheet/damage actions, like existing
+damage mitigation. `companionArmored` requires learned Armored and uses an `armor: 1` cost instead of companion
+Stress; it is mutually exclusive with the regular companion interception. Positional prerequisites
+are confirmed explicitly. `requiresCompanion` gates an action
+or effect on companion availability; `confirm` supplies a table-prerequisite prompt.
+
+Command rolls include the additive `companion` source target, use companion Experiences instead of owner
+Experiences, and otherwise reuse existing Spellcast/attack/damage infrastructure. The `on: "companion"`
+Hope trigger offers the conditional next-action advantage through existing chat feature reactions.
+Weapon-range and critical melee benefits recognize a companion attack on the owner's saved sheet.
+Chat sharing reconstructs the companion weapon from that same saved state for identity validation;
+the generated attack is not transferable inventory.
+No new required messages, settings or compatibility-version changes.
+
+Rules reference: [official SRD](https://www.daggerheart.com/srd/), Ranger/companion sections, and
+[official character sheets](https://www.daggerheart.com/downloads/), Ranger Companion sheet.
+
 ### Brawler and martial stance metadata
 
 `classes.json` maintains Brawler mechanics without inferring rules from feature prose:
@@ -349,7 +386,8 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   Actions/options support `costConditions: [{feature?, unmarkedHp?: {min,max}, cost}]`, merging matching
   resource overrides into the base cost. Bounds are inclusive and re-evaluated from current HP.
   Passive modifiers support `requiresEffect`, including stat breakdowns. Roll options also support
-  `excludeRolls` to prevent applying Wolf Form's bonus twice on an attack already receiving its die.
+  `excludeRolls` to hide an option whenever an excluded roll target is present. This prevents applying Wolf Form's
+  bonus twice on an attack already receiving its die and keeps Underborne Low-Light Living off attack rolls.
   `actionRoll.trait: "spellcast"` selects the character's Spellcast trait and includes `spellcast` plus the
   feature key in the roll targets. `rollTriggers.when: "success"` requires a known difficulty, supplied by
   `rollTriggers.difficulty` or the original roll; raw matching Duality dice also succeed. Browser and host
