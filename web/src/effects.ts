@@ -71,7 +71,7 @@ export function renderEffects(
 ): void {
   const blocks: HTMLElement[] = [];
   for (const g of groups) {
-    const effects = g.character.effects ?? [];
+    const effects = (g.character.effects ?? []).filter(e => !e.dicePool);
     if (!effects.length) continue;
     const rows = effects.map((e) => {
       const key = `${g.actorId}:${e.id}`;

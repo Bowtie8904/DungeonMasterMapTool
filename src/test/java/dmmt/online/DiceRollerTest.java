@@ -9,6 +9,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void sacredResonanceMatchesAllKeptDiceAcrossSourcesWithoutDoublingModifiers() {
+        var result = DiceRoller.roll("3d8kh2+2d6+9", 5, faces(1, 5, 5, 5, 3));
+        assertEquals(List.of(0, 5, 5, 5, 0), DiceRoller.matchingDiceBonuses(result, 5));
+        assertEquals(42, result.total() + DiceRoller.matchingDiceBonuses(result, 5).stream().mapToInt(Integer::intValue).sum());
+        var discarded = DiceRoller.roll("2d8kh1+1d6", 3, faces(2, 7, 2));
+        assertEquals(List.of(0, 0, 0), DiceRoller.matchingDiceBonuses(discarded, 3));
+        var ties = DiceRoller.roll("3d8kh2+d6", 4, faces(2, 2, 2, 2));
+        assertEquals(List.of(0, 2, 2, 2), DiceRoller.matchingDiceBonuses(ties, 4));
+        var doubled = DiceRoller.roll("(2d8+7)*2", 2, faces(5, 5));
+        assertEquals(List.of(10, 10), DiceRoller.matchingDiceBonuses(doubled, 2));
+        var combo = new DiceRoller.Result("(2d8+7)*2", List.of(5, 3, 5), 35);
+        assertEquals(List.of(10, 0, 5), DiceRoller.matchingDiceBonuses(combo, 3));
+    }
+
+    @Test
     void comboIncludesEqualFacesAndTheFinalLowerDieAndNeverModifiesThem() {
         assertEquals(List.of(1, 3, 3, 4, 2), DiceRoller.combo(4, 10, faces(1, 3, 3, 4, 2)));
         assertEquals(List.of(8, 2), DiceRoller.combo(8, 10, faces(8, 2)));

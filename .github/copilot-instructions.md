@@ -18,3 +18,8 @@ Before implementing any code change, always open and review `plan.md` in the pro
 - Keep the version unchanged for backward-compatible fixes and unrelated application changes. Compatibility must not depend on application-content hashes, identical builds, packaging or compiler output.
 - Preserve compatibility checks before host approval or workspace replacement, and keep mismatch errors actionable by showing both compatibility versions.
 - Cover changed remote behavior and version rejection with relevant tests; update `plan.md` and directly related documentation.
+
+## Browser interactions
+
+- Never use native browser prompts (`alert`, `confirm`, or `prompt`). Use themed, accessible in-app dialogs or inline messages when user input is necessary.
+- Do not add confirmation steps to actions that already have explicit controls or usage limits unless the specification requires one.

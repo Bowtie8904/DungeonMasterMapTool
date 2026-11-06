@@ -96,10 +96,12 @@ public final class CampaignStore {
     }
 
     public synchronized Campaign load(String campaignId) throws IOException {
+        recoverSheetTransfer(campaignId);
         return MAPPER.readValue(dir(campaignId).resolve("campaign.json").toFile(), Campaign.class);
     }
 
     public synchronized void save(Campaign campaign) throws IOException {
+        recoverSheetTransfer(campaign.getId());
         Path folder = dir(campaign.getId());
         Files.createDirectories(folder);
         Path target = folder.resolve("campaign.json");
@@ -353,6 +355,21 @@ public final class CampaignStore {
     /** Journals sheet changes, an optional updated result, and additional new reports as one transaction. */
     public synchronized void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                                   ObjectNode replacement, List<ObjectNode> messages) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, null);
+    }
+
+    public synchronized void saveFearReward(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                             ObjectNode roll, int fear) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, roll, List.of(), fear);
+    }
+
+    public synchronized void saveFearReward(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                             ObjectNode roll, List<ObjectNode> messages, int fear) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, roll, messages, fear);
+    }
+
+    private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                      ObjectNode replacement, List<ObjectNode> messages, Integer fear) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
@@ -361,6 +378,7 @@ public final class CampaignStore {
         if (replacement != null) transaction.set("$roll", replacement);
         if (messages.size() == 1) transaction.set("$message", messages.getFirst());
         else if (!messages.isEmpty()) transaction.set("$messages", MAPPER.valueToTree(messages));
+        if (fear != null) transaction.put("$fear", fear);
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
@@ -377,7 +395,7 @@ public final class CampaignStore {
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
-            if ("$roll".equals(entry.getKey()) || "$message".equals(entry.getKey()) || "$messages".equals(entry.getKey())) continue;
+            if (List.of("$roll", "$message", "$messages", "$fear").contains(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
         if (transaction.get("$roll") instanceof ObjectNode roll)
@@ -387,6 +405,14 @@ public final class CampaignStore {
         for (JsonNode entry : transaction.path("$messages")) {
             if (!(entry instanceof ObjectNode message)) throw new IOException("Invalid journaled chat result.");
             writeHistoryEntryRaw(campaignId, message.path("id").asLong(), message.path("ts").asLong(), message, true);
+        }
+        if (transaction.has("$fear")) {
+            Path file = dir(campaignId).resolve("campaign.json");
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(file.toFile());
+            saved.put("fear", transaction.path("$fear").asInt());
+            Path temp = file.resolveSibling("campaign.json.tmp");
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), saved);
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
         }
         Files.delete(journal);
     }

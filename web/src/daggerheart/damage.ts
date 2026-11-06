@@ -63,6 +63,7 @@ export interface MitigationOption {
   passive?: boolean;
   defaultOn?: boolean;
   requiresEffect?: string;
+  endEffect?: string;
   when?: MitigationWhen;
   /** Paid on apply; "@hp" means the HP the damage would mark. */
   cost?: MitigationCost;
@@ -406,6 +407,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       }
     }
     if (m.option.effect) addEffect(c, m.option.effect, m.source);
+    if (m.option.endEffect) c.effects = c.effects.filter(e => e.name !== m.option.endEffect);
     const u = usageKey(m);
     if (u) {
       const entry = c.usage[u.key] ?? { used: 0, per: u.auto.uses!.per };
@@ -415,6 +417,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     if (m.option.consumeItem && m.item && m.item.qty > 0) m.item.qty--;
     if (m.option.followUp) notes.push(`${m.option.label}: rolled ${roll(m.option.followUp.dice)} (${m.option.followUp.text})`);
   }
+  syncEffectDependencies(c);
   const bonded = resolveBonded(c, roll);
   if (bonded) notes.push(bonded);
   syncDeathState(c);

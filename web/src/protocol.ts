@@ -364,6 +364,8 @@ export interface Hello {
   rollRewards?: boolean;
   partyFeatures?: boolean;
   guardianRolls?: boolean;
+  dualityDieBonus?: boolean;
+  seraphAutomation?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

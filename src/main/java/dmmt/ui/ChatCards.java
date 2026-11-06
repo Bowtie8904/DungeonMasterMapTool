@@ -740,8 +740,15 @@ public final class ChatCards {
             content.getChildren().add(detailRow(source, value, "chat-detail"));
             for (Note note : d.notes()) {
                 Label noteLabel = wrapped(note.label(), "chat-detail-note");
-                HBox.setHgrow(noteLabel, Priority.ALWAYS);
-                content.getChildren().add(detailRow(noteLabel, new Label(note.impact()), "chat-detail-note-row"));
+                Label impact = wrapped(note.impact(), "chat-detail-note");
+                noteLabel.setMinWidth(0);
+                noteLabel.setMaxWidth(Double.MAX_VALUE);
+                impact.setMinWidth(0);
+                impact.setMaxWidth(Double.MAX_VALUE);
+                VBox noteBox = new VBox(2, noteLabel, impact);
+                noteBox.setMinWidth(0);
+                noteBox.getStyleClass().add("chat-detail-note-row");
+                content.getChildren().add(noteBox);
             }
         }
         Label result = new Label("Result");

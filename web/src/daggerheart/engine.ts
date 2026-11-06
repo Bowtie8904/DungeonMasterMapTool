@@ -32,6 +32,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  dicePool?: string;
   requiresCompanion?: boolean;
   counter?: { value: number; max: number; maxByLevel?: Record<string, number> };
   earthAuraGrant?: boolean;
@@ -61,6 +62,7 @@ export interface EffectDef {
   lockedHp?: number;
   die?: Pick<RollOption, 'dice' | 'diceByLevel' | 'diceByFeature'>;
   rollOptions?: RollOption[];
+  rollTriggers?: RollTrigger[];
   actions?: ActionDef[];
 }
 
@@ -80,6 +82,8 @@ export interface Step {
 }
 
 export interface ActionDef {
+  rollDicePool?: boolean;
+  weaponRanges?: string[];
   requiresCompanion?: boolean;
   confirm?: string;
   companion?: 'comfortHope' | 'comfortStress';
@@ -140,6 +144,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  matchingDice?: boolean;
   effectValue?: boolean;
   rerollBelowProficiency?: boolean;
   exclusive?: string;
@@ -172,6 +177,7 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  dualityDieBonus?: { die: 'hope' | 'fear'; value: number };
   usesSource?: boolean;
   advanceEffect?: string;
   swapDuality?: boolean;
@@ -197,6 +203,8 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  dicePool?: { id: string; label: string; count: ModValue; sides: number; extraByFeature?: Record<string, number> };
+  hopeReward?: { removeFear: number; roll: string };
   companion?: CompanionRules;
   companionTraining?: number;
   effectCounters?: Array<{ label: string; effect: string }>;
@@ -331,6 +339,31 @@ export function automationSources(c: CharacterSheet): Automation[] {
 
 export function resourceDefinitions(c: CharacterSheet): ResourceDef[] {
   return [...new Map(automationSources(c).flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
+}
+
+export function poolDice(c: CharacterSheet, pool: NonNullable<Automation['dicePool']>): ActiveEffect[] {
+  return c.effects.filter(e => e.dicePool === pool.id);
+}
+
+export function rollDicePool(c: CharacterSheet, pool: NonNullable<Automation['dicePool']>, roll: DiceRoll = rollLocal): string[] {
+  const count = Math.max(0, Math.floor(evalValue(pool.count, c)));
+  const extra = Object.entries(pool.extraByFeature ?? {}).reduce((n, [feature, amount]) => n + (hasFeature(c, feature) ? amount : 0), 0);
+  const faces = count > 0 ? Array.from({ length: count + extra }, () => roll(`1d${pool.sides}`)) : [];
+  const kept = [...faces].sort((a, b) => b - a).slice(0, count);
+  c.effects = c.effects.filter(e => e.dicePool !== pool.id);
+  for (const [index, value] of kept.entries()) {
+    const id = `pool-${pool.id}-${Date.now()}-${index}`;
+    const name = `${pool.label} ${index + 1} (${value})`;
+    c.effects.push({
+      id, name, dicePool: pool.id, kind: 'buff', until: 'session', counter: { value, max: pool.sides },
+      rollTriggers: [{ id: 'spend', label: `Prayer die: +${value}`, on: 'any', audience: 'any',
+        addDice: String(value), endEffect: name, usesSource: false,
+        description: 'Spend this die to aid yourself or an ally within Far range.' }],
+      mitigation: [{ id: 'spend', label: `Prayer die: reduce by ${value}`, reduce: value, requiresEffect: name, endEffect: name }],
+    });
+  }
+  return [`Rolled ${count + (count > 0 ? extra : 0)}d${pool.sides}${extra && count > 0 ? `, keep highest ${count}` : ''}: ${faces.join(', ') || 'no dice (Spellcast trait is 0 or lower)'}.`,
+    `Available ${pool.label}: ${kept.join(', ') || 'none'}.`];
 }
 
 export function syncResources(c: CharacterSheet): void {
@@ -579,6 +612,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
+    .filter((o) => !o.weaponRanges || !!weapon && !targets.includes('spelldamage') && o.weaponRanges.some(range => range.toLowerCase() === weapon.range.toLowerCase()))
     .filter((o) => !o.excludeRolls?.some(target => targets.includes(target)))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
@@ -895,6 +929,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     u.used++;
     c.usage[key] = u;
   }
+  if (action.rollDicePool && a.dicePool) log.push(...rollDicePool(c, a.dicePool, roll));
   if (action.companion === 'comfortHope') {
     const gained = Math.min(1, Math.max(0, c.hope.slots - c.hope.on));
     c.hope.on += gained;
@@ -1023,9 +1058,10 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
   if (t.swapDuality && (ctx.kind === 'damage' || ctx.hope === ctx.fear)) return false;
   const companion = companionWeapon(c);
   if (t.weaponRange && ![...activeWeapons(c), ...(companion ? [companion] : [])].some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
+  if (t.weaponRanges && !activeWeapons(c).some(w => w.name === ctx.weapon && t.weaponRanges!.some(range => range.toLowerCase() === w.range.toLowerCase()))) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
-  if (t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
+  if (t.on !== 'any' && t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
   if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
   if (t.weapon && t.weapon !== ctx.weapon) return false;
   if (t.weaponAttack && (!ctx.weapon || !ctx.source.split(',').includes('attack'))) return false;
@@ -1059,6 +1095,7 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
+    ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];
   return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => triggerApplies(c, t, ctx))
     .map((trigger) => ({ key: s.key, source: s.name,

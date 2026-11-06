@@ -108,6 +108,20 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
     }
   }
   const stances = c.features.flatMap(f => f.automation?.stances ?? []);
+  for (const feature of [...c.features, ...c.heritage]) {
+    const pool = feature.automation?.dicePool;
+    if (!pool) continue;
+    const dice = c.effects.filter(e => e.dicePool === pool.id);
+    if (dice.length && feature.automation?.uses?.per === 'session') {
+      c.usage[`feat:${feature.name}`] ??= { used: 1, per: 'session' };
+    }
+    for (const die of dice) {
+      const value = die.counter?.value;
+      if (value === undefined) continue;
+      for (const trigger of die.rollTriggers ?? []) trigger.label = `Prayer die: +${value}`;
+      for (const mitigation of die.mitigation ?? []) mitigation.label = `Prayer die: reduce by ${value}`;
+    }
+  }
   for (const effect of c.effects.filter(e => e.stance)) {
     const stance = stances.find(s => s.name === effect.name);
     if (stance) effect.text = stance.effect.text;

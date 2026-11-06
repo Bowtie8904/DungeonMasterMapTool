@@ -279,6 +279,9 @@ rotation commands/previews/cancellation, pause and older-host capability handlin
 `checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,
 and checks safe, independent source disclosures and source propagation from feature/local action rolls,
 Spellcast, individual grimoire spells and follow-up spell damage.
+Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
+never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
+The catalog editor preserves unsaved drafts on cancellation, including when closing its embedded DM window.
 `checks/sheet-layout.html` checks the vertical trait sidebar on every tab and Experiences in Background,
 two-column class/heritage features, compact stats, wider viewport-height floating sheet, pop-out layout,
 independent sidebar scrolling, overflow and trait roll interaction at several window sizes without a Java host.

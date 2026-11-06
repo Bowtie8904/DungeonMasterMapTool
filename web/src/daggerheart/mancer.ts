@@ -1,6 +1,7 @@
 // Guided wizards: the Character Mancer (creation) and the Level-up guide. One decision per step, remembered on the sheet.
 
 import { el } from '../login';
+import { noticeDialog } from '../dialogs';
 import { Advancement, AdvancementType, CharacterSheet, CompanionChoices, CompanionTraining, CreationChoices, LevelUpRecord, RangerCompanion, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
 import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
@@ -677,7 +678,7 @@ function transformationPicker(data: RulesData, current: string, pick: (name: str
 export async function openTransformation(host: HTMLElement, c: CharacterSheet, onDone: () => void): Promise<void> {
   const data = await loadWithNotice(host);
   if (!data) return;
-  if (!data.transformations.length) { alert('No transformations are available in the compendium.'); return; }
+  if (!data.transformations.length) { await noticeDialog('No transformations are available in the compendium.'); return; }
   let chosen = c.transformation ?? '';
   const ancestry = { ancestry: c.ancestry, feature: c.ancestryFeature ?? '' };
   runWizard({
@@ -701,7 +702,7 @@ async function loadWithNotice(host: HTMLElement): Promise<RulesData | null> {
   try {
     return await loadRulesData();
   } catch (e) {
-    alert(`Could not load the compendium: ${e instanceof Error ? e.message : e}`);
+    await noticeDialog(`Could not load the compendium: ${e instanceof Error ? e.message : e}`, 'Compendium unavailable');
     return null;
   } finally {
     note.remove();

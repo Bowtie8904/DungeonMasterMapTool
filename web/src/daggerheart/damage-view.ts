@@ -1,4 +1,5 @@
 import { el } from '../login';
+import { confirmDialog } from '../dialogs';
 import type { CharacterSheet } from './data';
 import { costText, usesLeft } from './engine';
 import {
@@ -144,11 +145,13 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     );
     error.textContent = r.error ?? '';
     apply.disabled = !!r.error || input.damage <= 0;
-    apply.onclick = () => {
+    apply.onclick = async () => {
       const guard = initial?.guard?.();
       if (guard) { error.textContent = guard; return; }
       if (r.applied.some(m => m.option.companionIntercept)
-        && !window.confirm('Confirm this is attack damage and you are within Close range of your available companion. They take the damage instead, using the selected Stress or Armored option.')) return;
+        && !await confirmDialog('Confirm this is attack damage and you are within Close range of your available companion. They take the damage instead, using the selected Stress or Armored option.')) return;
+      const currentGuard = initial?.guard?.();
+      if (currentGuard) { error.textContent = currentGuard; return; }
       const summary = applyDamage(c, r, input.type);
       if (!summary) { error.textContent = 'Could not apply damage'; return; }
       close();

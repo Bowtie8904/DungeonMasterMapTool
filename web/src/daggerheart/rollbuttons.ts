@@ -6,7 +6,7 @@ import { applyDeathRecovery, claimRollReward, useFeature } from '../api';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { actionBlocker, availableRollTriggers, costText, usesLeft } from './engine';
+import { actionBlocker, automationSources, availableRollTriggers, costText, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
@@ -27,6 +27,8 @@ export interface RollButtonHost {
   supportsRollRewards?: () => boolean;
   supportsPartyFeatures?: () => boolean;
   supportsGuardianRolls?: () => boolean;
+  supportsDualityDieBonus?: () => boolean;
+  supportsSeraphAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -237,7 +239,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
   const actorId = m.actorId;
   const ctx = rollContext(m);
   const isAttack = m.source?.split(',').includes('attack');
-  if (!(ctx || (actorId && isAttack && m.weapon))) return null;
+  if (!(ctx || actorId || host.actorIds?.().length)) return null;
   const box = el('div', { class: 'roll-actions' });
   let claiming = false;
 
@@ -272,6 +274,25 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
 
       });
       buttons.push(reward);
+      const alternative = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
+        .find(r => r && ctx!.source.split(',').includes(r.roll));
+      if (alternative) {
+        const remove = el('button', { class: 'small primary', type: 'button' }, `Remove ${alternative.removeFear} Fear instead`);
+        remove.disabled = claiming || !host.supportsSeraphAutomation?.();
+        remove.title = host.supportsSeraphAutomation?.() ? 'Only on a successful Presence roll with Hope' : 'Update the host to use Seraph automation.';
+        remove.addEventListener('click', async () => {
+          if (claiming || m.rewardClaimed) return;
+          claiming = true;
+          remove.disabled = true;
+          try {
+            await save.flush?.();
+            await claimRollReward(rolledActor.actorId, { id: m.id, ts: m.ts }, 'removeFear');
+            m.rewardClaimed = true;
+          } catch (e) { host.toast((e as Error).message); }
+          finally { claiming = false; await paintFor(); }
+        });
+        buttons.push(remove);
+      }
     }
     if (rolledActor && isAttack && m.weapon) {
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
@@ -284,7 +305,8 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
 
     for (const { actorId: featureActorId, sheet } of sheets) {
       const c = sheet.character;
-      for (const t of ctx ? availableRollTriggers(c, ctx) : []) {
+      for (const t of availableRollTriggers(c, ctx ?? { source: m.source ?? '', hope: 0, fear: 0, total: m.total, kind: 'damage' })) {
+        if (!ctx && t.trigger.on !== 'any') continue;
         if (usesLeft(c, t.key, t.automation) === 0) continue;
         const trigger = t.trigger as typeof t.trigger & {
           audience?: string; outcome?: 'hope' | 'fear'; target?: 'actor' | 'party';
@@ -295,12 +317,17 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         if (audience === 'self' && featureActorId !== actorId) continue;
         if (audience === 'ally' && featureActorId === actorId) continue;
         if (m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
+        if (trigger.dualityDieBonus && trigger.endEffect
+            && m.featureUses?.includes(`${featureActorId}:effectBonus:${trigger.endEffect}`)) continue;
         const cost = costText(t.trigger.cost, c);
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = (t.trigger.advanceEffect || t.trigger.swapDuality) && !host.supportsGuardianRolls?.()
+        const unsupported = t.key.startsWith('effect:pool-') && !host.supportsSeraphAutomation?.()
+          ? 'Update the host to spend Prayer Dice on chat rolls.'
+          : (t.trigger.advanceEffect || t.trigger.swapDuality) && !host.supportsGuardianRolls?.()
           ? 'Update the host to use Guardian roll actions.'
+          : t.trigger.dualityDieBonus && !host.supportsDualityDieBonus?.() ? 'Update the host to adjust Duality dice after a roll.'
           : t.trigger.addDice && !host.supportsPartyFeatures?.() ? 'Update the host to add dice to finished rolls.' : undefined;
         b.disabled = !!blocked || !!unsupported;
         b.title = unsupported ?? blocked ?? t.trigger.description ?? t.source;

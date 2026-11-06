@@ -35,6 +35,43 @@ class ChatPanelTest {
     }
 
     @Test
+    void sacredResonanceNotesWrapInsideNarrowDmCardsWithoutChangingTotals() throws Exception {
+        JsonNode message = MAPPER.readTree("""
+                {"type":"roll","id":9,"ts":10,"from":"Seraph","expression":"4d8","rolls":[4,4,3,2],"total":21,
+                 "breakdown":[
+                   {"label":"Weapon","expression":"4d8","rolls":[4,4,3,2],"total":13},
+                   {"label":"Divine Wielder - Sacred Resonance","expression":"8","rolls":[],"total":8,
+                    "notes":[{"label":"Sacred Resonance",
+                     "impact":"Matching kept damage dice count double across every damage source, including weapon dice and bonus dice; +8 damage."}]}]}
+                """);
+        onFx(() -> {
+            var card = (javafx.scene.layout.VBox) ChatCards.render(message);
+            StackPane root = new StackPane(card);
+            Scene scene = new Scene(root, 260, 900);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            root.applyCss();
+            var disclosure = (javafx.scene.layout.VBox) card.lookup(".chat-roll-breakdown");
+            var content = (javafx.scene.layout.VBox) disclosure.getChildren().get(1);
+            content.setVisible(true);
+            content.setManaged(true);
+            for (double width : new double[]{260, 340}) {
+                root.resize(width, 900);
+                root.layout();
+                var note = (javafx.scene.layout.VBox) card.lookup(".chat-detail-note-row");
+                Label impact = (Label) note.getChildren().get(1);
+                assertTrue(impact.isWrapText());
+                assertEquals(0, impact.getMinWidth());
+                assertTrue(impact.getHeight() > impact.getFont().getSize() * 2, "Explanation wraps onto multiple lines");
+                assertTrue(note.getBoundsInParent().getMaxX() <= content.getWidth() + 1, "Note stays inside breakdown");
+                assertTrue(impact.getBoundsInParent().getMaxX() <= note.getWidth() + 1, "Explanation stays inside note");
+                assertTrue(card.getWidth() <= width + 1, "Card never expands beyond available chat width");
+            }
+            assertTrue(card.lookupAll(".chat-detail-value").stream()
+                    .map(node -> ((Label) node).getText()).toList().containsAll(List.of("+13", "+8")));
+        });
+    }
+
+    @Test
     void dmDeleteIsAccessibleAndWaitsForHostEventWithoutMarkingUnread() throws Exception {
         JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"id\":1,\"ts\":10,\"from\":\"Alice\",\"text\":\"Hello\"}");
         CountDownLatch called = new CountDownLatch(1);

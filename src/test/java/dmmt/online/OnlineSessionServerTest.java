@@ -121,6 +121,271 @@ class OnlineSessionServerTest {
         }
     }
 
+    private ObjectNode seraphSheet(String subclass) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Seraph").put("subclass", subclass).put("level", 8);
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        String prefix = "seraph-" + subclass.toLowerCase(java.util.Locale.ROOT).replace(' ', '-') + "-";
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if (!"seraph".equals(entry.path("id").asText()) && !entry.path("id").asText().startsWith(prefix)) continue;
+            for (JsonNode feature : entry.path("features")) {
+                ObjectNode learned = feature.deepCopy();
+                learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Seraph"
+                        : "Subclass " + entry.path("stage").asText() + " - " + subclass);
+                features.add(learned);
+            }
+        }
+        return sheet;
+    }
+
+    @Test
+    void sacredResonanceDoublesMatchingBonusDiceAndKeepsBreakdownConsistent() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertTrue(inbox.next("hello").path("seraphAutomation").asBoolean());
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d1+1d1+9").put("source", "damage");
+            msg.putObject("damageRules").put("matchingDice", true);
+            var contributions = msg.putArray("contributions");
+            contributions.addObject().put("label", "Weapon").put("expression", "2d1");
+            contributions.addObject().put("label", "Bonus dice").put("expression", "1d1");
+            contributions.addObject().put("label", "Flat modifier").put("expression", "9");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode result = inbox.next("roll");
+            assertEquals(15, result.path("total").asInt());
+            assertEquals(2, result.path("breakdown").path(0).path("total").asInt());
+            assertEquals(1, result.path("breakdown").path(1).path("total").asInt());
+            assertEquals(9, result.path("breakdown").path(2).path("total").asInt());
+            assertEquals("Sacred Resonance", result.path("breakdown").path(3).path("label").asText());
+            assertEquals(3, result.path("breakdown").path(3).path("total").asInt());
+            assertEquals(1, result.path("rolls").path(0).asInt());
+            assertFalse(result.path("breakdown").path(1).has("notes"));
+            contributions.addObject().put("label", "Divine Wielder - Sacred Resonance").put("expression", "0");
+            ws.sendText(msg.toString(), true).join();
+            result = inbox.next("roll");
+            assertEquals(4, result.path("breakdown").size());
+            assertEquals("Divine Wielder - Sacred Resonance", result.path("breakdown").path(3).path("label").asText());
+            assertEquals(3, result.path("breakdown").path(3).path("total").asInt());
+            int sum = 0;
+            for (JsonNode detail : result.path("breakdown")) sum += detail.path("total").asInt();
+            assertEquals(result.path("total").asInt(), sum);
+            msg.remove("damageRules");
+            ws.sendText(msg.toString(), true).join();
+            assertEquals(12, inbox.next("roll").path("total").asInt());
+            msg.put("expression", "4d8");
+            msg.putObject("damageRules").put("matchingDice", true);
+            contributions.removeAll();
+            contributions.addObject().put("label", "Weapon").put("expression", "4d8");
+            contributions.addObject().put("label", "Divine Wielder - Sacred Resonance").put("expression", "0");
+            diceSeed(25332);
+            ws.sendText(msg.toString(), true).join();
+            result = inbox.next("roll");
+            assertEquals(MAPPER.readTree("[4,4,3,2]"), result.path("rolls"));
+            assertEquals(13, result.path("breakdown").path(0).path("total").asInt());
+            assertEquals(8, result.path("breakdown").path(1).path("total").asInt());
+            assertEquals(21, result.path("total").asInt());
+            assertEquals(result, store.historyTail(campaign.getId(), 1).getLast());
+
+            msg.put("expression", "(4d8)*2");
+            ((ObjectNode) contributions.get(0)).put("expression", "(4d8)*2");
+            ((ObjectNode) contributions.get(1)).put("expression", "(0)*2");
+            diceSeed(25332);
+            ws.sendText(msg.toString(), true).join();
+            result = inbox.next("roll");
+            assertEquals(26, result.path("breakdown").path(0).path("total").asInt());
+            assertEquals(16, result.path("breakdown").path(1).path("total").asInt());
+            assertEquals(42, result.path("total").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void prayerDiceSpendOnPlainAndAllyRollsOnceAndExpireWithSession() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("seraph").name("Seraph").ownerId(playerId()).build());
+        ObjectNode sheet = seraphSheet("Divine Wielder");
+        var effects = sheet.withArray("effects");
+        for (int i = 0; i < 2; i++)
+            effects.addObject().put("id", "pool-prayer-" + i).put("name", "Prayer Dice " + i + " (3)")
+                    .put("dicePool", "prayer").put("kind", "buff").put("until", "session")
+                    .putObject("counter").put("value", 3).put("max", 4);
+        store.saveSheet(campaign.getId(), "seraph", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"1d1\"}", true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "seraph").put("key", "effect:pool-prayer-0").put("actionId", "spend");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, inbox.next("rollUpdate").path("total").asInt());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph")).path("effects").size());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"1d1\",\"source\":\"damage\",\"actorId\":\"ally\"}", true).join();
+            roll = inbox.next("roll");
+            request.put("key", "effect:pool-prayer-1");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, inbox.next("rollUpdate").path("total").asInt());
+            sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph"));
+            sheet.withArray("effects").addObject().put("id", "pool-prayer-session").put("name", "Prayer Dice")
+                    .put("dicePool", "prayer").put("kind", "buff").put("until", "session");
+            sheet.withObject("/usage").putObject("feat:Prayer Dice").put("used", 1).put("per", "session");
+            store.saveSheet(campaign.getId(), "seraph", sheet.toString());
+            assertNull(server.newSession());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph")).path("effects").size());
+            assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph")).path("usage").has("feat:Prayer Dice"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void etherealVisageRemovesFearInsteadOfHopeAndCannotClaimBothOrUseReactions() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Seraph").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "reward-actor", seraphSheet("Winged Sentinel").toString());
+        campaign.setFear(3);
+        store.save(campaign);
+        String cookie = cookie();
+        ObjectNode roll = rewardRoll(5500, 10, 3);
+        roll.put("source", "trait:Presence,action");
+        store.replaceHistoryEntry(campaign.getId(), 5500, 1234, roll);
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "reward-actor").put("reward", "removeFear");
+        request.putObject("roll").put("id", 5500).put("ts", 1234);
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(2, campaign.getFear());
+        assertEquals(2, new CampaignStore(store.root()).load(campaign.getId()).getFear());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("hope").path("on").asInt());
+        assertTrue(store.historyTail(campaign.getId(), 10).getLast().path("text").asText()
+                .contains("Removed 1 GM Fear instead of gaining Hope (GM Fear: 2)."));
+        assertEquals(400, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        for (String source : List.of("trait:Presence,reaction", "trait:Agility,action", "trait:Presence,action")) {
+            roll = rewardRoll(5501, 10, 3);
+            roll.put("source", source);
+            if (source.endsWith("Presence,action")) roll.put("difficulty", 99);
+            store.replaceHistoryEntry(campaign.getId(), 5501, 1234, roll);
+            request.withObject("/roll").put("id", 5501);
+            response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                    .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode(), response.body());
+            assertEquals(2, campaign.getFear());
+        }
+    }
+
+    @Test
+    void devoutSparingTouchHasTwoSharedUsesAndReportsSelfRecipient() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("seraph").name("Seraph").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "seraph", seraphSheet("Divine Wielder").toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "seraph").put("key", "feat:Sparing Touch")
+                    .put("actionId", "hp").put("targetActorId", "seraph");
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertTrue(store.historyTail(campaign.getId(), 10).getLast().path("text").asText().contains("Seraph: Cleared 2 HP"));
+            request.put("actionId", "stress");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertTrue(store.historyTail(campaign.getId(), 10).getLast().path("text").asText().contains("Seraph: Cleared 2 Stress"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            campaign.getActors().add(Campaign.Actor.builder().id("healed").name("Healed Ally").ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), "seraph", seraphSheet("Divine Wielder").toString());
+            store.saveSheet(campaign.getId(), "healed", seraphSheet("Divine Wielder").toString());
+            request.put("targetActorId", "healed");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertTrue(store.historyTail(campaign.getId(), 10).getLast().path("text").asText().contains("Healed Ally: Cleared 2 Stress"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void contactsDieBonusConsumesOneEffectUpdatesTheRollAndAwardsAdjustedCriticals() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("rogue").name("Rogue").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.putArray("effects");
+        var features = sheet.putArray("features");
+        JsonNode classes = MAPPER.readTree(compendiumDir.resolve("classes.json").toFile());
+        for (JsonNode entry : classes.path("entries")) {
+            if (!"rogue-syndicate-specialization".equals(entry.path("id").asText())) continue;
+            for (JsonNode feature : entry.path("features")) features.add(feature);
+        }
+        JsonNode contact = features.get(0);
+        ObjectNode effect = contact.path("automation").path("actions").path(0).path("steps").path(0).path("effect").deepCopy();
+        effect.put("id", "contact");
+        sheet.withArray("effects").add(effect);
+        store.saveSheet(campaign.getId(), "rogue", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("dualityDieBonus").asBoolean());
+            diceSeed(42);
+            JsonNode roll = null;
+            for (int i = 0; i < 200; i++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"action,trait:Presence","actorId":"rogue"}
+                        """, true).join();
+                JsonNode candidate = inbox.next("roll");
+                if (Math.abs(candidate.path("rolls").path(0).asInt() - candidate.path("rolls").path(1).asInt()) == 3) {
+                    roll = candidate;
+                    break;
+                }
+            }
+            assertNotNull(roll);
+            int hope = roll.path("rolls").path(0).asInt(), fear = roll.path("rolls").path(1).asInt();
+            String chosen = hope < fear ? "hope" : "fear";
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "rogue")
+                    .put("key", "effect:contact").put("actionId", chosen);
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode update = inbox.next("rollUpdate");
+            assertEquals(update.path("rolls").path(0), update.path("rolls").path(1));
+            assertEquals(roll.path("total").asInt() + 3, update.path("total").asInt());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "rogue")).path("effects").size());
+            request.put("actionId", "hope".equals(chosen) ? "fear" : "hope");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            response = rewardHttp(cookie, "rogue", roll);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "rogue"));
+            assertEquals(6, saved.path("hope").path("on").asInt());
+            assertEquals(2, saved.path("stress").path("on").asInt());
+            ObjectNode reactivated = (ObjectNode) saved;
+            reactivated.withArray("effects").add(effect);
+            reactivated.withObject("/hope").put("on", 5);
+            store.saveSheet(campaign.getId(), "rogue", reactivated.toString());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            roll = null;
+            for (int i = 0; i < 200; i++) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12","source":"action","actorId":"rogue"}
+                        """, true).join();
+                JsonNode candidate = inbox.next("roll");
+                if (candidate.path("rolls").path(0).asInt() >= 10
+                        && candidate.path("rolls").path(0).asInt() != candidate.path("rolls").path(1).asInt()) {
+                    roll = candidate;
+                    break;
+                }
+            }
+            assertNotNull(roll);
+            request.put("actionId", "hope");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            update = inbox.next("rollUpdate");
+            assertTrue(update.path("rolls").path(0).asInt() > 12);
+            response = rewardHttp(cookie, "rogue", roll);
+            assertEquals(200, response.statusCode(), response.body());
+        } finally { ws.abort(); }
+    }
+
     @Test
     void unstoppableAdvancesOncePerDamageRollEndsOnOverflowAndSceneEnd() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("guardian").name("Guardian").ownerId(playerId()).build());

@@ -1,4 +1,5 @@
 import { el } from './login';
+import { confirmDialog } from './dialogs';
 import { markdownBlock } from './compendium';
 import {
   CatalogShapes, CATALOG_LABELS, cloneValue, entryTemplate, entryFieldTab, fieldHelp, fieldLabel, isCatalogObject,
@@ -35,7 +36,12 @@ export class CatalogEditor {
   }
 
   get dirty(): boolean { return !!this.draft && JSON.stringify(this.draft) !== this.original; }
-  canClose(): boolean { return !this.busy && (!this.dirty || window.confirm('Discard unsaved catalog changes?')); }
+  canClose(): boolean { return !this.busy && !this.dirty; }
+  async requestClose(): Promise<boolean> {
+    if (this.busy) return false;
+    if (!this.dirty) return true;
+    return await confirmDialog('Discard unsaved catalog changes?', 'Unsaved changes', 'Discard changes') && !this.busy;
+  }
   discard(): void { this.draft = undefined; this.render(); }
 
   async open(): Promise<void> {
@@ -58,8 +64,8 @@ export class CatalogEditor {
     const entries = this.documents.get(this.category)?.file.entries;
     return Array.isArray(entries) ? entries.filter(isCatalogObject) : [];
   }
-  private choose(entry?: CatalogObject, duplicate = false): void {
-    if (!this.canClose()) return;
+  private async choose(entry?: CatalogObject, duplicate = false): Promise<void> {
+    if (!this.canClose() && !await this.requestClose()) return;
     this.draft = cloneValue(entry ?? entryTemplate(this.category));
     delete this.draft._editorOriginal;
     this.existingId = entry && !duplicate ? String(entry.id) : '';
@@ -71,7 +77,7 @@ export class CatalogEditor {
   }
 
   private async reload(): Promise<void> {
-    if (!this.canClose()) return;
+    if (!this.canClose() && !await this.requestClose()) return;
     this.busy = true; this.render();
     try {
       const document = await (await this.request(`/api/dm/catalog/${this.category}`)).json() as Document;
@@ -117,8 +123,8 @@ export class CatalogEditor {
     const category = el('select', { disabled: this.busy, ariaLabel: 'Catalog category' },
       ...Object.entries(CATALOG_LABELS).map(([value, name]) => el('option', { value }, name)));
     category.value = this.category;
-    category.onchange = () => {
-      if (!this.canClose()) { category.value = this.category; return; }
+    category.onchange = async () => {
+      if (!this.canClose() && !await this.requestClose()) { category.value = this.category; return; }
       this.category = category.value; this.draft = undefined; this.query = ''; this.message = '';
       this.panels = []; this.sourcePath = ''; this.scrollPositions.clear(); this.renderedView = ''; this.render();
     };

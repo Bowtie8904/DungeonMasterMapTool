@@ -19,6 +19,33 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void fearRewardRecoveryJournalsCampaignFearAndClaimTogether() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Fear reward");
+        campaign.setFear(5);
+        store.save(campaign);
+        var roll = mapper.createObjectNode().put("id", 1).put("ts", 10).put("rewardClaimed", false);
+        store.appendHistoryChecked(campaign.getId(), roll);
+        roll.put("rewardClaimed", true);
+        var transaction = mapper.createObjectNode().put("$fear", 4);
+        transaction.set("$roll", roll);
+        var report = mapper.createObjectNode().put("id", 2).put("ts", 11)
+                .put("text", "Removed 1 GM Fear instead of gaining Hope.");
+        transaction.set("$message", report);
+        transaction.set("hero", mapper.createObjectNode().put("featureRevision", 1));
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals(4, reopened.load(campaign.getId()).getFear());
+        assertEquals(List.of(roll, report), reopened.historyTail(campaign.getId(), 20));
+        assertTrue(reopened.historyTail(campaign.getId(), 20).getFirst().path("rewardClaimed").asBoolean());
+        assertEquals(1, mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("featureRevision").asInt());
+        assertTrue(Files.notExists(journal));
+        assertEquals(4, reopened.load(campaign.getId()).getFear());
+    }
+
+    @Test
     void sessionResourcesArePersistedLikeOtherResources() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

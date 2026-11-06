@@ -1,4 +1,5 @@
 import { el } from '../login';
+import { confirmDialog } from '../dialogs';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
   dualityExpression, handsUsed, multiclassesOf, shortTrait, signed, tierOf,
@@ -6,7 +7,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, resourceDefinitions, rollBonus,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -33,7 +34,7 @@ import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
 export interface RollRequest {
-  damageRules?: { comboDie?: number; maximumOnes?: boolean; rerollBelow?: number };
+  damageRules?: { comboDie?: number; maximumOnes?: boolean; rerollBelow?: number; matchingDice?: boolean };
   label: string;
   expression: string;
   kind?: 'duality';
@@ -62,6 +63,7 @@ export class SheetBus {
 }
 
 export interface SheetViewOptions {
+  supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
   character: CharacterSheet;
@@ -292,7 +294,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
     const bonus = rollBonus(c, targets, w, false);
     openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll('damage', w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
-      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation);
+      () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation, opts.supportsSeraphAutomation);
   };
   if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource) => {
     const spell: Weapon = { name: label, slot: 'Primary', damageType: spec.type === 'physical' ? 'phys' : 'magic', trait: 'Presence', range: '', damage: spec.dice, hands: 1, tier: 0, fixedDice: spec.fixed,
@@ -329,7 +331,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
-    if (!actions.length && !a?.resources?.length && !a?.effectCounters?.length && !a?.uses) return null;
+    if (!actions.length && !a?.resources?.length && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
     if (key.startsWith('item:') || key.startsWith('feat:')) {
       for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
@@ -374,12 +376,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.actionRoll?.trait !== 'highest') b.textContent = currentCost ? `${action.label} (${currentCost})` : action.label;
     });
     const setBusy = (value: boolean) => { busy = value; b.disabled = value; };
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
-      if (action.confirm && !window.confirm(action.confirm)) return;
+      if (action.confirm && !await confirmDialog(action.confirm, action.label)) return;
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
-          && !window.confirm('Confirm at the table that you have earned this Mask token.')) return;
+          && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
       if ((action.beastform || action.evolution || action.channel || action.aura) && !opts.supportsDruidAutomation?.()) {
         opts.onLog?.('Update the host to use Druid automation.');
@@ -432,7 +434,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (!opts.supportsPartyFeatures?.()) { opts.onLog?.('Update the host to use party feature actions.'); return; }
       }
       if (action.target || action.check || action.chatBenefits) {
-        if (a.deathMove?.kind === 'lifeWard' && !window.confirm('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
+        if (a.deathMove?.kind === 'lifeWard' && !await confirmDialog('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
           openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(); render(); }));
@@ -589,6 +591,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         ...extraResources.map((r) => vital(r.label, poolControls(r))),
         ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? [])
           .map(r => vital(r.label, counterResource(r))),
+        ...activeFeatures(c).flatMap(f => f.automation?.dicePool ? [vital(f.automation.dicePool.label, dicePoolControls(f.automation.dicePool))] : []),
       ),
     );
   }
@@ -608,13 +611,35 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return el('output', { ariaLabel: r.label }, effectCounterText(c, r.effect));
   }
 
+  function dicePoolControls(pool: NonNullable<Automation['dicePool']>): HTMLElement {
+    const dice = poolDice(c, pool);
+    return el('div', { class: 'dh-dice-pool', ariaLabel: pool.label },
+      ...(dice.length ? dice.map(die => {
+        const value = die.counter!.value;
+        const remove = el('button', { type: 'button', class: 'dh-die-remove',
+          title: `Remove die showing ${value} (manual use)`, ariaLabel: `Remove ${pool.label} die showing ${value}` }, '\u00d7');
+        remove.addEventListener('click', () => { c.effects = c.effects.filter(e => e.id !== die.id); render(); });
+        const hope = el('button', { type: 'button', class: 'dh-die-hope',
+          title: `Spend this die to gain ${value} Hope`, ariaLabel: `Spend ${pool.label} die to gain ${value} Hope` }, '+');
+        hope.disabled = c.hope.on >= c.hope.slots;
+        hope.addEventListener('click', () => {
+          const gained = Math.min(value, c.hope.slots - c.hope.on);
+          c.hope.on += gained;
+          c.effects = c.effects.filter(e => e.id !== die.id);
+          opts.onLog?.(formatActionReport({ title: pool.label, character: c.name, lines: [`Spent die ${value}: gained ${gained} Hope.`] }));
+          render();
+        });
+        return el('span', { class: 'dh-pool-die' }, el('strong', {}, String(value)), hope, remove);
+      }) : [el('span', { class: 'muted' }, 'No dice rolled')]));
+  }
+
   function poolControls(r: NonNullable<Automation['resources']>[number]): HTMLElement {
     const input = poolInput(r);
     if (r.id !== 'death-mask') return input;
     input.title = 'Manual Mask token adjustment (0–4); confirm the reason at the table.';
     const gain = el('button', { type: 'button', class: 'small', disabled: (c.resources?.[r.id] ?? 0) >= 4 }, 'Gain token');
-    gain.addEventListener('click', () => {
-      if (!window.confirm('Confirm at the table that you have earned one Mask token.')) return;
+    gain.addEventListener('click', async () => {
+      if (!await confirmDialog('Confirm at the table that you have earned one Mask token.')) return;
       c.resources ??= {};
       c.resources[r.id] = Math.min(4, (c.resources[r.id] ?? 0) + 1);
       render();
@@ -659,7 +684,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     for (const [id, label] of PAGES) {
       if (id === 'companion' && !companionRules(c)) continue;
       if (id === 'beastform' && !c.effects.some(e => e.beastform)) continue;
-      const count = id === 'effects' && c.effects.length ? ` (${c.effects.length})` : '';
+      const effectCount = c.effects.filter(e => !e.dicePool).length;
+      const count = id === 'effects' && effectCount ? ` (${effectCount})` : '';
       const b = el('button', { class: 'tab', type: 'button' }, label + count);
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(id === page));
@@ -864,7 +890,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function effectsPage(): HTMLElement {
     const untilText = (e: ActiveEffect) => ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
-    const rows = c.effects.map((e) => {
+    const rows = c.effects.filter(e => !e.dicePool).map((e) => {
       const dismiss = el('button', { class: 'small', type: 'button' }, 'Remove');
       dismiss.disabled = !!e.lockedHp || !!e.earthAuraGrant;
       if (e.earthAuraGrant) dismiss.title = 'Ends automatically with the granting druid\'s Earth aura; select the roll option only when in range.';
@@ -1355,7 +1381,7 @@ function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: n
 }
 
 /** Small modal: advantage and Experience spend; posts the duality roll to the chat. */
-export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0, supportsDruidAutomation?: () => boolean): void {
+export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0, supportsDruidAutomation?: () => boolean, supportsSeraphAutomation?: () => boolean): void {
   const mod = trait.reduce((n, s) => n + Number(s.expression), 0);
   let reaction = targets.includes('reaction');
   const canChooseReaction = !weapon && !pendingAction && !targets.includes('attack') && targets.some((target) => target.startsWith('trait:'));
@@ -1389,6 +1415,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     try { selected(); } catch (e) { return (e as Error).message; }
     if (weapon && damagePool(c, weapon)?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
     if (selected().some(s => s.option.rerollBelowProficiency) && !supportsDruidAutomation?.()) return 'Update the host to use Deadly Raptor damage rerolls.';
+    if (selected().some(s => s.option.matchingDice) && !supportsSeraphAutomation?.()) return 'Update the host to use Sacred Resonance.';
     if (weapon && (damagePool(c, weapon)?.maximumOnes || selected().some(s => s.option.combo)) && !supportsBrawlerRolls?.()) return 'Update the host to roll Combo Strike or Exacting damage.';
     if (selected().some((s) => s.option.multiplier) && !supportsRollMultipliers?.()) return 'This host does not support damage multipliers. Update the host to use this option.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
@@ -1474,7 +1501,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
     const request: RollRequest = weapon ? {
       label: otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
-      ...(selected().some(s => s.option.combo || s.option.rerollBelowProficiency) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
+      ...(selected().some(s => s.option.combo || s.option.rerollBelowProficiency || s.option.matchingDice) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
+        ...(selected().some(s => s.option.matchingDice) ? { matchingDice: true } : {}),
         ...(selected().some(s => s.option.combo) ? { comboDie: comboDie(c) } : {}),
         ...(damagePool(c, weapon)?.maximumOnes ? { maximumOnes: true } : {}),
         ...(selected().some(s => s.option.rerollBelowProficiency) ? { rerollBelow: derivedStats(c).proficiency } : {}),

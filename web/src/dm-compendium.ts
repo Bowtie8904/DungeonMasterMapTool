@@ -4,7 +4,7 @@ import { CatalogEditor } from './catalog-editor';
 import type { CatalogObject } from './catalog-fields';
 
 declare global {
-  interface Window { dmmtCanCloseCatalog?: () => boolean }
+  interface Window { dmmtCanCloseCatalog?: () => boolean; dmmtRequestCloseCatalog?: () => Promise<boolean> }
 }
 
 /** Standalone content for the host's JavaFX WebView, not a player login or browser pop-out. */
@@ -47,8 +47,8 @@ export function startDmCompendium(root: HTMLElement): void {
   const edit = el('button', { type: 'button' }, 'Edit JSON catalogs');
   const tabs = el('div', { class: 'catalog-tabs' }, browse, edit);
   let editing = false;
-  browse.onclick = () => {
-    if (!editor.canClose()) return;
+  browse.onclick = async () => {
+    if (!await editor.requestClose()) return;
     editor.discard();
     editing = false;
     editor.element.remove();
@@ -63,10 +63,7 @@ export function startDmCompendium(root: HTMLElement): void {
     void editor.open();
   };
   window.dmmtCanCloseCatalog = () => editor.canClose();
-  const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (editor.dirty) { event.preventDefault(); event.returnValue = ''; }
-  };
-  window.addEventListener('beforeunload', beforeUnload);
+  window.dmmtRequestCloseCatalog = () => editor.requestClose();
   body.append(tabs, panel.element);
   let revision = '';
   let refreshing = false;
@@ -89,7 +86,7 @@ export function startDmCompendium(root: HTMLElement): void {
   const timer = window.setInterval(() => { void refresh(); }, 3000);
   window.addEventListener('pagehide', () => {
     clearInterval(timer);
-    window.removeEventListener('beforeunload', beforeUnload);
     delete window.dmmtCanCloseCatalog;
+    delete window.dmmtRequestCloseCatalog;
   }, { once: true });
 }

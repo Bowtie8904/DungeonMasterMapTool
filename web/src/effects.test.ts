@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { effectSource } from './effects';
+import { effectSource, renderEffects } from './effects';
 import { emptyCharacter } from './daggerheart/data';
 import type { ActiveEffect } from './daggerheart/engine';
 
 describe('effectSource', () => {
+  it('does not render class-resource dice as individual effect rows', () => {
+    const c = emptyCharacter('Seraph');
+    c.effects = [{ id: 'pool-prayer-1', name: 'Prayer Dice 1', kind: 'buff', dicePool: 'prayer' }];
+    const rendered: Array<Node | string> = [];
+    const host = { replaceChildren: (...nodes: Array<Node | string>) => { rendered.push(...nodes); } } as HTMLElement;
+    renderEffects(host, [{ actorId: 'seraph', name: 'Seraph', character: c }], new Set(), () => {}, () => {});
+    expect(rendered).toEqual([]);
+  });
+
   const effect = (over: Partial<ActiveEffect> = {}): ActiveEffect => ({ id: 'e1', name: 'Fury', kind: 'buff', source: "Patron's Fury", ...over });
 
   it('shows the action source and effect details', () => {

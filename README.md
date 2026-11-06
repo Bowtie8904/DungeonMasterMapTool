@@ -174,6 +174,19 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Gain 1 Hope / Clear 1 Stress**. Outcome conversions no longer grant Hope automatically; claim it on the
   converted roll. Claims are saved on the host and stay consumed after reloads. At maximum Hope the button
   is disabled, except a critical can still clear marked Stress; capped rewards are not consumed.
+  **Seraph:** Roll Prayer Dice once per session without a confirmation; the feature shows its remaining session use.
+  Manage individual values only in the compact class-resource group: the face, a highlighted yellow **+** to gain Hope, and **x** to remove
+  a manually used die. Each die uses an independent random sample; d4 repeats are normal, especially with Devout.
+  Each die can reduce incoming damage, add to any chat roll (including an ally's), grant Hope, or be removed for
+  manual use. Devout rolls an extra die and drops the lowest, and grants a second Sparing Touch use; healing reports
+  name the recipient. Spirit Weapon adds a Stress-spend button to weapon attack chat. Sacred Resonance defaults on
+  for Melee/Very Close/Close weapon damage and doubles matching values across all kept damage dice, including bonuses.
+  Its extra damage appears on the Sacred Resonance breakdown row; each dice source retains its base total.
+  Explanatory breakdown notes wrap within both browser and native DM chat cards, including saved rolls.
+  Ethereal Visage offers **Remove 1 Fear instead** beside Gain Hope on successful normal Presence-with-Hope rolls,
+  never reactions; either claim consumes the reward. Removal needs no confirmation and announces the GM Fear change
+  in chat. With hidden difficulty, selecting this reward asserts that the roll succeeded.
+  Power of the Gods automatically upgrades Wings of Light to d12. New host mechanics require Seraph-capable hosts.
   Rerolls produce a single roll card. Limited uses persist across reconnects and host restarts; the DM resets them
   with **End scene** (per-scene uses and scene-duration effects) and **New session** (also per-session uses,
   session-duration effects and session token pools). Both post a highlighted announcement in the chat.
@@ -188,6 +201,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   Lifespring and other configured healing actions select and heal a character; Eye of the Storm selects a
   character for +1 Evasion until the caster takes Severe damage or recasts. Luckbringer grants Hope to all
   actors belonging to currently connected players.
+  Rogue Nightwalkers can roll Dark Cloud against difficulty 15. Syndicate Contacts Everywhere prepares a
+  shared buff: choose +3 to either Duality die after an action roll, or use its preselected 2d8 damage bonus.
+  Reliable Backup raises its session uses to three and adds a one-HP mitigation and a conversational Presence
+  roll with a d20 Hope Die. Using any one benefit ends the buff; equal adjusted dice are a critical success.
 - **Daggerheart Character Mancer and level-up guide**: a new actor's sheet only shows a "Start the Character Mancer"
   prompt. The wizard shows one small choice per step (class, subclass, ancestry, community, an optional transformation,
   traits, primary weapon, secondary weapon, armor, supplies,

@@ -443,7 +443,15 @@
     {
      "name": "Sacred Resonance",
      "text": "When you roll damage for your “Spirit Weapon” feature, if any of the die results match, double the value of each matching die. For example, if you roll two 5s, they count as two 10s.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "resonance", "label": "Sacred Resonance", "roll": "damage",
+       "weaponRanges": ["Melee", "Very Close", "Close"], "weapon": "any",
+       "matchingDice": true, "defaultOn": true,
+       "description": "Double every matching die result across all damage dice for this Spirit Weapon attack, including bonus dice."
+      }]
+     }
     }
    ]
   },
@@ -463,7 +471,8 @@
     {
      "name": "Devout",
      "text": "When you roll your Prayer Dice, you can roll an additional die and discard the lowest result. Additionally, you can use your “Sparing Touch” feature twice instead of once per long rest.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": { "usesOverrides": { "feat:Sparing Touch": 2 } }
     }
    ]
   },
@@ -485,10 +494,12 @@
      "text": "When you have an equipped weapon with a range of Melee or Very Close, it can fly from your hand to attack an adversary within Close range and then return to you. You can **mark a Stress** to target an additional adversary within range with the same attack roll.",
      "type": "subclass",
      "automation": {
-      "actions": [
+      "rollTriggers": [
        {
         "id": "use",
-        "label": "Spirit Weapon",
+        "label": "Spirit Weapon: target an additional adversary",
+        "on": "attack", "weaponAttack": true,
+        "weaponRanges": ["Melee", "Very Close", "Close"],
         "cost": {
          "stress": 1
         }
@@ -1312,7 +1323,12 @@
     {
      "name": "Dark Cloud",
      "text": "Make a **Spellcast Roll(15)**. On a success, create a temporary dark cloud that covers any area within Close range. Anyone in this cloud can’t see outside of it, and anyone outside of it can’t see in. You’re considered *Cloaked* from any adversary for whom the cloud blocks line of sight.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       { "id": "cast", "label": "Dark Cloud", "actionRoll": { "trait": "spellcast", "difficulty": 15 } }
+      ]
+     }
     },
     {
      "name": "Adrenaline",
@@ -2628,7 +2644,16 @@
     {
      "name": "Reliable Backup",
      "text": "You can use your “Contacts Everywhere” feature three times per session. The following options are added to the list of benefits you can choose from when you use that feature:\n\n- When you mark 1 or more Hit Points, they can rush out to shield you, reducing the Hit Points marked by 1.\n\n- When you make a Presence Roll in conversation, they back you up. You can roll a **d20** as your Hope Die.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "usesOverrides": { "feat:Contacts Everywhere": 3 },
+      "rollOptions": [
+       { "id": "presence", "label": "Reliable Backup: Hope d20", "roll": "trait:Presence", "hopeDie": 20, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "description": "Only for a Presence roll in conversation." }
+      ],
+      "mitigation": [
+       { "id": "shield", "label": "Reliable Backup: reduce HP marked by 1", "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "when": { "markingHp": true }, "markedHpOnly": true, "hp": -1 }
+      ]
+     }
     }
    ]
   },
@@ -2657,7 +2682,20 @@
       "actions": [
        {
         "id": "use",
-        "label": "Contacts Everywhere"
+        "label": "Contacts Everywhere",
+        "steps": [
+         { "op": "effect", "effect": {
+          "name": "Contacts Everywhere", "kind": "buff", "until": "session",
+          "text": "Choose one benefit from Contacts Everywhere; using it ends this effect.",
+          "rollOptions": [
+           { "id": "damage", "label": "Contacts Everywhere: 2d8 damage", "roll": "damage", "dice": "2d8", "defaultOn": true, "endEffect": "Contacts Everywhere" }
+          ],
+          "rollTriggers": [
+           { "id": "hope", "label": "Contacts Everywhere: +3 Hope die", "on": "action", "usesSource": false, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "dualityDieBonus": { "die": "hope", "value": 3 } },
+           { "id": "fear", "label": "Contacts Everywhere: +3 Fear die", "on": "action", "usesSource": false, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "dualityDieBonus": { "die": "fear", "value": 3 } }
+          ]
+         } }
+        ]
        }
       ]
      }
@@ -3333,6 +3371,7 @@
      "text": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope.",
      "type": "subclass",
      "automation": {
+      "hopeReward": { "removeFear": 1, "roll": "trait:Presence" },
       "rollOptions": [
        {
         "id": "advantage",
@@ -3370,10 +3409,11 @@
         "label": "Wings of Light",
         "roll": "damage",
         "dice": "1d8",
+        "diceByFeature": { "Power of the Gods": "1d12" },
         "cost": {
          "hope": 1
         },
-        "description": "Successful attack while flying; Power of the Gods upgrades this manually."
+        "description": "Successful attack while flying."
        }
       ],
       "actions": [
@@ -3708,7 +3748,14 @@
     {
      "name": "Prayer Dice",
      "text": "At the beginning of each session, roll a number of **d4s** equal to your subclass’s Spellcast trait and place them on your character sheet in the space provided. These are your Prayer Dice. You can spend any number of Prayer Dice to aid yourself or an ally within Far range. You can use a spent die’s value to reduce incoming damage, add to a roll’s result after the roll is made, or gain Hope equal to the result. At the end of each session, clear all unspent Prayer Dice.",
-     "type": "class"
+     "type": "class",
+     "automation": {
+      "dicePool": { "id": "prayer", "label": "Prayer Dice", "count": "@spellcast", "sides": 4, "extraByFeature": { "Devout": 1 } },
+      "uses": { "max": 1, "per": "session" },
+      "actions": [{
+       "id": "roll", "label": "Roll Prayer Dice", "rollDicePool": true
+      }]
+     }
     }
    ]
   },

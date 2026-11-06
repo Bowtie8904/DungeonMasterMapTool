@@ -111,6 +111,72 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers the Fear alternative beside Hope, gates old hosts, and excludes reactions and criticals', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const confirm = vi.fn(() => { throw new Error('Native prompts are forbidden'); });
+    vi.stubGlobal('window', { confirm });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Seraph', { name: 'Ethereal Visage', automation: {
+      hopeReward: { removeFear: 1, roll: 'trait:Presence' },
+    } });
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, rolls: [10, 3], source: 'action,trait:Presence', rewardClaimed: false };
+    const supported = { ...host, playerId: original.fromId, supportsRollRewards: () => true, supportsSeraphAutomation: () => true };
+    const old = rollButtons(message, { ...supported, supportsSeraphAutomation: () => false }) as unknown as FakeElement;
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    const reaction = rollButtons({ ...message, source: 'reaction,trait:Presence' }, supported) as unknown as FakeElement;
+    const critical = rollButtons({ ...message, rolls: [10, 10] }, supported) as unknown as FakeElement;
+    const failed = rollButtons({ ...message, difficulty: 99 }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.text).toContain('Gain 1 Hope');
+    expect(box.text).toContain('Remove 1 Fear instead');
+    expect(old.queryAll('button').find(b => b.text === 'Remove 1 Fear instead')!.disabled).toBe(true);
+    expect(reaction.text).not.toContain('Remove 1 Fear');
+    expect(critical.text).not.toContain('Remove 1 Fear');
+    expect(failed.text).not.toContain('Remove 1 Fear');
+    await box.queryAll('button').find(b => b.text === 'Remove 1 Fear instead')!.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ reward: 'removeFear', actorId: 'actor-b' });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(box.text).not.toContain('Gain 1 Hope');
+    expect(box.text).not.toContain('Remove 1 Fear');
+  });
+
+  it('offers each Prayer Die on unlinked plain rolls and gates unsupported hosts', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Seraph', undefined);
+    c.effects = [1, 2].map(n => ({ id: `pool-prayer-${n}`, name: `Prayer Dice ${n}`, kind: 'buff', dicePool: 'prayer',
+      rollTriggers: [{ id: 'spend', label: `Prayer Dice: +3 (die ${n})`, on: 'any', audience: 'any', addDice: '3', endEffect: `Prayer Dice ${n}` }] }));
+    const { host } = hostFor({ seraph: c });
+    const message: RollMessage = { id: 1, ts: 1, fromId: 'ally', from: 'Ally', expression: '1d6', rolls: [4], total: 4 };
+    const old = rollButtons(message, host) as unknown as FakeElement;
+    const box = rollButtons(message, { ...host, supportsSeraphAutomation: () => true, supportsPartyFeatures: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(2);
+    expect(box.queryAll('button').every(b => !b.disabled)).toBe(true);
+    expect(old.queryAll('button').every(b => b.disabled)).toBe(true);
+  });
+
+  it('gates effect die-adjustment buttons on the host capability', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    c.effects = [{ id: 'contact', name: 'Contacts Everywhere', kind: 'buff', rollTriggers: [
+      { id: 'hope', label: '+3 Hope', on: 'action', requiresEffect: 'Contacts Everywhere', endEffect: 'Contacts Everywhere', dualityDieBonus: { die: 'hope', value: 3 } },
+      { id: 'fear', label: '+3 Fear', on: 'action', requiresEffect: 'Contacts Everywhere', endEffect: 'Contacts Everywhere', dualityDieBonus: { die: 'fear', value: 3 } },
+    ] }];
+    const { host } = hostFor({ 'actor-b': c });
+    const oldHost = rollButtons(original, { ...host, playerId: 'player-b' }) as unknown as FakeElement;
+    const newHost = rollButtons(original, { ...host, playerId: 'player-b', supportsDualityDieBonus: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(oldHost.queryAll('button').map(b => b.disabled)).toEqual([true, true]);
+    expect(newHost.queryAll('button').map(b => b.disabled)).toEqual([false, false]);
+    expect(oldHost.queryAll('button')[0].title).toContain('Update the host');
+    const spent = rollButtons({ ...original, featureUses: ['actor-b:effectBonus:Contacts Everywhere'] },
+      { ...host, playerId: 'player-b', supportsDualityDieBonus: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(spent.queryAll('button')).toHaveLength(0);
+  });
+
   it('gates Guardian chat actions on host support and retains them after spending the activation', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Bob', { name: 'Unstoppable', automation: {

@@ -181,7 +181,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   are numbers or supported formula strings. Omit `max` for an uncapped pool; never infer a cap from Hope or a
   description. Resource ids are stable, shared sheet keys, so a Warlock subclass can spend the `favor` declared
   by its class's Favor feature. Initial values are applied once, not every render/re-equip. Resource counters
-  are not rolled-die collections: Prayer Dice retain distinct rolled values and remain manual.
+  are not rolled-die collections: use `dicePool` for distinct rolled values.
   Rally Dice use consumable effects instead of numeric resource pools.
   `session: true` declares a session pool (initially 0): it is saved with the sheet like other pools and
   reset to 0 when the DM clicks **New session**.
@@ -189,6 +189,33 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `longRestLoss` subtracts that many tokens automatically on each long rest, floored at zero (Feed).
   `resetOn: "longRest"|"shortRest"|"rest"` restores the pool to `initial` on that rest;
   a long rest also counts as a short rest. Toxic Concoctions uses `initial: 0, resetOn: "longRest"`.
+- **dicePool**: `{id, label, count, sides, extraByFeature?: {"Feature": number}}` declares one grouped class
+  resource. An action with `rollDicePool: true` replaces its dice, rolling `count` (a supported value formula)
+  plus feature-granted extras and keeping the highest `count`. Nonpositive count produces no dice.
+  Each kept face is a session-duration effect with `dicePool: id` and a `counter` carrying its value.
+  Prayer Dice declares `uses: {max: 1, per: "session"}`; `runActionDetailed` counts the use before rolling,
+  without confirmation. Rests do not refresh it; New session does. Each die takes an independent RNG sample;
+  repeated faces remain valid. The feature displays its session counter but no duplicate dice.
+  The header groups values as compact dice chips, not individual resource/effect rows; each chip supports manual
+  removal (**x**) and spending for Hope (**+**). Per-die mitigation reduces damage by that value and consumes the effect.
+  Per-die `on: "any", audience: "any"` chat triggers add the face as a flat `addDice` expression and consume
+  the source die, including on plain, damage and ally rolls. The host resolves these dynamic triggers from the
+  stored die and catalog pool, not client-supplied actions. Buttons use `Prayer die: +N`, without indices.
+  New session removes every unspent die. Loading older dice refreshes labels while preserving IDs and values,
+  and marks the session use spent if unspent dice already exist without a counter.
+- **hopeReward**: `{removeFear: 1, roll: "trait:Presence"}` offers an alternative to the
+  normal Hope reward on a noncritical normal roll with Hope. The host validates ownership, trait, outcome,
+  known difficulty and available Fear, and journals the Fear change, explanatory chat report and shared one-time
+  reward claim together. No confirmation dialog is shown. With hidden difficulty the reward button asserts success.
+  Reaction rolls never qualify; reports retain the roll's whisper audience.
+- **matchingDice**: a roll option with `matchingDice: true` requests Sacred Resonance damage rules.
+  `weaponRanges: ["Melee", "Very Close", "Close"]` filters eligible weapon roll options/triggers.
+  Each matching kept face counts double across all damage sources, including bonus and Combo Dice;
+  discarded dice and flat/critical modifiers do not participate. Original faces and base contribution totals
+  remain unchanged; the full additional damage appears on the Sacred Resonance row instead of its zero
+  placeholder (the host adds a row when absent). Combined total multipliers also multiply the matching-die bonus.
+  The additive `hello.seraphAutomation` capability gates new host rules and alternative rewards; older clients
+  retain ordinary rolls/rewards. Online Play and DM Link compatibility versions are unchanged.
 - **uses**: `max` per `shortRest`, `longRest`, `rest`, `scene` or `session`. Scene uses reset when the DM clicks
   **End scene** or **New session** and on any rest; session uses reset only on **New session**. Reconnecting or
   restarting hosting resets nothing. Exhausted uses show "No uses left this scene/this session/until a rest".
@@ -366,6 +393,12 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `rollTriggers[].addDice` rolls additional dice on the host after the original action, paying costs once
   and updating the saved roll's expression, dice, total and breakdown through additive `rollUpdate` fields.
   Original Hope/Fear dice and outcome are unchanged. Heart of a Poet uses this for its 1-Hope d4.
+  Effects may also carry `rollTriggers`; the host resolves their definitions from the learned granting
+  feature, not from editable effect metadata. `dualityDieBonus: {die: "hope"|"fear", value: number}`
+  adjusts that die and the total on the finished roll, preserving its original face in the host's saved roll
+  and identifying the adjustment in the breakdown. Equal adjusted dice are a critical success. The
+  `hello.dualityDieBonus` capability gates these buttons on older hosts. `requiresEffect` and `endEffect`
+  make both choices share one consumable effect (Contacts Everywhere).
   A trigger's `weapon` restricts it to the named attack weapon. `tokenGain: {resource, max}` asks for a positive
   integer `amount` through a styled in-app popup with inline validation and Cancel/Feed controls (no browser
   prompt). Cancellation spends nothing; request errors stay inline with input retained for retry.
@@ -669,6 +702,7 @@ claims retain their prior per-player behavior.
   Option fields:
   - `id`, `label`, `description`; `passive` (always applied when its conditions hold) or `defaultOn`.
     `requiresEffect` only offers the mitigation while the named effect is active (Retracted).
+    `endEffect` consumes the named effect only when the mitigation actually applies (Reliable Backup).
     `excludesEffect` blocks activation while the named effect is already active (Wolf Form).
   - `when`: `type` (`physical`/`magic`), `severity` (list of `minor`/`major`/`severe`/`massive`, after reductions),
     `armor`, `lastArmor`, `armorFull`, `lastHp`, `hpUnmarkedMax`, `min: {value, at}` (e.g. `@cards_splendor` ≥ 4).
@@ -680,6 +714,7 @@ claims retain their prior per-player behavior.
     `armorCost`, `armorBlocked`, `saveArmor`, `roll: {count, sides, success, each}` (`count` may be a value, `"hp"` or
     `"quantity"`; without `success` the total reduces damage), and `followUp: {dice, text}` rolled on apply.
     `effect` adds a standard active effect only when the damage is applied (Wolf Form), never on preview/cancel.
+    `markedHpOnly` applies an HP adjustment after capping damage to remaining HP slots.
   - Order: thresholds → double → halve (rounded up, resistance never stacks) → flat/rolled reductions → severity (massive = at least 2× Severe) →
     negate → Armor Slots → severity steps → HP adjustments → HP replacement. HP is capped at the unmarked slots.
     Values may use `@hp`, `@armorScore`, `@cards_<domain>` and the usual named values.

@@ -42,6 +42,7 @@ public final class CompendiumWindow {
 
     public final class SheetCloseBridge {
         public void done() { Platform.runLater(CompendiumWindow.this::close); }
+        public void cancelled() { Platform.runLater(() -> closing = false); }
         public void failed(String message) {
             Platform.runLater(() -> {
                 if (frame == null) return;
@@ -55,6 +56,14 @@ public final class CompendiumWindow {
 
     public void requestClose() {
         if (closing || frame == null) return;
+        if (!sheetWindow && Boolean.TRUE.equals(view.getEngine().executeScript("typeof window.dmmtRequestCloseCatalog === 'function'"))) {
+            closing = true;
+            ((JSObject) view.getEngine().executeScript("window")).setMember("_dmmtSheetClose", closeBridge);
+            view.getEngine().executeScript("window.dmmtRequestCloseCatalog().then(allowed => allowed"
+                    + " ? window._dmmtSheetClose.done() : window._dmmtSheetClose.cancelled())"
+                    + ".catch(error => window._dmmtSheetClose.failed(String(error.message)))");
+            return;
+        }
         if (!sheetWindow && Boolean.TRUE.equals(view.getEngine().executeScript("typeof window.dmmtCanCloseCatalog === 'function'"))
                 && !Boolean.TRUE.equals(view.getEngine().executeScript("window.dmmtCanCloseCatalog()"))) return;
         if (!sheetWindow || !Boolean.TRUE.equals(view.getEngine().executeScript("typeof window.dmmtFlushSheet === 'function'"))) {
@@ -87,13 +96,6 @@ public final class CompendiumWindow {
         this.closed = closed;
         view = new WebView();
         view.setContextMenuEnabled(false);
-        view.getEngine().setConfirmHandler(message -> {
-            var alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION,
-                    message, javafx.scene.control.ButtonType.OK, javafx.scene.control.ButtonType.CANCEL);
-            alert.initOwner(desktop.getScene().getWindow());
-            alert.setHeaderText(sheetWindow ? "Confirm character action" : "Unsaved catalog changes");
-            return alert.showAndWait().orElse(javafx.scene.control.ButtonType.CANCEL) == javafx.scene.control.ButtonType.OK;
-        });
         Label title = new Label(windowTitle);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

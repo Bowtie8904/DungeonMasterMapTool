@@ -156,12 +156,12 @@ export async function takeDeathMove(actorId: string, move: import('./daggerheart
   if (!res.ok) throw await readError(res);
 }
 
-export async function claimRollReward(actorId: string, roll: { id: number | string; ts: number }): Promise<void> {
+export async function claimRollReward(actorId: string, roll: { id: number | string; ts: number }, reward?: 'removeFear'): Promise<void> {
   const res = await hostFetch('/api/roll-reward', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actorId, roll }),
+    body: JSON.stringify({ actorId, roll, ...(reward ? { reward } : {}) }),
   });
   if (!res.ok) throw await readError(res);
 }

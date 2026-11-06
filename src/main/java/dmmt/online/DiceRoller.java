@@ -1,6 +1,7 @@
 package dmmt.online;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
@@ -89,6 +90,31 @@ public final class DiceRoller {
         }
 
         return new Result(result.expression(), rolls, total(parsed, rolls));
+    }
+
+    /** Per-die bonus for matching kept faces across the whole roll, not separately per contribution. */
+    public static List<Integer> matchingDiceBonuses(Result result, int maxDice) {
+        Terms parsed = terms(result.expression(), maxDice);
+        boolean[] kept = new boolean[result.rolls().size()];
+        java.util.Arrays.fill(kept, true);
+        for (Keep keep : parsed.keeps()) {
+            List<Integer> indices = new ArrayList<>();
+            for (int i = keep.offset(); i < keep.offset() + keep.count(); i++) indices.add(i);
+            indices.sort(Comparator.comparingInt(i -> Math.abs(result.rolls().get(i))));
+            for (int i = 0; i < keep.count() - keep.kept(); i++) kept[indices.get(i)] = false;
+        }
+        java.util.Map<Integer, Integer> counts = new java.util.HashMap<>();
+        for (int i = 0; i < kept.length; i++) {
+            int face = result.rolls().get(i);
+            if (kept[i] && face > 0) counts.merge(face, 1, Integer::sum);
+        }
+        List<Integer> bonuses = new ArrayList<>();
+        for (int i = 0; i < kept.length; i++) {
+            int face = result.rolls().get(i);
+            bonuses.add(kept[i] && face > 0 && counts.getOrDefault(face, 0) > 1
+                    ? face * (i < parsed.dice().size() ? parsed.multiplier() : 1) : 0);
+        }
+        return bonuses;
     }
 
     public static Result rerollBelow(Result result, int threshold, int maxDice, Random random) {
