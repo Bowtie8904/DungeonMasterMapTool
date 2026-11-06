@@ -367,6 +367,7 @@ export interface Hello {
   dualityDieBonus?: boolean;
   seraphAutomation?: boolean;
   sorcererAutomation?: boolean;
+  warlockAutomation?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

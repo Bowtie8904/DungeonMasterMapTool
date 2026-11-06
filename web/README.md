@@ -301,6 +301,15 @@ same long-rest Charged buff; its optional +10 magic-damage bonus consumes it. Re
 when taking the alternative +3 reaction Difficulty. The new chat-edit dialogs require
 `hello.sorcererAutomation:true`; older hosts show an update hint. Existing compatibility versions and
 settings are unchanged.
+Warlock Favor is shown only in class resources; the exclusive **Gain Favor instead of Hope** reward is
+available on successful Hope action rolls, even at full Hope. Deathless Embrace and Otherworldly Ire ask
+for Favor/Patron Dice; Deadly Vengeance asks for HP marked and also works from mitigation using final HP.
+Patron Dice scale from d6 to d8 at level 5. The host resolves feature dice, costs, rest limits and Embrace
+healing, with descriptive chat reports. Menacing Reach grants an explicit primary-weapon reach buff and
+an attack-chat action to end it after success. Diminish My Foes has feature and Hope-action Favor-input
+dialogs. Fearsome Attack retains its feature button and adds repeatable individual damage-die rerolls,
+charging one Favor each time. Patron's Boon's standard blue feature button does not alter its chat reroll.
+New host actions and rewards require `hello.warlockAutomation:true`; older hosts show an update hint.
 The catalog editor preserves unsaved drafts on cancellation, including when closing its embedded DM window.
 `checks/sheet-layout.html` checks the vertical trait sidebar on every tab and Experiences in Background,
 two-column class/heritage features, compact stats, wider viewport-height floating sheet, pop-out layout,

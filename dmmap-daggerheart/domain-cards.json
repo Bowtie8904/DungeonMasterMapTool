@@ -430,7 +430,7 @@
     "actions": [
      {
       "id": "avoid",
-      "label": "Once per rest: avoid condition (manual)"
+      "label": "Once per rest: avoid condition"
      }
     ]
    }
@@ -2018,7 +2018,7 @@
     "actions": [
      {
       "id": "vulnerable",
-      "label": "Make target Vulnerable (manual)",
+      "label": "Make target Vulnerable",
       "cost": {
        "hope": 1
       }
@@ -2529,7 +2529,7 @@
      },
      {
       "id": "give",
-      "label": "Give ally a benefit (manual)",
+      "label": "Give ally a benefit",
       "cost": {
        "inspiration": 1
       }
@@ -3636,7 +3636,7 @@
      },
      {
       "id": "other",
-      "label": "Touch creature: heal or clear condition (manual)",
+      "label": "Touch creature: heal or clear condition",
       "cost": {
        "restoration": 1
       }

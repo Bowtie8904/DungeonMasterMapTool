@@ -111,6 +111,47 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers Favor as an exclusive Hope reward at full Hope and gates old hosts', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Warlock', { name: 'Favor', automation: { hopeReward: { favor: 1, roll: 'action' } } });
+    c.hope.on = c.hope.slots;
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, rolls: [10, 3], rewardClaimed: false };
+    const supported = { ...host, playerId: original.fromId, supportsRollRewards: () => true, supportsWarlockAutomation: () => true };
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    const old = rollButtons(message, { ...supported, supportsWarlockAutomation: () => false }) as unknown as FakeElement;
+    const reaction = rollButtons({ ...message, source: 'reaction' }, supported) as unknown as FakeElement;
+    const critical = rollButtons({ ...message, rolls: [10, 10] }, supported) as unknown as FakeElement;
+    const failed = rollButtons({ ...message, difficulty: 99 }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const favor = box.queryAll('button').find(b => b.text === 'Gain 1 Favor instead of Hope')!;
+    expect(favor.disabled).toBe(false);
+    expect(box.queryAll('button').find(b => b.text === 'Gain 1 Hope')!.disabled).toBe(true);
+    expect(old.queryAll('button').find(b => b.text === favor.text)!.disabled).toBe(true);
+    for (const other of [reaction, critical, failed]) expect(other.text).not.toContain('Favor instead');
+    await favor.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ reward: 'favor' });
+    expect(box.text).not.toContain('Favor instead');
+    expect(box.text).not.toContain('Gain 1 Hope');
+  });
+
+  it('does not hide repeatable Fearsome Attack after a previous use', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Warlock', { name: 'Fearsome Attack', automation: {
+      rollTriggers: [{ id: 'reroll', label: 'Fearsome Attack', on: 'damage', damageDice: 'reroll', repeatable: true, cost: { favor: 1 } }],
+    } });
+    c.resources = { favor: 3 };
+    c.features.push({ name: 'Favor', text: '', source: 'Warlock', automation: { resources: [{ id: 'favor', label: 'Favor', initial: 3 }] } });
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, kind: 'damage', source: 'damage', featureUses: ['actor-b:feat:Fearsome Attack:reroll'] };
+    const box = rollButtons(message, { ...host, playerId: original.fromId,
+      supportsSorcererAutomation: () => true, supportsWarlockAutomation: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').find(b => b.text.includes('Fearsome Attack'))!.disabled).toBe(false);
+  });
+
   it('gates Sorcerer damage selections on host support without changing manual actions', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Sorcerer', { name: 'Volatile Magic', automation: {

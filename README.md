@@ -369,8 +369,14 @@ Nothing starts until you click **Start online session**, so offline play and the
   Damage buttons (Blighting Strike, Siphon Essence, ...) that pick the dice from the roll result. Domain cards only
   offer a Spellcast button when they ask for one; token cards (Umbral Veil, Flight, ...) track tokens; I See It Coming
   rolls its d4 into the chat. The roll window uses Advantage / Normal / Disadvantage buttons.
-  Custom resource pools such as Warlock **Favor** are configurable and appear on the sheet, with gain/spend actions
-  and a selectable, level-scaled Patron Die. Creation grants can add HP, Stress, Evasion, domain-card choices and
+  Warlock **Favor** appears once in class resources; successful Hope action rolls offer **Gain Favor instead of Hope**
+  as an exclusive roll reward. **Deathless Embrace**, **Deadly Vengeance** (also in mitigation) and **Otherworldly Ire**
+  roll level-scaled Patron Dice from themed input dialogs and explain their results in chat; Embrace applies healing.
+  **Menacing Reach** tracks the weapon's increased range in a buff with a primary-attack chat action to end it.
+  **Diminish My Foes** asks for Favor from its feature or Hope-action chat button; **Fearsome Attack** adds repeatable,
+  individually selected damage-die rerolls in chat. **Patron's Boon** retains its chat reroll and has the usual blue
+  Hope feature button. Tribute remains a downtime move and Patron's Pact remains an optional action-roll bonus.
+  Creation grants can add HP, Stress, Evasion, domain-card choices and
   eligible domains, including mixed-ancestry feature selection. Attack/action and damage dialogs offer multiple
   optional bonuses together (for example **Charging Quiver** on arrow damage), show their conditions and costs,
   and identify feature origins (for example **Highborne - Privilege**). Repeated source/option names are shown

@@ -1603,7 +1603,9 @@ public final class OnlineSessionServer {
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
-            else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits"))
+            else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
+                    && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
+                    && !definition.path("menacingReach").asBoolean())
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
             String targetMode = definition.path("target").asText("");
@@ -1672,6 +1674,7 @@ public final class OnlineSessionServer {
             JsonNode uses = definition.path("uses").isObject() ? definition.path("uses")
                     : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
             useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
+            resolveWarlockAction(sourceSheet, definition, request, reportLines);
 
             if (hasRoll && definition.has("damageDice")) {
                 editDamageDice(originalRoll, definition, request, reportLines);
@@ -1872,7 +1875,7 @@ public final class OnlineSessionServer {
             if (hasRoll) {
                 ArrayNode featureUses = originalRoll.withArray("featureUses");
                 String use = sourceActor.getId() + ":" + key + ":" + actionId;
-                if (!containsText(featureUses, use)) featureUses.add(use);
+                if (!definition.path("repeatable").asBoolean() && !containsText(featureUses, use)) featureUses.add(use);
             }
 
             ArrayNode benefits = actionBenefits(sourceSheet, key, definition);
@@ -1927,6 +1930,60 @@ public final class OnlineSessionServer {
 
     private static final class FeatureIoException extends RuntimeException {
         FeatureIoException(IOException cause) { super(cause); }
+    }
+
+    private void resolveWarlockAction(ObjectNode sheet, JsonNode action, JsonNode request, List<String> report) {
+        if (action.path("menacingReach").asBoolean()) {
+            JsonNode primary = null;
+            for (JsonNode weapon : sheet.path("activeWeapons"))
+                if ("Primary".equals(weapon.path("slot").asText())) primary = weapon;
+            if (primary == null) throw new IllegalArgumentException("Equip a primary weapon first.");
+            List<String> ranges = List.of("Melee", "Very Close", "Close", "Far", "Very Far");
+            int index = -1;
+            for (int i = 0; i < ranges.size(); i++)
+                if (ranges.get(i).equalsIgnoreCase(primary.path("range").asText())) index = i;
+            if (index < 0) throw new IllegalArgumentException("The primary weapon has no supported range.");
+            for (JsonNode effect : sheet.path("effects"))
+                if ("Menacing Reach".equals(effect.path("name").asText()))
+                    throw new IllegalArgumentException("Menacing Reach is already active.");
+            String range = ranges.get(Math.min(index + 1, ranges.size() - 1));
+            String text = primary.path("name").asText() + " reach: " + range
+                    + " (normally " + primary.path("range").asText() + "). Ends after a successful attack with this weapon.";
+            sheet.withArray("effects").addObject().put("id", "f" + java.util.UUID.randomUUID())
+                    .put("name", "Menacing Reach").put("kind", "buff").put("until", "manual")
+                    .put("source", "Menacing Reach").put("text", text);
+            report.add("Spent 1 Favor. " + text);
+            return;
+        }
+        String mode = action.path("patronDice").asText();
+        if (mode.isEmpty() && !action.path("spendFavor").asBoolean()) return;
+        JsonNode input = request.path("amount");
+        boolean vengeance = "vengeance".equals(mode);
+        int max = vengeance ? sheet.path("hp").path("slots").asInt() : sheet.path("resources").path("favor").asInt();
+        if (!input.isInt() || input.asInt() < 1 || input.asInt() > max)
+            throw new IllegalArgumentException("Enter a whole number from 1 to " + max + (vengeance ? " HP marked." : " Favor."));
+        int amount = input.asInt();
+        if (!vengeance) applyFeatureCost(sheet, MAPPER.createObjectNode().put("favor", amount));
+        if (action.path("spendFavor").asBoolean()) {
+            report.add("Spent " + amount + " Favor after a successful action roll with Hope; the target marks " + amount + " Stress.");
+            return;
+        }
+        int sides = sheet.path("level").asInt(1) >= 5 ? 8 : 6;
+        DiceRoller.Result dice = DiceRoller.roll(amount + "d" + sides, config.maxDice(), diceRandom);
+        report.add("Spent " + (vengeance ? 1 : amount) + " Favor. Rolled " + dice.expression() + ": " + dice.rolls() + ".");
+        int hits = (int) dice.rolls().stream().filter(n -> n >= 4).count();
+        switch (mode) {
+            case "heal" -> {
+                ObjectNode hp = requireTrack(sheet, "hp");
+                int before = hp.path("on").asInt();
+                hp.put("on", Math.max(DeathMoves.hpHealingFloor(sheet), before - hits));
+                report.add(hits + " results of 4+: cleared " + (before - hp.path("on").asInt()) + " HP.");
+            }
+            case "vengeance" -> report.add("For " + amount + " HP marked from the attack, the attacker marks " + hits + " HP (one per 4+).");
+            case "ire" -> report.add("Highest result: " + dice.rolls().stream().mapToInt(Integer::intValue).max().orElseThrow()
+                    + ". Target that many creatures within Close range; each target marks 1 HP.");
+            default -> throw new IllegalArgumentException("Unsupported Patron Dice action.");
+        }
     }
 
     private void editDamageDice(ObjectNode roll, JsonNode definition, JsonNode request, List<String> reportLines) {
@@ -2298,6 +2355,38 @@ public final class OnlineSessionServer {
             boolean withHope = "hope".equals(roll.path("outcome").asText(hope > fear ? "hope" : "fear"));
             if (!critical && !withHope)
                 throw new IllegalArgumentException("Only Hope or critical results have a reward.");
+            if ("favor".equals(request.path("reward").asText())) {
+                JsonNode favorSource = null;
+                JsonNode favorReward = null;
+                for (JsonNode feature : sheet.path("features")) {
+                    JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(),
+                            feature.path("name").asText(), feature.path("automation"));
+                    JsonNode reward = auto.path("hopeReward");
+                    if (reward.path("favor").asInt() > 0
+                            && List.of(roll.path("source").asText("").split(",")).contains(reward.path("roll").asText())) {
+                        favorSource = feature;
+                        favorReward = reward;
+                    }
+                }
+                if (favorSource == null || critical)
+                    throw new IllegalArgumentException("Favor requires a successful action roll with Hope.");
+                if (roll.has("difficulty") && roll.path("total").asDouble() < roll.path("difficulty").asDouble())
+                    throw new IllegalArgumentException("Favor requires a successful action roll with Hope.");
+                List<String> lines = new ArrayList<>();
+                ArrayNode steps = MAPPER.createArrayNode();
+                steps.addObject().put("op", "gain").put("resource", "favor").set("amount", favorReward.path("favor"));
+                applyFeatureSteps(sheet, steps, "Favor", actor, "feat:Favor", lines);
+                lines.add("Instead of gaining Hope from the successful action roll.");
+                roll.put("rewardClaimed", true);
+                ObjectNode report = actionReportMessage(actor, favorSource, "Favor", lines, roll);
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
+                sendFeatureState(actor, sheet);
+                broadcastRollUpdate(roll);
+                deliver(report, report.path("toId").asText(null), false);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             if (request.has("reward")) {
                 if (!"removeFear".equals(request.path("reward").asText()))
                     throw new IllegalArgumentException("Unknown roll reward.");
@@ -2307,7 +2396,7 @@ public final class OnlineSessionServer {
                     JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(),
                             feature.path("name").asText(), feature.path("automation"));
                     JsonNode reward = auto.path("hopeReward");
-                    if (reward.isObject() && List.of(roll.path("source").asText("").split(",")).contains(reward.path("roll").asText())) {
+                    if (reward.path("removeFear").asInt() > 0 && List.of(roll.path("source").asText("").split(",")).contains(reward.path("roll").asText())) {
                         alternative = reward;
                         alternativeSource = feature;
                     }
@@ -2442,6 +2531,13 @@ public final class OnlineSessionServer {
         if (trigger.path("weaponAttack").asBoolean()
                 && (!List.of(source.split(",")).contains("attack") || roll.path("weapon").asText("").isBlank()))
             throw new IllegalArgumentException("This feature requires a weapon attack.");
+        if (trigger.path("primaryWeapon").asBoolean()) {
+            boolean matching = false;
+            for (JsonNode weapon : storedSheet(sourceActor.getId()).path("activeWeapons"))
+                if ("Primary".equals(weapon.path("slot").asText())
+                        && weapon.path("name").asText().equals(roll.path("weapon").asText())) matching = true;
+            if (!matching) throw new IllegalArgumentException("This feature requires a primary weapon attack.");
+        }
         if (trigger.has("weapon") && !trigger.path("weapon").asText().equals(roll.path("weapon").asText()))
             throw new IllegalArgumentException("This feature requires a " + trigger.path("weapon").asText() + " attack.");
         if (trigger.has("weaponRange")) {
@@ -2457,7 +2553,8 @@ public final class OnlineSessionServer {
         }
         ArrayNode uses = roll.withArray("featureUses");
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
-        if (containsText(uses, usageKey)) throw new IllegalArgumentException("This feature was already used on that roll.");
+        if (!trigger.path("repeatable").asBoolean() && containsText(uses, usageKey))
+            throw new IllegalArgumentException("This feature was already used on that roll.");
         if (!duality) {
             if (!List.of("damage", "any").contains(on) || !"always".equals(trigger.path("when").asText("always"))
                     || trigger.has("outcome") || trigger.has("reroll") || trigger.has("dualityDieBonus") || trigger.path("swapDuality").asBoolean())
@@ -2473,6 +2570,9 @@ public final class OnlineSessionServer {
         if (!"hope".equals(actualOutcome) && !"fear".equals(actualOutcome))
             actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
         String when = trigger.path("when").asText("always");
+        if (trigger.path("spendFavor").asBoolean() && roll.has("difficulty")
+                && roll.path("total").asDouble() < roll.path("difficulty").asDouble())
+            throw new IllegalArgumentException("Diminish My Foes requires a successful action roll with Hope.");
         if ("success".equals(when)) {
             JsonNode difficulty = trigger.has("difficulty") ? trigger.path("difficulty") : roll.path("difficulty");
             if (!difficulty.isNumber() || hope != fear && roll.path("total").asDouble() < difficulty.asDouble())
@@ -3582,6 +3682,7 @@ public final class OnlineSessionServer {
             hello.put("dualityDieBonus", true);
             hello.put("seraphAutomation", true);
             hello.put("sorcererAutomation", true);
+            hello.put("warlockAutomation", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);

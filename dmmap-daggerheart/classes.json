@@ -1744,7 +1744,7 @@
       "actions": [
        {
         "id": "use",
-        "label": "Prevent damage (manual)",
+        "label": "Prevent damage",
         "cost": {
          "favor": 1
         }
@@ -1830,7 +1830,7 @@
       "actions": [
        {
         "id": "use",
-        "label": "Halve incoming damage (manual)",
+        "label": "Halve incoming damage",
         "cost": {
          "favor": 1
         }
@@ -1921,7 +1921,8 @@
       "actions": [
        {
         "id": "use",
-        "label": "Deathless Embrace"
+        "label": "Deathless Embrace",
+        "patronDice": "heal"
        }
       ]
      }
@@ -1949,12 +1950,16 @@
       "actions": [
        {
         "id": "use",
-        "label": "Reroll damage dice (manual)",
+        "label": "Reroll damage dice",
         "cost": {
          "favor": 1
         }
        }
-      ]
+      ],
+      "rollTriggers": [{
+       "id": "reroll", "label": "Fearsome Attack", "on": "damage",
+       "damageDice": "reroll", "repeatable": true, "cost": { "favor": 1 }
+      }]
      }
     },
     {
@@ -1969,7 +1974,8 @@
       "actions": [
        {
         "id": "use",
-        "label": "Otherworldly Ire"
+        "label": "Otherworldly Ire",
+        "patronDice": "ire"
        }
       ]
      }
@@ -1997,18 +2003,31 @@
       "actions": [
        {
         "id": "use",
-        "label": "Increase weapon range (manual)",
+        "label": "Increase weapon range",
+        "menacingReach": true,
         "cost": {
          "favor": 1
         }
        }
-      ]
+      ],
+      "rollTriggers": [{
+       "id": "end", "label": "Menacing Reach: end after successful attack", "on": "attack",
+       "primaryWeapon": true, "requiresEffect": "Menacing Reach", "endEffect": "Menacing Reach"
+      }]
      }
     },
     {
      "name": "Diminish My Foes",
      "text": "When you succeed with Hope on an action roll against a target, you can **spend any number of Favor** to force the target to mark an equal number of Stress.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Diminish My Foes", "spendFavor": true }],
+      "rollTriggers": [{
+       "id": "use", "label": "Diminish My Foes", "on": "action", "when": "hope",
+       "description": "Only after a successful action roll against a target.",
+       "spendFavor": true
+      }]
+     }
     }
    ]
   },
@@ -2078,7 +2097,15 @@
     {
      "name": "Deadly Vengeance",
      "text": "When you mark any number of Hit Points from an attack, you can **spend a Favor** to roll an equal number of Patron Dice. For each result of 4 or higher, the attacker marks a Hit Point.",
-     "type": "subclass"
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Deadly Vengeance", "patronDice": "vengeance", "cost": { "favor": 1 } }],
+      "mitigation": [{
+       "id": "vengeance", "label": "Deadly Vengeance",
+       "description": "Only when marking HP from an attack. Spend a Favor; roll one Patron Die per HP marked. Each 4+ makes the attacker mark 1 HP.",
+       "when": { "markingHp": true }, "cost": { "favor": 1 }, "patronDice": "vengeance"
+      }]
+     }
     }
    ]
   },
@@ -4680,6 +4707,7 @@
      "text": "When you fail a roll, you can **spend 3 Hope** to reroll with advantage.",
      "type": "hope",
      "automation": {
+      "actions": [{ "id": "use", "label": "Patron’s Boon", "cost": { "hope": 3 } }],
       "rollTriggers": [
        {
         "id": "reroll",
@@ -4722,6 +4750,8 @@
      "text": "You start with 3 Favor. You can use a downtime move to show tribute to your patron. Describe how and gain Favor equal to your Spellcast trait. Additionally, when you succeed on an action roll with Hope, you can choose to gain a Favor instead of a Hope.",
      "type": "class",
      "automation": {
+      "classResourceOnly": true,
+      "hopeReward": { "favor": 1, "roll": "action" },
       "resources": [
        {
         "id": "favor",
@@ -4741,31 +4771,6 @@
          }
         ],
         "timing": "downtime"
-       },
-       {
-        "id": "gain-favor",
-        "label": "Successful Hope roll: gain Favor instead (do not gain Hope)",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "favor",
-          "amount": 1
-         }
-        ]
-       },
-       {
-        "id": "hope-to-favor",
-        "label": "Successful Hope roll: replace gained Hope with Favor",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "favor",
-          "amount": 1
-         }
-        ],
-        "cost": {
-         "hope": 1
-        }
        }
       ]
      }

@@ -139,6 +139,201 @@ class OnlineSessionServerTest {
         return sheet;
     }
 
+    private ObjectNode warlockSheet(int level) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Warlock").put("subclass", "Pact Of The Wrathful").put("level", level);
+        sheet.putArray("effects");
+        sheet.withObject("/resources").put("favor", 12);
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries")) {
+            if (!"warlock".equals(entry.path("id").asText()) && !entry.path("id").asText().startsWith("warlock-pact-")) continue;
+            for (JsonNode feature : entry.path("features")) {
+                ObjectNode learned = feature.deepCopy();
+                learned.put("source", "class".equals(entry.path("kind").asText()) ? "Class feature - Warlock"
+                        : "Subclass " + entry.path("stage").asText() + " - " + entry.path("name").asText());
+                features.add(learned);
+            }
+        }
+        sheet.putArray("activeWeapons").addObject().put("name", "Blade").put("slot", "Primary").put("range", "Melee");
+        sheet.withArray("activeWeapons").addObject().put("name", "Dagger").put("slot", "Secondary").put("range", "Melee");
+        return sheet;
+    }
+
+    @Test
+    void warlockPatronActionsValidateSpendRollHealAndShareRestLimits() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warlock").name("Warlock").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warlock", warlockSheet(3).toString());
+        String cookie = cookie();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "warlock").put("key", "feat:Deathless Embrace").put("actionId", "use");
+        for (double invalid : new double[]{0, -1, 1.5, 13}) {
+            request.put("amount", invalid);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        }
+        assertEquals(12, MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock")).path("resources").path("favor").asInt());
+        request.put("amount", 3);
+        diceSeed(1);
+        var healRandom = new java.util.Random(1);
+        List<Integer> faces = java.util.stream.IntStream.range(0, 3).map(i -> healRandom.nextInt(6) + 1).boxed().toList();
+        assertTrue(faces.stream().anyMatch(n -> n >= 4) && faces.stream().anyMatch(n -> n < 4));
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock"));
+        assertEquals(9, saved.path("resources").path("favor").asInt());
+        assertEquals(4 - faces.stream().filter(n -> n >= 4).count(), saved.path("hp").path("on").asInt());
+        assertEquals(1, saved.path("usage").path("feat:Deathless Embrace").path("used").asInt());
+        String report = store.historyTail(campaign.getId(), 1).getLast().path("text").asText();
+        assertTrue(report.contains("3d6: " + faces), report);
+        assertTrue(report.contains("cleared " + faces.stream().filter(n -> n >= 4).count() + " HP"), report);
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+
+        request.put("key", "feat:Deadly Vengeance").put("amount", 2);
+        diceSeed(1);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock"));
+        assertEquals(8, saved.path("resources").path("favor").asInt());
+        report = store.historyTail(campaign.getId(), 1).getLast().path("text").asText();
+        assertTrue(report.contains("2d6: " + faces.subList(0, 2)), report);
+        assertTrue(report.contains("For 2 HP marked from the attack, the attacker marks"), report);
+        assertEquals(4 - faces.stream().filter(n -> n >= 4).count(), saved.path("hp").path("on").asInt());
+        request.put("amount", 7);
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+
+        ObjectNode upgraded = (ObjectNode) saved;
+        upgraded.put("level", 5);
+        store.saveSheet(campaign.getId(), "warlock", upgraded.toString());
+        request.put("key", "feat:Otherworldly Ire").put("amount", 3);
+        diceSeed(123);
+        var random = new java.util.Random(123);
+        List<Integer> ireFaces = new ArrayList<>();
+        for (int i = 0; i < 3; i++) ireFaces.add(random.nextInt(8) + 1);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock"));
+        assertEquals(5, saved.path("resources").path("favor").asInt());
+        report = store.historyTail(campaign.getId(), 1).getLast().path("text").asText();
+        assertTrue(report.contains("3d8: " + ireFaces), report);
+        assertTrue(report.contains("Highest result: " + ireFaces.stream().mapToInt(Integer::intValue).max().orElseThrow()), report);
+        assertTrue(report.contains("each target marks 1 HP"), report);
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock")).path("resources").path("favor").asInt());
+        request.put("key", "feat:Diminish My Foes").put("amount", 2);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(store.historyTail(campaign.getId(), 1).getLast().path("text").asText().contains("the target marks 2 Stress"));
+    }
+
+    @Test
+    void warlockReachDiminishAndRepeatableRerollsValidateChatContextAndPersist() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warlock").name("Warlock").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warlock", warlockSheet(5).toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("warlockAutomation").asBoolean());
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "warlock").put("key", "feat:Menacing Reach").put("actionId", "use");
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock"));
+            assertEquals(11, saved.path("resources").path("favor").asInt());
+            assertTrue(saved.path("effects").path(0).path("text").asText().contains("Blade reach: Very Close"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("actorId", "warlock")
+                    .put("source", "attack,action").put("weapon", "Dagger").put("kind", "duality").put("expression", "2d12");
+            ws.sendText(message.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            request.put("actionId", "end");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            message.put("weapon", "Blade");
+            ws.sendText(message.toString(), true).join();
+            roll = inbox.next("roll");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            inbox.next("rollUpdate");
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock")).path("effects").size());
+
+            message.remove("kind");
+            message.put("source", "damage").put("expression", "2d8+3");
+            ws.sendText(message.toString(), true).join();
+            roll = inbox.next("roll");
+            request.put("key", "feat:Fearsome Attack").put("actionId", "reroll");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            request.putArray("dice").add(0);
+            request.set("expectedDice", roll.path("rolls"));
+            for (int i = 0; i < 2; i++) {
+                response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode updated = inbox.next("rollUpdate");
+                assertEquals(roll.path("rolls").path(1), updated.path("rolls").path(1));
+                assertEquals(updated.path("rolls").path(0).asInt() + updated.path("rolls").path(1).asInt() + 3, updated.path("total").asInt());
+                assertEquals(10 - i, MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock")).path("resources").path("favor").asInt());
+                request.set("expectedDice", updated.path("rolls"));
+            }
+            request.putArray("expectedDice").add(-1);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.remove(List.of("dice", "expectedDice"));
+            request.put("key", "feat:Diminish My Foes").put("actionId", "use").put("amount", 2);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            message.put("kind", "duality").put("source", "action").put("expression", "2d12");
+            diceSeed(0);
+            ws.sendText(message.toString(), true).join();
+            roll = inbox.next("roll");
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            assertTrue(roll.path("rolls").path(0).asInt() < roll.path("rolls").path(1).asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            diceSeed(1);
+            ws.sendText(message.toString(), true).join();
+            roll = inbox.next("roll");
+            assertTrue(roll.path("rolls").path(0).asInt() > roll.path("rolls").path(1).asInt());
+            request.putObject("roll").set("id", roll.path("id"));
+            request.withObject("/roll").set("ts", roll.path("ts"));
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(7, MAPPER.readTree(store.loadSheet(campaign.getId(), "warlock")).path("resources").path("favor").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void warlockFavorRewardIsExclusivePersistsAtFullHopeAndRejectsOtherOutcomes() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Warlock").ownerId(playerId()).build());
+        ObjectNode sheet = warlockSheet(3);
+        sheet.withObject("/hope").put("on", 6);
+        store.saveSheet(campaign.getId(), "reward-actor", sheet.toString());
+        String cookie = cookie();
+        ObjectNode roll = rewardRoll(5500, 10, 3);
+        roll.put("source", "action,attack");
+        store.replaceHistoryEntry(campaign.getId(), 5500, 1234, roll);
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "reward-actor").put("reward", "favor");
+        request.putObject("roll").put("id", 5500).put("ts", 1234);
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
+        assertEquals(13, saved.path("resources").path("favor").asInt());
+        assertEquals(6, saved.path("hope").path("on").asInt());
+        assertEquals(400, rewardHttp(cookie, "reward-actor", roll).statusCode());
+        assertTrue(store.historyTail(campaign.getId(), 1).getLast().path("text").asText().contains("Instead of gaining Hope"));
+        for (int i = 0; i < 4; i++) {
+            roll = rewardRoll(5501 + i, i == 0 ? 2 : 10, i == 1 ? 10 : 3);
+            roll.put("source", i == 2 ? "reaction" : "action");
+            if (i == 3) roll.put("difficulty", 99);
+            store.replaceHistoryEntry(campaign.getId(), 5501 + i, 1234, roll);
+            request.withObject("/roll").put("id", 5501 + i);
+            response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/roll-reward"))
+                    .header("Cookie", cookie).POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode(), response.body());
+            assertEquals(13, MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor")).path("resources").path("favor").asInt());
+        }
+    }
+
     private ObjectNode sorcererSheet() throws Exception {
         ObjectNode sheet = communitySheet("Seaborne");
         sheet.put("className", "Sorcerer").put("subclass", "Primal Origin");

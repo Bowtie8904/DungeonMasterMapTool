@@ -1096,6 +1096,7 @@ export class App {
       supportsDualityDieBonus: () => this.conn.dualityDieBonus,
       supportsSeraphAutomation: () => this.conn.seraphAutomation,
       supportsSorcererAutomation: () => this.conn.sorcererAutomation,
+      supportsWarlockAutomation: () => this.conn.warlockAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
@@ -1209,6 +1210,7 @@ export class App {
             supportsDruidAutomation: () => this.conn.druidAutomation,
             supportsSeraphAutomation: () => this.conn.seraphAutomation,
             supportsSorcererAutomation: () => this.conn.sorcererAutomation,
+            supportsWarlockAutomation: () => this.conn.warlockAutomation,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {

@@ -15,6 +15,7 @@ import { activateAura, canCastDomain, channelElement, transformBeastform } from 
 import { chooseBeastform } from './druid-view';
 import { channelRawPower, chooseActionEffects } from './sorcerer';
 import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
+import { chooseWarlockAmount } from './warlock-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 
@@ -66,6 +67,7 @@ export class SheetBus {
 
 export interface SheetViewOptions {
   supportsSorcererAutomation?: () => boolean;
+  supportsWarlockAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
@@ -334,10 +336,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
-    if (!actions.length && !a?.resources?.length && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
+    if (!actions.length && (!a?.resources?.length || a.classResourceOnly) && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
     if (key.startsWith('item:') || key.startsWith('feat:')) {
-      for (const r of a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
+      for (const r of a?.classResourceOnly ? [] : a?.resources ?? []) row.append(el('label', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, poolControls(r)));
       for (const r of a?.effectCounters ?? []) row.append(el('span', { class: 'muted', style: 'font-size:12px;display:flex;gap:4px;align-items:center' }, r.label, counterResource(r)));
     }
     const sharedUses = a?.uses && actions.some(action => action.usesSource === false)
@@ -391,6 +393,24 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
+      if (action.patronDice || action.spendFavor || action.menacingReach) {
+        if (!opts.supportsWarlockAutomation?.() || !opts.onFeature) {
+          opts.onLog?.('Update the host to use Warlock automation.');
+          return;
+        }
+        const submit = async (amount?: number) => {
+          await opts.onFeature!(key, action.id, amount);
+          hooks.after?.();
+          render();
+        };
+        if (action.menacingReach) {
+          setBusy(true);
+          try { await submit(); }
+          catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
+          finally { setBusy(false); }
+        } else chooseWarlockAmount(c, action, submit);
+        return;
+      }
       if (action.channelRawPower || action.chooseEffects) {
         const report = (lines: string[]) => {
           opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));

@@ -58,6 +58,28 @@ const roll: RollMessage = { id: 1, ts: 1, fromId: 'player', from: 'Player', sour
   expression: '2d8+1d4+3', rolls: [2, 6, 4], total: 15 };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
+describe('Warlock feature controls', () => {
+  it('renders one Favor resource and the standard blue Boon button without Favor feature actions', () => {
+    setup();
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+    const c = emptyCharacter('Warlock');
+    c.className = 'Warlock';
+    c.mancer = { done: true };
+    c.hope.on = 3;
+    c.features = catalog.entries.find(e => e.id === 'warlock')!.features!
+      .map(f => ({ ...structuredClone(f), source: 'Class feature - Warlock' }));
+    const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
+    expect(root.querySelectorAll('input').filter(i => i.ariaLabel === 'Favor')).toHaveLength(1);
+    const buttons = root.querySelectorAll('button');
+    const boon = buttons.find(b => b.text() === 'Patron’s Boon (3 Hope)')!;
+    expect(boon.className).toContain('primary');
+    expect(boon.disabled).toBe(false);
+    expect(buttons.some(b => /tribute|gain Favor|replace gained Hope/i.test(b.text()))).toBe(false);
+    boon.click();
+    expect(c.hope.on).toBe(0);
+  });
+});
+
 describe('Sorcerer selection dialogs', () => {
   it('groups the long-rest counter with manual swap, not unlimited Help, and disables only swap after use', () => {
     setup();

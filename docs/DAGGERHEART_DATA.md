@@ -597,14 +597,30 @@ Classes, ancestries, communities and transformations are included in the total.
   exchanges the actual Hope/Fear results, updates breakdown/outcome and preserves the total. Matching dice
   cannot be swapped and each roll permits only one use. The prioritized adversary is table-confirmed.
   Additive `hello.guardianRolls` gates new chat actions on older hosts; no compatibility version changes.
-- **Warlock:** initial 3 Favor, **uncapped**; downtime tribute gains `@spellcast`. After a **successful action roll
-  with Hope**, choose **one** button: gain Favor instead without awarding Hope (also works when Hope is full),
-  or replace Hope already awarded by spending it to gain Favor. Do not use these after other Hope gains.
+- **Warlock:** initial 3 Favor, **uncapped**; downtime tribute gains `@spellcast`. `classResourceOnly: true`
+  hides the duplicate feature resource controls. `hopeReward: {favor: 1, roll: "action"}` offers a
+  host-authoritative exclusive Favor reward instead of Hope on successful Hope action rolls, including when
+  Hope is full (not reactions, Fear or criticals). A roll cannot award both rewards.
   Patron's Pact is an optional action-roll Patron Die costing one Favor, d6/d8 at level 5.
+  Patron's Boon has the normal Hope feature button and its unchanged chat reroll.
+  `patronDice: "heal" | "vengeance" | "ire"` actions ask for a positive whole-number `amount`; the host
+  rolls d6/d8 Patron Dice. Heal spends that much Favor and clears HP per 4+ with actual recovery reported;
+  vengeance spends one Favor and takes HP marked as the dice count, reporting attacker HP per 4+;
+  ire spends one Favor per die and reports highest-result Close-range targets, each marking one HP.
+  Deathless Embrace and Otherworldly Ire share their feature's once-per-rest limit. Ire is not mitigation.
+  Vengeance mitigation uses `patronDice: "vengeance"` and final HP marked after mitigation, spending nothing
+  if no HP is marked. Attack origin remains player-confirmed. `menacingReach: true` spends the configured
+  Favor cost to grant a buff naming the primary weapon and its one-step-higher reach (capped at Very Far).
+  Its `primaryWeapon: true` attack trigger ends the effect after a player-confirmed successful attack.
+  `spendFavor: true` feature/Hope-action triggers take Favor input and report equal target Stress
+  (Diminish My Foes). Fearsome Attack uses `damageDice: "reroll", repeatable: true` on damage results,
+  reusing the individual-die selector, stale-selection validation and original-roll updates; every use costs
+  one Favor, and the original feature button remains. New actions/rewards require `hello.warlockAutomation`.
   Pact Mantle's thresholds and intimidation option end on taking Severe damage. Fury's tier-scaled Patron Dice
   (a damage-dialog option costing 1 Favor that starts a scene effect; while active it is pre-ticked and free;
   remove the effect manually after dealing Severe damage), and the fixed-Favor costs of Endless/Wrathful
-  subfeatures are explicit; damage prevention, reroll choice, range and target effects remain manual.
+  subfeatures are explicit. Adversary HP/Stress application and unknown success/target conditions remain
+  player/GM-confirmed; no settings or compatibility-version changes.
 - **Other class/heritage sources:** permanent Stalwart, Shell, Rugged, Ascendant and Fleeting Shadow bonuses;
   creation grants; Battle Ritual, Courage, Limit Breaker, Deadly Determination and Frontline Tank resource actions;
   Rogue's Dodge effect; No Mercy as an effect-based attack option (pre-ticked while active); optional Tusks, Kick, Elementalist, Wings of Light, Sneak Attack,

@@ -82,6 +82,9 @@ export interface Step {
 }
 
 export interface ActionDef {
+  patronDice?: 'heal' | 'vengeance' | 'ire';
+  spendFavor?: boolean;
+  menacingReach?: boolean;
   usesSource?: boolean;
   magicOnly?: boolean;
   channelRawPower?: EffectDef;
@@ -181,6 +184,8 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  primaryWeapon?: boolean;
+  repeatable?: boolean;
   magicAction?: boolean;
   damageDice?: 'reroll' | 'double';
   choices?: Array<{ id: string; label: string; addDice?: string }>;
@@ -209,9 +214,10 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  classResourceOnly?: boolean;
   elementChoice?: string[];
   dicePool?: { id: string; label: string; count: ModValue; sides: number; extraByFeature?: Record<string, number> };
-  hopeReward?: { removeFear: number; roll: string };
+  hopeReward?: { removeFear?: number; favor?: number; roll: string };
   companion?: CompanionRules;
   companionTraining?: number;
   effectCounters?: Array<{ label: string; effect: string }>;
@@ -887,6 +893,9 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (action.usesSource === false) a = { ...a, uses: undefined };
   if ((action.companion || action.requiresCompanion) && !companionAvailable(c)) return 'Your companion is unavailable';
   if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
+  if ((action.patronDice || action.spendFavor) && (c.resources?.favor ?? 0) < 1) return 'Not enough Favor';
+  if (action.menacingReach && !activeWeapons(c).some(w => w.slot === 'Primary')) return 'Equip a primary weapon first';
+  if (action.menacingReach && c.effects.some(e => e.name === 'Menacing Reach')) return 'Menacing Reach is already active';
   if (action.requiresFeature && !hasFeature(c, action.requiresFeature)) return 'Required feature is not available';
   if (action.excludesFeature && hasFeature(c, action.excludesFeature)) return 'This option has been replaced by another feature';
   if (action.actionRoll?.trait === 'spellcast' && !c.traits.some(t => t.spellcast)) return 'No Spellcast trait is available';
@@ -1065,6 +1074,8 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
   const targets = ctx.source.split(',');
+  if (t.primaryWeapon && !activeWeapons(c).some(w => w.slot === 'Primary' && w.name === ctx.weapon)) return false;
+  if (t.spendFavor && ctx.difficulty !== undefined && ctx.total < ctx.difficulty) return false;
   const magic = targets.includes('magicdamage') || targets.includes('spelldamage')
     || activeWeapons(c).some(w => w.name === ctx.weapon && w.damageType === 'magic');
   if (t.magicOnly && !magic) return false;

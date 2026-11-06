@@ -8,6 +8,7 @@ import {
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
 import { companionAvailable, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
+import { vengeanceReport } from './warlock';
 
 export type DamageType = 'physical' | 'magic';
 /** 0 = none, 1 = Minor, 2 = Major, 3 = Severe, 4 = massive (twice the Severe threshold). */
@@ -49,6 +50,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  patronDice?: 'vengeance';
   companionIntercept?: boolean;
   companionArmored?: boolean;
   markedHpOnly?: boolean;
@@ -321,6 +323,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
   drop((m) => m.option.when?.markingHp && hpBeforeReplace <= 0 ? 'Requires marking at least one HP' : null);
+  drop(m => m.option.patronDice === 'vengeance' && hp <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
 
   // 5. Costs.
@@ -391,6 +394,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
   }
   const notes: string[] = [];
   for (const m of r.applied) {
+    if (m.option.patronDice === 'vengeance') notes.push(vengeanceReport(c, r.hp, roll));
     if (m.option.companionIntercept) notes.push(m.option.companionArmored
       ? 'Armored: marked one owner Armor Slot instead of companion Stress for Loyal Friend.'
       : markCompanionDamage(c));

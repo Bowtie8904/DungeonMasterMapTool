@@ -11,6 +11,7 @@ import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification } from './sorcerer-view';
+import { chooseWarlockAmount } from './warlock-view';
 
 export interface RollButtonSheet {
   character: CharacterSheet;
@@ -31,6 +32,7 @@ export interface RollButtonHost {
   supportsDualityDieBonus?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsSorcererAutomation?: () => boolean;
+  supportsWarlockAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -277,7 +279,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       });
       buttons.push(reward);
       const alternative = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
-        .find(r => r && ctx!.source.split(',').includes(r.roll));
+        .find(r => r?.removeFear && ctx!.source.split(',').includes(r.roll));
       if (alternative) {
         const remove = el('button', { class: 'small primary', type: 'button' }, `Remove ${alternative.removeFear} Fear instead`);
         remove.disabled = claiming || !host.supportsSeraphAutomation?.();
@@ -294,6 +296,25 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           finally { claiming = false; await paintFor(); }
         });
         buttons.push(remove);
+      }
+      const favor = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
+        .find(r => r?.favor && ctx!.source.split(',').includes(r.roll));
+      if (favor) {
+        const gain = el('button', { class: 'small primary', type: 'button' }, `Gain ${favor.favor} Favor instead of Hope`);
+        gain.disabled = claiming || !host.supportsWarlockAutomation?.();
+        gain.title = host.supportsWarlockAutomation?.() ? 'Only on a successful action roll with Hope' : 'Update the host to use Warlock automation.';
+        gain.addEventListener('click', async () => {
+          if (claiming || m.rewardClaimed) return;
+          claiming = true;
+          gain.disabled = true;
+          try {
+            await save.flush?.();
+            await claimRollReward(rolledActor.actorId, { id: m.id, ts: m.ts }, 'favor');
+            m.rewardClaimed = true;
+          } catch (e) { host.toast((e as Error).message); }
+          finally { claiming = false; await paintFor(); }
+        });
+        buttons.push(gain);
       }
     }
     if (rolledActor && isAttack && m.weapon) {
@@ -318,14 +339,16 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const audience = trigger.audience ?? 'self';
         if (audience === 'self' && featureActorId !== actorId) continue;
         if (audience === 'ally' && featureActorId === actorId) continue;
-        if (m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
+        if (!t.trigger.repeatable && m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
         if (trigger.dualityDieBonus && trigger.endEffect
             && m.featureUses?.includes(`${featureActorId}:effectBonus:${trigger.endEffect}`)) continue;
         const cost = costText(t.trigger.cost, c);
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = (t.trigger.damageDice || t.trigger.choices) && !host.supportsSorcererAutomation?.()
+        const unsupported = (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable) && !host.supportsWarlockAutomation?.()
+          ? 'Update the host to use Warlock automation.'
+          : (t.trigger.damageDice || t.trigger.choices) && !host.supportsSorcererAutomation?.()
           ? 'Update the host to use Sorcerer roll actions.'
           : t.key.startsWith('effect:pool-') && !host.supportsSeraphAutomation?.()
           ? 'Update the host to spend Prayer Dice on chat rolls.'
@@ -338,6 +361,13 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.spendFavor) {
+            chooseWarlockAmount(c, t.trigger, async amount => {
+              await sheet.save.flush?.();
+              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+            }, () => { b.disabled = false; });
+            return;
+          }
           if (t.trigger.damageDice || t.trigger.choices) {
             chooseRollModification(m, t.trigger, async choice => {
               await sheet.save.flush?.();
