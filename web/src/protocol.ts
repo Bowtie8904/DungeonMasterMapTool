@@ -339,6 +339,7 @@ export type DeltaOp =
   | { op: 'tokens'; upsert?: Token[]; remove?: string[] };
 
 export interface Hello {
+  mapPings?: boolean;
   type: 'hello';
   sheetSync?: boolean;
   deathMoves?: boolean;

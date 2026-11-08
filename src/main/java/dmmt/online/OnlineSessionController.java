@@ -388,6 +388,41 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     }
 
     @Override
+    public boolean supportsMapPings() {
+        return true;
+    }
+
+    @Override
+    public CompletableFuture<OnlineSessionServer.MoveResult> mapPing(String playerId, String mapId, String levelId,
+                                                                    double x, double y) {
+        CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            if (result.isDone()) return;
+            try {
+                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
+                    return;
+                }
+                if (!Double.isFinite(x) || !Double.isFinite(y) || app.project() == null
+                        || campaign.getPlayers().stream().noneMatch(p -> playerId.equals(p.getId()))) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Invalid map ping"));
+                    return;
+                }
+                var pings = app.project().getActivePings();
+                if (pings.size() >= 256) pings.removeFirst();
+                pings.add(DmProject.PingEvent.builder().x(x).y(y).createdAtMillis(System.currentTimeMillis())
+                        .durationMillis(Tuning.PING_DURATION_MS.get()).build());
+                publishNow();
+                result.complete(OnlineSessionServer.MoveResult.accepted());
+            } catch (RuntimeException ex) {
+                app.status("Online map ping failed: " + ex.getMessage());
+                result.complete(OnlineSessionServer.MoveResult.rejected("Map ping failed"));
+            }
+        });
+        return result;
+    }
+
+    @Override
     public CompletableFuture<OnlineSessionServer.MoveResult> editDrawing(String playerId, JsonNode command) {
         CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
         Platform.runLater(() -> {

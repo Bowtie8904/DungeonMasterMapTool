@@ -1,7 +1,7 @@
 import { Measurement, Overlay } from './protocol';
 
 export type DrawMode = 'pen' | 'brush' | 'line' | 'circle' | 'rect';
-export type MapTool = 'navigate' | 'draw' | 'measure';
+export type MapTool = 'navigate' | 'draw' | 'measure' | 'ping';
 export interface DrawingStyle {
   color: string;
   alpha: number;

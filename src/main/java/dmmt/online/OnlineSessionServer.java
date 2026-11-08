@@ -60,6 +60,12 @@ public final class OnlineSessionServer {
 
     /** Callbacks into the application; may be invoked from server threads. */
     public interface Host {
+        default boolean supportsMapPings() { return false; }
+
+        default CompletableFuture<MoveResult> mapPing(String playerId, String mapId, String levelId, double x, double y) {
+            return CompletableFuture.completedFuture(MoveResult.rejected("Map pings are unavailable on this host"));
+        }
+
         default boolean supportsDrawing() { return false; }
         default boolean supportsTokenRotation() { return false; }
         default boolean supportsPortalControls() { return false; }
@@ -4265,6 +4271,7 @@ public final class OnlineSessionServer {
             hello.put("tokenRotation", host.supportsTokenRotation());
             hello.put("tokenConditions", host.supportsTokenConditions());
             hello.put("portalControls", host.supportsPortalControls());
+            hello.put("mapPings", host.supportsMapPings());
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
             hello.put("compendiumChat", true);
@@ -4362,6 +4369,26 @@ public final class OnlineSessionServer {
 
     private void onCommand(Client client, JsonNode msg) {
         String cmdId = msg.path("cmdId").asText("");
+        if ("mapPing".equals(msg.path("kind").asText())) {
+            double x = msg.path("x").asDouble(Double.NaN);
+            double y = msg.path("y").asDouble(Double.NaN);
+            if (paused || !host.supportsMapPings() || !msg.path("x").isNumber() || !msg.path("y").isNumber()
+                    || !Double.isFinite(x) || !Double.isFinite(y)
+                    || !msg.path("mapId").isTextual() || msg.path("mapId").asText().isBlank()
+                    || !msg.path("levelId").isTextual() || msg.path("levelId").asText().isBlank()) {
+                sendTo(client.ctx, reject(cmdId, paused ? "paused" : "Invalid or unsupported map ping", null));
+                return;
+            }
+            host.mapPing(client.playerId, msg.path("mapId").asText(), msg.path("levelId").asText(), x, y)
+                    .orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
+                        if (error != null || result == null || !result.ok()) {
+                            sendTo(client.ctx, reject(cmdId, error != null || result == null ? "Map ping failed" : result.reason(), null));
+                        } else {
+                            sendTo(client.ctx, MAPPER.createObjectNode().put("type", "ack").put("cmdId", cmdId).put("seq", seq()).toString());
+                        }
+                    });
+            return;
+        }
         if ("setTokenCondition".equals(msg.path("kind").asText())) {
             String tokenId = msg.path("tokenId").asText("");
             String type = msg.path("condition").path("type").asText("");

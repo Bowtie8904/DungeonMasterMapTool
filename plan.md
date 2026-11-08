@@ -565,6 +565,10 @@ Desktop tool for tabletop dungeon masters that:
 - Ping appears immediately in DM and player views at world position.
 - Ping should be visually obvious (short animation + fade out).
 - Support at least one default ping style initially; extensible for variants later.
+- Online players have a Ping button in the left map toolbar, with no flyout, and `P` activates it outside text inputs/dialogs. Its target cursor indicates the armed tool; one left-click sends one ping and returns to Select.
+- In Select, holding left-click still for 600 ms sends one ping without switching tools. Moving more than 4 screen pixels cancels the hold and preserves ordinary dragging/box selection. Release, cancellation, focus loss, tool/map/level changes and pause cancel pending holds.
+- Player and DM pings share the existing world-position animation and are visible to the DM and every online player. The host validates authenticated requests, finite coordinates, current map/level and pause state; pings are transient, not edits/history.
+- Advertise an additive `mapPings` browser capability; older hosts disable the player tool and hold gesture. Existing DM pings/snapshots and LAN compatibility version remain unchanged. No new settings or DM controls.
 
 ## 3.10 Doors, Windows, and dd2vtt Interactables
 

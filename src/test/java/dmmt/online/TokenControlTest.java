@@ -341,6 +341,48 @@ class TokenControlTest {
         assertFalse(controller.togglePortal("player", "door", "map", "level").get(5, TimeUnit.SECONDS).ok());
     }
 
+    @Test
+    void mapPingsAreTransientSharedAndValidatePlayerMapPauseAndCoordinates() throws Exception {
+        TestApp app = new TestApp();
+        var controller = new OnlineSessionController(temp, app);
+        Campaign campaign = controller.store().create("Pings");
+        campaign.getPlayers().add(Campaign.Player.builder().id("player").name("Player").build());
+        try {
+            onFx(() -> {
+                try (var socket = new java.net.ServerSocket(0)) {
+                    String port = String.valueOf(socket.getLocalPort());
+                    Tuning.apply(key -> "online.port".equals(key) ? port : null);
+                }
+                controller.start(campaign);
+                return null;
+            });
+            assertTrue(controller.supportsMapPings());
+            assertTrue(controller.mapPing("player", "map", "level", 123, 456).get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> {
+                var ping = app.project.getActivePings().getFirst();
+                assertEquals(123, ping.getX());
+                assertEquals(456, ping.getY());
+                assertEquals(Tuning.PING_DURATION_MS.get().longValue(), ping.getDurationMillis());
+                var state = new OnlineStateBuilder(file -> null).build(app.project,
+                        new OnlineStateBuilder.Context("map", "level", "", null, 0, false, false), campaign,
+                        new AssetRegistry(temp.resolve("cache"), 2048, controller.store()), List.of());
+                assertEquals(123, state.path("pings").get(0).path("x").asDouble());
+                assertEquals(456, state.path("pings").get(0).path("y").asDouble());
+                return null;
+            });
+            assertFalse(controller.mapPing("player", "wrong", "level", 0, 0).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.mapPing("player", "map", "wrong", 0, 0).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.mapPing("unknown", "map", "level", 0, 0).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.mapPing("player", "map", "level", Double.NaN, 0).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.mapPing("player", "map", "level", 0, Double.POSITIVE_INFINITY).get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> { controller.server().setPaused(true); return null; });
+            assertFalse(controller.mapPing("player", "map", "level", 0, 0).get(5, TimeUnit.SECONDS).ok());
+        } finally {
+            onFx(() -> { controller.stop(); Tuning.reset(); return null; });
+        }
+        assertFalse(controller.mapPing("player", "map", "level", 0, 0).get(5, TimeUnit.SECONDS).ok());
+    }
+
     private static final class TestApp implements OnlineSessionController.App {
         private final DmProject project = new DmProject();
         TestApp() {

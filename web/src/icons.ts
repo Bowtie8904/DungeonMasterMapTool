@@ -3,6 +3,7 @@ import { el } from './login';
 const paths: Record<string, string> = {
   add: 'M12 5v14M5 12h14',
   navigate: 'M5 3 19 12 12 13 9 20Z',
+  ping: 'M12 2v5M12 17v5M2 12h5M17 12h5M19 12a7 7 0 1 1-14 0 7 7 0 0 1 14 0ZM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z',
   draw: 'm10 14 9-11 3 3-11 9M10 14c-6-2-3 6-8 6 6 3 11-2 8-6Z',
   pen: 'm4 15 12-12 5 5L9 20l-6 1ZM14 5l5 5M4 15l5 5',
   line: 'M4 20 20 4M3 18l3 3M18 3l3 3',

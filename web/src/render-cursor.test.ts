@@ -67,7 +67,79 @@ describe('map interaction cursors', () => {
     view.setState(current);
     view.setMeasurements([{ ...measure }]);
   });
-  afterEach(() => { view.destroy(); vi.unstubAllGlobals(); });
+  afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('places one tool ping at world coordinates and restores Select and its cursor', () => {
+    const ping = vi.fn(), select = vi.fn();
+    view.canPing = true; view.onPing = ping; view.onSelectTool = select;
+    view.setTool('ping');
+    canvas.pointer('pointermove', 100, 100);
+    expect(canvas.style.cursor).toBe('crosshair');
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointerup', 100, 100);
+    expect(ping).toHaveBeenCalledOnce();
+    expect(ping.mock.calls[0][0]).toBeCloseTo(100);
+    expect(ping.mock.calls[0][1]).toBeCloseTo(100);
+    expect(select).toHaveBeenCalledOnce();
+    expect(view.tool).toBe('navigate');
+    expect(canvas.style.cursor).toBe('grab');
+  });
+
+  it.each([[800, 800], [100, 100], [250, 250], [450, 400]])('pings once after a stationary 600 ms Select hold at %s,%s', (x, y) => {
+    vi.useFakeTimers();
+    const ping = vi.fn(), move = vi.fn(), drawing = vi.fn(), measurement = vi.fn();
+    view.canPing = true; view.onPing = ping; view.onMove = move;
+    view.onDrawing = drawing; view.onMeasurement = measurement;
+    canvas.pointer('pointerdown', x, y);
+    canvas.pointer('pointermove', x + 2, y);
+    vi.advanceTimersByTime(599);
+    expect(ping).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(ping).toHaveBeenCalledOnce();
+    expect(ping.mock.calls[0][0]).toBeCloseTo(x);
+    expect(ping.mock.calls[0][1]).toBeCloseTo(y);
+    vi.advanceTimersByTime(2000);
+    canvas.pointer('pointermove', x + 100, y + 100);
+    canvas.pointer('pointerup', x + 100, y + 100);
+    expect(ping).toHaveBeenCalledOnce();
+    expect(view.tool).toBe('navigate');
+    expect(move).not.toHaveBeenCalled();
+    expect(drawing).not.toHaveBeenCalled();
+    expect(measurement).not.toHaveBeenCalled();
+  });
+
+  it('cancels the hold beyond four screen pixels while preserving token dragging', () => {
+    vi.useFakeTimers();
+    const ping = vi.fn(), move = vi.fn();
+    view.canPing = true; view.onPing = ping; view.onMove = move;
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 104, 100);
+    expect(current.tokens[0].x).toBe(100);
+    canvas.pointer('pointermove', 125, 100);
+    vi.advanceTimersByTime(1000);
+    canvas.pointer('pointerup', 125, 100);
+    expect(ping).not.toHaveBeenCalled();
+    expect(current.tokens[0].x).toBe(125);
+    expect(move).toHaveBeenCalled();
+  });
+
+  it.each(['release', 'cancel', 'blur', 'tool', 'map', 'level', 'pause', 'destroy', 'unsupported'])('cancels pending holds on %s', reason => {
+    vi.useFakeTimers();
+    const ping = vi.fn();
+    view.canPing = true; view.onPing = ping;
+    canvas.pointer('pointerdown', 800, 800);
+    if (reason === 'release') canvas.pointer('pointerup', 800, 800);
+    if (reason === 'cancel') canvas.pointer('pointercancel', 800, 800);
+    if (reason === 'blur') canvas.blur();
+    if (reason === 'tool') view.setTool('draw');
+    if (reason === 'map') view.setState({ ...current, mapId: 'next' });
+    if (reason === 'level') view.setState({ ...current, levelId: 'next' });
+    if (reason === 'pause') { view.paused = true; view.invalidate(); }
+    if (reason === 'destroy') view.destroy();
+    if (reason === 'unsupported') { view.canPing = false; view.invalidate(); }
+    vi.advanceTimersByTime(1000);
+    expect(ping).not.toHaveBeenCalled();
+  });
 
   it('opens the token menu only after canceling the browser context menu', () => {
     view.canEditConditions = true;

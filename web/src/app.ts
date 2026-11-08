@@ -87,7 +87,10 @@ export class App {
     if (e.defaultPrevented || target instanceof HTMLElement &&
       (target.isContentEditable || target.closest('textarea, select')
         || target instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'button'].includes(target.type))) return;
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && e.key.toLowerCase() === 'p'
+      && !document.querySelector('dialog[open]') && !this.view.paused && this.view.canPing) {
+      e.preventDefault(); this.toolButtons.get('ping')!.click();
+    } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault(); this.undoDrawing();
     }
   };
@@ -179,6 +182,10 @@ export class App {
     this.view.smoothMovement = settings.smoothTokens;
     this.updateDrawingMode('pen');
     this.view.onSelectTool = () => this.selectTool();
+    this.view.onPing = (x, y) => {
+      const state = this.store.state;
+      if (state) this.sendTool({ type: 'command', kind: 'mapPing', x, y, mapId: state.mapId, levelId: state.levelId });
+    };
     this.view.onUndo = () => this.undoDrawing();
     this.view.onMove = (m) => this.commitMove(m);
     this.view.onPortal = id => {
@@ -489,15 +496,21 @@ export class App {
   private buildTools(): HTMLElement {
     const rail = el('nav', { class: 'tool-rail' });
     rail.setAttribute('aria-label', 'Map tools');
-    for (const [id, label] of [['navigate', 'Navigate / select'], ['draw', 'Drawing'], ['measure', 'Measure']] as const) {
+    for (const [id, label] of [['navigate', 'Navigate / select'], ['ping', 'Ping (P)'], ['draw', 'Drawing'], ['measure', 'Measure']] as const) {
       const button = iconButton(id, label, () => {
+        if (id === 'ping') {
+          this.view.setTool('ping');
+          this.toolButtons.forEach((b, key) => b.setAttribute('aria-pressed', String(key === id)));
+          this.closeTools();
+          return;
+        }
         if (id !== 'navigate' && this.view.tool === id && !this.flyout.classList.contains('hidden')) {
           this.closeTools(); return;
         }
         this.view.setTool(id);
         this.toolButtons.forEach((b, key) => {
           b.setAttribute('aria-pressed', String(key === id));
-          if (id !== 'navigate' && key !== 'navigate') b.setAttribute('aria-expanded', String(key === id));
+          if (id !== 'navigate' && (key === 'draw' || key === 'measure')) b.setAttribute('aria-expanded', String(key === id));
         });
         if (id !== 'navigate') {
           this.flyout.classList.remove('hidden');
@@ -507,8 +520,8 @@ export class App {
         }
       });
       button.setAttribute('aria-pressed', String(id === 'navigate'));
-      if (id !== 'navigate') {
-        button.disabled = true;
+      if (id !== 'navigate') button.disabled = true;
+      if (id === 'draw' || id === 'measure') {
         button.setAttribute('aria-controls', 'tool-flyout');
         button.setAttribute('aria-expanded', 'false');
       }
@@ -634,7 +647,7 @@ export class App {
   private closeTools(): void {
     this.flyout.classList.add('hidden');
     this.toolButtons.forEach((button, id) => {
-      if (id !== 'navigate') button.setAttribute('aria-expanded', 'false');
+      if (id === 'draw' || id === 'measure') button.setAttribute('aria-expanded', 'false');
     });
   }
 
@@ -871,9 +884,12 @@ export class App {
         this.view.canRotateTokens = msg.tokenRotation === true;
         this.view.canEditConditions = msg.tokenConditions === true;
         this.view.canControlPortals = msg.portalControls === true;
+        this.view.canPing = msg.mapPings === true;
+        this.toolButtons.get('ping')!.disabled = !this.view.canPing;
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
         this.toolButtons.get('measure')!.disabled = !msg.measurementTools;
-        if (this.view.tool === 'draw' && !msg.drawingTools || this.view.tool === 'measure' && !msg.measurementTools) {
+        if (this.view.tool === 'draw' && !msg.drawingTools || this.view.tool === 'measure' && !msg.measurementTools
+          || this.view.tool === 'ping' && !this.view.canPing) {
           this.view.setTool('navigate');
           this.selectTool();
           this.closeTools();

@@ -47,6 +47,9 @@ export class MapView {
   onMeasurement: (value: Measurement, remove: boolean) => void = () => {};
   onSelection: (shape: Overlay | null, measurement: boolean, count?: number) => void = () => {};
   onSelectTool: () => void = () => {};
+  canPing = false;
+  onPing: (x: number, y: number) => void = () => {};
+  private pingHold: { timer: ReturnType<typeof setTimeout>; pointerId: number; x: number; y: number } | null = null;
   onUndo: () => void = () => {};
   private selectedDrawings = new Set<string>();
   private selectedTokens = new Set<string>();
@@ -121,6 +124,7 @@ export class MapView {
     canvas.addEventListener('pointermove', (e) => this.pointerMove(e));
     canvas.addEventListener('pointerup', (e) => { this.pointerUp(e); this.updateCursor(); });
     canvas.addEventListener('pointercancel', e => {
+      this.cancelPingHold();
       if (this.drag?.kind === 'pan') {
         this.drag = null;
         if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
@@ -137,7 +141,8 @@ export class MapView {
       if (token && this.canEditConditions) this.onTokenContext(token, e.clientX, e.clientY);
     });
     canvas.addEventListener('pointerleave', () => { this.hover = null; this.invalidate(); });
-    canvas.addEventListener('blur', () => { if (this.rotation) this.cancelGesture(); });
+    canvas.addEventListener('blur', () => { this.cancelPingHold(); if (this.rotation) this.cancelGesture(); });
+    canvas.addEventListener('lostpointercapture', () => this.cancelPingHold());
     canvas.addEventListener('keydown', (e) => {
       if (this.nudgeTokens(e)) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
@@ -156,11 +161,13 @@ export class MapView {
   }
 
   invalidate(): void {
+    if (this.paused || !this.canPing) this.cancelPingHold();
     this.dirty = true;
     this.updateCursor();
   }
 
   destroy(): void {
+    this.cancelPingHold();
     this.destroyed = true;
     this.resizeObserver.disconnect();
     this.images.clear(); this.tiles.clear(); this.maskCache.clear();
@@ -173,6 +180,7 @@ export class MapView {
   }
 
   setState(state: GameState | null): void {
+    if (!state || state.paused || state.mapId !== this.state?.mapId || state.levelId !== this.state?.levelId) this.cancelPingHold();
     if (state && this.state && (state.mapId !== this.state.mapId || state.levelId !== this.state.levelId)) {
       this.gesture = null;
       this.rotation = null;
@@ -282,7 +290,13 @@ export class MapView {
     this.invalidate();
   }
 
+  private cancelPingHold(): void {
+    if (this.pingHold) clearTimeout(this.pingHold.timer);
+    this.pingHold = null;
+  }
+
   private cancelGesture(e?: PointerEvent): void {
+    this.cancelPingHold();
     this.rotation = null;
     this.marquee = this.group = null;
     const g = this.gesture;
@@ -469,7 +483,8 @@ export class MapView {
     let cursor = 'default';
     if (this.drag?.kind === 'pan') cursor = 'grabbing';
     else if (!this.paused && this.state) {
-      if (this.rotation) cursor = 'grabbing';
+      if (this.tool === 'ping') cursor = 'crosshair';
+      else if (this.rotation) cursor = 'grabbing';
       else if (this.gesture?.resize) cursor = 'nwse-resize';
       else if (this.group || this.drag?.kind === 'token' || this.gesture && !this.gesture.create) cursor = 'grabbing';
       else if (this.gesture?.create) cursor = 'crosshair';
@@ -485,6 +500,7 @@ export class MapView {
   }
 
   private pointerDown(e: PointerEvent): void {
+    this.cancelPingHold();
     this.canvas.focus();
     this.canvas.setPointerCapture(e.pointerId);
     const w = this.toWorld(e);
@@ -502,6 +518,12 @@ export class MapView {
     }
     if (e.button !== 0) return;
     if (s && !this.paused && e.button === 0) {
+      if (this.tool === 'ping') {
+        if (this.canPing) this.onPing(w.x, w.y);
+        this.setTool('navigate');
+        this.onSelectTool();
+        return;
+      }
       const remove = this.measurementDeleteAt(w.x, w.y);
       if (remove) { this.onMeasurement(remove, true); this.invalidate(); return; }
       if (this.tool !== 'navigate') {
@@ -537,6 +559,17 @@ export class MapView {
           before: t.rotationDeg ?? 0, angle: t.rotationDeg ?? 0 };
         this.invalidate(); return;
       }
+      if (this.canPing && this.tool === 'navigate' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        this.pingHold = { pointerId: e.pointerId, x: e.clientX, y: e.clientY,
+          timer: setTimeout(() => {
+            this.pingHold = null;
+            if (this.destroyed || this.paused || !this.canPing || this.tool !== 'navigate'
+              || this.state?.mapId !== s.mapId || this.state?.levelId !== s.levelId) return;
+            this.cancelGesture();
+            this.drag = null;
+            this.onPing(w.x, w.y);
+          }, 600) };
+      }
       if (hit?.kind === 'group') {
         this.group = { start: w, end: w,
           shapes: (s.overlays ?? []).filter(o => this.selectedDrawings.has(o.id) && ownsDrawing(o, this.playerId, this.campaignId)),
@@ -570,6 +603,11 @@ export class MapView {
   }
 
   private pointerMove(e: PointerEvent): void {
+    if (this.pingHold) {
+      if (e.pointerId !== this.pingHold.pointerId || Math.hypot(e.clientX - this.pingHold.x, e.clientY - this.pingHold.y) > 4) {
+        this.cancelPingHold();
+      } else return;
+    }
     this.hover = this.toWorld(e);
     if (this.drag?.kind === 'pan') {
       const d = this.drag;
@@ -641,6 +679,7 @@ export class MapView {
   }
 
   private pointerUp(e: PointerEvent): void {
+    this.cancelPingHold();
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     if (this.rotation) {
       const rotation = this.rotation; this.rotation = null;
@@ -735,6 +774,7 @@ export class MapView {
   }
 
   private wheel(e: WheelEvent): void {
+    this.cancelPingHold();
     e.preventDefault();
     const r = this.canvas.getBoundingClientRect();
     const px = e.clientX - r.left;

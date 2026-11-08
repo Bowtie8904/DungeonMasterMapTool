@@ -321,6 +321,13 @@ the normal map overlays, including generated effect textures. Texture choices/de
 than a separate browser list. Measurements are shared session-only annotations, replayed to late joiners and cleared
 on map/level changes. Both features are advertised in `hello`, so older hosts keep their tools disabled.
 Audio preferences and logout live in Settings; the roster reports host-measured round-trip ping.
+**Ping (P)** in the left toolbar activates a one-shot target cursor without opening a flyout. Left-click
+to send one ping and return to Select. In Select, holding left-click still for 600 ms also sends one ping;
+moving more than 4 screen pixels cancels the hold and keeps normal dragging/box selection. Release, focus
+loss, cancellation, map/tool changes and pause cancel pending holds. Everyone, including the DM, sees
+player and DM pings using the host's existing animation. The additive `mapPings` hello capability disables
+player pings on older hosts; LAN compatibility is unchanged. P does not intercept typing or open dialogs.
+
 Right-click without dragging switches to Select without dismissing flyouts; right-drag pans without changing
 the active tool. Empty left-drag box-selects
 owned drawings, controlled tokens and measurements for group movement. Left-clicking a controlled token

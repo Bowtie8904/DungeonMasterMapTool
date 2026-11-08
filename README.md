@@ -641,6 +641,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   effects, grouped by character name, with 40%-opaque row backgrounds. Each row has the effect name and a remove (x) button; click a name to expand the
   full source (for example the whole Patron's Fury feature) and click again to collapse.
 - **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
+  **Ping (P)** in the left toolbar arms a target cursor without a flyout. Left-click once to ping and return to
+  Select. In Select, hold left-click still for 600 ms to ping; dragging cancels the hold. Player and DM pings
+  are visible to everyone. Pings are unavailable while paused or connected to an older host without this capability.
   Right-drag pans while keeping the active tool;
   left-drag on empty space box-selects your drawings, controlled actors/tokens and measurements. Drag a selected
   object to move the group. Delete removes selected drawings/measurements, not actors. Choosing a drawing or

@@ -48,6 +48,8 @@ class OnlineSessionServerTest {
     private volatile boolean drawingSupported;
     private volatile boolean rotationSupported;
     private volatile boolean portalSupported;
+    private volatile boolean mapPingsSupported;
+    private final List<String> mapPings = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<String> portals = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile OnlineSessionServer.MoveResult portalResult = OnlineSessionServer.MoveResult.accepted();
     private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -4909,6 +4911,23 @@ class OnlineSessionServerTest {
                     public boolean supportsPortalControls() { return portalSupported; }
 
                     @Override
+                    public boolean supportsMapPings() { return mapPingsSupported; }
+
+                    @Override
+                    public CompletableFuture<OnlineSessionServer.MoveResult> mapPing(String playerId, String mapId,
+                                                                                     String levelId, double x, double y) {
+                        assertEquals(OnlineSessionServerTest.this.playerId(), playerId);
+                        assertEquals("m1", mapId);
+                        assertEquals("l1", levelId);
+                        mapPings.add(playerId);
+                        ObjectNode next = state(mapId, 5);
+                        next.putArray("pings").addObject().put("x", x).put("y", y)
+                                .put("startMs", System.currentTimeMillis()).put("durationMs", 2000);
+                        server.publish(next, "m1/l1");
+                        return CompletableFuture.completedFuture(OnlineSessionServer.MoveResult.accepted());
+                    }
+
+                    @Override
                     public CompletableFuture<OnlineSessionServer.MoveResult> togglePortal(String playerId, String id,
                                                                                           String mapId, String levelId) {
                         assertEquals(OnlineSessionServerTest.this.playerId(), playerId);
@@ -5380,6 +5399,58 @@ class OnlineSessionServerTest {
             ws.sendText(command.toString(), true).join();
             assertEquals("rotate", inbox.next("ack").path("cmdId").asText());
             assertEquals(List.of(90.0), rotations);
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void mapPingCapabilityValidatesCommandsAndBroadcastsToEveryConnection() throws Exception {
+        mapPingsSupported = true;
+        server.publish(state("m1", 5), "m1/l1");
+        String cookie = cookie();
+        Inbox first = new Inbox(), second = new Inbox();
+        WebSocket sender = connect(cookie, first), watcher = connect(cookie, second);
+        try {
+            assertTrue(first.next("hello").path("mapPings").asBoolean());
+            assertEquals(OnlineProtocol.VERSION, second.next("hello").path("protocol").asInt());
+            first.next("snapshot"); second.next("snapshot");
+            ObjectNode command = MAPPER.createObjectNode().put("type", "command").put("cmdId", "ping")
+                    .put("kind", "mapPing").put("mapId", "m1").put("levelId", "l1").put("x", 123).put("y", 456);
+            for (String field : List.of("mapId", "levelId", "x", "y")) {
+                ObjectNode invalid = command.deepCopy();
+                invalid.remove(field);
+                sender.sendText(invalid.toString(), true).join();
+                assertEquals("ping", first.next("reject").path("cmdId").asText());
+            }
+            sender.sendText(command.deepCopy().put("x", "NaN").toString(), true).join();
+            first.next("reject");
+            server.setPaused(true);
+            sender.sendText(command.toString(), true).join();
+            assertEquals("paused", first.next("reject").path("reason").asText());
+            assertTrue(mapPings.isEmpty());
+            server.setPaused(false);
+            sender.sendText(command.toString(), true).join();
+            for (Inbox inbox : List.of(first, second)) {
+                JsonNode op = inbox.next("delta").path("ops").get(0);
+                assertEquals("set", op.path("op").asText());
+                assertEquals("pings", op.path("path").asText());
+                assertEquals(123, op.path("value").get(0).path("x").asDouble());
+                assertEquals(456, op.path("value").get(0).path("y").asDouble());
+            }
+            assertEquals("ping", first.next("ack").path("cmdId").asText());
+            assertEquals(List.of(playerId()), mapPings);
+        } finally { sender.abort(); watcher.abort(); }
+    }
+
+    @Test
+    void hostsWithoutMapPingsRejectOnlyTheAdditiveCommand() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertFalse(inbox.next("hello").path("mapPings").asBoolean());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"p\",\"kind\":\"mapPing\",\"mapId\":\"m1\","
+                    + "\"levelId\":\"l1\",\"x\":1,\"y\":2}", true).join();
+            assertEquals("p", inbox.next("reject").path("cmdId").asText());
+            assertTrue(mapPings.isEmpty());
         } finally { ws.abort(); }
     }
 
