@@ -10,6 +10,84 @@ class OnlineTokenConditionsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
+    void fullStressAddsOneLinkedDebuffAndClearingOneStressRemovesOnlyIt() {
+        var sheet = MAPPER.createObjectNode();
+        sheet.putObject("stress").put("slots", 6).put("on", 5);
+        var effects = sheet.putArray("effects");
+        var other = effects.addObject().put("id", "other").put("name", "Poisoned");
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertEquals(1, effects.size());
+        sheet.withObject("/stress").put("on", 6);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertEquals(2, effects.size());
+        var generated = effects.get(1);
+        assertEquals(OnlineTokenConditions.FULL_STRESS_EFFECT_ID, generated.path("id").asText());
+        assertTrue(generated.path("appliedByFullStress").asBoolean());
+        assertEquals("debuff", generated.path("kind").asText());
+        assertEquals(OnlineTokenConditions.VULNERABLE_TEXT, generated.path("text").asText());
+        assertEquals("vulnerable", OnlineTokenConditions.actorConditions(sheet).getFirst().getId());
+        sheet.withObject("/stress").put("on", 5);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertEquals(1, effects.size());
+        assertEquals(other, effects.get(0));
+    }
+
+    @Test
+    void preExistingLinkedAndUnlinkedVulnerabilityNeverBecomesStressOwned() {
+        for (boolean linked : java.util.List.of(false, true)) {
+            var sheet = MAPPER.createObjectNode();
+            sheet.putObject("stress").put("slots", 6).put("on", 6);
+            var effects = sheet.putArray("effects");
+            var original = MAPPER.createObjectNode().put("id", "outside-source").put("name", "Vulnerable")
+                    .put("kind", "debuff");
+            if (linked) OnlineTokenConditions.effect(original, "token",
+                    new DmProject.TokenCondition("vulnerable", "vulnerable", "Vulnerable"));
+            effects.add(original);
+            var before = sheet.deepCopy();
+            OnlineTokenConditions.normalizeFullStress(sheet);
+            assertEquals(before, sheet);
+            sheet.withObject("/stress").put("on", 0);
+            OnlineTokenConditions.normalizeFullStress(sheet);
+            assertEquals(1, effects.size());
+            assertEquals(original, effects.get(0));
+            assertFalse(original.path("appliedByFullStress").asBoolean());
+        }
+    }
+
+    @Test
+    void externalVulnerabilityAddedAfterFullStressSurvivesAndManualApplicationTakesOwnership() {
+        var sheet = MAPPER.createObjectNode();
+        sheet.putObject("stress").put("slots", 6).put("on", 6);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        var effects = (com.fasterxml.jackson.databind.node.ArrayNode) sheet.get("effects");
+        var manual = effects.addObject().put("id", "external").put("name", "Vulnerable");
+        sheet.withObject("/stress").put("on", 0);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertEquals(1, effects.size());
+        assertEquals(manual, effects.get(0));
+        effects.removeAll();
+        sheet.withObject("/stress").put("on", 6);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        OnlineTokenConditions.effect((com.fasterxml.jackson.databind.node.ObjectNode) effects.get(0), "token",
+                new DmProject.TokenCondition("vulnerable", "vulnerable", "Vulnerable"));
+        sheet.withObject("/stress").put("on", 0);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertEquals(1, effects.size());
+        assertFalse(effects.get(0).path("appliedByFullStress").asBoolean());
+    }
+
+    @Test
+    void missingAndZeroSlotStressDoNotApplyVulnerable() {
+        var sheet = MAPPER.createObjectNode();
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertFalse(sheet.has("effects"));
+        sheet.putObject("stress").put("slots", 0).put("on", 0);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        assertFalse(sheet.has("effects"));
+    }
+
+    @Test
     void validatesBuiltInAndCustomNames() {
         assertNull(OnlineTokenConditions.validationProblem("hidden", "Hidden"));
         assertNull(OnlineTokenConditions.validationProblem("restrained", "Restrained"));

@@ -16,6 +16,10 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Full Stress:** Marking every Stress slot automatically applies Vulnerable and its token badge.
+  Clearing any Stress removes it only if full Stress applied it. Vulnerable from another source is preserved,
+  and the automatic source is remembered across saves and reloads.
+
 - **DM actor resource bars:** Player-owned and testing Daggerheart actor tokens in the selected campaign show compact
   marked HP and marked Stress bars over the bottom of their artwork, with marked/maximum numbers.
   Each bar is empty at zero marked slots and fills as slots are marked, matching the character sheet.

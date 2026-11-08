@@ -112,6 +112,41 @@ class TokenControlTest {
             });
             assertEquals("buff", mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"))
                     .path("effects").get(0).path("kind").asText());
+            var full = (com.fasterxml.jackson.databind.node.ObjectNode)
+                    mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"));
+            full.putObject("stress").put("slots", 6).put("on", 6);
+            controller.store().saveSheet(campaign.getId(), "actor", full.toString());
+            onFx(() -> {
+                controller.campaignEdited(campaign);
+                assertTrue(app.project.getTokens().stream().allMatch(token ->
+                        token.getConditions().stream().anyMatch(condition -> "vulnerable".equals(condition.getId()))));
+                return null;
+            });
+            var generated = (com.fasterxml.jackson.databind.node.ObjectNode)
+                    mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"));
+            generated.withObject("/stress").put("on", 5);
+            controller.store().saveSheet(campaign.getId(), "actor", generated.toString());
+            onFx(() -> {
+                controller.campaignEdited(campaign);
+                assertTrue(app.project.getTokens().stream().allMatch(token ->
+                        token.getConditions().stream().noneMatch(condition -> "vulnerable".equals(condition.getId()))));
+                return null;
+            });
+            full.withObject("/stress").put("on", 6);
+            controller.store().saveSheet(campaign.getId(), "actor", full.toString());
+            onFx(() -> { controller.campaignEdited(campaign); return null; });
+            assertTrue(controller.setTokenCondition("token", "vulnerable", "Vulnerable", "vulnerable", true)
+                    .get(5, TimeUnit.SECONDS).ok());
+            var manual = (com.fasterxml.jackson.databind.node.ObjectNode)
+                    mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"));
+            manual.withObject("/stress").put("on", 0);
+            controller.store().saveSheet(campaign.getId(), "actor", manual.toString());
+            onFx(() -> {
+                controller.campaignEdited(campaign);
+                assertTrue(app.project.getTokens().stream().allMatch(token ->
+                        token.getConditions().stream().anyMatch(condition -> "vulnerable".equals(condition.getId()))));
+                return null;
+            });
         } finally {
             onFx(() -> { controller.stop(); Tuning.reset(); return null; });
         }

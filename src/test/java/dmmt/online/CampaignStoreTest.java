@@ -19,6 +19,40 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void fullStressProvenanceSurvivesReloadAndAllSheetPersistencePaths() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Stress");
+        store.saveSheet(campaign.getId(), "hero", """
+                {"stress":{"slots":6,"on":6},"effects":[]}
+                """);
+        var reopened = new CampaignStore(dir);
+        var sheet = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(reopened.loadSheet(campaign.getId(), "hero"));
+        assertTrue(sheet.path("effects").get(0).path("appliedByFullStress").asBoolean());
+        sheet.withObject("/stress").put("on", 5);
+        reopened.saveSheets(campaign.getId(), java.util.Map.of("hero", sheet));
+        assertTrue(sheet.path("effects").isEmpty());
+        assertTrue(mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("effects").isEmpty());
+        sheet.withObject("/stress").put("on", 6);
+        var actor = Campaign.Actor.builder().id("hero").name("Hero").build();
+        campaign.getActors().add(actor);
+        reopened.save(campaign);
+        reopened.renameActor(campaign, actor, "Renamed", sheet);
+        assertTrue(sheet.path("effects").get(0).path("appliedByFullStress").asBoolean());
+        sheet.withObject("/stress").put("on", 0);
+        reopened.saveSheetsAndRoll(campaign.getId(), java.util.Map.of("hero", sheet), null);
+        assertTrue(sheet.path("effects").isEmpty());
+        sheet.putArray("effects").addObject().put("id", "original").put("name", "Vulnerable").put("kind", "debuff");
+        sheet.withObject("/stress").put("on", 6);
+        reopened.saveSheet(campaign.getId(), "hero", sheet.toString());
+        var saved = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(reopened.loadSheet(campaign.getId(), "hero"));
+        saved.withObject("/stress").put("on", 0);
+        reopened.saveSheet(campaign.getId(), "hero", saved.toString());
+        assertEquals("original", mapper.readTree(new CampaignStore(dir).loadSheet(campaign.getId(), "hero"))
+                .path("effects").get(0).path("id").asText());
+    }
+
+    @Test
     void assignsEightDistinctPlayerColorsAndPreservesThemThroughReloadAndAccountChanges() throws Exception {
         CampaignStore store = new CampaignStore(dir);
         Campaign campaign = store.create("Colors");

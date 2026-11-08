@@ -5,6 +5,10 @@ default and can be shown to the DM only from the desktop map's token right-click
 Token condition menus open from the canceled browser `contextmenu` event, rather than on pointer press,
 so displaying the in-app menu cannot redirect the native context-menu event to a new DOM element.
 Hidden is a linked actor buff; Restrained, Vulnerable and custom conditions are debuffs.
+The host automatically adds Vulnerable when all Stress slots are marked and removes that generated
+effect when any Stress is cleared, including through actions and rests. Saved full-Stress provenance
+keeps Vulnerable from another source intact across reloads. Explicit token-condition application
+takes manual ownership, so clearing Stress will not remove that effect.
 Existing linked Hidden effects are reclassified when synchronized with their token.
 Effect removal flushes the sheet save before sending `setTokenCondition`, so the host's linked-effect
 update does not race the client's versioned autosave. A failed save keeps the token unchanged and reports

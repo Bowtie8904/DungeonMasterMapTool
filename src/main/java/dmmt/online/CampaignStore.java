@@ -324,7 +324,9 @@ public final class CampaignStore {
 
     public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
         recoverSheetTransfer(campaignId);
-        writeSheet(campaignId, actorId, MAPPER.readTree(json).toString());
+        var sheet = MAPPER.readTree(json);
+        if (sheet instanceof ObjectNode object) OnlineTokenConditions.normalizeFullStress(object);
+        writeSheet(campaignId, actorId, sheet.toString());
     }
 
     /** Journal an actor rename together with its sheet, if one exists. */
@@ -332,7 +334,10 @@ public final class CampaignStore {
             throws IOException {
         recoverSheetTransfer(campaign.getId());
         ObjectNode transaction = MAPPER.createObjectNode();
-        if (sheet != null) transaction.set(actor.getId(), sheet);
+        if (sheet != null) {
+            OnlineTokenConditions.normalizeFullStress(sheet);
+            transaction.set(actor.getId(), sheet);
+        }
         transaction.putObject("$actorName").put("id", actor.getId()).put("name", name);
         writeSheetTransaction(campaign.getId(), transaction);
         actor.setName(name);
@@ -402,6 +407,7 @@ public final class CampaignStore {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
+            OnlineTokenConditions.normalizeFullStress(entry.getValue());
             transaction.set(entry.getKey(), entry.getValue());
         }
         if (replacement != null) transaction.set("$roll", replacement);

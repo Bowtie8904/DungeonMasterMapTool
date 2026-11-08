@@ -55,6 +55,42 @@ class OnlineSessionServerTest {
     private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Path compendiumDir;
 
+    @Test
+    void versionedStressSavesReturnAutomaticVulnerabilityAndPreserveOutsideSources() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("stress-hero").name("Hero").ownerId(playerId()).build());
+        ObjectNode initial = MAPPER.createObjectNode();
+        initial.putObject("stress").put("slots", 6).put("on", 5);
+        initial.putArray("effects");
+        store.saveSheet(campaign.getId(), "stress-hero", initial.toString());
+        String cookie = cookie();
+        String uri = "http://localhost:" + port + "/api/sheet/stress-hero";
+        var loaded = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        var data = MAPPER.readTree(loaded.body());
+        var sheet = (ObjectNode) data.path("sheet");
+        sheet.withObject("/stress").put("on", 6);
+        var full = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", data.path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, full.statusCode(), full.body());
+        var result = MAPPER.readTree(full.body());
+        assertTrue(result.path("sheet").path("effects").get(0).path("appliedByFullStress").asBoolean());
+        sheet = (ObjectNode) result.path("sheet");
+        sheet.withArray("effects").addObject().put("id", "outside").put("name", "Vulnerable").put("kind", "debuff");
+        sheet.withObject("/stress").put("on", 5);
+        var cleared = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", result.path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, cleared.statusCode(), cleared.body());
+        var effects = MAPPER.readTree(cleared.body()).path("sheet").path("effects");
+        assertEquals(1, effects.size());
+        assertEquals("outside", effects.get(0).path("id").asText());
+        var stale = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", data.path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(initial.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, stale.statusCode());
+    }
+
     private HttpResponse<String> preferencesHttp(String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/preferences"));
         if (cookie != null) request.header("Cookie", cookie);

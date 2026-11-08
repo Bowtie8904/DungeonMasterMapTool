@@ -630,6 +630,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                         || !existing.getName().equals(resolvedName))) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Condition changed; refresh the map and try again"));
                     return;
+                } else if (enabled && existing != null && "vulnerable".equals(type)) {
+                    updateActorConditionEffect(token, existing, true);
                 } else {
                     result.complete(OnlineSessionServer.MoveResult.accepted());
                     return;
