@@ -2448,7 +2448,7 @@
    "name": "Grace-Touched",
    "automation": {
     "conditionalRollTriggers": [
-     { "id": "stress", "label": "Grace-Touched: target marks Stress instead of HP", "on": "damage",
+     { "id": "stress", "label": "Grace-Touched: target marks Stress, not HP", "on": "damage",
        "loadoutDomain": { "domain": "Grace", "min": 4 },
        "description": "Replace the HP this damage would force the target to mark with the same number of Stress; apply it at the table." }
     ]

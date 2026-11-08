@@ -53,6 +53,63 @@ class OnlineSessionServerTest {
     private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Path compendiumDir;
 
+    private HttpResponse<String> preferencesHttp(String cookie, String token, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/preferences"));
+        if (cookie != null) request.header("Cookie", cookie);
+        if (token != null) request.header("Authorization", "Bearer " + token);
+        if (body == null) request.GET();
+        else request.header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(body));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void domainCardPreferencesAreAuthenticatedValidatedAndPersistedPerAccount() throws Exception {
+        assertEquals(401, preferencesHttp(null, null, null).statusCode());
+        assertEquals(401, preferencesHttp(null, null, "{\"domainCardView\":\"list\"}").statusCode());
+        String cookie = cookie();
+        var initial = preferencesHttp(cookie, null, null);
+        assertEquals(200, initial.statusCode());
+        assertEquals("card", MAPPER.readTree(initial.body()).path("domainCardView").asText());
+        assertFalse(MAPPER.readTree(initial.body()).has("passwordHash"));
+        Campaign.Player bob = Campaign.Player.builder().name("Bob").build();
+        campaign.getPlayers().add(bob);
+        for (String body : List.of("{}", "null", "{", "{\"domainCardView\":1}", "{\"domainCardView\":\"grid\"}"))
+            assertEquals(400, preferencesHttp(cookie, null, body).statusCode(), body);
+        var saved = preferencesHttp(cookie, null, "{\"domainCardView\":\"list\",\"playerId\":\"" + bob.getId() + "\"}");
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals("list", campaign.player(playerId()).getDomainCardView());
+        assertEquals("card", bob.getDomainCardView());
+        assertEquals("card", campaign.getDmDomainCardView());
+        assertEquals("list", store.load(campaign.getId()).player(playerId()).getDomainCardView());
+        assertEquals("list", MAPPER.readTree(preferencesHttp(cookie, null, null).body()).path("domainCardView").asText());
+        assertEquals("card", MAPPER.readValue("{\"name\":\"Legacy\"}", Campaign.Player.class).getDomainCardView());
+    }
+
+    @Test
+    void domainCardPreferencesKeepDmAndPlayerChoicesSeparateAndRejectExpiredGrants() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("preference-sheet").name("Sheet").ownerId(playerId()).build());
+        String token = URI.create(server.dmSheetUrl("preference-sheet")).getFragment();
+        var saved = preferencesHttp(null, token, "{\"domainCardView\":\"list\"}");
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals("dm:" + campaign.getId(), MAPPER.readTree(saved.body()).path("userId").asText());
+        assertEquals("list", store.load(campaign.getId()).getDmDomainCardView());
+        assertEquals("card", campaign.player(playerId()).getDomainCardView());
+        assertEquals(403, preferencesHttp(null, "invalid", null).statusCode());
+    }
+
+    @Test
+    void domainCardPreferenceSaveFailureRestoresThePreviousChoice() throws Exception {
+        String cookie = cookie();
+        Path file = store.root().resolve(campaign.getId()).resolve("campaign.json");
+        java.nio.file.Files.delete(file);
+        java.nio.file.Files.createDirectory(file);
+        java.nio.file.Files.writeString(file.resolve("block"), "block replacement");
+        var saved = preferencesHttp(cookie, null, "{\"domainCardView\":\"list\"}");
+        assertEquals(500, saved.statusCode(), saved.body());
+        assertEquals("card", campaign.player(playerId()).getDomainCardView());
+        assertTrue(MAPPER.readTree(saved.body()).path("error").asText().contains("Could not save"));
+    }
+
     @Test
     void copycatListsUniqueOtherActorLoadoutsChargesRoundedHopeAndExpiresOnSourceVaulting() throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");

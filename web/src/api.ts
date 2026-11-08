@@ -64,6 +64,22 @@ export async function logout(): Promise<void> {
   if (!res.ok) throw await readError(res);
 }
 
+export type DomainCardView = 'card' | 'list';
+export interface DomainCardPreference { userId: string; domainCardView: DomainCardView }
+
+export async function domainCardPreference(view?: DomainCardView): Promise<DomainCardPreference> {
+  const res = await hostFetch('/api/preferences', {
+    credentials: 'same-origin',
+    ...(view ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domainCardView: view }) } : {}),
+  });
+  if (res.status === 404) throw new ApiError('Update the host to save domain card view preferences.', 404);
+  if (!res.ok) throw await readError(res);
+  const data = await res.json() as DomainCardPreference;
+  if (typeof data.userId !== 'string' || !['card', 'list'].includes(data.domainCardView))
+    throw new Error('The host returned an invalid domain card view preference.');
+  return data;
+}
+
 export async function uploadArtwork(actorId: string, file: File): Promise<void> {
   const res = await fetch(`/api/actors/${encodeURIComponent(actorId)}/artwork`, {
     method: 'PUT',

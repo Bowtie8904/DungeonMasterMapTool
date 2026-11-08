@@ -472,6 +472,11 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Diminish My Foes** asks for Favor from its feature or Hope-action chat button; **Fearsome Attack** adds repeatable,
   individually selected damage-die rerolls in chat. **Patron's Boon** retains its chat reroll and has the usual blue
   Hope feature button. Tribute remains a downtime move and Patron's Pact remains an optional action-roll bonus.
+  The Domain Cards tab offers a compact icon-only **Card / List** switch, spaced apart from the Loadout active count.
+  Card view keeps the existing balanced layout; List view aligns level, name, domain, Recall cost,
+  actions and chat links in compact rows. Click a row (or use Enter/Space) to expand its full card,
+  including text, tokens and feature buttons. The choice applies to both Loadout and Vault and is
+  saved to the campaign user account across sheets, pop-outs and devices; the DM has a separate preference.
   Creation grants can add HP, Stress, Evasion, domain-card choices and
   eligible domains, including mixed-ancestry feature selection. Attack/action and damage dialogs offer multiple
   optional bonuses together (for example **Charging Quiver** on arrow damage), show their conditions and costs,

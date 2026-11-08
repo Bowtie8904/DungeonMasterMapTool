@@ -243,6 +243,17 @@ Columns may contain different numbers of cards; narrow panels use one column. Se
 the visible cards without stretching cards to match their neighbors or splitting a card between columns.
 Loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
 They retain their existing editable values, limits and autosave behavior. Domain-card action groups have no enclosing border or panel padding; individual buttons retain their normal styling.
+The icon-only Card/List switch follows the active count at the far right of the Loadout header.
+Its compact 28 px buttons use 18 px icons and leave extra spacing after the active count without increasing the header height.
+Card view is the default; List view applies to Loadout and Vault with aligned level, name, domain,
+Recall cost, action-menu and chat-link columns. Click or keyboard-activate a row to expand/collapse
+the full card, including grimoire spells, tokens and actions; menu/chat controls do not toggle it.
+Preferences are saved on the authenticated campaign account, with a separate campaign DM preference,
+and reused across sheets and devices. Open same-origin sheets/pop-outs refresh through BroadcastChannel
+and window focus. `GET /api/preferences` returns `{userId,domainCardView:"card"|"list"}`;
+`PUT /api/preferences {domainCardView}` validates and persists only the authenticated user's preference.
+Save failures retain the previous view and show an inline error. Older hosts show an update-required message;
+older clients ignore the additive account fields. Online Play and DM Link versions remain unchanged.
 Sheet chat icons and inventory-to-chat drags require `hello.chatCards:true`. Posting uses
 `POST /api/chat-cards {actorId,category,item,toId?}`; the host resolves the entry from the owner's saved sheet,
 adds `sharedCard` to an ordinary chat message and keeps a text fallback for older clients. Inventory drags wait

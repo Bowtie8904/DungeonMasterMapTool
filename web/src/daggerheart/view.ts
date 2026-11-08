@@ -36,6 +36,8 @@ import { iconButton } from '../icons';
 import { mutagenEffectSource } from '../effects';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
 import { activeCards, activeCardSources, actorAutomationAvailable, copiedCardAvailable } from './copycat';
+import type { CardPreferences, CardPreferenceState } from './card-preferences';
+import type { DomainCardView } from '../api';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
@@ -78,6 +80,7 @@ export interface SheetViewOptions {
   supportsBrawlerRolls?: () => boolean;
   character: CharacterSheet;
   readOnly?: () => boolean;
+  cardPreferences?: CardPreferences;
   artwork?: string;
   /** Sends a roll to the shared roll log; returns false when it could not be sent. */
   onRoll: (roll: RollRequest) => boolean;
@@ -162,7 +165,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   root.addEventListener('click', event => {
     if (!opts.readOnly?.()) return;
     const target = event.target as Element;
-    if (target.closest('.tabs [role="tab"], .loot-description button')) return;
+    if (target.closest('.tabs [role="tab"], .loot-description button, .card-view-switch button')
+      || target.closest('.domain-list-summary') && !target.closest('button')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
   }, true);
@@ -181,7 +185,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   descriptionObserver.observe(root);
   const cardLayoutObserver = new ResizeObserver(() => layoutCards());
   function layoutCards(): void {
-    root.querySelectorAll<HTMLElement>('.cards').forEach(grid => {
+    root.querySelectorAll<HTMLElement>('.cards:not(.cards-list)').forEach(grid => {
       const width = grid.clientWidth;
       if (!width) return;
       const gap = 10;
@@ -369,7 +373,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     actionButton(`feat:${name}`, feature.automation, action, name, {}).click();
     return true;
   };
-  for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, () => {
+  for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, event => {
+    const target = event.target as Element;
+    if (target.closest('.card-view-switch')
+      || ev === 'click' && target.closest('.domain-list-summary') && !target.closest('button')) return;
     if (!opts.readOnly?.()) opts.onChange?.();
   });
 
@@ -710,13 +717,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     layoutCards();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
-      root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
-        if (control.matches('.tabs [role="tab"], .loot-description button')) return;
-        if (control instanceof HTMLInputElement && ['text', 'number', 'search'].includes(control.type) || control instanceof HTMLTextAreaElement)
-          control.readOnly = true;
-        else control.disabled = true;
-      });
-      root.querySelectorAll<HTMLElement>('[draggable="true"]').forEach(node => { node.draggable = false; });
+      applyReadOnlyControls();
     } else opts.onChange?.();
     const p = root.querySelector('.pages');
     if (p) p.scrollTop = scroll;
@@ -724,6 +725,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (sidebar) sidebar.scrollTop = sidebarScroll;
     requestAnimationFrame(() => { measureDescriptions(); layoutCards(); });
   };
+
+  function applyReadOnlyControls(): void {
+    root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
+      if (control.matches('.tabs [role="tab"], .loot-description button, .card-view-switch button')) return;
+      if (control instanceof HTMLInputElement && ['text', 'number', 'search'].includes(control.type) || control instanceof HTMLTextAreaElement)
+        control.readOnly = true;
+      else control.disabled = true;
+    });
+    root.querySelectorAll<HTMLElement>('[draggable="true"]').forEach(node => { node.draggable = false; });
+  }
 
   const launchMancer = () => { void openMancer(root, c, () => render()); };
   const launchLevelUp = () => { void openLevelUp(root, c, () => render()); };
@@ -1510,7 +1521,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ...(copiedCardAvailable(d) ? [dcard(d.borrowedCard.card, loadout, true)] : []),
     ] : [];
     const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? spells.map((s) => spellBlock(d, s, loadout)) : [rich(d.text)]), acts, ...copied), { category: 'domain', item: d });
-    node.draggable = !c.testingCharacter;
+    return draggableCard(node, d, loadout);
+  }
+
+  function draggableCard(node: HTMLElement, d: DomainCard, loadout: boolean): HTMLElement {
+    node.draggable = !c.testingCharacter && !opts.readOnly?.();
     node.classList.add('inventory-draggable');
     node.addEventListener('dragstart', (e) => {
       draggedCard = { card: d, fromLoadout: loadout };
@@ -1570,6 +1585,65 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   const cardQuery = { loadout: '', vault: '' };
+  const expandedCards = new Set<DomainCard>();
+  let cardState: CardPreferenceState = { view: 'card', pending: false, error: '' };
+  let cardPage: HTMLElement | undefined;
+
+  function updateCardPage(): void {
+    if (page !== 'cards' || !cardPage) return;
+    cardLayoutObserver.disconnect();
+    cardPage.replaceChildren(...cardPageContents());
+    if (opts.readOnly?.()) applyReadOnlyControls();
+    root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard').forEach(node => cardLayoutObserver.observe(node));
+    layoutCards();
+  }
+
+  function cardViewSwitch(): HTMLElement {
+    const buttons = (['card', 'list'] as DomainCardView[]).map(view => {
+      const button = iconButton(view === 'card' ? 'cards' : 'list', view === 'card' ? 'Card view' : 'List view', () => {
+        if (view === cardState.view || cardState.pending) return;
+        if (opts.cardPreferences) void opts.cardPreferences.save(view);
+        else { cardState = { ...cardState, view }; updateCardPage(); }
+      });
+      button.setAttribute('aria-pressed', String(cardState.view === view));
+      button.disabled = cardState.pending;
+      return button;
+    });
+    return el('span', { class: 'card-view-switch', role: 'group', ariaLabel: 'Domain card view' }, ...buttons);
+  }
+
+  function cardListRow(d: DomainCard, loadout: boolean): HTMLElement {
+    const details = el('details', { class: 'domain-list-row', open: expandedCards.has(d) });
+    const move = () => {
+      if (c.testingCharacter || opts.readOnly?.()) return;
+      if (loadout) { c.loadout.splice(c.loadout.indexOf(d), 1); c.vault.push(d); }
+      else if (c.loadout.length < derivedStats(c).loadoutMax) { c.vault.splice(c.vault.indexOf(d), 1); c.loadout.push(d); }
+      render();
+    };
+    const menu = c.testingCharacter ? el('span', { class: 'list-menu' }) : cardMenu(
+      loadout ? 'Move to vault' : `Recall to loadout (mark ${d.recall} Stress)`, move);
+    const chat = el('span', { class: 'list-chat' });
+    if (opts.onShare) {
+      const button = iconButton('chat', `Post ${d.name} to chat`, () => opts.onShare!({ category: 'domain', item: d }));
+      button.classList.add('share-icon');
+      chat.append(button);
+    }
+    const summary = draggableCard(el('summary', { class: 'domain-list-summary', title: `Expand or collapse ${d.name}` },
+      el('span', { class: 'list-level', title: 'Level' }, String(d.level)),
+      el('span', { class: 'list-name' }, d.name),
+      el('span', { class: 'list-domain' }, d.domain),
+      el('span', { class: 'list-recall', title: 'Recall cost', ariaLabel: `Recall cost: ${d.recall}` }, `\u26A1 ${d.recall}`),
+      menu, chat), d, loadout);
+    summary.addEventListener('click', event => {
+      if ((event.target as Element).closest('button, .card-menu-list')) event.preventDefault();
+    });
+    details.addEventListener('toggle', () => {
+      if (details.open) expandedCards.add(d);
+      else expandedCards.delete(d);
+    });
+    details.append(summary, dcard(d, loadout));
+    return details;
+  }
 
   function cardMatches(d: DomainCard, q: string): boolean {
     return textMatches(`${d.name} ${d.domain} ${d.type} ${d.text}`, q);
@@ -1583,10 +1657,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   /** Card panel with a header search box; filtering toggles visibility in place so typing is not interrupted by a re-render. */
   function cardZone(key: 'loadout' | 'vault', title: string, info: string, cards: DomainCard[], extras: HTMLElement[]): HTMLElement {
-    const nodes = [...cards].sort((a, b) => a.level - b.level).map((d) => ({ d, node: dcard(d, key === 'loadout') }));
+    const nodes = [...cards].sort((a, b) => a.level - b.level).map((d) => ({
+      d, node: cardState.view === 'list' ? cardListRow(d, key === 'loadout') : dcard(d, key === 'loadout'),
+    }));
     const search = el('input', { type: 'search', placeholder: 'Search name, domain, text', value: cardQuery[key], ariaLabel: `Search ${title.toLowerCase()} cards` });
     search.style.width = '190px';
-    const grid = el('div', { class: 'cards' }, ...nodes.map((n) => n.node), ...extras);
+    const grid = el('div', { class: `cards${cardState.view === 'list' ? ' cards-list' : ''}` }, ...nodes.map((n) => n.node), ...extras);
     const none = el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 0' }, 'No cards match the search.');
     const apply = () => {
       const q = search.value.trim();
@@ -1599,19 +1675,27 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     };
     search.addEventListener('input', apply);
     apply();
-    return el('div', { class: 'card drop-zone' }, el('h3', {}, title, el('span', { class: 'right muted' }, search, info)), grid, none);
+    return el('div', { class: 'card drop-zone' }, el('h3', { class: 'card-zone-header' }, title,
+      el('span', { class: 'right muted' }, search, info, ...(key === 'loadout' ? [cardViewSwitch()] : []))), grid, none);
   }
 
-  function cardsPage(): HTMLElement {
-    if (c.testingCharacter) return cardZone('loadout', 'Testing loadout', `${c.loadout.length} active - no limit`, c.loadout, []);
+  function cardPageContents(): HTMLElement[] {
+    const error = el('p', { class: 'error card-view-error', role: 'alert' }, cardState.error);
+    error.hidden = !cardState.error;
+    if (c.testingCharacter) return [error, cardZone('loadout', 'Testing loadout', `${c.loadout.length} active - no limit`, c.loadout, [])];
     const max = derivedStats(c).loadoutMax;
     const empties = Array.from({ length: Math.max(0, max - c.loadout.length) }, () => el('div', { class: 'dcard empty' }, 'Empty loadout slot'));
-    return el(
-      'div', {},
+    return [
+      error,
       cardDropTarget(cardZone('loadout', 'Loadout', `${c.loadout.length} / ${max} active`, c.loadout, empties), true),
       cardDropTarget(cardZone('vault', 'Vault', 'Inactive cards', c.vault, []), false),
       el('p', { class: 'muted', style: 'font-size:12px' }, 'Subclass, ancestry and community cards are always active and do not count towards loadout or vault (see the Character tab).'),
-    );
+    ];
+  }
+
+  function cardsPage(): HTMLElement {
+    cardPage = el('div', {}, ...cardPageContents());
+    return cardPage;
   }
 
   function bgPage(): HTMLElement {
@@ -1639,6 +1723,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   render();
+  opts.cardPreferences?.subscribe(state => {
+    if (state.view === cardState.view && state.pending === cardState.pending && state.error === cardState.error) return;
+    cardState = state;
+    updateCardPage();
+  });
+  void opts.cardPreferences?.load();
   return root;
 }
 

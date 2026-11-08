@@ -47,6 +47,9 @@ public class Campaign {
     private int fear;
 
     @Builder.Default
+    private String dmDomainCardView = "card";
+
+    @Builder.Default
     private List<Countdown> countdowns = new ArrayList<>();
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -85,6 +88,8 @@ public class Campaign {
         /** Retained for old campaign round-tripping; chat names are derived from enabled actors. */
         @Builder.Default
         private String chatIdentity = "";
+        @Builder.Default
+        private String domainCardView = "card";
         /** {@code argon2id$m$t$p$saltB64$hashB64}; empty until the DM sets a password. */
         private String passwordHash;
     }

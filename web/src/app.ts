@@ -9,6 +9,7 @@ import { basicDeathOptions } from './daggerheart/death';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type GrabQuantity, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
 import { SheetBus } from './daggerheart/view';
+import { cardPreferences } from './daggerheart/card-preferences';
 import { renderEffects } from './effects';
 import { renderCountdowns } from './countdowns';
 import { setGmFear } from './daggerheart/engine';
@@ -1160,6 +1161,7 @@ export class App {
         void changed.refresh().catch((error: Error) => this.toast(error.message));
         const win = new SheetWindow(
           {
+            cardPreferences,
             character,
             readOnly,
             bus,

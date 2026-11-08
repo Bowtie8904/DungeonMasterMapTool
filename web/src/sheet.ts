@@ -13,6 +13,7 @@ import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
 import { setDisabledCopycatSources } from './daggerheart/copycat';
+import { cardPreferences } from './daggerheart/card-preferences';
 
 declare global {
   interface Window { dmmtFlushSheet?: () => Promise<void> }
@@ -82,6 +83,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       if ((event as CustomEvent<string>).detail === actorId) bus.notify();
     });
     const view = renderSheetView({
+      cardPreferences,
       character: sheet,
       readOnly,
       supportsPartyFeatures: () => conn.partyFeatures,

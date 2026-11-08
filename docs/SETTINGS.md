@@ -7,6 +7,13 @@ common synonyms to make searching easier.
 
 ## Online Play browser preferences
 
+**Domain Cards > Loadout > Card/List icons** (default Card) selects the presentation of both Loadout
+and Vault. List rows expand to the full card on click or keyboard activation. This preference is saved
+on the campaign player account, not on the character, in browser storage or in `dmmt-settings.ini`,
+and follows that account across sheets, pop-outs and devices. Embedded DM sheets share a separate
+campaign DM preference. Failed saves show an inline error and keep the previous choice.
+**Keywords:** domain cards, loadout, vault, compact list, card view, user preference.
+
 Chat names are not a setting: the host uses the first enabled actor assigned to the player, or the account
 name when no enabled actor is assigned. The bottom-left overlay shows the account and actor names.
 

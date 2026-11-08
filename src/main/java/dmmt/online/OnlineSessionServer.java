@@ -248,6 +248,8 @@ public final class OnlineSessionServer {
         javalin.get("/api/session", this::handleSession);
         javalin.post("/api/login", this::handleLogin);
         javalin.post("/api/logout", this::handleLogout);
+        javalin.get("/api/preferences", ctx -> handlePreferences(ctx, false));
+        javalin.put("/api/preferences", ctx -> handlePreferences(ctx, true));
         javalin.get("/api/sheet/{id}", this::handleSheet);
         javalin.get("/api/copycat/{id}", this::handleCopycatCandidates);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
@@ -1097,7 +1099,7 @@ public final class OnlineSessionServer {
             DmSheetGrant grant = dmSheetGrant(ctx.req().getRemoteAddr(), authorization.substring(7));
             if (grant != null) {
                 String path = ctx.path();
-                if (path.equals("/api/sheet/" + grant.actorId())
+                if (path.equals("/api/preferences") || path.equals("/api/sheet/" + grant.actorId())
                         || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
@@ -1144,6 +1146,47 @@ public final class OnlineSessionServer {
             return null;
         }
         return playerId;
+    }
+
+    private synchronized void handlePreferences(Context ctx, boolean save) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        ctx.header("Cache-Control", "no-store");
+        String authorization = ctx.header("Authorization");
+        boolean dm = authorization != null && authorization.startsWith("Bearer ");
+        Campaign.Player player = dm ? null : campaign.player(playerId);
+        if (!dm && player == null) {
+            json(ctx, 403, errorBody("The player account is no longer available."));
+            return;
+        }
+        String previous = dm ? campaign.getDmDomainCardView() : player.getDomainCardView();
+        if (save) {
+            try {
+                JsonNode request = MAPPER.readTree(ctx.body());
+                JsonNode value = request == null ? null : request.get("domainCardView");
+                if (value == null || !value.isTextual() || !List.of("card", "list").contains(value.asText())) {
+                    json(ctx, 400, errorBody("Domain card view must be card or list."));
+                    return;
+                }
+                if (dm) campaign.setDmDomainCardView(value.asText());
+                else player.setDomainCardView(value.asText());
+            } catch (IOException e) {
+                json(ctx, 400, errorBody("Invalid preference request."));
+                return;
+            }
+            try {
+                store.save(campaign);
+            } catch (IOException e) {
+                if (dm) campaign.setDmDomainCardView(previous);
+                else player.setDomainCardView(previous);
+                json(ctx, 500, errorBody("Could not save the domain card view preference: " + e.getMessage()));
+                return;
+            }
+        }
+        String view = dm ? campaign.getDmDomainCardView() : player.getDomainCardView();
+        json(ctx, 200, MAPPER.createObjectNode()
+                .put("userId", dm ? "dm:" + campaign.getId() : playerId)
+                .put("domainCardView", "list".equals(view) ? "list" : "card"));
     }
 
     private static final java.util.regex.Pattern COMPENDIUM_NAME = java.util.regex.Pattern.compile("[a-z0-9-]{1,64}");

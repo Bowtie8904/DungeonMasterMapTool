@@ -12,6 +12,8 @@ const paths: Record<string, string> = {
   radius: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 12h9M12 10v4',
   cone: 'M3 12 20 3a19 19 0 0 1 0 18Z',
   chat: 'M4 4h16v12H9l-5 5ZM8 8h8M8 12h5',
+  cards: 'M3 4h7v16H3ZM14 4h7v16h-7Z',
+  list: 'M3 5h2M8 5h13M3 12h2M8 12h13M3 19h2M8 19h13',
   transfer: 'M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4',
   grab: 'M8 13V6a2 2 0 0 1 4 0v5-2a2 2 0 0 1 4 0v3a2 2 0 0 1 4 0v4c0 4-2 6-6 6h-1c-2 0-3-1-4-2l-5-6a2 2 0 0 1 3-2l2 2',
   actors: 'M14 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM3 21v-3a7 7 0 0 1 14 0v3M17 4a4 4 0 0 1 0 8M20 21v-4',
