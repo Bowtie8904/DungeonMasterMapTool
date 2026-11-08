@@ -128,9 +128,10 @@ Nothing starts until you click **Start online session**, so offline play and the
     rename, create or delete. *New campaign* asks for a name and a game system.
   - **Players:** username, password state, owned actors and online status with ping. Right-click to set the
     password, rename, kick, add or delete (renaming, a new password or deleting signs the player out).
-  - **Actors:** a folder tree with each actor's artwork (default token art when none) and owner. Right-click for
-    owner, artwork, rename, remove, place at view centre and folder management; drag actors and folders into
-    folders, or **drag an actor straight onto the map** to place it there (like the token browser).
+  - **Actors:** a folder tree with all folders expanded by default and each actor's artwork (default token art when
+    none) and owner. Folders can still be collapsed. Right-click for owner, artwork, rename, remove, place at view
+    centre and folder management; drag actors and folders into folders, or **drag an actor straight onto the map**
+    to place it there (like the token browser).
   - **Connected:** connected players with their open tabs and ping; right-click to kick.
 - **Connected players overlay:** while hosting, the bottom-left of the DM map shows the same roster as
   the browser: account color dots, player names and current character identities, and live ping in

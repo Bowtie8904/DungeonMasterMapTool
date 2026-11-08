@@ -102,7 +102,7 @@ public final class OnlinePlayPanel extends VBox {
     private final Label rosterPlaceholder = new Label();
     private final Timeline rosterTimer;
 
-    private final Set<String> expandedFolders = new HashSet<>();
+    private final Set<String> collapsedFolders = new HashSet<>();
     private Map<String, OnlineSessionServer.RosterEntry> rosterByPlayer = Map.of();
     private Campaign current;
     private boolean updating;
@@ -564,11 +564,11 @@ public final class OnlinePlayPanel extends VBox {
         folderItems.put("", root);
         for (String folder : folders) {
             TreeItem<ActorItem> item = new TreeItem<>(new ActorItem(folder, null));
-            item.setExpanded(!query.isEmpty() || expandedFolders.contains(folder));
+            item.setExpanded(!query.isEmpty() || !collapsedFolders.contains(folder));
             item.expandedProperty().addListener((obs, was, now) -> {
                 if (!actorSearch.getText().isBlank()) return;
-                if (now) expandedFolders.add(folder);
-                else expandedFolders.remove(folder);
+                if (now) collapsedFolders.remove(folder);
+                else collapsedFolders.add(folder);
             });
             folderItems.put(folder, item);
         }
@@ -631,7 +631,7 @@ public final class OnlinePlayPanel extends VBox {
         if (controller.running()) return;
         try {
             current = store().load(summary.id());
-            expandedFolders.clear();
+            collapsedFolders.clear();
         } catch (IOException ex) {
             Dialogs.error(window(), "Could not open the campaign", ex.getMessage());
             current = null;
@@ -654,7 +654,7 @@ public final class OnlinePlayPanel extends VBox {
                 Campaign campaign = store().create(created.name(), created.system());
                 if (!controller.running()) {
                     current = campaign;
-                    expandedFolders.clear();
+                    collapsedFolders.clear();
                 }
                 refresh();
             } catch (IOException ex) {
@@ -853,7 +853,7 @@ public final class OnlinePlayPanel extends VBox {
             Campaign.Actor actor = Campaign.Actor.builder().name(name).testingCharacter(testing)
                     .folder(folder.isEmpty() ? null : folder).build();
             current.getActors().add(actor);
-            if (!folder.isEmpty()) expandedFolders.add(folder);
+            if (!folder.isEmpty()) collapsedFolders.remove(folder);
             persist();
             select(actorTree.getRoot(), "a:" + actor.getId());
         });
@@ -922,7 +922,7 @@ public final class OnlinePlayPanel extends VBox {
                 MaterialDesignF.FOLDER_PLUS_OUTLINE, "Create", "", folderNameProblem(parent, null)).ifPresent(name -> {
             String path = join(parent, name);
             current.getActorFolders().add(path);
-            if (!parent.isEmpty()) expandedFolders.add(parent);
+            if (!parent.isEmpty()) collapsedFolders.remove(parent);
             persist();
         });
     }
@@ -973,14 +973,14 @@ public final class OnlinePlayPanel extends VBox {
             if (f.equals(from)) actor.setFolder(to);
             else if (f.startsWith(prefix)) actor.setFolder(to + "/" + f.substring(prefix.length()));
         }
-        boolean wasExpanded = expandedFolders.remove(from);
-        if (wasExpanded) expandedFolders.add(to);
+        boolean wasCollapsed = collapsedFolders.remove(from);
+        if (wasCollapsed) collapsedFolders.add(to);
     }
 
     private void moveActor(Campaign.Actor actor, String folder) {
         if (normalize(actor.getFolder()).equals(folder)) return;
         actor.setFolder(folder.isEmpty() ? null : folder);
-        if (!folder.isEmpty()) expandedFolders.add(folder);
+        if (!folder.isEmpty()) collapsedFolders.remove(folder);
         persist();
     }
 
@@ -1037,7 +1037,7 @@ public final class OnlinePlayPanel extends VBox {
                     } else if (board.hasContent(ACTOR_FOLDER)) {
                         String folder = (String) board.getContent(ACTOR_FOLDER);
                         moveFolder(folder, join(target, new ActorItem(folder, null).name()));
-                        if (!target.isEmpty()) expandedFolders.add(target);
+                        if (!target.isEmpty()) collapsedFolders.remove(target);
                         persist();
                         done = true;
                     }
