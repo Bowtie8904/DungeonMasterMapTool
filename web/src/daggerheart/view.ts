@@ -755,9 +755,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return el('div', { class: 'sheet-edit-control' }, el('span', { class: canEdit() ? 'sheet-edit-label' : 'sheet-edit-label muted' }, 'Edit mode'), button);
   }
 
-  function textEdit(label: string, value: string, set: (value: string) => void): HTMLInputElement {
+  function textEdit(label: string, value: string, set: (value: string) => void, commitOnBlur = false): HTMLInputElement {
     const input = el('input', { type: 'text', value, ariaLabel: label, readOnly: !canEdit() });
-    input.addEventListener('input', () => { if (canEdit()) set(input.value); });
+    let committed = value;
+    input.addEventListener(commitOnBlur ? 'blur' : 'input', () => {
+      if (!canEdit() || commitOnBlur && input.value === committed) return;
+      set(input.value);
+      committed = input.value;
+      if (commitOnBlur) opts.onChange?.();
+    });
     return input;
   }
 
@@ -887,7 +893,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             el('p', { class: 'name' }, canEdit() ? textEdit('Character name', c.name, value => {
               c.name = value;
               if ('Name' in c.description) c.description.Name = value;
-            }) : c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`),
+            }, true) : c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`),
               ...(opts.readOnly?.() ? [el('span', { class: 'tag', style: 'margin-left:8px', role: 'status' }, 'Disabled - read-only')] : [])),
             ...(c.testingCharacter ? [tag('TESTING CHARACTER - unrestricted', 'hope')] : []),
             sub('Class: ', c.className, ` - Subclass: ${c.subclass}`),
@@ -1899,7 +1905,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       return t;
     };
     const fields = el('div', { class: 'fields' }, ...Object.keys(c.description).map((k) => {
-      const i = textEdit(k, c.description[k], value => { c.description[k] = value; if (k === 'Name') c.name = value; });
+      const i = textEdit(k, c.description[k], value => { c.description[k] = value; if (k === 'Name') c.name = value; }, k === 'Name');
       return el('label', { class: 'field' }, k, i);
     }));
     const qa = (list: string[], prefix: string) => el('div', { class: 'qa' }, ...list.map((v, i) => el('label', { class: 'q' }, `${prefix} ${i + 1}`, area(v, (x) => { list[i] = x; }))));

@@ -143,7 +143,8 @@ are ignored. The roster displays the actor name alongside the account name. Olde
 the derived name; historical messages retain their original names.
 Character-sheet name edits rename the campaign actor, and DM actor renames update the saved sheet and its
 Background Name field. Legacy mismatches display the actor name until explicitly renamed. A pending rename
-in the map tab is saved before sending a chat message.
+stays local to the header or Background Name text field until it loses focus; typing pauses and background saves
+do not persist a partial name. A committed rename in the map tab is saved before sending a chat message.
 New chat and roll cards capture the same actor's portrait without showing an initial alongside it, falling back to the sender's initial when
 artwork is missing or unavailable; older messages keep their existing initial avatars.
 

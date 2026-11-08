@@ -107,6 +107,8 @@ it('defaults edit mode off and gates base traits, Proficiency, names, background
   const name = root.querySelectorAll('input').find(input => input.ariaLabel === 'Character name')!;
   name.value = 'Renamed';
   name.listeners.get('input')?.();
+  expect(c.name).toBe('Hero');
+  name.listeners.get('blur')?.();
   expect(c.name).toBe('Renamed');
   const experience = root.querySelectorAll('input').find(input => input.ariaLabel === 'Experience 1 name')!;
   experience.value = 'Explorer';
@@ -122,6 +124,59 @@ it('defaults edit mode off and gates base traits, Proficiency, names, background
   await toggle().click();
   expect(root.querySelectorAll('input').some(input => input.ariaLabel === 'Character name')).toBe(false);
   expect(root.querySelectorAll('textarea').every(input => input.readOnly)).toBe(true);
+});
+
+it('commits header and Background names only on blur, preserving other text edits and read-only gating', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.description.Name = 'Hero';
+  let readOnly = false;
+  const changed = vi.fn();
+  const root = renderSheetView({ character: c, onRoll: () => true, onChange: changed,
+    readOnly: () => readOnly }) as unknown as Element;
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await root.querySelectorAll('button').find(b => b.text() === 'Background')!.click();
+  for (const label of ['Character name', 'Name']) {
+    const input = root.querySelectorAll('input').find(input => input.ariaLabel === label)!;
+    const before = JSON.stringify(c);
+    changed.mockClear();
+    input.listeners.get('blur')?.();
+    expect(changed).not.toHaveBeenCalled();
+    for (const value of ['R', 'Ren', 'Renamed']) {
+      input.value = value;
+      input.listeners.get('input')?.();
+      input.listeners.get('change')?.();
+      expect(JSON.stringify(c)).toBe(before);
+      expect(changed).not.toHaveBeenCalled();
+    }
+    input.value = `${label} finished`;
+    input.listeners.get('blur')?.();
+    expect(c.name).toBe(`${label} finished`);
+    expect(c.description.Name).toBe(c.name);
+    expect(changed).toHaveBeenCalledOnce();
+    input.listeners.get('blur')?.();
+    expect(changed).toHaveBeenCalledOnce();
+    input.value = 'Hero';
+    input.listeners.get('blur')?.();
+    expect(c.name).toBe('Hero');
+    expect(c.description.Name).toBe('Hero');
+    expect(changed).toHaveBeenCalledTimes(2);
+  }
+  const other = root.querySelectorAll('input').find(input => input.ariaLabel in c.description && input.ariaLabel !== 'Name')!;
+  other.value = 'Updated description';
+  other.listeners.get('input')?.();
+  expect(c.description[other.ariaLabel]).toBe('Updated description');
+  const name = root.querySelectorAll('input').find(input => input.ariaLabel === 'Character name')!;
+  changed.mockClear();
+  name.value = 'Blocked rename';
+  readOnly = true;
+  name.listeners.get('blur')?.();
+  expect(c.name).toBe('Hero');
+  expect(changed).not.toHaveBeenCalled();
 });
 
 it('deletes domain cards only from this character in Card and List views', async () => {

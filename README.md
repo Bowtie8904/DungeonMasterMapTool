@@ -223,6 +223,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   and is hidden when minimized, with extra spacing from the title and a muted gray label while off.
   Enable it to edit the character name, portrait (hover/focus for **Edit image**),
   base trait modifiers (-99 to +99, excluding buffs), Proficiency, transformation, Experiences and Background.
+  Character name edits (including Background Name) save only after leaving the text field, not during typing pauses.
   In edit mode, resource pips change the usable maximum: locked slots enable through the clicked slot;
   enabled slots disable themselves and later slots. HP locks remain protected. Manual Armor adjustments
   appear separately from equipment/buffs as **Manual override** in the hover breakdown.
