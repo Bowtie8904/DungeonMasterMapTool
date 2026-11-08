@@ -118,6 +118,11 @@ Nothing starts until you click **Start online session**, so offline play and the
     owner, artwork, rename, remove, place at view centre and folder management; drag actors and folders into
     folders, or **drag an actor straight onto the map** to place it there (like the token browser).
   - **Connected:** connected players with their open tabs and ping; right-click to kick.
+- **Connected players overlay:** while hosting, the bottom-left of the DM map shows the same roster as
+  the browser: account color dots, player names and current character identities, and live ping in
+  milliseconds (`--` until measured). The Dungeon Master has a colored **Host** row, and the heading
+  shows whether the session is live or paused. It refreshes even with the Online Play sidebar closed
+  and does not intercept map clicks.
 - **Roll context:** feature actions and Spellcast rolls have a subtle, collapsed **Source** section in chat.
   Reports from chat action buttons (including Marked For Death and Death Strike) also show the activated
   feature's description and origin, retained in saved chat history rather than the original weapon's source.

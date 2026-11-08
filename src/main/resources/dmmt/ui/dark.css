@@ -1433,6 +1433,36 @@
     -fx-opacity: 1;
 }
 
+.connected-players-overlay {
+    -fx-background-color: rgba(11, 13, 16, 0.11);
+    -fx-background-radius: 6;
+    -fx-padding: 9 10;
+}
+.connected-players-overlay .label {
+    -fx-effect: dropshadow(gaussian, black, 4, 0.5, 0, 1);
+}
+.connected-players-heading {
+    -fx-text-fill: #a4acb5;
+    -fx-font-size: 9px;
+}
+.connected-players-status {
+    -fx-text-fill: #a4acb5;
+    -fx-font-size: 10px;
+    -fx-opacity: 0.75;
+}
+.connected-player-name {
+    -fx-text-fill: #bac2cb;
+    -fx-font-size: 12px;
+}
+.connected-player-ping {
+    -fx-text-fill: #9da6b2;
+    -fx-font-size: 11px;
+}
+.connected-player-color {
+    -fx-stroke: rgba(0, 0, 0, 0.53);
+    -fx-stroke-width: 1;
+}
+
 /* DM-side Fear counter, bottom right of the map while a campaign is hosted. */
 .fear-overlay {
     -fx-background-color: rgba(18, 20, 26, 0.82);

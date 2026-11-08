@@ -52,6 +52,8 @@ public final class OnlinePlayPanel extends VBox {
         void removeForeignActorTokens(Campaign campaign);
 
         default void campaignSelected(Campaign campaign) { }
+
+        default void rosterChanged(List<OnlineSessionServer.RosterEntry> entries) { }
     }
 
     /** Drag payload: the id of an actor of {@link #selectedCampaign()}. */
@@ -493,6 +495,7 @@ public final class OnlinePlayPanel extends VBox {
     private void refreshRoster() {
         boolean running = controller.running() && controller.server() != null;
         List<OnlineSessionServer.RosterEntry> entries = running ? controller.server().roster() : List.of();
+        actions.rosterChanged(entries);
         Map<String, OnlineSessionServer.RosterEntry> byPlayer = new HashMap<>();
         entries.forEach(r -> byPlayer.put(r.playerId(), r));
         rosterByPlayer = byPlayer;

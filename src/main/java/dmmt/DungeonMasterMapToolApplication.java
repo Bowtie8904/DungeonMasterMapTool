@@ -338,6 +338,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private HBox imageUnlockBanner;
     private HBox onlinePausedBanner;
     private dmmt.ui.FearOverlay fearOverlay;
+    private dmmt.ui.ConnectedPlayersOverlay connectedPlayersOverlay;
     private dmmt.ui.CountdownOverlay countdownOverlay;
     private dmmt.ui.ChatPanel chatPanel;
     private Runnable flyoutRelayout;
@@ -703,6 +704,10 @@ public class DungeonMasterMapToolApplication extends Application {
             if (onlineController != null) onlineController.newSession();
         });
         center.getChildren().add(fearOverlay);
+        connectedPlayersOverlay = new dmmt.ui.ConnectedPlayersOverlay();
+        StackPane.setAlignment(connectedPlayersOverlay, Pos.BOTTOM_LEFT);
+        StackPane.setMargin(connectedPlayersOverlay, new Insets(0, 0, 24, 25));
+        center.getChildren().add(connectedPlayersOverlay);
         fearOverlay.onReservedHeightChanged(() -> {
             if (flyoutRelayout != null) flyoutRelayout.run();
         });
@@ -11044,6 +11049,12 @@ public class DungeonMasterMapToolApplication extends Application {
         onlineController.setCompendiumDirectory(() -> AppSettings.resolveConfiguredFolder(preferences.getFile(),
                 Tuning.ONLINE_DAGGERHEART_DIR.get(), "dmmap-daggerheart"));
         onlinePanel = new dmmt.ui.OnlinePlayPanel(onlineController, new dmmt.ui.OnlinePlayPanel.Actions() {
+            @Override public void rosterChanged(List<dmmt.online.OnlineSessionServer.RosterEntry> entries) {
+                if (connectedPlayersOverlay != null) {
+                    connectedPlayersOverlay.update(onlineController.running() ? onlineController.campaign() : null,
+                            entries, onlineController.paused());
+                }
+            }
             @Override public void placeActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor) {
                 placeCampaignActor(campaign, actor);
             }
