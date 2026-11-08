@@ -11,6 +11,7 @@ import { setGmFear } from './daggerheart/engine';
 import { postCard, transferable } from './shared-cards';
 import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
+import { openCopycat } from './daggerheart/copycat-view';
 
 declare global {
   interface Window { dmmtFlushSheet?: () => Promise<void> }
@@ -85,16 +86,19 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onFeature: async (key, actionId, amount) => {
         await changed!.flush();
         let targetActorId: string | undefined;
-        if (featureTarget(sheet, key, actionId) === 'actor') {
+        const target = featureTarget(sheet, key, actionId);
+        if (target === 'actor' || target === 'anyActor') {
           const ward = isLifeWard(sheet, key);
           if (ward && !conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
-          const candidates = (store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
-          const selected = await pickActor(candidates, 'Choose a character', 'Select target');
+          const candidates = (store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : (target === 'anyActor' || connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId));
+          const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
           if (!selected) return;
           targetActorId = selected.id;
         }
         await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
+        await changed!.refresh();
       },
+      onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
       onDamageTaken: async (severity) => {
         await changed!.flush();
         await damageTaken(actorId, severity);

@@ -45,6 +45,7 @@ final class CharacterSheetRules {
             }
         }
         for (JsonNode effect : sheet.path("effects")) sources.add(effect);
+        sources.addAll(CopycatCards.borrowedAutomation(sheet));
         for (JsonNode source : sources) {
             for (JsonNode modifier : source.path("modifiers")) {
                 if ("loadoutMax".equals(modifier.path("stat").asText())) {
@@ -63,6 +64,14 @@ final class CharacterSheetRules {
             if (trait.path("spellcast").asBoolean()) { spellcast = trait; break; }
         if (spellcast == null) return 0;
         String stat = "trait." + spellcast.path("name").asText();
+        return statTotal(sheet, stat, spellcast.path("mod").asDouble(), fear);
+    }
+
+    static int proficiencyTotal(com.fasterxml.jackson.databind.node.ObjectNode sheet, int fear) {
+        return Math.max(0, statTotal(sheet, "proficiency", sheet.path("proficiency").path("on").asDouble(), fear));
+    }
+
+    private static int statTotal(com.fasterxml.jackson.databind.node.ObjectNode sheet, String stat, double base, int fear) {
         List<JsonNode> sources = new ArrayList<>();
         sources.add(sheet.path("activeArmor").path("automation"));
         JsonNode replacementWeapon = null;
@@ -78,14 +87,16 @@ final class CharacterSheetRules {
             sources.add(effect);
             for (JsonNode feature : effect.path("features")) sources.add(feature.path("automation"));
         }
-        double total = spellcast.path("mod").asDouble();
+        double total = base;
+        sources.addAll(CopycatCards.borrowedAutomation(sheet));
         List<JsonNode> modifiers = new ArrayList<>();
         for (JsonNode source : sources) {
             for (JsonNode modifier : source.path("modifiers")) modifiers.add(modifier);
             for (JsonNode modifier : source.path("conditionalModifiers")) modifiers.add(modifier);
         }
         for (JsonNode modifier : modifiers) {
-            if (!stat.equals(modifier.path("stat").asText()) && !"traits".equals(modifier.path("stat").asText())) continue;
+            if (!stat.equals(modifier.path("stat").asText())
+                    && !(stat.startsWith("trait.") && "traits".equals(modifier.path("stat").asText()))) continue;
             if (modifier.has("requiresEffect")
                     && !DruidEffects.hasEffect(sheet, modifier.path("requiresEffect").asText())) continue;
             JsonNode required = modifier.path("loadoutDomain");

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from './rollbuttons';
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
@@ -115,6 +116,25 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('hides both Endless Charisma alternatives once either choice has been used', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const entry = catalog.entries.find((card: { id: string }) => card.id === 'endless-charisma');
+    const c = character('Caster', undefined);
+    c.loadout = [{ name: entry.name, domain: 'Grace', type: 'Ability', level: 7, recall: 1, text: '',
+      automation: entry.automation }];
+    const { host } = hostFor({ 'actor-b': c });
+    const supported = { ...host, playerId: original.fromId, supportsDomainCardAutomation: () => true };
+    const message = { ...original, source: 'action,trait:Presence' };
+    const ready = rollButtons(message, supported) as unknown as FakeElement;
+    const attack = rollButtons({ ...message, source: 'action,attack,trait:Presence' }, supported) as unknown as FakeElement;
+    const spent = rollButtons({ ...message, featureUses: ['actor-b:card:Endless Charisma:group:charisma-reroll'] }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(ready.queryAll('button').filter(button => button.text.includes('Endless Charisma'))).toHaveLength(2);
+    expect(attack.queryAll('button').filter(button => button.text.includes('Endless Charisma'))).toHaveLength(0);
+    expect(spent.queryAll('button').filter(button => button.text.includes('Endless Charisma'))).toHaveLength(0);
+  });
+
   it('gates Blink Out by host capability and sends the chosen Hope from the success dialog', async () => {
     const body = new FakeElement('body');
     vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });

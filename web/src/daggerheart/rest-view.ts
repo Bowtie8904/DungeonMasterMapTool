@@ -1,14 +1,16 @@
 import { el } from '../login';
 import { CharacterSheet, TRAIT_ORDER } from './data';
 import type { RestKind } from './engine';
+import { activeCardSources } from './copycat';
 import { chooseAncestryFeature } from './ancestry-choice';
 import {
   RestOptions, RestPick, RestResult, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
   shortRestBlocker, mutagenChoices,
 } from './rest';
 
-/** Downtime dialog: pick moves, then rest. Cancelling leaves the sheet untouched. */
-export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string, result: RestResult) => void): void {
+/** Downtime choices do not change the sheet until confirmation, including any host-backed casting. */
+export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string, result: RestResult) => void,
+  castBeforeRest?: (key: string, actionId: string) => Promise<void>): void {
   const o: RestOptions = {};
   const picks: RestPick[] = [];
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -17,7 +19,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
   const go = el('button', { class: 'primary', type: 'button' }, kind === 'long' ? 'Take long rest' : 'Take short rest');
   const cancel = el('button', { type: 'button' }, 'Cancel');
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !pending) close(); };
 
   const check = (label: string, get: () => boolean | undefined, set: (v: boolean) => void, disabled = false, description?: string): HTMLElement => {
     const input = el('input', { type: 'checkbox' });
@@ -107,18 +109,33 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
     go.disabled = !!blocker || invalid;    error.textContent = '';
   }
 
-  go.addEventListener('click', () => {
+  let pending = false;
+  go.addEventListener('click', async () => {
+    if (pending) return;
+    pending = true;
+    go.disabled = cancel.disabled = true;
     try {
+      for (const source of activeCardSources(c)) for (const benefit of source.auto?.rest?.passives ?? []) {
+        const id = `${source.key}|${benefit.id}`;
+        if (!benefit.castBeforeRest || !passiveOn(c, kind, o, id)) continue;
+        if (!castBeforeRest) throw new Error('Update the host to cast this spell during downtime.');
+        await castBeforeRest(source.key, benefit.castBeforeRest);
+        if (!c.effects.some(e => e.name === benefit.excludesEffect)) throw new Error(`${source.name} was not granted. Reopen downtime after the sheet refreshes.`);
+        delete o.passives?.[id];
+      }
       const chosen = picks.map((p) => ({ ...p }));
       const result = resolveRest(c, kind, chosen, o);
       close();
       onDone(restSummary(c, kind, chosen, result), result);
     } catch (e) {
       error.textContent = e instanceof Error ? e.message : 'Resting failed.';
+    } finally {
+      pending = false;
+      go.disabled = cancel.disabled = false;
     }
   });
-  cancel.addEventListener('click', close);
-  backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); });
+  cancel.addEventListener('click', () => { if (!pending) close(); });
+  backdrop.addEventListener('click', (ev) => { if (!pending && ev.target === backdrop) close(); });
   backdrop.append(el('div', { class: 'dh-rolldlg dh-restdlg' }, el('h4', {}, kind === 'long' ? 'Long rest - downtime moves' : 'Short rest - downtime moves'), body, error, el('div', { class: 'acts' }, cancel, go)));
   document.addEventListener('keydown', onKey);
   host.ownerDocument.body.append(backdrop);

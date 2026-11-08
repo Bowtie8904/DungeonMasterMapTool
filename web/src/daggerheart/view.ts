@@ -35,6 +35,7 @@ import { actionReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { mutagenEffectSource } from '../effects';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
+import { activeCards, activeCardSources } from './copycat';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
@@ -82,6 +83,7 @@ export interface SheetViewOptions {
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[]) => void;
   onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
+  onCopycat?: (key: string, actionId: string) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
   onDeathMove?: (move: DeathMove, extras?: DeathMoveExtras) => Promise<void>;
   onDeathOptions?: () => Promise<DeathOptions>;
@@ -298,7 +300,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const allTargets = [...targets, 'action'];
     const bonus = rollBonus(c, allTargets, weapon, false);
     const send = sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined));
-    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
+    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon, false, undefined, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
@@ -334,7 +336,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   };
   for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, () => opts.onChange?.());
 
-  const cardResourceIds = (): Set<string> => new Set([...c.loadout.map((d) => d.automation), ...c.inventory.map((i) => i.automation)].flatMap((a) => a?.resources ?? []).map((r) => r.id));
+  const cardResourceIds = (): Set<string> => new Set([...activeCards(c).map((d) => d.automation), ...c.inventory.map((i) => i.automation)].flatMap((a) => a?.resources ?? []).map((r) => r.id));
   /** Re-evaluates rendered action buttons after a resource changes without re-rendering the sheet. */
   let actionRefreshers: Array<() => void> = [];
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
@@ -402,7 +404,17 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     b.addEventListener('click', async () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
-      if (action.steps?.some(step => step.effect?.exclusiveSource) && !opts.supportsDomainCardAutomation?.()) {
+      if (action.copycat) {
+        if (!opts.onCopycat || !opts.supportsDomainCardAutomation?.()) { opts.onLog?.('Update the host to use Copycat.'); return; }
+        setBusy(true);
+        try { await opts.onCopycat(key, action.id); hooks.after?.(); render(); }
+        catch (e) { opts.onLog?.((e as Error).message); }
+        finally { setBusy(false); }
+        return;
+      }
+      if ((action.target === 'anyActor' || action.giveFear || action.chatDamage
+          || action.steps?.some(step => step.effect?.exclusiveSource || step.effect?.rest)
+          || action.chatBenefits?.some(benefit => benefit.transferStress)) && !opts.supportsDomainCardAutomation?.()) {
         opts.onLog?.('Update the host to use this domain-card effect.');
         return;
       }
@@ -432,7 +444,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         for (const card of c.vault) {
           const button = el('button', { type: 'button', class: 'small' }, card.name);
           button.addEventListener('click', () => {
-            const sourceIndex = c.loadout.findIndex(item => key === `card:${item.name}`);
+            const sourceIndex = c.loadout.findIndex(item => key === `card:${item.name}`
+              || item.name === 'Copycat' && item.borrowedCard && key === `card:Copycat/${item.borrowedCard.card.name}`);
             const targetIndex = c.vault.indexOf(card);
             const blocker = actionBlocker(c, key, a, action);
             if (sourceIndex < 0 || targetIndex < 0 || blocker) {
@@ -478,8 +491,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             error.textContent = `Enter a whole number from 1 to ${available()}.`;
             return;
           }
-          const active = c.loadout.some(card => key === `card:${card.name}`
-            || card.spells?.some(spell => key === `card:${card.name}/${spell.name}`));
+          const active = activeCardSources(c).some(source => source.key === key);
           if (!active) { error.textContent = 'This card is no longer in your active loadout.'; return; }
           const paidAction = { ...action, cost: { ...action.cost, [spec.resource]: amount } };
           const blocker = actionBlocker(c, key, a, paidAction);
@@ -613,7 +625,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         openRollDialog(root, c, action.label, trait ? traitContributions(c, trait) : [], bonus,
           (request) => sendRoll(targets.join(','), weapon?.name, rollSourceFor(c, key))({ ...request, difficulty: spec.difficulty }),
           () => { runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(); render(); },
-          targets, undefined, undefined, weapon, false, { key, automation: a, action });
+          targets, undefined, undefined, weapon, false, { key, automation: a, action }, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
         return;
       }
       if (action.sendRoll) {
@@ -707,7 +719,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ...([['Short rest', 'short', 'Short rest: refreshes short-rest abilities and ends effects lasting until a rest'], ['Long rest', 'long', 'Long rest: refreshes all rest abilities and ends effects lasting until a rest']] as const)
         .map(([label, kind, title]) => {
           const b = el('button', { class: 'small', type: 'button', title }, label);
-          b.addEventListener('click', () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); }));
+          b.addEventListener('click', () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); },
+            async (key, actionId) => {
+              if (!opts.supportsDomainCardAutomation?.() || !opts.onFeature) throw new Error('Update the host to cast this spell during downtime.');
+              await opts.onFeature(key, actionId);
+            }));
           return b;
         }),
       death,
@@ -1359,21 +1375,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   /** A grimoire spell: its own text, Spellcast roll and automation buttons, independent of the other spells. */
-  function spellBlock(d: DomainCard, s: Spell, loadout: boolean): HTMLElement {
+  function spellBlock(d: DomainCard, s: Spell, loadout: boolean, cardKey = `card:${d.name}`): HTMLElement {
     const acts = el('div', { class: 'act' });
     if (d.spellcast && asksSpellcastRoll(s.text) && !s.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
       const tracked = s.automation?.automaticRestUse;
-      const blocked = tracked && (!loadout || !opts.supportsDomainCardAutomation?.() || usesLeft(c, `card:${d.name}/${s.name}`, s.automation!) === 0);
+      const blocked = tracked && (!loadout || !opts.supportsDomainCardAutomation?.() || usesLeft(c, `${cardKey}/${s.name}`, s.automation!) === 0);
       sp.disabled = !loadout || !canCastDomain(c) || !!blocked;
       if (tracked && !loadout) sp.title = 'Move this card to your active loadout to cast.';
       else if (tracked && !opts.supportsDomainCardAutomation?.()) sp.title = 'Update the host to track this spell.';
       else if (blocked) sp.title = 'No uses remaining until rest.';
-      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${s.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`, `card:${s.name}`], undefined, rollSourceFor(c, `card:${d.name}/${s.name}`), s.automation?.spellcastDifficulty));
+      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${s.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, cardKey, cardKey.startsWith('card:Copycat/') ? `${cardKey}/${s.name}` : `card:${s.name}`], undefined, rollSourceFor(c, `${cardKey}/${s.name}`), s.automation?.spellcastDifficulty));
       acts.append(sp);
     }
     if (loadout) {
-      const actions = actionRow(`card:${d.name}/${s.name}`, s.automation, s.name, {
+      const actions = actionRow(`${cardKey}/${s.name}`, s.automation, s.name, {
         extraBlock: () => canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
       });
       if (actions) acts.append(actions);
@@ -1381,23 +1397,29 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return el('div', { class: 'dspell' }, el('span', { class: 'sn' }, s.name), rich(s.text), ...(acts.childElementCount ? [acts] : []));
   }
 
-  function dcard(d: DomainCard, loadout: boolean): HTMLElement {
+  function dcard(d: DomainCard, loadout: boolean, embedded = false): HTMLElement {
+    const cardKey = embedded ? `card:Copycat/${d.name}` : `card:${d.name}`;
     const acts = el('div', { class: 'act' });
     const spells = d.spells?.length ? d.spells : null;
     if (!spells && d.spellcast && asksSpellcastRoll(d.text) && !d.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
-      sp.disabled = !loadout || !canCastDomain(c);
-      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${d.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`], undefined, rollSourceFor(c, `card:${d.name}`), d.automation?.spellcastDifficulty));
+      const tracked = d.automation?.automaticRestUse;
+      const blocked = tracked && (!opts.supportsDomainCardAutomation?.() || usesLeft(c, cardKey, d.automation!) === 0);
+      sp.disabled = !loadout || !canCastDomain(c) || !!blocked;
+      if (tracked && !loadout) sp.title = 'Move this card to your active loadout to cast.';
+      else if (tracked && !opts.supportsDomainCardAutomation?.()) sp.title = 'Update the host to track this spell.';
+      else if (blocked) sp.title = 'No uses remaining until rest.';
+      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${d.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, cardKey], undefined, rollSourceFor(c, cardKey), d.automation?.spellcastDifficulty));
       acts.append(sp);
     }
     if (loadout && !spells) {
-      const actions = actionRow(`card:${d.name}`, d.automation, d.name, {
+      const actions = actionRow(cardKey, d.automation, d.name, {
         extraBlock: () => d.type === 'Ability' || canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
       });
       if (actions) acts.append(actions);
     }
     if (d.automation?.banishDifficulty) {
-      const input = el('input', { type: 'number', step: '1', value: d.banishDifficulty === undefined ? '' : String(d.banishDifficulty), ariaLabel: 'Banish difficulty' });
+      const input = el('input', { type: 'number', class: 'banish-difficulty', step: '1', value: d.banishDifficulty === undefined ? '' : String(d.banishDifficulty), ariaLabel: 'Banish difficulty' });
       const error = el('span', { class: 'error', role: 'alert' });
       input.addEventListener('change', () => {
         if (input.value.trim() === '') {
@@ -1411,7 +1433,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         error.textContent = '';
         opts.onChange?.();
       });
-      acts.append(el('label', {}, 'Banish difficulty', input), error);
+      acts.append(el('label', { class: 'banish-field' }, 'Banish difficulty', input), error);
+    }
+    if (embedded) {
+      const pools = loadout ? (d.automation?.resources ?? []).map(r => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
+      return el('div', { class: 'dspell copycat-borrowed' }, el('div', { class: 'hd' }, `Level ${d.level} · ${d.domain} · ${d.type}`, ...pools),
+        el('span', { class: 'sn' }, d.name), ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey)) : [rich(d.text)]), acts);
     }
     const move = () => {
       if (c.testingCharacter) return;
@@ -1428,7 +1455,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     const pools = loadout ? (d.automation?.resources ?? []).map((r) => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
     const hd = el('div', { class: 'hd' }, el('span', { class: 'lv' }, String(d.level)), el('span', { class: 'dm' }, d.domain), ...pools, el('span', { class: 'rc' }, `\u26A1 ${d.recall}`), ...(loadout ? [control] : []));
-    const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? spells.map((s) => spellBlock(d, s, loadout)) : [rich(d.text)]), acts), { category: 'domain', item: d });
+    const copied = d.name === 'Copycat' && d.borrowedCard ? [
+      el('p', { class: 'muted' }, `Copied from ${d.borrowedCard.sourceActorName}. Ends on rest or source vaulting.`),
+      dcard(d.borrowedCard.card, loadout, true),
+    ] : [];
+    const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? spells.map((s) => spellBlock(d, s, loadout)) : [rich(d.text)]), acts, ...copied), { category: 'domain', item: d });
     node.draggable = !c.testingCharacter;
     node.classList.add('inventory-draggable');
     node.addEventListener('dragstart', (e) => {
@@ -1586,7 +1617,7 @@ function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: n
 }
 
 /** Small modal: advantage and Experience spend; posts the duality roll to the chat. */
-export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0, supportsDruidAutomation?: () => boolean, supportsSeraphAutomation?: () => boolean): void {
+export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: string, trait: RollContribution[], bonus: RollBonus, onRoll: (r: RollRequest) => boolean, onSent: () => void, targets: string[], weapon?: Weapon, supportsKeptDice?: () => boolean, actionWeapon?: Weapon, critical = false, pendingAction?: PendingAction, supportsRollMultipliers?: () => boolean, attackFear?: number, supportsBrawlerRolls?: () => boolean, proficiencyBonus = 0, supportsDruidAutomation?: () => boolean, supportsSeraphAutomation?: () => boolean, supportsDomainCardAutomation?: () => boolean): void {
   const mod = trait.reduce((n, s) => n + Number(s.expression), 0);
   let reaction = targets.includes('reaction');
   const canChooseReaction = !weapon && !pendingAction && !targets.includes('attack') && targets.some((target) => target.startsWith('trait:'));
@@ -1607,7 +1638,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const go = el('button', { class: 'primary', type: 'button' }, 'Roll to chat');
   const cancel = el('button', { type: 'button' }, 'Cancel');
   const error = el('div', { class: 'error', role: 'alert' });
-  let options = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
+  const hostSupportsOption = (key: string) => !c.effects.some(effect => key === `effect:${effect.id}` && effect.linkedTokenResource)
+    || !!supportsDomainCardAutomation?.();
+  const currentOptions = () => availableRollOptions(c, currentTargets(), weapon ?? actionWeapon).filter(option => hostSupportsOption(option.key));
+  let options = currentOptions();
   const checked = new Set<number>();
   const values = new Map<number, number>();
   const selected = () => options.flatMap((s, i) => checked.has(i) ? [configuredRollOption(c, s, values.get(i))] : []);
@@ -1623,6 +1657,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     if (selected().some(s => s.option.matchingDice) && !supportsSeraphAutomation?.()) return 'Update the host to use Sacred Resonance.';
     if (weapon && (damagePool(c, weapon)?.maximumOnes || selected().some(s => s.option.combo)) && !supportsBrawlerRolls?.()) return 'Update the host to roll Combo Strike or Exacting damage.';
     if (selected().some((s) => s.option.multiplier) && !supportsRollMultipliers?.()) return 'This host does not support damage multipliers. Update the host to use this option.';
+    if (selected().some(s => !hostSupportsOption(s.key))) return 'Update the host to spend Invisibility tokens.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
     if (selected().some((s) => !active.some((a) => a.key === s.key && a.option.id === s.option.id && a.active === s.active))) return 'A selected bonus changed. Reopen this roll dialog.';
     if (pendingAction) {
@@ -1722,7 +1757,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         [...damageContributions(c, weapon, b, proficiencyExtra()), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])], selected()),
     } : {
       label,
-      source: [...currentTargets(), ...selected().filter(s => s.key.startsWith('card:')).map(s => `option:${s.key}:${s.option.id}`),
+      source: [...currentTargets(), ...selected().filter(s => s.key.startsWith('card:') || c.effects.some(effect => effect.linkedTokenResource && s.key === `effect:${effect.id}`)).map(s => `option:${s.key}:${s.option.id}`),
         ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : [])].join(','),
       expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12,
         selected().some((s) => s.option.fearDie === 20) ? 20 : 12, selected().some(s => s.option.advantageDie === 8) ? 8 : 6)
@@ -1763,7 +1798,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       checked.clear();
       values.clear();
       bonus = rollBonus(c, currentTargets(), actionWeapon, false);
-      options = availableRollOptions(c, currentTargets(), actionWeapon);
+      options = currentOptions();
       optionFieldset.replaceChildren(el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());
       optionFieldset.hidden = options.length === 0;
       applied.textContent = `Applied: ${bonus.names.join(', ')}.`;

@@ -298,7 +298,7 @@ and checks safe, independent source disclosures and source propagation from feat
 Spellcast, individual grimoire spells and follow-up spell damage.
 All 236 domain cards and every grimoire spell have an individual audit disposition and a complete
 open-decision list in `../plan.md`. Nested grimoire target actions resolve their full book/spell key.
-Audited host reactions and source-exclusive effects require the optional `domainCardAutomationV2`
+Audited host reactions and source-exclusive effects require the optional `domainCardAutomationV3`
 hello capability; the original capability remains for older clients. Domain action/option source tags
 link results to their chosen cast or bonus without changing class roll tags.
 Non-fixed reaction damage and Hope/Stress quantity rolls validate pending costs and source availability,

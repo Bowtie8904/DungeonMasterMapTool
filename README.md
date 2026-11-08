@@ -21,7 +21,20 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Domain-card review:** all 236 cards and each grimoire spell have an individual disposition in
   [plan.md](plan.md#individual-domain-card-disposition-ledger), followed by the complete open-decision list.
   Costs, dice, passives, limits and ally claims use the class patterns; target fiction remains table-managed.
-  Host-dependent audited actions require the optional `domainCardAutomationV2` capability.
+  Host-dependent audited actions require the optional `domainCardAutomationV3` capability.
+- **Grace and Codex workflows:** successful casts expose their payments and damage in chat; cast-time
+  limits remain attached to the roll. Tava's Armor and Parallela can target offline actor sheets,
+  with Parallela consumed through a preselected attack option. Invisibility spends the caster's
+  tokens when its recipient acts. Inspirational Words refills on long rest without preparation
+  controls, and recipient choices are reported in chat. Never Upstaged gains tokens through the
+  damage dialog and preselects spending its pool for the printed damage bonus. Share the Burden transfers Stress and
+  awards Hope atomically to one accepting ally. Safe Haven grants caster and entering allies an
+  extra downtime move until their next rest, including casting directly from downtime.
+  Copycat embeds a usable card from another actor's active loadout; its half-level Hope cost rounds up,
+  and its searchable picker keeps Cancel visible while the card list scrolls.
+  Endless Charisma rerolls either the Hope or Fear die once per original non-attack trait roll, never both.
+  Teleport spends its once-per-long-rest use on the Spellcast attempt even when it fails.
+  Grace-Touched substitutions are intentionally manual.
 - **Prepared attacks and damage:** Boost pays Stress before the attack; Smite holds a charge for doubled
   magic weapon damage. Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
   offers a d8 advantage die with marked HP and its paid d8 after the trait roll. Never Upstaged and Sigil

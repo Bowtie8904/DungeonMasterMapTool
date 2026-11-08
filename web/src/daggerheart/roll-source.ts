@@ -2,6 +2,7 @@ import type { RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { activeFeatures, activeWeapons } from './engine';
 import { companionWeapon } from './companion';
+import { activeCards } from './copycat';
 
 /** Resolve action keys, including individual grimoire spells, without copying automation. */
 export function rollSourceFor(c: CharacterSheet, key: string): RollSource | undefined {
@@ -13,11 +14,13 @@ export function rollSourceFor(c: CharacterSheet, key: string): RollSource | unde
   for (const f of [...activeFeatures(c), ...c.heritage]) {
     if (key === `feat:${f.name}`) return { name: f.name, text: f.text, source: f.source };
   }
-  for (const d of [...c.loadout, ...c.vault]) {
+  for (const d of [...activeCards(c), ...c.vault]) {
     const source = `${d.domain} - Level ${d.level} ${d.type}`;
-    if (key === `card:${d.name}`) return { name: d.name, text: d.text, source };
+    const copied = c.loadout.some(card => card.borrowedCard?.card === d);
+    const cardKey = copied ? `card:Copycat/${d.name}` : `card:${d.name}`;
+    if (key === cardKey) return { name: d.name, text: d.text, source: copied ? `Copycat - ${source}` : source };
     for (const s of d.spells ?? []) {
-      if (key === `card:${d.name}/${s.name}`) return { name: s.name, text: s.text, source: `${d.name} - ${source}` };
+      if (key === `${cardKey}/${s.name}`) return { name: s.name, text: s.text, source: `${copied ? 'Copycat - ' : ''}${d.name} - ${source}` };
     }
   }
   for (const w of [...activeWeapons(c), ...c.carriedWeapons]) {

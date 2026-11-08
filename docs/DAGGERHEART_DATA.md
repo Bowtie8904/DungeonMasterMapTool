@@ -74,8 +74,8 @@ separate `conditionalModifiers` field rather than applying the bonuses without t
 currently covers the passive bonuses on Arcana-, Blade-, Bone-, Splendor- and Valor-Touched.
 `conditionalActions` and `conditionalMitigation` use the same gate for Bone-Touched's attack avoidance
 and Splendor-Touched's shared-use damage replacements. Older clients ignore these gated actions rather
-than applying them without the loadout requirement. Grace-Touched's explicit substitution controls are
-gated too; automatic substitution across every Stress-cost workflow remains an open decision.
+than applying them without the loadout requirement. Grace-Touched substitutions are deliberately
+player-managed, without payment action buttons.
 
 `conditionalRollOptions` similarly gates optional roll choices by `loadoutDomain`. Codex-Touched's
 `derivedProficiency` uses current Proficiency including bonuses; Sage-Touched's `traitValue` uses the
@@ -126,9 +126,40 @@ deliberately manual narrative consequences are distinguished from the complete o
   `endOnMarkedHpCount` expires Vital Ward after actual HP marked by incoming damage reaches the
   specified threshold; non-damage HP changes and leaving the circle are explicitly manual.
 
-The host advertises optional `domainCardAutomationV2` alongside the retained original capability.
-Current clients require V2 for host-dependent audited actions; older hosts disable those controls
+The host advertises optional `domainCardAutomationV3` alongside retained V1/V2 capabilities.
+Current clients require V3 for host-dependent audited actions; older hosts disable those controls
 without blocking connection. LAN compatibility version and settings contracts are unchanged.
+
+### Grace/Codex feedback metadata
+
+- `target: "anyActor"` opens a single-target picker including offline actors; it does not apply an
+  effect to everybody. `allActors` retains its existing group-target meaning.
+- Effect `rest` can grant `extraMoves`; Safe Haven's caster action grants the effect and publishes an
+  entry claim for allies. A rest passive's `castBeforeRest` names the host action to perform before
+  resolving downtime; `excludesEffect` hides this cast choice when already sheltered.
+- `chatBenefits[].transferStress` is a host-validated, exclusive paired-sheet transaction. The claimant
+  chooses up to their marked Stress and the caster's free Stress slots; the caster gains Hope capped
+  by their Hope track. Claims publish a separate report naming the benefit and actual changes.
+- Mitigation `gainTokens: {resource, perHp?, amount?}` adds to the pool only after confirmed damage;
+  Never Upstaged uses the actual HP marked. Its printed whole-pool damage bonus is preselected in the
+  damage roll and hidden at zero; it does not modify the attack's hit roll.
+- `giveFear` grants GM Fear atomically with the action's use and report. `chatDamage` exposes an
+  independent damage button on that report; the corresponding card damage action remains usable.
+- `rerollDualityDie: "hope" | "fear"` changes one die, its breakdown, total and outcome on the original
+  trait roll. Endless Charisma's alternatives share `exclusiveRollGroup: "charisma-reroll"` so either
+  choice blocks both buttons for that roll; `excludeRolls` rejects attacks and reactions on both the
+  browser and host. Existing class `reroll` workflows are unchanged.
+- Grimoire objects must contain only one `automation` key. Duplicate keys shadow earlier definitions
+  and are rejected by regression checks rather than silently hiding configured actions.
+- `copycat: true` opens the unique, level-sorted active-card picker. Copycat spends its long-rest use
+  and half-level Hope cost rounded up only on host-confirmed selection. `borrowedCard` stores the
+  canonical copied card and source actor; its actions, nested spells, effects, resources, roll options,
+  mitigation and rest benefits use isolated `card:Copycat/<name>` keys. The borrowed card does not
+  occupy another loadout slot or count toward domain loadout requirements. Any rest or source vaulting
+  removes it and its linked effects; sheet saves cannot fabricate or edit its automation.
+- Invisibility's recipient effect uses `linkedTokenResource`, `sourceActorId` and `sourceKey`.
+  Its preselected action option spends the caster's token pool only when the host commits the roll;
+  resending the same roll cannot spend twice. Zero tokens or source removal ends the linked buff.
 
 ### Witch metadata
 
@@ -825,6 +856,8 @@ Classes, ancestries, communities and transformations are included in the total.
   action; older clients ignore the trigger and newer clients require host capability support.
   Book of Homet's `automaticRestUse` consumes each spell's separate rest use on a successful
   host roll at `spellcastDifficulty`, not on failure. Travel is resolved at the table.
+  Adding `automaticRestUseOnAttempt: true` consumes the use on any committed Spellcast attempt,
+  including failure (Teleport); root cards and copied cards use the same host tracking.
   Banish's `banishDifficulty` reaction rolls the current Spellcast trait's d20s on the host and stores
   their highest result on the card; players can manually edit or clear that value.
   Arcana-Touched uses a host-validated conditional chat reaction to swap Hope and Fear once per rest;
@@ -850,9 +883,11 @@ Classes, ancestries, communities and transformations are included in the total.
   Conjure Swarm's beetles reduce the next non-negated incoming damage automatically and disperse
   unless the optional Hope payment retains the effect.
   Weave the Flesh offers separate base and upgraded ally benefits with a shared rest limit.
-  Safe Haven's rest passive has no additional cost, and Specter of the Dark creates a manually ended physical-immunity effect.
+  Safe Haven's existing buff grants a free extra downtime move; without the buff its downtime checkbox
+  casts the spell for 2 Hope and publishes ally entry claims. Specter of the Dark creates a manually ended physical-immunity effect.
   Other target effects remain table-managed. Separate healing choices never
-  clear both resources unless the export says both. The individual domain-card review is not yet complete.
+  clear both resources unless the export says both. The individual domain-card review is complete;
+  remaining decisions are recorded in the living-spec ledger.
 - **Consumables:** existing healing and next-roll trait potions retained; Sweet Moss, Self-Sewing Thread,
   Nursewood Sap, Godling's Pomelo, Votive Bloom Nectar and Tincture self-healing choices; Steelskin, Featherstep,
   Drakemantle, Vigilance, Lionheart, Demiurge and Needle Key temporary modifiers. Six weapon coatings are

@@ -53,6 +53,62 @@ class OnlineSessionServerTest {
     private final List<Double> rotations = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Path compendiumDir;
 
+    @Test
+    void copycatListsUniqueOtherActorLoadoutsChargesRoundedHopeAndExpiresOnSourceVaulting() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries");
+        JsonNode definition = java.util.stream.StreamSupport.stream(catalog.spliterator(), false)
+                .filter(entry -> "Copycat".equals(entry.path("name").asText())).findFirst().orElseThrow();
+        ObjectNode own = (ObjectNode) MAPPER.readTree("""
+                {"level":9,"hope":{"on":6,"slots":6},"hp":{"on":0,"slots":6},"stress":{"on":0,"slots":6},
+                "traits":[{"name":"Presence","mod":2,"spellcast":true}],"effects":[],"resources":{},"usage":{},"loadout":[],"vault":[]}
+                """);
+        own.withArray("loadout").add(definition.deepCopy());
+        ObjectNode other = own.deepCopy();
+        other.putArray("loadout").addObject().put("name", "Flight");
+        other.withArray("loadout").addObject().put("name", "Armorer");
+        ObjectNode duplicate = other.deepCopy();
+        duplicate.putArray("loadout").addObject().put("name", "Flight");
+        for (String id : List.of("copycat", "source", "duplicate"))
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "copycat", own.toString());
+        store.saveSheet(campaign.getId(), "source", other.toString());
+        store.saveSheet(campaign.getId(), "duplicate", duplicate.toString());
+        String cookie = cookie();
+        HttpResponse<String> choices = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/copycat/copycat"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, choices.statusCode(), choices.body());
+        JsonNode candidates = MAPPER.readTree(choices.body()).path("cards");
+        assertEquals(2, candidates.size());
+        assertEquals("Flight", candidates.get(0).path("card").path("name").asText());
+        assertEquals("Armorer", candidates.get(1).path("card").path("name").asText());
+        String actionId = definition.path("automation").path("actions").get(0).path("id").asText();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "copycat").put("key", "card:Copycat")
+                .put("actionId", actionId).put("copyActorId", "copycat").put("copyCardName", "Copycat");
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        request.put("copyActorId", "source").put("copyCardName", "Flight");
+        HttpResponse<String> copied = featureHttp(cookie, request);
+        assertEquals(200, copied.statusCode(), copied.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "copycat"));
+        assertEquals(4, saved.path("hope").path("on").asInt());
+        assertEquals(1, saved.path("usage").path("card:Copycat").path("used").asInt());
+        assertEquals("Flight", saved.path("loadout").get(0).path("borrowedCard").path("card").path("name").asText());
+        assertEquals("Copycat/Flight/flight", saved.path("loadout").get(0).path("borrowedCard").path("card")
+                .path("automation").path("resources").get(0).path("id").asText());
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "copycat")).path("hope").path("on").asInt());
+        JsonNode vaulted = other.withArray("loadout").remove(0);
+        other.withArray("vault").add(vaulted);
+        HttpResponse<String> sourceSave = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/source"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(other.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, sourceSave.statusCode(), sourceSave.body());
+        JsonNode expired = MAPPER.readTree(store.loadSheet(campaign.getId(), "copycat"));
+        assertFalse(expired.path("loadout").get(0).has("borrowedCard"));
+        assertTrue(expired.path("usage").has("card:Copycat"));
+        assertFalse(expired.path("resources").has("Copycat/Flight/flight"));
+    }
+
     private ObjectNode communitySheet(String name) throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");
         JsonNode entry = java.util.stream.StreamSupport.stream(
@@ -74,6 +130,75 @@ class OnlineSessionServerTest {
         return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
                 .header("Cookie", cookie).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void invisibilityCastsOnOfflineSheetsReplacesRecipientAndSpendsCasterTokensOnlyOnCommittedActions() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        campaign.getActors().add(Campaign.Actor.builder().id("invisible-caster").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("invisible-recipient").name("Recipient").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("invisible-offline").name("Offline sheet").build());
+        ObjectNode caster = witchHostSheet();
+        caster.putArray("features");
+        caster.putObject("resources").put("invisibility", 9);
+        JsonNode card = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(entry -> "Invisibility".equals(entry.path("name").asText())).findFirst().orElseThrow();
+        caster.putArray("loadout").add(card.deepCopy());
+        store.saveSheet(campaign.getId(), "invisible-caster", caster.toString());
+        ObjectNode target = witchHostSheet();
+        target.putArray("features");
+        store.saveSheet(campaign.getId(), "invisible-recipient", target.toString());
+        store.saveSheet(campaign.getId(), "invisible-offline", target.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            for (String actorId : List.of("invisible-offline", "invisible-recipient")) {
+                ws.sendText("""
+                        {"type":"roll","kind":"duality","expression":"2d12+30","source":"action,spellcast,card:Invisibility","actorId":"invisible-caster"}
+                        """, true).join();
+                JsonNode rolled = inbox.next("roll");
+                ObjectNode cast = MAPPER.createObjectNode().put("actorId", "invisible-caster")
+                        .put("key", "card:Invisibility").put("actionId", "cast").put("targetActorId", actorId);
+                cast.putObject("roll").put("id", rolled.path("id").asLong()).put("ts", rolled.path("ts").asLong());
+                var response = featureHttp(cookie, cast);
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals(400, featureHttp(cookie, cast).statusCode());
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster"));
+                assertEquals(3, saved.path("resources").path("invisibility").asInt());
+                assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), actorId)).path("stress").path("on").asInt());
+            }
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-offline")).path("effects").isEmpty());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster"));
+            assertEquals(2, saved.path("stress").path("on").asInt());
+            JsonNode recipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-recipient"));
+            String effectId = recipient.path("effects").get(0).path("id").asText();
+            ObjectNode action = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("actorId", "invisible-recipient").put("expression", "2d12")
+                    .put("source", "trait:Agility,action,option:effect:" + effectId + ":spend-token").put("ref", "invisible-action");
+            ws.sendText(action.toString(), true).join();
+            JsonNode rolled = inbox.next("roll");
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster")).path("resources").path("invisibility").asInt());
+            ws.sendText(action.toString(), true).join();
+            assertEquals(rolled.path("id").asLong(), inbox.next("roll").path("id").asLong());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster")).path("resources").path("invisibility").asInt());
+            action.put("expression", "bad-expression").put("ref", "invalid");
+            ws.sendText(action.toString(), true).join();
+            inbox.next("error");
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster")).path("resources").path("invisibility").asInt());
+            action.put("expression", "2d12");
+            for (int i = 0; i < 2; i++) {
+                action.put("ref", "next-" + i);
+                ws.sendText(action.toString(), true).join();
+                inbox.next("roll");
+            }
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-caster")).path("resources").path("invisibility").asInt());
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "invisible-recipient")).path("effects").isEmpty());
+            ws.sendText(action.put("ref", "ended").toString(), true).join();
+            inbox.next("error");
+        } finally { ws.abort(); }
     }
 
     private ObjectNode witchHostSheet() throws Exception {
@@ -1484,7 +1609,7 @@ class OnlineSessionServerTest {
             for (int use = 0; use < 2; use++) {
                 var response = featureHttp(cookie, action);
                 assertEquals(200, response.statusCode(), response.body());
-                JsonNode message = inbox.next("chat");
+                JsonNode message = inbox.nextBenefit();
                 assertTrue(message.path("text").asText().contains("Cleared 1 HP."), message.toString());
                 assertFalse(message.path("text").asText().contains("(1 = 1)"), message.toString());
                 assertEquals(3 - use, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hp").path("on").asInt());
@@ -1500,7 +1625,7 @@ class OnlineSessionServerTest {
             assertEquals(400, featureHttp(cookie, action).statusCode());
             action.put("key", "feat:Heartbreaking Song");
             assertEquals(200, featureHttp(cookie, action).statusCode());
-            JsonNode song = inbox.next("chat");
+            JsonNode song = inbox.nextBenefit();
             assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "bard")).path("hope").path("on").asInt());
             assertEquals(200, featureHttp(allyCookie, benefitRequest("ally", song, "hope")).statusCode());
             assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hope").path("on").asInt());
@@ -1535,7 +1660,7 @@ class OnlineSessionServerTest {
             store.saveSheet(campaign.getId(), "bard", bardSheet("Wordsmith").toString());
             action.put("key", "feat:Rousing Speech");
             assertEquals(200, featureHttp(cookie, action).statusCode());
-            JsonNode speech = inbox.next("chat");
+            JsonNode speech = inbox.nextBenefit();
             assertEquals(200, featureHttp(allyCookie, benefitRequest("ally", speech, "stress")).statusCode());
             assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("stress").path("on").asInt());
             assertEquals(400, featureHttp(cookie, action).statusCode());
@@ -3397,6 +3522,52 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void teleportConsumesLongRestUseOnFailedAndSuccessfulAttemptsIncludingCopiedCards() throws Exception {
+        ObjectNode caster = communitySheet("Seaborne");
+        JsonNode teleport = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(card -> "teleport".equals(card.path("id").asText())).findFirst().orElseThrow();
+        campaign.getActors().add(Campaign.Actor.builder().id("teleport").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("original").name("Original").ownerId(playerId()).build());
+        ObjectNode original = caster.deepCopy();
+        original.putArray("loadout").add(teleport.deepCopy());
+        store.saveSheet(campaign.getId(), "original", original.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (boolean copied : List.of(false, true)) for (int bonus : List.of(-30, 30)) {
+                ObjectNode fresh = caster.deepCopy();
+                String key;
+                if (copied) {
+                    ObjectNode copycat = fresh.putArray("loadout").addObject().put("name", "Copycat");
+                    copycat.putObject("borrowedCard").put("sourceActorId", "original")
+                            .set("card", CopycatCards.prepare(teleport, fresh));
+                    key = "card:Copycat/Teleport";
+                } else {
+                    fresh.putArray("loadout").add(teleport.deepCopy());
+                    key = "card:Teleport";
+                }
+                store.saveSheet(campaign.getId(), "teleport", fresh.toString());
+                ObjectNode request = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("actorId", "teleport").put("expression", "2d12" + (bonus > 0 ? "+" : "") + bonus)
+                        .put("source", "action,spellcast," + key);
+                diceSeed(0);
+                ws.sendText(request.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                assertEquals(16, roll.path("difficulty").asInt());
+                assertEquals(bonus > 0, roll.path("total").asInt() >= 16);
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "teleport"));
+                assertEquals(1, saved.path("usage").path(key).path("used").asInt());
+                request.put("expression", "2d12+30");
+                ws.sendText(request.toString(), true).join();
+                assertTrue(inbox.next("error").toString().contains("no uses remaining"));
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "teleport")).path("usage").path(key).path("used").asInt());
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void blinkOutValidatesSuccessActiveCardAndHopeBeforeSpending() throws Exception {
         ObjectNode caster = communitySheet("Seaborne");
         caster.withObject("/hope").put("on", 5);
@@ -3417,6 +3588,7 @@ class OnlineSessionServerTest {
                 if (random.nextInt(12) != random.nextInt(12)) break;
                 seed++;
             }
+
             diceSeed(seed);
             ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
                     .put("actorId", "blink").put("expression", "2d12-30")
@@ -3448,6 +3620,158 @@ class OnlineSessionServerTest {
             assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "blink")).path("hope").path("on").asInt());
             assertEquals(400, featureHttp(cookie, request).statusCode());
         } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void shareTheBurdenTransfersStressAndHopeAtomicallyToOnlyOneClaimant() throws Exception {
+                String ally = allyCookie("burden-ally");
+                ObjectNode caster = communitySheet("Seaborne");
+                caster.withObject("/hope").put("on", 1);
+                caster.withObject("/stress").put("on", 4);
+                JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile());
+                for (JsonNode card : catalog.path("entries"))
+                    if ("share-the-burden".equals(card.path("id").asText())) caster.withArray("loadout").add(card.deepCopy());
+                campaign.getActors().add(Campaign.Actor.builder().id("burden-caster").name("Caster").ownerId(playerId()).build());
+                campaign.getActors().add(Campaign.Actor.builder().id("burden-target").name("Ally").ownerId("burden-ally").build());
+                store.saveSheet(campaign.getId(), "burden-caster", caster.toString());
+                store.saveSheet(campaign.getId(), "burden-target", communitySheet("Seaborne").toString());
+                ObjectNode action = MAPPER.createObjectNode().put("actorId", "burden-caster").put("key", "card:Share the Burden").put("actionId", "use");
+                assertEquals(200, featureHttp(cookie(), action).statusCode());
+                ObjectNode invitation = (ObjectNode) dmMessages.stream().filter(m -> m.has("actionBenefits")).findFirst().orElseThrow();
+                ObjectNode claim = benefitRequest("burden-target", invitation, "transfer").put("amount", 3);
+                assertEquals(400, featureHttp(ally, claim).statusCode());
+                assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "burden-caster")).path("stress").path("on").asInt());
+                claim.put("amount", 2);
+                var result = featureHttp(ally, claim);
+                assertEquals(200, result.statusCode(), result.body());
+                JsonNode savedCaster = MAPPER.readTree(store.loadSheet(campaign.getId(), "burden-caster"));
+                assertEquals(6, savedCaster.path("stress").path("on").asInt());
+                assertEquals(3, savedCaster.path("hope").path("on").asInt());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "burden-target")).path("stress").path("on").asInt());
+                assertEquals(400, featureHttp(ally, claim).statusCode());
+                assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("Transferred 2 Stress")));
+            }
+
+            @Test
+            void octarineWallSuccessCommitsFearUseAndDamageReportTogether() throws Exception {
+                ObjectNode caster = communitySheet("Seaborne");
+                JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile());
+                for (JsonNode card : catalog.path("entries"))
+                    if ("octarine-wall".equals(card.path("id").asText())) caster.withArray("loadout").add(card.deepCopy());
+                campaign.getActors().add(Campaign.Actor.builder().id("octarine").name("Caster").ownerId(playerId()).build());
+                store.saveSheet(campaign.getId(), "octarine", caster.toString());
+                String cookie = cookie();
+                Inbox inbox = new Inbox();
+                WebSocket ws = connect(cookie, inbox);
+                try {
+                    ObjectNode roll = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                            .put("actorId", "octarine").put("expression", "2d12-30").put("difficulty", 14)
+                            .put("source", "action,spellcast,card:Octarine Wall");
+                    diceSeed(0);
+                    ws.sendText(roll.toString(), true).join();
+                    JsonNode failed = inbox.next("roll");
+                    ObjectNode request = MAPPER.createObjectNode().put("actorId", "octarine").put("key", "card:Octarine Wall").put("actionId", "create");
+                    request.putObject("roll").put("id", failed.path("id").asLong()).put("ts", failed.path("ts").asLong());
+                    int before = campaign.getFear();
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    assertEquals(before, campaign.getFear());
+                    roll.put("expression", "2d12+30");
+                    ws.sendText(roll.toString(), true).join();
+                    JsonNode success = inbox.next("roll");
+                    request.withObject("/roll").put("id", success.path("id").asLong()).put("ts", success.path("ts").asLong());
+                    var result = featureHttp(cookie, request);
+                    assertEquals(200, result.statusCode(), result.body());
+                    assertEquals(before + 1, campaign.getFear());
+                    assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "octarine")).path("usage").path("card:Octarine Wall").path("used").asInt());
+                    assertTrue(dmMessages.stream().anyMatch(m -> "d12".equals(m.path("actionDamage").path("damage").path("dice").asText())));
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    assertEquals(before + 1, campaign.getFear());
+                } finally { ws.abort(); }
+            }
+
+            @Test
+            void troublemakerKeepsHighestD4AndEndlessCharismaRevisesOnlyChosenDie() throws Exception {
+                ObjectNode caster = communitySheet("Seaborne");
+                caster.putObject("proficiency").put("on", 3);
+                JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile());
+                for (JsonNode card : catalog.path("entries"))
+                    if (List.of("troublemaker", "endless-charisma").contains(card.path("id").asText())) caster.withArray("loadout").add(card.deepCopy());
+                campaign.getActors().add(Campaign.Actor.builder().id("charisma").name("Caster").ownerId(playerId()).build());
+                store.saveSheet(campaign.getId(), "charisma", caster.toString());
+                String cookie = cookie();
+                Inbox inbox = new Inbox();
+                WebSocket ws = connect(cookie, inbox);
+                try {
+                    ws.sendText("""
+                            {"type":"roll","kind":"duality","expression":"2d12+30","actorId":"charisma",
+                            "source":"action,trait:Presence,featureAction:card:Troublemaker:use,card:Troublemaker"}
+                            """, true).join();
+                    JsonNode original = inbox.next("roll");
+                    ObjectNode request = MAPPER.createObjectNode().put("actorId", "charisma").put("key", "card:Troublemaker").put("actionId", "stress");
+                    request.putObject("roll").put("id", original.path("id").asLong()).put("ts", original.path("ts").asLong());
+                    var result = featureHttp(cookie, request);
+                    assertEquals(200, result.statusCode(), result.body());
+                    JsonNode dice = inbox.next("roll");
+                    assertEquals("3d4kh1", dice.path("expression").asText());
+                    int highest = java.util.stream.StreamSupport.stream(dice.path("rolls").spliterator(), false).mapToInt(JsonNode::asInt).max().orElseThrow();
+                    assertEquals(highest, dice.path("total").asInt());
+                    assertTrue(dice.path("featureRoll").path("consequence").asText().contains("target marks " + highest + " Stress"));
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    request.put("key", "card:Endless Charisma").put("actionId", "fear");
+                    assertEquals(200, featureHttp(cookie, request).statusCode());
+                    JsonNode saved = store.historyTail(campaign.getId(), Integer.MAX_VALUE).stream()
+                            .filter(m -> m.path("id").equals(original.path("id")) && m.path("ts").equals(original.path("ts"))).findFirst().orElseThrow();
+                    assertEquals(original.path("rolls").path(0), saved.path("rolls").path(0));
+                    assertEquals(original.path("total").asInt() - original.path("rolls").path(1).asInt() + saved.path("rolls").path(1).asInt(), saved.path("total").asInt());
+                    assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "charisma")).path("hope").path("on").asInt());
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    request.put("actionId", "hope");
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "charisma")).path("hope").path("on").asInt());
+                    ws.sendText("""
+                            {"type":"roll","kind":"duality","expression":"2d12","actorId":"charisma","source":"action,trait:Presence"}
+                            """, true).join();
+                    JsonNode next = inbox.next("roll");
+                    request.withObject("/roll").put("id", next.path("id").asLong()).put("ts", next.path("ts").asLong());
+                    assertEquals(200, featureHttp(cookie, request).statusCode());
+                    request.put("actionId", "fear");
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "charisma")).path("hope").path("on").asInt());
+                    ws.sendText("""
+                            {"type":"roll","kind":"duality","expression":"2d12","actorId":"charisma","source":"action,attack,trait:Presence"}
+                            """, true).join();
+                    JsonNode attack = inbox.next("roll");
+                    request.withObject("/roll").put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong());
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    request.put("actionId", "hope");
+                    assertEquals(400, featureHttp(cookie, request).statusCode());
+                    assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "charisma")).path("hope").path("on").asInt());
+                } finally { ws.abort(); }
+            }
+
+            @Test
+            void safeHavenGrantsCasterAndClaimingAllyRestEffectsAndReportsTheirChoices() throws Exception {
+                String ally = allyCookie("haven-ally");
+                ObjectNode caster = communitySheet("Seaborne");
+                JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile());
+                for (JsonNode card : catalog.path("entries"))
+                    if ("safe-haven".equals(card.path("id").asText())) caster.withArray("loadout").add(card.deepCopy());
+                campaign.getActors().add(Campaign.Actor.builder().id("haven-caster").name("Caster").ownerId(playerId()).build());
+                campaign.getActors().add(Campaign.Actor.builder().id("haven-target").name("Ally").ownerId("haven-ally").build());
+                store.saveSheet(campaign.getId(), "haven-caster", caster.toString());
+                store.saveSheet(campaign.getId(), "haven-target", communitySheet("Seaborne").toString());
+                ObjectNode action = MAPPER.createObjectNode().put("actorId", "haven-caster").put("key", "card:Safe Haven").put("actionId", "use");
+                var result = featureHttp(cookie(), action);
+                assertEquals(200, result.statusCode(), result.body());
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "haven-caster"));
+                assertEquals(3, saved.path("hope").path("on").asInt());
+                assertEquals(1, saved.path("effects").path(0).path("rest").path("extraMoves").asInt());
+                ObjectNode invitation = (ObjectNode) dmMessages.stream().filter(m -> m.has("actionBenefits")).findFirst().orElseThrow();
+                assertEquals(200, featureHttp(ally, benefitRequest("haven-target", invitation, "enter")).statusCode());
+                JsonNode target = MAPPER.readTree(store.loadSheet(campaign.getId(), "haven-target"));
+                assertEquals("rest", target.path("effects").path(0).path("until").asText());
+                assertEquals(1, target.path("effects").path(0).path("rest").path("extraMoves").asInt());
+                assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("Enter Safe Haven")));
     }
 
     @Test
@@ -4665,6 +4989,15 @@ class OnlineSessionServerTest {
                 }
             }
             throw new AssertionError("No " + type + " message");
+        }
+
+        JsonNode nextBenefit() throws Exception {
+            long end = System.currentTimeMillis() + 5000;
+            while (System.currentTimeMillis() < end) {
+                JsonNode node = messages.poll(200, TimeUnit.MILLISECONDS);
+                if (node != null && "chat".equals(node.path("type").asText()) && node.has("actionBenefits")) return node;
+            }
+            throw new AssertionError("No claimable action message");
         }
     }
 

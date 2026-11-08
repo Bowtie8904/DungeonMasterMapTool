@@ -12,6 +12,8 @@ import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
+import { pickActor } from '../actor-picker';
+import type { Actor } from '../protocol';
 
 export interface RollButtonSheet {
   character: CharacterSheet;
@@ -22,6 +24,7 @@ export interface RollButtonSheet {
 export interface RollButtonHost {
   sheet(actorId: string): Promise<RollButtonSheet | undefined>;
   actorIds?(): string[];
+  targetActors?(): Actor[];
   send(roll: RollRequest): boolean;
   log(text: string, rollSource?: RollSource): void;
   toast(message: string): void;
@@ -161,6 +164,7 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
         const sheet = await host.sheet(actorId);
         if (!sheet) continue;
         for (const benefit of claims.options) {
+          if ((benefit.transferStress || benefit.steps.some(step => step.effect?.rest)) && !host.supportsDomainCardAutomation?.()) continue;
           const button = el('button', { type: 'button', class: 'small' }, `${benefit.label} · ${sheet.character.name}`);
           button.disabled = pending;
           button.addEventListener('click', async () => {
@@ -168,8 +172,13 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
             pending = true;
             buttons.forEach(b => { b.disabled = true; });
             try {
+              let amount: number | undefined;
+              if (benefit.transferStress) {
+                amount = await chooseStressTransfer(Math.min(sheet.character.stress.on, claims.stressCapacity ?? 0));
+                if (amount === undefined) return;
+              }
               await sheet.save.flush?.();
-              await useFeature({ actorId, key: '', actionId: 'claim', benefitId: benefit.id, roll: { id: m.id, ts: m.ts } });
+              await useFeature({ actorId, key: '', actionId: 'claim', benefitId: benefit.id, amount, roll: { id: m.id, ts: m.ts } });
               if (!claims.claimedBy.includes(host.playerId!)) claims.claimedBy.push(host.playerId!);
               if (benefit.featureAction) {
                 await sheet.save.refresh?.();
@@ -191,6 +200,45 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
   return box;
 }
 
+function chooseStressTransfer(max: number): Promise<number | undefined> {
+  return new Promise(resolve => {
+    const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: 'Transfer Stress' });
+    const amount = el('input', { type: 'number', min: '1', max: String(max), step: '1', value: '1', ariaLabel: 'Stress to transfer' });
+    const error = el('div', { class: 'error', role: 'alert' });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const go = el('button', { type: 'button', class: 'primary', disabled: max < 1 }, 'Transfer Stress');
+    let selected: number | undefined;
+    cancel.addEventListener('click', () => dialog.close());
+    go.addEventListener('click', () => {
+      if (!Number.isInteger(amount.valueAsNumber) || amount.valueAsNumber < 1 || amount.valueAsNumber > max) {
+        error.textContent = `Enter a whole number from 1 to ${max}.`;
+        return;
+      }
+      selected = amount.valueAsNumber;
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => { dialog.remove(); resolve(selected); }, { once: true });
+    dialog.append(el('h4', {}, 'Share the Burden'), el('p', {}, `Transfer up to ${max} marked Stress. The caster gains 1 Hope per Stress received.`),
+      amount, error, el('div', { class: 'acts' }, cancel, go));
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+
+function chatDamageButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  if (!m.actionDamage || !m.actorId || m.fromId !== host.playerId || !host.supportsDomainCardAutomation?.()) return null;
+  const box = el('div', { class: 'roll-actions' });
+  const button = el('button', { class: 'small primary', type: 'button' }, m.actionDamage.label);
+  button.addEventListener('click', async () => {
+    try {
+      const sheet = await host.sheet(m.actorId!);
+      if (!sheet?.bus.spellDamage?.(m.rollSource?.name ?? 'Spell damage', m.actionDamage!.damage, false, () => {}, m.rollSource))
+        host.toast('Open this character sheet to roll spell damage.');
+    } catch (e) { host.toast((e as Error).message); }
+  });
+  box.append(button);
+  return box;
+}
 function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   if (!m.restDice?.length || !m.actorId) return null;
   const box = el('div', { class: 'roll-actions' });
@@ -275,7 +323,10 @@ function deathButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null 
 }
 
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
-  if ('text' in m) return benefitButtons(m, host) ?? restButtons(m, host);
+  if ('text' in m) {
+    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host)].filter((node): node is HTMLElement => !!node);
+    return children.length === 1 ? children[0] : children.length ? el('div', {}, ...children) : null;
+  }
   if (m.deathMove) return deathButtons(m, host);
   const actorId = m.actorId;
   const ctx = rollContext(m);
@@ -405,7 +456,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.automation.conditionalRollTriggers?.includes(t.trigger) && !host.supportsDomainCardAutomation?.()
+        const unsupported = (t.automation.conditionalRollTriggers?.includes(t.trigger)
+          || t.trigger.target === 'anyActor' || t.trigger.giveFear || t.trigger.chatDamage || t.trigger.rerollDualityDie
+          || t.trigger.steps?.some(step => step.effect?.linkedTokenResource)) && !host.supportsDomainCardAutomation?.()
           ? 'Update the host to use this domain-card action.'
           : (t.trigger.steps?.some(s => s.effect?.tokenResource || s.effect?.endOnMarkedHp) && !host.supportsWitchAutomation?.())
           ? 'Update the host to use Witch roll actions.'
@@ -475,11 +528,18 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             return;
           }
           try {
+            let targetActorId: string | undefined;
+            if (t.trigger.target === 'actor' || t.trigger.target === 'anyActor') {
+              const target = await pickActor(host.targetActors?.() ?? [], 'Choose a character', 'Apply spell', true);
+              if (!target) { b.disabled = false; return; }
+              targetActorId = target.id;
+            }
             await sheet.save.flush?.();
             await useFeature({
               actorId: featureActorId,
               key: t.key,
               actionId: t.trigger.id,
+              targetActorId,
               roll: { id: m.id, ts: m.ts },
             });
             if (t.trigger.reroll) {

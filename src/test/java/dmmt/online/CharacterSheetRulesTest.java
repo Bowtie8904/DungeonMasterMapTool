@@ -12,6 +12,24 @@ class CharacterSheetRulesTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
+    void totalProficiencyIncludesActiveAndBorrowedBonusesWithoutTraitBonuses() throws Exception {
+        var sheet = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree("""
+                {"proficiency":{"on":3},"level":5,
+                 "loadout":[{"domain":"Grace","automation":{"conditionalModifiers":[
+                    {"stat":"proficiency","value":1,"loadoutDomain":{"domain":"Grace","min":2}}]}},
+                    {"name":"Copycat","domain":"Grace","borrowedCard":{"card":{"automation":{"modifiers":[
+                    {"stat":"proficiency","value":1}]}}}}],
+                 "features":[{"automation":{"modifiers":[{"stat":"traits","value":100}]}}],
+                 "inventory":[{"qty":0,"automation":{"modifiers":[{"stat":"proficiency","value":100}]}}],
+                 "effects":[{"modifiers":[{"stat":"proficiency","value":1},
+                    {"stat":"proficiency","value":100,"requiresEffect":"Expired"}]}]}
+                """);
+        assertEquals(6, CharacterSheetRules.proficiencyTotal(sheet, 0));
+        sheet.withArray("loadout").remove(1);
+        assertEquals(4, CharacterSheetRules.proficiencyTotal(sheet, 0));
+    }
+
+    @Test
     void spellcastTotalIncludesActivePassiveBonusesButNotCarriedOrExpiredSources() throws Exception {
         var sheet = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree("""
                 {"traits":[{"name":"Presence","mod":3,"spellcast":true}],

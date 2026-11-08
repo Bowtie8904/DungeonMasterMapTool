@@ -6,6 +6,7 @@ import { CompendiumFile, fetchCompendiumCategory, fetchCompendiumIndex } from '.
 import { syncResources } from './engine';
 import { applyTestingBuild, defaultTestingBuild } from './testing';
 import { loadRulesData } from './rules';
+import { activeCardSources, prepareBorrowedCard } from './copycat';
 
 /** Refresh copied rule metadata without rebuilding a character or resetting spent resources/advancements. */
 export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFile[]): void {
@@ -61,6 +62,11 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   restMetadata('items', c.inventory.filter((i) => !i.custom && i.type !== 'consumable'));
   restMetadata('consumables', c.inventory.filter((i) => !i.custom && i.type === 'consumable'));
   equipment('domain-cards', [...c.loadout, ...c.vault]);
+  for (const card of [...c.loadout, ...c.vault]) {
+    if (card.name !== 'Copycat' || !card.borrowedCard) continue;
+    const entry = entries('domain-cards').find(entry => entry.name === card.borrowedCard!.card.name);
+    if (entry) card.borrowedCard.card = prepareBorrowedCard({ ...card.borrowedCard.card, automation: entry.automation, spells: entry.spells });
+  }
   for (const card of [...c.loadout, ...c.vault]) {
     if (card.catalog) continue;
     const entry = entries('domain-cards').find((e) => e.name === card.name && e.spells?.length);
@@ -144,8 +150,7 @@ function automationSources(c: CharacterSheet): Array<{ key: string; automation?:
   return [
     ...c.features.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
     ...c.heritage.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
-    ...c.loadout.map((item) => ({ key: `card:${item.name}`, automation: item.automation })),
-    ...c.loadout.flatMap(card => (card.spells ?? []).map(spell => ({ key: `card:${card.name}/${spell.name}`, automation: spell.automation }))),
+    ...activeCardSources(c).map(source => ({ key: source.key, automation: source.auto })),
     ...c.activeWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
     ...c.carriedWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, automation: c.activeArmor.automation }] : []),

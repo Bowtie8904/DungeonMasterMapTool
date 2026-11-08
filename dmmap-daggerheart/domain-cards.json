@@ -568,27 +568,21 @@
     {
      "name": "Tava’s Armor",
      "automation": { "actions": [
-      { "id": "armor", "label": "Tava's Armor", "target": "actor", "cost": { "hope": 1 }, "steps": [{ "op": "effect", "effect": {
+      { "id": "armor", "label": "Tava's Armor", "target": "anyActor", "cost": { "hope": 1 }, "steps": [{ "op": "effect", "effect": {
         "name": "Tava's Armor", "kind": "buff", "until": "rest", "exclusiveSource": true, "unique": true,
+        "text": "The chosen actor gains +1 Armor Score until their next rest or this card is cast on them again.",
         "modifiers": [{ "stat": "armorScore", "value": 1 }]
-      } }] }
+      } }], "report": { "text": "The chosen actor gains +1 Armor Score until their next rest or this card is cast on them again." } }
      ] },
-     "text": "**Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again.",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Tava’s Armor",
-        "cost": {
-         "hope": 1
-        }
-       }
-      ]
-     }
+     "text": "**Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again."
     },
     {
      "name": "Ice Spike",
-     "text": "Make a **Spellcast Roll (12)** to summon a large ice spike within Far range. If you use it as a weapon, make the Spellcast Roll against the target’s Difficulty instead. On a success, deal **d6** physical damage using your Proficiency."
+     "text": "Make a **Spellcast Roll (12)** to summon a large ice spike within Far range. If you use it as a weapon, make the Spellcast Roll against the target’s Difficulty instead. On a success, deal **d6** physical damage using your Proficiency.",
+     "automation": { "conditionalRollTriggers": [
+      { "id": "damage", "label": "Successful Ice Spike: damage", "on": "card:Ice Spike", "successIfKnown": true,
+        "damage": { "dice": "d6", "type": "physical" } }
+     ] }
     }
    ]
   },
@@ -609,19 +603,7 @@
       { "id": "stop", "label": "Successful Repudiate: stop effect", "on": "featureAction:card:Book of Exota/Repudiate:reaction",
         "successIfKnown": true, "report": { "text": "Stop the magical effect and avoid its consequences; the GM applies the interruption." } }
      ] },
-     "text": "You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "rest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Repudiate"
-       }
-      ]
-     }
+     "text": "You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided."
     },
     {
      "name": "Create Construct",
@@ -636,18 +618,7 @@
         "successIfKnown": true, "requiresEffect": "Create Construct", "damage": { "dice": "2d10+3", "fixed": true, "type": "physical" },
         "description": "Only when this command makes the construct attack." }
      ] },
-     "text": "**Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage.",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Create Construct",
-        "cost": {
-         "hope": 1
-        }
-       }
-      ]
-     }
+     "text": "**Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage."
     }
    ]
   },
@@ -668,13 +639,14 @@
        "max": 1,
        "per": "longRest"
       },
-      "actions": [
+      "mitigation": [
        {
-        "id": "use",
-        "label": "Arcane Deflection",
-        "cost": {
-         "hope": 1
-        }
+        "id": "deflect",
+        "label": "Arcane Deflection: negate attack damage",
+        "description": "Spend 1 Hope to negate damage from an attack targeting you or an ally within Very Close range.",
+        "uses": "source",
+        "cost": { "hope": 1 },
+        "negate": true
        }
       ]
      }
@@ -688,6 +660,10 @@
      "text": "Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage.",
      "automation": { "spellcastDifficulty": 15, "actions": [
       { "id": "damage", "label": "Creature passes through wall: damage", "damage": { "dice": "4d10+3", "fixed": true, "type": "magic" } }
+     ], "conditionalRollTriggers": [
+      { "id": "damage", "label": "Successful Wall of Flame: passage damage", "on": "card:Wall of Flame", "successIfKnown": true,
+        "damage": { "dice": "4d10+3", "fixed": true, "type": "magic" },
+        "description": "Use for a creature subsequently passing through the wall, not for casting it." }
      ] }
     }
    ]
@@ -793,18 +769,7 @@
       { "id": "use", "label": "Recant: target makes Reaction (15)", "cost": { "hope": 1 },
         "report": { "text": "The target makes Reaction (15); on failure, the GM removes their memory of the last minute of conversation." } }
      ] },
-     "text": "**Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation.",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Recant",
-        "cost": {
-         "hope": 1
-        }
-       }
-      ]
-     }
+     "text": "**Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation."
     },
     {
      "name": "Rune Circle",
@@ -817,9 +782,11 @@
         "cost": {
          "stress": 1
         },
-        "damage": { "dice": "2d12+4", "fixed": true, "type": "magic" }
+        "report": { "text": "The temporary circle is active. Adversaries in or entering Melee range take 2d12+4 magic damage and are knocked back to Very Close range." }
        },
-       { "id": "enter", "label": "Adversary enters circle: damage", "damage": { "dice": "2d12+4", "fixed": true, "type": "magic" } }
+       { "id": "enter", "label": "Adversary in or enters circle: damage",
+         "damage": { "dice": "2d12+4", "fixed": true, "type": "magic" },
+         "report": { "text": "The adversary takes the circle's magic damage and is knocked back to Very Close range." } }
       ]
      }
     }
@@ -868,19 +835,7 @@
       { "id": "cast", "label": "Eternal Enervation: Spellcast", "actionRoll": { "trait": "spellcast" },
         "report": { "text": "On success, the GM makes the chosen adversary permanently Vulnerable." } }
      ] },
-     "text": "Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Eternal Enervation"
-       }
-      ]
-     }
+     "text": "Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means."
     }
    ]
   },
@@ -900,24 +855,14 @@
     {
      "name": "Parallela",
      "automation": { "actions": [
-      { "id": "use", "label": "Parallela", "target": "actor", "cost": { "hope": 2 }, "steps": [{ "op": "effect", "effect": {
+      { "id": "use", "label": "Parallela", "target": "anyActor", "cost": { "hope": 2 }, "steps": [{ "op": "effect", "effect": {
         "name": "Parallela", "kind": "buff", "until": "manual", "exclusiveSource": true, "unique": true,
+        "text": "On the target's next attack, they may hit one additional target within range whose Difficulty the attack roll meets.",
         "rollOptions": [{ "id": "attack", "label": "Parallela: next attack may hit another target", "roll": "attack",
-          "defaultOn": true, "endEffect": "Parallela", "description": "Another target within range whose Difficulty this attack meets." }]
-      } }] }
+          "defaultOn": true, "endEffect": "Parallela", "description": "Add one target within range whose Difficulty this attack meets; this grants no numerical attack bonus." }]
+      } }], "report": { "text": "The chosen actor's next attack may hit one additional target within range whose Difficulty the attack roll meets." } }
      ] },
-     "text": "**Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time.",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Parallela",
-        "cost": {
-         "hope": 2
-        }
-       }
-      ]
-     }
+     "text": "**Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time."
     },
     {
      "name": "Illusion",
@@ -1377,7 +1322,8 @@
     "actions": [
      {
       "id": "use",
-      "label": "Copycat"
+      "label": "Copycat",
+      "copycat": true
      }
     ]
    }
@@ -1773,17 +1719,21 @@
    "text": "Make a **Spellcast Roll (18)**. Once per long rest on a success, the GM tells you which adversaries within Far range have a Difficulty of 18 or lower. **Mark a Stress** for each one you wish to hit with this spell. They are killed and can’t come back to life by any means.",
    "automation": {
     "spellcastDifficulty": 18,
+    "automaticRestUse": true,
     "uses": {
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
-      "id": "use",
-      "label": "Disintegration Wave",
-      "cost": {
-       "stress": 1
-      }
+      "id": "targets",
+      "label": "Disintegration Wave: mark Stress and kill one eligible target",
+      "on": "card:Disintegration Wave",
+      "successIfKnown": true,
+      "repeatable": true,
+      "usesSource": false,
+      "cost": { "stress": 1 },
+      "report": { "text": "Choose one GM-identified adversary within Far range with Difficulty 18 or lower to kill. Mark 1 Stress; repeat this option once per target you choose." }
      }
     ]
    }
@@ -1929,13 +1879,26 @@
    "recall": 1,
    "text": "After you make an action roll to persuade, lie, or garner favor, you can **spend a Hope** to reroll the Hope or Fear Die.",
    "automation": {
-    "actions": [
+    "conditionalRollTriggers": [
      {
-      "id": "use",
-      "label": "Endless Charisma",
-      "cost": {
-       "hope": 1
-      }
+      "id": "hope",
+      "label": "Endless Charisma: reroll Hope Die",
+      "on": "trait",
+      "excludeRolls": ["reaction", "attack"],
+      "cost": { "hope": 1 },
+      "rerollDualityDie": "hope",
+      "exclusiveRollGroup": "charisma-reroll",
+      "description": "Use after a social action roll; the GM confirms whether it was to persuade, lie, or garner favor."
+     },
+     {
+      "id": "fear",
+      "label": "Endless Charisma: reroll Fear Die",
+      "on": "trait",
+      "excludeRolls": ["reaction", "attack"],
+      "cost": { "hope": 1 },
+      "rerollDualityDie": "fear",
+      "exclusiveRollGroup": "charisma-reroll",
+      "description": "Use after a social action roll; the GM confirms whether it was to persuade, lie, or garner favor."
      }
     ]
    }
@@ -2484,11 +2447,6 @@
    "id": "grace-touched",
    "name": "Grace-Touched",
    "automation": {
-    "conditionalActions": [
-     { "id": "armor", "label": "Grace-Touched: mark Armor instead of Stress", "cost": { "armor": 1 },
-       "loadoutDomain": { "domain": "Grace", "min": 4 },
-       "report": { "text": "Marked one Armor Slot instead of one Stress. Do not mark that Stress separately." } }
-    ],
     "conditionalRollTriggers": [
      { "id": "stress", "label": "Grace-Touched: target marks Stress instead of HP", "on": "damage",
        "loadoutDomain": { "domain": "Grace", "min": 4 },
@@ -2769,38 +2727,18 @@
     ],
     "actions": [
      {
-      "id": "clear",
-      "label": "Long rest: clear old tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "inspiration",
-        "amount": "all"
-       }
-      ]
-     },
-     {
-      "id": "prepare",
-      "label": "After long rest: prepare tokens",
-      "steps": [
-       { "op": "clear", "resource": "inspiration", "amount": "all" },
-       {
-        "op": "gain",
-        "resource": "inspiration",
-        "amount": "@total_presence"
-       }
-      ]
-     },
-     {
       "id": "give",
       "label": "Give ally a benefit",
       "cost": {
        "inspiration": 1
       },
       "chatBenefits": [
-       { "id": "stress", "label": "Clear 1 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] },
-       { "id": "hp", "label": "Clear 1 HP", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
-       { "id": "hope", "label": "Gain 1 Hope", "exclusiveClaim": true, "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }
+       { "id": "stress", "label": "Ally clears 1 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }],
+         "report": { "text": "The ally clears 1 Stress." } },
+       { "id": "hp", "label": "Ally clears 1 HP", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }],
+         "report": { "text": "The ally clears 1 Hit Point." } },
+       { "id": "hope", "label": "Ally gains 1 Hope", "exclusiveClaim": true, "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }],
+         "report": { "text": "The ally gains 1 Hope." } }
       ]
      }
     ]
@@ -2836,36 +2774,30 @@
       "initial": 0
      }
     ],
-    "actions": [
+    "rollTriggers": [
      {
       "id": "cast",
-      "label": "Successful cast: prepare tokens",
+      "label": "Choose Invisibility recipient",
+      "on": "card:Invisibility",
+      "when": "success",
+      "difficulty": 10,
+      "target": "anyActor",
+      "cost": { "stress": 1 },
       "steps": [
        {
-        "op": "gain",
-        "resource": "invisibility",
-        "amount": "@spellcast"
-       }
-      ],
-      "cost": {
-       "stress": 1
-      }
-     },
-     {
-      "id": "tick",
-      "label": "Affected creature acts: spend token",
-      "cost": {
-       "invisibility": 1
-      }
-     },
-     {
-      "id": "end",
-      "label": "Effect ends: clear tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "invisibility",
-        "amount": "all"
+        "op": "effect",
+        "effect": {
+         "name": "Invisibility",
+         "kind": "buff",
+         "until": "manual",
+         "exclusiveSource": true,
+         "linkedTokenResource": "invisibility",
+         "text": "Invisible: unseen except by magical means; attacks against you have disadvantage. Each selected action roll spends one token on the caster's Invisibility card. The effect ends after the last-token action resolves.",
+         "rollOptions": [
+          { "id": "spend-token", "label": "Invisibility: spend token", "roll": "action", "defaultOn": true,
+            "description": "Spend one token on the caster's card when this action roll resolves." }
+         ]
+        }
        }
       ]
      }
@@ -3066,13 +2998,14 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
-      "id": "use",
-      "label": "Manifest Wall",
-      "cost": {
-       "hope": 1
-      }
+      "id": "create",
+      "label": "Successful Manifest Wall: spend Hope and create wall",
+      "on": "card:Manifest Wall",
+      "successIfKnown": true,
+      "cost": { "hope": 1 },
+      "report": { "text": "Spend 1 Hope to create the wall; choose its geometry and resolve shunting creatures or objects manually." }
      }
     ]
    }
@@ -3327,17 +3260,21 @@
      {
       "id": "upstaged",
       "label": "Never Upstaged tokens",
-      "initial": 0
+      "initial": 0,
+      "resetOn": "rest"
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "tokens",
+      "label": "When marking HP from an attack: gain tokens",
+      "markedHpOnly": true,
+      "cost": { "stress": 1 },
+      "gainTokens": { "resource": "upstaged", "perHp": 1 },
+      "description": "Gain one token per Hit Point actually marked from this attack."
      }
     ],
     "actions": [
-     {
-      "id": "mark",
-      "label": "HP marked: place tokens",
-      "cost": {
-       "stress": 1
-      }
-     },
      {
       "id": "clear",
       "label": "Clear tokens",
@@ -3351,9 +3288,9 @@
      }
     ],
     "rollOptions": [
-     { "id": "upstaged", "label": "Never Upstaged: spend ALL tokens", "roll": "damage",
+     { "id": "upstaged", "label": "Never Upstaged: spend ALL tokens", "roll": "damage", "defaultOn": true,
        "resourceMultiplier": { "resource": "upstaged", "value": 5 },
-       "description": "Confirm this is your next successful attack. Clear every token after sending damage.",
+       "description": "Spend all tokens on your next successful attack, adding +5 damage per token.",
        "steps": [{ "op": "clear", "resource": "upstaged", "amount": "all" }] }
     ]
    }
@@ -3459,8 +3396,22 @@
     },
     "actions": [
      {
-      "id": "use",
-      "label": "Octarine Wall"
+      "id": "damage",
+      "label": "Creature touches Octarine Wall: damage",
+      "usesSource": false,
+      "damage": { "dice": "d12", "type": "magic" },
+      "report": { "text": "The creature makes Reaction (14); on failure, it takes this magic damage." }
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "create",
+      "label": "Successful Octarine Wall: give the GM Fear",
+      "on": "card:Octarine Wall",
+      "successIfKnown": true,
+      "giveFear": 1,
+      "report": { "text": "Give the GM 1 Fear to create the wall. Creatures or objects in its path gain a level of contamination and are shunted to a side of your choice." },
+      "chatDamage": { "dice": "d12", "type": "magic" }
      }
     ]
    }
@@ -4103,6 +4054,20 @@
      {
       "id": "use",
       "label": "Safe Haven",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Safe Haven", "kind": "buff", "until": "rest",
+       "text": "Resting inside Safe Haven grants one additional downtime move. Ends after your next rest.",
+       "rest": { "extraMoves": 1 }
+      } }],
+      "chatBenefits": [{
+       "id": "enter", "label": "Enter Safe Haven",
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Safe Haven", "kind": "buff", "until": "rest",
+        "text": "Resting inside Safe Haven grants one additional downtime move. Ends after your next rest.",
+        "rest": { "extraMoves": 1 }
+       } }]
+      }],
+      "report": { "text": "Summoned Safe Haven for 2 Hope. Eligible allies can enter using this message and gain one additional downtime move for their next rest." },
       "cost": {
        "hope": 2
       }
@@ -4112,7 +4077,10 @@
      "passives": [
       {
        "id": "shelter",
-       "label": "rest inside it (+1 move)",
+       "label": "Cast Safe Haven (2 Hope, +1 move)",
+       "castBeforeRest": "use",
+       "excludesEffect": "Safe Haven",
+       "cost": { "hope": 2 },
        "defaultOn": false,
        "extraMoves": 1
       }
@@ -4335,7 +4303,11 @@
     "actions": [
      {
       "id": "use",
-      "label": "Share the Burden"
+      "label": "Share the Burden",
+      "report": { "text": "One willing creature within Melee range can transfer marked Stress to you. Gain 1 Hope for each Stress received." },
+      "chatBenefits": [{
+       "id": "transfer", "label": "Transfer Stress", "exclusiveClaim": true, "transferStress": true, "steps": []
+      }]
      }
     ]
    }
@@ -4374,13 +4346,13 @@
      {
      "id": "use",
      "label": "Shield Aura",
-     "target": "actor",
+     "target": "anyActor",
      "cost": {
       "stress": 1
      },
      "steps": [{ "op": "effect", "effect": {
       "name": "Shield Aura", "kind": "buff", "until": "manual", "exclusiveSource": true, "unique": true,
-      "text": "Extra severity reduction when marking Armor. Ends when the aura reduces an attack to zero HP or the caster recasts.",
+      "text": "When the chosen actor marks an Armor Slot, reduce the attack's severity by one additional threshold. Ends if this reduction prevents all HP marking, or the caster casts Shield Aura again.",
       "mitigation": [{ "id": "aura", "label": "Shield Aura", "passive": true, "when": { "armor": true },
        "armorSeverity": 1, "endEffectIfNoHp": "Shield Aura" }]
      } }]
@@ -4947,6 +4919,8 @@
    "text": "Once per long rest, you can instantly teleport yourself and any number of willing targets within Close range to a place you’ve been before. Choose one of the following options, then make a **Spellcast Roll (16)**:\n\n- If you know the place very well, gain a +3 bonus.\n- If you’ve visited the place frequently, gain a +1 bonus.\n- If you’ve visited the place infrequently, gain no modifier.\n- If you’ve only been there once, gain a −2 penalty.\nOn a success, you appear where you were intending to go. On a failure, you appear off course, with the range of failure determining how far off course.",
    "automation": {
     "spellcastDifficulty": 16,
+    "automaticRestUse": true,
+    "automaticRestUseOnAttempt": true,
     "rollOptions": [
      { "id": "familiar", "label": "Teleport: know it very well", "roll": "card:Teleport", "value": 3, "exclusive": "teleport-familiarity", "usesSource": false },
      { "id": "frequent", "label": "Teleport: frequent visits", "roll": "card:Teleport", "value": 1, "exclusive": "teleport-familiarity", "usesSource": false },
@@ -4955,13 +4929,7 @@
     "uses": {
      "max": 1,
      "per": "longRest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Teleport"
-     }
-    ]
+    }
    }
   },
   {
@@ -5170,7 +5138,19 @@
     "actions": [
      {
       "id": "use",
-      "label": "Troublemaker"
+      "label": "Troublemaker: Presence Roll",
+      "usesSource": false,
+      "actionRoll": { "trait": "Presence" }
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "stress",
+      "label": "Successful Troublemaker: roll target Stress",
+      "on": "featureAction:card:Troublemaker:use",
+      "successIfKnown": true,
+      "sendRoll": { "dice": "@total_proficiencyd4kh1", "label": "Troublemaker: target marks Stress" },
+      "report": { "text": "The target marks {result} Stress, equal to the highest d4 rolled." }
      }
     ]
    }

@@ -91,10 +91,11 @@ describe('daggerheart rests', () => {
     expect(c.inventory.find((i) => i.name === 'Pipeweed')!.qty).toBe(1);
   });
 
-  it('keeps Safe Havens extra move free and leaves the sheet untouched on failure', () => {
+  it('keeps an existing Safe Haven extra move free and expires it after rest', () => {
     const c = mockCharacter();
     c.hope.on = 2;
     c.loadout.push({ name: 'Safe Haven', automation: rules('domain-cards', 'Safe Haven') } as never);
+    c.effects.push({ id: 'haven', name: 'Safe Haven', kind: 'buff', until: 'rest', rest: { extraMoves: 1 } });
     c.inventory.push({ name: 'Potion of Stability', type: 'consumable', qty: 1, automation: rules('consumables', 'Potion of Stability') });
     const o = { passives: { 'card:Safe Haven|shelter': true, 'item:Potion of Stability|drink': true } };
     expect(restSlots(c, 'short', o)).toHaveLength(4);
@@ -103,7 +104,18 @@ describe('daggerheart rests', () => {
     expect(c).toEqual(before);
     resolveRest(c, 'short', [], o);
     expect(c.hope.on).toBe(2);
+    expect(c.effects.some(e => e.name === 'Safe Haven')).toBe(false);
     expect(c.inventory.find((i) => i.name === 'Potion of Stability')!.qty).toBe(0);
+  });
+
+  it('requires host casting before a Safe Haven downtime checkbox can be resolved', () => {
+    const c = mockCharacter();
+    c.hope.on = 2;
+    c.loadout.push({ name: 'Safe Haven', automation: rules('domain-cards', 'Safe Haven') } as never);
+    const options = { passives: { 'card:Safe Haven|shelter': true } };
+    expect(restSlots(c, 'short', options)).toHaveLength(3);
+    expect(() => resolveRest(c, 'short', [], options)).toThrow('Cast the selected Safe Haven');
+    expect(c.hope.on).toBe(2);
   });
 
   it('enforces configured rest kinds and rolls back a failure after an earlier move', () => {

@@ -16,6 +16,7 @@ import { rollButtons } from './daggerheart/rollbuttons';
 import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import { pickActor } from './actor-picker';
+import { openCopycat } from './daggerheart/copycat-view';
 import type { CharacterSheet } from './daggerheart/data';
 import { MapTool } from './tools';
 import { MapView, MoveCommit } from './render';
@@ -650,15 +651,16 @@ export class App {
     await save.flush();
     const target = featureTarget(character, key, actionId);
     let targetActorId: string | undefined;
-    if (target === 'actor') {
+    if (target === 'actor' || target === 'anyActor') {
       const ward = isLifeWard(character, key);
       if (ward && !this.conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
-      const candidates = (this.store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : this.connectedPlayers.has(a.ownerId) && (amount === undefined || a.id !== actorId));
-      const selected = await pickActor(candidates, 'Choose a character', 'Select target');
+      const candidates = (this.store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : (target === 'anyActor' || this.connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId));
+      const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
       if (!selected) return;
       targetActorId = selected.id;
     }
     await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
+    await save.refresh();
   }
 
   private selectTool(): void {
@@ -1104,6 +1106,7 @@ export class App {
       sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
       actorIds: () => this.myActors.map(a => a.id),
+      targetActors: () => this.store.state?.actors ?? [],
       sheet: async (id) => {
         const actor = this.myActors.find(a => a.id === id);
         if (!actor) return undefined;
@@ -1183,6 +1186,7 @@ export class App {
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
+            onCopycat: (key, actionId) => openCopycat(character, a.id, key, actionId, changed),
             onDamageTaken: async (severity) => {
               await changed.flush();
               await damageTaken(a.id, severity);

@@ -9,6 +9,7 @@ import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
 import { companionAvailable, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { vengeanceReport } from './warlock';
+import { activeCardSources, activeCards } from './copycat';
 
 export type DamageType = 'physical' | 'magic';
 /** 0 = none, 1 = Minor, 2 = Major, 3 = Severe, 4 = massive (twice the Severe threshold). */
@@ -50,6 +51,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  gainTokens?: { resource: string; perHp?: number; amount?: number };
   endEffectIfNoHp?: string;
   loadoutDomain?: { domain: string; min: number };
   preserveEffect?: string;
@@ -161,7 +163,7 @@ export function availableMitigations(c: CharacterSheet): AvailableMitigation[] {
   if (c.activeArmor) add(`armor:${c.activeArmor.name}`, c.activeArmor.name, c.activeArmor.automation);
   for (const w of activeWeapons(c)) add(`weapon:${w.name}`, w.name, w.automation);
   for (const f of [...activeFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
-  for (const d of c.loadout) add(`card:${d.name}`, d.name, d.automation);
+  for (const source of activeCardSources(c)) add(source.key, source.name, source.auto);
   for (const i of c.inventory.filter((x) => x.qty > 0)) add(`item:${i.name}`, i.name, i.automation, i);
   for (const e of c.effects) add(`effect:${e.id}`, e.name, { mitigation: e.mitigation });
   return out;
@@ -213,6 +215,9 @@ export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, typ
   for (const res of Object.keys(o.cost ?? {})) {
     if (!['hp', 'stress', 'hope', 'armor'].includes(res) && !resourceDefinitions(c).some((r) => r.id === res)) return `Resource unavailable: ${res}`;
   }
+  const gain = o.gainTokens;
+  if (gain && !resourceDefinitions(c).some(r => r.id === gain.resource))
+    return `Resource unavailable: ${gain.resource}`;
   return null;
 }
 
@@ -357,7 +362,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
 
 function damageBlocker(c: CharacterSheet, r: DamageResult, type: DamageType): string | null {
   syncResources(c);
-  for (const m of r.applied.filter(m => m.option.companionIntercept)) {
+  for (const m of r.applied.filter(m => m.option.companionIntercept || m.option.gainTokens)) {
     const why = mitigationBlocker(c, m, type);
     if (why) return why;
   }
@@ -415,7 +420,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     if (!['hp', 'stress', 'hope', 'armor'].includes(res)) c.resources![res] = Math.max(0, (c.resources![res] ?? 0) - n);
   }
   const notes: string[] = [];
-  for (const card of c.loadout) for (const reward of card.automation?.conditionalDamageRewards ?? []) {
+  for (const card of activeCards(c)) for (const reward of card.automation?.conditionalDamageRewards ?? []) {
     if (!loadoutDomainMatches(c, reward.loadoutDomain) || r.hp < reward.minHp || hpMarked < 1
         || reward.noArmorMarked && armor > 0) continue;
     if (reward.gainHope) {
@@ -430,6 +435,17 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     }
   }
   for (const m of r.applied) {
+    if (m.option.gainTokens && hpMarked > 0) {
+      const gain = m.option.gainTokens;
+      const definition = resourceDefinitions(c).find(resource => resource.id === gain.resource);
+      if (!definition) throw new Error(`Resource unavailable: ${gain.resource}`);
+      const before = c.resources?.[gain.resource] ?? 0;
+      const amount = Math.max(0, gain.amount ?? hpMarked * (gain.perHp ?? 1));
+      const max = definition.max === undefined ? Infinity : evalValue(definition.max, c);
+      c.resources ??= {};
+      c.resources[gain.resource] = Math.min(max, before + amount);
+      notes.push(`${m.source}: gained ${c.resources[gain.resource] - before} ${definition.label}.`);
+    }
     if (m.option.patronDice === 'vengeance') notes.push(vengeanceReport(c, r.hp, roll));
     if (m.option.companionIntercept) notes.push(m.option.companionArmored
       ? 'Armored: marked one owner Armor Slot instead of companion Stress for Loyal Friend.'

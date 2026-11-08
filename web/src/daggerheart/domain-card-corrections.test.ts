@@ -380,11 +380,13 @@ describe('domain-card cost and limit corrections', () => {
     expect(availableRollOptions(c, ['action'])[0].option.advantage).toBe('advantage');
   });
 
-  it('charges Safe Haven only on summoning and not for its rest move', () => {
+  it('charges Safe Haven when casting for a rest, not when an ally enters it', () => {
     const automation = rules('safe-haven');
     expect(automation.actions![0].cost?.hope).toBe(2);
     expect(automation.rest?.passives?.[0].extraMoves).toBe(1);
-    expect(automation.rest?.passives?.[0].cost).toBeUndefined();
+    expect(automation.rest?.passives?.[0]).toMatchObject({ castBeforeRest: 'use', cost: { hope: 2 } });
+    expect(automation.actions?.[0].chatBenefits?.[0]).toMatchObject({ id: 'enter', steps: [{ op: 'effect' }] });
+    expect((automation.actions?.[0].chatBenefits?.[0] as unknown as { cost?: unknown }).cost).toBeUndefined();
   });
 
   it('uses the printed difficulties for additional domain Spellcast rolls', () => {
@@ -530,7 +532,6 @@ describe('domain-card cost and limit corrections', () => {
   it.each([
     ['deft-maneuvers', 'stress', 1],
     ['divination', 'hope', 3],
-    ['manifest-wall', 'hope', 1],
     ['reapers-strike', 'hope', 1],
     ['smite', 'hope', 3],
     ['summon-horror', 'stress', 1],
@@ -618,7 +619,6 @@ describe('domain-card cost and limit corrections', () => {
   it.each([
     ['astral-projection', undefined, 'stress'],
     ['bloodbath', undefined, 'hope'],
-    ['book-of-grynn', 'Arcane Deflection', 'hope'],
     ['book-of-vyola', 'Shared Clarity', 'hope'],
   ] as const)('pays and checks the %s action cost', (id, spell, resource) => {
     const c = emptyCharacter('Test');
@@ -648,5 +648,155 @@ describe('domain-card cost and limit corrections', () => {
     expect(availableRollOptions(c, ['trait:Presence']).some((option) => option.source === 'Bold Presence')).toBe(true);
     applyRest(c, 'short');
     expect(actionBlocker(c, key, automation, action)).toBeNull();
+  });
+
+  it('keeps comprehensive nested spell automation and targets one actor for protective buffs', () => {
+    expect(rules('book-of-exota', 'Repudiate')).toMatchObject({
+      uses: { max: 1, per: 'rest' },
+      actions: [{ id: 'reaction', usesSource: false, actionRoll: { trait: 'spellcast', reaction: true } }],
+      conditionalRollTriggers: [{ id: 'stop', on: 'featureAction:card:Book of Exota/Repudiate:reaction' }],
+    });
+    expect(rules('book-of-exota', 'Create Construct').actions?.map(action => action.id)).toEqual(['summon', 'command', 'end']);
+    expect(rules('book-of-korvax', 'Recant').actions?.[0]).toMatchObject({
+      cost: { hope: 1 }, report: { text: expect.stringContaining('Reaction (15)') },
+    });
+    expect(rules('book-of-ronin', 'Eternal Enervation')).toMatchObject({
+      uses: { max: 1, per: 'longRest' },
+      actions: [{ id: 'cast', actionRoll: { trait: 'spellcast' } }],
+    });
+
+    expect(rules('book-of-ava', 'Tava’s Armor').actions?.[0]).toMatchObject({
+      target: 'anyActor',
+      cost: { hope: 1 },
+      steps: [{ op: 'effect', effect: { modifiers: [{ stat: 'armorScore', value: 1 }] } }],
+      report: { text: expect.stringContaining('+1 Armor Score') },
+    });
+    expect(rules('book-of-sitil', 'Parallela').actions?.[0]).toMatchObject({
+      target: 'anyActor',
+      cost: { hope: 2 },
+      steps: [{ op: 'effect', effect: { rollOptions: [{
+        roll: 'attack', defaultOn: true, endEffect: 'Parallela',
+        description: expect.stringContaining('no numerical attack bonus'),
+      }] } }],
+      report: { text: expect.stringContaining('one additional target') },
+    });
+    expect(rules('shield-aura').actions?.[0]).toMatchObject({
+      target: 'anyActor',
+      cost: { stress: 1 },
+      steps: [{ op: 'effect', effect: {
+        exclusiveSource: true,
+        text: expect.stringContaining('one additional threshold'),
+        mitigation: [{ armorSeverity: 1, endEffectIfNoHp: 'Shield Aura' }],
+      } }],
+    });
+    expect(rules('book-of-yarrow', 'Magic Immunity').actions?.[0]).toMatchObject({
+      cost: { hope: 5 },
+      steps: [{ op: 'effect', effect: {
+        until: 'rest',
+        text: 'Immune to magic damage until your next rest.',
+        mitigation: [{ passive: true, when: { type: 'magic' }, negate: true }],
+      } }],
+    });
+  });
+
+  it('configures successful spell results, rest uses, and table-facing reports', () => {
+    expect(rules('book-of-ava', 'Ice Spike').conditionalRollTriggers?.[0]).toMatchObject({
+      on: 'card:Ice Spike', successIfKnown: true, damage: { dice: 'd6', type: 'physical' },
+    });
+
+    const rune = rules('book-of-korvax', 'Rune Circle').actions!;
+    expect(rune[0]).toMatchObject({ cost: { stress: 1 }, report: { text: expect.stringContaining('circle is active') } });
+    expect(rune[0].damage).toBeUndefined();
+    expect(rune[1]).toMatchObject({ damage: { dice: '2d12+4', fixed: true, type: 'magic' }, report: { text: expect.stringContaining('knocked back') } });
+
+    const flame = rules('book-of-grynn', 'Wall of Flame');
+    expect(flame.actions?.[0].damage).toMatchObject({ dice: '4d10+3', fixed: true, type: 'magic' });
+    expect(flame.conditionalRollTriggers?.[0]).toMatchObject({
+      id: 'damage', on: 'card:Wall of Flame', successIfKnown: true,
+      damage: { dice: '4d10+3', fixed: true, type: 'magic' },
+    });
+
+    const manifest = rules('manifest-wall');
+    expect(manifest.actions).toBeUndefined();
+    expect(manifest.uses).toEqual({ max: 1, per: 'rest' });
+    expect(manifest.conditionalRollTriggers?.[0]).toMatchObject({
+      on: 'card:Manifest Wall', successIfKnown: true, cost: { hope: 1 },
+      report: { text: expect.stringContaining('create the wall') },
+    });
+
+    const octarine = rules('octarine-wall');
+    expect(octarine.actions?.[0].usesSource).toBe(false);
+    expect(octarine.actions?.[0].damage).toMatchObject({ dice: 'd12', type: 'magic' });
+    expect(octarine.conditionalRollTriggers?.[0]).toMatchObject({
+      id: 'create', on: 'card:Octarine Wall', successIfKnown: true, giveFear: 1,
+      chatDamage: { dice: 'd12', type: 'magic' },
+      report: { text: expect.stringContaining('1 Fear') },
+    });
+
+    const teleport = rules('teleport');
+    expect(teleport).toMatchObject({ automaticRestUse: true, uses: { max: 1, per: 'longRest' } });
+    expect(teleport.actions).toBeUndefined();
+  });
+
+  it('keeps Grace-Touched passive-only and reports automatic Inspiration pool benefits', () => {
+    const grace = rules('grace-touched');
+    expect(grace.conditionalActions).toBeUndefined();
+    expect(grace.conditionalRollTriggers?.[0]).toMatchObject({
+      on: 'damage', loadoutDomain: { domain: 'Grace', min: 4 },
+    });
+
+    const inspiration = rules('inspirational-words');
+    expect(inspiration.resources?.[0]).toMatchObject({ resetOn: 'longRest', resetValue: '@total_presence' });
+    expect(inspiration.actions?.map(action => action.id)).toEqual(['give']);
+    expect(inspiration.actions?.[0].chatBenefits?.map(benefit => benefit.report?.text)).toEqual([
+      'The ally clears 1 Stress.',
+      'The ally clears 1 Hit Point.',
+      'The ally gains 1 Hope.',
+    ]);
+  });
+
+  it('configures rest-limited and marked-HP card results without generic buttons', () => {
+    const troublemaker = rules('troublemaker');
+    expect(troublemaker.uses).toEqual({ max: 1, per: 'rest' });
+    expect(troublemaker.actions?.[0]).toMatchObject({
+      usesSource: false, actionRoll: { trait: 'Presence' },
+    });
+    expect(troublemaker.conditionalRollTriggers?.[0]).toMatchObject({
+      id: 'stress', on: 'featureAction:card:Troublemaker:use', successIfKnown: true,
+      sendRoll: { dice: '@total_proficiencyd4kh1' },
+      report: { text: expect.stringContaining('{result}') },
+    });
+
+    const deflection = rules('book-of-grynn', 'Arcane Deflection');
+    expect(deflection.uses).toEqual({ max: 1, per: 'longRest' });
+    expect(deflection.mitigation?.[0]).toMatchObject({
+      uses: 'source', cost: { hope: 1 }, negate: true,
+    });
+
+    const wave = rules('disintegration-wave');
+    expect(wave.uses).toEqual({ max: 1, per: 'longRest' });
+    expect(wave.automaticRestUse).toBe(true);
+    expect(wave.actions).toBeUndefined();
+    expect(wave.conditionalRollTriggers?.[0]).toMatchObject({
+      on: 'card:Disintegration Wave', successIfKnown: true,
+      repeatable: true, usesSource: false, cost: { stress: 1 },
+      report: { text: expect.stringContaining('repeat this option once per target') },
+    });
+
+    const charisma = rules('endless-charisma').conditionalRollTriggers!;
+    expect(charisma).toMatchObject([
+      { id: 'hope', on: 'trait', excludeRolls: ['reaction', 'attack'], cost: { hope: 1 }, rerollDualityDie: 'hope' },
+      { id: 'fear', on: 'trait', excludeRolls: ['reaction', 'attack'], cost: { hope: 1 }, rerollDualityDie: 'fear' },
+    ]);
+
+    const upstaged = rules('never-upstaged');
+    expect(upstaged.resources?.[0]).toMatchObject({ resetOn: 'rest' });
+    expect(upstaged.mitigation?.[0]).toMatchObject({
+      markedHpOnly: true, cost: { stress: 1 }, gainTokens: { resource: 'upstaged', perHp: 1 },
+    });
+    expect(upstaged.rollOptions?.[0]).toMatchObject({
+      defaultOn: true, resourceMultiplier: { resource: 'upstaged', value: 5 },
+      steps: [{ op: 'clear', resource: 'upstaged', amount: 'all' }],
+    });
   });
 });

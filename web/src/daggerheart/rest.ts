@@ -71,6 +71,8 @@ const LONG_MOVES: RestMove[] = [
   { id: 'project', label: 'Work on a Project' },
 ];
 
+import { activeCardSources } from './copycat';
+
 interface Source { key: string; name: string; automation: Automation; item?: CharacterSheet['inventory'][number] }
 function sources(c: CharacterSheet): Source[] {
   const out: Source[] = [];
@@ -79,12 +81,9 @@ function sources(c: CharacterSheet): Source[] {
   };
   for (const f of [...c.features, ...companionFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
   for (const effect of c.effects) {
-    if (effect.actions?.length) add(`effect:${effect.id}`, effect.name, { actions: effect.actions });
+    if (effect.actions?.length || effect.rest) add(`effect:${effect.id}`, effect.name, { actions: effect.actions, rest: effect.rest });
   }
-  for (const d of c.loadout) {
-    add(`card:${d.name}`, d.name, d.automation);
-    for (const s of d.spells ?? []) add(`card:${d.name}/${s.name}`, s.name, s.automation);
-  }
+  for (const source of activeCardSources(c)) add(source.key, source.name, source.auto);
   for (const i of c.inventory.filter((i) => i.qty > 0)) add(`item:${i.name}`, i.name, i.automation, i);
   for (const w of c.activeWeapons) add(`weapon:${w.name}`, w.name, w.automation);
   if (c.activeArmor) add(`armor:${c.activeArmor.name}`, c.activeArmor.name, c.activeArmor.automation);
@@ -202,6 +201,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const chosen = picks.filter((p) => p.move);
   const previousEffects = new Set(c.effects.map((e) => e.id));
   const selected = benefits(c, kind).filter(({ id }) => passiveOn(c, kind, o, id));
+  if (selected.some(({ b }) => b.castBeforeRest)) throw new Error('Cast the selected Safe Haven before resolving downtime.');
   const reroll = selected.some(({ b }) => b.reroll);
   const dice = (expr: string): { value: number; text: string } => {
     const first = roll(expr);

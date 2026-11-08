@@ -8,6 +8,7 @@ import { hpHealingFloor, syncDeathState } from './death';
 import { syncBrawler } from './brawler';
 import { clearCompanionStress, companionAvailable, companionFeatures, companionWeapon, returnCompanion, syncCompanion } from './companion';
 import type { CompanionRules } from './companion';
+import { activeCards, activeCardSources, clearBorrowedCard } from './copycat';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -38,6 +39,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  rest?: Automation['rest'];
   exclusiveSource?: boolean;
   endOnMarkedHpCount?: number;
   witchGrant?: 'circle' | 'moonbeam' | 'talisman';
@@ -45,6 +47,8 @@ export interface EffectDef {
   activationId?: string;
   resources?: ResourceDef[];
   tokenResource?: string;
+  /** Host-owned tokens on sourceActorId's source card, not this recipient's resources. */
+  linkedTokenResource?: string;
   endOnMarkedHp?: boolean;
   endOnDealtDamage?: boolean;
   partyDowntimeGrant?: boolean;
@@ -84,6 +88,8 @@ export interface EffectDef {
 }
 
 export interface ChatBenefit {
+  report?: ActionDef['report'];
+  transferStress?: boolean;
   id: string;
   label: string;
   steps: Step[];
@@ -101,6 +107,10 @@ export interface Step {
 }
 
 export interface ActionDef {
+  copycat?: boolean;
+  giveFear?: number;
+  chatDamage?: ActionDef['damage'];
+  excludesEffect?: string;
   vaultSource?: boolean;
   resourceRoll?: { resource: 'hope' | 'stress'; sides: number; bonusPerDie?: number; type?: 'magic' | 'physical' };
   codexSwap?: boolean;
@@ -159,7 +169,7 @@ export interface ActionDef {
   endEffect?: string;
   requiresEffect?: string;
   damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic'; count?: 'spellcast' };
-  target?: 'actor' | 'party' | 'allActors';
+  target?: 'actor' | 'anyActor' | 'party' | 'allActors';
   chatBenefits?: ChatBenefit[];
   allowSourceOwner?: boolean;
   transferHope?: boolean;
@@ -227,6 +237,7 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  rerollDualityDie?: 'hope' | 'fear';
   criticalOnly?: boolean;
   exclusiveRollGroup?: string;
   successIfKnown?: boolean;
@@ -250,7 +261,7 @@ export interface RollTrigger extends ActionDef {
   difficulty?: number;
   die?: number;
   matchResource?: string;
-  reroll?: 'hope' | 'duality';
+  reroll?: 'hope' | 'fear' | 'duality';
   advantage?: boolean;
   /** Offered only while an effect with this name is active. */
   requiresEffect?: string;
@@ -270,6 +281,7 @@ export interface Automation {
   banishDifficulty?: boolean;
   spellcastDifficulty?: number;
   automaticRestUse?: boolean;
+  automaticRestUseOnAttempt?: boolean;
   conditionalRollTriggers?: RollTrigger[];
   conditionalModifiers?: Modifier[];
   conditionalRollOptions?: RollOption[];
@@ -351,6 +363,7 @@ export function syncEffectDependencies(c: CharacterSheet): void {
 }
 
 export interface RestBenefit extends ActionDef {
+  castBeforeRest?: string;
   defaultOn: boolean;
   rest?: RestKind;
   extraMoves?: number;
@@ -424,13 +437,14 @@ export function automationSources(c: CharacterSheet): Automation[] {
   activeWeapons(c).forEach((w) => add(w.automation));
   activeFeatures(c).forEach((f) => add(f.automation));
   c.heritage.forEach((f) => add(f.automation));
-  c.loadout.forEach((d) => add(d.automation));
+  activeCards(c).forEach((d) => add(d.automation));
   c.inventory.filter((i) => i.qty > 0).forEach((i) => add(i.automation));
   return out;
 }
 
 export function resourceDefinitions(c: CharacterSheet): ResourceDef[] {
-  return [...new Map([...automationSources(c), ...c.effects].flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
+  const copied = activeCardSources(c).filter(source => source.key.startsWith('card:Copycat/')).flatMap(source => source.auto ? [source.auto] : []);
+  return [...new Map([...automationSources(c), ...copied, ...c.effects].flatMap((a) => a.resources ?? []).map((r) => [r.id, r])).values()];
 }
 
 export function poolDice(c: CharacterSheet, pool: NonNullable<Automation['dicePool']>): ActiveEffect[] {
@@ -547,7 +561,7 @@ export function derivedStats(c: CharacterSheet): DerivedStats {
 
 function unarmoredBase(c: CharacterSheet): { name: string; score: number; thresholds: [number, number] } | undefined {
   if (c.activeArmor) return undefined;
-  const source = c.loadout.find(card => card.automation?.unarmoredBase);
+  const source = activeCards(c).find(card => card.automation?.unarmoredBase);
   const base = source?.automation?.unarmoredBase;
   const thresholds = base?.thresholdsByTier[String(tierOf(c.level))];
   return source && base && thresholds
@@ -564,7 +578,7 @@ function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automatio
     ...activeWeapons(c).map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
     ...activeFeatures(c).map((f) => ({ name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ name: f.name, auto: f.automation })),
-    ...c.loadout.map((d) => ({ name: d.name, auto: d.automation })),
+    ...activeCards(c).map((d) => ({ name: d.name, auto: d.automation })),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ name: i.name, auto: i.automation })),
     ...c.effects.map((e) => ({ name: e.name, mods: e.modifiers })),
   ];
@@ -719,8 +733,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
     ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
-    ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
-    ...c.loadout.flatMap(d => (d.spells ?? []).map(s => ({ key: `card:${d.name}/${s.name}`, name: s.name, auto: s.automation }))),
+    ...activeCardSources(c),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
       rollOptions: (e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions)
@@ -746,6 +759,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.magicOnly || weapon?.damageType === 'magic' || targets.includes('magicdamage') || targets.includes('spelldamage'))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
+    .filter((o) => !o.resourceMultiplier || (c.resources?.[o.resourceMultiplier.resource] ?? 0) > 0)
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
       ? weapon?.slot.toLowerCase() === o.weapon && activeWeapons(c).includes(weapon)
       : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
@@ -956,6 +970,7 @@ export type RestKind = 'short' | 'long';
 
 /** Expires effects and refreshes limited-use abilities for a rest. */
 export function applyRest(c: CharacterSheet, kind: RestKind): void {
+  for (const card of [...c.loadout, ...c.vault]) clearBorrowedCard(c, card);
   if (kind === 'long') returnCompanion(c);
   syncResources(c);
   const restResources = [...new Map([
@@ -1070,6 +1085,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (action.deathMove && (c.hp.on < c.hp.slots || c.pendingDeathRoll)) return 'Requires all HP marked and no pending death recovery';
   if (context !== 'rest' && isRestOnlyAction(action) && !action.ancestryChoice) return 'Choose this move in the rest dialog';
   if (action.requiresEffect && !c.effects.some((e) => e.name === action.requiresEffect)) return 'Required effect is not active';
+  if (action.excludesEffect && c.effects.some(e => e.name === action.excludesEffect)) return 'Effect is already active';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return noUsesLeftText(a.uses?.per);
@@ -1278,7 +1294,8 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
   if (t.weaponRanges && !activeWeapons(c).some(w => w.name === ctx.weapon && t.weaponRanges!.some(range => range.toLowerCase() === w.range.toLowerCase()))) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
-  if (t.on !== 'any' && t.on !== 'duality' && !ctx.source.split(',').includes(t.on)) return false;
+  if (t.on === 'trait' && !targets.some(target => target.startsWith('trait:'))) return false;
+  if (t.on !== 'any' && t.on !== 'duality' && t.on !== 'trait' && !targets.includes(t.on)) return false;
   if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
   if (t.weapon && t.weapon !== ctx.weapon) return false;
   if (t.weaponAttack && (!ctx.weapon || !ctx.source.split(',').includes('attack'))) return false;
@@ -1310,8 +1327,7 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation })),
     ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
-    ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
-    ...c.loadout.flatMap(d => (d.spells ?? []).map(s => ({ key: `card:${d.name}/${s.name}`, name: s.name, auto: s.automation }))),
+    ...activeCardSources(c),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];

@@ -29,6 +29,37 @@ const run = (c: CharacterSheet, input: Partial<DamageInput>, roll = fixed(1)) =>
 const feat = (name: string, category = 'ancestries') => ({ source: 'test', name, text: '', automation: rules(category, name) });
 
 describe('damage calculation', () => {
+  it('adds Never Upstaged tokens only for confirmed actual HP marks and pays Stress once', () => {
+    const { c, severe } = setup(c => {
+      c.loadout = [{ name: 'Never Upstaged', domain: 'Grace', type: 'Ability', level: 6, recall: 2, text: '',
+        automation: rules('domain-cards', 'Never Upstaged') }];
+      c.resources = { upstaged: 2 };
+      c.hp.on = c.hp.slots - 2;
+    });
+    const option = availableMitigations(c).find(m => m.option.gainTokens)!;
+    const preview = run(c, { damage: severe, selected: new Set([option.id]) });
+    expect(c.resources!.upstaged).toBe(2);
+    expect(c.stress.on).toBe(0);
+    expect(applyDamage(c, preview, 'physical')).toContain('gained 2 Never Upstaged tokens');
+    expect(c.resources!.upstaged).toBe(4);
+    expect(c.stress.on).toBe(1);
+  });
+
+  it('blocks a missing token pool before applying mitigation payments or HP', () => {
+    const { c } = setup(c => {
+      c.features = [{ source: 'test', name: 'Tokens', text: '', automation: {
+        resources: [{ id: 'tokens', label: 'Tokens', initial: 0 }],
+        mitigation: [{ id: 'gain', label: 'Gain tokens', cost: { stress: 1 }, gainTokens: { resource: 'tokens' } }],
+      } }];
+    });
+    const option = availableMitigations(c)[0];
+    const preview = run(c, { damage: 1, selected: new Set([option.id]) });
+    c.features[0].automation!.resources = [];
+    expect(applyDamage(c, preview, 'physical')).toBeNull();
+    expect(c.hp.on).toBe(0);
+    expect(c.stress.on).toBe(0);
+  });
+
   const shield = (c: CharacterSheet) => {
     const a = rules('domain-cards', 'Shield Aura');
     runAction(c, 'card:Shield Aura', a, a.actions![0], 'Shield Aura');

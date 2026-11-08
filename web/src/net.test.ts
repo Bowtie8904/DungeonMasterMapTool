@@ -16,8 +16,8 @@ it('negotiates death option capability additively and clears it on reconnect to 
     constructor() { sockets.push(this); }
     send(): void {}
     close(): void {}
-    hello(expanded?: boolean, domainV2 = expanded): void {
-      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded, brawlerRolls: expanded, druidAutomation: expanded, guardianRolls: expanded, warlockAutomation: expanded, witchAutomation: expanded, domainCardAutomation: expanded, domainCardAutomationV2: domainV2 }) });
+    hello(expanded?: boolean, domainV3 = expanded): void {
+      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded, brawlerRolls: expanded, druidAutomation: expanded, guardianRolls: expanded, warlockAutomation: expanded, witchAutomation: expanded, domainCardAutomation: expanded, domainCardAutomationV2: expanded, domainCardAutomationV3: domainV3 }) });
     }
   }
   vi.stubGlobal('WebSocket', FakeSocket);

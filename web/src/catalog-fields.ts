@@ -68,7 +68,7 @@ export const FIELD_HELP: Record<string, string> = {
   effect: 'Effect added to the character’s Effects tab, with its own name, text, duration and mechanics.',
   until: 'Effect lifetime. manual needs removal; rest durations expire on matching rests; scene/session use DM commands.',
   unique: 'Replace previous effects with this name rather than stack copies.',
-  target: 'actor selects one character; party targets connected players’ characters; allActors includes offline player-owned sheets.',
+  target: 'actor selects one connected character; anyActor selects one actor including offline sheets; party targets connected players’ characters; allActors includes offline player-owned sheets.',
   requiresFeature: 'Exact learned feature name required for this action or option.',
   excludesFeature: 'Hide this action or option while the named feature is learned.',
   requiresEffect: 'Exact active effect name required.',

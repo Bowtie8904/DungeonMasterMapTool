@@ -118,6 +118,12 @@ public final class OnlineSessionServer {
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
     private final Map<String, LoginClaim> loginClaims = new java.util.HashMap<>();
     private final Set<String> sessionRolls = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Map<String, ObjectNode> invisibilityRolls = new java.util.LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, ObjectNode> eldest) {
+            return size() > 512;
+        }
+    };
 
     private record LoginClaim(String token, long expiresAt) {
     }
@@ -243,6 +249,7 @@ public final class OnlineSessionServer {
         javalin.post("/api/login", this::handleLogin);
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/sheet/{id}", this::handleSheet);
+        javalin.get("/api/copycat/{id}", this::handleCopycatCandidates);
         javalin.put("/api/sheet/{id}", this::handleSheetSave);
         javalin.post("/api/feature", this::handleFeature);
         javalin.post("/api/death-move", this::handleDeathMove);
@@ -419,6 +426,18 @@ public final class OnlineSessionServer {
                 files.add(CatalogEditor.read(directory, category).file());
         }
         CatalogSheets.refresh(sheet, files);
+        for (String location : List.of("loadout", "vault"))
+            for (JsonNode node : sheet.path(location)) {
+                if (!(node instanceof ObjectNode card) || !"Copycat".equals(card.path("name").asText())
+                        || !card.path("borrowedCard").isObject()) continue;
+                ObjectNode borrowed = (ObjectNode) card.path("borrowedCard");
+                JsonNode definition = catalogDomainCard(borrowed.path("card").path("name").asText());
+                if (definition == null) { CopycatCards.clear(sheet, card); continue; }
+                ObjectNode canonical = CopycatCards.prepare(definition, sheet);
+                if (borrowed.path("card").has("banishDifficulty"))
+                    canonical.set("banishDifficulty", borrowed.path("card").get("banishDifficulty"));
+                borrowed.set("card", canonical);
+            }
     }
 
     private JsonNode compendiumDocument(String category) throws IOException {
@@ -1076,6 +1095,7 @@ public final class OnlineSessionServer {
             if (grant != null) {
                 String path = ctx.path();
                 if (path.equals("/api/sheet/" + grant.actorId())
+                        || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
                     return grant.ownerId();
@@ -1309,6 +1329,7 @@ public final class OnlineSessionServer {
                 json(ctx, 409, conflict);
                 return;
             }
+            CopycatCards.preserveSave((ObjectNode) sheet, previous);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
             if (problem != null) {
                 json(ctx, 403, errorBody(problem));
@@ -1318,6 +1339,7 @@ public final class OnlineSessionServer {
             refreshCatalogSheet(saved);
             validateDeathSave(saved, previous);
             WitchEffects.validateSave(saved, previous);
+            InvisibilityEffects.validateSave(saved, previous);
             if (!saved.has("scars") && previous.has("scars"))
                 saved.set("scars", previous.get("scars"));
             JsonNode scars = saved.path("scars");
@@ -1431,6 +1453,14 @@ public final class OnlineSessionServer {
                 if (automation != null && automation.path("deathMove").isObject())
                     sources.add(new DeathMoves.Source(kind + ":" + name, name, automation, entry));
             }
+        }
+        JsonNode copycat = CopycatCards.activeCard(sheet, "Copycat");
+        if (copycat != null && copycat.path("borrowedCard").isObject()) {
+            String name = copycat.path("borrowedCard").path("card").path("name").asText();
+            String key = "card:Copycat/" + name;
+            JsonNode borrowed = featureSource(sheet, key);
+            if (borrowed.path("automation").path("deathMove").isObject())
+                sources.add(new DeathMoves.Source(key, name, borrowed.path("automation"), copycat));
         }
         return sources;
     }
@@ -1551,6 +1581,85 @@ public final class OnlineSessionServer {
         }
     }
 
+    private synchronized void handleCopycatCandidates(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        try {
+            Campaign.Actor borrower = ownedActor(playerId, ctx.pathParam("id"));
+            ObjectNode own = storedSheet(borrower.getId());
+            if (CopycatCards.activeCard(own, "Copycat") == null)
+                throw new IllegalArgumentException("Copycat must be in your active loadout.");
+            Map<String, ObjectNode> unique = new java.util.TreeMap<>();
+            for (Campaign.Actor actor : campaign.getActors()) {
+                if (actor.getId().equals(borrower.getId())) continue;
+                for (JsonNode loaded : storedSheet(actor.getId()).path("loadout")) {
+                    String name = loaded.path("name").asText();
+                    JsonNode catalog = catalogDomainCard(name);
+                    if (catalog == null || "Copycat".equals(name) || catalog.path("level").asInt() < 1 || catalog.path("level").asInt() > 8) continue;
+                    ObjectNode candidate = MAPPER.createObjectNode().put("actorId", actor.getId()).put("actorName", actor.getName());
+                    ObjectNode card = CopycatCards.prepare(catalog, own);
+                    // Candidates display ordinary rules; the embedded rules are namespaced only on activation.
+                    card.set("automation", catalog.path("automation"));
+                    if (catalog.has("spells")) card.set("spells", catalog.path("spells"));
+                    candidate.set("card", card);
+                    unique.putIfAbsent(name, candidate);
+                }
+            }
+            ArrayNode cards = MAPPER.createArrayNode();
+            unique.values().stream().sorted(java.util.Comparator.comparingInt(card -> card.path("card").path("level").asInt()))
+                    .forEach(cards::add);
+            ObjectNode response = MAPPER.createObjectNode();
+            response.set("cards", cards);
+            ctx.header("Cache-Control", "no-store");
+            json(ctx, 200, response);
+        } catch (IllegalArgumentException e) { json(ctx, 400, errorBody(e.getMessage())); }
+        catch (IOException e) { json(ctx, 500, errorBody("Could not load Copycat candidates.")); }
+    }
+
+    private void copycatAction(JsonNode request, Campaign.Actor borrower, ObjectNode sheet, String key,
+                               JsonNode automation, JsonNode definition) throws IOException {
+        if (!"card:Copycat".equals(key) || request.has("roll"))
+            throw new IllegalArgumentException("Choose a card using Copycat on your character sheet.");
+        JsonNode cardNode = CopycatCards.activeCard(sheet, "Copycat");
+        if (!(cardNode instanceof ObjectNode copycat))
+            throw new IllegalArgumentException("Copycat must be in your active loadout.");
+        Campaign.Actor source = campaign.actor(request.path("copyActorId").asText());
+        String name = request.path("copyCardName").asText();
+        if (source == null || source.getId().equals(borrower.getId()) || "Copycat".equals(name))
+            throw new IllegalArgumentException("Choose a domain card from another actor's active loadout.");
+        if (CopycatCards.activeCard(storedSheet(source.getId()), name) == null)
+            throw new IllegalArgumentException("The source has vaulted or removed that card. Choose again.");
+        JsonNode catalog = catalogDomainCard(name);
+        if (catalog == null) throw new IllegalArgumentException("The copied card is no longer in the domain catalog.");
+        int hope = CopycatCards.cost(catalog.path("level").asInt());
+        applyFeatureCost(sheet, MAPPER.createObjectNode().put("hope", hope));
+        JsonNode uses = definition.has("uses") ? definition.path("uses") : automation.path("uses");
+        if (!uses.isObject() || uses.path("max").asInt() != 1 || !"longRest".equals(uses.path("per").asText()))
+            throw new IllegalArgumentException("Copycat requires its once-per-long-rest catalog limit.");
+        useFeatureLimit(sheet, key, uses);
+        CopycatCards.clear(sheet, copycat);
+        ObjectNode embedded = CopycatCards.prepare(catalog, sheet);
+        ObjectNode borrowed = copycat.putObject("borrowedCard").put("sourceActorId", source.getId()).put("sourceActorName", source.getName());
+        borrowed.set("card", embedded);
+        List<JsonNode> copiedSources = new ArrayList<>();
+        copiedSources.add(embedded);
+        embedded.path("spells").forEach(copiedSources::add);
+        for (JsonNode copiedSource : copiedSources)
+            for (JsonNode resource : copiedSource.path("automation").path("resources")) {
+                String id = resource.path("id").asText();
+                int initial = Math.max(0, featureAmount(resource.path("initial"), sheet));
+                sheet.withObject("/resources").put(id, initial);
+            }
+        sheet.put("compendiumRevision", sheet.path("compendiumRevision").asLong() + 1);
+        ObjectNode report = chatMessage(borrower.getOwnerId(), campaign.player(borrower.getOwnerId()).getName(), null,
+                "ACTION USED\nCopycat - " + name + "\n" + borrower.getName() + "\n• Spent " + hope
+                        + " Hope and the once-per-long-rest use. Copied from " + source.getName()
+                        + "; ends on any rest or when that actor vaults the original card.");
+        commitFeatureSheets(Map.of(borrower.getId(), sheet), report, true);
+        sendFeatureState(borrower, sheet);
+        deliver(report, null, false);
+    }
+
     private synchronized void handleFeature(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) return;
@@ -1589,6 +1698,11 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            if (definition.path("copycat").asBoolean()) {
+                copycatAction(request, sourceActor, sourceSheet, key, automation, definition);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             boolean conditionalTrigger = false;
             if (hasRoll) for (JsonNode trigger : automation.path("conditionalRollTriggers"))
                 if (actionId.equals(trigger.path("id").asText())) conditionalTrigger = true;
@@ -1609,7 +1723,7 @@ public final class OnlineSessionServer {
             }
             if (definition.path("automatic").asBoolean())
                 throw new IllegalArgumentException("This feature resolves automatically when its roll is made.");
-            if (definition.path("vaultSource").asBoolean() && (!hasRoll || !key.startsWith("card:") || key.contains("/")))
+            if (definition.path("vaultSource").asBoolean() && (!hasRoll || !key.startsWith("card:") || key.contains("/") && !key.startsWith("card:Copycat/")))
                 throw new IllegalArgumentException("Vaulting requires this card's successful reaction roll.");
             if (definition.path("choices").isArray()) {
                 JsonNode choice = null;
@@ -1642,8 +1756,8 @@ public final class OnlineSessionServer {
             boolean lifeWard = "lifeWard".equals(automation.path("deathMove").path("kind").asText());
             List<Campaign.Actor> targets;
             if (lifeWard) {
-                if (!sourceSheet.path("loadout").isArray() || java.util.stream.StreamSupport.stream(sourceSheet.path("loadout").spliterator(), false)
-                        .noneMatch(card -> source.path("name").asText().equals(card.path("name").asText())))
+                if (!key.startsWith("card:Copycat/") && (!sourceSheet.path("loadout").isArray() || java.util.stream.StreamSupport.stream(sourceSheet.path("loadout").spliterator(), false)
+                        .noneMatch(card -> source.path("name").asText().equals(card.path("name").asText()))))
                     throw new IllegalArgumentException("Life Ward must be in the active loadout.");
                 Campaign.Actor target = c.actor(request.path("targetActorId").asText());
                 if (target == null || target.getOwnerId() == null || c.player(target.getOwnerId()) == null
@@ -1659,7 +1773,7 @@ public final class OnlineSessionServer {
                 ArrayNode loadout = sourceSheet.withArray("loadout");
                 int index = -1;
                 for (int i = 0; i < loadout.size(); i++)
-                    if (key.equals("card:" + loadout.get(i).path("name").asText())) index = i;
+                    if ((key.startsWith("card:Copycat/") ? "card:Copycat" : key).equals("card:" + loadout.get(i).path("name").asText())) index = i;
                 if (index < 0) throw new IllegalArgumentException("This card is no longer in your active loadout.");
                 sourceSheet.withArray("vault").add(loadout.remove(index));
                 sourceSheet.put("compendiumRevision", sourceSheet.path("compendiumRevision").asLong() + 1);
@@ -1678,6 +1792,12 @@ public final class OnlineSessionServer {
             String reportSource = source.path("name").asText(sourceActor.getName());
             DiceRoller.Result damageRoll = null;
             DiceRoller.Result banishRoll = null;
+            DiceRoller.Result utilityRoll = null;
+            if (definition.path("sendRoll").isObject()) {
+                String expression = definition.path("sendRoll").path("dice").asText()
+                        .replace("@total_proficiency", String.valueOf(featureAmount(MAPPER.getNodeFactory().textNode("@total_proficiency"), sourceSheet)));
+                utilityRoll = DiceRoller.roll(expression, config.maxDice(), diceRandom);
+            }
             if (definition.path("damage").isObject()) {
                 JsonNode damage = definition.path("damage");
                 if (!damage.path("fixed").asBoolean())
@@ -1685,6 +1805,24 @@ public final class OnlineSessionServer {
                 damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
             }
             List<String> reportLines = new ArrayList<>();
+            int fearGrant = definition.path("giveFear").asInt();
+            if (fearGrant < 0 || fearGrant > 1) throw new IllegalArgumentException("Invalid GM Fear grant.");
+            if (fearGrant > 0) reportLines.add("Gave the GM " + fearGrant + " Fear.");
+            if (definition.path("report").isObject()) {
+                JsonNode report = definition.path("report");
+                int amount = report.has("dice")
+                        ? DiceRoller.roll(report.path("dice").asText(), config.maxDice(), diceRandom).total()
+                        : report.has("amount") ? featureAmount(report.path("amount"), sourceSheet) : 0;
+                reportLines.add(report.path("text").asText().replace("{amount}", String.valueOf(Math.max(0, amount)))
+                        .replace("{result}", utilityRoll == null ? "" : String.valueOf(utilityRoll.total())));
+            }
+            if (InvisibilityEffects.isCast(key, definition)) {
+                if (!hasRoll || targets.size() != 1)
+                    throw new IllegalArgumentException("Invisibility requires a successful cast and one recipient.");
+                int tokens = CharacterSheetRules.spellcastTotal(sourceSheet, c.getFear());
+                InvisibilityEffects.prepareCast(sourceSheet, key, tokens);
+                reportLines.add("Prepared " + Math.max(0, tokens) + " Invisibility tokens on the caster's card.");
+            }
             if (definition.path("banishDifficulty").asBoolean()) {
                 int count = CharacterSheetRules.spellcastTotal(sourceSheet, c.getFear());
                 if (count < 1) throw new IllegalArgumentException("Banish requires a positive Spellcast trait to roll d20s.");
@@ -1832,6 +1970,8 @@ public final class OnlineSessionServer {
                 }
                 reportLines.add("Swapped the original Hope and Fear dice; the total is unchanged.");
             }
+            if (hasRoll && definition.has("rerollDualityDie"))
+                rerollFeatureDualityDie(originalRoll, definition.path("rerollDualityDie").asText(), reportLines);
             if (hasRoll && definition.has("advanceEffect")) {
                 String name = definition.path("advanceEffect").asText();
                 ObjectNode effect = null;
@@ -1963,6 +2103,8 @@ public final class OnlineSessionServer {
                 benefitReport.put("actorId", sourceActor.getId());
                 ObjectNode claims = benefitReport.putObject("actionBenefits");
                 claims.put("sessionId", sessionId);
+                if (java.util.stream.StreamSupport.stream(benefits.spliterator(), false).anyMatch(b -> b.path("transferStress").asBoolean()))
+                    claims.put("stressCapacity", Math.max(0, sourceSheet.path("stress").path("slots").asInt() - sourceSheet.path("stress").path("on").asInt()));
                 if (definition.path("allowSourceOwner").asBoolean()) claims.put("allowSourceOwner", true);
                 claims.set("options", benefits);
                 claims.putArray("claimedBy");
@@ -1971,7 +2113,40 @@ public final class OnlineSessionServer {
                     if (hasPlayerSheet(actor) && (definition.path("allowSourceOwner").asBoolean()
                             ? !actor.getId().equals(sourceActor.getId()) : !actor.getOwnerId().equals(sourceActor.getOwnerId()))) eligible.add(actor.getId());
             }
-            commitFeatureSheets(changedSheets, benefitReport == null ? originalRoll : benefitReport, benefitReport != null);
+            if (definition.has("chatDamage") || fearGrant > 0) {
+                if (benefitReport == null)
+                    benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                benefitReport.put("actorId", sourceActor.getId());
+                if (definition.has("chatDamage")) {
+                    ObjectNode button = benefitReport.putObject("actionDamage").put("label", "Damage");
+                    button.set("damage", definition.path("chatDamage"));
+                }
+            }
+            if (fearGrant > 0) {
+                List<String> deathReports = normalizeDeathChanges(changedSheets);
+                for (ObjectNode sheet : changedSheets.values()) {
+                    sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                    if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+                        throw new IllegalArgumentException("The character sheet is too large.");
+                }
+                int fear = Math.addExact(c.getFear(), fearGrant);
+                List<ObjectNode> reports = new ArrayList<>();
+                reports.add(benefitReport);
+                if (!deathReports.isEmpty()) reports.add(deathStateMessage("dm", "DM", "Party", deathReports));
+                store.saveFearReward(c.getId(), changedSheets, originalRoll, reports, fear);
+                c.setFear(fear);
+                if (current != null) {
+                    ObjectNode next = current.deepCopy();
+                    next.put("fear", fear);
+                    publish(next, currentMapKey);
+                }
+                host.campaignChanged(c);
+                for (int i = 1; i < reports.size(); i++) deliver(reports.get(i), null, false);
+            } else if (benefitReport != null && originalRoll != null) {
+                List<String> deathReports = normalizeDeathChanges(changedSheets);
+                if (!deathReports.isEmpty()) benefitReport.put("text", benefitReport.path("text").asText() + "\n" + String.join("\n", deathReports));
+                persistFeatureSheets(changedSheets, originalRoll, false, benefitReport);
+            } else commitFeatureSheets(changedSheets, benefitReport == null ? originalRoll : benefitReport, benefitReport != null);
             if (hasRoll) broadcastRollUpdate(originalRoll);
             for (var entry : changedSheets.entrySet()) {
                 Campaign.Actor actor = c.actor(entry.getKey());
@@ -1982,6 +2157,8 @@ public final class OnlineSessionServer {
                 deliver(benefitReport, null, false);
             } else if (banishRoll != null) {
                 publishFeatureCheck(sourceActor, source, actionLabel, banishRoll, String.join(" ", reportLines));
+            } else if (utilityRoll != null) {
+                publishFeatureCheck(sourceActor, source, actionLabel, utilityRoll, String.join(" ", reportLines));
             } else if (damageRoll != null) {
                 String damageType = definition.path("damage").path("type").asText("physical");
                 ObjectNode damage = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
@@ -2077,6 +2254,7 @@ public final class OnlineSessionServer {
             if (!index.isInt() || index.asInt() < 0 || index.asInt() >= roll.path("rolls").size() || !selected.add(index.asInt()))
                 throw new IllegalArgumentException("Select distinct dice from this damage roll.");
         }
+
         ArrayNode details = roll.withArray("breakdown");
         if (details.isEmpty()) {
             ObjectNode detail = details.addObject().put("label", "Damage").put("expression", roll.path("expression").asText())
@@ -2115,6 +2293,38 @@ public final class OnlineSessionServer {
         int updatedTotal = Math.addExact(previousTotal, delta);
         roll.put("total", updatedTotal);
         reportLines.add("Damage total: " + previousTotal + " -> " + updatedTotal + ".");
+    }
+
+    private void rerollFeatureDualityDie(ObjectNode roll, String die, List<String> report) {
+        if (!"duality".equals(roll.path("kind").asText()) || !List.of("hope", "fear").contains(die))
+            throw new IllegalArgumentException("Choose a Hope or Fear die from a Duality roll.");
+        int target = "hope".equals(die) ? 0 : 1;
+        ArrayNode values = roll.withArray("rolls");
+        if (values.size() < 2) throw new IllegalArgumentException("The original Duality dice are unavailable.");
+        String expression = roll.path("expression").asText();
+        int sides = target == 0 ? expression.startsWith("1d20+") ? 20 : 12
+                : expression.matches("^1d(?:12|20)\\+1d20.*") ? 20 : 12;
+        int previous = values.get(target).asInt();
+        int replacement = DiceRoller.roll("1d" + sides, config.maxDice(), diceRandom).total();
+        int delta = replacement - previous;
+        values.set(target, MAPPER.getNodeFactory().numberNode(replacement));
+        roll.put("total", Math.addExact(roll.path("total").asInt(), delta));
+        int offset = 0;
+        for (JsonNode raw : roll.path("breakdown")) {
+            if (!(raw instanceof ObjectNode detail)) continue;
+            ArrayNode dice = detail.withArray("rolls");
+            if (target >= offset && target < offset + dice.size()) {
+                dice.set(target - offset, MAPPER.getNodeFactory().numberNode(replacement));
+                detail.put("total", detail.path("total").asInt() + delta);
+                detail.withArray("notes").addObject().put("label", "Endless Charisma")
+                        .put("impact", "Rerolled " + die + " die: " + previous + " -> " + replacement);
+            }
+            offset += dice.size();
+        }
+        int hope = values.get(0).asInt(), fear = values.get(1).asInt();
+        if (hope == fear) roll.remove("outcome");
+        else roll.put("outcome", hope > fear ? "hope" : "fear");
+        report.add("Rerolled the " + die + " die: " + previous + " -> " + replacement + ". Total: " + roll.path("total").asInt() + ".");
     }
 
     private boolean hasPlayerSheet(Campaign.Actor actor) throws IOException {
@@ -2175,12 +2385,41 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("Another ally has already accepted this action.");
         ObjectNode before = sheet.deepCopy();
         List<String> lines = new ArrayList<>();
-        applyFeatureSteps(sheet, benefit.path("steps"), benefit.path("label").asText(), actor, "", lines);
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        Campaign.Actor caster = campaign.actor(message.path("actorId").asText());
+        if (benefit.path("transferStress").asBoolean()) {
+            if (caster == null || caster.getId().equals(actor.getId()))
+                throw new IllegalArgumentException("Choose another willing creature to transfer Stress.");
+            ObjectNode casterSheet = storedSheet(caster.getId());
+            ObjectNode from = requireTrack(sheet, "stress");
+            ObjectNode to = requireTrack(casterSheet, "stress");
+            int max = Math.min(from.path("on").asInt(), Math.max(0, to.path("slots").asInt() - to.path("on").asInt()));
+            JsonNode input = request.path("amount");
+            if (!input.isInt() || input.asInt() < 1 || input.asInt() > max)
+                throw new IllegalArgumentException("Transfer a whole number from 1 to " + max + " Stress.");
+            int amount = input.asInt();
+            from.put("on", from.path("on").asInt() - amount);
+            to.put("on", to.path("on").asInt() + amount);
+            int hope = gainTrack(casterSheet, "hope", amount);
+            lines.add("Transferred " + amount + " Stress from " + actor.getName() + " to " + caster.getName()
+                    + "; " + caster.getName() + " gained " + hope + " Hope.");
+            changed.put(caster.getId(), casterSheet);
+        } else {
+            applyFeatureSteps(sheet, benefit.path("steps"), benefit.path("label").asText(),
+                    caster == null ? actor : caster, "", lines);
+        }
         if (sheet.equals(before)) throw new IllegalArgumentException("No benefit available: already at maximum Hope or nothing to clear.");
+        if (benefit.path("report").has("text")) lines.add(benefit.path("report").path("text").asText());
         claims.withArray("claimedBy").add(actor.getOwnerId());
-        commitFeatureSheets(Map.of(actor.getId(), sheet), message);
-        sendFeatureState(actor, sheet);
+        ObjectNode source = MAPPER.createObjectNode().put("name", benefit.path("label").asText());
+        ObjectNode report = actionReportMessage(actor, source, benefit.path("label").asText(), lines, null);
+        List<String> deathReports = normalizeDeathChanges(changed);
+        if (!deathReports.isEmpty()) report.put("text", report.path("text").asText() + "\n" + String.join("\n", deathReports));
+        persistFeatureSheets(changed, message, false, report);
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
         broadcastChatUpdate(message);
+        deliver(report, null, false);
     }
 
     private void rerollRestDie(JsonNode request, Campaign.Actor sourceActor, JsonNode source,
@@ -2265,6 +2504,32 @@ public final class OnlineSessionServer {
     }
 
     private JsonNode featureSource(ObjectNode sheet, String key) {
+        if (key.startsWith("card:Copycat/")) {
+            JsonNode copycat = CopycatCards.activeCard(sheet, "Copycat");
+            if (copycat == null || !copycat.path("borrowedCard").isObject())
+                throw new IllegalArgumentException("Copycat has no active copied card. Copy it again after resting.");
+            JsonNode borrowed = copycat.path("borrowedCard");
+            String name = borrowed.path("card").path("name").asText();
+            Campaign.Actor original = campaign.actor(borrowed.path("sourceActorId").asText());
+            try {
+                if (original == null || CopycatCards.activeCard(storedSheet(original.getId()), name) == null)
+                    throw new IllegalArgumentException("The copied card's source has vaulted or removed it.");
+            } catch (IOException e) { throw new FeatureIoException(e); }
+            JsonNode card = borrowed.path("card");
+            try {
+                JsonNode definition = catalogDomainCard(name);
+                if (definition == null) throw new IllegalArgumentException("The copied card is no longer in the domain catalog.");
+                ObjectNode canonical = CopycatCards.prepare(definition, sheet);
+                if (card.has("banishDifficulty")) canonical.set("banishDifficulty", card.get("banishDifficulty"));
+                ((ObjectNode) borrowed).set("card", canonical);
+                card = canonical;
+            } catch (IOException e) { throw new FeatureIoException(e); }
+            String cardKey = "card:Copycat/" + name;
+            if (key.equals(cardKey)) return card;
+            for (JsonNode spell : card.path("spells"))
+                if (key.equals(cardKey + "/" + spell.path("name").asText())) return spell;
+            throw new IllegalArgumentException("That spell is not part of the copied card.");
+        }
         int separator = key.indexOf(':');
         if (separator <= 0) throw new IllegalArgumentException("Invalid feature source.");
         String kind = key.substring(0, separator);
@@ -2343,6 +2608,7 @@ public final class OnlineSessionServer {
     }
 
     private JsonNode catalogAutomation(String key, String name, JsonNode fallback) {
+        if (key.startsWith("card:Copycat/")) return fallback;
         java.nio.file.Path directory = host.compendiumDirectory();
         if (directory == null || name.isBlank()) return fallback;
         try (var files = java.nio.file.Files.list(directory)) {
@@ -2661,7 +2927,9 @@ public final class OnlineSessionServer {
         boolean duality = "duality".equals(roll.path("kind").asText());
         if ("duality".equals(on) && !duality)
             throw new IllegalArgumentException("This feature requires a Duality roll.");
-        if (!"any".equals(on) && !"duality".equals(on) && !List.of(source.split(",")).contains(on))
+        if ("trait".equals(on) && tags.stream().noneMatch(tag -> tag.startsWith("trait:")))
+            throw new IllegalArgumentException("This feature requires a trait roll.");
+        if (!"any".equals(on) && !"duality".equals(on) && !"trait".equals(on) && !List.of(source.split(",")).contains(on))
             throw new IllegalArgumentException("This feature does not apply to that roll.");
         if ("companion".equals(on)) {
             ObjectNode sheet = storedSheet(sourceActor.getId());
@@ -2749,6 +3017,11 @@ public final class OnlineSessionServer {
             Set<String> online = new LinkedHashSet<>();
             clients.values().forEach(client -> online.add(client.playerId));
             return c.getActors().stream().filter(a -> a.getOwnerId() != null && online.contains(a.getOwnerId())).toList();
+        }
+        if ("anyActor".equals(mode)) {
+            Campaign.Actor target = c.actor(targetActorId);
+            if (target == null) throw new IllegalArgumentException("Choose an existing actor as the target.");
+            return List.of(target);
         }
         if ("actor".equals(mode)) {
             Campaign.Actor target = c.actor(targetActorId);
@@ -2860,7 +3133,7 @@ public final class OnlineSessionServer {
                 effect.put("sourceActorId", sourceActor.getId());
                 effect.put("sourceKey", sourceKey);
                 sheet.withArray("effects").add(effect);
-                report.add("Gained " + name + ".");
+                report.add("Gained " + name + "." + (effect.path("text").asText().isBlank() ? "" : " " + effect.path("text").asText()));
             }
 
         }
@@ -2917,6 +3190,7 @@ public final class OnlineSessionServer {
                 return DiceRoller.roll(text, config.maxDice(), diceRandom).total();
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
             if ("@proficiency".equals(text)) return Math.max(0, sheet.path("proficiency").path("on").asInt());
+            if ("@total_proficiency".equals(text)) return CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear());
             if ("@spellcast".equals(text)) {
                 return CharacterSheetRules.spellcastTotal(sheet, campaign.getFear());
             }
@@ -3055,7 +3329,11 @@ public final class OnlineSessionServer {
             if (!warriors.containsKey(actor.getId()) && store.loadSheet(campaign.getId(), actor.getId()) != null)
                 warriors.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
         warriors.forEach((id, sheet) -> before.putIfAbsent(id, sheet.deepCopy()));
+        Map<String, ObjectNode> previousCopycatParty = new java.util.LinkedHashMap<>();
+        for (String id : warriors.keySet()) previousCopycatParty.put(id, storedSheet(id));
+        CopycatCards.synchronize(warriors, previousCopycatParty);
         WarriorAutomation.synchronizeDowntime(warriors);
+        InvisibilityEffects.synchronize(warriors);
         warriors.forEach((id, sheet) -> {
             if (!sheet.equals(before.get(id))) changes.put(id, sheet);
         });
@@ -3870,6 +4148,7 @@ public final class OnlineSessionServer {
             hello.put("witchAutomation", true);
             hello.put("domainCardAutomation", true);
             hello.put("domainCardAutomationV2", true);
+            hello.put("domainCardAutomationV3", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -4182,7 +4461,12 @@ public final class OnlineSessionServer {
         else if (player != null) out.put("to", chatName(to, player.getName()));
     }
 
-    private void onRoll(Client client, JsonNode msg) {
+    private synchronized void onRoll(Client client, JsonNode msg) {
+        String invisibilityRef = invisibilityRollRef(client, msg);
+        if (invisibilityRef != null && invisibilityRolls.containsKey(invisibilityRef)) {
+            sendTo(client.ctx, invisibilityRolls.get(invisibilityRef).toString());
+            return;
+        }
         DiceRoller.Result result;
         ObjectNode rollSource;
         List<DiceRoller.Detail> breakdown = null;
@@ -4311,7 +4595,8 @@ public final class OnlineSessionServer {
         for (String hint : new String[]{"ref", "actorId", "source", "weapon"}) {
             String value = msg.path(hint).asText("").strip();
             if (!value.isEmpty()) {
-                out.put(hint, value.length() > 80 ? value.substring(0, 80) : value);
+                int maxLength = "source".equals(hint) ? 4096 : 80;
+                out.put(hint, value.length() > maxLength ? value.substring(0, maxLength) : value);
             }
         }
         if ("duality".equals(msg.path("kind").asText("")) && result.expression().matches("^(?:2d12|1d(?:12|20)\\+1d(?:12|20))(?:[+-](?:\\d*d\\d+|\\d+))*$")) {
@@ -4325,6 +4610,7 @@ public final class OnlineSessionServer {
         sessionRolls.add(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
         try {
             boolean persisted = applyAutomaticFeatureTriggers(client, out);
+            if (persisted && invisibilityRef != null) invisibilityRolls.put(invisibilityRef, out.deepCopy());
             deliver(out, to, !persisted);
         } catch (IOException | IllegalArgumentException e) {
             sessionRolls.remove(rollKey(out.path("id").asLong(), out.path("ts").asLong()));
@@ -4335,11 +4621,48 @@ public final class OnlineSessionServer {
     private synchronized boolean applyAutomaticFeatureTriggers(Client client, ObjectNode roll) throws IOException {
         if (!"duality".equals(roll.path("kind").asText())) return false;
         Campaign.Actor actor = campaign.actor(roll.path("actorId").asText());
-        if (actor == null || !client.playerId.equals(actor.getOwnerId())) return false;
+        boolean linkedTokens = roll.path("source").asText().contains("option:effect:");
+        if (actor == null || !client.playerId.equals(actor.getOwnerId())) {
+            if (linkedTokens) throw new IllegalArgumentException("Only the recipient's owner can spend Invisibility tokens.");
+            return false;
+        }
         ObjectNode sheet = storedSheet(actor.getId());
         boolean changed = false;
+        Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
+        changedSheets.put(actor.getId(), sheet);
+        if (linkedTokens) {
+            Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
+            Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
+            for (Campaign.Actor candidate : campaign.getActors()) {
+                if (!candidate.getId().equals(actor.getId()) && store.loadSheet(campaign.getId(), candidate.getId()) == null) continue;
+                ObjectNode other = candidate.getId().equals(actor.getId()) ? sheet : storedSheet(candidate.getId());
+                party.put(candidate.getId(), other);
+                before.put(candidate.getId(), other.deepCopy());
+            }
+            changed = InvisibilityEffects.spendSelected(party, actor.getId(), roll);
+            party.forEach((id, other) -> {
+                if (!other.equals(before.get(id))) changedSheets.put(id, other);
+            });
+        }
         List<String> tags = List.of(roll.path("source").asText("").split(","));
         if (tags.contains("spellcast")) {
+            for (String tag : tags) {
+                if (!tag.startsWith("card:Copycat/")) continue;
+                JsonNode copiedSource = featureSource(sheet, tag);
+                JsonNode automation = copiedSource.path("automation");
+                if (!automation.path("automaticRestUse").asBoolean()) continue;
+                JsonNode difficulty = automation.path("spellcastDifficulty");
+                if (!difficulty.isInt() || !automation.path("uses").isObject())
+                    throw new IllegalArgumentException("Invalid copied spell difficulty or rest limit.");
+                roll.put("difficulty", difficulty.asInt());
+                int hope = roll.path("rolls").path(0).asInt();
+                int fear = roll.path("rolls").path(1).asInt();
+                if (!automation.path("automaticRestUseOnAttempt").asBoolean()
+                        && hope != fear && roll.path("total").asDouble() < difficulty.asDouble()) continue;
+                useFeatureLimit(sheet, tag, automation.path("uses"));
+                roll.withArray("featureUses").add(actor.getId() + ":" + tag + ":automaticRestUse");
+                changed = true;
+            }
             for (String tag : tags) {
                 if (!tag.startsWith("card:")) continue;
                 String bookName = tag.substring("card:".length());
@@ -4350,6 +4673,8 @@ public final class OnlineSessionServer {
                 if (present) continue;
                 JsonNode catalogCard = catalogDomainCard(bookName);
                 if (catalogCard == null) continue;
+                if (catalogCard.path("automation").path("automaticRestUse").asBoolean())
+                    throw new IllegalArgumentException("This spell must be in your active loadout.");
                 for (JsonNode spell : catalogCard.path("spells"))
                     if (tags.contains("card:" + spell.path("name").asText())
                             && spell.path("automation").path("automaticRestUse").asBoolean())
@@ -4360,7 +4685,10 @@ public final class OnlineSessionServer {
                 if (!tags.contains("card:" + bookName)) continue;
                 JsonNode catalogCard = catalogDomainCard(bookName);
                 JsonNode spells = catalogCard == null ? card.path("spells") : catalogCard.path("spells");
-                for (JsonNode spell : spells) {
+                List<JsonNode> trackedSources = new ArrayList<>();
+                trackedSources.add(catalogCard == null ? card : catalogCard);
+                spells.forEach(trackedSources::add);
+                for (JsonNode spell : trackedSources) {
                     String spellName = spell.path("name").asText();
                     if (!tags.contains("card:" + spellName)) continue;
                     JsonNode automation = spell.path("automation");
@@ -4373,8 +4701,9 @@ public final class OnlineSessionServer {
                     roll.put("difficulty", difficulty.asInt());
                     int hope = roll.path("rolls").path(0).asInt();
                     int fear = roll.path("rolls").path(1).asInt();
-                    if (hope != fear && roll.path("total").asDouble() < difficulty.asDouble()) continue;
-                    String key = "card:" + bookName + "/" + spellName;
+                    if (!automation.path("automaticRestUseOnAttempt").asBoolean()
+                            && hope != fear && roll.path("total").asDouble() < difficulty.asDouble()) continue;
+                    String key = "card:" + bookName + (spellName.equals(bookName) ? "" : "/" + spellName);
                     useFeatureLimit(sheet, key, automation.path("uses"));
                     roll.withArray("featureUses").add(actor.getId() + ":" + key + ":automaticRestUse");
                     changed = true;
@@ -4415,9 +4744,16 @@ public final class OnlineSessionServer {
             }
         }
         if (!changed) return false;
-        commitFeatureSheets(Map.of(actor.getId(), sheet), roll, true);
-        sendFeatureState(actor, sheet);
+        commitFeatureSheets(changedSheets, roll, true);
+        for (var entry : changedSheets.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
         return true;
+    }
+
+    private String invisibilityRollRef(Client client, JsonNode request) {
+        if (!request.path("source").asText().contains("option:effect:")) return null;
+        String ref = request.path("ref").asText();
+        if (ref.isBlank() || ref.length() > 80) return null;
+        return sessionId + ":" + client.playerId + ":" + request.path("actorId").asText() + ":" + ref;
     }
 
     private JsonNode catalogDomainCard(String name) throws IOException {

@@ -135,7 +135,7 @@ export class Connection {
         this.sorcererAutomation = msg.sorcererAutomation === true;
         this.warlockAutomation = msg.warlockAutomation === true;
         this.witchAutomation = msg.witchAutomation === true;
-        this.domainCardAutomation = msg.domainCardAutomationV2 === true;
+        this.domainCardAutomation = msg.domainCardAutomationV3 === true;
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;

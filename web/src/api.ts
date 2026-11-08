@@ -117,6 +117,8 @@ export interface FeatureRequest {
   key: string;
   actionId: string;
   targetActorId?: string;
+  copyActorId?: string;
+  copyCardName?: string;
   confirmRange?: boolean;
   amount?: number;
   restDie?: number;

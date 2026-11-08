@@ -476,6 +476,6 @@ function fieldChoices(key: string, path: string): string[] {
     cardType: ['Ability', 'Spell', 'Grimoire'], per: ['shortRest', 'longRest', 'rest', 'scene', 'session'],
     until: ['manual', 'rest', 'shortRest', 'longRest', 'scene', 'session'],
     resetOn: ['shortRest', 'longRest', 'rest'], op: ['clear', 'gain', 'mark', 'effect'],
-    timing: ['action', 'downtime', 'rest'], target: ['actor', 'party', 'allActors'], audience: ['self', 'ally', 'any'],
+    timing: ['action', 'downtime', 'rest'], target: ['actor', 'anyActor', 'party', 'allActors'], audience: ['self', 'ally', 'any'],
   } as Record<string, string[]>)[key]?.slice() ?? [];
 }

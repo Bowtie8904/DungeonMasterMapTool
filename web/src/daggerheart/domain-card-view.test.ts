@@ -44,6 +44,25 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('disables Teleport casts on unsupported hosts and after its long-rest use is spent', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const entry = catalog.entries.find(item => item.id === 'teleport')!;
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.loadout = [{ name: entry.name, domain: 'Codex', level: 5, type: 'Spell', recall: 2,
+    text: entry.text ?? '', spellcast: 'Knowledge', automation: entry.automation }];
+  for (const [supported, spent, disabled] of [[false, false, true], [true, false, false], [true, true, true]]) {
+    c.usage = spent ? { 'card:Teleport': { used: 1, per: 'longRest' } } : {};
+    const root = renderSheetView({ character: c, onRoll: () => true, supportsDomainCardAutomation: () => supported }) as unknown as Element;
+    await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+    expect(root.querySelectorAll('button').find(button => button.text() === 'Spellcast roll')!.disabled).toBe(disabled);
+  }
+});
+
 it('displays loadout and vault cards by ascending level without reordering the sheet data', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
