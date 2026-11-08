@@ -334,6 +334,10 @@ public final class OnlineStateBuilder {
             if (image != null) {
                 node.put("image", image);
             }
+            if (actor != null && actor.getTokenArtwork() != null) {
+                node.put("shape", "circle").put("border", false);
+                node.put("color", actor.getTokenArtwork().getColor());
+            }
             if (actor != null) {
                 node.put("actorId", actor.getId());
             }

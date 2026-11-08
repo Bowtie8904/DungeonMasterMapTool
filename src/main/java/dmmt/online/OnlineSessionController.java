@@ -365,6 +365,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             return;
         }
         try {
+            if (ActorTokenArtwork.synchronize(project, campaign, store)) app.changed();
             synchronizeActorConditions(project);
             OnlineStateBuilder.Context ctx = new OnlineStateBuilder.Context(app.mapId(), app.levelId(),
                     app.mapName(), app.projectFile(), weatherSeed, current.isPaused(), app.showGrid());
@@ -719,7 +720,10 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     @Override
     public void campaignChanged(Campaign changed) {
-        Platform.runLater(app::changed);
+        Platform.runLater(() -> {
+            if (app.project() != null) ActorTokenArtwork.synchronize(app.project(), changed, store);
+            app.changed();
+        });
     }
 
     @Override

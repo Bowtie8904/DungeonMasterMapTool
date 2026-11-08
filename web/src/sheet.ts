@@ -227,6 +227,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         const actor = store.state?.actors.find(a => a.id === actorId);
         if (actor) disabled = !!actor.disabled;
         if (shown && actorsChanged) {
+          bus.artwork = actor?.artwork;
           bus.notify();
           if (changed) void changed.refresh().catch((e: Error) => report(e.message));
         }

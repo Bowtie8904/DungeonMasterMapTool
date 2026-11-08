@@ -1,4 +1,5 @@
-import { cardRequest, uploadArtwork, logout, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
+import { cardRequest, logout, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
+import { editTokenArtwork } from './token-artwork';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
@@ -1533,6 +1534,10 @@ export class App {
     for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
     if (changedStatus.length) this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
     for (const a of mine) void this.ensureSheet(a).then(handle => {
+      if (handle.bus.artwork !== a.artwork) {
+        handle.bus.artwork = a.artwork;
+        handle.bus.notify(false);
+      }
       this.syncTokenConditionEffects(a, handle);
       this.scheduleEffects();
     }).catch(() => { /* reported when the sheet is opened */ });
@@ -1543,21 +1548,22 @@ export class App {
         const img = el('img', { class: 'art', alt: '' });
         if (a.artwork) img.src = a.artwork;
         const err = el('div', { class: 'error small' });
-        const file = el('input', { type: 'file', accept: 'image/*', class: 'hidden' });
-        file.addEventListener('change', async () => {
-          const f = file.files?.[0];
-          if (!f) return;
-          err.textContent = 'Uploading...';
+        const canEdit = () => {
+          const actor = this.myActors.find(actor => actor.id === a.id);
+          return !!actor && !actor.disabled;
+        };
+        const up = el('button', { disabled: !!a.disabled }, 'Customize token');
+        up.addEventListener('click', async () => {
+          up.disabled = true;
           try {
-            await uploadArtwork(a.id, f);
+            const artwork = await editTokenArtwork(a.id, canEdit);
+            if (artwork) img.src = artwork;
             err.textContent = '';
           } catch (e) {
             err.textContent = (e as Error).message;
           }
-          file.value = '';
+          finally { up.disabled = !canEdit(); }
         });
-        const up = el('button', { disabled: !!a.disabled }, 'Upload artwork');
-        up.addEventListener('click', () => file.click());
         const open = el('button', { class: 'primary' }, 'Open sheet');
         open.addEventListener('click', () => this.openSheet(a));
         const pop = el('button', {}, 'Pop out sheet');
@@ -1568,7 +1574,7 @@ export class App {
           name.classList.add('link');
           name.addEventListener('click', () => this.view.focus(find));
         }
-        return el('div', { class: 'actor' }, img, el('div', { class: 'grow' }, name, el('div', { class: 'row' }, up), el('div', { class: 'row' }, open, pop), err, file));
+        return el('div', { class: 'actor' }, img, el('div', { class: 'grow' }, name, el('div', { class: 'row' }, up), el('div', { class: 'row' }, open, pop), err));
       }),
     );
   }

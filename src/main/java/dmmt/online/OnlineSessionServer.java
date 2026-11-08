@@ -237,7 +237,7 @@ public final class OnlineSessionServer {
         sessionRolls.clear();
         Javalin javalin = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
-            cfg.http.maxRequestSize = 9L * 1024 * 1024;
+            cfg.http.maxRequestSize = 12L * 1024 * 1024;
             cfg.jetty.modifyWebSocketServletFactory(factory -> factory.setMaxTextMessageSize(config.maxMessageBytes()));
             cfg.staticFiles.add(files -> {
                 files.directory = "/web";
@@ -289,6 +289,7 @@ public final class OnlineSessionServer {
         javalin.post("/api/dm/compendium/add", ctx -> handleDmCompendiumAction(ctx, false));
         javalin.post("/api/dm/compendium/link", ctx -> handleDmCompendiumAction(ctx, true));
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
+        javalin.get("/api/actors/{id}/artwork", this::handleArtworkSettings);
         javalin.get("/a/{name}", this::handleAsset);
         javalin.get("/t/{key}/{level}/{tile}", this::handleTile);
         javalin.get("/sheet/{id}", this::serveIndex);
@@ -4169,7 +4170,30 @@ public final class OnlineSessionServer {
         }
     }
 
-    private void handleArtwork(Context ctx) {
+    private synchronized void handleArtworkSettings(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null) return;
+        Campaign.Actor actor = campaign == null ? null : campaign.actor(ctx.pathParam("id"));
+        if (actor == null || !playerId.equals(actor.getOwnerId())) {
+            json(ctx, 403, errorBody("Not your actor"));
+            return;
+        }
+        Campaign.ActorArtwork art = actor.getTokenArtwork();
+        boolean dm = ctx.header("Authorization") != null && ctx.header("Authorization").startsWith("Bearer ");
+        Campaign.Player player = campaign.player(playerId);
+        ObjectNode result = MAPPER.createObjectNode();
+        result.put("color", art == null ? dm ? campaign.getDmColor() : player.getColor() : art.getColor());
+        result.put("sizeTiles", art == null ? 1 : art.getSizeTiles());
+        result.put("zoom", art == null ? 1 : art.getZoom());
+        result.put("centerX", art == null ? .5 : art.getCenterX());
+        result.put("centerY", art == null ? .5 : art.getCenterY());
+        String source = art == null ? actor.getArtwork() : art.getSource();
+        if (source != null) result.put("source", assets.artworkUrl(campaign.getId(), source));
+        ctx.header("Cache-Control", "no-store");
+        json(ctx, 200, result);
+    }
+
+    private synchronized void handleArtwork(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) {
             return;
@@ -4180,13 +4204,40 @@ public final class OnlineSessionServer {
             json(ctx, 403, errorBody("Not your actor"));
             return;
         }
+        String previous = actor.getArtwork();
+        Campaign.ActorArtwork previousSettings = actor.getTokenArtwork();
         try {
-            String hash = store.storeArtwork(c.getId(), ctx.bodyAsBytes());
+            String hash;
+            Campaign.ActorArtwork settings = null;
+            if (ctx.contentType() != null && ctx.contentType().startsWith("application/json")) {
+                JsonNode request = MAPPER.readTree(ctx.body());
+                if (request == null || !request.isObject()) throw new IOException("Invalid token artwork request.");
+                settings = MAPPER.treeToValue(request, Campaign.ActorArtwork.class);
+                ActorTokenArtwork.validate(settings);
+                String source = previousSettings == null ? previous : previousSettings.getSource();
+                if (request.has("image")) {
+                    String image = request.path("image").asText();
+                    if (!image.startsWith("data:image/") || !image.contains(";base64,"))
+                        throw new IOException("Choose or paste an image.");
+                    byte[] bytes;
+                    try { bytes = Base64.getDecoder().decode(image.substring(image.indexOf(";base64,") + 8)); }
+                    catch (IllegalArgumentException ex) { throw new IOException("Invalid image encoding.", ex); }
+                    source = store.storeArtwork(c.getId(), bytes);
+                }
+                if (source == null) throw new IOException("Choose or paste an image.");
+                settings.setSource(source);
+                hash = store.storeArtwork(c.getId(), ActorTokenArtwork.render(store.artworkPath(c.getId(), source), settings));
+            } else {
+                hash = store.storeArtwork(c.getId(), ctx.bodyAsBytes());
+            }
             actor.setArtwork(hash);
+            actor.setTokenArtwork(settings);
             store.save(c);
             host.campaignChanged(c);
             json(ctx, 200, MAPPER.createObjectNode().put("artwork", assets.artworkUrl(c.getId(), hash)));
         } catch (IOException e) {
+            actor.setArtwork(previous);
+            actor.setTokenArtwork(previousSettings);
             json(ctx, 400, errorBody(e.getMessage() == null ? "Invalid image" : e.getMessage()));
         }
     }

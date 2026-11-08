@@ -93,6 +93,33 @@ export async function uploadArtwork(actorId: string, file: File): Promise<string
   return data.artwork;
 }
 
+export interface TokenArtworkSettings {
+  source?: string;
+  color: string;
+  sizeTiles: number;
+  zoom: number;
+  centerX: number;
+  centerY: number;
+}
+
+export function tokenArtwork(actorId: string): Promise<TokenArtworkSettings>;
+export function tokenArtwork(actorId: string, settings: TokenArtworkSettings & { image?: string }): Promise<{ artwork: string }>;
+export async function tokenArtwork(actorId: string, settings?: TokenArtworkSettings & { image?: string }): Promise<TokenArtworkSettings | { artwork: string }> {
+  const res = await hostFetch(`/api/actors/${encodeURIComponent(actorId)}/artwork`, {
+    credentials: 'same-origin',
+    ...(settings ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) } : {}),
+  });
+  if (res.status === 404 || res.status === 405) throw new ApiError('Update the host to customize character tokens.', res.status);
+  if (!res.ok) throw await readError(res);
+  const data = await res.json() as TokenArtworkSettings & { artwork?: string };
+  if (settings ? typeof data.artwork !== 'string' || !data.artwork
+    : typeof data.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(data.color)
+      || ![data.sizeTiles, data.zoom, data.centerX, data.centerY].every(Number.isFinite))
+    throw new Error('The host returned invalid character token settings.');
+  if (settings && data.artwork) return { artwork: data.artwork };
+  return data;
+}
+
 export interface SheetData {
   version?: string;
   testingCharacter?: boolean;

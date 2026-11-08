@@ -373,6 +373,11 @@ dialog.dh-sorcerer-dialog::backdrop { background: rgba(0,0,0,.6); }
 .dh .portrait-edit-indicator { position: absolute; inset: auto 0 0; padding: 6px 2px; text-align: center; background: #10151de6; color: #fff; font-size: 12px; opacity: 0; }
 .dh .editable-portrait:hover .portrait-edit-indicator, .dh .editable-portrait:focus-visible .portrait-edit-indicator { opacity: 1; }
 .dh .portrait-error { display: block; font-size: 11px; overflow-wrap: anywhere; }
+.token-artwork-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.token-artwork-dialog canvas { display: block; margin: 12px auto; max-width: 100%; height: auto; touch-action: none; cursor: grab; }
+.token-artwork-dialog input[type="number"] { width: 90px; }
+.token-artwork-dialog input[type="range"] { width: 100%; }
+.token-artwork-dialog .row, .token-artwork-dialog .acts { flex-wrap: wrap; }
 .dh .name input { width: min(100%, 300px); font: inherit; }
 .dh .trait input.md { width: 76px; max-width: 100%; text-align: center; padding: 2px; }
 .dh .v-e input { width: 100%; padding: 2px 0; text-align: center; }

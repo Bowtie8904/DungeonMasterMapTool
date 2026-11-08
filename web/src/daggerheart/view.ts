@@ -1,6 +1,6 @@
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
-import { uploadArtwork } from '../api';
+import { editTokenArtwork } from '../token-artwork';
 import { chooseTalismanHope } from './witch-view';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
@@ -60,16 +60,17 @@ export interface RollRequest {
 
 /** Lets other parts of the page (the compendium) change a sheet and have an open view refresh. */
 export class SheetBus {
+  artwork?: string;
   featureAction?: (name: string, id: string) => boolean;
-  private listeners: Array<() => void> = [];
+  private listeners: Array<(save?: boolean) => void> = [];
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
   /** Opens the damage dialog for an equipped weapon; set by the rendered sheet. */
   damage?: (weapon: string, critical?: boolean, attackFear?: number, proficiencyBonus?: number) => boolean;
   /** Opens the damage dialog for a spell; onSent runs once the roll was sent. */
   spellDamage?: (label: string, spec: NonNullable<ActionDef['damage']>, critical: boolean, onSent: () => void, rollSource?: RollSource, pendingAction?: PendingAction) => boolean;
-  subscribe(fn: () => void): void { this.listeners.push(fn); }
-  notify(): void { this.listeners.forEach((fn) => fn()); }
+  subscribe(fn: (save?: boolean) => void): void { this.listeners.push(fn); }
+  notify(save = true): void { this.listeners.forEach((fn) => fn(save)); }
 }
 
 export interface SheetViewOptions {
@@ -377,7 +378,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     return true;
   };
-  opts.bus?.subscribe(() => render());
+  opts.bus?.subscribe((save) => render(save));
   if (opts.bus) opts.bus.featureAction = (name, id) => {
     const feature = activeFeatures(c).find(f => f.name === name);
     const action = feature?.automation?.actions?.find(a => a.id === id);
@@ -825,7 +826,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     const extraResources = resourceDefinitions(c).filter((r) => !r.cardOnly && !hidden.has(r.id));
     const portrait = el('div', { class: 'portrait', title: canEdit() ? 'Edit character image' : 'Character image' });
-    if (opts.artwork) portrait.append(el('img', { src: opts.artwork, alt: '' }));
+    const artwork = opts.bus?.artwork ?? opts.artwork;
+    if (artwork) portrait.append(el('img', { src: artwork, alt: '' }));
     else portrait.textContent = c.name.slice(0, 1).toUpperCase();
     const portraitError = el('span', { class: 'error portrait-error', role: 'alert' });
     if (canEdit() && opts.actorId) {
@@ -834,21 +836,23 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       portrait.setAttribute('role', 'button');
       portrait.setAttribute('aria-label', 'Edit character image');
       portrait.append(el('span', { class: 'portrait-edit-indicator' }, 'Edit image'));
-      const file = el('input', { type: 'file', accept: 'image/*', hidden: true });
-      portrait.append(file);
-      portrait.addEventListener('click', event => { if (event.target !== file && canEdit()) file.click(); });
-      portrait.addEventListener('keydown', event => {
-        if ((event.key === 'Enter' || event.key === ' ') && canEdit()) { event.preventDefault(); file.click(); }
-      });
-      file.addEventListener('change', async () => {
-        const image = file.files?.[0];
-        if (!image || !canEdit()) return;
-        portraitError.textContent = 'Uploading...';
+      let editing = false;
+      const edit = async () => {
+        if (editing || !canEdit()) return;
+        editing = true;
         try {
-          opts.artwork = await uploadArtwork(opts.actorId!, image);
-          render(false);
+          const artwork = await editTokenArtwork(opts.actorId!, canEdit);
+          if (artwork) {
+            opts.artwork = artwork;
+            if (opts.bus) opts.bus.artwork = artwork;
+            render(false);
+          }
         } catch (error) { portraitError.textContent = `Could not update character image: ${(error as Error).message}`; }
-        file.value = '';
+        finally { editing = false; }
+      };
+      portrait.addEventListener('click', () => { void edit(); });
+      portrait.addEventListener('keydown', event => {
+        if ((event.key === 'Enter' || event.key === ' ') && canEdit()) { event.preventDefault(); void edit(); }
       });
     }
     const sub = (label: string, ...bold: string[]) => el('div', { class: 'sub' }, label, ...bold.map((b) => el('b', {}, b)));

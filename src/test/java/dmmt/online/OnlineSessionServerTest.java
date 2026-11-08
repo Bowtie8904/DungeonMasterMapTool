@@ -64,6 +64,67 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> artworkHttp(String actorId, String cookie, String token, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/" + actorId + "/artwork"));
+        if (cookie != null) request.header("Cookie", cookie);
+        if (token != null) request.header("Authorization", "Bearer " + token);
+        if (body == null) request.GET();
+        else request.header("Content-Type", "application/json").PUT(HttpRequest.BodyPublishers.ofString(body));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void characterTokenArtworkKeepsSourceAndCropAndEnforcesOwnershipAndDisabledActors() throws Exception {
+        var actor = Campaign.Actor.builder().id("token-art").name("Actor").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        var other = Campaign.Actor.builder().id("other-art").name("Other").ownerId("other").build();
+        campaign.getActors().add(other);
+        String cookie = cookie();
+        assertEquals(401, artworkHttp(actor.getId(), null, null, null).statusCode());
+        assertEquals(403, artworkHttp(other.getId(), cookie, null, null).statusCode());
+        var initial = MAPPER.readTree(artworkHttp(actor.getId(), cookie, null, null).body());
+        assertEquals(campaign.player(playerId()).getColor(), initial.path("color").asText());
+        assertEquals(1, initial.path("sizeTiles").asDouble());
+        assertFalse(initial.has("source"));
+        assertEquals(400, artworkHttp(actor.getId(), cookie, null, "{\"color\":\"#ff0000\"}").statusCode());
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(8, 4, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", bytes);
+        ObjectNode request = MAPPER.createObjectNode().put("color", "#ff0000").put("sizeTiles", 1.5)
+                .put("zoom", 2).put("centerX", .25).put("centerY", .75)
+                .put("source", "forged").put("border", false).put("shape", "square")
+                .put("image", "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes.toByteArray()));
+        var saved = artworkHttp(actor.getId(), cookie, null, request.toString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertFalse(MAPPER.readTree(saved.body()).path("artwork").asText().isBlank());
+        var persisted = store.load(campaign.getId()).actor(actor.getId());
+        assertEquals(1.5, persisted.getTokenArtwork().getSizeTiles());
+        assertEquals(.25, persisted.getTokenArtwork().getCenterX());
+        assertFalse("forged".equals(persisted.getTokenArtwork().getSource()));
+        var rendered = javax.imageio.ImageIO.read(store.artworkPath(campaign.getId(), actor.getArtwork()).toFile());
+        assertEquals(0, rendered.getRGB(0, 0) >>> 24);
+        assertEquals(java.awt.Color.RED.getRGB(), rendered.getRGB(128, 2));
+        request.remove("image");
+        request.put("color", "#0000ff").put("sizeTiles", 2);
+        assertEquals(200, artworkHttp(actor.getId(), cookie, null, request.toString()).statusCode());
+        assertEquals(persisted.getTokenArtwork().getSource(), actor.getTokenArtwork().getSource());
+        var loaded = MAPPER.readTree(artworkHttp(actor.getId(), cookie, null, null).body());
+        assertEquals("#0000ff", loaded.path("color").asText());
+        assertEquals(2, loaded.path("sizeTiles").asDouble());
+        assertFalse(loaded.path("source").asText().isBlank());
+        String previous = actor.getArtwork();
+        request.put("sizeTiles", .75);
+        assertEquals(400, artworkHttp(actor.getId(), cookie, null, request.toString()).statusCode());
+        assertEquals(previous, actor.getArtwork());
+        actor.setDisabled(true);
+        assertEquals(403, artworkHttp(actor.getId(), cookie, null, request.toString()).statusCode());
+        String grant = URI.create(server.dmSheetUrl(actor.getId())).getFragment();
+        request.put("sizeTiles", 1);
+        assertEquals(200, artworkHttp(actor.getId(), null, grant, request.toString()).statusCode());
+        assertEquals(403, artworkHttp(other.getId(), null, grant, null).statusCode());
+        server.revokeDmSheet("http://127.0.0.1:" + port + "/sheet/" + actor.getId() + "#" + grant);
+        assertEquals(403, artworkHttp(actor.getId(), null, grant, null).statusCode());
+    }
+
     @Test
     void domainCardPreferencesAreAuthenticatedValidatedAndPersistedPerAccount() throws Exception {
         assertEquals(401, preferencesHttp(null, null, null).statusCode());

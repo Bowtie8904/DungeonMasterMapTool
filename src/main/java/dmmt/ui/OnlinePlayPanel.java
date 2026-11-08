@@ -1110,6 +1110,10 @@ public final class OnlinePlayPanel extends VBox {
             if (actor.getArtwork() != null && current != null) {
                 definition.setImage(store().artworkPath(current.getId(), actor.getArtwork()).toUri().toString());
             }
+            if (actor.getTokenArtwork() != null) {
+                definition.setBorder(false);
+                definition.setColor(actor.getTokenArtwork().getColor());
+            }
             try {
                 TokenArt.draw(gc, definition, 16, 16, 30);
             } catch (RuntimeException ex) {

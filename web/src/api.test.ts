@@ -1,7 +1,29 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { applyDeathRecovery, configureDmSheet, getDeathOptions, logout, takeDeathMove, uploadArtwork, useFeature } from './api';
+import { applyDeathRecovery, configureDmSheet, getDeathOptions, logout, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('loads token editor settings and saves a crop without replacing its source', async () => {
+  const settings = { source: '/a/source.png', color: '#123456', sizeTiles: 1.5, zoom: 2, centerX: .2, centerY: .8 };
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(settings)))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ artwork: '/a/finished.png' })));
+  vi.stubGlobal('fetch', fetch);
+  expect(await tokenArtwork('a b')).toEqual(settings);
+  expect(fetch.mock.calls[0][0]).toBe('/api/actors/a%20b/artwork');
+  expect((await tokenArtwork('a b', settings)).artwork).toBe('/a/finished.png');
+  expect(fetch.mock.calls[1][1].method).toBe('PUT');
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual(settings);
+});
+
+it('reports unsupported hosts, read-only actors and malformed token responses', async () => {
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(new Response('{}', { status: 404 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Actor is disabled' }), { status: 403 }))
+    .mockResolvedValueOnce(new Response('{}')));
+  await expect(tokenArtwork('actor')).rejects.toThrow('Update the host');
+  await expect(tokenArtwork('actor')).rejects.toThrow('Actor is disabled');
+  await expect(tokenArtwork('actor')).rejects.toThrow('invalid character token settings');
+});
 
 it('does not report logout success when the host rejects it', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Session unavailable' }), { status: 503 })));

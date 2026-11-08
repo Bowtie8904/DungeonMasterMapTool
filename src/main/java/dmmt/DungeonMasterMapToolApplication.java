@@ -6722,6 +6722,9 @@ public class DungeonMasterMapToolApplication extends Application {
             capturePlayerTransition();
         }
         project = next;
+        if (onlinePanel != null && onlinePanel.selectedCampaign() != null) {
+            dmmt.online.ActorTokenArtwork.synchronize(project, onlinePanel.selectedCampaign(), onlineController.store());
+        }
         selectedTokenId = null;
         tokenDragBefore = null;
         draggingToken = false;
@@ -11110,6 +11113,11 @@ public class DungeonMasterMapToolApplication extends Application {
                 .name(actor.getName()).build();
         if (actor.getArtwork() != null) {
             definition.setImage(onlineController.store().artworkPath(campaign.getId(), actor.getArtwork()).toUri().toString());
+        }
+        if (actor.getTokenArtwork() != null) {
+            definition.setSizeTiles(actor.getTokenArtwork().getSizeTiles());
+            definition.setColor(actor.getTokenArtwork().getColor());
+            definition.setBorder(false);
         }
         project.getTokenDefinitions().put(definitionId, definition);
         DmProject.TokenInstance token = DmProject.TokenInstance.builder().id(UUID.randomUUID().toString())

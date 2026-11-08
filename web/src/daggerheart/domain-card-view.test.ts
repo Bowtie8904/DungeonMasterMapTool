@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter } from './data';
 import { renderSheetView, SheetBus, type RollRequest } from './view';
+import * as artworkEditor from '../token-artwork';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
 import { addEffect, applyRest, derivedStats, isManualOverride, removeManualOverride, setManualStat, setTrackSlots, statBreakdown, syncDerived, traitTotal } from './engine';
 
@@ -323,30 +324,34 @@ it('uses resource pips for capacities only in edit mode and retains normal marki
   expect(c.armorTrack.slots).toBe(1);
 });
 
-it('offers portrait editing only in edit mode, uploads images and surfaces upload failures', async () => {
+it('offers the token editor only in edit mode, refreshes artwork without saving the sheet and surfaces failures', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ artwork: '/a/new.png' })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Invalid image' }), { status: 400 }));
-  vi.stubGlobal('fetch', fetch);
+  const edit = vi.spyOn(artworkEditor, 'editTokenArtwork').mockResolvedValueOnce('/a/new.png')
+    .mockRejectedValueOnce(new Error('Invalid image'));
   const c = emptyCharacter('Hero');
   c.mancer = { done: true };
-  const root = renderSheetView({ character: c, actorId: 'hero', onRoll: () => true }) as unknown as Element;
+  const bus = new SheetBus();
+  const changed = vi.fn();
+  const root = renderSheetView({ character: c, actorId: 'hero', bus, onChange: changed, onRoll: () => true }) as unknown as Element;
   expect(root.querySelectorAll('div').some(node => node.ariaLabel === 'Edit character image')).toBe(false);
   await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
   const portrait = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!;
   expect(portrait.text()).toContain('Edit image');
-  const file = portrait.querySelectorAll('input')[0];
-  file.files = [new File(['image'], 'portrait.png', { type: 'image/png' })];
-  await file.listeners.get('change')?.();
-  expect(root.querySelectorAll('img')).toHaveLength(1);
-  expect(fetch.mock.calls[0][0]).toBe('/api/actors/hero/artwork');
-  const next = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!.querySelectorAll('input')[0];
-  next.files = file.files;
-  await next.listeners.get('change')?.();
-  expect(root.text()).toContain('Could not update character image: Invalid image');
+  changed.mockClear();
+  await portrait.click();
+  await vi.waitFor(() => expect(root.querySelectorAll('img')).toHaveLength(1));
+  expect(edit.mock.calls[0][0]).toBe('hero');
+  expect(bus.artwork).toBe('/a/new.png');
+  expect(changed).not.toHaveBeenCalled();
+  bus.artwork = '/a/from-other-window.png';
+  bus.notify(false);
+  expect(changed).not.toHaveBeenCalled();
+  const next = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!;
+  await next.click();
+  await vi.waitFor(() => expect(root.text()).toContain('Could not update character image: Invalid image'));
   await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
   expect(root.querySelectorAll('input').some(input => input.files)).toBe(false);
 });

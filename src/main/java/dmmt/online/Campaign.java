@@ -117,8 +117,27 @@ public class Campaign {
         private boolean testingCharacter;
         /** sha256 hex of the re-encoded PNG in {@code artwork/}; {@code null} when none. */
         private String artwork;
+        private ActorArtwork tokenArtwork;
         /** Folder path ("a/b") in the DM's actor tree; empty or {@code null} for the root. */
         private String folder;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ActorArtwork {
+        private String source;
+        private String color;
+        @Builder.Default
+        private double sizeTiles = 1;
+        @Builder.Default
+        private double zoom = 1;
+        @Builder.Default
+        private double centerX = .5;
+        @Builder.Default
+        private double centerY = .5;
     }
 
     @Data

@@ -147,6 +147,18 @@ in the map tab is saved before sending a chat message.
 New chat and roll cards capture the same actor's portrait without showing an initial alongside it, falling back to the sender's initial when
 artwork is missing or unavailable; older messages keep their existing initial avatars.
 
+The preview and saved token use the normal DM token border thickness: 5.5% of the diameter, fully contained inside the artwork.
+
+Character portraits and the Actors list use the same circular, mandatory-border token editor. Choose or paste
+an image (Ctrl+V works without clipboard-read permission), pan by dragging, zoom, choose a border color
+(default: the authenticated account's assigned color) and size (default: 1 tile; half-tile increments).
+The host retains the source/crop and renders the finished token for sheets, actor lists and linked map tokens.
+`GET /api/actors/{id}/artwork` returns `source`, `color`, `sizeTiles`, `zoom`, `centerX`, `centerY`.
+JSON `PUT` accepts these crop fields plus an optional image data URL; without an image it reuses the saved source.
+The existing binary image PUT remains supported. Both routes enforce ownership and disabled-player restrictions;
+actor-scoped DM grants remain supported. Older hosts show an update-required error rather than accepting a raw
+upload in place of token customization. These additions do not change LAN remote compatibility.
+
 Daggerheart testing actors are created only by the desktop DM (Actors tree context menu) and may be used freely
 by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately
 from saved sheet data; players cannot promote ordinary actors through PUT. Marked sheets show a testing badge
