@@ -42,6 +42,91 @@ class CanvasMapRendererTest {
     }
 
     @Test
+    void actorResourceBarsAreDmOnlyUprightAndInvalidateRetainedForeground() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            var project = DmProject.builder().build();
+            project.getMap().getGrid().setPixelsPerCell(64);
+            var camera = DmProject.CameraState.builder().x(80).y(80).zoom(1).build();
+            project.getTokenDefinitions().put("hero", DmProject.TokenDefinition.builder().id("hero").name("Hero").build());
+            var token = DmProject.TokenInstance.builder().id("token").definitionId("hero").actorId("actor")
+                    .campaignId("campaign").x(80).y(60).sizeTiles(1).playerVisible(true).build();
+            project.getTokens().add(token);
+            var renderer = new CanvasMapRenderer(new LightingEngine());
+            var foreground = new Canvas(160, 160);
+            Runnable render = () -> renderer.renderForegroundLayer(foreground.getGraphicsContext2D(), project, 160, 160, camera, false);
+            renderer.setActorResources("campaign", java.util.Map.of("actor", new dmmt.online.ActorTokenResources(3, 6, 1, 6, 2, 4)));
+            render.run();
+            var pixels = transparentSnapshot(foreground).getPixelReader();
+            java.util.function.BiPredicate<Integer, String> barHasColor = (top, color) -> {
+                var image = transparentSnapshot(foreground).getPixelReader();
+                return java.util.stream.IntStream.range(72, 88).anyMatch(column ->
+                        java.util.stream.IntStream.range(top, top + 9).anyMatch(row ->
+                                image.getColor(column, row).equals(Color.web(color))));
+            };
+            assertTrue(barHasColor.test(70, "#ef5350"));
+            assertTrue(barHasColor.test(80, "#ab7df0"));
+            assertEquals(Color.web("#78909c"), pixels.getColor(53, 71), "Armor shield uses the sheet color");
+            assertTrue(java.util.stream.IntStream.range(89, 112).anyMatch(column ->
+                    java.util.stream.IntStream.range(68, 91).anyMatch(row ->
+                            pixels.getColor(column, row).equals(Color.web("#f5b942")))),
+                    "Hope star uses the sheet color");
+            for (int row = 0; row < 160; row++) {
+                for (int column = 0; column < 160; column++) {
+                    if (column < 48 || column > 112 || row < 28 || row > 92)
+                        assertEquals(0, pixels.getArgb(column, row), "Bars must not extend beyond the token footprint");
+                }
+            }
+            render.run();
+            assertEquals(1, renderer.dmForegroundRedrawCount());
+            token.setRotationDeg(90);
+            render.run();
+            assertTrue(barHasColor.test(70, "#ef5350"));
+            renderer.setActorResources("campaign", java.util.Map.of("actor", new dmmt.online.ActorTokenResources(0, 6, 6, 6, 2, 4)));
+            render.run();
+            assertEquals(3, renderer.dmForegroundRedrawCount());
+            assertFalse(barHasColor.test(70, "#ef5350"), "Zero marked HP leaves the bar empty");
+            assertTrue(barHasColor.test(80, "#ab7df0"));
+            renderer.setActorResources("campaign", java.util.Map.of("actor", new dmmt.online.ActorTokenResources(6, 6, 6, 6, 2, 4)));
+            render.run();
+            assertTrue(barHasColor.test(70, "#ef5350"), "All marked HP fills the bar");
+            renderer.setActorResources("campaign", java.util.Map.of("actor", new dmmt.online.ActorTokenResources(6, 6, 6, 6, 0, 0)));
+            render.run();
+            assertEquals(5, renderer.dmForegroundRedrawCount(), "Armor and Hope changes invalidate the cached decoration");
+            var player = new Canvas(160, 160);
+            renderer.renderForegroundLayer(player.getGraphicsContext2D(), project, 160, 160, camera, true);
+            assertEquals(0, transparentSnapshot(player).getPixelReader().getArgb(66, 73));
+            assertEquals(0, transparentSnapshot(player).getPixelReader().getArgb(53, 74));
+            assertEquals(0, transparentSnapshot(player).getPixelReader().getArgb(103, 74));
+            token.setPlayerVisible(false);
+            render.run();
+            assertTrue(barHasColor.test(80, "#ab7df0"));
+            token.setCampaignId("foreign");
+            render.run();
+            assertEquals(0, transparentSnapshot(foreground).getPixelReader().getArgb(66, 83));
+            token.setPlayerVisible(true);
+            token.setCampaignId("campaign");
+            token.setActorId(null);
+            render.run();
+            assertFalse(foreground.isVisible());
+            token.setActorId("actor");
+            camera.setZoom(.25);
+            render.run();
+            var small = transparentSnapshot(foreground).getPixelReader();
+            assertNotEquals(0, small.getArgb(80, 78), "Small tokens retain scaled resource bars");
+            for (int row = 0; row < 160; row++) {
+                for (int column = 0; column < 160; column++) {
+                    if (column < 72 || column > 88 || row < 67 || row > 83)
+                        assertEquals(0, small.getArgb(column, row), "Zoomed-out bars stay within the token footprint");
+                }
+            }
+            renderer.setActorResources(null, java.util.Map.of());
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
     void dmEffectsRetainFramesAndInvalidateHiddenStylesGeometryAndView() throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> {
             DmProject project = DmProject.builder().build();

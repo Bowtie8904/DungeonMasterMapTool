@@ -51,6 +51,19 @@ import java.util.Objects;
 import java.util.stream.IntStream;
 
 public class CanvasMapRenderer {
+    private String resourceCampaignId;
+    private Map<String, dmmt.online.ActorTokenResources> actorResources = Map.of();
+
+    public void setActorResources(String campaignId, Map<String, dmmt.online.ActorTokenResources> values) {
+        resourceCampaignId = campaignId;
+        actorResources = Map.copyOf(values);
+    }
+
+    private dmmt.online.ActorTokenResources resourcesOf(DmProject.TokenInstance token) {
+        return token.getActorId() != null && resourceCampaignId != null && resourceCampaignId.equals(token.getCampaignId())
+                ? actorResources.get(token.getActorId()) : null;
+    }
+
     /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
     private int activeLightMapScale = 4;
 
@@ -584,12 +597,12 @@ public class CanvasMapRenderer {
                 .map(box -> new DmTextState(TextState.of(box), box.isPlayerVisible(), box.isRoomLabel())).toList()
                 : List.of();
         List<TokenDecorationState> tokens = project == null ? List.of() : project.getTokens().stream()
-                .filter(token -> !token.isPlayerVisible() || token.isNameVisible())
+                .filter(token -> !token.isPlayerVisible() || token.isNameVisible() || resourcesOf(token) != null)
                 .filter(token -> project.getTokenDefinitions().get(token.getDefinitionId()) != null)
                 .map(token -> new TokenDecorationState(token.getX(), token.getY(), token.getSizeTiles(),
                         token.getRotationDeg(), project.getTokenDefinitions().get(token.getDefinitionId()).getShape(),
                         token.isPlayerVisible(), token.isNameVisible(),
-                        project.getTokenDefinitions().get(token.getDefinitionId()).getName())).toList();
+                        project.getTokenDefinitions().get(token.getDefinitionId()).getName(), resourcesOf(token))).toList();
         List<SegmentState> walls = project != null && wallLayerVisible ? project.getWalls().stream()
                 .map(wall -> new SegmentState(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2())).toList() : List.of();
         List<PortalState> portals = project != null && wallLayerVisible ? project.getInteractables().stream()
@@ -615,7 +628,8 @@ public class CanvasMapRenderer {
     }
 
     private record TokenDecorationState(double x, double y, double size, double rotation, DmProject.TokenShape shape,
-                                        boolean playerVisible, boolean nameVisible, String name) {
+                                        boolean playerVisible, boolean nameVisible, String name,
+                                        dmmt.online.ActorTokenResources resources) {
     }
 
     private record SegmentState(double x1, double y1, double x2, double y2) {
@@ -723,6 +737,21 @@ public class CanvasMapRenderer {
             if (!decorations) drawTokenConditionBadges(gc, token, x, y, radius);
             if (decorations) {
                 gc.save();
+                var resources = resourcesOf(token);
+                double labelY = y + radius + 3;
+                if (resources != null) {
+                    double scale = Math.min(1, diameter / 64);
+                    double barWidth = Math.min(56, diameter - 48 * scale);
+                    double barY = y + diameter / 2 - 22 * scale;
+                    drawResourceBar(gc, x, barY, barWidth, scale, resources.hp(), resources.maxHp(), Color.web("#ef5350"));
+                    drawResourceBar(gc, x, barY + 10 * scale, barWidth, scale, resources.stress(), resources.maxStress(),
+                            Color.web("#ab7df0"));
+                    double counterOffset = barWidth / 2 + 12 * scale;
+                    if (resources.armor() != null)
+                        drawResourceCounter(gc, x - counterOffset, barY, scale, resources.armor(), false);
+                    if (resources.hope() != null)
+                        drawResourceCounter(gc, x + counterOffset, barY, scale, resources.hope(), true);
+                }
                 if (!token.isPlayerVisible()) {
                     drawHiddenBadge(gc, x, y);
                 }
@@ -731,13 +760,74 @@ public class CanvasMapRenderer {
                     gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
                     gc.setFill(Color.color(0, 0, 0, .85));
                     double labelWidth = Math.max(40, definition.getName().length() * 7 + 12);
-                    gc.fillRoundRect(x - labelWidth / 2, y + radius + 3, labelWidth, 20, 5, 5);
+                    gc.fillRoundRect(x - labelWidth / 2, labelY, labelWidth, 20, 5, 5);
                     gc.setFill(Color.WHITE);
-                    gc.fillText(definition.getName(), x, y + radius + 17);
+                    gc.setTextBaseline(VPos.BASELINE);
+                    gc.fillText(definition.getName(), x, labelY + 14);
                 }
                 gc.restore();
             }
         }
+    }
+
+    private void drawResourceCounter(GraphicsContext gc, double x, double y, double scale, int value, boolean hope) {
+        gc.save();
+        gc.translate(x, y + 9.5 * scale);
+        gc.scale(scale, scale);
+        gc.beginPath();
+        if (hope) {
+            for (int i = 0; i < 10; i++) {
+                double angle = -Math.PI / 2 + i * Math.PI / 5;
+                double radius = i % 2 == 0 ? 11 : 6.5;
+                double px = Math.cos(angle) * radius, py = Math.sin(angle) * radius;
+                if (i == 0) gc.moveTo(px, py);
+                else gc.lineTo(px, py);
+            }
+        } else {
+            gc.moveTo(-10, -11);
+            gc.lineTo(10, -11);
+            gc.lineTo(10, 1);
+            gc.quadraticCurveTo(10, 7, 0, 11);
+            gc.quadraticCurveTo(-10, 7, -10, 1);
+        }
+        gc.closePath();
+        gc.setFill(Color.web(hope ? "#f5b942" : "#78909c"));
+        gc.fill();
+        gc.setStroke(Color.web("#151a20"));
+        gc.setLineWidth(.7);
+        gc.stroke();
+        gc.setFont(Font.font("System", FontWeight.BOLD, 14));
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.setTextBaseline(VPos.CENTER);
+        gc.setFill(Color.web("#151a20"));
+        gc.fillText(Integer.toString(value), 0, 0, 16);
+        gc.restore();
+    }
+
+    private void drawResourceBar(GraphicsContext gc, double x, double y, double width, double scale,
+                                 int value, int maximum, Color color) {
+        double left = x - width / 2;
+        double height = 9 * scale;
+        double rounding = 2 * scale;
+        gc.setFill(Color.web("#151a20"));
+        gc.fillRoundRect(left, y, width, height, rounding, rounding);
+        double filled = maximum > 0 ? width * value / maximum : 0;
+        if (filled > 0) {
+            gc.setFill(color);
+            gc.fillRoundRect(left, y, filled, height, rounding, rounding);
+        }
+        gc.setStroke(Color.color(1, 1, 1, .65));
+        gc.setLineWidth(.5 * scale);
+        gc.strokeRoundRect(left, y, width, height, rounding, rounding);
+        gc.setFont(Font.font("System", FontWeight.BOLD, 9 * scale));
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.setTextBaseline(VPos.CENTER);
+        String text = value + "/" + maximum;
+        gc.setStroke(Color.color(0, 0, 0, .85));
+        gc.setLineWidth(1.5 * scale);
+        gc.strokeText(text, x, y + height / 2, width - 2 * scale);
+        gc.setFill(Color.WHITE);
+        gc.fillText(text, x, y + height / 2, width - 2 * scale);
     }
 
     private void drawTokenConditionBadges(GraphicsContext gc, DmProject.TokenInstance token,

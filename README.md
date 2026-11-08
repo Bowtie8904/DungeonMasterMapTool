@@ -16,6 +16,16 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **DM actor resource bars:** Player-owned and testing Daggerheart actor tokens in the selected campaign show compact
+  marked HP and marked Stress bars over the bottom of their artwork, with marked/maximum numbers.
+  Each bar is empty at zero marked slots and fills as slots are marked, matching the character sheet.
+  They match the sheet's red HP and purple Stress colors and stay within the token footprint.
+  A gray shield on the left shows remaining unmarked Armor slots; a yellow star on the right shows
+  current Hope. Both use enlarged icons with bold numbers and update from the saved sheet.
+  They refresh from saved character sheets and are visible only on the DM map, never on player screens
+  or browser maps. Hidden and disabled player actors retain their bars, and testing actors qualify without
+  a player owner; ordinary tokens and other unowned actors do not.
+
 - **Battle Cry (Daggerheart):** its once-per-long-rest action offers allies a chat claim to clear 1 Stress
   and gain 1 Hope. Each other player may claim once; hearing and attack advantage are resolved at the table.
 - **Domain-card review:** all 236 cards and each grimoire spell have an individual disposition in

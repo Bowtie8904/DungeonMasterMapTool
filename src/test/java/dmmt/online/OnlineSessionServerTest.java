@@ -5009,6 +5009,19 @@ class OnlineSessionServerTest {
     }
 
     private volatile OnlineSessionServer.MoveResult drawingResult = OnlineSessionServer.MoveResult.accepted();
+    private final java.util.List<String> changedActorSheets = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    @Test
+    void savingPlayerResourcesNotifiesTheDmAfterPersistence() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("hero").name("Hero").ownerId(playerId()).build());
+        String sheet = "{\"name\":\"Hero\",\"hp\":{\"slots\":6,\"on\":2},\"stress\":{\"slots\":6,\"on\":3}}";
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/hero"))
+                .header("Cookie", cookie()).PUT(HttpRequest.BodyPublishers.ofString(sheet)).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(changedActorSheets.contains("hero"));
+        assertEquals(new ActorTokenResources(2, 6, 3, 6, null, null), ActorTokenResources.load(campaign, store).get("hero"));
+    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -5099,6 +5112,16 @@ class OnlineSessionServerTest {
 
                     @Override
                     public void campaignChanged(Campaign c) {
+                    }
+
+                    @Override
+                    public void actorSheetChanged(String actorId) {
+                        try {
+                            assertNotNull(store.loadSheet(campaign.getId(), actorId));
+                        } catch (java.io.IOException ex) {
+                            throw new AssertionError(ex);
+                        }
+                        changedActorSheets.add(actorId);
                     }
 
                     @Override

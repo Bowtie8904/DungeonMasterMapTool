@@ -11036,6 +11036,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 renderDm();
             }
             @Override public void status(String text) { DungeonMasterMapToolApplication.this.status(text); }
+            @Override public void actorResourcesChanged() { refreshActorTokenResources(); }
             @Override public dmmt.audio.AudioEngine audioEngine() {
                 return audioControls == null || audioControls.engine().isRemote() ? null : audioControls.engine();
             }
@@ -11072,6 +11073,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 removeForeignActorTokensOf(campaign);
             }
             @Override public void campaignSelected(dmmt.online.Campaign campaign) {
+                refreshActorTokenResources(campaign);
                 String id = campaign == null ? null : campaign.getId();
                 if (java.util.Objects.equals(colorCampaignId, id)) return;
                 colorCampaignId = id;
@@ -11108,6 +11110,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void placeCampaignActor(dmmt.online.Campaign campaign, dmmt.online.Campaign.Actor actor,
                                     double worldX, double worldY) {
         if (project == null || campaign == null || actor == null) return;
+        refreshActorTokenResources(campaign);
         String definitionId = "actor:" + actor.getId();
         DmProject.TokenDefinition definition = DmProject.TokenDefinition.builder().id(definitionId)
                 .name(actor.getName()).build();
@@ -11134,6 +11137,24 @@ public class DungeonMasterMapToolApplication extends Application {
                 () -> applyTokenState(token.getId(), null));
         selectedTokenId = token.getId();
         status("Placed actor " + actor.getName() + " (hidden from players until revealed).");
+    }
+
+    private void refreshActorTokenResources() {
+        refreshActorTokenResources(onlinePanel == null ? null : onlinePanel.selectedCampaign());
+    }
+
+    private void refreshActorTokenResources(dmmt.online.Campaign campaign) {
+        try {
+            renderer.setActorResources(campaign == null ? null : campaign.getId(),
+                    dmmt.online.ActorTokenResources.load(campaign, onlineController.store()));
+        } catch (IOException ex) {
+            renderer.setActorResources(null, Map.of());
+            status("Could not load actor token HP and Stress: " + ex.getMessage());
+        }
+        if (project != null && dmForegroundCanvas != null) {
+            renderer.renderForegroundLayer(dmForegroundCanvas.getGraphicsContext2D(), project,
+                    dmCanvas.getWidth(), dmCanvas.getHeight(), project.getViews().getDmCamera(), false);
+        }
     }
 
     private void removeForeignActorTokensOf(dmmt.online.Campaign campaign) {

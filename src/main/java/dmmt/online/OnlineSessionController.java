@@ -56,6 +56,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
         /** Something about the session changed (roster, running state, messages). */
         void changed();
+        default void actorResourcesChanged() { }
     }
 
     private final Path root;
@@ -722,8 +723,14 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     public void campaignChanged(Campaign changed) {
         Platform.runLater(() -> {
             if (app.project() != null) ActorTokenArtwork.synchronize(app.project(), changed, store);
+            app.actorResourcesChanged();
             app.changed();
         });
+    }
+
+    @Override
+    public void actorSheetChanged(String actorId) {
+        Platform.runLater(app::actorResourcesChanged);
     }
 
     @Override

@@ -108,6 +108,7 @@ public final class OnlineSessionServer {
 
         /** The stock of transfer offers made by this actor may have changed; may run on a server thread. */
         default void cardStockChanged(String actorId) { }
+        default void actorSheetChanged(String actorId) { }
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -1499,6 +1500,7 @@ public final class OnlineSessionServer {
             } else {
                 if (renamed) store.renameActor(c, actor, name, saved);
                 else store.saveSheet(c.getId(), actor.getId(), saved.toString());
+                host.actorSheetChanged(actor.getId());
             }
             if (renamed || !sheetPronouns(saved).equals(sheetPronouns(previous))) {
                 publishRoster();
@@ -1545,6 +1547,7 @@ public final class OnlineSessionServer {
     public synchronized void sheetChanged(String actorId) {
         Campaign.Actor actor = campaign.actor(actorId);
         if (actor == null) return;
+        host.actorSheetChanged(actorId);
         String message = MAPPER.createObjectNode().put("type", "sheetChanged").put("actorId", actorId).toString();
         for (Client client : clients.values())
             if (client.fullSheets && actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)
