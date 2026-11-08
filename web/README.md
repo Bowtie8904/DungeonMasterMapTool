@@ -1,5 +1,7 @@
 # Online Play web client
 
+The browser map never displays token names, including when a DM enables a name label. Names are hidden by
+default and can be shown to the DM only from the desktop map's token right-click menu.
 Token condition menus open from the canceled browser `contextmenu` event, rather than on pointer press,
 so displaying the in-app menu cannot redirect the native context-menu event to a new DOM element.
 Hidden is a linked actor buff; Restrained, Vulnerable and custom conditions are debuffs.

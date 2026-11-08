@@ -1334,19 +1334,6 @@ export class MapView {
         }
       }
       ctx.restore();
-      if (t.name) {
-        ctx.save();
-        const fs = Math.max(11 / this.cam.scale, ppc * 0.22);
-        ctx.font = `${fs}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.lineWidth = fs * 0.2;
-        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.strokeText(t.name, pos.x, pos.y + r + 2 / this.cam.scale);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(t.name, pos.x, pos.y + r + 2 / this.cam.scale);
-        ctx.restore();
-      }
       const conditions = t.conditions ?? [];
       const badge = 15 / this.cam.scale;
       conditions.slice(0, 5).forEach((condition, index) => {

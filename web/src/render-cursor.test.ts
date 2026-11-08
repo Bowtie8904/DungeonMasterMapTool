@@ -463,6 +463,21 @@ describe('map interaction cursors', () => {
     expect(ctx.arc.mock.calls).toEqual([[0, 0, 11, 0, Math.PI * 2], [0, 0, 11, 0, Math.PI * 2]]);
   });
 
+  it('does not render token names in the player map', () => {
+    current.tokens[0].name = 'Private DM label';
+    const ctx = Object.assign(document.createElement('canvas').getContext('2d')!, {
+      save: vi.fn(), restore: vi.fn(), translate: vi.fn(), rotate: vi.fn(), beginPath: vi.fn(),
+      arc: vi.fn(), rect: vi.fn(), clip: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), ellipse: vi.fn(),
+      stroke: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), strokeText: vi.fn(),
+    });
+
+    view['drawTokens'](ctx, current, current.grid.pixelsPerCell);
+
+    expect(ctx.arc).toHaveBeenCalled();
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    expect(ctx.strokeText).not.toHaveBeenCalled();
+  });
+
   it.each(['door', 'window'])('only toggles unlocked %s badges in unpaused Select on supporting hosts', kind => {
     current.doors = [{ id: 'portal', x1: 650, y1: 700, x2: 750, y2: 700, kind, open: false }];
     view.setState(current);
