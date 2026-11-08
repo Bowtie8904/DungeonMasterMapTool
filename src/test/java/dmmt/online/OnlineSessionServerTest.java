@@ -4417,15 +4417,13 @@ class OnlineSessionServerTest {
         inbox.next("snapshot");
         inbox.next("roster");
         try {
-            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"Mara's player\"}", true).join();
-            assertEquals("Mara's player", inbox.next("roster").path("players").get(0).path("chatIdentity").asText());
             ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("category", "item").put("offerQuantity", 2);
             request.set("item", original.path("inventory").get(0));
             HttpResponse<String> post = cardHttp(cookie, "", request);
             assertEquals(200, post.statusCode(), post.body());
             String id = MAPPER.readTree(post.body()).path("cardId").asText();
             JsonNode message = inbox.next("chat");
-            assertEquals("Mara's player", message.path("from").asText());
+            assertEquals("Mara", message.path("from").asText());
             assertTrue(message.path("text").asText().contains("Clear **HP**"));
             assertEquals("Potion", message.path("sharedCard").path("item").path("name").asText());
             assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
@@ -5712,58 +5710,77 @@ class OnlineSessionServerTest {
     }
 
     @Test
-    void chatIdentityIsValidatedAndSharedWithoutChangingAccountNamesOrCompatibility() throws Exception {
+    void chatNamesFollowFirstEnabledActorAndFallbackToAccount() throws Exception {
+        campaign.player(playerId()).setChatIdentity("Legacy name");
+        Campaign.Actor firstActor = Campaign.Actor.builder().id("first").name("Mara").ownerId(playerId()).build();
+        Campaign.Actor secondActor = Campaign.Actor.builder().id("second").name("Rook").ownerId(playerId()).build();
+        firstActor.setArtwork("portrait-one");
+        secondActor.setArtwork("portrait-two");
+        for (String hash : List.of("portrait-one", "portrait-two")) {
+            Path file = store.artworkPath(campaign.getId(), hash);
+            java.nio.file.Files.createDirectories(file.getParent());
+            java.nio.file.Files.write(file, new byte[]{1, 2, 3});
+        }
+        campaign.getActors().add(Campaign.Actor.builder().id("unowned").name("Other").ownerId("other").build());
+        campaign.getActors().add(firstActor);
+        campaign.getActors().add(secondActor);
         String cookie = cookie();
         Inbox first = new Inbox();
         WebSocket ws = connect(cookie, first);
         JsonNode hello = first.next("hello");
-        assertTrue(hello.path("chatIdentity").asBoolean());
+        assertFalse(hello.path("chatIdentity").asBoolean());
         assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
         String accountName = hello.path("playerName").asText();
-        first.next("roster");
+        assertEquals("Mara", first.next("roster").path("players").get(0).path("chatIdentity").asText());
         Inbox second = new Inbox();
         WebSocket other = connect(cookie, second);
         second.next("hello");
         second.next("roster");
         first.next("roster");
         try {
-            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"  Rook  \"}", true).join();
-            JsonNode roster = second.next("roster").path("players").get(0);
-            first.next("roster");
-            assertEquals("Rook", roster.path("chatIdentity").asText());
-            Campaign loaded = store.load(campaign.getId());
-            assertEquals("Rook", loaded.player(playerId()).getChatIdentity());
-            server.setCampaign(loaded);
-            assertEquals(accountName, roster.path("playerName").asText());
-            assertEquals(2, roster.path("connections").asInt());
             other.sendText("{\"type\":\"chat\",\"text\":\"hello\"}", true).join();
-            assertEquals("Rook", first.next("chat").path("from").asText());
+            JsonNode original = first.next("chat");
+            assertEquals("Mara", original.path("from").asText());
+            assertEquals("/a/portrait-one.img", original.path("fromArtwork").asText());
             other.sendText("{\"type\":\"roll\",\"expression\":\"1d6\"}", true).join();
-            assertEquals("Rook", first.next("roll").path("from").asText());
+            JsonNode roll = first.next("roll");
+            assertEquals("Mara", roll.path("from").asText());
+            assertEquals("/a/portrait-one.img", roll.path("fromArtwork").asText());
             server.dmChat("private", playerId());
-            assertEquals("Rook", first.next("chat").path("to").asText());
-            for (String invalid : List.of("x".repeat(61), "bad\nname")) {
-                ws.sendText(MAPPER.createObjectNode().put("type", "chatIdentity").put("identity", invalid).toString(), true).join();
-                assertTrue(first.next("error").path("message").asText().contains("Chat identity"));
-                assertEquals("Rook", server.roster().getFirst().chatIdentity());
-            }
-            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":123}", true).join();
-            assertTrue(first.next("error").path("message").asText().contains("must be text"));
-            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"\"}", true).join();
-            first.next("roster");
-            other.sendText("{\"type\":\"chat\",\"text\":\"account name again\"}", true).join();
+            assertEquals("Mara", first.next("chat").path("to").asText());
+            ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"Override\"}", true).join();
+            assertTrue(first.next("error").path("message").asText().contains("automatically"));
+            firstActor.setDisabled(true);
+            server.setCampaign(campaign);
+            assertEquals("Rook", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            other.sendText("{\"type\":\"chat\",\"text\":\"second actor\"}", true).join();
+            JsonNode next = first.next("chat");
+            assertEquals("Rook", next.path("from").asText());
+            assertEquals("/a/portrait-two.img", next.path("fromArtwork").asText());
+            assertEquals("/a/portrait-one.img", store.historyTail(campaign.getId(), 50).stream()
+                    .filter(item -> item.path("id").equals(original.path("id"))).findFirst().orElseThrow().path("fromArtwork").asText());
+            secondActor.setDisabled(true);
+            server.setCampaign(campaign);
+            assertEquals("", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            other.sendText("{\"type\":\"chat\",\"text\":\"account fallback\"}", true).join();
+            JsonNode fallback = first.next("chat");
+            assertEquals(accountName, fallback.path("from").asText());
+            assertFalse(fallback.has("fromArtwork"));
+            firstActor.setDisabled(false);
+            server.setCampaign(campaign);
+            assertEquals("Mara", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            firstActor.setName("Mara Renamed");
+            server.setCampaign(campaign);
+            assertEquals("Mara Renamed", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            firstActor.setOwnerId("other");
+            secondActor.setDisabled(false);
+            server.setCampaign(campaign);
+            assertEquals("Rook", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            campaign.getActors().remove(secondActor);
+            server.setCampaign(campaign);
+            assertEquals("", first.next("roster").path("players").get(0).path("chatIdentity").asText());
+            other.sendText("{\"type\":\"chat\",\"text\":\"no actors\"}", true).join();
             assertEquals(accountName, first.next("chat").path("from").asText());
-            assertEquals("", store.load(campaign.getId()).player(playerId()).getChatIdentity());
-            java.nio.file.Path blockedSave = temp.resolve("campaigns").resolve(campaign.getId()).resolve("campaign.json.tmp");
-            java.nio.file.Files.createDirectory(blockedSave);
-            try {
-                ws.sendText("{\"type\":\"chatIdentity\",\"identity\":\"Unsaved\"}", true).join();
-                assertTrue(first.next("error").path("message").asText().contains("Could not save chat identity"));
-                assertEquals("", server.roster().getFirst().chatIdentity());
-                assertEquals("", store.load(campaign.getId()).player(playerId()).getChatIdentity());
-            } finally {
-                java.nio.file.Files.delete(blockedSave);
-            }
         } finally {
             ws.abort();
             other.abort();

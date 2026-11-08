@@ -124,8 +124,15 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
   const m = e.m;
   const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const sender = m.fromId === 'dm' ? 'Gamemaster' : m.from;
-  const avatar = el('span', { class: 'message-avatar' }, sender.slice(0, 1).toUpperCase());
+  const initial = sender.slice(0, 1).toUpperCase();
+  const hasPortrait = m.fromId !== 'dm' && m.fromArtwork && /^\/a\/[a-zA-Z0-9_-]+\.img$/.test(m.fromArtwork);
+  const avatar = el('span', { class: 'message-avatar' }, ...(hasPortrait ? [] : [initial]));
   avatar.setAttribute('aria-hidden', 'true');
+  if (hasPortrait) {
+    const portrait = el('img', { src: m.fromArtwork, alt: '' });
+    portrait.addEventListener('error', () => { portrait.remove(); avatar.append(initial); });
+    avatar.append(portrait);
+  }
   const header = el('header', { class: 'message-header' },
     avatar,
     el('strong', { class: 'message-sender' }, sender),

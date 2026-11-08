@@ -263,7 +263,8 @@ export function applyInventory(c: CharacterSheet, incoming: Partial<Omit<Charact
 
 export type SheetSave = (() => void) & { flush: () => Promise<void>; refresh: () => Promise<void> };
 
-export function autosave(actorId: string, c: CharacterSheet, onError: (message: string) => void, delayMs = 700): SheetSave {
+export function autosave(actorId: string, c: CharacterSheet, onError: (message: string) => void, delayMs = 700,
+                         readOnly: () => boolean = () => false): SheetSave {
   let last = '';
   const baseline = JSON.stringify(c);
   const dirty = () => JSON.stringify(c) !== (last || baseline);
@@ -311,7 +312,9 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
   const flush = async () => {
     if (timer !== undefined) window.clearTimeout(timer);
     timer = undefined;
+    if (readOnly()) return;
     while (saving) await saving;
+    if (readOnly()) return;
     const json = JSON.stringify(c);
     if (json === last) return;
     const operation = async () => {
@@ -347,6 +350,8 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') backgroundFlush(); });
   const changed = () => {
     if (timer !== undefined) window.clearTimeout(timer);
+    timer = undefined;
+    if (readOnly()) return;
     timer = window.setTimeout(backgroundFlush, delayMs);
   };
   return Object.assign(changed, {

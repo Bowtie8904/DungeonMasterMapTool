@@ -193,6 +193,7 @@ export interface ChatMessage {
   ts: number;
   fromId: string;
   from: string;
+  fromArtwork?: string;
   toId?: string;
   to?: string;
   text: string;
@@ -229,6 +230,7 @@ export interface RollMessage {
   ts: number;
   fromId: string;
   from: string;
+  fromArtwork?: string;
   toId?: string;
   to?: string;
   expression: string;

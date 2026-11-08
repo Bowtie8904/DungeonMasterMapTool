@@ -497,6 +497,8 @@ public final class OnlineSessionServer {
         if (this.campaign != null && !this.campaign.getId().equals(campaign.getId())) dmSheetGrants.clear();
         this.campaign = campaign;
         sharedCards.clear();
+        publishRoster();
+        host.rosterChanged();
     }
 
     public Campaign campaign() {
@@ -700,6 +702,7 @@ public final class OnlineSessionServer {
             for (JsonNode entry : store.historyTail(c.getId(), 50)) {
                 String to = entry.path("toId").asText("");
                 if (to.isEmpty() || client.playerId.equals(to) || client.playerId.equals(entry.path("fromId").asText())) {
+                    registerChatArtwork(entry);
                     tail.add(playerView(entry));
                 }
             }
@@ -3542,8 +3545,9 @@ public final class OnlineSessionServer {
         String sourceName = source.path("name").asText();
         ObjectNode out = MAPPER.createObjectNode().put("id", nextChatId()).put("type", "roll")
                 .put("ts", System.currentTimeMillis()).put("fromId", actor.getOwnerId())
-                .put("from", campaign.player(actor.getOwnerId()).getName()).put("expression", result.expression())
+                .put("from", chatName(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName())).put("expression", result.expression())
                 .put("total", result.total()).put("label", label).put("kind", "dice").put("actorId", actor.getId());
+        putChatArtwork(out, actor.getOwnerId());
         ArrayNode rolls = out.putArray("rolls");
         result.rolls().forEach(rolls::add);
         out.set("rollSource", featureSourceDescription(source));
@@ -4214,7 +4218,6 @@ public final class OnlineSessionServer {
             hello.put("transferOffers", true);
             hello.put("goldTransfers", true);
             hello.put("grabQuantity", true);
-            hello.put("chatIdentity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
             hello.put("brawlerRolls", true);
@@ -4296,7 +4299,7 @@ public final class OnlineSessionServer {
             case "command" -> onCommand(client, msg);
             case "measurement" -> onMeasurement(client, msg);
             case "chat" -> onChat(client, msg);
-            case "chatIdentity" -> onChatIdentity(client, msg);
+            case "chatIdentity" -> sendTo(ctx, error("Chat names are chosen automatically from your first enabled actor."));
             case "roll" -> onRoll(client, msg);
             case "fogExplored" -> onFogExplored(client, msg);
             case "resync" -> onResync(client, msg.path("lastSeq").asLong(0));
@@ -4444,41 +4447,31 @@ public final class OnlineSessionServer {
         return out.toString();
     }
 
-    private synchronized void onChatIdentity(Client client, JsonNode msg) {
-        JsonNode value = msg.path("identity");
-        if (!value.isTextual()) {
-            sendTo(client.ctx, error("Chat identity must be text."));
-            return;
-        }
-        String identity = value.asText().strip();
-        if (identity.length() > 60 || identity.codePoints().anyMatch(Character::isISOControl)) {
-            sendTo(client.ctx, error("Chat identity must be at most 60 characters without control characters."));
-            return;
-        }
+    private Campaign.Actor chatActor(String playerId) {
         Campaign c = campaign;
-        Campaign.Player player = c == null ? null : c.player(client.playerId);
-        if (player == null) {
-            sendTo(client.ctx, error("Your player is no longer in this campaign."));
-            return;
-        }
-        String previous = player.getChatIdentity();
-        player.setChatIdentity(identity);
-        try {
-            store.save(c);
-        } catch (IOException e) {
-            player.setChatIdentity(previous);
-            sendTo(client.ctx, error("Could not save chat identity: " + e.getMessage()));
-            return;
-        }
-        host.campaignChanged(c);
-        publishRoster();
-        host.rosterChanged();
+        if (c == null || playerId == null || c.player(playerId) == null) return null;
+        return c.getActors().stream()
+                .filter(actor -> playerId.equals(actor.getOwnerId()) && !actor.isDisabled()
+                        && actor.getName() != null && !actor.getName().isBlank())
+                .findFirst().orElse(null);
     }
 
     private String chatIdentity(String playerId) {
-        Campaign c = campaign;
-        Campaign.Player player = c == null ? null : c.player(playerId);
-        return player == null || player.getChatIdentity() == null ? "" : player.getChatIdentity();
+        Campaign.Actor actor = chatActor(playerId);
+        return actor == null ? "" : actor.getName();
+    }
+
+    private void putChatArtwork(ObjectNode message, String playerId) {
+        Campaign.Actor actor = chatActor(playerId);
+        if (actor == null || actor.getArtwork() == null) return;
+        String url = assets.artworkUrl(campaign.getId(), actor.getArtwork());
+        if (url != null) message.put("fromArtwork", url);
+    }
+
+    private void registerChatArtwork(JsonNode message) {
+        String url = message.path("fromArtwork").asText("");
+        if (url.startsWith("/a/") && url.endsWith(".img"))
+            assets.artworkUrl(campaign.getId(), url.substring(3, url.length() - 4));
     }
 
     private String chatName(String playerId, String accountName) {
@@ -4687,6 +4680,7 @@ public final class OnlineSessionServer {
         }
         out.put("type", "roll").put("ts", System.currentTimeMillis());
         out.put("fromId", client.playerId).put("from", chatName(client.playerId, client.playerName));
+        putChatArtwork(out, client.playerId);
         putRecipient(out, to);
         out.put("expression", result.expression());
         ArrayNode rolls = out.putArray("rolls");
@@ -4906,6 +4900,7 @@ public final class OnlineSessionServer {
         }
         out.put("type", "chat").put("ts", System.currentTimeMillis());
         out.put("fromId", fromId).put("from", chatName(fromId, from));
+        putChatArtwork(out, fromId);
         putRecipient(out, toId);
         out.put("text", text);
         return out;

@@ -20,31 +20,11 @@ try {
   const sent = [];
   app.conn.send = command => { sent.push(command); return true; };
   const hello = { type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex',
-    campaignId: 'chat-check', paused: false, chatIdentity: true };
+    campaignId: 'chat-check', paused: false };
   app.handle(hello);
-  assert(!sent.some(command => command.type === 'chatIdentity'), 'connecting never overwrites campaign identity');
-  const identity = document.getElementById('chat-identity');
-  app.handle({ type: 'roster', players: [{ playerId: 'alice', playerName: 'Alex', chatIdentity: 'Remembered', connections: 1, pingMs: 12 }] });
-  assert(identity.value === 'Remembered', 'loads saved identity from host roster');
-  identity.value = '  Rook  ';
-  identity.form.dispatchEvent(new Event('submit', { cancelable: true }));
-  assert(sent.at(-1).type === 'chatIdentity' && sent.at(-1).identity === 'Rook', 'sends trimmed identity');
+  assert(!document.getElementById('chat-identity'), 'chat identity setting is absent');
   app.handle({ type: 'roster', players: [{ playerId: 'alice', playerName: 'Alex', chatIdentity: 'Rook', connections: 1, pingMs: 12 }] });
-  assert(identity.value === 'Rook', 'host confirms saved campaign identity');
-  assert(document.querySelector('.players-overlay').textContent.includes('Alex (Rook) (you)'), 'overlay keeps account name with identity');
-  app.handle({ ...hello, chatIdentity: undefined });
-  assert(identity.disabled && identity.form.querySelector('button').disabled, 'older hosts disable identity changes');
-  app.handle(hello);
-  app.handle({ type: 'roster', players: [{ playerId: 'alice', playerName: 'Alex', chatIdentity: 'Rook', connections: 1, pingMs: 12 }] });
-  assert(identity.value === 'Rook', 'reconnect loads campaign identity without browser storage');
-  app.conn.send = () => false;
-  identity.value = 'Not saved';
-  identity.form.dispatchEvent(new Event('submit', { cancelable: true }));
-  assert(document.querySelector('.toast').textContent.includes('not saved'), 'disconnected save reports failure');
-  app.conn.send = command => { sent.push(command); return true; };
-  identity.value = '';
-  identity.form.dispatchEvent(new Event('submit', { cancelable: true }));
-  assert(sent.at(-1).identity === '', 'identity can be cleared');
+  assert(document.querySelector('.players-overlay').textContent.includes('Alex (Rook) (you)'), 'overlay shows account and actor name');
 
   const message = n => ({ type: 'chat', id: n, ts: Date.now(), fromId: 'bob', from: 'Bob', text: `Message ${n}: reading history` });
   app.handle({ type: 'snapshot', seq: 1, state: defaultState() });

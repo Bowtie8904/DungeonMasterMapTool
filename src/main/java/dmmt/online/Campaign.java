@@ -82,6 +82,7 @@ public class Campaign {
         @Builder.Default
         private String id = UUID.randomUUID().toString();
         private String name;
+        /** Retained for old campaign round-tripping; chat names are derived from enabled actors. */
         @Builder.Default
         private String chatIdentity = "";
         /** {@code argon2id$m$t$p$saltB64$hashB64}; empty until the DM sets a password. */

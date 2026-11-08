@@ -8,6 +8,42 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('shows sender portraits for chat and rolls and falls back when artwork fails', () => {
+    class Element {
+      className = '';
+      src = '';
+      children: Array<Element | string> = [];
+      listeners = new Map<string, () => void>();
+      removed = false;
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute() {}
+      addEventListener(type: string, handler: () => void) { this.listeners.set(type, handler); }
+      remove() { this.removed = true; }
+      find(cls: string): Element | undefined {
+        return this.className === cls ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      for (const entry of [
+        { kind: 'chat' as const, m: { id: 1, ts: 0, fromId: 'player', from: 'Mara', text: 'Hello', fromArtwork: '/a/portrait.img' } },
+        { kind: 'roll' as const, m: { ...message, fromArtwork: '/a/portrait.img' } },
+      ]) {
+        const avatar = (renderLogEntry(entry, 'player') as unknown as Element).find('message-avatar')!;
+        expect(avatar.children).toHaveLength(1);
+        const portrait = avatar.children[0] as Element;
+        expect(portrait.src).toBe('/a/portrait.img');
+        portrait.listeners.get('error')!();
+        expect(portrait.removed).toBe(true);
+        expect(avatar.children[1]).toBe(entry.m.from[0]);
+      }
+      const legacy = renderLogEntry({ kind: 'roll', m: message }, 'player') as unknown as Element;
+      expect(legacy.find('message-avatar')!.children).toEqual(['P']);
+      const dm = renderLogEntry({ kind: 'roll', m: { ...message, fromId: 'dm', fromArtwork: '/a/portrait.img' } }, 'player') as unknown as Element;
+      expect(dm.find('message-avatar')!.children).toEqual(['G']);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('explains doubled damage without treating the multiplier as another flat bonus', () => {
     const details = rollDetails({ ...message, kind: undefined, expression: '(3d8kh2+2+2d4+24)*2', rolls: [1, 8, 4, 2, 3], total: 86 });
     expect(details.map((d) => d.total)).toEqual([24, 4, 10, 48]);

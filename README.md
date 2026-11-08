@@ -243,7 +243,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
   The DM can right-click an actor in Online Play to disable or re-enable it. Its assigned player can still
   read the disabled sheet, marked beside the character's name, but cannot edit it, use its actions, or move
-  its token; the DM retains control.
+  its token; navigating the read-only sheet does not save it, and the DM retains control.
   Disabled actors are excluded from targeting, transfers and actor-based automation. Previously applied
   effects remain in place, and re-enabling restores access.
   Domain-card counters labeled "Tokens" sit in each loadout card's header between its domain and recall cost;
@@ -589,9 +589,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.
   Click the selected section again to collapse it to just its icons. Settings contains your audio
-  controls, an optional **Chat identity**, and logout. Chat identities are saved in the campaign per player
-  on the host (shared across browsers/devices), used for future chat messages, rolls and shared cards, and shown as `username (identity)`
-  in the bottom-left roster; leave the identity empty to use your account name (maximum 60 characters).
+  controls and logout. Future chat messages, rolls and shared cards use the name of the first enabled actor
+  assigned to the player, or the account name if there is none. The bottom-left roster shows the account
+  name alongside the actor name. Chat and roll cards show that actor's portrait when available.
   Settings also has **Smooth token movement** (on by default, remembered per browser): tokens moved by
   other players or the DM glide between updates instead of jumping. Other players' drags reach you as soon
   as the host accepts each step (about 20 updates per second). Turn it off on slow devices to redraw less.

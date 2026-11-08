@@ -11,7 +11,11 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 
@@ -24,6 +28,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.ToIntFunction;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -206,6 +211,10 @@ public final class ChatCards {
 
     /** Adds a moderation button only when the DM view supplies a delete action. */
     public static Node render(JsonNode m, ToIntFunction<JsonNode> stock, Runnable delete) {
+        return render(m, stock, delete, null);
+    }
+
+    public static Node render(JsonNode m, ToIntFunction<JsonNode> stock, Runnable delete, Function<String, String> artwork) {
         boolean roll = "roll".equals(m.path("type").asText());
         String text = m.path("text").asText("");
         boolean whisper = !m.path("toId").asText("").isEmpty();
@@ -224,7 +233,7 @@ public final class ChatCards {
         if (damage != null) card.getStyleClass().add("chat-damage");
         if (action != null) card.getStyleClass().add("chat-action");
         if (whisper) card.getStyleClass().add("chat-whisper");
-        card.getChildren().add(header(m, delete));
+        card.getChildren().add(header(m, delete, artwork));
         if (whisper) {
             Label label = new Label("Whisper to " + ("dm".equals(m.path("toId").asText()) ? "Gamemaster"
                     : m.path("to").asText(m.path("toId").asText())));
@@ -298,20 +307,34 @@ public final class ChatCards {
         return new VBox(banner, wrapped(report.title(), "chat-action-title"), bullets(report.lines()));
     }
 
-    private static Node header(JsonNode m, Runnable delete) {
+    private static Node header(JsonNode m, Runnable delete, Function<String, String> artwork) {
         String from = "dm".equals(m.path("fromId").asText()) ? "Gamemaster" : m.path("from").asText("?");
         Label avatar = new Label(from.isEmpty() ? "?" : from.substring(0, 1).toUpperCase(Locale.ROOT));
         avatar.getStyleClass().add("chat-avatar");
         avatar.setMinSize(25, 25);
         avatar.setMaxSize(25, 25);
         avatar.setAlignment(Pos.CENTER);
+        Node avatarNode = avatar;
+        if (!"dm".equals(m.path("fromId").asText()) && artwork != null && m.hasNonNull("fromArtwork")) {
+            String url = artwork.apply(m.path("fromArtwork").asText());
+            if (url != null) {
+                Image image = new Image(url, 25, 25, false, true, true);
+                ImageView portrait = new ImageView(image);
+                Rectangle clip = new Rectangle(25, 25);
+                clip.setArcWidth(8);
+                clip.setArcHeight(8);
+                portrait.setClip(clip);
+                portrait.visibleProperty().bind(image.errorProperty().not());
+                avatarNode = new StackPane(avatar, portrait);
+            }
+        }
         Label sender = new Label(from);
         sender.getStyleClass().add("chat-sender");
         HBox.setHgrow(sender, Priority.ALWAYS);
         sender.setMaxWidth(Double.MAX_VALUE);
         Label time = new Label(TIME.format(Instant.ofEpochMilli(m.path("ts").asLong()).atZone(ZoneId.systemDefault())));
         time.getStyleClass().add("chat-time");
-        HBox header = new HBox(8, avatar, sender, time);
+        HBox header = new HBox(8, avatarNode, sender, time);
         if (delete != null) {
             Button remove = Icons.button(org.kordamp.ikonli.materialdesign2.MaterialDesignD.DELETE_OUTLINE,
                     "Delete message for everyone", delete);

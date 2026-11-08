@@ -43,6 +43,8 @@ public final class ChatPanel extends VBox {
         /** Units a transfer offer still has; may block, called off the FX thread. */
         int remaining(JsonNode sharedCard);
 
+        default String artwork(String url) { return null; }
+
         /** Posts a gold transfer offer; returns an error message, or null on success. */
         default String offerGold(int amount, String toPlayerId) {
             return "Gold offers are not supported.";
@@ -176,7 +178,7 @@ public final class ChatPanel extends VBox {
                 javafx.scene.Node card = messages.getChildren().get(i);
                 if (!(card.getUserData() instanceof JsonNode previous)
                         || !previous.path("id").equals(updated.path("id")) || !previous.path("ts").equals(updated.path("ts"))) continue;
-                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated));
+                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated), backend::artwork);
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);
                 break;
@@ -201,7 +203,7 @@ public final class ChatPanel extends VBox {
                 if (message.has("expression")) updated.set("expression", message.get("expression"));
                 if (message.has("rolls")) updated.set("rolls", message.get("rolls"));
                 if (message.has("breakdown")) updated.set("breakdown", message.get("breakdown"));
-                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated));
+                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated), backend::artwork);
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);
                 return;
@@ -255,7 +257,7 @@ public final class ChatPanel extends VBox {
 
     private void addCard(JsonNode m) {
         stickToBottom = distanceFromBottom() < 4;
-        var card = ChatCards.render(m, backend::remaining, () -> deleteMessage(m));
+        var card = ChatCards.render(m, backend::remaining, () -> deleteMessage(m), backend::artwork);
         card.setUserData(m);
         messages.getChildren().add(card);
         while (messages.getChildren().size() > MAX_CARDS) {

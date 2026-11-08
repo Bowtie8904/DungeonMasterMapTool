@@ -51,7 +51,7 @@ No settings or compatibility-version changes are required.
 Browser client for the Online Play host (plan.md section 3.41). Vanilla TypeScript, Canvas 2D, no runtime dependencies.
 
 Actor snapshots and sheet responses include an additive `disabled` flag. Disabled actors remain listed for
-their owner, but their sheets are read-only with a disabled indicator beside the name, and their tokens have no player controllers. The host rejects
+their owner, but their sheets are read-only with a disabled indicator beside the name, and their tokens have no player controllers. Read-only navigation and background flushes do not save; pending edits remain until re-enabled. The host rejects
 disabled-actor writes, actions, rolls and inventory claims even from older clients, and excludes them from
 actor-based targeting, effects and Copycat candidates. Existing effects remain, and the DM's authenticated
 sheet retains edit access. The flag defaults to false for older campaigns and hosts; DM Link compatibility is unchanged.
@@ -99,15 +99,12 @@ Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `
 Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view without reducing player ambient darkness;
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
 Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).
-Optional chat identities are stored on the host in `campaign.json` as `players[].chatIdentity`
-(empty or missing = account name, maximum 60 characters), not in browser storage.
-Settings sends `chatIdentity {identity}` only with `hello.chatIdentity:true`; older hosts
-disable the form. Browsers and pop-out sheets never send identity edits on reconnect.
-The host saves edits before broadcasting the updated roster, reporting save failures without changing the identity.
-The host resolves all future
-message/roll/card sender and whisper-recipient names, sharing the identity across that player's sockets.
-Roster entries add `chatIdentity` without changing `playerName`, displayed as `username (identity)`.
-These additions do not change Online protocol or DM Link compatibility versions.
+The host resolves future message, roll, card and whisper-recipient names to the first enabled actor
+owned by that player in campaign order, or the account name if none is enabled. Saved legacy identities
+are ignored. The roster displays the actor name alongside the account name. Older clients cannot edit
+the derived name; historical messages retain their original names.
+New chat and roll cards capture the same actor's portrait without showing an initial alongside it, falling back to the sender's initial when
+artwork is missing or unavailable; older messages keep their existing initial avatars.
 
 Daggerheart testing actors are created only by the desktop DM (Actors tree context menu) and may be used freely
 by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately

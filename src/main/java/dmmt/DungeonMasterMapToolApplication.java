@@ -1757,6 +1757,13 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override public int remaining(com.fasterxml.jackson.databind.JsonNode sharedCard) {
                 return onlineController == null ? 0 : onlineController.cardRemaining(sharedCard);
             }
+            @Override public String artwork(String url) {
+                if (onlineController == null || onlineController.campaign() == null
+                        || !url.matches("/a/[a-zA-Z0-9_-]+\\.img")) return null;
+                var path = onlineController.store().artworkPath(onlineController.campaign().getId(),
+                        url.substring(3, url.length() - 4));
+                return java.nio.file.Files.isRegularFile(path) ? path.toUri().toString() : null;
+            }
             @Override public String offerGold(int amount, String toPlayerId) {
                 return onlineController == null ? "Not hosting." : onlineController.offerGold(amount, toPlayerId);
             }

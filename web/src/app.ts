@@ -97,11 +97,6 @@ export class App {
   private chatScrollTop = 0;
   private chatResize?: ResizeObserver;
   private latestButton = el('button', { type: 'button', class: 'chat-latest hidden' }, 'Jump to latest');
-  private identityInput = el('input', { type: 'text', id: 'chat-identity', maxLength: 60, disabled: true, placeholder: 'Use account name' });
-  private identitySave = el('button', { type: 'submit', disabled: true }, 'Save identity');
-  private identityHint = el('p', { class: 'tool-hint' });
-  private currentIdentity: string | null = null;
-  private identitySupported = false;
   private chatRecipient = el('select', { id: 'chat-recipient' },
     el('option', { value: '' }, 'Everyone'), el('option', { value: 'dm' }, 'Gamemaster'));
   private actorsEl = el('div', { class: 'actors' });
@@ -234,22 +229,6 @@ export class App {
   }
 
   private buildSettings(): HTMLElement {
-    const identityForm = el('form', { class: 'chat-identity-form' },
-      el('label', { class: 'vol', htmlFor: 'chat-identity' }, 'Chat identity', this.identityInput),
-      this.identityHint, this.identitySave);
-    identityForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const identity = this.identityInput.value.trim();
-      if (identity.length > 60 || /[\u0000-\u001f\u007f-\u009f]/.test(identity)) {
-        this.toast('Chat identity must be at most 60 characters without control characters.');
-        return;
-      }
-      if (!this.identitySupported || !this.conn.send({ type: 'chatIdentity', identity })) {
-        this.toast('Not connected to a host supporting chat identities. Your identity was not saved.');
-        return;
-      }
-      this.identityInput.value = identity;
-    });
     const slider = (title: string, get: () => number, set: (v: number) => void) => {
       const s = el('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(get()), title });
       s.addEventListener('input', () => {
@@ -305,7 +284,7 @@ export class App {
       this.view.smoothMovement = smooth.checked;
       this.view.invalidate();
     });
-    return el('div', { class: 'settings-section' }, identityForm, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
+    return el('div', { class: 'settings-section' }, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
       el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'),
       el('h3', {}, 'Display'),
       el('label', { class: 'vol', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
@@ -765,12 +744,6 @@ export class App {
         this.handouts.closeAll();
         this.sectionButtons.get('files')?.classList.toggle('hidden', msg.handouts !== true);
         if (msg.handouts !== true && this.section === 'files') this.showSection('chat');
-        this.identitySupported = msg.chatIdentity === true;
-        this.identityInput.disabled = this.identitySave.disabled = !this.identitySupported;
-        this.identityInput.value = '';
-        this.identityHint.textContent = this.identitySupported
-          ? 'Saved in the campaign for your account. Leave empty to use your account name.'
-          : 'This host does not support chat identities. Update the host to enable them.';
         this.playerWhispers = msg.playerWhispers === true;
         this.chatCards = msg.chatCards === true;
         this.compendiumChat = msg.compendiumChat === true;
@@ -796,11 +769,6 @@ export class App {
       case 'roster':
         {
           this.connectedPlayers = new Set(msg.players.filter(p => p.connections > 0).map(p => p.playerId));
-          const own = msg.players.find(p => p.playerId === this.playerId);
-          if (own && this.currentIdentity !== (own.chatIdentity ?? '')) {
-            this.currentIdentity = own.chatIdentity ?? '';
-            this.identityInput.value = this.currentIdentity;
-          }
         }
         this.updateRecipients(msg.players);
         this.rosterEl.replaceChildren(this.rosterHeading,
@@ -1179,7 +1147,8 @@ export class App {
     if (!load) {
       load = loadCharacter(a.id, a.name, (message) => this.toast(message)).then((character) => {
         const bus = new SheetBus();
-        const changed = autosave(a.id, character, (m) => this.toast(m));
+        const readOnly = () => this.store.state?.actors.find(actor => actor.id === a.id)?.disabled === true;
+        const changed = autosave(a.id, character, (m) => this.toast(m), 700, readOnly);
         this.sheetHandles.set(a.id, { character, bus, save: changed });
         bus.subscribe(() => this.scheduleEffects());
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
@@ -1192,7 +1161,7 @@ export class App {
         const win = new SheetWindow(
           {
             character,
-            readOnly: () => this.store.state?.actors.find(actor => actor.id === a.id)?.disabled === true,
+            readOnly,
             bus,
             onChange: () => {
               changed();

@@ -115,10 +115,15 @@ it('updates sheet controls and minimized trait rolls when read-only is toggled',
   const controls = root.querySelectorAll('input, textarea, select, button');
   expect(controls.filter(control => control.attributes.role === 'tab').every(control => !control.disabled)).toBe(true);
   expect(controls.filter(control => control.tag === 'button' && control.attributes.role !== 'tab').every(control => control.disabled)).toBe(true);
+  root.listeners.get('click')!();
+  root.listeners.get('input')!();
+  root.listeners.get('change')!();
   expect(onChange).toHaveBeenCalledTimes(1);
   disabled = false;
   bus.notify();
   expect(name().text).not.toContain('Disabled');
   expect(miniButtons().every(button => !button.disabled)).toBe(true);
   expect(onChange).toHaveBeenCalledTimes(2);
+  root.listeners.get('click')!();
+  expect(onChange).toHaveBeenCalledTimes(3);
 });

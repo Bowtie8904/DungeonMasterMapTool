@@ -9,9 +9,38 @@ vi.mock('../api', async () => {
   return { ...actual, getSheet: vi.fn(), saveSheet: vi.fn() };
 });
 
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('defers pending edits and blocks all background saves while read-only, then resumes when enabled', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', globalThis);
+    let visibilityChange: (() => void) | undefined;
+    vi.stubGlobal('document', { visibilityState: 'hidden', addEventListener: (type: string, handler: () => void) => {
+      if (type === 'visibilitychange') visibilityChange = handler;
+    } });
+    const c = mockCharacter();
+    const onError = vi.fn();
+    let readOnly = false;
+    const save = autosave('disabled', c, onError, 700, () => readOnly);
+    c.notes = 'Pending edit';
+    save();
+    readOnly = true;
+    await vi.advanceTimersByTimeAsync(700);
+    save();
+    visibilityChange!();
+    await save.flush();
+    await vi.runAllTimersAsync();
+    expect(saveSheet).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(c.notes).toBe('Pending edit');
+    readOnly = false;
+    save();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(saveSheet).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveSheet).mock.calls[0][1].notes).toBe('Pending edit');
+  });
+
   it('finds targeted nested grimoire actions and conditional card actions', () => {
     const c = mockCharacter();
     c.loadout = [{ name: 'Book', domain: 'Codex', level: 1, type: 'Grimoire', recall: 0, text: '',

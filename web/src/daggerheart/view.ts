@@ -347,7 +347,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     actionButton(`feat:${name}`, feature.automation, action, name, {}).click();
     return true;
   };
-  for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, () => opts.onChange?.());
+  for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, () => {
+    if (!opts.readOnly?.()) opts.onChange?.();
+  });
 
   const cardResourceIds = (): Set<string> => new Set([...activeCards(c).map((d) => d.automation), ...c.inventory.map((i) => i.automation)].flatMap((a) => a?.resources ?? []).map((r) => r.id));
   /** Re-evaluates rendered action buttons after a resource changes without re-rendering the sheet. */

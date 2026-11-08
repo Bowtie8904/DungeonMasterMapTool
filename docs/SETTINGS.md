@@ -7,12 +7,8 @@ common synonyms to make searching easier.
 
 ## Online Play browser preferences
 
-The player's browser **Settings > Chat identity** sets an optional name for future chat messages, rolls
-and shared cards. It is trimmed, limited to 60 characters without control characters, and defaults to empty
-(use the account name). It is saved on the host in the campaign's `campaign.json` as
-`players[].chatIdentity`, not in browser storage or `dmmt-settings.ini`. The identity follows the player
-across browsers/devices and host restarts; the bottom-left overlay shows `username (identity)`. Clearing the field
-and saving restores the account name. Older hosts disable this setting with an update hint.
+Chat names are not a setting: the host uses the first enabled actor assigned to the player, or the account
+name when no enabled actor is assigned. The bottom-left overlay shows the account and actor names.
 
 **Settings > Smooth token movement** (default on) is stored only in that browser's local storage
 (`dmmt.smoothTokens`), not in `dmmt-settings.ini`. When on, tokens moved by other players or the DM glide
