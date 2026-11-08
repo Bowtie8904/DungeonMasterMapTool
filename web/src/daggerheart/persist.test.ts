@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryConflict, getSheet, saveSheet } from '../api';
-import { applyFeatureState, applyInventory, autosave, updateCharacterAutomation } from './persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, updateCharacterAutomation } from './persist';
 import { mockCharacter } from './data';
 import type { CompendiumFile } from './compendium';
 
@@ -12,6 +12,15 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('finds targeted nested grimoire actions and conditional card actions', () => {
+    const c = mockCharacter();
+    c.loadout = [{ name: 'Book', domain: 'Codex', level: 1, type: 'Grimoire', recall: 0, text: '',
+      spells: [{ name: 'Armor', text: '', automation: { actions: [{ id: 'cast', label: 'Cast', target: 'actor' }] } }],
+      automation: { conditionalActions: [{ id: 'other', label: 'Other', target: 'actor' }] } }];
+    expect(featureTarget(c, 'card:Book/Armor', 'cast')).toBe('actor');
+    expect(featureTarget(c, 'card:Book', 'other')).toBe('actor');
+    expect(featureTarget(c, 'card:Book/Missing', 'cast')).toBeUndefined();
+  });
   it('refreshes the full sheet live without saving it back or overwriting a pending edit', async () => {
     vi.stubGlobal('window', globalThis);
     vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });

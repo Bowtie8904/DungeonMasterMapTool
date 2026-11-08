@@ -99,6 +99,8 @@ describe('daggerheart data', () => {
     expect(dualityExpression(0, 0)).toBe('2d12');
     expect(dualityExpression(3, 1)).toBe('2d12+1d6+3');
     expect(dualityExpression(-1, -1)).toBe('2d12-1d6-1');
+    expect(dualityExpression(2, 1, 12, 12, 8)).toBe('2d12+1d8+2');
+    expect(dualityExpression(2, -1, 12, 12, 8)).toBe('2d12-1d6+2');
   });
 
   it('interprets duality rolls', () => {

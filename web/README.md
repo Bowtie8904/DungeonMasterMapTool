@@ -233,7 +233,8 @@ Browsers remove the entry without marking chat unread; no player delete UI or co
 Removal is persisted on the host before notification, including revoking shared-card access.
 Older clients ignore the event and converge on their next snapshot; Online and DM Link versions are unchanged.
 `shared-cards.ts` renders description-only feature/domain/equipment cards, with no sheet automation controls.
-On the sheet, loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
+On the sheet, loadout and vault domain cards are displayed in ascending level order without changing their saved order.
+Loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
 They retain their existing editable values, limits and autosave behavior. Domain-card action groups have no enclosing border or panel padding; individual buttons retain their normal styling.
 Sheet chat icons and inventory-to-chat drags require `hello.chatCards:true`. Posting uses
 `POST /api/chat-cards {actorId,category,item,toId?}`; the host resolves the entry from the owner's saved sheet,
@@ -295,6 +296,14 @@ rotation commands/previews/cancellation, pause and older-host capability handlin
 `checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,
 and checks safe, independent source disclosures and source propagation from feature/local action rolls,
 Spellcast, individual grimoire spells and follow-up spell damage.
+All 236 domain cards and every grimoire spell have an individual audit disposition and a complete
+open-decision list in `../plan.md`. Nested grimoire target actions resolve their full book/spell key.
+Audited host reactions and source-exclusive effects require the optional `domainCardAutomationV2`
+hello capability; the original capability remains for older clients. Domain action/option source tags
+link results to their chosen cast or bonus without changing class roll tags.
+Non-fixed reaction damage and Hope/Stress quantity rolls validate pending costs and source availability,
+and spend nothing on cancellation or disconnected sends. `domain-card-corrections.test.ts`,
+`domain-card-view.test.ts`, `rollbuttons.test.ts` and `damage.test.ts` cover these paths.
 Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
 never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
 Witch automation rolls Commune's Spellcast-trait d6s and includes the sensory chart. Walk Between Worlds

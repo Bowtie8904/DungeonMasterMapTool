@@ -11,19 +11,7 @@
    "domain": "Blade",
    "level": 2,
    "recall": 1,
-   "text": "Once per long rest, when you compliment someone or ask them about something they’re good at, you can both gain 3 Hope.",
-   "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "A Soldier’s Bond"
-     }
-    ]
-   }
+   "text": "Once per long rest, when you compliment someone or ask them about something they’re good at, you can both gain 3 Hope."
   },
   {
    "id": "adjust-reality",
@@ -54,21 +42,26 @@
    "recall": 2,
    "text": "When 4 or more of the domain cards in your loadout are from the Arcana domain, gain the following benefits:\n\n- +1 bonus to your Spellcast Rolls\n- Once per rest, you can switch the results of your Hope and Fear Dice.",
    "automation": {
+    "conditionalModifiers": [
+     { "roll": "spellcast", "value": 1, "loadoutDomain": { "domain": "Arcana", "min": 4 } }
+    ],
     "uses": {
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Arcana-Touched"
-     }
+    "conditionalRollTriggers": [
+     { "id": "swap", "label": "Arcana-Touched: swap Hope and Fear", "on": "duality", "swapDuality": true,
+       "loadoutDomain": { "domain": "Arcana", "min": 4 } }
     ]
    }
   },
   {
    "id": "arcane-reflection",
    "name": "Arcane Reflection",
+   "automation": { "actions": [
+    { "id": "reflect", "label": "Arcane Reflection: roll Hope dice", "resourceRoll": { "resource": "hope", "sides": 6 },
+      "report": { "text": "If any die shows 6, the GM reflects the incoming magic attack to its caster instead." } }
+   ] },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 8,
@@ -84,6 +77,9 @@
    "recall": 1,
    "text": "While you’re wearing armor, gain a +1 bonus to your Armor Score.\n\nDuring a rest, when you choose to repair your armor as a downtime move, your allies also clear an Armor Slot.",
    "automation": {
+    "conditionalModifiers": [
+     { "stat": "armorScore", "value": 1, "requiresArmor": true }
+    ],
     "rest": {
      "modifiers": [
       {
@@ -114,7 +110,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Astral Projection"
+      "label": "Astral Projection",
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -148,15 +147,9 @@
    "recall": 0,
    "text": "Make a **Spellcast Roll** against a target within Close range. On a success, roll a number of **d20**s equal to your Spellcast trait. The target must make a reaction roll with a Difficulty equal to your highest result. On a success, the target must mark a Stress but isn’t banished. Once per rest on a failure, they are banished from this realm.\n\nWhen the PCs roll with Fear, the Difficulty gains a −1 penalty and the target makes another reaction roll. On a success, they return from banishment.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Banish"
-     }
+    "banishDifficulty": true,
+    "conditionalRollTriggers": [
+     { "id": "difficulty", "label": "Banish: roll difficulty", "on": "card:Banish", "banishDifficulty": true }
     ]
    }
   },
@@ -167,7 +160,11 @@
    "domain": "Valor",
    "level": 1,
    "recall": 0,
-   "text": "When you choose not to equip armor, you have a base Armor Score of 3 + your Strength and use the following as your base damage thresholds:\n\n- ***Tier 1:*** 9/19\n- ***Tier 2:*** 11/24\n- ***Tier 3:*** 13/31\n- ***Tier 4:*** 15/38"
+   "text": "When you choose not to equip armor, you have a base Armor Score of 3 + your Strength and use the following as your base damage thresholds:\n\n- ***Tier 1:*** 9/19\n- ***Tier 2:*** 11/24\n- ***Tier 3:*** 13/31\n- ***Tier 4:*** 15/38",
+   "automation": { "unarmoredBase": {
+    "score": 3, "trait": "Strength",
+    "thresholdsByTier": { "1": [9, 19], "2": [11, 24], "3": [13, 31], "4": [15, 38] }
+   } }
   },
   {
    "id": "battle-cry",
@@ -185,7 +182,17 @@
     "actions": [
      {
       "id": "use",
-      "label": "Battle Cry"
+      "label": "Battle Cry",
+      "chatBenefits": [
+       {
+        "id": "battle-cry",
+        "label": "If you can hear the cry: clear 1 Stress and gain 1 Hope",
+        "steps": [
+         { "op": "clear", "resource": "stress", "amount": 1 },
+         { "op": "gain", "resource": "hope", "amount": 1 }
+        ]
+       }
+      ]
      }
     ]
    }
@@ -240,7 +247,13 @@
    "domain": "Blade",
    "level": 7,
    "recall": 1,
-   "text": "When 4 or more of the domain cards in your loadout are from the Blade domain, gain the following benefits:\n\n- +2 bonus to your attack rolls\n- +4 bonus to your Severe damage threshold"
+   "text": "When 4 or more of the domain cards in your loadout are from the Blade domain, gain the following benefits:\n\n- +2 bonus to your attack rolls\n- +4 bonus to your Severe damage threshold",
+   "automation": {
+    "conditionalModifiers": [
+     { "roll": "attack", "value": 2, "loadoutDomain": { "domain": "Blade", "min": 4 } },
+     { "stat": "severeThreshold", "value": 4, "loadoutDomain": { "domain": "Blade", "min": 4 } }
+    ]
+   }
   },
   {
    "id": "blighting-strike",
@@ -251,14 +264,15 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success:\n\n- On a roll with Hope, deal **d6+1** magic damage using your Proficiency. On a roll with Fear, deal **d10+1** magic damage using your Proficiency.\n- The target’s next successful attack deals half damage.\nOn a failure, you must spend a Hope or mark a Stress.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "hope-damage",
       "label": "Blighting Strike: roll d6+1 damage (Hope)",
       "on": "card:Blighting Strike",
       "when": "hope",
+      "successIfKnown": true,
       "damage": {
-       "dice": "d6+1"
+       "dice": "d6+1", "type": "magic"
       }
      },
      {
@@ -266,12 +280,16 @@
       "label": "Blighting Strike: roll d10+1 damage (Fear)",
       "on": "card:Blighting Strike",
       "when": "fear",
+      "successIfKnown": true,
       "damage": {
-       "dice": "d10+1"
+       "dice": "d10+1", "type": "magic"
       }
      },
      {
       "id": "fail-hope",
+      "exclusiveRollGroup": "failure-payment",
+      "failedOnly": true,
+      "when": "failure",
       "label": "Blighting Strike failed: spend a Hope",
       "on": "card:Blighting Strike",
       "cost": {
@@ -280,6 +298,9 @@
      },
      {
       "id": "fail-stress",
+      "exclusiveRollGroup": "failure-payment",
+      "failedOnly": true,
+      "when": "failure",
       "label": "Blighting Strike failed: mark a Stress",
       "on": "card:Blighting Strike",
       "steps": [
@@ -300,11 +321,23 @@
    "domain": "Arcana",
    "level": 4,
    "recall": 1,
-   "text": "Make a **Spellcast Roll (12)**. On a success, **spend a Hope** to teleport to another point you can see within Far range. If any willing creatures are within Very Close range, **spend an additional Hope** for each creature to bring them with you."
+   "text": "Make a **Spellcast Roll (12)**. On a success, **spend a Hope** to teleport to another point you can see within Far range. If any willing creatures are within Very Close range, **spend an additional Hope** for each creature to bring them with you.",
+   "automation": {
+    "spellcastDifficulty": 12,
+    "conditionalRollTriggers": [
+     { "id": "teleport", "label": "Blink Out: spend Hope", "on": "card:Blink Out", "when": "success", "difficulty": 12, "spendHopeAmount": true }
+    ]
+   }
   },
   {
    "id": "blood-bind",
    "name": "Blood Bind",
+   "automation": { "conditionalRollTriggers": [
+    { "id": "bind", "label": "Successful Blood Bind: mark Stress", "on": "card:Blood Bind", "successIfKnown": true,
+      "cost": { "stress": 1 }, "description": "Target becomes Restrained and Vulnerable; spotlight damage and termination are table-managed." }
+   ], "actions": [
+    { "id": "spotlight", "label": "Bound target spotlighted: damage", "damage": { "dice": "d10", "type": "magic" } }
+   ] },
    "cardType": "Spell",
    "domain": "Blood",
    "level": 6,
@@ -314,6 +347,15 @@
   {
    "id": "blood-puppet",
    "name": "Blood Puppet",
+   "automation": { "actions": [
+    { "id": "control", "label": "Blood Puppet: control Spellcast roll", "actionRoll": { "trait": "spellcast" } },
+    { "id": "attack", "label": "Blood Puppet: puppet attack Spellcast roll", "actionRoll": { "trait": "spellcast" } }
+   ], "conditionalRollTriggers": [
+    { "id": "control", "label": "Blood Puppet: spend Hope to control", "on": "featureAction:card:Blood Puppet:control",
+      "successIfKnown": true, "cost": { "hope": 1 }, "report": { "text": "Move or attack with the controlled creature; resolve its movement manually." } },
+    { "id": "damage", "label": "Blood Puppet: puppet damage", "on": "featureAction:card:Blood Puppet:attack",
+      "successIfKnown": true, "damage": { "dice": "d10", "type": "physical" } }
+   ] },
    "cardType": "Spell",
    "domain": "Blood",
    "level": 3,
@@ -329,13 +371,14 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **mark a Stress** to deal **d10** magic damage to the target using your Proficiency. On a success with Hope, the target also marks a Stress. On a roll with Fear, **mark a Stress**.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Blood Spike: mark a Stress, roll d10 damage",
       "on": "card:Blood Spike",
       "damage": {
-       "dice": "d10"
+       "dice": "d10", "type": "magic"
       },
       "cost": {
        "stress": 1
@@ -364,7 +407,15 @@
    "domain": "Blood",
    "level": 7,
    "recall": 1,
-   "text": "While 4 or more of the domain cards in your loadout are from the Blood domain, gain the following benefits:\n\n- When you take enough damage to mark 2 or more Hit Points, gain a ***Hope***.\n- For every ***3 Hit Points*** you have marked, gain a ***+1*** bonus to your Evasion."
+   "text": "While 4 or more of the domain cards in your loadout are from the Blood domain, gain the following benefits:\n\n- When you take enough damage to mark 2 or more Hit Points, gain a ***Hope***.\n- For every ***3 Hit Points*** you have marked, gain a ***+1*** bonus to your Evasion.",
+   "automation": {
+    "conditionalModifiers": [
+     { "stat": "evasion", "markedHpDivisor": 3, "loadoutDomain": { "domain": "Blood", "min": 4 } }
+    ],
+    "conditionalDamageRewards": [
+     { "minHp": 2, "gainHope": 1, "loadoutDomain": { "domain": "Blood", "min": 4 } }
+    ]
+   }
   },
   {
    "id": "bloodbath",
@@ -382,7 +433,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Bloodbath"
+      "label": "Bloodbath",
+      "cost": {
+       "hope": 1
+      }
      }
     ]
    }
@@ -401,7 +455,9 @@
       "id": "basher",
       "label": "Body Basher",
       "roll": "damage",
-      "value": "@strength",
+      "traitValue": "Strength",
+      "weaponRange": "Melee",
+      "excludeRolls": ["spelldamage"],
       "description": "Successful attack with a Melee weapon."
      }
     ]
@@ -421,7 +477,7 @@
       "id": "presence",
       "label": "Bold Presence",
       "roll": "trait:Presence",
-      "value": "@strength",
+      "traitValue": "Strength",
       "cost": {
        "hope": 1
       }
@@ -430,7 +486,11 @@
     "actions": [
      {
       "id": "avoid",
-      "label": "Once per rest: avoid condition"
+      "label": "Once per rest: avoid condition",
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      }
      }
     ]
    }
@@ -444,13 +504,14 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success, **spend a Hope** to send a bolt of shimmering light toward them, dealing **d8+2** magic damage using your Proficiency. The target becomes temporarily *Vulnerable* and glows brightly until this condition is cleared.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Bolt Beacon: spend a Hope, roll d8+2 damage",
       "on": "card:Bolt Beacon",
       "damage": {
-       "dice": "d8+2"
+       "dice": "d8+2", "type": "magic"
       },
       "cost": {
        "hope": 1
@@ -468,14 +529,18 @@
    "recall": 2,
    "text": "When 4 or more of the domain cards in your loadout are from the Bone domain, gain the following benefits:\n\n- +1 bonus to Agility\n- Once per rest, you can **spend 3 Hope** to cause an attack that succeeded against you to fail instead.",
    "automation": {
+    "conditionalModifiers": [
+     { "stat": "trait.Agility", "value": 1, "loadoutDomain": { "domain": "Bone", "min": 4 } }
+    ],
     "uses": {
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalActions": [
      {
       "id": "use",
       "label": "Bone-Touched",
+      "loadoutDomain": { "domain": "Bone", "min": 4 },
       "cost": {
        "hope": 3
       }
@@ -494,10 +559,20 @@
    "spells": [
     {
      "name": "Power Push",
-     "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, they’re knocked back to Far range and take **d10+2** magic damage using your Proficiency."
+     "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, they’re knocked back to Far range and take **d10+2** magic damage using your Proficiency.",
+     "automation": { "conditionalRollTriggers": [
+      { "id": "damage", "label": "Successful Power Push: damage", "on": "card:Power Push", "successIfKnown": true,
+        "damage": { "dice": "d10+2", "type": "magic" } }
+     ] }
     },
     {
      "name": "Tava’s Armor",
+     "automation": { "actions": [
+      { "id": "armor", "label": "Tava's Armor", "target": "actor", "cost": { "hope": 1 }, "steps": [{ "op": "effect", "effect": {
+        "name": "Tava's Armor", "kind": "buff", "until": "rest", "exclusiveSource": true, "unique": true,
+        "modifiers": [{ "stat": "armorScore", "value": 1 }]
+      } }] }
+     ] },
      "text": "**Spend a Hope** to give a target you can touch a +1 bonus to their Armor Score until their next rest or you cast Tava’s Armor again.",
      "automation": {
       "actions": [
@@ -528,6 +603,12 @@
    "spells": [
     {
      "name": "Repudiate",
+     "automation": { "uses": { "max": 1, "per": "rest" }, "actions": [
+      { "id": "reaction", "label": "Repudiate: Spellcast Reaction", "usesSource": false, "actionRoll": { "trait": "spellcast", "reaction": true } }
+     ], "conditionalRollTriggers": [
+      { "id": "stop", "label": "Successful Repudiate: stop effect", "on": "featureAction:card:Book of Exota/Repudiate:reaction",
+        "successIfKnown": true, "report": { "text": "Stop the magical effect and avoid its consequences; the GM applies the interruption." } }
+     ] },
      "text": "You can interrupt a magical effect taking place. Make a reaction roll using your Spellcast trait. Once per rest on a success, the effect stops and any consequences are avoided.",
      "automation": {
       "uses": {
@@ -544,6 +625,17 @@
     },
     {
      "name": "Create Construct",
+     "automation": { "actions": [
+      { "id": "summon", "label": "Create Construct", "cost": { "hope": 1 }, "steps": [{ "op": "effect", "effect": {
+        "name": "Create Construct", "kind": "buff", "until": "manual", "text": "Shares your current Evasion and traits. Dismiss it when the construct takes any damage."
+      } }] },
+      { "id": "command", "label": "Construct command: Spellcast", "requiresEffect": "Create Construct", "actionRoll": { "trait": "spellcast" } },
+      { "id": "end", "label": "Construct damaged or dismissed", "requiresEffect": "Create Construct", "endEffect": "Create Construct" }
+     ], "conditionalRollTriggers": [
+      { "id": "damage", "label": "Construct attack damage", "on": "featureAction:card:Book of Exota/Create Construct:command",
+        "successIfKnown": true, "requiresEffect": "Create Construct", "damage": { "dice": "2d10+3", "fixed": true, "type": "physical" },
+        "description": "Only when this command makes the construct attack." }
+     ] },
      "text": "**Spend a Hope** to choose a group of objects around you and create an animated construct from them that obeys basic commands. Make a **Spellcast Roll** to command them to take action. When necessary, they share your Evasion and traits and their attacks deal **2d10+3** physical damage. You can only maintain one construct at a time, and they fall apart when they take any amount of damage.",
      "automation": {
       "actions": [
@@ -579,7 +671,10 @@
       "actions": [
        {
         "id": "use",
-        "label": "Arcane Deflection"
+        "label": "Arcane Deflection",
+        "cost": {
+         "hope": 1
+        }
        }
       ]
      }
@@ -590,7 +685,10 @@
     },
     {
      "name": "Wall of Flame",
-     "text": "Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage."
+     "text": "Make a **Spellcast Roll (15)**. On a success, create a temporary wall of magical flame between two points within Far range. All creatures in its path must choose a side to be on, and anything that subsequently passes through the wall takes **4d10+3** magic damage.",
+     "automation": { "spellcastDifficulty": 15, "actions": [
+      { "id": "damage", "label": "Creature passes through wall: damage", "damage": { "dice": "4d10+3", "fixed": true, "type": "magic" } }
+     ] }
     }
    ]
   },
@@ -607,32 +705,24 @@
      "name": "Pass Through",
      "text": "Make a **Spellcast Roll (13)**. Once per rest on a success, you and all creatures touching you can pass through a wall or door within Close range. The effect ends once everyone is on the other side.",
      "automation": {
+      "spellcastDifficulty": 13,
+      "automaticRestUse": true,
       "uses": {
        "max": 1,
        "per": "rest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Pass Through"
-       }
-      ]
+      }
      }
     },
     {
      "name": "Plane Gate",
      "text": "Make a **Spellcast Roll (14)**. Once per long rest on a success, open a gateway to a location in another dimension or plane of existence you’ve been to before. This gateway lasts until your next rest.",
      "automation": {
+      "spellcastDifficulty": 14,
+      "automaticRestUse": true,
       "uses": {
        "max": 1,
        "per": "longRest"
-      },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Plane Gate"
-       }
-      ]
+      }
      }
     }
    ]
@@ -658,10 +748,11 @@
        "max": 1,
        "per": "rest"
       },
-      "actions": [
+      "conditionalActions": [
        {
         "id": "use",
-        "label": "Arcane Barrage"
+        "label": "Arcane Barrage",
+        "hopeDice": { "sides": 6, "type": "magic" }
        }
       ]
      }
@@ -698,6 +789,10 @@
     },
     {
      "name": "Recant",
+     "automation": { "actions": [
+      { "id": "use", "label": "Recant: target makes Reaction (15)", "cost": { "hope": 1 },
+        "report": { "text": "The target makes Reaction (15); on failure, the GM removes their memory of the last minute of conversation." } }
+     ] },
      "text": "**Spend a Hope** to force a target within Melee range to make a Reaction Roll (15). On a failure, they forget the last minute of your conversation.",
      "automation": {
       "actions": [
@@ -721,8 +816,10 @@
         "label": "Rune Circle",
         "cost": {
          "stress": 1
-        }
-       }
+        },
+        "damage": { "dice": "2d12+4", "fixed": true, "type": "magic" }
+       },
+       { "id": "enter", "label": "Adversary enters circle: damage", "damage": { "dice": "2d12+4", "fixed": true, "type": "magic" } }
       ]
      }
     }
@@ -743,7 +840,11 @@
     },
     {
      "name": "Fireball",
-     "text": "Make a **Spellcast Roll** against a target within Very Far range. On a success, hurl a sphere of fire toward them that explodes on impact. The target and all creatures within Very Close range of them must make a Reaction Roll (13). Targets who fail take** d20+5** magic damage using your Proficiency. Targets who succeed take half damage."
+     "text": "Make a **Spellcast Roll** against a target within Very Far range. On a success, hurl a sphere of fire toward them that explodes on impact. The target and all creatures within Very Close range of them must make a Reaction Roll (13). Targets who fail take** d20+5** magic damage using your Proficiency. Targets who succeed take half damage.",
+     "automation": { "conditionalRollTriggers": [
+      { "id": "damage", "label": "Successful Fireball: damage", "on": "card:Fireball", "successIfKnown": true,
+        "damage": { "dice": "d20+5", "type": "magic" }, "description": "Targets that succeed on Reaction (13) take half damage." }
+     ] }
     }
    ]
   },
@@ -758,10 +859,15 @@
    "spells": [
     {
      "name": "Transform",
-     "text": "Make a **Spellcast Roll (15)**. On a success, transform into an inanimate object no larger than twice your normal size. You can remain in this shape until you take damage."
+     "text": "Make a **Spellcast Roll (15)**. On a success, transform into an inanimate object no larger than twice your normal size. You can remain in this shape until you take damage.",
+     "automation": { "spellcastDifficulty": 15 }
     },
     {
      "name": "Eternal Enervation",
+     "automation": { "uses": { "max": 1, "per": "longRest" }, "actions": [
+      { "id": "cast", "label": "Eternal Enervation: Spellcast", "actionRoll": { "trait": "spellcast" },
+        "report": { "text": "On success, the GM makes the chosen adversary permanently Vulnerable." } }
+     ] },
      "text": "Once per long rest, make a **Spellcast Roll** against a target within Close range. On a success, they become permanently *Vulnerable*. They can’t clear this condition by any means.",
      "automation": {
       "uses": {
@@ -793,6 +899,13 @@
     },
     {
      "name": "Parallela",
+     "automation": { "actions": [
+      { "id": "use", "label": "Parallela", "target": "actor", "cost": { "hope": 2 }, "steps": [{ "op": "effect", "effect": {
+        "name": "Parallela", "kind": "buff", "until": "manual", "exclusiveSource": true, "unique": true,
+        "rollOptions": [{ "id": "attack", "label": "Parallela: next attack may hit another target", "roll": "attack",
+          "defaultOn": true, "endEffect": "Parallela", "description": "Another target within range whose Difficulty this attack meets." }]
+      } }] }
+     ] },
      "text": "**Spend 2 Hope** to cast this spell on yourself or an ally within Close range. The next time the target makes an attack, they can hit an additional target within range that their attack roll would succeed against. You can only hold this spell on one creature at a time.",
      "automation": {
       "actions": [
@@ -808,7 +921,8 @@
     },
     {
      "name": "Illusion",
-     "text": "Make a **Spellcast Roll (14)**. On a success, create a temporary visual illusion no larger than you within Close range that lasts for as long as you look at it. It holds up to scrutiny until an observer is within Melee range."
+     "text": "Make a **Spellcast Roll (14)**. On a success, create a temporary visual illusion no larger than you within Close range that lasts for as long as you look at it. It holds up to scrutiny until an observer is within Melee range.",
+     "automation": { "spellcastDifficulty": 14 }
     }
    ]
   },
@@ -823,7 +937,11 @@
    "spells": [
     {
      "name": "Wild Flame",
-     "text": "Make a **Spellcast Roll** against up to three adversaries within Melee range. Targets you succeed against take **2d6** magic damage and must mark a Stress as flames erupt from your hand."
+     "text": "Make a **Spellcast Roll** against up to three adversaries within Melee range. Targets you succeed against take **2d6** magic damage and must mark a Stress as flames erupt from your hand.",
+     "automation": { "conditionalRollTriggers": [
+      { "id": "damage", "label": "Successful Wild Flame: damage", "on": "card:Wild Flame", "successIfKnown": true,
+        "damage": { "dice": "2d6", "fixed": true, "type": "magic" }, "description": "Each successful target also marks a Stress." }
+     ] }
     },
     {
      "name": "Magic Hand",
@@ -831,7 +949,8 @@
     },
     {
      "name": "Mysterious Mist",
-     "text": "Make a **Spellcast Roll (13)** to cast a temporary thick fog that gathers in a stationary area within Very Close range. The fog heavily obscures this area and everything in it."
+     "text": "Make a **Spellcast Roll (13)** to cast a temporary thick fog that gathers in a stationary area within Very Close range. The fog heavily obscures this area and everything in it.",
+     "automation": { "spellcastDifficulty": 13 }
     }
    ]
   },
@@ -846,11 +965,16 @@
    "spells": [
     {
      "name": "Runic Lock",
-     "text": "Make a **Spellcast Roll (15)** on an object you’re touching that can close (such as a lock, chest, or box). Once per rest on a success, you can lock the object so it can only be opened by creatures of your choice. Someone with access to magic and an hour of time to study the spell can break it."
+     "text": "Make a **Spellcast Roll (15)** on an object you’re touching that can close (such as a lock, chest, or box). Once per rest on a success, you can lock the object so it can only be opened by creatures of your choice. Someone with access to magic and an hour of time to study the spell can break it.",
+     "automation": { "spellcastDifficulty": 15, "automaticRestUse": true, "uses": { "max": 1, "per": "rest" } }
     },
     {
      "name": "Arcane Door",
-     "text": "When you have no adversaries within Melee range, make a **Spellcast Roll (13)**. On a success, **spend a Hope** to create a portal from where you are to a point within Far range you can see. It closes once a creature has passed through it."
+     "text": "When you have no adversaries within Melee range, make a **Spellcast Roll (13)**. On a success, **spend a Hope** to create a portal from where you are to a point within Far range you can see. It closes once a creature has passed through it.",
+     "automation": { "spellcastDifficulty": 13, "conditionalRollTriggers": [
+      { "id": "portal", "label": "Successful Arcane Door: spend Hope", "on": "card:Arcane Door", "when": "success", "difficulty": 13,
+        "cost": { "hope": 1 }, "description": "Portal travel and closure are table-managed." }
+     ] }
     },
     {
      "name": "Reveal",
@@ -882,7 +1006,10 @@
       "actions": [
        {
         "id": "use",
-        "label": "Shared Clarity"
+        "label": "Shared Clarity",
+        "cost": {
+         "hope": 1
+        }
        }
       ]
      }
@@ -900,7 +1027,8 @@
    "spells": [
     {
      "name": "Timejammer",
-     "text": "Make a **Spellcast Roll (18)**. On a success, time temporarily slows to a halt for everyone within Far range except for you. It resumes the next time you make an action roll that targets another creature."
+     "text": "Make a **Spellcast Roll (18)**. On a success, time temporarily slows to a halt for everyone within Far range except for you. It resumes the next time you make an action roll that targets another creature.",
+     "automation": { "spellcastDifficulty": 18 }
     },
     {
      "name": "Magic Immunity",
@@ -912,7 +1040,11 @@
         "label": "Magic Immunity",
         "cost": {
          "hope": 5
-        }
+        },
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Magic Immunity", "kind": "buff", "until": "rest", "text": "Immune to magic damage until your next rest.",
+         "mitigation": [{ "id": "immune", "label": "Magic Immunity", "passive": true, "when": { "type": "magic" }, "negate": true }]
+        } }]
        }
       ]
      }
@@ -928,17 +1060,16 @@
    "recall": 1,
    "text": "**Mark a Stress** to boost off a willing ally within Close range, fling yourself into the air, and perform an aerial attack against a target within Far range. You have advantage on the attack, add a** d10** to the damage roll, and end your move within Melee range of the target.",
    "automation": {
-    "rollOptions": [
-     {
-      "id": "boost",
-      "label": "Boost",
-      "roll": "damage",
-      "dice": "1d10",
-      "cost": {
-       "stress": 1
-      },
-      "description": "Aerial attack boosted off a willing ally in Close range; advantage/movement manual."
-     }
+    "actions": [
+     { "id": "boost", "label": "Boost: prepare aerial attack", "cost": { "stress": 1 }, "steps": [
+      { "op": "effect", "effect": { "name": "Boost attack", "kind": "buff", "until": "manual",
+        "rollOptions": [{ "id": "advantage", "label": "Boost: aerial attack advantage", "roll": "attack",
+          "advantage": "advantage", "defaultOn": true, "endEffect": "Boost attack" }] } },
+      { "op": "effect", "effect": { "name": "Boost damage", "kind": "buff", "until": "manual",
+        "rollOptions": [{ "id": "damage", "label": "Boost: aerial attack damage", "roll": "damage", "dice": "1d10",
+          "defaultOn": true, "endEffect": "Boost damage", "description": "Only the prepared aerial attack; discard this effect if it misses." }] } }
+     ] },
+     { "id": "miss", "label": "Boosted attack missed: discard damage", "requiresEffect": "Boost damage", "endEffect": "Boost damage" }
     ]
    }
   },
@@ -979,6 +1110,10 @@
   {
    "id": "brand-of-castigation",
    "name": "Brand of Castigation",
+   "automation": { "actions": [
+    { "id": "use", "label": "After dealing damage: Brand of Castigation", "cost": { "stress": 1 },
+      "report": { "text": "Mark the damaged creature. Direction, retaliation and replacement are table-managed." } }
+   ] },
    "cardType": "Spell",
    "domain": "Blood",
    "level": 2,
@@ -1008,6 +1143,10 @@
   {
    "id": "burning-blood",
    "name": "Burning Blood",
+   "automation": { "spellcastDifficulty": 12, "conditionalRollTriggers": [
+    { "id": "burn", "label": "Successful Burning Blood: mark HP", "on": "card:Burning Blood", "when": "success", "difficulty": 12,
+      "cost": { "hp": 1 }, "description": "Each target marks 1 HP, or 2 HP on success with Hope. Targets are table-managed." }
+   ] },
    "cardType": "Spell",
    "domain": "Blood",
    "level": 3,
@@ -1057,6 +1196,14 @@
   {
    "id": "champions-edge",
    "name": "Champion’s Edge",
+   "automation": { "conditionalRollTriggers": [
+    { "id": "hp", "label": "Champion's Edge: clear HP", "on": "attack", "criticalOnly": true, "cost": { "hope": 1 },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+    { "id": "armor", "label": "Champion's Edge: clear Armor Slot", "on": "attack", "criticalOnly": true, "cost": { "hope": 1 },
+      "steps": [{ "op": "clear", "resource": "armor", "amount": 1 }] },
+    { "id": "target", "label": "Champion's Edge: target marks extra HP", "on": "attack", "criticalOnly": true, "cost": { "hope": 1 },
+      "report": { "text": "The target marks an additional HP; the GM applies it." } }
+   ] },
    "cardType": "Ability",
    "domain": "Blade",
    "level": 5,
@@ -1092,14 +1239,15 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Melee range. On a success, the target instantly bursts into flames, takes **1d20+3** magic damage, and is temporarily lit *On Fire*.\n\nWhen a creature acts while *On Fire*, they must take an extra **2d6** magic damage if they are still *On Fire* at the end of their action.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Cinder Grasp: roll 1d20+3 damage",
       "on": "card:Cinder Grasp",
       "damage": {
        "dice": "1d20+3",
-       "fixed": true
+       "fixed": true, "type": "magic"
       }
      }
     ]
@@ -1134,18 +1282,13 @@
    "recall": 2,
    "text": "When 4 or more of the domain cards in your loadout are from the Codex domain, gain the following benefits:\n\n- You can **mark a Stress** to add your Proficiency to a Spellcast Roll.\n- Once per rest, replace this card with any card from your vault without paying its Recall Cost.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Codex-Touched",
-      "cost": {
-       "stress": 1
-      }
-     }
+    "conditionalRollOptions": [
+     { "id": "proficiency", "label": "Codex-Touched", "roll": "spellcast", "derivedProficiency": true,
+       "cost": { "stress": 1 }, "loadoutDomain": { "domain": "Codex", "min": 4 } }
+    ],
+    "conditionalActions": [
+     { "id": "swap", "label": "Codex-Touched: swap with vault", "codexSwap": true,
+       "uses": { "max": 1, "per": "rest" }, "loadoutDomain": { "domain": "Codex", "min": 4 } }
     ]
    }
   },
@@ -1158,6 +1301,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (14)**. Once per long rest on a success, you create a layer of illusion over your body that makes it hard to tell exactly where you are. **Mark any number of Stress** to make that many additional layers. When an adversary makes an attack against you, roll a number of **d6s** equal to the number of layers currently active. If any roll a 5 or higher, one layer of the aura is destroyed and the attack fails. If all the results are 4 or lower, you take the damage and this spell ends.",
    "automation": {
+    "spellcastDifficulty": 14,
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -1179,26 +1323,31 @@
    "recall": 1,
    "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.\n\n***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
    "automation": {
-    "rollTriggers": [
+    "conditionalActions": [
+     { "id": "beetles", "label": "Conjure Tekaira Armored Beetles", "cost": { "stress": 1 },
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Tekaira Armored Beetles", "kind": "buff", "until": "manual", "endAfterIncomingDamage": true,
+        "text": "Reduce the next damage severity by one; spend a Hope to retain the beetles.",
+        "mitigation": [
+         { "id": "reduce", "label": "Tekaira Armored Beetles", "passive": true, "severity": 1 },
+         { "id": "keep", "label": "Keep the beetles", "cost": { "hope": 1 }, "requiresEffect": "Tekaira Armored Beetles",
+           "preserveAfterIncomingDamage": "Tekaira Armored Beetles" }
+        ]
+       } }] }
+    ],
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Fire Flies: spend a Hope, roll 2d8+3 damage",
       "on": "card:Conjure Swarm",
       "damage": {
        "dice": "2d8+3",
-       "fixed": true
+       "fixed": true, "type": "magic"
       },
       "cost": {
        "hope": 1
       }
-     }
-    ],
-    "mitigation": [
-     {
-      "id": "beetles",
-      "label": "Tekaira Armored Beetles",
-      "description": "While the beetles are conjured; they disperse after this damage unless you spend a Hope.",
-      "severity": 1
      }
     ]
    }
@@ -1242,13 +1391,14 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success, deal **d6+4** magic damage using your Proficiency. Additionally, **mark 2 or more Stress** to make them permanently *Corroded*. While a target is *Corroded*, they gain a −1 penalty to their Difficulty for every 2 Stress you spent. This condition can stack.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Corrosive Projectile: roll d6+4 damage",
       "on": "card:Corrosive Projectile",
       "damage": {
-       "dice": "d6+4"
+       "dice": "d6+4", "type": "magic"
       }
      }
     ]
@@ -1257,6 +1407,12 @@
   {
    "id": "counterspell",
    "name": "Counterspell",
+   "automation": { "actions": [
+    { "id": "reaction", "label": "Counterspell: Spellcast Reaction", "actionRoll": { "trait": "spellcast", "reaction": true } }
+   ], "conditionalRollTriggers": [
+    { "id": "stop", "label": "Successful Counterspell: stop effect and vault", "on": "featureAction:card:Counterspell:reaction",
+      "successIfKnown": true, "vaultSource": true, "report": { "text": "The magical effect stops and its consequences are avoided." } }
+   ] },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 3,
@@ -1305,7 +1461,11 @@
     "actions": [
      {
       "id": "use",
-      "label": "Critical Inspiration"
+      "label": "Critical Inspiration: critical attack",
+      "chatBenefits": [
+       { "id": "stress", "label": "Within Very Close range: clear 1 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] },
+       { "id": "hope", "label": "Within Very Close range: gain 1 Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }
+      ]
      }
     ]
    }
@@ -1324,13 +1484,19 @@
       "id": "finesse",
       "label": "Cruel Precision: Finesse",
       "roll": "damage",
-      "value": "@finesse"
+      "traitValue": "Finesse",
+      "exclusive": "cruel-precision",
+      "excludeRolls": ["spelldamage"],
+      "description": "Use only after a successful weapon attack."
      },
      {
       "id": "agility",
       "label": "Cruel Precision: Agility",
       "roll": "damage",
-      "value": "@agility"
+      "traitValue": "Agility",
+      "exclusive": "cruel-precision",
+      "excludeRolls": ["spelldamage"],
+      "description": "Use only after a successful weapon attack."
      }
     ]
    }
@@ -1338,6 +1504,9 @@
   {
    "id": "damnation",
    "name": "Damnation",
+   "automation": { "actions": [
+    { "id": "damage", "label": "Successful Damnation: Stress damage", "resourceRoll": { "resource": "stress", "sides": 20, "type": "magic" } }
+   ] },
    "cardType": "Spell",
    "domain": "Dread",
    "level": 9,
@@ -1353,18 +1522,21 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (14)**. Once per long rest on a success, you can summon fiends that surround and move with you. Place 8 tokens on this card. When you deal damage to a target within Very Close range, you can spend any number of tokens to add **1d8** for each token spent to your damage roll. Additionally, when you take damage, you can spend any number of tokens to reduce the damage by **1d8** for each token spent. Each time you spend a token, a fiend acts on your behalf, then disappears.\n\nWhen you take a rest, clear all unspent tokens.",
    "automation": {
+    "spellcastDifficulty": 14,
     "resources": [
      {
       "id": "fiends",
       "label": "Dark Army fiends",
       "initial": 0,
-      "max": 8
+      "max": 8,
+      "resetOn": "rest"
      }
     ],
     "actions": [
      {
       "id": "summon",
       "label": "Successful Spellcast: summon 8 fiends",
+      "uses": { "max": 1, "per": "longRest" },
       "steps": [
        {
         "op": "gain",
@@ -1372,13 +1544,6 @@
         "amount": 8
        }
       ]
-     },
-     {
-      "id": "defend",
-      "label": "Spend fiend: roll 1d8 reduction manually",
-      "cost": {
-       "fiends": 1
-      }
      },
      {
       "id": "clear",
@@ -1398,12 +1563,15 @@
       "label": "Dark Army fiend",
       "roll": "damage",
       "dice": "1d8",
+      "quantity": { "resource": "fiends", "label": "Fiends to spend" },
       "cost": {
        "fiends": 1
       },
-      "description": "Only a target within Very Close range; spend extra fiends/dice manually."
+      "description": "Only a target within Very Close range."
      }
-    ]
+    ],
+    "mitigation": [{ "id": "fiends", "label": "Dark Army fiends", "quantity": true,
+     "roll": { "count": "quantity", "sides": 8 }, "cost": { "fiends": 1 } }]
    }
   },
   {
@@ -1463,7 +1631,12 @@
     "actions": [
      {
       "id": "use",
-      "label": "Deadly Focus"
+      "label": "Deadly Focus",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Deadly Focus", "kind": "buff", "until": "manual",
+       "text": "End this effect if you attack another creature, defeat the target, or the battle ends.",
+       "modifiers": [{ "stat": "proficiency", "value": 1 }]
+      } }]
      }
     ]
    }
@@ -1471,6 +1644,10 @@
   {
    "id": "death-grip",
    "name": "Death Grip",
+   "automation": { "actions": [
+    { "id": "vines", "label": "Successful Death Grip: vines damage", "damage": { "dice": "3d6+2", "fixed": true, "type": "physical" },
+      "report": { "text": "Apply only to intervening adversaries who fail their Reaction Roll (13)." } }
+   ] },
    "cardType": "Spell",
    "domain": "Sage",
    "level": 4,
@@ -1506,10 +1683,13 @@
    "recall": 0,
    "text": "**Spend a Hope** to gain advantage on a roll to deceive or trick someone into believing a lie you tell them.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
       "id": "use",
       "label": "Deft Deceiver",
+      "roll": "action",
+      "advantage": "advantage",
+      "description": "A roll to deceive or trick someone into believing a lie.",
       "cost": {
        "hope": 1
       }
@@ -1533,7 +1713,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Deft Maneuvers"
+      "label": "Deft Maneuvers",
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -1547,13 +1730,14 @@
    "recall": 1,
    "text": "Contaminated Cinder Grasp\n\nMake a Spellcast Roll against a target within Melee range. On a success, give the GM a Fear to have the target instantly burst into eldritch flames, taking d12+3 magic damage using your proficiency and become temporarily *Consumed by Octarine Flame*. If the target takes Severe damage from this attack, they must mark a Stress or gain 1 Contamination Level.\n\n When a creature acts while *Consumed by Octarin*e Flame, they must take an additional 2d6 magic damage and mark a Stress if they are still *Consumed by Octarine Flame* at the end of their action.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Delerium Grasp: give the GM a Fear, roll d12+3 damage",
       "on": "card:Delerium Grasp",
       "damage": {
-       "dice": "d12+3"
+       "dice": "d12+3", "type": "magic"
       }
      }
     ]
@@ -1588,6 +1772,7 @@
    "recall": 4,
    "text": "Make a **Spellcast Roll (18)**. Once per long rest on a success, the GM tells you which adversaries within Far range have a Difficulty of 18 or lower. **Mark a Stress** for each one you wish to hit with this spell. They are killed and can’t come back to life by any means.",
    "automation": {
+    "spellcastDifficulty": 18,
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -1619,7 +1804,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Divination"
+      "label": "Divination",
+      "cost": {
+       "hope": 3
+      }
      }
     ]
    }
@@ -1637,14 +1825,15 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Dread-Touched",
-      "cost": {
-       "stress": 2
-      }
-     }
+    "conditionalRollOptions": [
+     { "id": "fear", "label": "Dread-Touched: GM Fear", "roll": "action", "value": "@fear",
+       "loadoutDomain": { "domain": "Dread", "min": 4 } }
+    ],
+    "conditionalRollTriggers": [
+     { "id": "prevent-fear", "label": "Dread-Touched: prevent GM Fear on success", "on": "duality", "when": "fear",
+       "successIfKnown": true, "usesSource": false, "cost": { "stress": 2 },
+       "description": "Use only after a successful Fear roll; the GM handles the prevented Fear.",
+       "loadoutDomain": { "domain": "Dread", "min": 4 } }
     ]
    }
   },
@@ -1657,6 +1846,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (16)**. Once per rest on a success, all targets within Very Far range who aren’t flying must make a Reaction Roll (18). Targets who fail take **3d10+8** physical damage and are temporarily *Vulnerable*. Targets who succeed take half damage.\n\nAdditionally, when you succeed on the Spellcast Roll, all terrain within Very Far range becomes difficult to move through and structures within this range might sustain damage or crumble.",
    "automation": {
+    "spellcastDifficulty": 16,
     "uses": {
      "max": 1,
      "per": "rest"
@@ -1678,6 +1868,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (16)**. Once per long rest on a success, plunge the entire area within Far range into complete darkness only you and your allies can see through. Attack rolls have disadvantage when targeting you or an ally within this shadow.\n\nAdditionally, when you or an ally succeeds with Hope against an adversary within this shadow, the target must mark a Stress.\n\nThis spell lasts until the GM spends a **Fear** on their turn to clear this effect or you take Severe damage.",
    "automation": {
+    "spellcastDifficulty": 16,
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -1699,6 +1890,9 @@
    "recall": 1,
    "text": "Gain a +1 bonus to your damage thresholds for each Stress you have marked.\n\nAdditionally, when you roll with Fear, you can **spend 2 Hope** to clear an Armor Slot.",
    "automation": {
+    "conditionalModifiers": [
+     { "stat": "thresholds", "markedStressMultiplier": 1 }
+    ],
     "actions": [
      {
       "id": "clear",
@@ -1773,6 +1967,10 @@
   {
    "id": "falling-sky",
    "name": "Falling Sky",
+   "automation": { "actions": [
+    { "id": "damage", "label": "Falling Sky: Stress damage to successful targets",
+      "resourceRoll": { "resource": "stress", "sides": 20, "bonusPerDie": 2, "type": "magic" } }
+   ] },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 10,
@@ -1792,7 +1990,7 @@
      {
       "id": "fane",
       "label": "Fane of the Wilds tokens",
-      "initial": 0
+      "initial": 0, "resetOn": "longRest", "resetValue": "@cards_sage"
      }
     ],
     "actions": [
@@ -1835,16 +2033,10 @@
       ]
      }
     ],
-    "rollOptions": [
-     {
-      "id": "fane",
-      "label": "Fane of the Wilds token",
-      "roll": "spellcast",
-      "value": 1,
-      "cost": {
-       "fane": 1
-      }
-     }
+    "conditionalRollTriggers": [
+     { "id": "bonus", "label": "Fane of the Wilds: spend tokens after roll", "on": "spellcast",
+       "description": "Spend one token per +1. Token quantity and target-domain critical awards are managed with the card's controls.",
+       "repeatable": true, "cost": { "fane": 1 }, "addDice": "1" }
     ]
    }
   },
@@ -1875,7 +2067,8 @@
    "domain": "Splendor",
    "level": 2,
    "recall": 1,
-   "text": "You can infuse a corpse with a moment of life to speak with it. Make a **Spellcast Roll (13)**. On a success with Hope, the corpse answers up to three questions. On a success with Fear, the corpse answers one question. The corpse answers truthfully, but it can’t impart information it didn’t know in life. On a failure, or once the corpse has finished answering your questions, the body turns to dust."
+   "text": "You can infuse a corpse with a moment of life to speak with it. Make a **Spellcast Roll (13)**. On a success with Hope, the corpse answers up to three questions. On a success with Fear, the corpse answers one question. The corpse answers truthfully, but it can’t impart information it didn’t know in life. On a failure, or once the corpse has finished answering your questions, the body turns to dust.",
+   "automation": { "spellcastDifficulty": 13 }
   },
   {
    "id": "flight",
@@ -1886,6 +2079,7 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll (15)**. On a success, place a number of tokens equal to your Agility on this card (minimum 1). When you make an action roll while flying, spend a token from this card. After the action that spends the last token is resolved, you descend to the ground directly below you.",
    "automation": {
+    "spellcastDifficulty": 15,
     "resources": [
      {
       "id": "flight",
@@ -1898,10 +2092,11 @@
       "id": "cast",
       "label": "Successful cast: place tokens",
       "steps": [
+       { "op": "clear", "resource": "flight", "amount": "all" },
        {
         "op": "gain",
         "resource": "flight",
-        "amount": "@agility"
+        "amount": "@total_agility", "minimumAmount": 1
        }
       ]
      },
@@ -2033,7 +2228,8 @@
    "domain": "Sage",
    "level": 8,
    "recall": 2,
-   "text": "Make a **Spellcast Roll (13)**. On a success, **spend any number of Hope** to create an equal number of small forest sprites who appear at points you choose within Far range, providing the following benefits:\n\n- Your allies gain a +3 bonus to attack rolls against adversaries within Melee range of a sprite.\n- An ally who marks an Armor Slot while within Melee range of a sprite can mark an additional Armor Slot.\nA sprite vanishes after granting a benefit or taking any damage."
+   "text": "Make a **Spellcast Roll (13)**. On a success, **spend any number of Hope** to create an equal number of small forest sprites who appear at points you choose within Far range, providing the following benefits:\n\n- Your allies gain a +3 bonus to attack rolls against adversaries within Melee range of a sprite.\n- An ally who marks an Armor Slot while within Melee range of a sprite can mark an additional Armor Slot.\nA sprite vanishes after granting a benefit or taking any damage.",
+   "automation": { "spellcastDifficulty": 13 }
   },
   {
    "id": "fortified-armor",
@@ -2042,7 +2238,12 @@
    "domain": "Blade",
    "level": 4,
    "recall": 0,
-   "text": "While you are wearing armor, gain a +2 bonus to your damage thresholds."
+   "text": "While you are wearing armor, gain a +2 bonus to your damage thresholds.",
+   "automation": {
+    "conditionalModifiers": [
+     { "stat": "thresholds", "value": 2, "requiresArmor": true }
+    ]
+   }
   },
   {
    "id": "frenzy",
@@ -2057,18 +2258,23 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "conditionalActions": [
      {
       "id": "use",
-      "label": "Frenzy"
-     }
-    ],
-    "mitigation": [
-     {
-      "id": "frenzied",
-      "label": "Frenzied: can't use Armor Slots",
-      "description": "While Frenzied you can't use Armor Slots.",
-      "armorBlocked": true
+      "label": "Frenzy",
+      "steps": [
+       { "op": "effect", "effect": {
+        "name": "Frenzied", "kind": "buff", "until": "manual",
+        "text": "End this effect when no adversaries remain in sight.",
+        "modifiers": [
+         { "roll": "damage", "value": 10 },
+         { "stat": "severeThreshold", "value": 8 }
+        ],
+        "mitigation": [
+         { "id": "frenzied", "label": "Frenzied: can't use Armor Slots", "passive": true, "armorBlocked": true }
+        ]
+       } }
+      ]
      }
     ]
    }
@@ -2153,6 +2359,11 @@
   {
    "id": "gifted-tracker",
    "name": "Gifted Tracker",
+   "automation": { "actions": [
+    { "id": "question", "label": "Gifted Tracker: ask one question", "cost": { "hope": 1 },
+      "report": { "text": "Ask one listed tracking question. Evasion is +1 only against creatures tracked this way." } },
+    { "id": "evasion", "label": "Tracked creature: show Evasion +1", "sendRoll": { "dice": "1", "base": "evasion", "label": "Gifted Tracker: Evasion against tracked creature" } }
+   ] },
    "cardType": "Ability",
    "domain": "Sage",
    "level": 1,
@@ -2189,9 +2400,11 @@
    "text": "Make a **Spellcast Roll** against a creature within Far range. On a success, **mark a Hit Point** to sear the target with a magical glyph that lasts until the GM spends 2 Fear to remove it or you take Severe damage. Whenever the target marks any Hit Points while the glyph remains, you can **mark a Stress** to make them mark an additional Hit Point.",
    "automation": {
     "actions": [
+     { "id": "cast", "label": "Successful Spellcast: sear glyph", "cost": { "hp": 1 },
+       "report": { "text": "Track the chosen target and remove the glyph when the GM spends 2 Fear or you take Severe damage." } },
      {
       "id": "use",
-      "label": "Glyph of Hemorrhaging",
+      "label": "Glyph target marks HP: force another HP",
       "cost": {
        "stress": 1
       }
@@ -2202,6 +2415,10 @@
   {
    "id": "glyph-of-nightfall",
    "name": "Glyph of Nightfall",
+   "automation": { "conditionalRollTriggers": [
+    { "id": "use", "label": "Successful Glyph of Nightfall", "on": "card:Glyph of Nightfall", "successIfKnown": true,
+      "cost": { "hope": 1 }, "description": "Temporarily reduce the target's Difficulty by your Knowledge (minimum 1), applied by the GM." }
+   ] },
    "cardType": "Spell",
    "domain": "Midnight",
    "level": 4,
@@ -2266,6 +2483,18 @@
   {
    "id": "grace-touched",
    "name": "Grace-Touched",
+   "automation": {
+    "conditionalActions": [
+     { "id": "armor", "label": "Grace-Touched: mark Armor instead of Stress", "cost": { "armor": 1 },
+       "loadoutDomain": { "domain": "Grace", "min": 4 },
+       "report": { "text": "Marked one Armor Slot instead of one Stress. Do not mark that Stress separately." } }
+    ],
+    "conditionalRollTriggers": [
+     { "id": "stress", "label": "Grace-Touched: target marks Stress instead of HP", "on": "damage",
+       "loadoutDomain": { "domain": "Grace", "min": 4 },
+       "description": "Replace the HP this damage would force the target to mark with the same number of Stress; apply it at the table." }
+    ]
+   },
    "cardType": "Ability",
    "domain": "Grace",
    "level": 7,
@@ -2281,14 +2510,15 @@
    "recall": 1,
    "text": "You launch a harpoon of blood at a location or creature within Far range. If the target is a location, make a **Spellcast Roll(13)**. On a success, **mark a Stress** to pull yourself to a position within Melee range of it.\n\nIf the target is a creature, make a **Spellcast Roll** against it. On a success, **mark a Stress** to deal **3d8** magic damage to the target. You then pull the target straight toward yourself or pull yourself straight toward the target, ending within Melee range of each other.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Grisly Harpoon: mark a Stress, roll 3d8 damage",
       "on": "card:Grisly Harpoon",
       "damage": {
        "dice": "3d8",
-       "fixed": true
+       "fixed": true, "type": "magic"
       },
       "cost": {
        "stress": 1
@@ -2310,6 +2540,7 @@
      {
       "id": "use",
       "label": "Ground Pound",
+      "actionRoll": { "trait": "Strength" },
       "cost": {
        "hope": 2
       }
@@ -2332,11 +2563,23 @@
     },
     "actions": [
      {
-      "id": "use",
-      "label": "Healing Field",
+      "id": "base",
+      "label": "Healing Field: clear 1 HP",
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }],
+      "chatBenefits": [
+       { "id": "heal-one", "label": "Within Close range: clear 1 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] }
+      ]
+     },
+     {
+      "id": "upgrade",
+      "label": "Healing Field: clear 2 HP",
       "cost": {
        "hope": 2
-      }
+      },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }],
+      "chatBenefits": [
+       { "id": "heal-two", "label": "Within Close range: clear 2 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }] }
+      ]
      }
     ]
    }
@@ -2344,6 +2587,7 @@
   {
    "id": "healing-hands",
    "name": "Healing Hands",
+   "automation": { "spellcastDifficulty": 13 },
    "cardType": "Spell",
    "domain": "Splendor",
    "level": 2,
@@ -2381,6 +2625,10 @@
   {
    "id": "hideous-retribution",
    "name": "Hideous Retribution",
+   "automation": { "actions": [
+    { "id": "damage", "label": "Successful reaction: Hideous Retribution damage", "cost": { "stress": 1 },
+      "damage": { "dice": "d6", "type": "magic" } }
+   ] },
    "cardType": "Spell",
    "domain": "Dread",
    "level": 2,
@@ -2390,6 +2638,10 @@
   {
    "id": "hold-the-line",
    "name": "Hold the Line",
+   "automation": { "actions": [
+    { "id": "use", "label": "Hold the Line", "cost": { "hope": 1 },
+      "report": { "text": "Track your stance and affected enemies. Ends on movement, failed Fear roll or the GM spending 2 Fear." } }
+   ] },
    "cardType": "Ability",
    "domain": "Valor",
    "level": 9,
@@ -2399,6 +2651,10 @@
   {
    "id": "hush",
    "name": "Hush",
+   "automation": { "conditionalRollTriggers": [
+    { "id": "use", "label": "Successful Hush: spend Hope", "on": "card:Hush", "successIfKnown": true,
+      "cost": { "hope": 1 }, "description": "Targets are Silenced. End on recast, Major damage or GM Fear; target tracking is manual." }
+   ] },
    "cardType": "Spell",
    "domain": "Midnight",
    "level": 5,
@@ -2482,6 +2738,13 @@
   {
    "id": "inevitable",
    "name": "Inevitable",
+   "automation": { "actions": [
+    { "id": "prepare", "label": "Failed action: prepare Inevitable", "steps": [{ "op": "effect", "effect": {
+     "name": "Inevitable", "kind": "buff", "until": "manual",
+     "rollOptions": [{ "id": "advantage", "label": "Inevitable: next action", "roll": "action", "advantage": "advantage",
+       "defaultOn": true, "endEffect": "Inevitable" }]
+    } }] }
+   ] },
    "cardType": "Ability",
    "domain": "Valor",
    "level": 6,
@@ -2501,7 +2764,7 @@
      {
       "id": "inspiration",
       "label": "Inspiration tokens",
-      "initial": 0
+      "initial": 0, "resetOn": "longRest", "resetValue": "@total_presence"
      }
     ],
     "actions": [
@@ -2520,10 +2783,11 @@
       "id": "prepare",
       "label": "After long rest: prepare tokens",
       "steps": [
+       { "op": "clear", "resource": "inspiration", "amount": "all" },
        {
         "op": "gain",
         "resource": "inspiration",
-        "amount": "@presence"
+        "amount": "@total_presence"
        }
       ]
      },
@@ -2532,7 +2796,12 @@
       "label": "Give ally a benefit",
       "cost": {
        "inspiration": 1
-      }
+      },
+      "chatBenefits": [
+       { "id": "stress", "label": "Clear 1 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] },
+       { "id": "hp", "label": "Clear 1 HP", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+       { "id": "hope", "label": "Gain 1 Hope", "exclusiveClaim": true, "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }
+      ]
      }
     ]
    }
@@ -2540,6 +2809,10 @@
   {
    "id": "invigoration",
    "name": "Invigoration",
+   "automation": { "actions": [
+    { "id": "restore", "label": "Invigoration: roll Hope dice", "resourceRoll": { "resource": "hope", "sides": 6 },
+      "report": { "text": "If any die shows 6, the chosen nearby character manually restores the chosen feature's exhaustion use." } }
+   ] },
    "cardType": "Spell",
    "domain": "Splendor",
    "level": 10,
@@ -2555,6 +2828,7 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll (10)**. On a success, **mark a Stress** and choose yourself or an ally within Melee range to become *Invisible*. An *Invisible* creature can’t be seen except through magical means and attack rolls against them are made with disadvantage. Place a number of tokens on this card equal to your Spellcast trait. When the *Invisible* creature takes an action, spend a token from this card. After the action that spends the last token is resolved, the effect ends.\n\nYou can only hold Invisibility on one creature at a time.",
    "automation": {
+    "spellcastDifficulty": 10,
     "resources": [
      {
       "id": "invisibility",
@@ -2601,6 +2875,12 @@
   {
    "id": "invoke-torment",
    "name": "Invoke Torment",
+   "automation": { "rollOptions": [
+    { "id": "double", "label": "Invoke Torment: target has full Stress", "roll": "damage", "multiplier": 2,
+      "description": "Confirm the target has all Stress marked." }
+   ], "actions": [
+    { "id": "defeat", "label": "Close adversary defeated with full Stress: gain Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }
+   ] },
    "cardType": "Ability",
    "domain": "Dread",
    "level": 10,
@@ -2637,9 +2917,11 @@
    "text": "When observing a creature, you can make an **Instinct Roll** against them. On a success, **spend a Hope** and ask the GM for one set of information about the target from the following options:\n\n- Their unmarked Hit Points and Stress.\n- Their Difficulty and damage thresholds.\n- Their tactics and standard attack damage dice.\n- Their features and Experiences.\nAdditionally on a success, you can **mark a Stress** to remove a Fear from the GM’s Fear Pool.",
    "automation": {
     "actions": [
+     { "id": "observe", "label": "Observe creature", "actionRoll": { "trait": "Instinct" } },
+     { "id": "information", "label": "Successful Instinct roll: ask for information", "cost": { "hope": 1 } },
      {
       "id": "use",
-      "label": "Know Thy Enemy",
+      "label": "Successful Instinct roll: remove GM Fear (manual)",
       "cost": {
        "stress": 1
       }
@@ -2683,7 +2965,12 @@
     "actions": [
      {
       "id": "use",
-      "label": "Lean on Me"
+      "label": "Lean on Me: console or inspire an ally",
+      "allowSourceOwner": true,
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }],
+      "chatBenefits": [
+       { "id": "stress", "label": "Consoled ally: clear 2 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }] }
+      ]
      }
     ]
    }
@@ -2774,6 +3061,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (15)**. Once per rest on a success, **spend a Hope** to create a temporary magical wall between two points within Far range. It can be up to 50 feet high and form at any angle. Creatures or objects in its path are shunted to a side of your choice. The wall stays up until your next rest or you cast Manifest Wall again.",
    "automation": {
+    "spellcastDifficulty": 15,
     "uses": {
      "max": 1,
      "per": "rest"
@@ -2781,7 +3069,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Manifest Wall"
+      "label": "Manifest Wall",
+      "cost": {
+       "hope": 1
+      }
      }
     ]
    }
@@ -2850,11 +3141,34 @@
     },
     "actions": [
      {
-      "id": "use",
-      "label": "Mending Touch",
-      "cost": {
-       "hope": 2
-      }
+      "id": "hp",
+      "label": "Mending Touch: clear 1 HP",
+      "usesSource": false,
+      "target": "actor",
+      "cost": { "hope": 2 },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }]
+     },
+     {
+      "id": "stress",
+      "label": "Mending Touch: clear 1 Stress",
+      "usesSource": false,
+      "target": "actor",
+      "cost": { "hope": 2 },
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }]
+     },
+     {
+      "id": "greater-hp",
+      "label": "Mending Touch: clear 2 HP (once per long rest)",
+      "target": "actor",
+      "cost": { "hope": 2 },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }]
+     },
+     {
+      "id": "greater-stress",
+      "label": "Mending Touch: clear 2 Stress (once per long rest)",
+      "target": "actor",
+      "cost": { "hope": 2 },
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }]
      }
     ]
    }
@@ -2869,13 +3183,14 @@
    "text": "**Spend a Hope** to summon a humanoid-sized spirit that can move or carry things for you until your next rest.\n\nYou can also send it to attack an adversary. When you do, make a **Spellcast Roll** against a target within Very Far range. On a success, the spirit moves into Melee range with that target. Roll a number of **d6s** equal to your Spellcast trait and deal that much magic damage to the target. The spirit then dissipates. You can only have one spirit at a time.",
    "automation": {
     "actions": [
-     {
-      "id": "use",
-      "label": "Midnight Spirit",
-      "cost": {
-       "hope": 1
-      }
-     }
+     { "id": "use", "label": "Midnight Spirit", "cost": { "hope": 1 }, "steps": [{ "op": "effect", "effect": {
+       "name": "Midnight Spirit", "kind": "buff", "until": "rest", "text": "One summoned spirit. It dissipates after dealing its attack damage."
+     } }] },
+     { "id": "attack", "label": "Midnight Spirit: attack Spellcast", "requiresEffect": "Midnight Spirit", "actionRoll": { "trait": "spellcast" } }
+    ],
+    "conditionalRollTriggers": [
+     { "id": "damage", "label": "Midnight Spirit damage", "on": "featureAction:card:Midnight Spirit:attack", "successIfKnown": true,
+       "requiresEffect": "Midnight Spirit", "endEffect": "Midnight Spirit", "damage": { "dice": "d6", "count": "spellcast", "type": "magic" } }
     ]
    }
   },
@@ -2892,14 +3207,15 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Midnight-Touched",
-      "cost": {
-       "stress": 1
-      }
-     }
+    "conditionalActions": [
+     { "id": "hope", "label": "Midnight-Touched: gain Hope instead of GM Fear", "requiresZeroHope": true,
+       "loadoutDomain": { "domain": "Midnight", "min": 4 }, "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }
+    ],
+    "conditionalRollOptions": [
+     { "id": "fear-damage", "label": "Midnight-Touched: add attack Fear die", "roll": "damage",
+       "usesSource": false, "cost": { "stress": 1 }, "input": { "label": "Fear Die", "default": 1, "min": 1, "max": 20, "source": "attackFear" },
+       "description": "Use after a successful attack; confirm the Fear die when not rolling damage from its chat result.",
+       "loadoutDomain": { "domain": "Midnight", "min": 4 } }
     ]
    }
   },
@@ -2921,12 +3237,13 @@
    "recall": 1,
    "text": "**Spend a Hope** to summon a small nature spirit or forest critter to your side until your next rest, you cast Natural Familiar again, or the familiar is targeted by an attack. If you **spend an additional Hope**, you can summon a familiar that flies. You can communicate with them, make a **Spellcast Roll** to command them to perform simple tasks, and **mark a Stress** to see through their eyes.\n\nWhen you deal damage to an adversary within Melee range of your familiar, you add a **d6** to your damage roll.",
    "automation": {
-    "rollOptions": [
+    "conditionalRollOptions": [
      {
       "id": "familiar",
       "label": "Natural Familiar",
       "roll": "damage",
       "dice": "1d6",
+      "requiresEffect": "Natural Familiar",
       "description": "Adversary is in Melee of your active familiar."
      }
     ],
@@ -2934,6 +3251,10 @@
      {
       "id": "summon",
       "label": "Summon familiar",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Natural Familiar", "kind": "buff", "until": "rest",
+       "text": "Dismiss when the familiar is targeted by an attack. Position and tasks are table-managed."
+      } }],
       "cost": {
        "hope": 1
       }
@@ -2941,6 +3262,10 @@
      {
       "id": "flying",
       "label": "Summon flying familiar",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Natural Familiar", "kind": "buff", "until": "rest",
+       "text": "Flying familiar. Dismiss when targeted by an attack. Position and tasks are table-managed."
+      } }],
       "cost": {
        "hope": 2
       }
@@ -2948,6 +3273,7 @@
      {
       "id": "eyes",
       "label": "See through familiar’s eyes",
+      "requiresEffect": "Natural Familiar",
       "cost": {
        "stress": 1
       }
@@ -3007,7 +3333,7 @@
     "actions": [
      {
       "id": "mark",
-      "label": "HP marked from an attack: place tokens (set the count above)",
+      "label": "HP marked: place tokens",
       "cost": {
        "stress": 1
       }
@@ -3025,42 +3351,10 @@
      }
     ],
     "rollOptions": [
-     {
-      "id": "upstaged-1",
-      "label": "Never Upstaged: 1 token (+5)",
-      "roll": "damage",
-      "value": 5,
-      "cost": {
-       "upstaged": 1
-      }
-     },
-     {
-      "id": "upstaged-2",
-      "label": "Never Upstaged: 2 tokens (+10)",
-      "roll": "damage",
-      "value": 10,
-      "cost": {
-       "upstaged": 2
-      }
-     },
-     {
-      "id": "upstaged-3",
-      "label": "Never Upstaged: 3 tokens (+15)",
-      "roll": "damage",
-      "value": 15,
-      "cost": {
-       "upstaged": 3
-      }
-     },
-     {
-      "id": "upstaged-4",
-      "label": "Never Upstaged: 4 tokens (+20)",
-      "roll": "damage",
-      "value": 20,
-      "cost": {
-       "upstaged": 4
-      }
-     }
+     { "id": "upstaged", "label": "Never Upstaged: spend ALL tokens", "roll": "damage",
+       "resourceMultiplier": { "resource": "upstaged", "value": 5 },
+       "description": "Confirm this is your next successful attack. Clear every token after sending damage.",
+       "steps": [{ "op": "clear", "resource": "upstaged", "amount": "all" }] }
     ]
    }
   },
@@ -3088,6 +3382,10 @@
   {
    "id": "not-good-enough",
    "name": "Not Good Enough",
+   "automation": { "rollOptions": [
+    { "id": "reroll", "label": "Not Good Enough: reroll all 1s and 2s", "roll": "damage", "rerollBelow": 3,
+      "description": "Optional: reroll each damage die below 3 once. To choose only some eligible dice, reroll those manually." }
+   ] },
    "cardType": "Ability",
    "domain": "Blade",
    "level": 1,
@@ -3154,6 +3452,7 @@
    "recall": 2,
    "text": "Contaminated Manifest Wall\n\nMake a Spellcast Roll (14). Once per rest on a success, give the GM a Fear to create a temporary wall of octarine magic between two points within Far range. It can be up to 50 feet high and form at any angle. Creatures or objects in its path gain a level of contamination and are shunted to a side of your choice.\n\n A creature that touches the wall must make a Reaction Roll (14) or take d12 magic damage using your Proficiency. The wall stays up until your next rest or you cast Octarine Wall again.",
    "automation": {
+    "spellcastDifficulty": 14,
     "uses": {
      "max": 1,
      "per": "rest"
@@ -3236,6 +3535,7 @@
   {
    "id": "overwhelming-aura",
    "name": "Overwhelming Aura",
+   "automation": { "spellcastDifficulty": 15 },
    "cardType": "Spell",
    "domain": "Splendor",
    "level": 9,
@@ -3252,9 +3552,10 @@
    "text": "Make a **Spellcast Roll** against a creature within Very Far range. On a success, **mark a Hit Point** to conjure a tiny magical bloodworm that burrows into the target. On a success with Hope, the target isn’t aware of the worm within.\n\nYou have advantage on any Presence roll against the target, and whenever they make a roll, you can **spend a Hope** to give the roll disadvantage. You can destroy the bloodworm to cause the target to mark a Hit Point.",
    "automation": {
     "actions": [
+     { "id": "cast", "label": "Successful Spellcast: conjure bloodworm", "cost": { "hp": 1 } },
      {
       "id": "use",
-      "label": "Parasite of the Will",
+      "label": "Bloodworm target rolls: give disadvantage",
       "cost": {
        "hope": 1
       }
@@ -3289,7 +3590,13 @@
    "domain": "Midnight",
    "level": 1,
    "recall": 0,
-   "text": "You have advantage on action rolls to pick nonmagical locks, disarm nonmagical traps, or steal items from a target (either through stealth or by force)."
+   "text": "You have advantage on action rolls to pick nonmagical locks, disarm nonmagical traps, or steal items from a target (either through stealth or by force).",
+   "automation": {
+    "rollOptions": [
+     { "id": "advantage", "label": "Pick and Pull", "roll": "action", "advantage": "advantage",
+       "description": "Use when picking a nonmagical lock, disarming a nonmagical trap, or stealing an item." }
+    ]
+   }
   },
   {
    "id": "plant-dominion",
@@ -3300,6 +3607,7 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll (18)**. Once per long rest on a success, you reshape the natural world, changing the surrounding plant life anywhere within Far range of you. For example, you can grow trees instantly, clear a path through dense vines, or create a wall of roots.",
    "automation": {
+    "spellcastDifficulty": 18,
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -3319,7 +3627,12 @@
    "domain": "Blood",
    "level": 1,
    "recall": 1,
-   "text": "If you have at least one Hit Point marked, you gain a bonus to your damage rolls. The bonus equals twice your number of marked Hit Points."
+   "text": "If you have at least one Hit Point marked, you gain a bonus to your damage rolls. The bonus equals twice your number of marked Hit Points.",
+   "automation": {
+    "conditionalModifiers": [
+     { "roll": "damage", "markedHpMultiplier": 2 }
+    ]
+   }
   },
   {
    "id": "premonition",
@@ -3351,13 +3664,14 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll** against all targets within Melee range. Targets you succeed against are forced back to Far range and take **d8+3** magic damage using your Spellcast trait.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Preservation Blast: roll d8+3 damage",
       "on": "card:Preservation Blast",
       "damage": {
-       "dice": "d8+3"
+       "dice": "d8+3", "type": "magic", "count": "spellcast"
       }
      }
     ]
@@ -3392,16 +3706,16 @@
    "recall": 1,
    "text": "**Spend a Hope** to make a **Spellcast Roll** and conjure throwing blades that strike out at all targets within Very Close range. Targets you succeed against take **d8+2** magic damage using your Proficiency.\n\nIf a target you hit is *Vulnerable*, they take an extra **1d8** damage.",
    "automation": {
-    "rollTriggers": [
+    "actions": [
+     { "id": "cast", "label": "Rain of Blades: Spellcast roll", "cost": { "hope": 1 }, "actionRoll": { "trait": "spellcast" } }
+    ],
+    "conditionalRollTriggers": [
      {
       "id": "damage",
-      "label": "Rain of Blades: spend a Hope, roll d8+2 damage",
+      "label": "Rain of Blades: roll d8+2 magic damage", "successIfKnown": true,
       "on": "card:Rain of Blades",
       "damage": {
-       "dice": "d8+2"
-      },
-      "cost": {
-       "hope": 1
+       "dice": "d8+2", "type": "magic"
       }
      }
     ]
@@ -3443,7 +3757,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Reaper’s Strike"
+      "label": "Reaper’s Strike",
+      "cost": {
+       "hope": 1
+      }
      }
     ]
    }
@@ -3478,10 +3795,12 @@
    "recall": 1,
    "text": "**Mark a Stress** to gain advantage on an attack.",
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
       "id": "use",
       "label": "Reckless",
+      "roll": "attack",
+      "advantage": "advantage",
       "cost": {
        "stress": 1
       }
@@ -3542,6 +3861,7 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll (15)**. Once per rest on a success, create a temporary barrier of protective energy around you at Very Close range. You and all allies within the barrier when this spell is cast clear **1d4** Hit Points. While the barrier is up, you and all allies within have resistance to physical damage from outside the barrier.\n\nWhen you move, the barrier follows you.",
    "automation": {
+    "spellcastDifficulty": 15,
     "uses": {
      "max": 1,
      "per": "rest"
@@ -3549,18 +3869,23 @@
     "actions": [
      {
       "id": "use",
-      "label": "Rejuvenation Barrier"
-     }
-    ],
-    "mitigation": [
-     {
-      "id": "barrier",
-      "label": "Rejuvenation Barrier",
-      "description": "While inside the barrier you have resistance to physical damage from outside it.",
-      "when": {
-       "type": "physical"
-      },
-      "halve": true
+     "label": "Successful Spellcast: Rejuvenation Barrier",
+     "steps": [
+      { "op": "clear", "resource": "hp", "amount": "1d4" },
+      { "op": "effect", "effect": {
+       "name": "Rejuvenation Barrier", "kind": "buff", "until": "manual",
+       "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
+       "mitigation": [{ "id": "barrier", "label": "Inside Rejuvenation Barrier; damage from outside", "when": { "type": "physical" }, "halve": true }]
+      } }
+     ],
+     "chatBenefits": [{ "id": "barrier", "label": "Within barrier when cast: heal d4 HP and gain barrier benefit", "steps": [
+      { "op": "clear", "resource": "hp", "amount": "1d4" },
+      { "op": "effect", "effect": {
+       "name": "Rejuvenation Barrier", "kind": "buff", "until": "manual",
+       "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
+       "mitigation": [{ "id": "barrier", "label": "Inside Rejuvenation Barrier; damage from outside", "when": { "type": "physical" }, "halve": true }]
+      } }
+     ] }]
      }
     ]
    }
@@ -3578,7 +3903,7 @@
      {
       "id": "restoration",
       "label": "Restoration tokens",
-      "initial": 0
+      "initial": 0, "resetOn": "longRest", "resetValue": "@total_spellcast"
      }
     ],
     "actions": [
@@ -3597,10 +3922,11 @@
       "id": "prepare",
       "label": "After long rest: prepare tokens",
       "steps": [
+       { "op": "clear", "resource": "restoration", "amount": "all" },
        {
         "op": "gain",
         "resource": "restoration",
-        "amount": "@spellcast"
+        "amount": "@total_spellcast"
        }
       ]
      },
@@ -3651,7 +3977,8 @@
    "domain": "Splendor",
    "level": 10,
    "recall": 2,
-   "text": "Make a **Spellcast Roll (20)**. On a success, restore one creature who has been dead no longer than 100 years to full strength. Then roll a **d6**. On a result of 5 or lower, place this card in your vault permanently.\n\nOn a failure, you can’t cast Resurrection again for a week."
+   "text": "Make a **Spellcast Roll (20)**. On a success, restore one creature who has been dead no longer than 100 years to full strength. Then roll a **d6**. On a result of 5 or lower, place this card in your vault permanently.\n\nOn a failure, you can’t cast Resurrection again for a week.",
+   "automation": { "spellcastDifficulty": 20 }
   },
   {
    "id": "rift-walker",
@@ -3660,7 +3987,8 @@
    "domain": "Arcana",
    "level": 6,
    "recall": 2,
-   "text": "Make a **Spellcast Roll (15)**. On a success, you place an arcane marking on the ground where you currently stand. The next time you successfully cast Rift Walker, a rift in space opens up, providing safe passage back to the exact spot where the marking was placed. This rift stays open until you choose to close it or you cast another spell.\n\nYou can drop the spell at any time to cast Rift Walker again and place the marking somewhere new."
+   "text": "Make a **Spellcast Roll (15)**. On a success, you place an arcane marking on the ground where you currently stand. The next time you successfully cast Rift Walker, a rift in space opens up, providing safe passage back to the exact spot where the marking was placed. This rift stays open until you choose to close it or you cast another spell.\n\nYou can drop the spell at any time to cast Rift Walker again and place the marking somewhere new.",
+   "automation": { "spellcastDifficulty": 15 }
   },
   {
    "id": "rise-up",
@@ -3708,7 +4036,12 @@
     "actions": [
      {
       "id": "use",
-      "label": "Rousing Strike"
+      "label": "Rousing Strike: after critical attack",
+      "chatBenefits": [
+       { "id": "hp", "label": "Clear 1 HP", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+       { "id": "stress", "label": "Clear d4 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": "1d4" }] }
+      ],
+      "allowSourceOwner": true
      }
     ]
    }
@@ -3746,34 +4079,14 @@
    "recall": 1,
    "text": "Your practice of blood magic has seeped into your bloodstream, enhancing your vitals in moments of urgency. When you roll with advantage, use a **d8** instead of a d6 as your advantage die if you have 1 or more Hit Points marked.\n\nAfter you make a Strength, an Agility, or a Finesse roll, you can **mark a Hit Point** to roll 1d8 and add it to the result.",
    "automation": {
-    "rollOptions": [
-     {
-      "id": "runic-strength",
-      "label": "Runic Adrenaline",
-      "roll": "trait:Strength",
-      "dice": "1d8",
-      "cost": {
-       "hp": 1
-      }
-     },
-     {
-      "id": "runic-agility",
-      "label": "Runic Adrenaline",
-      "roll": "trait:Agility",
-      "dice": "1d8",
-      "cost": {
-       "hp": 1
-      }
-     },
-     {
-      "id": "runic-finesse",
-      "label": "Runic Adrenaline",
-      "roll": "trait:Finesse",
-      "dice": "1d8",
-      "cost": {
-       "hp": 1
-      }
-     }
+    "conditionalRollOptions": [
+     { "id": "advantage", "label": "Runic Adrenaline: d8 advantage (HP marked)", "roll": "action",
+       "condition": { "markedHp": 1 }, "advantageDie": 8, "defaultOn": true }
+    ],
+    "conditionalRollTriggers": [
+     { "id": "strength", "label": "Runic Adrenaline: mark HP, add d8", "on": "trait:Strength", "cost": { "hp": 1 }, "addDice": "1d8" },
+     { "id": "agility", "label": "Runic Adrenaline: mark HP, add d8", "on": "trait:Agility", "cost": { "hp": 1 }, "addDice": "1d8" },
+     { "id": "finesse", "label": "Runic Adrenaline: mark HP, add d8", "on": "trait:Finesse", "cost": { "hp": 1 }, "addDice": "1d8" }
     ]
    }
   },
@@ -3799,12 +4112,9 @@
      "passives": [
       {
        "id": "shelter",
-       "label": "rest inside it (+1 move, spend 2 Hope)",
+       "label": "rest inside it (+1 move)",
        "defaultOn": false,
-       "extraMoves": 1,
-       "cost": {
-        "hope": 2
-       }
+       "extraMoves": 1
       }
      ]
     }
@@ -3823,11 +4133,13 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Sage-Touched"
-     }
+    "conditionalRollOptions": [
+     { "id": "nature", "label": "Sage-Touched: natural environment", "roll": "spellcast", "value": 2,
+       "usesSource": false, "loadoutDomain": { "domain": "Sage", "min": 4 } },
+     { "id": "agility", "label": "Sage-Touched: double Agility", "roll": "trait:Agility", "traitValue": "Agility",
+       "exclusive": "sage-touched", "loadoutDomain": { "domain": "Sage", "min": 4 } },
+     { "id": "instinct", "label": "Sage-Touched: double Instinct", "roll": "trait:Instinct", "traitValue": "Instinct",
+       "exclusive": "sage-touched", "loadoutDomain": { "domain": "Sage", "min": 4 } }
     ]
    }
   },
@@ -3838,7 +4150,8 @@
    "domain": "Splendor",
    "level": 9,
    "recall": 2,
-   "text": "Make a **Spellcast Roll (16)**. On a success, **mark any number of Stress** to target a line of allies within Far range. You can clear Hit Points on the targets equal to the number of Stress marked, divided among them however you’d like."
+   "text": "Make a **Spellcast Roll (16)**. On a success, **mark any number of Stress** to target a line of allies within Far range. You can clear Hit Points on the targets equal to the number of Stress marked, divided among them however you’d like.",
+   "automation": { "spellcastDifficulty": 16 }
   },
   {
    "id": "sanguine-feast",
@@ -3942,6 +4255,7 @@
    "recall": 0,
    "text": "Once per rest, make a **Spellcast Roll (15)**. On a success, drop into a vision that lets you clearly see and hear any place you have been before as though you are standing there in this moment. You can move freely in this vision and are not constrained by the physics or impediments of a physical body. This spell cannot be detected by mundane or magical means. You drop out of this vision upon taking damage or casting another spell.",
    "automation": {
+    "spellcastDifficulty": 15,
     "uses": {
      "max": 1,
      "per": "rest"
@@ -3970,7 +4284,20 @@
    "domain": "Midnight",
    "level": 8,
    "recall": 2,
-   "text": "Your prowess is enhanced under the cover of shadow. While you’re shrouded in low light or darkness, you gain a +1 bonus to your Evasion and make attack rolls with advantage."
+   "text": "Your prowess is enhanced under the cover of shadow. While you’re shrouded in low light or darkness, you gain a +1 bonus to your Evasion and make attack rolls with advantage.",
+   "automation": {
+    "conditionalActions": [
+     { "id": "enter", "label": "Shadowhunter: enter low light or darkness",
+       "steps": [{ "op": "effect", "effect": { "name": "Shadowhunter: shrouded", "kind": "buff", "until": "manual", "text": "End this effect when no longer shrouded in low light or darkness." } }] },
+     { "id": "leave", "label": "Shadowhunter: leave shadow", "requiresEffect": "Shadowhunter: shrouded", "endEffect": "Shadowhunter: shrouded" }
+    ],
+    "conditionalModifiers": [
+     { "stat": "evasion", "value": 1, "requiresEffect": "Shadowhunter: shrouded" }
+    ],
+    "conditionalRollOptions": [
+     { "id": "attack", "label": "Shadowhunter: attack in shadow", "roll": "attack", "requiresEffect": "Shadowhunter: shrouded", "advantage": "advantage", "defaultOn": true }
+    ]
+   }
   },
   {
    "id": "shape-material",
@@ -4045,22 +4372,18 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Shield Aura",
-      "cost": {
-       "stress": 1
-      }
-     }
-    ],
-    "mitigation": [
-     {
-      "id": "aura",
-      "label": "Shield Aura",
-      "description": "While the aura is on you, marking an Armor Slot reduces severity by an additional threshold.",
-      "when": {
-       "armor": true
-      },
-      "armorSeverity": 1
+     "id": "use",
+     "label": "Shield Aura",
+     "target": "actor",
+     "cost": {
+      "stress": 1
+     },
+     "steps": [{ "op": "effect", "effect": {
+      "name": "Shield Aura", "kind": "buff", "until": "manual", "exclusiveSource": true, "unique": true,
+      "text": "Extra severity reduction when marking Armor. Ends when the aura reduces an attack to zero HP or the caster recasts.",
+      "mitigation": [{ "id": "aura", "label": "Shield Aura", "passive": true, "when": { "armor": true },
+       "armorSeverity": 1, "endEffectIfNoHp": "Shield Aura" }]
+     } }]
      }
     ]
    }
@@ -4102,6 +4425,19 @@
   {
    "id": "sigil-of-retribution",
    "name": "Sigil of Retribution",
+   "automation": {
+    "resources": [{ "id": "retribution", "label": "Sigil d8s", "initial": 0, "max": "@level" }],
+    "actions": [
+     { "id": "cast", "label": "Mark adversary: reset Sigil dice", "steps": [{ "op": "clear", "resource": "retribution", "amount": "all" }],
+       "report": { "text": "The GM gains a Fear. Track the marked adversary and dismiss the sigil on their defeat." } },
+     { "id": "gain", "label": "Marked adversary dealt damage: add d8", "steps": [{ "op": "gain", "resource": "retribution", "amount": 1 }] },
+     { "id": "end", "label": "End Sigil: clear dice", "steps": [{ "op": "clear", "resource": "retribution", "amount": "all" }] }
+    ],
+    "rollOptions": [
+     { "id": "damage", "label": "Sigil: roll ALL d8s", "roll": "damage", "allResourceDice": { "resource": "retribution", "sides": 8 },
+       "description": "Only a successful attack against the marked adversary.", "steps": [{ "op": "clear", "resource": "retribution", "amount": "all" }] }
+    ]
+   },
    "cardType": "Spell",
    "domain": "Codex",
    "level": 6,
@@ -4121,11 +4457,13 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Signature Move"
-     }
+    "rollOptions": [
+     { "id": "signature", "label": "Signature Move", "roll": "action", "hopeDie": 20,
+       "description": "Only when performing your named signature combat move." }
+    ],
+    "conditionalRollTriggers": [
+     { "id": "success", "label": "Successful Signature Move: clear Stress", "on": "option:card:Signature Move:signature",
+       "usesSource": false, "successIfKnown": true, "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] }
     ]
    }
   },
@@ -4138,18 +4476,16 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Very Close range. Once per long rest on a success, the target takes **d12+4** magic damage using your Proficiency. On a success with Fear, you gain a **+1** bonus to your Proficiency for this attack.\n\nYou clear a number of Hit Points equal to the number of Hit Points the target marked from this attack.",
    "automation": {
-    "rollTriggers": [
+    "uses": { "max": 1, "per": "longRest" },
+    "conditionalRollTriggers": [
      {
       "id": "hope-damage",
       "label": "Siphon Essence: roll d12+4 damage (once per long rest)",
       "on": "card:Siphon Essence",
-      "when": "hope",
+      "when": "hopeOrCritical",
+      "successIfKnown": true,
       "damage": {
-       "dice": "d12+4"
-      },
-      "uses": {
-       "max": 1,
-       "per": "longRest"
+       "dice": "d12+4", "type": "magic"
       }
      },
      {
@@ -4157,13 +4493,10 @@
       "label": "Siphon Essence: roll d12+4 damage with +1 Proficiency (Fear)",
       "on": "card:Siphon Essence",
       "when": "fear",
+      "successIfKnown": true,
       "damage": {
        "dice": "d12+4",
-       "extraDice": 1
-      },
-      "uses": {
-       "max": 1,
-       "per": "longRest"
+       "extraDice": 1, "type": "magic"
       }
      }
     ]
@@ -4185,7 +4518,15 @@
     "actions": [
      {
       "id": "use",
-      "label": "Smite"
+      "label": "Smite",
+      "cost": {
+       "hope": 3
+      },
+      "steps": [{ "op": "effect", "effect": { "name": "Smite", "kind": "buff", "until": "manual",
+       "text": "Use on the damage roll of your next successful weapon attack.",
+       "rollOptions": [{ "id": "damage", "label": "Smite: double weapon damage (magic)", "roll": "damage",
+         "excludeRolls": ["spelldamage"], "multiplier": 2, "magicDamage": true, "endEffect": "Smite", "defaultOn": true }]
+      } }]
      }
     ]
    }
@@ -4233,7 +4574,12 @@
       "label": "Specter of the Dark",
       "cost": {
        "stress": 1
-      }
+      },
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Specter of the Dark", "kind": "buff", "until": "manual",
+       "text": "End this effect when you make an action roll targeting another creature.",
+       "mitigation": [{ "id": "immune", "label": "Specter of the Dark", "passive": true, "when": { "type": "physical" }, "negate": true }]
+      } }]
      }
     ]
    }
@@ -4272,7 +4618,7 @@
       "id": "spellcharge",
       "label": "Spellcharge",
       "initial": 0,
-      "max": "@spellcast"
+      "max": "@total_spellcast"
      }
     ],
     "actions": [
@@ -4294,6 +4640,7 @@
       "label": "Spellcharge token",
       "roll": "damage",
       "dice": "1d6",
+      "quantity": { "resource": "spellcharge", "label": "Spellcharge tokens to spend" },
       "cost": {
        "spellcharge": 1
       }
@@ -4310,27 +4657,19 @@
    "recall": 2,
    "text": "When 4 or more of the domain cards in your loadout are from the Splendor domain, gain the following benefits:\n\n- +3 bonus to your Severe damage threshold\n- Once per long rest, when incoming damage would require you to mark a number of Hit Points, you can choose to mark that much Stress or spend that much Hope instead.",
    "automation": {
+    "conditionalModifiers": [
+     { "stat": "severeThreshold", "value": 3, "loadoutDomain": { "domain": "Splendor", "min": 4 } }
+    ],
     "uses": {
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Splendor-Touched"
-     }
-    ],
-    "mitigation": [
+    "conditionalMitigation": [
      {
       "id": "stress",
       "label": "Splendor-Touched: mark Stress instead",
       "description": "Mark Stress equal to the Hit Points you would mark instead.",
-      "when": {
-       "min": {
-        "value": "@cards_splendor",
-        "at": 4
-       }
-      },
+      "loadoutDomain": { "domain": "Splendor", "min": 4 },
       "replaceHp": true,
       "cost": {
        "stress": "@hp"
@@ -4341,12 +4680,7 @@
       "id": "hope",
       "label": "Splendor-Touched: spend Hope instead",
       "description": "Spend Hope equal to the Hit Points you would mark instead.",
-      "when": {
-       "min": {
-        "value": "@cards_splendor",
-        "at": 4
-       }
-      },
+      "loadoutDomain": { "domain": "Splendor", "min": 4 },
       "replaceHp": true,
       "cost": {
        "hope": "@hp"
@@ -4428,7 +4762,7 @@
      {
       "id": "strategic",
       "label": "Strategic Approach tokens",
-      "initial": 0
+      "initial": 0, "resetOn": "longRest", "resetValue": "@total_knowledge", "minimumReset": 1
      }
     ],
     "actions": [
@@ -4436,19 +4770,21 @@
       "id": "rest",
       "label": "Long rest: place tokens",
       "steps": [
+       { "op": "clear", "resource": "strategic", "amount": "all" },
        {
         "op": "gain",
         "resource": "strategic",
-        "amount": "@knowledge"
+        "amount": "@total_knowledge", "minimumAmount": 1
        }
       ]
      },
      {
       "id": "spend",
-      "label": "Spend token: advantage or clear an ally Stress",
+      "label": "First Close attack: clear eligible ally Stress", "target": "actor",
       "cost": {
        "strategic": 1
-      }
+      },
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }]
      },
      {
       "id": "clear",
@@ -4463,6 +4799,9 @@
      }
     ],
     "rollOptions": [
+     { "id": "strategic-advantage", "label": "Strategic Approach: first Close attack advantage", "roll": "attack",
+       "advantage": "advantage", "cost": { "strategic": 1 },
+       "description": "Only the first Close attack against this adversary; choose one card benefit, not the ally Stress or damage benefit too." },
      {
       "id": "strategic-d8",
       "label": "Strategic Approach: +d8 damage",
@@ -4470,7 +4809,8 @@
       "dice": "1d8",
       "cost": {
        "strategic": 1
-      }
+      },
+      "description": "Only the first Close attack against this adversary, if you did not choose advantage or ally Stress clearing."
      }
     ]
    }
@@ -4478,6 +4818,13 @@
   {
    "id": "stunning-sunlight",
    "name": "Stunning Sunlight",
+   "automation": { "actions": [
+    { "id": "target", "label": "Successful Sunlight: pay for one target", "cost": { "hope": 1 },
+      "report": { "text": "One target you succeeded against makes Reaction (14). Repeat for each additional target." } },
+    { "id": "success", "label": "Target succeeded Reaction: damage", "damage": { "dice": "3d20+3", "fixed": true, "type": "magic" } },
+    { "id": "failure", "label": "Target failed Reaction: damage", "damage": { "dice": "4d20+5", "fixed": true, "type": "magic" },
+      "report": { "text": "The failed target is temporarily Stunned; the GM manages the condition." } }
+   ] },
    "cardType": "Spell",
    "domain": "Splendor",
    "level": 8,
@@ -4500,7 +4847,8 @@
     "actions": [
      {
       "id": "use",
-      "label": "Summon Horror"
+      "label": "Summon Horror",
+      "cost": { "stress": 1 }
      }
     ]
    }
@@ -4563,6 +4911,10 @@
   {
    "id": "tactician",
    "name": "Tactician",
+   "automation": { "rollOptions": [
+    { "id": "tag-team", "label": "Tactician: Tag Team Hope d20", "roll": "action", "hopeDie": 20,
+      "description": "Only for a Tag Team Roll. The ally manually adds your applicable Experience when you Help them." }
+   ] },
    "cardType": "Ability",
    "domain": "Bone",
    "level": 3,
@@ -4572,6 +4924,13 @@
   {
    "id": "telekinesis",
    "name": "Telekinesis",
+   "automation": { "actions": [
+    { "id": "lift", "label": "Telekinesis: lift Spellcast roll", "actionRoll": { "trait": "spellcast" } },
+    { "id": "throw", "label": "Telekinesis: throw Spellcast roll", "actionRoll": { "trait": "spellcast" } }
+   ], "conditionalRollTriggers": [
+    { "id": "damage", "label": "Telekinesis: throw damage", "on": "featureAction:card:Telekinesis:throw", "successIfKnown": true,
+      "damage": { "dice": "d12+4", "type": "physical" } }
+   ] },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 6,
@@ -4587,6 +4946,12 @@
    "recall": 2,
    "text": "Once per long rest, you can instantly teleport yourself and any number of willing targets within Close range to a place you’ve been before. Choose one of the following options, then make a **Spellcast Roll (16)**:\n\n- If you know the place very well, gain a +3 bonus.\n- If you’ve visited the place frequently, gain a +1 bonus.\n- If you’ve visited the place infrequently, gain no modifier.\n- If you’ve only been there once, gain a −2 penalty.\nOn a success, you appear where you were intending to go. On a failure, you appear off course, with the range of failure determining how far off course.",
    "automation": {
+    "spellcastDifficulty": 16,
+    "rollOptions": [
+     { "id": "familiar", "label": "Teleport: know it very well", "roll": "card:Teleport", "value": 3, "exclusive": "teleport-familiarity", "usesSource": false },
+     { "id": "frequent", "label": "Teleport: frequent visits", "roll": "card:Teleport", "value": 1, "exclusive": "teleport-familiarity", "usesSource": false },
+     { "id": "once", "label": "Teleport: visited only once", "roll": "card:Teleport", "value": -2, "exclusive": "teleport-familiarity", "usesSource": false }
+    ],
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -4611,6 +4976,18 @@
   {
    "id": "tempest",
    "name": "Tempest",
+   "automation": { "actions": [
+    { "id": "blizzard", "label": "Blizzard: Spellcast roll", "actionRoll": { "trait": "spellcast" } },
+    { "id": "hurricane", "label": "Hurricane: Spellcast roll", "actionRoll": { "trait": "spellcast" } },
+    { "id": "sandstorm", "label": "Sandstorm: Spellcast roll", "actionRoll": { "trait": "spellcast" } }
+   ], "conditionalRollTriggers": [
+    { "id": "blizzard", "label": "Blizzard damage", "on": "featureAction:card:Tempest:blizzard", "successIfKnown": true,
+      "damage": { "dice": "2d20+8", "fixed": true, "type": "magic" } },
+    { "id": "hurricane", "label": "Hurricane damage", "on": "featureAction:card:Tempest:hurricane", "successIfKnown": true,
+      "damage": { "dice": "3d10+10", "fixed": true, "type": "magic" } },
+    { "id": "sandstorm", "label": "Sandstorm damage", "on": "featureAction:card:Tempest:sandstorm", "successIfKnown": true,
+      "damage": { "dice": "5d6+9", "fixed": true, "type": "magic" } }
+   ] },
    "cardType": "Spell",
    "domain": "Sage",
    "level": 10,
@@ -4620,6 +4997,10 @@
   {
    "id": "terrify",
    "name": "Terrify",
+   "automation": { "actions": [
+    { "id": "stress", "label": "Successful Terrify: roll target Stress", "sendRoll": { "dice": "1d4", "label": "Terrify: target marks Stress" },
+      "report": { "text": "The GM marks this Stress, resolves fleeing, and applies Vulnerable on a Fear success." } }
+   ] },
    "cardType": "Spell",
    "domain": "Dread",
    "level": 3,
@@ -4639,13 +5020,15 @@
      {
       "id": "thorns",
       "label": "Thorn Skin tokens",
-      "initial": 0
+      "initial": 0,
+      "resetOn": "rest"
      }
     ],
     "actions": [
      {
       "id": "cast",
       "label": "Once per rest: sprout thorns",
+      "uses": { "max": 1, "per": "rest" },
       "steps": [
        {
         "op": "gain",
@@ -4731,16 +5114,17 @@
    "recall": 1,
    "text": "Once per rest, you can conjure a thick, twisting stalk within Close range that can be easily climbed. Its height can grow up to Far range.\n\n**Mark a Stress** to use this spell as an attack. Make a **Spellcast Roll** against an adversary or group of adversaries within Close range. The erupting stalk lifts targets you succeed against into the air and drops them, dealing **d8** physical damage using your Proficiency.",
    "automation": {
-    "rollTriggers": [
+    "actions": [
+     { "id": "climb", "label": "Conjure climbing stalk", "uses": { "max": 1, "per": "rest" } },
+     { "id": "attack", "label": "Towering Stalk: attack Spellcast roll", "cost": { "stress": 1 }, "actionRoll": { "trait": "spellcast" } }
+    ],
+    "conditionalRollTriggers": [
      {
       "id": "damage",
-      "label": "Towering Stalk: mark a Stress, roll d8 damage",
+      "label": "Towering Stalk: roll d8 physical damage", "successIfKnown": true,
       "on": "card:Towering Stalk",
       "damage": {
-       "dice": "d8"
-      },
-      "cost": {
-       "stress": 1
+       "dice": "d8", "type": "physical"
       }
      }
     ]
@@ -4762,7 +5146,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Transcendent Union"
+      "label": "Transcendent Union",
+      "cost": {
+       "hope": 5
+      }
      }
     ]
    }
@@ -4801,7 +5188,7 @@
      {
       "id": "twilight",
       "label": "Twilight Toll tokens",
-      "initial": 0
+      "initial": 0, "resetOn": "rest"
      }
     ],
     "actions": [
@@ -4834,10 +5221,11 @@
       "label": "Twilight Toll token",
       "roll": "damage",
       "dice": "1d12",
+      "quantity": { "resource": "twilight", "label": "Twilight Toll tokens to spend" },
       "cost": {
        "twilight": 1
       },
-      "description": "Only damage to the chosen target; spend extra tokens/dice manually."
+      "description": "Only damage to the chosen target."
      }
     ]
    }
@@ -4985,7 +5373,12 @@
     "actions": [
      {
       "id": "use",
-      "label": "Uncanny Focus"
+      "label": "Uncanny Focus",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Uncanny Focus", "kind": "buff", "until": "manual",
+       "text": "End this effect if you attack another creature, defeat the target, or the battle ends. The extra HP and GM Fear are handled at the table.",
+       "modifiers": [{ "stat": "proficiency", "value": 1 }]
+      } }]
      }
     ]
    }
@@ -5098,7 +5491,15 @@
    "domain": "Valor",
    "level": 7,
    "recall": 1,
-   "text": "When 4 or more of the domain cards in your loadout are from the Valor domain, gain the following benefits:\n\n- +1 bonus to your Armor Score\n- When you mark 1 or more Hit Points without marking an Armor Slot, clear an Armor Slot."
+   "text": "When 4 or more of the domain cards in your loadout are from the Valor domain, gain the following benefits:\n\n- +1 bonus to your Armor Score\n- When you mark 1 or more Hit Points without marking an Armor Slot, clear an Armor Slot.",
+   "automation": {
+    "conditionalModifiers": [
+     { "stat": "armorScore", "value": 1, "loadoutDomain": { "domain": "Valor", "min": 4 } }
+    ],
+    "conditionalDamageRewards": [
+     { "minHp": 1, "noArmorMarked": true, "clearArmor": 1, "loadoutDomain": { "domain": "Valor", "min": 4 } }
+    ]
+   }
   },
   {
    "id": "vampiric-strike",
@@ -5168,7 +5569,8 @@
    "domain": "Midnight",
    "level": 3,
    "recall": 1,
-   "text": "Make a **Spellcast Roll (13)**. On a success, you can create a temporary curtain of darkness between two points within Far range. Only you can see through this darkness. You’re considered *Hidden* to adversaries on the other side of the veil, and you have advantage on attacks you make through the darkness. The veil remains until you cast another spell."
+   "text": "Make a **Spellcast Roll (13)**. On a success, you can create a temporary curtain of darkness between two points within Far range. Only you can see through this darkness. You’re considered *Hidden* to adversaries on the other side of the veil, and you have advantage on attacks you make through the darkness. The veil remains until you cast another spell.",
+   "automation": { "spellcastDifficulty": 13 }
   },
   {
    "id": "versatile-fighter",
@@ -5199,14 +5601,15 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a target within Far range. On a success, roots and vines reach out from the ground, dealing **1d8+1** physical damage and temporarily *Restraining* the target.\n\nAdditionally on a success, you can **spend a Hope** to temporarily *Restrain* another adversary within Very Close range of your target.",
    "automation": {
-    "rollTriggers": [
+    "conditionalRollTriggers": [
      {
       "id": "damage",
+      "successIfKnown": true,
       "label": "Vicious Entangle: roll 1d8+1 damage",
       "on": "card:Vicious Entangle",
       "damage": {
        "dice": "1d8+1",
-       "fixed": true
+       "fixed": true, "type": "physical"
       }
      }
     ]
@@ -5221,22 +5624,17 @@
    "recall": 1,
    "text": "**Mark a Hit Point** to trace a circle of blood around yourself at Very Close range. While in the circle, you have resistance to your choice of physical or magic damage (choose when you cast the spell). Allies also gain this benefit while in the circle. The circle disappears if you move out of it, mark 2 or more Hit Points, or cast this spell again.",
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Vital Ward",
-      "cost": {
-       "hp": 1
-      }
-     }
-    ],
-    "mitigation": [
-     {
-      "id": "ward",
-      "label": "Vital Ward",
-      "description": "While in the circle, resistance to the chosen damage type.",
-      "halve": true
-     }
+    "conditionalActions": [
+     { "id": "physical", "label": "Vital Ward: physical resistance", "cost": { "hp": 1 }, "steps": [
+      { "op": "effect", "effect": { "name": "Vital Ward", "kind": "buff", "until": "manual", "endOnMarkedHpCount": 2,
+       "text": "Physical resistance within the circle. End when you leave the circle or mark 2 or more HP; allies apply the chosen resistance manually.",
+       "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "physical" }, "halve": true }] } }
+     ] },
+     { "id": "magic", "label": "Vital Ward: magic resistance", "cost": { "hp": 1 }, "steps": [
+      { "op": "effect", "effect": { "name": "Vital Ward", "kind": "buff", "until": "manual", "endOnMarkedHpCount": 2,
+       "text": "Magic resistance within the circle. End when you leave the circle or mark 2 or more HP; allies apply the chosen resistance manually.",
+       "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "magic" }, "halve": true }] } }
+     ] }
     ]
    }
   },
@@ -5274,7 +5672,13 @@
    "domain": "Splendor",
    "level": 3,
    "recall": 1,
-   "text": "You speak with an unmatched power and authority. You have advantage on action rolls to de-escalate violent situations or convince someone to follow your lead.\n\nAdditionally, you’re emboldened in moments of duress. When all of your Stress slots are marked, you gain a +1 bonus to your Proficiency for damage rolls."
+   "text": "You speak with an unmatched power and authority. You have advantage on action rolls to de-escalate violent situations or convince someone to follow your lead.\n\nAdditionally, you’re emboldened in moments of duress. When all of your Stress slots are marked, you gain a +1 bonus to your Proficiency for damage rolls.",
+   "automation": {
+    "conditionalRollOptions": [
+     { "id": "social", "label": "Voice of Reason: de-escalate or lead", "roll": "action", "advantage": "advantage", "description": "Use when de-escalating violence or convincing someone to follow your lead." },
+     { "id": "damage", "label": "Voice of Reason: full Stress", "roll": "damage", "condition": { "stressFull": true }, "proficiency": 1, "defaultOn": true }
+    ]
+   }
   },
   {
    "id": "wall-of-hunger",
@@ -5285,6 +5689,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (10)**. On a success, you can **spend a Hope** to create a visible wall of writhing necrotic energy between two points within Far range. The wall lasts until you mark a Hit Point or cast this spell again. A creature inside the wall when it appears or that passes through it must mark 2 Stress.",
    "automation": {
+    "spellcastDifficulty": 10,
     "actions": [
      {
       "id": "use",
@@ -5331,11 +5736,24 @@
     },
     "actions": [
      {
-      "id": "use",
-      "label": "Weave the Flesh",
-      "cost": {
-       "stress": 1
-      }
+      "id": "base",
+      "label": "Weave the Flesh: allies clear HP or Stress",
+      "cost": { "hp": 1 },
+      "chatBenefits": [
+       { "id": "hp", "label": "Within Close range: clear 1 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+       { "id": "stress", "label": "Within Close range: clear 1 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] }
+      ]
+     },
+     {
+      "id": "upgrade",
+      "label": "Weave the Flesh: allies clear HP and Stress",
+      "cost": { "hp": 1, "stress": 1 },
+      "chatBenefits": [
+       { "id": "both", "label": "Within Close range: clear 1 HP and 1 Stress", "steps": [
+        { "op": "clear", "resource": "hp", "amount": 1 },
+        { "op": "clear", "resource": "stress", "amount": 1 }
+       ] }
+      ]
      }
     ]
    }
@@ -5363,6 +5781,11 @@
   {
    "id": "wild-fortress",
    "name": "Wild Fortress",
+   "automation": { "spellcastDifficulty": 13, "actions": [
+    { "id": "cast", "label": "Successful Spellcast: grow fortress", "cost": { "hope": 2 },
+      "steps": [{ "op": "clear", "resource": "fortress", "amount": "all" }] },
+    { "id": "hit", "label": "Fortress marks a Hit Point", "steps": [{ "op": "gain", "resource": "fortress", "amount": 1 }] }
+   ], "resources": [{ "id": "fortress", "label": "Fortress marked HP (ends at 3)", "initial": 0, "max": 3 }] },
    "cardType": "Spell",
    "domain": "Sage",
    "level": 5,
@@ -5385,7 +5808,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Wild Surge"
+      "label": "Wild Surge",
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -5393,6 +5819,10 @@
   {
    "id": "words-of-discord",
    "name": "Words of Discord",
+   "automation": { "spellcastDifficulty": 13, "rollOptions": [
+    { "id": "repeat", "label": "Words of Discord: repeat target", "roll": "card:Words of Discord", "value": -5,
+      "description": "Use when casting again on a target that has realized what happened." }
+   ] },
    "cardType": "Spell",
    "domain": "Grace",
    "level": 5,
@@ -5412,6 +5842,7 @@
      {
       "id": "use",
       "label": "Wrangle",
+      "actionRoll": { "trait": "Agility" },
       "cost": {
        "hope": 1
       }
@@ -5428,6 +5859,7 @@
    "recall": 2,
    "text": "Make a **Spellcast Roll (16)**. Once per long rest on a success, choose a point within Far range and create a visible zone of protection there for all allies within Very Close range of that point. When you do, place a **d6** on this card with the 1 value facing up. When an ally in this zone takes damage, they reduce it by the die’s value. You then increase the die’s value by one. When the die’s value would exceed 6, this effect ends.",
    "automation": {
+    "spellcastDifficulty": 16,
     "uses": {
      "max": 1,
      "per": "longRest"

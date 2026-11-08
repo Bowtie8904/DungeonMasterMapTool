@@ -91,7 +91,7 @@ describe('daggerheart rests', () => {
     expect(c.inventory.find((i) => i.name === 'Pipeweed')!.qty).toBe(1);
   });
 
-  it('pays configured extra-move costs and leaves the sheet untouched on failure', () => {
+  it('keeps Safe Havens extra move free and leaves the sheet untouched on failure', () => {
     const c = mockCharacter();
     c.hope.on = 2;
     c.loadout.push({ name: 'Safe Haven', automation: rules('domain-cards', 'Safe Haven') } as never);
@@ -102,7 +102,7 @@ describe('daggerheart rests', () => {
     expect(() => resolveRest(c, 'short', [{ move: 'tend' }, { move: 'tend' }], o)).toThrow();
     expect(c).toEqual(before);
     resolveRest(c, 'short', [], o);
-    expect(c.hope.on).toBe(0);
+    expect(c.hope.on).toBe(2);
     expect(c.inventory.find((i) => i.name === 'Potion of Stability')!.qty).toBe(0);
   });
 

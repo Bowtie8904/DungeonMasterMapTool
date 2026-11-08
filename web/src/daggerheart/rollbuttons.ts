@@ -6,7 +6,7 @@ import { applyDeathRecovery, claimRollReward, useFeature } from '../api';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, usesLeft } from './engine';
+import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, runAction, usesLeft } from './engine';
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
@@ -34,6 +34,7 @@ export interface RollButtonHost {
   supportsSorcererAutomation?: () => boolean;
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
+  supportsDomainCardAutomation?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
@@ -84,6 +85,38 @@ function openTokenGain(t: AvailableRollTrigger, cost: string, submit: (amount: n
   dialog.append(el('h4', {}, t.trigger.label),
     el('p', { class: 'muted' }, t.trigger.description ?? 'Enter the tokens gained.'),
     el('label', {}, `HP marked by the target (1-${max})`, amount), error, el('div', { class: 'acts' }, cancel, go));
+  document.body.append(dialog);
+  dialog.showModal();
+  amount.focus();
+  amount.select();
+}
+
+function openHopeAmount(t: AvailableRollTrigger, c: CharacterSheet, submit: (amount: number) => Promise<void>, onClose: () => void): void {
+  const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: t.trigger.label });
+  const amount = el('input', { type: 'number', min: '1', max: String(c.hope.on), step: '1', value: '1', ariaLabel: 'Hope to spend' });
+  const error = el('div', { class: 'error', role: 'alert' });
+  const cancel = el('button', { type: 'button' }, 'Cancel');
+  const go = el('button', { type: 'button', class: 'primary' }, 'Spend Hope');
+  let pending = false;
+  cancel.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('cancel', event => { if (pending) event.preventDefault(); });
+  dialog.addEventListener('close', () => { dialog.remove(); onClose(); }, { once: true });
+  go.addEventListener('click', async () => {
+    if (pending) return;
+    const n = amount.valueAsNumber;
+    if (!Number.isInteger(n) || n < 1 || n > c.hope.on) {
+      error.textContent = `Enter a whole number from 1 to ${c.hope.on}.`;
+      return;
+    }
+    pending = true;
+    go.disabled = cancel.disabled = amount.disabled = true;
+    error.textContent = '';
+    try { await submit(n); dialog.close(); }
+    catch (e) { error.textContent = (e as Error).message; }
+    finally { pending = false; go.disabled = cancel.disabled = amount.disabled = false; }
+  });
+  dialog.append(el('h4', {}, t.trigger.label), el('p', { class: 'muted' }, 'Spend 1 Hope for yourself and 1 additional Hope for each willing creature.'),
+    el('label', {}, 'Hope to spend', amount), error, el('div', { class: 'acts' }, cancel, go));
   document.body.append(dialog);
   dialog.showModal();
   amount.focus();
@@ -365,13 +398,16 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         if (audience === 'self' && featureActorId !== actorId) continue;
         if (audience === 'ally' && featureActorId === actorId) continue;
         if (!t.trigger.repeatable && m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
+        if (t.trigger.exclusiveRollGroup && m.featureUses?.includes(`${featureActorId}:${t.key}:group:${t.trigger.exclusiveRollGroup}`)) continue;
         if (trigger.dualityDieBonus && trigger.endEffect
             && m.featureUses?.includes(`${featureActorId}:effectBonus:${trigger.endEffect}`)) continue;
         const cost = costText(t.trigger.cost, c);
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = (t.trigger.steps?.some(s => s.effect?.tokenResource || s.effect?.endOnMarkedHp) && !host.supportsWitchAutomation?.())
+        const unsupported = t.automation.conditionalRollTriggers?.includes(t.trigger) && !host.supportsDomainCardAutomation?.()
+          ? 'Update the host to use this domain-card action.'
+          : (t.trigger.steps?.some(s => s.effect?.tokenResource || s.effect?.endOnMarkedHp) && !host.supportsWitchAutomation?.())
           ? 'Update the host to use Witch roll actions.'
           : t.trigger.rerollResourceDice && !host.supportsWarriorAutomation?.()
           ? 'Update the host to reroll Slayer Dice.'
@@ -390,6 +426,13 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.spendHopeAmount) {
+            openHopeAmount(t, c, async amount => {
+              await sheet.save.flush?.();
+              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+            }, () => { b.disabled = false; });
+            return;
+          }
           if (t.trigger.spendFavor) {
             chooseWarlockAmount(c, t.trigger, async amount => {
               await sheet.save.flush?.();
@@ -406,7 +449,20 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             return;
           }
           if (t.trigger.damage && !t.trigger.damage.fixed) {
-            const opened = sheet.bus.spellDamage?.(t.trigger.label, t.trigger.damage, critical, () => { sheet.save(); }, m.rollSource);
+            const opened = sheet.bus.spellDamage?.(t.trigger.label, t.trigger.damage, critical, () => {
+              const report = runAction(c, t.key, t.automation, t.trigger, t.source);
+              if (!report) throw new Error('The feature payment changed before the damage roll completed.');
+              m.featureUses ??= [];
+              m.featureUses.push(`${featureActorId}:${t.key}:${t.trigger.id}`);
+              if (t.trigger.exclusiveRollGroup) m.featureUses.push(`${featureActorId}:${t.key}:group:${t.trigger.exclusiveRollGroup}`);
+              sheet.save();
+            }, m.rollSource, { key: t.key, automation: t.automation, action: t.trigger, blocker: () => {
+              if (!t.trigger.repeatable && m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`))
+                return 'This feature was already used on this roll.';
+              return availableRollTriggers(c, ctx ?? { source: m.source ?? '', hope: 0, fear: 0, total: m.total, kind: 'damage' })
+                .some(current => current.key === t.key && current.trigger.id === t.trigger.id)
+                ? null : 'The feature is no longer available for this roll.';
+            } });
             if (!opened) host.toast('Open this character sheet to roll feature damage.');
             b.disabled = false;
             return;

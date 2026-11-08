@@ -64,6 +64,72 @@ versions change. Older clients can continue reading catalog files and saved shee
 
 ## Automation block
 
+### Active-loadout conditional modifiers
+
+`conditionalModifiers` contains passive modifiers with `loadoutDomain: {domain, min}`.
+The domain comparison is case-insensitive and counts only cards in the active loadout, including the
+source card when it matches; vaulted cards do not count. These modifiers affect sheet statistics, their
+source breakdowns, roll bonuses and the host's Spellcast trait calculation. Older clients ignore the
+separate `conditionalModifiers` field rather than applying the bonuses without the condition. This
+currently covers the passive bonuses on Arcana-, Blade-, Bone-, Splendor- and Valor-Touched.
+`conditionalActions` and `conditionalMitigation` use the same gate for Bone-Touched's attack avoidance
+and Splendor-Touched's shared-use damage replacements. Older clients ignore these gated actions rather
+than applying them without the loadout requirement. Grace-Touched's explicit substitution controls are
+gated too; automatic substitution across every Stress-cost workflow remains an open decision.
+
+`conditionalRollOptions` similarly gates optional roll choices by `loadoutDomain`. Codex-Touched's
+`derivedProficiency` uses current Proficiency including bonuses; Sage-Touched's `traitValue` uses the
+current total trait and its natural-environment bonus is player-selected. Sage's Agility and Instinct
+choices share its rest limit, while its natural-environment option is unlimited. Dread-Touched's
+optional roll bonus uses the GM's current Fear pool. Older clients ignore these options.
+
+### Audited domain-card metadata
+
+The individual disposition of all 236 cards and every nested spell is in
+[`plan.md`](../plan.md#individual-domain-card-disposition-ledger). Supported sheet mechanics and
+deliberately manual narrative consequences are distinguished from the complete open-decision list.
+
+- `unarmoredBase` specifies `{score, trait, thresholdsByTier}`. Bare Bones replaces the unarmored base,
+  adds current Strength to its Armor Score, and adds level once to each threshold. Equipped armor and
+  vaulting disable this base; stat breakdowns use the same calculation.
+- `@total_<trait>`, `@total_spellcast` and `@total_proficiency` use current derived totals. Existing
+  `@<trait>`, `@spellcast` and `@proficiency` expressions keep their base-value semantics.
+  Resource `resetValue`/`minimumReset` define rest regeneration after expiring effects have been removed.
+  Step `minimumAmount` clamps an award such as Flight's current-Agility tokens to at least one.
+- Nested actions/reactions use `card:<book>/<spell>` keys. Both host catalog lookup and browser target
+  selection resolve the exact nested spell; the host requires its book in the active loadout.
+  `actionRoll.reaction` opens Reaction mode. Action rolls include a
+  `featureAction:<source-key>:<action-id>` source tag for domain-card actions; selected domain-card options include
+  `option:<source-key>:<option-id>` so a result action can require the specific cast or option.
+- Trigger `successIfKnown` rejects a known failed roll, while hidden Difficulty remains player-confirmed.
+  `criticalOnly` requires equal positive Duality dice on an eligible attack. `failedOnly` excludes
+  critical successes. `exclusiveRollGroup` gives alternative reactions a shared per-roll exclusion;
+  Blighting Strike cannot claim both failed-cast payments.
+- Non-fixed damage reactions pass a pending action into the sheet damage dialog. Recheck the active
+  source, reaction eligibility, use and aggregate costs before sending; pay and consume the use only
+  after sending. Canceled/disconnected rolls spend nothing. This follows the client-side sheet damage
+  pattern, not a host-acknowledged per-roll transaction across reloads.
+- `resourceRoll: {resource, sides, bonusPerDie?, type?}` opens a Hope-spend or Stress-mark quantity
+  dialog. A damage `type` labels the result as physical/magic; omitting it produces a utility roll
+  (Arcane Reflection/Invigoration). `hopeDice` remains supported for Arcane Barrage.
+- Roll options can use `resourceMultiplier` for an all-token numerical bonus or `allResourceDice`
+  for an all-dice pool. Their clear-all steps run only on successful sending. `advantageDie: 8` changes
+  advantage, never disadvantage; `condition.markedHp` supplies Runic Adrenaline's minimum marked HP.
+  `magicDamage` changes weapon damage tags/type, `multiplier: 2` doubles the total, and `rerollBelow: 3`
+  rerolls all eligible 1s/2s once through the existing host damage reroller.
+- `damage.count: "spellcast"` uses the current total Spellcast trait instead of Proficiency.
+  `vaultSource` is a host reaction operation that moves the active source card to the vault on validated
+  success and increments the compendium revision; Counterspell uses it.
+- Effect `exclusiveSource` replaces that caster/source's previous recipient effects on recast.
+  Shield Aura's passive mitigation has `endEffectIfNoHp`: it expires only when its extra reduction
+  caused HP to become zero, not when ordinary Armor or negation already prevented damage.
+  `endOnMarkedHpCount` expires Vital Ward after actual HP marked by incoming damage reaches the
+  specified threshold; non-damage HP changes and leaving the circle are explicitly manual.
+
+The host advertises optional `domainCardAutomationV2` alongside the retained original capability.
+Current clients require V2 for host-dependent audited actions; older hosts disable those controls
+without blocking connection. LAN compatibility version and settings contracts are unchanged.
+
 ### Witch metadata
 
 Commune's `sendRoll.dice: "@spellcastd6"` resolves the current total Spellcast trait as the dice count;
@@ -625,17 +691,18 @@ classes or the named examples. A source is an individual class/heritage/transfor
 entry. The counts below describe the current catalog snapshot; edit them when catalog changes affect the totals.
 “Executable” means at least one modifier, counter/usage upgrade, action/chat benefit, roll option, creation/rest grant, damage-mitigation option, weapon-damage operation or death-move metadata;
 **it does not mean the whole feature is automated**. A cost/use-only button tracks the owner's spending, not the
-target's outcome. “Plain gear” has no feature to automate. Sources without an executable operation are
-purely narrative text.
+target's outcome. “Plain gear” has no feature to automate; the domain-card column also includes
+unresolved automation, not only narrative text. See the individual audit ledger before interpreting coverage
+as complete automation.
 
 | Category | Entries | Rule sources | Executable | Plain gear |
 |---|---:|---:|---:|---:|
-| Domain cards | 236 | 236 | 165 | 71 |
+| Domain cards | 236 | 236 | 223 | 13 |
 | Armor | 110 | 110 | 80 | 30 |
 | Weapons | 336 | 336 | 144 | 192 |
 | Consumables | 182 | 182 | 62 | 120 |
 | Items | 174 | 174 | 84 | 90 |
-| **All categories** | **1,187** | **1,296** | **719** | **577** |
+| **All categories** | **1,187** | **1,296** | **777** | **519** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -726,8 +793,8 @@ Classes, ancestries, communities and transformations are included in the total.
   of Hope outcome conversion; simple situational community/gear advantages; Nature's Tongue, Goad Them On and
   Woven Net trait rolls; and Life Support, Healing Strike, Sparing Touch and Restoration target healing.
   Range, willingness, attack success and narrative prerequisites remain player/GM decisions. Complex healing
-  choices such as Healing Hands (result-dependent amounts and per-target rest limits), Mending Touch's special
-  healing-time upgrade, and area/group healing still need their own workflows rather than guessed targets.
+  choices such as Healing Hands (result-dependent amounts and per-target rest limits) and area/group healing
+  still need their own workflows rather than guessed targets.
 - **Pools:** Favor, Slayer Dice, Tide, poison tokens, Spellcharge, Inspiration, Restoration, thorns, Dark Army
   fiends, Twilight Toll, chaos, Invisibility/Disguise tokens and Alconite charge. Explicit gain/spend/clear buttons
   track **numeric tokens** only. Follow descriptions for start/end-session and rest preparation/clearing; rest
@@ -740,7 +807,52 @@ Classes, ancestries, communities and transformations are included in the total.
   situational. Alconite recharge requires its explicit salt-water downtime action.
 - **Domain cards:** optional Body Basher, Cruel Precision, Bold Presence, Boost, Forceful Push, Natural Familiar,
   Nature's Tongue and Runic Adrenaline; Rise Up/Notorious passives; Full Surge and explicit self-healing/recovery
-  actions. Separate healing choices never clear both resources unless the export says both.
+  actions. Bold Presence's condition avoidance has an independent once-per-rest action limit; its Presence roll
+  option remains unlimited. Astral Projection marks Stress; Bloodbath, Arcane Deflection and Shared Clarity
+  spend Hope on their action buttons. Battle Cry offers other players a Bard-style chat claim for clearing
+  1 Stress and gaining 1 Hope, once per player; hearing and advantage remain table-managed. A Soldier's Bond
+  has no automation. Mending Touch offers unlimited base healing and a shared once-per-long-rest upgrade;
+  its target and narrative prerequisite are player-confirmed. Summon Horror's action marks 1 Stress.
+  Dark Army's summon and Thorn Skin's cast have independent long-rest and rest limits respectively;
+  either rest clears their tokens, even if the cards are in the vault. Rest-time resource resets include
+  vaulted card definitions, with active definitions taking precedence for duplicate resource IDs.
+  Confirm Dark Army's Spellcast success at the table.
+  Book of Illiat's Arcane Barrage prompts for Hope and sends that many d6 magic damage dice; it spends
+  Hope and its rest use only after the send succeeds. Its `conditionalActions` metadata is ignored by
+  older clients.
+  Armorer and Fortified Armor use conditional modifiers that apply only while armor is equipped.
+  Blink Out uses `spellcastDifficulty` and a host-validated `conditionalRollTriggers` Hope-quantity
+  action; older clients ignore the trigger and newer clients require host capability support.
+  Book of Homet's `automaticRestUse` consumes each spell's separate rest use on a successful
+  host roll at `spellcastDifficulty`, not on failure. Travel is resolved at the table.
+  Banish's `banishDifficulty` reaction rolls the current Spellcast trait's d20s on the host and stores
+  their highest result on the card; players can manually edit or clear that value.
+  Arcana-Touched uses a host-validated conditional chat reaction to swap Hope and Fear once per rest;
+  vaulted Arcana cards do not count.
+  Blood- and Valor-Touched use conditional modifiers and damage rewards, evaluated after mitigation
+  when confirming damage. These metadata fields are ignored by older clients.
+  Codex-Touched's conditional `codexSwap` action swaps the card with a chosen vault card and has its
+  own rest limit, separate from its Stress-paid Spellcast option.
+  Midnight-Touched offers a Stress-paid attack Fear die damage option and a zero-Hope, once-per-rest
+  Hope action. Confirm attack success and the prevented GM Fear at the table.
+  Frenzy's manually ended effect carries its damage/threshold bonuses and Armor restriction.
+  Healing Field offers free and upgraded party healing with one shared long-rest use.
+  Eldritch Flesh and Power Through Pain derive their bonuses from currently marked Stress and HP.
+  Shadowhunter uses a player-managed lighting effect, while Voice of Reason offers its situational
+  advantage and preselects its damage Proficiency bonus only with a full Stress track.
+  Dread-Touched's Fear reaction rejects known failures; if Difficulty is hidden, the player confirms
+  success and the GM handles the prevented Fear.
+  Body Basher and Cruel Precision apply the selected current trait to appropriate weapon damage.
+  Deadly Focus ends at player discretion, Critical Inspiration uses ally claims, and Magic Immunity
+  negates magic damage until rest.
+  Runic Lock uses the same successful-cast rest tracking as Book of Homet. Lean on Me uses an
+  exclusive ally claim; the failed roll and proximity are player-confirmed.
+  Conjure Swarm's beetles reduce the next non-negated incoming damage automatically and disperse
+  unless the optional Hope payment retains the effect.
+  Weave the Flesh offers separate base and upgraded ally benefits with a shared rest limit.
+  Safe Haven's rest passive has no additional cost, and Specter of the Dark creates a manually ended physical-immunity effect.
+  Other target effects remain table-managed. Separate healing choices never
+  clear both resources unless the export says both. The individual domain-card review is not yet complete.
 - **Consumables:** existing healing and next-roll trait potions retained; Sweet Moss, Self-Sewing Thread,
   Nursewood Sap, Godling's Pomelo, Votive Bloom Nectar and Tincture self-healing choices; Steelskin, Featherstep,
   Drakemantle, Vigilance, Lionheart, Demiurge and Needle Key temporary modifiers. Six weapon coatings are

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from './rollbuttons';
-import type { CharacterSheet } from './data';
+import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest } from './engine';
+import type { SheetBus } from './view';
 import { renderLogEntry } from '../chat';
 
 class FakeElement {
@@ -52,17 +53,20 @@ class FakeElement {
 
 function character(name: string, feature: { name: string; automation: object } | undefined): CharacterSheet {
   return {
+    ...emptyCharacter(name),
     name,
     activeWeapons: [],
     features: feature ? [feature] : [],
     heritage: [],
     loadout: [],
+    vault: [],
     inventory: [],
     effects: [],
     usage: {},
     resources: {},
-    hope: { on: 2, slots: 6 },
-    stress: { on: 2, slots: 6 },
+    hp: { on: 0, slots: 6, total: 6 },
+    hope: { on: 2, slots: 6, total: 6 },
+    stress: { on: 2, slots: 6, total: 6 },
   } as unknown as CharacterSheet;
 }
 
@@ -111,6 +115,37 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('gates Blink Out by host capability and sends the chosen Hope from the success dialog', async () => {
+    const body = new FakeElement('body');
+    vi.stubGlobal('document', { body, createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Caster', undefined);
+    c.loadout = [{ name: 'Blink Out', domain: 'Arcana', level: 4, type: 'Spell', recall: 1, text: '',
+      automation: { conditionalRollTriggers: [{ id: 'teleport', label: 'Blink Out: spend Hope', on: 'card:Blink Out',
+        when: 'success', difficulty: 12, spendHopeAmount: true }] } }];
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, source: 'action,spellcast,card:Blink Out', difficulty: 12 };
+    const supported = { ...host, playerId: original.fromId, supportsDomainCardAutomation: () => true };
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    const old = rollButtons(message, { ...supported, supportsDomainCardAutomation: () => false }) as unknown as FakeElement;
+    const failed = rollButtons({ ...message, total: 11 }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const button = box.queryAll('button').find(b => b.text === 'Blink Out: spend Hope')!;
+    expect(old.queryAll('button').find(b => b.text === button.text)!.disabled).toBe(true);
+    expect(failed.text).not.toContain('Blink Out');
+    await button.click();
+    const dialog = body.queryAll('dialog')[0];
+    const input = dialog.queryAll('input')[0];
+    const go = dialog.queryAll('button').find(b => b.text === 'Spend Hope')!;
+    input.value = '3';
+    await go.click();
+    expect(fetch).not.toHaveBeenCalled();
+    input.value = '2';
+    await go.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'actor-b', key: 'card:Blink Out', actionId: 'teleport', amount: 2 });
+  });
+
   it('offers an exclusive Slayer reward at full Hope, blocks full pools and old hosts, and excludes reactions', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
@@ -317,7 +352,37 @@ describe('cross-player roll buttons', () => {
       { ...host, sheet: async () => ({ ...sheet!, bus: { spellDamage } }) } as never) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     await box.queryAll('button').find(b => b.text === 'Focus Cannon damage')!.click();
-    expect(spellDamage).toHaveBeenCalledWith('Focus Cannon damage', { dice: 'd20+3', type: 'magic' }, false, expect.any(Function), undefined);
+    expect(spellDamage).toHaveBeenCalledWith('Focus Cannon damage', { dice: 'd20+3', type: 'magic' }, false, expect.any(Function), undefined,
+      expect.objectContaining({ key: 'feat:Focus Cannon', action: c.features[0].automation!.rollTriggers![0] }));
+  });
+
+  it('pays a non-fixed damage reaction and consumes its shared use only after sending', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    const automation = { uses: { max: 1, per: 'longRest' as const }, conditionalRollTriggers: [
+      { id: 'damage', label: 'Spell damage', on: 'card:Spell', cost: { hope: 1 }, damage: { dice: 'd12+4', type: 'magic' as const } },
+    ] };
+    c.loadout = [{ name: 'Spell', domain: 'Dread', level: 1, type: 'Spell', recall: 0, text: '', automation }];
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const spellDamage = vi.fn<NonNullable<SheetBus['spellDamage']>>(() => true);
+    const message = { ...original, source: 'action,spellcast,card:Spell' };
+    const box = rollButtons(message, { ...host, supportsDomainCardAutomation: () => true,
+      sheet: async () => ({ ...sheet!, bus: { spellDamage } }) } as never) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find(button => button.text.startsWith('Spell damage'))!.click();
+    expect(c.hope.on).toBe(2);
+    expect(c.usage['card:Spell']).toBeUndefined();
+    const onSent = spellDamage.mock.calls[0][3];
+    const pending = spellDamage.mock.calls[0][5]!;
+    expect(pending.blocker!()).toBeNull();
+    c.vault.push(c.loadout.pop()!);
+    expect(pending.blocker!()).toContain('no longer available');
+    c.loadout.push(c.vault.pop()!);
+    onSent();
+    expect(c.hope.on).toBe(1);
+    expect(c.usage['card:Spell']).toEqual({ used: 1, per: 'longRest' });
+    expect(pending.blocker!()).toContain('already used');
   });
 
   it('labels Pummeljoy critical Melee claims with both additional rewards', async () => {

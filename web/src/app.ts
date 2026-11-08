@@ -1098,6 +1098,7 @@ export class App {
       supportsSorcererAutomation: () => this.conn.sorcererAutomation,
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
       supportsWitchAutomation: () => this.conn.witchAutomation,
+      supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
       supportsWarriorAutomation: () => this.conn.warriorAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
@@ -1214,6 +1215,7 @@ export class App {
             supportsSorcererAutomation: () => this.conn.sorcererAutomation,
             supportsWarlockAutomation: () => this.conn.warlockAutomation,
             supportsWitchAutomation: () => this.conn.witchAutomation,
+            supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {

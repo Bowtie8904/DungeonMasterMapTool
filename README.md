@@ -16,6 +16,49 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Battle Cry (Daggerheart):** its once-per-long-rest action offers allies a chat claim to clear 1 Stress
+  and gain 1 Hope. Each other player may claim once; hearing and attack advantage are resolved at the table.
+- **Domain-card review:** all 236 cards and each grimoire spell have an individual disposition in
+  [plan.md](plan.md#individual-domain-card-disposition-ledger), followed by the complete open-decision list.
+  Costs, dice, passives, limits and ally claims use the class patterns; target fiction remains table-managed.
+  Host-dependent audited actions require the optional `domainCardAutomationV2` capability.
+- **Prepared attacks and damage:** Boost pays Stress before the attack; Smite holds a charge for doubled
+  magic weapon damage. Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
+  offers a d8 advantage die with marked HP and its paid d8 after the trait roll. Never Upstaged and Sigil
+  spend their complete pools; Not Good Enough optionally rerolls all damage 1s/2s once.
+- **Grimoires and protective effects:** nested spells have their own host-validated sources and target
+  pickers. Counterspell vaults only after its successful reaction. Shield Aura moves between recipients
+  when recast; Vital Ward chooses resistance type; Tava's Armor and Parallela grant targeted effects.
+  Flight replaces its tokens with current Agility (minimum one), and long-rest preparation regenerates
+  Inspirational Words, Restoration, Strategic Approach and Fane tokens automatically.
+- **Touched-card passives:** Arcana, Blade, Bone, Splendor and Valor automatically apply their passive
+  bonuses while at least four matching domain cards are in the active loadout. Vaulted cards do not count;
+  Codex, Sage and Dread also offer loadout-gated roll options; Bone's attack avoidance and Splendor's damage
+  replacements use the same gate. Their other benefits are not yet fully automated.
+- **Mending Touch:** heal 1 HP or Stress for 2 Hope without a use limit, or use its shared once-per-long-rest
+  upgrade to heal 2. Choose a character in the target picker and confirm the narrative condition at the table.
+- **Dark Army and Thorn Skin:** their summon/cast use limits are tracked separately from token spending,
+  and their unspent tokens clear on a rest. Confirm Dark Army's Spellcast success at the table.
+- **Arcane Barrage:** choose how much Hope to spend and roll that many d6 magic damage dice; canceling
+  or a disconnected send does not spend Hope or its rest use.
+- **Armorer and Fortified Armor:** their Armor Score and damage-threshold bonuses apply while armor is equipped.
+- **Blink Out:** after a successful Difficulty 12 Spellcast roll, choose the Hope to spend from the chat action; teleportation is resolved at the table.
+- **Book of Homet:** Pass Through and Plane Gate use their printed difficulties and independent rest limits; only successful rolls consume a use.
+- **Banish:** roll its difficulty from the Spellcast result in chat; the highest d20 is stored on the card and can be adjusted manually.
+- **Arcana-Touched:** with four Arcana cards in the active loadout, swap the Hope and Fear dice of a roll from chat once per rest.
+- **Blood- and Valor-Touched:** their loadout-gated Evasion and damage rewards are applied by the character sheet and damage dialog.
+- **Codex-Touched:** swap it for a chosen vault card once per rest without paying Recall; its Stress-paid Spellcast bonus remains independent.
+- **Midnight-Touched:** add an attack’s Fear die to damage for Stress, or gain Hope at zero Hope once per rest when the GM would gain Fear.
+- **Frenzy and Healing Field:** Frenzy's bonuses and Armor restriction apply while its effect is active; end it when combatants are no longer in sight. Healing Field offers free or Hope-paid healing, with allies claiming their own healing.
+- **Eldritch Flesh and Power Through Pain:** marked Stress increases damage thresholds; marked HP increases damage rolls respectively.
+- **Shadowhunter and Voice of Reason:** toggle low-light benefits on Shadowhunter; Voice of Reason offers its situational advantage and its extra damage die when Stress is full.
+- **Dread-Touched:** mark Stress from a successful Fear roll to prevent the GM gaining Fear; confirm success with the GM if the Difficulty is hidden.
+- **Deadly Focus, Critical Inspiration, and Magic Immunity:** track focus until ended, let nearby allies claim their critical-attack benefit, and negate magic damage while immunity lasts.
+- **Grimoires and Lean on Me:** several spells now use their printed difficulties, Runic Lock tracks successful casts per rest, and one consoled ally can claim Lean on Me’s Stress clearing.
+- **Conjure Swarm:** conjure armored beetles for Stress; incoming damage consumes their automatic severity reduction unless Hope is spent to retain them.
+- **Weave the Flesh:** mark HP to offer allies a healing choice, with an optional Stress-paid upgrade to both benefits.
+- **Safe Haven and Specter of the Dark:** Safe Haven's extra rest move has no additional Hope cost; Specter grants physical immunity until its effect is manually ended.
+- **Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam, and Veil of Night use their printed difficulties; subsequent effects remain manual.
 - **Sorcerer automation:** select damage dice in chat for Volatile Magic rerolls or Manipulate Magic doubling;
   Manipulate Magic also offers reach, +2, and additional-target choices on eligible action rolls. Channel Raw
   Power selects and vaults a domain card for Hope or a one-use damage bonus. Elementalist saves a creation
@@ -186,7 +229,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   Sheets are saved on the host per actor (`<campaign>/sheets/<actorId>.json`, debounced autosave) and reload on
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
   Domain-card counters labeled "Tokens" sit in each loadout card's header between its domain and recall cost;
-  domain-card action groups have no enclosing border, while individual buttons retain their normal styling.
+  loadout and vault cards are displayed in ascending level order without changing their saved order. Domain-card
+  action groups have no enclosing border, while individual buttons retain their normal styling.
   Ancestry actions perform their configured attacks, damage and checks instead of only spending resources.
   Feature checks such as Unshakable show a concise consequence below the dice and include the full feature in Source.
   Firbolg and Centaur Charge reactions on Agility roll cards spend one Stress and post a fixed 1d12 damage roll.

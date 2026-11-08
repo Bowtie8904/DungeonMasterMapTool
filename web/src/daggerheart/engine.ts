@@ -17,6 +17,11 @@ export type ModValue = number | string;
 
 export interface Modifier {
   hopeMin?: number;
+  requiresArmor?: boolean;
+  markedHpDivisor?: number;
+  markedHpMultiplier?: number;
+  markedStressMultiplier?: number;
+  loadoutDomain?: { domain: string; min: number };
   traitValue?: TraitName;
   /** Passive stat: evasion, armorScore, majorThreshold, severeThreshold, thresholds, proficiency, loadoutMax, traits, trait.<Name> */
   stat?: string;
@@ -33,6 +38,8 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  exclusiveSource?: boolean;
+  endOnMarkedHpCount?: number;
   witchGrant?: 'circle' | 'moonbeam' | 'talisman';
   witchLinked?: 'circle' | 'moonbeam' | 'talisman';
   activationId?: string;
@@ -48,6 +55,7 @@ export interface EffectDef {
   group?: string;
   requiresEffect?: string;
   endOnDamage?: number;
+  endAfterIncomingDamage?: boolean;
   beastform?: boolean;
   features?: Feature[];
   weapon?: Weapon;
@@ -84,6 +92,7 @@ export interface ChatBenefit {
 }
 
 export interface Step {
+  minimumAmount?: number;
   fallbackEffect?: EffectDef;
   op: 'clear' | 'gain' | 'mark' | 'effect';
   resource?: Resource;
@@ -92,6 +101,12 @@ export interface Step {
 }
 
 export interface ActionDef {
+  vaultSource?: boolean;
+  resourceRoll?: { resource: 'hope' | 'stress'; sides: number; bonusPerDie?: number; type?: 'magic' | 'physical' };
+  codexSwap?: boolean;
+  requiresZeroHope?: boolean;
+  loadoutDomain?: { domain: string; min: number };
+  hopeDice?: { sides: number; type: 'magic' | 'physical' };
   witchAction?: 'talisman' | 'lunarRoll' | 'lunarAdvance';
   patronDice?: 'heal' | 'vengeance' | 'ire';
   spendFavor?: boolean;
@@ -139,11 +154,11 @@ export interface ActionDef {
   uses?: { max: number; per: 'shortRest' | 'longRest' | 'rest' | 'scene' | 'session' };
   /** Sends a plain roll to the chat, for example the d4 of I See It Coming added to the Evasion against one attack. */
   sendRoll?: { dice: string; base?: 'evasion'; label: string };
-  actionRoll?: { trait?: TraitName | 'highest' | 'spellcast' | 'beastform'; attack?: boolean; difficulty?: number };
+  actionRoll?: { trait?: TraitName | 'highest' | 'spellcast' | 'beastform'; attack?: boolean; reaction?: boolean; difficulty?: number };
   ancestryChoice?: 'ancestry' | 'feature';
   endEffect?: string;
   requiresEffect?: string;
-  damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' };
+  damage?: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic'; count?: 'spellcast' };
   target?: 'actor' | 'party' | 'allActors';
   chatBenefits?: ChatBenefit[];
   allowSourceOwner?: boolean;
@@ -152,6 +167,8 @@ export interface ActionDef {
 }
 
 export interface ResourceDef {
+  resetValue?: ModValue;
+  minimumReset?: number;
   cardOnly?: boolean;
   whileEffect?: string;
   sessionHope?: boolean;
@@ -165,6 +182,13 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  allResourceDice?: { resource: string; sides: number };
+  advantageDie?: 8;
+  magicDamage?: boolean;
+  rerollBelow?: number;
+  resourceMultiplier?: { resource: string; value: number };
+  traitValue?: TraitName;
+  derivedProficiency?: boolean;
   experience?: { resource: 'stress'; multiplier: number };
   preserveEffect?: string;
   condition?: SheetCondition;
@@ -203,6 +227,11 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  criticalOnly?: boolean;
+  exclusiveRollGroup?: string;
+  successIfKnown?: boolean;
+  banishDifficulty?: boolean;
+  spendHopeAmount?: boolean;
   automatic?: boolean;
   failedOnly?: boolean;
   rerollResourceDice?: string;
@@ -236,6 +265,16 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  unarmoredBase?: { score: number; trait: TraitName; thresholdsByTier: Record<string, [number, number]> };
+  conditionalDamageRewards?: Array<{ minHp: number; noArmorMarked?: boolean; gainHope?: number; clearArmor?: number; loadoutDomain?: { domain: string; min: number } }>;
+  banishDifficulty?: boolean;
+  spellcastDifficulty?: number;
+  automaticRestUse?: boolean;
+  conditionalRollTriggers?: RollTrigger[];
+  conditionalModifiers?: Modifier[];
+  conditionalRollOptions?: RollOption[];
+  conditionalActions?: ActionDef[];
+  conditionalMitigation?: MitigationOption[];
   experienceRefund?: { dice: string; min: number };
   lunarPhases?: Array<{ faces: number[]; effect: EffectDef }>;
   ignoreWeaponBurden?: boolean;
@@ -340,8 +379,10 @@ export interface ActiveEffect extends EffectDef {
 const TRAIT_SET = new Set<string>(TRAIT_ORDER);
 
 export interface SheetCondition {
+  markedHp?: number;
   feature?: string;
   unmarkedHp?: { min: number; max: number };
+  stressFull?: boolean;
 }
 
 export function hasFeature(c: CharacterSheet, name: string): boolean {
@@ -350,8 +391,10 @@ export function hasFeature(c: CharacterSheet, name: string): boolean {
 
 function conditionMatches(c: CharacterSheet, condition: SheetCondition): boolean {
   const hp = c.hp.slots - c.hp.on;
-  return (!condition.feature || hasFeature(c, condition.feature))
-    && (!condition.unmarkedHp || hp >= condition.unmarkedHp.min && hp <= condition.unmarkedHp.max);
+  return (condition.markedHp === undefined || c.hp.on >= condition.markedHp)
+    && (!condition.feature || hasFeature(c, condition.feature))
+    && (!condition.unmarkedHp || hp >= condition.unmarkedHp.min && hp <= condition.unmarkedHp.max)
+    && (!condition.stressFull || c.stress.slots > 0 && c.stress.on >= c.stress.slots);
 }
 
 export function actionCost(c: CharacterSheet, action: ActionDef): ActionDef['cost'] {
@@ -362,8 +405,14 @@ export function actionCost(c: CharacterSheet, action: ActionDef): ActionDef['cos
   return cost;
 }
 
+export function loadoutDomainMatches(c: CharacterSheet, condition?: { domain: string; min: number }): boolean {
+  return !condition || c.loadout.filter(card => card.domain.toLowerCase() === condition.domain.toLowerCase()).length >= condition.min;
+}
+
 function modifierActive(c: CharacterSheet, modifier: Modifier): boolean {
   return (modifier.hopeMin === undefined || c.hope.on >= modifier.hopeMin)
+    && (!modifier.requiresArmor || !!c.activeArmor)
+    && loadoutDomainMatches(c, modifier.loadoutDomain)
     && (!modifier.requiresEffect || c.effects.some(e => e.name === modifier.requiresEffect));
 }
 
@@ -419,7 +468,7 @@ export function syncResources(c: CharacterSheet): void {
 }
 
 function allModifiers(c: CharacterSheet): Modifier[] {
-  const mods = automationSources(c).flatMap((a) => a.modifiers ?? []);
+  const mods = automationSources(c).flatMap((a) => [...(a.modifiers ?? []), ...(a.conditionalModifiers ?? [])]);
   for (const e of c.effects) mods.push(...(e.modifiers ?? []));
   return mods.filter(m => modifierActive(c, m));
 }
@@ -444,6 +493,14 @@ export function evalValue(value: ModValue | undefined, c: CharacterSheet): numbe
   else if (key === 'level') n = c.level;
   else if (key === 'proficiency') n = c.proficiency.on;
   else if (key === 'spellcast') n = c.traits.find((t) => t.spellcast)?.mod ?? 0;
+  else if (key === 'total_spellcast') {
+    const spellcast = c.traits.find(t => t.spellcast);
+    n = spellcast ? traitTotal(c, spellcast.name) : 0;
+  } else if (key === 'total_proficiency') n = derivedStats(c).proficiency;
+  else if (key.startsWith('total_')) {
+    const trait = c.traits.find(t => t.name.toLowerCase() === key.slice(6));
+    n = trait ? traitTotal(c, trait.name) : 0;
+  }
   else {
     const t = c.traits.find((x) => x.name.toLowerCase() === key);
     n = t ? t.mod : 0;
@@ -452,7 +509,14 @@ export function evalValue(value: ModValue | undefined, c: CharacterSheet): numbe
 }
 
 function statTotal(c: CharacterSheet, ...stats: string[]): number {
-  return allModifiers(c).filter((m) => m.stat && stats.includes(m.stat)).reduce((n, m) => n + evalValue(m.value, c), 0);
+  return allModifiers(c).filter((m) => m.stat && stats.includes(m.stat)).reduce((n, m) => n + modifierValue(m, c), 0);
+}
+
+function modifierValue(m: Modifier, c: CharacterSheet): number {
+  if (m.markedHpDivisor && m.markedHpDivisor > 0) return Math.floor(c.hp.on / m.markedHpDivisor);
+  if (m.markedHpMultiplier !== undefined) return c.hp.on * m.markedHpMultiplier;
+  if (m.markedStressMultiplier !== undefined) return c.stress.on * m.markedStressMultiplier;
+  return evalValue(m.value, c);
 }
 
 export interface DerivedStats {
@@ -467,17 +531,28 @@ export interface DerivedStats {
 /** Evasion, armor slots and damage thresholds from the equipped armor, level and all active modifiers. */
 export function derivedStats(c: CharacterSheet): DerivedStats {
   const armor = c.activeArmor;
-  const baseMajor = armor ? (armor.major ?? armor.score + 4) : 0;
-  const baseSevere = armor ? (armor.severe ?? armor.score * 2 + 7) : 0;
+  const unarmored = unarmoredBase(c);
+  const baseMajor = armor ? (armor.major ?? armor.score + 4) : unarmored?.thresholds[0] ?? 0;
+  const baseSevere = armor ? (armor.severe ?? armor.score * 2 + 7) : unarmored?.thresholds[1] ?? 0;
   const both = statTotal(c, 'thresholds');
   return {
     evasion: c.evasion + statTotal(c, 'evasion'),
-    armorSlots: Math.max(0, (armor?.score ?? 0) + statTotal(c, 'armorScore')),
+    armorSlots: Math.max(0, (armor?.score ?? unarmored?.score ?? 0) + statTotal(c, 'armorScore')),
     major: Math.max(0, baseMajor + c.level + both + statTotal(c, 'majorThreshold')),
-    severe: Math.max(0, baseSevere + (armor ? c.level : c.level * 2) + both + statTotal(c, 'severeThreshold')),
+    severe: Math.max(0, baseSevere + (armor || unarmored ? c.level : c.level * 2) + both + statTotal(c, 'severeThreshold')),
     proficiency: Math.max(1, c.proficiency.on + statTotal(c, 'proficiency')),
     loadoutMax: Math.max(0, 5 + statTotal(c, 'loadoutMax')),
   };
+}
+
+function unarmoredBase(c: CharacterSheet): { name: string; score: number; thresholds: [number, number] } | undefined {
+  if (c.activeArmor) return undefined;
+  const source = c.loadout.find(card => card.automation?.unarmoredBase);
+  const base = source?.automation?.unarmoredBase;
+  const thresholds = base?.thresholdsByTier[String(tierOf(c.level))];
+  return source && base && thresholds
+    ? { name: source.name, score: base.score + traitTotal(c, base.trait), thresholds }
+    : undefined;
 }
 
 export interface StatSource { label: string; value: number }
@@ -499,7 +574,8 @@ function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automatio
 export function statSources(c: CharacterSheet, ...stats: string[]): StatSource[] {
   const out: StatSource[] = [];
   for (const s of namedSources(c)) {
-    const value = (s.mods ?? s.auto?.modifiers ?? []).filter((m) => modifierActive(c, m) && m.stat && stats.includes(m.stat)).reduce((n, m) => n + evalValue(m.value, c), 0);
+    const mods = s.mods ?? [...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])];
+    const value = mods.filter((m) => modifierActive(c, m) && m.stat && stats.includes(m.stat)).reduce((n, m) => n + modifierValue(m, c), 0);
     if (value) out.push({ label: s.name, value });
   }
   return out;
@@ -508,13 +584,14 @@ export function statSources(c: CharacterSheet, ...stats: string[]): StatSource[]
 /** Where evasion, armor slots and the damage thresholds come from, base values first. */
 export function statBreakdown(c: CharacterSheet): Record<'evasion' | 'armor' | 'major' | 'severe', StatSource[]> {
   const armor = c.activeArmor;
+  const unarmored = unarmoredBase(c);
   const both = statSources(c, 'thresholds');
   const base = (label: string, value: number): StatSource[] => (value ? [{ label, value }] : []);
   return {
     evasion: [{ label: c.className ? `${c.className} base (with level-ups)` : 'Base', value: c.evasion }, ...statSources(c, 'evasion')],
-    armor: [...(armor ? [{ label: armor.name, value: armor.score }] : []), ...statSources(c, 'armorScore')],
-    major: [...base(armor ? armor.name : 'No armor', armor ? (armor.major ?? armor.score + 4) : 0), { label: `Level ${c.level}`, value: c.level }, ...both, ...statSources(c, 'majorThreshold')],
-    severe: [...base(armor ? armor.name : 'No armor', armor ? (armor.severe ?? armor.score * 2 + 7) : 0), { label: armor ? `Level ${c.level}` : `Level ${c.level} x2`, value: armor ? c.level : c.level * 2 }, ...both, ...statSources(c, 'severeThreshold')],
+    armor: [...(armor ? [{ label: armor.name, value: armor.score }] : unarmored ? [{ label: unarmored.name, value: unarmored.score }] : []), ...statSources(c, 'armorScore')],
+    major: [...base(armor?.name ?? unarmored?.name ?? 'No armor', armor ? (armor.major ?? armor.score + 4) : unarmored?.thresholds[0] ?? 0), { label: `Level ${c.level}`, value: c.level }, ...both, ...statSources(c, 'majorThreshold')],
+    severe: [...base(armor?.name ?? unarmored?.name ?? 'No armor', armor ? (armor.severe ?? armor.score * 2 + 7) : unarmored?.thresholds[1] ?? 0), { label: armor || unarmored ? `Level ${c.level}` : `Level ${c.level} x2`, value: armor || unarmored ? c.level : c.level * 2 }, ...both, ...statSources(c, 'severeThreshold')],
   };
 }
 
@@ -559,7 +636,7 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
     if (!modifierActive(c, m)) return;
     if (!m.roll || !targets.includes(m.roll)) return;
     if (m.consume && !withConsumables) return;
-    const v = m.traitValue ? traitTotal(c, m.traitValue) : evalValue(m.value, c);
+    const v = m.traitValue ? traitTotal(c, m.traitValue) : modifierValue(m, c);
     out.value += v;
     const level = Object.keys(m.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
     const dice = level === undefined ? m.dice : m.diceByLevel![String(level)];
@@ -571,7 +648,7 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
   for (const e of c.effects) for (const m of e.modifiers ?? []) take(m, e.name, e);
   for (const s of namedSources(c)) {
     if (weapon && s.weapon && s.weapon !== weapon) continue;
-    for (const m of s.auto?.modifiers ?? []) take(m, s.name);
+    for (const m of [...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])]) take(m, s.name);
   }
   return out;
 }
@@ -643,6 +720,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
+    ...c.loadout.flatMap(d => (d.spells ?? []).map(s => ({ key: `card:${d.name}/${s.name}`, name: s.name, auto: s.automation }))),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
       rollOptions: (e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions)
@@ -654,7 +732,8 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     const option: RollOption = { id: `prepared:${e.id}:${i}`, label: 'prepared', roll: modifier.roll, value: modifier.value, dice: modifier.dice, diceByLevel: modifier.diceByLevel };
     return [{ key: `effect:${e.id}:${i}`, source: e.name, automation: {}, option, active: true, prepared: { effect: e, modifier } }];
   }));
-  return [...prepared, ...sources.flatMap((s) => (s.auto?.rollOptions ?? [])
+  return [...prepared, ...sources.flatMap((s) => [...(s.auto?.rollOptions ?? []), ...(s.auto?.conditionalRollOptions ?? [])]
+    .filter((o) => loadoutDomainMatches(c, o.loadoutDomain))
     .filter((o) => targets.includes(o.roll) || o.roll === 'trait' && targets.some(t => t.startsWith('trait:'))
       || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
@@ -679,6 +758,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
 }
 
 export function rollOptionDice(c: CharacterSheet, option: RollOption): string | undefined {
+  if (option.allResourceDice) return `${c.resources?.[option.allResourceDice.resource] ?? 0}d${option.allResourceDice.sides}`;
   if (option.secondaryWeaponDie) {
     const damage = activeWeapons(c).find(w => w.slot === 'Secondary')?.damage;
     const sides = /\d*d(\d+)/i.exec(damage ?? '')?.[1];
@@ -711,7 +791,9 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
   const out = { ...base, dice: [...base.dice], names: [...base.names], contributions: [...base.contributions] };
   for (const selection of selected) {
     const { option } = selection;
-    const value = evalValue(option.value, c);
+    const value = option.resourceMultiplier ? (c.resources?.[option.resourceMultiplier.resource] ?? 0) * option.resourceMultiplier.value
+      : option.traitValue ? traitTotal(c, option.traitValue)
+      : option.derivedProficiency ? derivedStats(c).proficiency : evalValue(option.value, c);
     const dice = rollOptionDice(c, option);
     const label = rollOptionLabel(selection).slice(0, 120);
     out.value += value;
@@ -743,6 +825,12 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
   const uses = new Map<string, number>();
   const items = new Map<CharacterSheet['inventory'][number], number>();
   for (const s of selected) {
+    if (s.option.allResourceDice && (c.resources?.[s.option.allResourceDice.resource] ?? 0) < 1)
+      return `${s.source}: no dice left`;
+    if (s.option.resourceMultiplier && (c.resources?.[s.option.resourceMultiplier.resource] ?? 0) < 1)
+      return `${s.source}: no tokens left`;
+    if (!loadoutDomainMatches(c, s.option.loadoutDomain)) return 'Required domain cards are no longer in the active loadout';
+    if (s.option.condition && !conditionMatches(c, s.option.condition)) return 'A selected bonus no longer meets its condition';
     if (s.key.startsWith('effect:') && !c.effects.some(e => s.key === `effect:${e.id}` || s.prepared?.effect === e)) return 'This effect is no longer active';
     if (s.active) continue;
     const block = actionBlocker(c, s.key, s.automation, s.option);
@@ -870,16 +958,20 @@ export type RestKind = 'short' | 'long';
 export function applyRest(c: CharacterSheet, kind: RestKind): void {
   if (kind === 'long') returnCompanion(c);
   syncResources(c);
-  for (const r of resourceDefinitions(c)) {
-    if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
-      c.resources![r.id] = evalValue(r.initial, c);
-    }
-  }
+  const restResources = [...new Map([
+    ...c.vault.flatMap(card => card.automation?.resources ?? []),
+    ...resourceDefinitions(c),
+  ].map(resource => [resource.id, resource])).values()];
   if (kind === 'long') for (const r of resourceDefinitions(c)) {
     if (r.longRestLoss) c.resources![r.id] = Math.max(0, c.resources![r.id] - r.longRestLoss);
   }
   const expiring: Until[] = kind === 'long' ? ['rest', 'shortRest', 'longRest', 'scene'] : ['shortRest', 'rest', 'scene'];
   c.effects = c.effects.filter((e) => !expiring.includes(e.until ?? 'manual'));
+  for (const r of restResources) {
+    if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
+      c.resources![r.id] = Math.max(r.minimumReset ?? 0, evalValue(r.resetValue ?? r.initial, c));
+    }
+  }
   for (const key of Object.keys(c.usage)) {
     const per = c.usage[key].per;
     if (per === 'shortRest' || per === 'rest' || per === 'scene' || (kind === 'long' && (per === 'longRest'))) {
@@ -949,7 +1041,7 @@ export function isRestOnlyAction(action: ActionDef): boolean {
 }
 
 export function sheetActions(a: Automation | undefined): ActionDef[] {
-  return (a?.actions ?? []).filter((action) => !isRestOnlyAction(action) || action.ancestryChoice);
+  return [...(a?.actions ?? []), ...(a?.conditionalActions ?? [])].filter((action) => !isRestOnlyAction(action) || action.ancestryChoice);
 }
 
 export function routeDeathAction(action: ActionDef, open: (move: string) => void): boolean {
@@ -960,6 +1052,8 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  if (!loadoutDomainMatches(c, action.loadoutDomain)) return 'Requires more matching domain cards in the active loadout';
+  if (action.requiresZeroHope && c.hope.on !== 0) return 'Requires zero Hope';
   if (action.usesSource === false) a = { ...a, uses: undefined };
   if ((action.companion || action.requiresCompanion) && !companionAvailable(c)) return 'Your companion is unavailable';
   if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
@@ -1049,10 +1143,11 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       continue;
     }
     const t = step.resource ? track(c, step.resource) : null;
-    const amount = (fallback: number) => typeof step.amount === 'number' ? step.amount
+    const rawAmount = (fallback: number) => typeof step.amount === 'number' ? step.amount
       : step.amount && /\d*d\d+/i.test(step.amount)
         ? roll(step.amount.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c))), step.op === 'clear' && t ? step.resource : undefined)
         : step.amount ? evalValue(step.amount, c) : fallback;
+    const amount = (fallback: number) => Math.max(step.minimumAmount ?? 0, rawAmount(fallback));
     if (step.resource && !t) {
       const def = resourceDefinitions(c).find((r) => r.id === step.resource)!;
       const before = c.resources![def.id];
@@ -1163,7 +1258,10 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
-  if (t.failedOnly && ctx.difficulty !== undefined && ctx.total >= ctx.difficulty) return false;
+  if (t.criticalOnly && (ctx.kind === 'damage' || ctx.hope < 1 || ctx.hope !== ctx.fear)) return false;
+  if (!loadoutDomainMatches(c, t.loadoutDomain)) return false;
+  if (t.successIfKnown && ctx.difficulty !== undefined && ctx.hope !== ctx.fear && ctx.total < ctx.difficulty) return false;
+  if (t.failedOnly && (ctx.hope === ctx.fear || ctx.difficulty !== undefined && ctx.total >= ctx.difficulty)) return false;
   if (t.rerollResourceDice && (!(ctx.source.split(',').some(target => target === 'attack' || target === 'damage'))
       || !ctx.resourceOnes?.includes(t.rerollResourceDice))) return false;
   const targets = ctx.source.split(',');
@@ -1213,10 +1311,11 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...c.loadout.map((d) => ({ key: `card:${d.name}`, name: d.name, auto: d.automation })),
+    ...c.loadout.flatMap(d => (d.spells ?? []).map(s => ({ key: `card:${d.name}/${s.name}`, name: s.name, auto: s.automation }))),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
     ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];
-  return sources.flatMap((s) => (s.auto?.rollTriggers ?? []).filter((t) => !t.automatic && triggerApplies(c, t, ctx))
+  return sources.flatMap((s) => [...(s.auto?.rollTriggers ?? []), ...(s.auto?.conditionalRollTriggers ?? [])].filter((t) => !t.automatic && triggerApplies(c, t, ctx))
     .map((trigger) => ({ key: s.key, source: s.name,
       automation: trigger.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, trigger })));
 }

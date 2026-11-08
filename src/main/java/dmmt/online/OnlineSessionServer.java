@@ -1589,8 +1589,28 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            boolean conditionalTrigger = false;
+            if (hasRoll) for (JsonNode trigger : automation.path("conditionalRollTriggers"))
+                if (actionId.equals(trigger.path("id").asText())) conditionalTrigger = true;
+            if (conditionalTrigger || key.startsWith("card:")) {
+                boolean active = key.startsWith("card:") && java.util.stream.StreamSupport.stream(sourceSheet.path("loadout").spliterator(), false)
+                        .anyMatch(card -> key.equals("card:" + card.path("name").asText())
+                                || key.startsWith("card:" + card.path("name").asText() + "/"));
+                if (!active) throw new IllegalArgumentException("This card must be in your active loadout.");
+                JsonNode condition = definition.path("loadoutDomain");
+                if (condition.isObject()) {
+                    String domain = condition.path("domain").asText();
+                    int minimum = condition.path("min").asInt();
+                    long count = java.util.stream.StreamSupport.stream(sourceSheet.path("loadout").spliterator(), false)
+                            .filter(card -> domain.equalsIgnoreCase(card.path("domain").asText())).count();
+                    if (domain.isBlank() || minimum < 1 || count < minimum)
+                        throw new IllegalArgumentException("This action requires more matching domain cards in the active loadout.");
+                }
+            }
             if (definition.path("automatic").asBoolean())
                 throw new IllegalArgumentException("This feature resolves automatically when its roll is made.");
+            if (definition.path("vaultSource").asBoolean() && (!hasRoll || !key.startsWith("card:") || key.contains("/")))
+                throw new IllegalArgumentException("Vaulting requires this card's successful reaction roll.");
             if (definition.path("choices").isArray()) {
                 JsonNode choice = null;
                 for (JsonNode candidate : definition.path("choices"))
@@ -1635,6 +1655,15 @@ public final class OnlineSessionServer {
             } else {
                 targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
             }
+            if (definition.path("vaultSource").asBoolean()) {
+                ArrayNode loadout = sourceSheet.withArray("loadout");
+                int index = -1;
+                for (int i = 0; i < loadout.size(); i++)
+                    if (key.equals("card:" + loadout.get(i).path("name").asText())) index = i;
+                if (index < 0) throw new IllegalArgumentException("This card is no longer in your active loadout.");
+                sourceSheet.withArray("vault").add(loadout.remove(index));
+                sourceSheet.put("compendiumRevision", sourceSheet.path("compendiumRevision").asLong() + 1);
+            }
             Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
             changedSheets.put(sourceActor.getId(), sourceSheet);
             if (lifeWard) removeLifeWards(changedSheets, sourceActor.getId());
@@ -1648,6 +1677,7 @@ public final class OnlineSessionServer {
             String actionLabel = definition.path("label").asText("Feature");
             String reportSource = source.path("name").asText(sourceActor.getName());
             DiceRoller.Result damageRoll = null;
+            DiceRoller.Result banishRoll = null;
             if (definition.path("damage").isObject()) {
                 JsonNode damage = definition.path("damage");
                 if (!damage.path("fixed").asBoolean())
@@ -1655,6 +1685,15 @@ public final class OnlineSessionServer {
                 damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
             }
             List<String> reportLines = new ArrayList<>();
+            if (definition.path("banishDifficulty").asBoolean()) {
+                int count = CharacterSheetRules.spellcastTotal(sourceSheet, c.getFear());
+                if (count < 1) throw new IllegalArgumentException("Banish requires a positive Spellcast trait to roll d20s.");
+                banishRoll = DiceRoller.roll(count + "d20", config.maxDice(), diceRandom);
+                int highest = banishRoll.rolls().stream().mapToInt(Integer::intValue).max().orElseThrow();
+                ((ObjectNode) source).put("banishDifficulty", highest);
+                sourceSheet.put("compendiumRevision", sourceSheet.path("compendiumRevision").asLong(0) + 1);
+                reportLines.add("Banish difficulty: " + highest + ".");
+            }
             if (definition.path("tokenGain").isObject()) {
                 JsonNode gain = definition.path("tokenGain");
                 JsonNode amount = request.path("amount");
@@ -1681,6 +1720,13 @@ public final class OnlineSessionServer {
                 reportLines.add("Gave " + amount.asInt() + " Hope to " + targets.getFirst().getName() + ".");
             }
             applyFeatureCost(sourceSheet, definition.path("cost"));
+            if (definition.path("spendHopeAmount").asBoolean()) {
+                JsonNode amount = request.path("amount");
+                if (!amount.isInt() || amount.asInt() < 1)
+                    throw new IllegalArgumentException("Choose a positive whole number of Hope.");
+                applyFeatureCost(sourceSheet, MAPPER.createObjectNode().put("hope", amount.asInt()));
+                reportLines.add("Spent " + amount.asInt() + " Hope.");
+            }
             JsonNode uses = definition.path("uses").isObject() ? definition.path("uses")
                     : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
             useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
@@ -1750,7 +1796,8 @@ public final class OnlineSessionServer {
 
             for (JsonNode step : definition.path("steps")) {
                 JsonNode effect = step.path("effect");
-                if (!"effect".equals(step.path("op").asText()) || !effect.path("endOnSourceSevere").asBoolean()) continue;
+                if (!"effect".equals(step.path("op").asText())
+                        || !(effect.path("endOnSourceSevere").asBoolean() || effect.path("exclusiveSource").asBoolean())) continue;
                 for (Campaign.Actor actor : c.getActors()) {
                     ObjectNode existing = changedSheets.get(actor.getId());
                     boolean wasLoaded = existing != null;
@@ -1904,6 +1951,8 @@ public final class OnlineSessionServer {
                 ArrayNode featureUses = originalRoll.withArray("featureUses");
                 String use = sourceActor.getId() + ":" + key + ":" + actionId;
                 if (!definition.path("repeatable").asBoolean() && !containsText(featureUses, use)) featureUses.add(use);
+                if (definition.has("exclusiveRollGroup"))
+                    featureUses.add(sourceActor.getId() + ":" + key + ":group:" + definition.path("exclusiveRollGroup").asText());
             }
 
             ArrayNode benefits = actionBenefits(sourceSheet, key, definition);
@@ -1931,6 +1980,8 @@ public final class OnlineSessionServer {
             if (benefitReport != null) {
                 sessionRolls.add(rollKey(benefitReport.path("id").asLong(), benefitReport.path("ts").asLong()));
                 deliver(benefitReport, null, false);
+            } else if (banishRoll != null) {
+                publishFeatureCheck(sourceActor, source, actionLabel, banishRoll, String.join(" ", reportLines));
             } else if (damageRoll != null) {
                 String damageType = definition.path("damage").path("type").asText("physical");
                 ObjectNode damage = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
@@ -2265,6 +2316,11 @@ public final class OnlineSessionServer {
             if (values.isArray()) {
                 for (JsonNode value : values) {
                     if (name.equals(value.path("name").asText())) return value;
+                    if ("card".equals(kind) && name.startsWith(value.path("name").asText() + "/")) {
+                        String spellName = name.substring(value.path("name").asText().length() + 1);
+                        for (JsonNode spell : value.path("spells"))
+                            if (spellName.equals(spell.path("name").asText())) return spell;
+                    }
                 }
             } else if (values.isObject() && name.equals(values.path("name").asText())) {
                 return values;
@@ -2279,9 +2335,10 @@ public final class OnlineSessionServer {
     }
 
     private JsonNode featureDefinition(JsonNode automation, String actionId, boolean trigger) {
-        JsonNode list = automation.path(trigger ? "rollTriggers" : "actions");
-        if (!list.isArray()) return null;
-        for (JsonNode item : list) if (actionId.equals(item.path("id").asText())) return item;
+        for (String field : trigger ? List.of("rollTriggers", "conditionalRollTriggers") : List.of("actions", "conditionalActions")) {
+            for (JsonNode item : automation.path(field))
+                if (actionId.equals(item.path("id").asText())) return item;
+        }
         return null;
     }
 
@@ -2299,6 +2356,16 @@ public final class OnlineSessionServer {
                     ordered.stream().filter(p -> !p.getFileName().toString().equals(preferred))).toList();
             for (java.nio.file.Path file : ordered) {
                 JsonNode root = MAPPER.readTree(file.toFile());
+                if (key.startsWith("card:") && key.contains("/") && file.getFileName().toString().equals(preferred)) {
+                    String nestedName = key.substring(5);
+                    int separator = nestedName.indexOf('/');
+                    for (JsonNode book : root.path("entries")) {
+                        if (!nestedName.substring(0, separator).equals(book.path("name").asText())) continue;
+                        for (JsonNode spell : book.path("spells"))
+                            if (nestedName.substring(separator + 1).equals(spell.path("name").asText()))
+                                return spell.path("automation");
+                    }
+                }
                 JsonNode found = findCatalogFeature(root, name);
                 if (found != null) return found;
             }
@@ -2560,8 +2627,15 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
         String source = roll.path("source").asText("");
         List<String> tags = List.of(source.split(","));
-        if (trigger.path("failedOnly").asBoolean() && roll.has("difficulty")
-                && roll.path("total").asDouble() >= roll.path("difficulty").asDouble())
+        if (trigger.path("criticalOnly").asBoolean()
+                && (roll.path("rolls").path(0).asInt() < 1
+                    || roll.path("rolls").path(0).asInt() != roll.path("rolls").path(1).asInt()
+                    || !tags.contains("attack")))
+            throw new IllegalArgumentException("This feature requires a critical attack.");
+        if (trigger.path("failedOnly").asBoolean()
+                && (roll.path("rolls").path(0).asInt() > 0
+                    && roll.path("rolls").path(0).asInt() == roll.path("rolls").path(1).asInt()
+                    || roll.has("difficulty") && roll.path("total").asDouble() >= roll.path("difficulty").asDouble()))
             throw new IllegalArgumentException("This feature requires a failed roll.");
         if (trigger.has("rerollResourceDice") && (!(tags.contains("attack") || tags.contains("damage"))
                 || !WarriorAutomation.hasOnes(roll, trigger.path("rerollResourceDice").asText())))
@@ -2623,6 +2697,9 @@ public final class OnlineSessionServer {
         String usageKey = sourceActor.getId() + ":" + key + ":" + trigger.path("id").asText();
         if (!trigger.path("repeatable").asBoolean() && containsText(uses, usageKey))
             throw new IllegalArgumentException("This feature was already used on that roll.");
+        if (trigger.has("exclusiveRollGroup") && containsText(uses,
+                sourceActor.getId() + ":" + key + ":group:" + trigger.path("exclusiveRollGroup").asText()))
+            throw new IllegalArgumentException("Another choice from this feature was already used on that roll.");
         if (!duality) {
             if (!List.of("damage", "any").contains(on) || !"always".equals(trigger.path("when").asText("always"))
                     || trigger.has("outcome") || trigger.has("reroll") || trigger.has("dualityDieBonus") || trigger.path("swapDuality").asBoolean())
@@ -2634,6 +2711,9 @@ public final class OnlineSessionServer {
         if (hope < 1 || fear < 1) throw new IllegalArgumentException("The original roll has no valid Hope and Fear dice.");
         if (trigger.path("swapDuality").asBoolean() && hope == fear)
             throw new IllegalArgumentException("Swapping matching Hope and Fear dice has no effect.");
+        if (trigger.path("successIfKnown").asBoolean() && roll.path("difficulty").isNumber()
+                && hope != fear && roll.path("total").asDouble() < roll.path("difficulty").asDouble())
+            throw new IllegalArgumentException("This feature requires a successful roll.");
         String actualOutcome = roll.path("outcome").asText("");
         if (!"hope".equals(actualOutcome) && !"fear".equals(actualOutcome))
             actualOutcome = hope == fear ? "crit" : (fear > hope ? "fear" : "hope");
@@ -2884,7 +2964,7 @@ public final class OnlineSessionServer {
         ArrayNode kept = MAPPER.createArrayNode();
         boolean removed = false;
         for (JsonNode effect : effects) {
-            boolean match = effect.path("endOnSourceSevere").asBoolean()
+            boolean match = (effect.path("endOnSourceSevere").asBoolean() || effect.path("exclusiveSource").asBoolean())
                     && sourceActorId.equals(effect.path("sourceActorId").asText())
                     && sourceKey.equals(effect.path("sourceKey").asText());
             if (match) removed = true;
@@ -3788,6 +3868,8 @@ public final class OnlineSessionServer {
             hello.put("sorcererAutomation", true);
             hello.put("warlockAutomation", true);
             hello.put("witchAutomation", true);
+            hello.put("domainCardAutomation", true);
+            hello.put("domainCardAutomationV2", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -4256,6 +4338,49 @@ public final class OnlineSessionServer {
         if (actor == null || !client.playerId.equals(actor.getOwnerId())) return false;
         ObjectNode sheet = storedSheet(actor.getId());
         boolean changed = false;
+        List<String> tags = List.of(roll.path("source").asText("").split(","));
+        if (tags.contains("spellcast")) {
+            for (String tag : tags) {
+                if (!tag.startsWith("card:")) continue;
+                String bookName = tag.substring("card:".length());
+                boolean present = false;
+                for (String location : List.of("loadout", "vault"))
+                    for (JsonNode card : sheet.path(location))
+                        if (bookName.equals(card.path("name").asText())) present = true;
+                if (present) continue;
+                JsonNode catalogCard = catalogDomainCard(bookName);
+                if (catalogCard == null) continue;
+                for (JsonNode spell : catalogCard.path("spells"))
+                    if (tags.contains("card:" + spell.path("name").asText())
+                            && spell.path("automation").path("automaticRestUse").asBoolean())
+                        throw new IllegalArgumentException("This spell must be in your active loadout.");
+            }
+            for (String location : List.of("loadout", "vault")) for (JsonNode card : sheet.path(location)) {
+                String bookName = card.path("name").asText();
+                if (!tags.contains("card:" + bookName)) continue;
+                JsonNode catalogCard = catalogDomainCard(bookName);
+                JsonNode spells = catalogCard == null ? card.path("spells") : catalogCard.path("spells");
+                for (JsonNode spell : spells) {
+                    String spellName = spell.path("name").asText();
+                    if (!tags.contains("card:" + spellName)) continue;
+                    JsonNode automation = spell.path("automation");
+                    if (!automation.path("automaticRestUse").asBoolean()) continue;
+                    if (!"loadout".equals(location))
+                        throw new IllegalArgumentException("This spell must be in your active loadout.");
+                    JsonNode difficulty = automation.path("spellcastDifficulty");
+                    if (!difficulty.isInt() || !automation.path("uses").isObject())
+                        throw new IllegalArgumentException("Invalid spell difficulty or rest limit.");
+                    roll.put("difficulty", difficulty.asInt());
+                    int hope = roll.path("rolls").path(0).asInt();
+                    int fear = roll.path("rolls").path(1).asInt();
+                    if (hope != fear && roll.path("total").asDouble() < difficulty.asDouble()) continue;
+                    String key = "card:" + bookName + "/" + spellName;
+                    useFeatureLimit(sheet, key, automation.path("uses"));
+                    roll.withArray("featureUses").add(actor.getId() + ":" + key + ":automaticRestUse");
+                    changed = true;
+                }
+            }
+        }
         for (String key : roll.path("source").asText("").split(",")) {
             if (!key.startsWith("feat:")) continue;
             JsonNode source;
@@ -4293,6 +4418,16 @@ public final class OnlineSessionServer {
         commitFeatureSheets(Map.of(actor.getId(), sheet), roll, true);
         sendFeatureState(actor, sheet);
         return true;
+    }
+
+    private JsonNode catalogDomainCard(String name) throws IOException {
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory == null) return null;
+        java.nio.file.Path file = directory.resolve("domain-cards.json");
+        if (!java.nio.file.Files.isRegularFile(file)) return null;
+        for (JsonNode card : MAPPER.readTree(file.toFile()).path("entries"))
+            if (name.equals(card.path("name").asText())) return card;
+        return null;
     }
 
     private ObjectNode rollSource(JsonNode msg) {

@@ -62,7 +62,7 @@ export class SheetBus {
   /** Opens the damage dialog for an equipped weapon; set by the rendered sheet. */
   damage?: (weapon: string, critical?: boolean, attackFear?: number, proficiencyBonus?: number) => boolean;
   /** Opens the damage dialog for a spell; onSent runs once the roll was sent. */
-  spellDamage?: (label: string, spec: { dice: string; fixed?: boolean; extraDice?: number; type?: 'physical' | 'magic' }, critical: boolean, onSent: () => void, rollSource?: RollSource) => boolean;
+  spellDamage?: (label: string, spec: NonNullable<ActionDef['damage']>, critical: boolean, onSent: () => void, rollSource?: RollSource, pendingAction?: PendingAction) => boolean;
   subscribe(fn: () => void): void { this.listeners.push(fn); }
   notify(): void { this.listeners.forEach((fn) => fn()); }
 }
@@ -71,6 +71,7 @@ export interface SheetViewOptions {
   supportsSorcererAutomation?: () => boolean;
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
+  supportsDomainCardAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
@@ -293,10 +294,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     return sent;
   };
-  const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource) => {
+  const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource, difficulty?: number) => {
     const allTargets = [...targets, 'action'];
     const bonus = rollBonus(c, allTargets, weapon, false);
-    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined)), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
+    const send = sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined));
+    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon);
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0) => {
@@ -304,10 +306,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     openRollDialog(root, c, `${w.name} damage`, [], bonus, sendRoll(['damage', ...(w.damageType === 'magic' ? ['magicdamage'] : []), ...(targets.includes('spelldamage') ? ['spelldamage'] : [])].join(','), w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
       () => { consumeBonus(c, bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation, opts.supportsSeraphAutomation);
   };
-  if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource) => {
-    const spell: Weapon = { name: label, slot: 'Primary', damageType: spec.type === 'physical' ? 'phys' : 'magic', trait: 'Presence', range: '', damage: spec.dice, hands: 1, tier: 0, fixedDice: spec.fixed,
-      ...(spec.extraDice ? { automation: { damage: { extraDice: spec.extraDice, dropLowest: 0 } } } : {}) };
-    openWeaponDamage(spell, critical, ['damage', 'spelldamage'], onSent, rollSource);
+  if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource, pendingAction) => {
+    const spell = featureWeapon(label, { ...spec, type: spec.type ?? 'magic' });
+    openWeaponDamage(spell, critical, ['damage', 'spelldamage'], onSent, rollSource, pendingAction);
     return true;
   };
   if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus) => {
@@ -361,8 +362,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function featureWeapon(label: string, spec: NonNullable<ActionDef['damage']>): Weapon {
+    const spellcast = c.traits.find(trait => trait.spellcast);
+    const count = spellcast ? Math.max(0, Math.floor(traitTotal(c, spellcast.name))) : 0;
+    const dice = spec.count === 'spellcast'
+      ? spec.dice.replace(/(\d*)d(\d+)/gi, (_term, diceCount: string, sides: string) => count > 0 ? `${Number(diceCount || 1) * count}d${sides}` : '0')
+      : spec.dice;
     return { name: label, slot: 'Primary', damageType: spec.type === 'magic' ? 'magic' : 'phys', trait: 'Instinct',
-      range: '', damage: spec.dice, hands: 1, tier: 0, fixedDice: spec.fixed,
+      range: '', damage: dice, hands: 1, tier: 0, fixedDice: spec.fixed || spec.count === 'spellcast',
       ...(spec.extraDice ? { automation: { damage: { extraDice: spec.extraDice, dropLowest: 0 } } } : {}) };
   }
 
@@ -396,6 +402,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     b.addEventListener('click', async () => {
       const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
       if (currentBlock) { b.title = currentBlock; return; }
+      if (action.steps?.some(step => step.effect?.exclusiveSource) && !opts.supportsDomainCardAutomation?.()) {
+        opts.onLog?.('Update the host to use this domain-card effect.');
+        return;
+      }
       if ((action.witchAction || a.resources?.some(r => r.whileEffect) || action.steps?.some(s => s.effect?.witchGrant) || a.rollTriggers?.some(t => t.automatic))
           && !opts.supportsWitchAutomation?.()) {
         opts.onLog?.('Update the host to use Witch automation.');
@@ -414,6 +424,86 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
       if (routeDeathAction(action, deathDialog)) return;
+      if (action.codexSwap) {
+        if (c.testingCharacter) { opts.onLog?.('The testing loadout cannot be changed.'); return; }
+        const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: action.label });
+        const error = el('div', { class: 'error', role: 'alert' });
+        const choices = el('div', { class: 'list' });
+        for (const card of c.vault) {
+          const button = el('button', { type: 'button', class: 'small' }, card.name);
+          button.addEventListener('click', () => {
+            const sourceIndex = c.loadout.findIndex(item => key === `card:${item.name}`);
+            const targetIndex = c.vault.indexOf(card);
+            const blocker = actionBlocker(c, key, a, action);
+            if (sourceIndex < 0 || targetIndex < 0 || blocker) {
+              error.textContent = blocker ?? 'The selected cards are no longer available.';
+              return;
+            }
+            const effects = runActionDetailed(c, key, a, action, label);
+            if (effects === null) { error.textContent = 'This action is no longer available.'; return; }
+            const original = c.loadout[sourceIndex];
+            c.loadout[sourceIndex] = card;
+            c.vault[targetIndex] = original;
+            opts.onLog?.(formatActionReport({ title: action.label, character: c.name, lines: [`Replaced ${original.name} with ${card.name} without Recall cost.`] }), rollSourceFor(c, key));
+            dialog.close();
+            render();
+          });
+          choices.append(button);
+        }
+        if (!c.vault.length) choices.append(el('p', { class: 'muted' }, 'No cards in the vault.'));
+        const cancel = el('button', { type: 'button' }, 'Cancel');
+        cancel.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('close', () => dialog.remove(), { once: true });
+        dialog.append(el('h4', {}, action.label), el('p', { class: 'muted' }, 'Choose a card from your vault.'), choices, error, cancel);
+        document.body.append(dialog);
+        dialog.showModal();
+        return;
+      }
+      if (action.hopeDice || action.resourceRoll) {
+        const spec = action.resourceRoll ?? { ...action.hopeDice!, resource: 'hope' as const };
+        const resourceLabel = spec.resource === 'hope' ? 'Hope' : 'Stress';
+        const available = () => spec.resource === 'hope' ? c.hope.on : c.stress.slots - c.stress.on;
+        const inputLabel = `${resourceLabel} to ${spec.resource === 'hope' ? 'spend' : 'mark'}`;
+        const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: action.label });
+        const input = el('input', { type: 'number', min: '1', max: String(available()), step: '1', value: '1', ariaLabel: inputLabel });
+        const error = el('div', { class: 'error', role: 'alert' });
+        const cancel = el('button', { type: 'button' }, 'Cancel');
+        const go = el('button', { type: 'button', class: 'primary', disabled: available() < 1 },
+          `${spec.resource === 'hope' ? 'Spend' : 'Mark'} ${resourceLabel} and roll`);
+        cancel.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('close', () => dialog.remove(), { once: true });
+        go.addEventListener('click', () => {
+          const amount = input.valueAsNumber;
+          if (!Number.isInteger(amount) || amount < 1 || amount > available()) {
+            error.textContent = `Enter a whole number from 1 to ${available()}.`;
+            return;
+          }
+          const active = c.loadout.some(card => key === `card:${card.name}`
+            || card.spells?.some(spell => key === `card:${card.name}/${spell.name}`));
+          if (!active) { error.textContent = 'This card is no longer in your active loadout.'; return; }
+          const paidAction = { ...action, cost: { ...action.cost, [spec.resource]: amount } };
+          const blocker = actionBlocker(c, key, a, paidAction);
+          if (blocker) { error.textContent = blocker; return; }
+          const expression = `${amount}d${spec.sides}${spec.bonusPerDie ? `+${amount * spec.bonusPerDie}` : ''}`;
+          const source = spec.type ? `damage,${spec.type === 'magic' ? 'magicdamage,spelldamage' : 'physicaldamage'}` : key;
+          const sent = sendRoll(source, undefined, rollSourceFor(c, key))({
+            label: spec.type ? `${action.label} damage` : action.label, expression,
+            contributions: [{ label: `${amount} ${resourceLabel}`, expression }],
+          });
+          if (!sent) { error.textContent = 'Not connected. Nothing was spent.'; return; }
+          runActionDetailed(c, key, a, paidAction, label);
+          hooks.after?.();
+          dialog.close();
+          render();
+        });
+        dialog.append(el('h4', {}, action.label), el('label', {}, inputLabel, input), error,
+          el('div', { class: 'acts' }, cancel, go));
+        document.body.append(dialog);
+        dialog.showModal();
+        input.focus();
+        input.select();
+        return;
+      }
       if (action.patronDice || action.spendFavor || action.menacingReach) {
         if (!opts.supportsWarlockAutomation?.() || !opts.onFeature) {
           opts.onLog?.('Update the host to use Warlock automation.');
@@ -513,7 +603,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         const trait = spec.trait === 'highest' ? TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best)
           : spec.trait === 'spellcast' ? c.traits.find(t => t.spellcast)?.name
             : spec.trait === 'beastform' ? activeWeapons(c)[0]?.trait : spec.trait;
-        const targets = ['action', ...(trait ? [`trait:${trait}`] : []), ...(spec.attack ? ['attack'] : []),
+        const targets = [spec.reaction ? 'reaction' : 'action', ...(key.startsWith('card:') ? [`featureAction:${key}:${action.id}`] : []),
+          ...(trait ? [`trait:${trait}`] : []), ...(spec.attack ? ['attack'] : []),
           ...(spec.trait === 'spellcast' ? ['spellcast'] : []),
           ...(key.startsWith('card:') || key.startsWith('feat:') ? [key] : [])];
         const bonus = rollBonus(c, targets, undefined, false);
@@ -857,7 +948,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         withSources(thresholds,
           [...srcs.major.map((r) => ({ ...r, label: `${r.label} (major)` })), ...srcs.severe.map((r) => ({ ...r, label: `${r.label} (severe)` }))], `${th.major} / ${th.severe}`, 'Total (major / severe)'),
         vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp, hpHealingFloor(c) - (c.permanentHp ?? 0)), 'v-hp'),
-        vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, refreshActions), 'v-st'),
+        vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, render), 'v-st'),
       ),
     );
   }
@@ -1270,10 +1361,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   /** A grimoire spell: its own text, Spellcast roll and automation buttons, independent of the other spells. */
   function spellBlock(d: DomainCard, s: Spell, loadout: boolean): HTMLElement {
     const acts = el('div', { class: 'act' });
-    if (d.spellcast && asksSpellcastRoll(s.text)) {
+    if (d.spellcast && asksSpellcastRoll(s.text) && !s.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
-      sp.disabled = !canCastDomain(c);
-      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${s.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`, `card:${s.name}`], undefined, rollSourceFor(c, `card:${d.name}/${s.name}`)));
+      const tracked = s.automation?.automaticRestUse;
+      const blocked = tracked && (!loadout || !opts.supportsDomainCardAutomation?.() || usesLeft(c, `card:${d.name}/${s.name}`, s.automation!) === 0);
+      sp.disabled = !loadout || !canCastDomain(c) || !!blocked;
+      if (tracked && !loadout) sp.title = 'Move this card to your active loadout to cast.';
+      else if (tracked && !opts.supportsDomainCardAutomation?.()) sp.title = 'Update the host to track this spell.';
+      else if (blocked) sp.title = 'No uses remaining until rest.';
+      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${s.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`, `card:${s.name}`], undefined, rollSourceFor(c, `card:${d.name}/${s.name}`), s.automation?.spellcastDifficulty));
       acts.append(sp);
     }
     if (loadout) {
@@ -1288,10 +1384,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function dcard(d: DomainCard, loadout: boolean): HTMLElement {
     const acts = el('div', { class: 'act' });
     const spells = d.spells?.length ? d.spells : null;
-    if (!spells && d.spellcast && asksSpellcastRoll(d.text)) {
+    if (!spells && d.spellcast && asksSpellcastRoll(d.text) && !d.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
-      sp.disabled = !canCastDomain(c);
-      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${d.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`], undefined, rollSourceFor(c, `card:${d.name}`)));
+      sp.disabled = !loadout || !canCastDomain(c);
+      sp.addEventListener('click', () => rollDuality(`Spellcast (${d.spellcast}) - ${d.name}`.slice(0, 80), d.spellcast!, ['spellcast', `trait:${d.spellcast}`, `card:${d.name}`], undefined, rollSourceFor(c, `card:${d.name}`), d.automation?.spellcastDifficulty));
       acts.append(sp);
     }
     if (loadout && !spells) {
@@ -1299,6 +1395,23 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         extraBlock: () => d.type === 'Ability' || canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
       });
       if (actions) acts.append(actions);
+    }
+    if (d.automation?.banishDifficulty) {
+      const input = el('input', { type: 'number', step: '1', value: d.banishDifficulty === undefined ? '' : String(d.banishDifficulty), ariaLabel: 'Banish difficulty' });
+      const error = el('span', { class: 'error', role: 'alert' });
+      input.addEventListener('change', () => {
+        if (input.value.trim() === '') {
+          delete d.banishDifficulty;
+        } else if (Number.isSafeInteger(input.valueAsNumber)) {
+          d.banishDifficulty = input.valueAsNumber;
+        } else {
+          error.textContent = 'Enter a whole number or leave the difficulty blank.';
+          return;
+        }
+        error.textContent = '';
+        opts.onChange?.();
+      });
+      acts.append(el('label', {}, 'Banish difficulty', input), error);
     }
     const move = () => {
       if (c.testingCharacter) return;
@@ -1389,7 +1502,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   /** Card panel with a header search box; filtering toggles visibility in place so typing is not interrupted by a re-render. */
   function cardZone(key: 'loadout' | 'vault', title: string, info: string, cards: DomainCard[], extras: HTMLElement[]): HTMLElement {
-    const nodes = cards.map((d) => ({ d, node: dcard(d, key === 'loadout') }));
+    const nodes = [...cards].sort((a, b) => a.level - b.level).map((d) => ({ d, node: dcard(d, key === 'loadout') }));
     const search = el('input', { type: 'search', placeholder: 'Search name, domain, text', value: cardQuery[key], ariaLabel: `Search ${title.toLowerCase()} cards` });
     search.style.width = '190px';
     const grid = el('div', { class: 'cards' }, ...nodes.map((n) => n.node), ...extras);
@@ -1447,7 +1560,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   return root;
 }
 
-interface PendingAction { key: string; automation: Automation; action: ActionDef }
+export interface PendingAction { key: string; automation: Automation; action: ActionDef; blocker?: () => string | null }
 
 function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: number) => Promise<void>): void {
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -1506,19 +1619,21 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const blocker = () => {
     try { selected(); } catch (e) { return (e as Error).message; }
     if (weapon && damagePool(c, weapon)?.dropLowest && !supportsKeptDice?.()) return 'This host does not support kept damage dice. Update the host to use this weapon feature.';
-    if (selected().some(s => s.option.rerollBelowProficiency) && !supportsDruidAutomation?.()) return 'Update the host to use Deadly Raptor damage rerolls.';
+    if (selected().some(s => s.option.rerollBelowProficiency || s.option.rerollBelow) && !supportsDruidAutomation?.()) return 'Update the host to use damage-die rerolls.';
     if (selected().some(s => s.option.matchingDice) && !supportsSeraphAutomation?.()) return 'Update the host to use Sacred Resonance.';
     if (weapon && (damagePool(c, weapon)?.maximumOnes || selected().some(s => s.option.combo)) && !supportsBrawlerRolls?.()) return 'Update the host to roll Combo Strike or Exacting damage.';
     if (selected().some((s) => s.option.multiplier) && !supportsRollMultipliers?.()) return 'This host does not support damage multipliers. Update the host to use this option.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon);
     if (selected().some((s) => !active.some((a) => a.key === s.key && a.option.id === s.option.id && a.active === s.active))) return 'A selected bonus changed. Reopen this roll dialog.';
     if (pendingAction) {
+      const changed = pendingAction.blocker?.();
+      if (changed) return changed;
       const why = actionBlocker(c, pendingAction.key, pendingAction.automation, pendingAction.action);
       if (why) return why;
     }
     return selectionBlocker(c, [...selected(), ...(pendingAction ? [{
       key: `${pendingAction.key}:pending`, source: label, automation: {},
-      option: { id: 'pending', label, roll: '', cost: pendingAction.action.cost },
+      option: { id: 'pending', label, roll: '', cost: actionCost(c, pendingAction.action) },
     }] : [])], !weapon && exp.value !== '');
   };
   const preview = el('div', { class: 'muted' });
@@ -1594,24 +1709,30 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const actualAdvantage = effectiveAdvantage(requestedAdvantage, selected());
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
     const request: RollRequest = weapon ? {
-      label: otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
-      ...(selected().some(s => s.option.combo || s.option.rerollBelowProficiency || s.option.matchingDice) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
+      label: selected().some(s => s.option.magicDamage) ? `${label} (magic)`.slice(0, 80) : otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
+      ...(selected().some(s => s.option.magicDamage) ? { source: ['damage', 'magicdamage', ...(targets.includes('spelldamage') ? ['spelldamage'] : [])].join(',') } : {}),
+      ...(selected().some(s => s.option.combo || s.option.rerollBelowProficiency || s.option.rerollBelow || s.option.matchingDice) || damagePool(c, weapon)?.maximumOnes ? { damageRules: {
         ...(selected().some(s => s.option.matchingDice) ? { matchingDice: true } : {}),
         ...(selected().some(s => s.option.combo) ? { comboDie: comboDie(c) } : {}),
         ...(damagePool(c, weapon)?.maximumOnes ? { maximumOnes: true } : {}),
-        ...(selected().some(s => s.option.rerollBelowProficiency) ? { rerollBelow: derivedStats(c).proficiency } : {}),
+        ...(selected().some(s => s.option.rerollBelowProficiency || s.option.rerollBelow) ? { rerollBelow: Math.max(
+          ...selected().map(s => s.option.rerollBelowProficiency ? derivedStats(c).proficiency : s.option.rerollBelow ?? 0)) } : {}),
       } } : {}),
       ...damageRollFormula(damageText(b).text,
         [...damageContributions(c, weapon, b, proficiencyExtra()), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])], selected()),
     } : {
       label,
-      source: [...currentTargets(), ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : [])].join(','),
-      expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12, selected().some((s) => s.option.fearDie === 20) ? 20 : 12) + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
+      source: [...currentTargets(), ...selected().filter(s => s.key.startsWith('card:')).map(s => `option:${s.key}:${s.option.id}`),
+        ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : [])].join(','),
+      expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12,
+        selected().some((s) => s.option.fearDie === 20) ? 20 : 12, selected().some(s => s.option.advantageDie === 8) ? 8 : 6)
+        + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
       kind: 'duality',
       contributions: [
         { label: 'Hope die', expression: selected().some((s) => s.option.hopeDie === 20) ? '1d20' : '1d12' },
         { label: 'Fear die', expression: selected().some((s) => s.option.fearDie === 20) ? '1d20' : '1d12' },
-        ...(actualAdvantage === 0 ? [] : [{ label: actualAdvantage === 1 ? 'Advantage' : 'Disadvantage', expression: actualAdvantage === 1 ? '1d6' : '-1d6' }]),
+        ...(actualAdvantage === 0 ? [] : [{ label: actualAdvantage === 1 ? 'Advantage' : 'Disadvantage',
+          expression: actualAdvantage === 1 ? selected().some(s => s.option.advantageDie === 8) ? '1d8' : '1d6' : '-1d6' }]),
         ...(requestedAdvantage !== actualAdvantage ? [{ label: 'Disadvantage ignored', expression: '0',
           notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),
         ...trait,

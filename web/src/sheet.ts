@@ -138,6 +138,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       supportsSorcererAutomation: () => conn.sorcererAutomation,
       supportsWarlockAutomation: () => conn.warlockAutomation,
       supportsWitchAutomation: () => conn.witchAutomation,
+      supportsDomainCardAutomation: () => conn.domainCardAutomation,
       supportsRollMultipliers: () => conn.rollMultipliers,
     });
     view.classList.add('dh-popout');

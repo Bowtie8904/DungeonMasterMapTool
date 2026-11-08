@@ -84,6 +84,7 @@ export interface DomainCard {
   text: string;
   recall: number;
   spellcast?: TraitName;
+  banishDifficulty?: number;
   automation?: Automation;
   /** Grimoires only: the individual spells that make up `text` */
   spells?: Spell[];
@@ -328,9 +329,9 @@ export function traitMod(c: CharacterSheet, name: TraitName): number {
 export type Advantage = -1 | 0 | 1;
 
 /** Builds the Hope/Fear expression plus an optional advantage die and modifier. */
-export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12, fearDie: 12 | 20 = 12): string {
+export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12, fearDie: 12 | 20 = 12, advantageDie: 6 | 8 = 6): string {
   let e = hopeDie === 12 && fearDie === 12 ? '2d12' : `1d${hopeDie}+1d${fearDie}`;
-  if (adv === 1) e += '+1d6';
+  if (adv === 1) e += `+1d${advantageDie}`;
   else if (adv === -1) e += '-1d6';
   if (mod > 0) e += `+${mod}`;
   else if (mod < 0) e += `${mod}`;

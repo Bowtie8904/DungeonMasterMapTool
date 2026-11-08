@@ -370,6 +370,8 @@ export interface Hello {
   sorcererAutomation?: boolean;
   warlockAutomation?: boolean;
   witchAutomation?: boolean;
+  domainCardAutomation?: boolean;
+  domainCardAutomationV2?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

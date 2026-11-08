@@ -31,6 +31,22 @@ class CharacterSheetRulesTest {
     }
 
     @Test
+    void conditionalModifiersCountOnlyTheMatchingActiveLoadout() throws Exception {
+        var sheet = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree("""
+                {"traits":[{"name":"Agility","mod":2,"spellcast":true}],
+                 "loadout":[{"domain":"Bone","automation":{"conditionalModifiers":[
+                    {"stat":"trait.Agility","value":1,"loadoutDomain":{"domain":"Bone","min":4}}]}},
+                    {"domain":"bone"},{"domain":"Bone"}],
+                 "vault":[{"domain":"Bone"}]}
+                """);
+        assertEquals(2, CharacterSheetRules.spellcastTotal(sheet, 0));
+        sheet.withArray("loadout").addObject().put("domain", "BONE");
+        assertEquals(3, CharacterSheetRules.spellcastTotal(sheet, 0));
+        sheet.withArray("loadout").remove(3);
+        assertEquals(2, CharacterSheetRules.spellcastTotal(sheet, 0));
+    }
+
+    @Test
     void normalLoadoutKeepsItsLimitAndRespectsLegitimateCapacityBonuses() throws Exception {
         JsonNode sheet = mapper.readTree("""
                 {"loadout":[{},{},{},{},{},{}]}

@@ -145,6 +145,7 @@ function automationSources(c: CharacterSheet): Array<{ key: string; automation?:
     ...c.features.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
     ...c.heritage.map((item) => ({ key: `feat:${item.name}`, automation: item.automation })),
     ...c.loadout.map((item) => ({ key: `card:${item.name}`, automation: item.automation })),
+    ...c.loadout.flatMap(card => (card.spells ?? []).map(spell => ({ key: `card:${card.name}/${spell.name}`, automation: spell.automation }))),
     ...c.activeWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
     ...c.carriedWeapons.map((item) => ({ key: `weapon:${item.name}`, automation: item.automation })),
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, automation: c.activeArmor.automation }] : []),
@@ -155,15 +156,8 @@ function automationSources(c: CharacterSheet): Array<{ key: string; automation?:
 }
 
 export function featureTarget(c: CharacterSheet, key: string, actionId: string): import('./engine').ActionDef['target'] {
-  const [kind, ...rest] = key.split(':');
-  const name = rest.join(':');
-  const source = kind === 'feat'
-    ? [...c.features, ...c.heritage].find((item) => item.name === name)
-    : kind === 'card' ? c.loadout.find((item) => item.name === name)
-      : kind === 'weapon' ? c.activeWeapons.find((item) => item.name === name)
-        : kind === 'armor' ? c.activeArmor?.name === name ? c.activeArmor : undefined
-          : kind === 'item' ? c.inventory.find((item) => item.name === name) : undefined;
-  const action = source?.automation?.actions?.find((item) => item.id === actionId);
+  const source = automationSources(c).find(source => source.key === key);
+  const action = [...(source?.automation?.actions ?? []), ...(source?.automation?.conditionalActions ?? [])].find(item => item.id === actionId);
   return action?.target;
 }
 

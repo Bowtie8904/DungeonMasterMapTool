@@ -3,7 +3,7 @@
 
 import type { CharacterSheet, InventoryItem } from './data';
 import {
-  Automation, DiceRoll, EffectDef, ModValue, Resource, activeFeatures, activeWeapons, addEffect, costText, derivedStats, evalValue, resourceDefinitions, rollLocal, syncEffectDependencies, syncResources, usesLeft, noUsesLeftText,
+  Automation, DiceRoll, EffectDef, ModValue, Resource, activeFeatures, activeWeapons, addEffect, costText, derivedStats, evalValue, loadoutDomainMatches, resourceDefinitions, rollLocal, syncEffectDependencies, syncResources, usesLeft, noUsesLeftText,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
@@ -50,7 +50,10 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  endEffectIfNoHp?: string;
+  loadoutDomain?: { domain: string; min: number };
   preserveEffect?: string;
+  preserveAfterIncomingDamage?: string;
   patronDice?: 'vengeance';
   companionIntercept?: boolean;
   companionArmored?: boolean;
@@ -150,7 +153,7 @@ export interface DamageResult {
 export function availableMitigations(c: CharacterSheet): AvailableMitigation[] {
   const out: AvailableMitigation[] = [];
   const add = (key: string, source: string, a?: Automation, item?: InventoryItem) => {
-    for (const option of a?.mitigation ?? []) {
+    for (const option of [...(a?.mitigation ?? []), ...(a?.conditionalMitigation ?? [])]) {
       if (option.requiresEffect && !c.effects.some((e) => e.name === option.requiresEffect)) continue;
       out.push({ id: `${key}/${option.id}`, key, source, automation: a!, option, item });
     }
@@ -191,6 +194,7 @@ function usageKey(m: AvailableMitigation): { key: string; auto: Automation } | n
 /** Conditions that do not depend on the damage being calculated. */
 export function mitigationBlocker(c: CharacterSheet, m: AvailableMitigation, type: DamageType): string | null {
   const o = m.option;
+  if (!loadoutDomainMatches(c, o.loadoutDomain)) return 'Requires more matching domain cards in the active loadout';
   if (o.companionIntercept && !companionAvailable(c)) return 'Your companion is unavailable';
   if (o.companionArmored && !hasCompanionTraining(c, 'armored')) return 'Your companion has not learned Armored';
   if (o.excludesEffect && c.effects.some((e) => e.name === o.excludesEffect)) return 'Effect is already active';
@@ -289,6 +293,8 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
     return name && s.includes(name) ? null : `Only on ${s.map((x) => SEVERITY_LABELS[SEVERITY_NAMES.indexOf(x)]).join(' or ')} damage`;
   });
   const negated = incoming > 0 && active.some((m) => m.option.negate);
+  drop(m => m.option.preserveAfterIncomingDamage && (incoming === 0 || negated)
+    ? 'No damage is being taken; the effect is already maintained' : null);
 
   // 3. Armor Slots.
   const blockers = active.filter((m) => m.option.armorBlocked);
@@ -381,7 +387,13 @@ function damageBlocker(c: CharacterSheet, r: DamageResult, type: DamageType): st
 /** Marks HP and Armor Slots, pays costs, counts uses, consumes items. Returns the chat summary, or null when blocked. */
 export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType, roll: DiceRoll = rollLocal): string | null {
   if (damageBlocker(c, r, type)) return null;
+  const expiringZeroHpEffects = r.hp === 0 && !r.negated ? r.applied.filter(m => m.option.endEffectIfNoHp
+    && computeDamage(c, r.applied.filter(other => other !== m), {
+      damage: r.input, type, armor: r.armorUsed > 0, armorCount: r.armorUsed,
+      selected: new Set(r.applied.map(other => other.id)), quantities: r.quantities, rolls: r.rolls,
+    }, roll).hp > 0).map(m => m.option.endEffectIfNoHp) : [];
   const armor = r.armorMarked + (r.costs.armor ?? 0);
+  const hpMarked = Math.min(r.hp, Math.max(0, c.hp.slots - c.hp.on));
   c.armorTrack.on = Math.min(c.armorTrack.slots, c.armorTrack.on + armor);
   c.hp.on = Math.min(c.hp.slots, c.hp.on + r.hp + (r.costs.hp ?? 0));
   c.stress.on = Math.min(c.stress.slots, c.stress.on + (r.costs.stress ?? 0));
@@ -391,8 +403,11 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       effect.hpMaintenance = (effect.hpMaintenance ?? 0) + 1;
   }
   c.effects = c.effects.filter(e => !(e.stance && ((!r.negated && r.final >= 3) || c.hp.on >= c.hp.slots))
+    && !(e.endOnMarkedHpCount && hpMarked >= e.endOnMarkedHpCount)
     && !(e.endOnMarkedHp && r.hp > 0 && !r.applied.some(m => m.option.preserveEffect === e.name))
     && !(e.endOnDamage && !r.negated && r.final >= e.endOnDamage)
+    && !(e.endAfterIncomingDamage && !r.negated && r.incoming > 0
+      && !r.applied.some(m => m.option.preserveAfterIncomingDamage === e.name))
     && !(e.beastform && c.hp.on >= c.hp.slots)
     && !(!r.negated && r.final >= 3 && e.endOnSourceSevere && !e.sourceActorId));
   syncEffectDependencies(c);
@@ -400,6 +415,20 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     if (!['hp', 'stress', 'hope', 'armor'].includes(res)) c.resources![res] = Math.max(0, (c.resources![res] ?? 0) - n);
   }
   const notes: string[] = [];
+  for (const card of c.loadout) for (const reward of card.automation?.conditionalDamageRewards ?? []) {
+    if (!loadoutDomainMatches(c, reward.loadoutDomain) || r.hp < reward.minHp || hpMarked < 1
+        || reward.noArmorMarked && armor > 0) continue;
+    if (reward.gainHope) {
+      const gained = Math.min(reward.gainHope, Math.max(0, c.hope.slots - c.hope.on));
+      c.hope.on += gained;
+      notes.push(`${card.name}: gained ${gained} Hope.`);
+    }
+    if (reward.clearArmor) {
+      const cleared = Math.min(reward.clearArmor, c.armorTrack.on);
+      c.armorTrack.on -= cleared;
+      notes.push(`${card.name}: cleared ${cleared} Armor Slot${cleared === 1 ? '' : 's'}.`);
+    }
+  }
   for (const m of r.applied) {
     if (m.option.patronDice === 'vengeance') notes.push(vengeanceReport(c, r.hp, roll));
     if (m.option.companionIntercept) notes.push(m.option.companionArmored
@@ -419,6 +448,8 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     }
     if (m.option.effect) addEffect(c, m.option.effect, m.source);
     if (m.option.endEffect) c.effects = c.effects.filter(e => e.name !== m.option.endEffect);
+    if (m.option.endEffectIfNoHp && expiringZeroHpEffects.includes(m.option.endEffectIfNoHp))
+      c.effects = c.effects.filter(e => e.name !== m.option.endEffectIfNoHp);
     const u = usageKey(m);
     if (u) {
       const entry = c.usage[u.key] ?? { used: 0, per: u.auto.uses!.per };

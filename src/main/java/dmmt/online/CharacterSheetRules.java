@@ -79,10 +79,22 @@ final class CharacterSheetRules {
             for (JsonNode feature : effect.path("features")) sources.add(feature.path("automation"));
         }
         double total = spellcast.path("mod").asDouble();
-        for (JsonNode source : sources) for (JsonNode modifier : source.path("modifiers")) {
+        List<JsonNode> modifiers = new ArrayList<>();
+        for (JsonNode source : sources) {
+            for (JsonNode modifier : source.path("modifiers")) modifiers.add(modifier);
+            for (JsonNode modifier : source.path("conditionalModifiers")) modifiers.add(modifier);
+        }
+        for (JsonNode modifier : modifiers) {
             if (!stat.equals(modifier.path("stat").asText()) && !"traits".equals(modifier.path("stat").asText())) continue;
             if (modifier.has("requiresEffect")
                     && !DruidEffects.hasEffect(sheet, modifier.path("requiresEffect").asText())) continue;
+            JsonNode required = modifier.path("loadoutDomain");
+            if (required.isObject()) {
+                int count = 0;
+                for (JsonNode card : sheet.path("loadout"))
+                    if (card.path("domain").asText().equalsIgnoreCase(required.path("domain").asText())) count++;
+                if (count < required.path("min").asInt()) continue;
+            }
             total += value(modifier.path("value"), sheet, fear);
         }
         return (int) total;

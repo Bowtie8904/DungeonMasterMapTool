@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { derivedStats, type Automation } from './engine';
+import { applyRest, derivedStats, runAction, type Automation } from './engine';
 import { mockCharacter, type CharacterSheet } from './data';
 import { applyDamage, availableMitigations, computeDamage, severityOf, type DamageInput } from './damage';
 import { formatDamageReport, parseDamageReport } from './damage-summary';
@@ -29,6 +29,179 @@ const run = (c: CharacterSheet, input: Partial<DamageInput>, roll = fixed(1)) =>
 const feat = (name: string, category = 'ancestries') => ({ source: 'test', name, text: '', automation: rules(category, name) });
 
 describe('damage calculation', () => {
+  const shield = (c: CharacterSheet) => {
+    const a = rules('domain-cards', 'Shield Aura');
+    runAction(c, 'card:Shield Aura', a, a.actions![0], 'Shield Aura');
+  };
+
+  it('expires Shield Aura only when its extra Armor reduction prevents the HP mark', () => {
+    const { c, major } = setup();
+    shield(c);
+    const preview = run(c, { damage: major, armor: true });
+    expect(preview.hp).toBe(0);
+    expect(c.effects.some(effect => effect.name === 'Shield Aura')).toBe(true);
+    applyDamage(c, preview, 'physical');
+    expect(c.effects.some(effect => effect.name === 'Shield Aura')).toBe(false);
+  });
+
+  it('retains Shield Aura when ordinary Armor already prevents all HP or no Armor was used', () => {
+    const { c } = setup();
+    shield(c);
+    const ordinaryArmor = run(c, { damage: 1, armor: true });
+    expect(ordinaryArmor.hp).toBe(0);
+    applyDamage(c, ordinaryArmor, 'physical');
+    expect(c.effects.some(effect => effect.name === 'Shield Aura')).toBe(true);
+    const unarmored = run(c, { damage: 1 });
+    expect(unarmored.hp).toBe(1);
+    applyDamage(c, unarmored, 'physical');
+    expect(c.effects.some(effect => effect.name === 'Shield Aura')).toBe(true);
+  });
+
+  it('does not consume Shield Aura when the incoming attack is negated', () => {
+    const { c, major } = setup();
+    shield(c);
+    c.effects.push({ id: 'negate', name: 'Negation', kind: 'buff',
+      mitigation: [{ id: 'negate', label: 'Negate', passive: true, negate: true }] });
+    const result = run(c, { damage: major, armor: true });
+    expect(result.negated).toBe(true);
+    applyDamage(c, result, 'physical');
+    expect(c.effects.some(effect => effect.name === 'Shield Aura')).toBe(true);
+  });
+
+  it('uses only the chosen Vital Ward resistance and expires on actual two-HP damage', () => {
+    const { c, major } = setup();
+    const a = rules('domain-cards', 'Vital Ward');
+    expect(availableMitigations(c).some(m => m.source === 'Vital Ward')).toBe(false);
+    runAction(c, 'card:Vital Ward', a, a.conditionalActions![0], 'Vital Ward');
+    c.hp.on = 0;
+    expect(run(c, { damage: major, type: 'physical' }).damage).toBe(Math.floor(major / 2));
+    expect(run(c, { damage: major, type: 'magic' }).damage).toBe(major);
+    runAction(c, 'card:Vital Ward', a, a.conditionalActions![1], 'Vital Ward');
+    c.hp.on = 0;
+    expect(c.effects.filter(effect => effect.name === 'Vital Ward')).toHaveLength(1);
+    expect(run(c, { damage: major, type: 'physical' }).damage).toBe(major);
+    const result = run(c, { damage: major, type: 'physical' });
+    expect(result.hp).toBe(2);
+    expect(c.effects.some(effect => effect.name === 'Vital Ward')).toBe(true);
+    applyDamage(c, result, 'physical');
+    expect(c.effects.some(effect => effect.name === 'Vital Ward')).toBe(false);
+  });
+
+  it('does not expire Vital Ward when damage can actually mark only one remaining HP', () => {
+    const { c, severe } = setup();
+    const a = rules('domain-cards', 'Vital Ward');
+    runAction(c, 'card:Vital Ward', a, a.conditionalActions![0], 'Vital Ward');
+    c.hp.on = c.hp.slots - 1;
+    const result = run(c, { damage: severe, type: 'magic' });
+    applyDamage(c, result, 'magic');
+    expect(c.effects.some(effect => effect.name === 'Vital Ward')).toBe(true);
+  });
+
+  it('conjures beetles and reduces the next damage, optionally retaining them for Hope', () => {
+    const { c, major } = setup();
+    const automation = rules('domain-cards', 'Conjure Swarm');
+    c.loadout = [{ name: 'Conjure Swarm', domain: 'Sage', level: 2, type: 'Spell', recall: 1, text: '', automation }];
+    expect(availableMitigations(c)).toHaveLength(0);
+    runAction(c, 'card:Conjure Swarm', automation, automation.conditionalActions![0], 'Conjure Swarm');
+    expect(c.stress.on).toBe(1);
+    const keep = availableMitigations(c).find(m => m.option.id === 'keep')!;
+    const input = { damage: major, selected: new Set([keep.id]) };
+    const preview = run(c, input);
+    expect(preview.hp).toBe(1);
+    expect(c.hope.on).toBe(3);
+    expect(c.effects).toHaveLength(1);
+    applyDamage(c, preview, 'physical');
+    expect(c.hope.on).toBe(2);
+    expect(c.effects).toHaveLength(1);
+    c.hp.on = 0;
+    const next = run(c, { damage: 1 });
+    expect(next.hp).toBe(0);
+    applyDamage(c, next, 'physical');
+    expect(c.effects).toHaveLength(0);
+    expect(availableMitigations(c)).toHaveLength(0);
+  });
+
+  it('does not spend Hope or dismiss beetles when damage is negated', () => {
+    const { c, major } = setup();
+    const automation = rules('domain-cards', 'Conjure Swarm');
+    c.loadout = [{ name: 'Conjure Swarm', domain: 'Sage', level: 2, type: 'Spell', recall: 1, text: '', automation }];
+    runAction(c, 'card:Conjure Swarm', automation, automation.conditionalActions![0], 'Conjure Swarm');
+    c.effects.push({ id: 'immune', name: 'immune', kind: 'buff', mitigation: [{ id: 'negate', label: 'Negate', passive: true, negate: true }] });
+    const keep = availableMitigations(c).find(m => m.option.id === 'keep')!;
+    const result = run(c, { damage: major, selected: new Set([keep.id]) });
+    expect(result.negated).toBe(true);
+    expect(result.costs.hope).toBeUndefined();
+    applyDamage(c, result, 'physical');
+    expect(c.hope.on).toBe(3);
+    expect(c.effects.some(e => e.name === 'Tekaira Armored Beetles')).toBe(true);
+  });
+
+  it('negates magic damage only while Book of Yarrow Magic Immunity is active', () => {
+    const { c, major } = setup();
+    const book = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'))
+      .entries.find((entry: { id: string }) => entry.id === 'book-of-yarrow');
+    const automation: Automation = book.spells.find((spell: { name: string }) => spell.name === 'Magic Immunity').automation;
+    c.hope.on = 6;
+    runAction(c, 'card:Book of Yarrow/Magic Immunity', automation, automation.actions![0], 'Magic Immunity');
+    expect(c.hope.on).toBe(1);
+    expect(run(c, { damage: major, type: 'magic' }).negated).toBe(true);
+    expect(run(c, { damage: major, type: 'physical' }).negated).toBe(false);
+    applyRest(c, 'short');
+    expect(run(c, { damage: major, type: 'magic' }).negated).toBe(false);
+  });
+
+  it('grants Specter of the Dark physical immunity until its effect is ended', () => {
+    const { c, major } = setup();
+    const automation = rules('domain-cards', 'Specter of the Dark');
+    expect(run(c, { damage: major, type: 'physical' }).negated).toBe(false);
+    runAction(c, 'card:Specter of the Dark', automation, automation.actions![0], 'Specter of the Dark');
+    expect(c.stress.on).toBe(1);
+    expect(run(c, { damage: major, type: 'physical' }).negated).toBe(true);
+    expect(run(c, { damage: major, type: 'magic' }).negated).toBe(false);
+    c.effects = c.effects.filter(effect => effect.name !== 'Specter of the Dark');
+    expect(run(c, { damage: major, type: 'physical' }).negated).toBe(false);
+  });
+
+  it('applies Blood-Touched after mitigation and updates Evasion per three marked HP', () => {
+    const { c, major } = setup();
+    const card = (name: string) => ({ name, domain: 'Blood', level: 1, type: 'Ability' as const, recall: 0, text: '' });
+    c.loadout = [{ ...card('Blood-Touched'), automation: rules('domain-cards', 'Blood-Touched') }, card('two'), card('three')];
+    c.vault = [card('four')];
+    const base = c.evasion;
+    c.hp.on = 3;
+    expect(derivedStats(c).evasion).toBe(base);
+    c.loadout.push(c.vault.pop()!);
+    expect(derivedStats(c).evasion).toBe(base + 1);
+    c.hp.on = 0;
+    const mitigated = run(c, { damage: major, armor: true });
+    applyDamage(c, mitigated, 'physical');
+    expect(c.hope.on).toBe(3);
+    c.hp.on = 0;
+    const damage = run(c, { damage: major });
+    applyDamage(c, damage, 'physical');
+    expect(c.hp.on).toBe(2);
+    expect(c.hope.on).toBe(4);
+    c.hp.on = 6;
+    expect(derivedStats(c).evasion).toBe(base + 2);
+  });
+
+  it('applies Valor-Touched only when HP is marked without marking armor', () => {
+    const { c, major } = setup();
+    const card = (name: string) => ({ name, domain: 'Valor', level: 1, type: 'Ability' as const, recall: 0, text: '' });
+    c.loadout = [{ ...card('Valor-Touched'), automation: rules('domain-cards', 'Valor-Touched') }, card('two'), card('three'), card('four')];
+    c.armorTrack.on = 2;
+    applyDamage(c, run(c, { damage: major }), 'physical');
+    expect(c.armorTrack.on).toBe(1);
+    c.hp.on = 0;
+    c.armorTrack.on = 1;
+    applyDamage(c, run(c, { damage: major, armor: true }), 'physical');
+    expect(c.armorTrack.on).toBe(2);
+    c.hp.on = 0;
+    c.vault.push(c.loadout.pop()!);
+    applyDamage(c, run(c, { damage: major }), 'physical');
+    expect(c.armorTrack.on).toBe(2);
+  });
+
   it('uses catalog Spectral Form resistance only with its effect and only against physical damage', () => {
     const { c, severe } = setup(x => x.features.push(feat('Spectral Form', 'classes')));
     const mitigation = c.features[0].automation!.mitigation![0];
@@ -110,7 +283,7 @@ describe('damage calculation', () => {
       x.loadout = [card('Splendor-Touched', rules('domain-cards', 'Splendor-Touched')), card('A'), card('B')];
     });
     const id = 'card:Splendor-Touched/stress';
-    expect(run(c, { damage: major, selected: new Set([id]) }).inactive[id]).toMatch(/Requirement/);
+    expect(run(c, { damage: major, selected: new Set([id]) }).inactive[id]).toMatch(/active loadout/);
     c.loadout.push({ ...c.loadout[1], name: 'C' });
     const r = run(c, { damage: major, selected: new Set([id]) });
     expect(r.hp).toBe(0);
