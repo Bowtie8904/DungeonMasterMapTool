@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { applyDeathRecovery, getDeathOptions, logout, takeDeathMove, useFeature } from './api';
+import { applyDeathRecovery, configureDmSheet, getDeathOptions, logout, takeDeathMove, uploadArtwork, useFeature } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -42,4 +42,29 @@ it('reports authoritative death option and claim errors', async () => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ error: 'Recovery is no longer pending' }), { status: 409 })));
   await expect(applyDeathRecovery('actor', { id: 1, ts: 2 }, { hp: 1 })).rejects.toThrow('no longer pending');
   await expect(getDeathOptions('actor')).rejects.toThrow('no longer pending');
+});
+
+it('returns the uploaded portrait URL and authenticates actor-scoped DM sheet uploads', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ artwork: '/a/portrait.png' })));
+  vi.stubGlobal('fetch', fetch);
+  const image = new File(['image'], 'portrait.png', { type: 'image/png' });
+  expect(await uploadArtwork('a b', image)).toBe('/a/portrait.png');
+  expect(fetch.mock.calls[0][0]).toBe('/api/actors/a%20b/artwork');
+  expect(fetch.mock.calls[0][1].body).toBe(image);
+  configureDmSheet('sheet-test');
+  try {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ artwork: '/a/next.png' })));
+    expect(await uploadArtwork('hero', image)).toBe('/a/next.png');
+    expect(fetch.mock.calls[1][1].credentials).toBe('omit');
+    expect(fetch.mock.calls[1][1].headers.get('Authorization')).toBe('Bearer sheet-test');
+  } finally { configureDmSheet(''); }
+});
+
+it('surfaces portrait upload rejection and invalid response data', async () => {
+  const image = new File(['image'], 'portrait.png', { type: 'image/png' });
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Invalid image' }), { status: 400 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({})));
+  vi.stubGlobal('fetch', fetch);
+  await expect(uploadArtwork('hero', image)).rejects.toThrow('Invalid image');
+  await expect(uploadArtwork('hero', image)).rejects.toThrow('invalid artwork URL');
 });

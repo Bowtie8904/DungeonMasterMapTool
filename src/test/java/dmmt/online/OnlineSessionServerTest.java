@@ -2780,6 +2780,30 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void dmSheetArtworkUploadsRemainActorScopedAndRevocable() throws Exception {
+        dmCompendiumData();
+        String url = server.dmSheetUrl("target");
+        String token = URI.create(url).getFragment();
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_ARGB), "png", bytes);
+        byte[] image = bytes.toByteArray();
+        var upload = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/target/artwork"))
+                .header("Authorization", "Bearer " + token).header("Content-Type", "image/png")
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(image)).build();
+        campaign.actor("target").setDisabled(true);
+        var saved = http.send(upload, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertFalse(MAPPER.readTree(saved.body()).path("artwork").asText().isBlank());
+        assertNotNull(store.load(campaign.getId()).actor("target").getArtwork());
+        var other = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/unowned/artwork"))
+                .header("Authorization", "Bearer " + token).header("Content-Type", "image/png")
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(image)).build();
+        assertEquals(403, http.send(other, HttpResponse.BodyHandlers.ofString()).statusCode());
+        server.revokeDmSheet(url);
+        assertEquals(403, http.send(upload, HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
+    @Test
     void dmCompendiumRejectsMissingForgedAndPlayerCredentialsAndListsOfflineActors() throws Exception {
         String token = dmCompendiumData();
         assertEquals(403, dmCompendiumHttp("actors", null, null).statusCode());

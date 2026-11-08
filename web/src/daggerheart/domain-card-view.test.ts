@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter } from './data';
-import { renderSheetView, type RollRequest } from './view';
+import { renderSheetView, SheetBus, type RollRequest } from './view';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
+import { addEffect, applyRest, derivedStats, isManualOverride, removeManualOverride, setManualStat, setTrackSlots, statBreakdown, syncDerived, traitTotal } from './engine';
 
 class Element {
   className = '';
@@ -13,6 +14,9 @@ class Element {
   value = '';
   get valueAsNumber(): number { return Number(this.value); }
   checked = false;
+  readOnly = false;
+  validationMessage = '';
+  files?: File[];
   disabled = false;
   hidden = false;
   open = false;
@@ -39,9 +43,12 @@ class Element {
   remove(): void {}
   focus(): void {}
   select(): void {}
+  setCustomValidity(message: string): void { this.validationMessage = message; }
+  reportValidity(): boolean { return !this.validationMessage; }
   querySelector(): null { return null; }
+  matches(): boolean { return this.attributes.role === 'tab' || ['Card view', 'List view'].includes(this.ariaLabel) || this.className === 'feature-search'; }
   querySelectorAll(selector: string): Element[] {
-    const tags = selector.split(',');
+    const tags = selector.split(',').map(tag => tag.trim());
     return this.children.flatMap(child => typeof child === 'string' ? [] :
       [...(tags.includes(child.tag) ? [child] : []), ...child.querySelectorAll(selector)]);
   }
@@ -50,6 +57,330 @@ class Element {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('defaults edit mode off and gates base traits, Proficiency, names, background and Experiences', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.hp.slots = 6;
+  c.experiences = [{ name: 'Survivor', mod: 2 }];
+  c.traits[0].mod = 3;
+  addEffect(c, { name: 'Trait buff', kind: 'buff', modifiers: [{ stat: 'trait.Agility', value: 5 }] });
+  const changed = vi.fn();
+  const root = renderSheetView({ character: c, onRoll: () => true, onChange: changed }) as unknown as Element;
+  const toggle = () => root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!;
+  const prof = () => root.querySelectorAll('div').find(node => node.dataset.kind === 'prof')!;
+  expect(toggle().attributes['aria-checked']).toBe('false');
+  expect(root.querySelectorAll('span').find(node => node.text() === 'Edit mode')!.className).toBe('sheet-edit-label muted');
+  expect(prof().querySelectorAll('button').every(b => b.disabled)).toBe(true);
+  expect(root.querySelectorAll('button').some(b => b.text() === 'Add a transformation')).toBe(false);
+  await root.querySelectorAll('button').find(b => b.text() === 'Background')!.click();
+  expect(root.querySelectorAll('textarea').every(input => input.readOnly)).toBe(true);
+  changed.mockClear();
+  await toggle().click();
+  expect(changed).not.toHaveBeenCalled();
+  expect(toggle().attributes['aria-checked']).toBe('true');
+  expect(root.querySelectorAll('span').find(node => node.text() === 'Edit mode')!.className).toBe('sheet-edit-label');
+  expect(prof().querySelectorAll('button').every(b => !b.disabled)).toBe(true);
+  expect(root.querySelectorAll('textarea').every(input => !input.readOnly)).toBe(true);
+  const trait = root.querySelectorAll('input').find(input => input.ariaLabel === 'Agility base modifier')!;
+  expect(trait.value).toBe('3');
+  trait.value = '99';
+  trait.listeners.get('change')?.();
+  expect(c.traits[0].mod).toBe(99);
+  expect(traitTotal(c, 'Agility')).toBe(104);
+  const negative = root.querySelectorAll('input').find(input => input.ariaLabel === 'Agility base modifier')!;
+  negative.value = '-99';
+  negative.listeners.get('change')?.();
+  expect(c.traits[0].mod).toBe(-99);
+  const invalid = root.querySelectorAll('input').find(input => input.ariaLabel === 'Agility base modifier')!;
+  for (const value of ['100', '-100', '1.5']) {
+    invalid.value = value;
+    invalid.listeners.get('change')?.();
+    expect(c.traits[0].mod).toBe(-99);
+    expect(invalid.validationMessage).toContain('-99 to +99');
+  }
+  const name = root.querySelectorAll('input').find(input => input.ariaLabel === 'Character name')!;
+  name.value = 'Renamed';
+  name.listeners.get('input')?.();
+  expect(c.name).toBe('Renamed');
+  const experience = root.querySelectorAll('input').find(input => input.ariaLabel === 'Experience 1 name')!;
+  experience.value = 'Explorer';
+  experience.listeners.get('input')?.();
+  const bonus = root.querySelectorAll('input').find(input => input.ariaLabel === 'Experience 1 bonus')!;
+  bonus.value = '5';
+  bonus.listeners.get('change')?.();
+  expect(c.experiences[0]).toEqual({ name: 'Explorer', mod: 5 });
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Add Experience')!.click();
+  expect(c.experiences).toHaveLength(2);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Delete Experience 1')!.click();
+  expect(c.experiences).toHaveLength(1);
+  await toggle().click();
+  expect(root.querySelectorAll('input').some(input => input.ariaLabel === 'Character name')).toBe(false);
+  expect(root.querySelectorAll('textarea').every(input => input.readOnly)).toBe(true);
+});
+
+it('deletes domain cards only from this character in Card and List views', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.loadout = [{ name: 'Active', level: 1, domain: 'Blade', type: 'Ability', recall: 1, text: '' }];
+  c.vault = [{ ...c.loadout[0], name: 'Vaulted' }];
+  const other = structuredClone(c);
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(b => b.text() === 'Domain Cards')!.click();
+  expect(root.querySelectorAll('button').some(b => b.ariaLabel.startsWith('Remove '))).toBe(false);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Remove Active from this character')!.click();
+  expect(c.loadout).toHaveLength(0);
+  expect(other.loadout).toHaveLength(1);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'List view')!.click();
+  const summary = root.querySelectorAll('summary')[0];
+  expect(summary.querySelectorAll('button').some(b => b.ariaLabel === 'Remove Vaulted from this character')).toBe(true);
+  await summary.querySelectorAll('button').find(b => b.ariaLabel === 'Remove Vaulted from this character')!.click();
+  expect(c.vault).toHaveLength(0);
+  expect(other.vault).toHaveLength(1);
+});
+
+it('edits contiguous capacities and keeps Armor overrides additive and persistent across rests', () => {
+  const c = emptyCharacter('Hero');
+  c.hp.slots = 6;
+  c.hp.on = 5;
+  c.stress.on = 4;
+  c.activeArmor = { name: 'Armor', score: 3, tier: 1 };
+  addEffect(c, { name: 'Armor buff', kind: 'buff', modifiers: [{ stat: 'armorScore', value: 2 }] });
+  setTrackSlots(c, 'hp', 9);
+  expect(c.hp.slots).toBe(9);
+  expect(c.hp.on).toBe(5);
+  setTrackSlots(c, 'hp', 3);
+  expect(c.hp).toEqual({ total: 12, slots: 3, on: 3 });
+  c.permanentHp = 2;
+  addEffect(c, { name: 'HP lock', kind: 'debuff', lockedHp: 1, until: 'rest' });
+  setTrackSlots(c, 'hp', 0);
+  expect(c.hp.slots).toBe(3);
+  setTrackSlots(c, 'stress', 2);
+  expect(c.stress).toEqual({ total: 12, slots: 2, on: 2 });
+  setTrackSlots(c, 'armor', 6);
+  expect(derivedStats(c).armorSlots).toBe(6);
+  expect(statBreakdown(c).armor).toContainEqual({ label: 'Manual override', value: 1 });
+  const restored = structuredClone(c);
+  syncDerived(restored);
+  applyRest(restored, 'long');
+  expect(derivedStats(restored).armorSlots).toBe(6);
+  restored.activeArmor!.score = 4;
+  syncDerived(restored);
+  expect(restored.armorTrack.slots).toBe(7);
+  setTrackSlots(restored, 'armor', 4);
+  expect(statBreakdown(restored).armor).toContainEqual({ label: 'Manual override', value: -2 });
+  setTrackSlots(restored, 'armor', 6);
+  expect(restored.effects.find(isManualOverride)?.modifiers).toEqual([]);
+  expect(restored.effects.find(isManualOverride)?.manualChanges).toEqual({ hp: -3, stress: -4 });
+});
+
+it('combines all manual changes without double-counting and reverses only manual adjustments', () => {
+  const c = emptyCharacter('Hero');
+  c.hp.slots = 6;
+  c.evasion = 10;
+  c.activeArmor = { name: 'Armor', score: 3, tier: 1 };
+  addEffect(c, { name: 'Buff', kind: 'buff', modifiers: [{ stat: 'trait.Agility', value: 5 }, { stat: 'evasion', value: 2 }] });
+  setTrackSlots(c, 'hp', 8);
+  setTrackSlots(c, 'stress', 4);
+  setManualStat(c, 'proficiency', 3);
+  setManualStat(c, 'trait.Agility', 5);
+  setManualStat(c, 'evasion', 12);
+  setTrackSlots(c, 'armor', 4);
+  setManualStat(c, 'trait.Agility', 7);
+  expect(c.effects.filter(isManualOverride)).toHaveLength(1);
+  const effect = c.effects.find(isManualOverride)!;
+  expect(effect.manualChanges).toEqual({ hp: 2, stress: -2, proficiency: 2, 'trait.Agility': 7, evasion: 2 });
+  expect(effect.text).toContain('HP slots: +2');
+  expect(effect.text).toContain('Stress slots: -2');
+  expect(effect.text).toContain('Agility base trait: +7');
+  expect(effect.text).toContain('Evasion: +2');
+  expect(derivedStats(c)).toMatchObject({ evasion: 14, proficiency: 3, armorSlots: 4 });
+  expect(traitTotal(c, 'Agility')).toBe(12);
+  expect(statBreakdown(c).evasion).toContainEqual({ label: 'Manual override', value: 2 });
+  const restored = structuredClone(c);
+  applyRest(restored, 'long');
+  expect(restored.effects.find(isManualOverride)?.manualChanges).toEqual(effect.manualChanges);
+  c.hp.slots++;
+  c.evasion++;
+  c.traits[0].mod++;
+  removeManualOverride(c, effect);
+  expect(c.hp.slots).toBe(7);
+  expect(c.stress.slots).toBe(6);
+  expect(c.proficiency.on).toBe(1);
+  expect(c.evasion).toBe(11);
+  expect(c.traits[0].mod).toBe(1);
+  expect(derivedStats(c).armorSlots).toBe(3);
+  expect(c.effects.map(item => item.name)).toEqual(['Buff']);
+});
+
+it('clears reverted adjustments and migrates existing Armor-only overrides into the combined effect', () => {
+  const c = emptyCharacter('Hero');
+  setManualStat(c, 'trait.Strength', -5);
+  setManualStat(c, 'trait.Strength', 0);
+  expect(c.effects.filter(isManualOverride)).toHaveLength(0);
+  addEffect(c, { name: 'Manual override', kind: 'debuff', modifiers: [{ stat: 'armorScore', value: -1 }] }, 'manual:armor-slots');
+  setManualStat(c, 'evasion', 2);
+  expect(c.effects.filter(isManualOverride)).toHaveLength(1);
+  expect(c.effects.find(isManualOverride)?.modifiers).toEqual([{ stat: 'armorScore', value: -1 }]);
+  setManualStat(c, 'evasion', 0);
+  expect(c.effects.filter(isManualOverride)).toHaveLength(1);
+  setTrackSlots(c, 'armor', 0);
+  expect(c.effects.filter(isManualOverride)).toHaveLength(0);
+});
+
+it('presents a friendly manual source and hides only the override Armor badge', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  addEffect(c, { name: 'Armor buff', kind: 'buff', modifiers: [{ stat: 'armorScore', value: 2 }] }, 'Armor feature');
+  setTrackSlots(c, 'armor', 3);
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(b => b.text() === 'Effects (2)')!.click();
+  const cards = root.querySelectorAll('div').filter(node => node.className === 'feat hope');
+  const manual = cards.find(node => node.text().includes('Manual override'))!;
+  const other = cards.find(node => node.text().includes('Armor buff'))!;
+  expect(manual.text()).toContain('from sheet edit mode');
+  expect(manual.text()).not.toContain('manual:armor-slots');
+  expect(manual.querySelectorAll('div').filter(node => node.className === 'badges')).toEqual([]);
+  expect(other.text()).toContain('from Armor feature');
+  expect(other.querySelectorAll('div').find(node => node.className === 'badges')!.text()).toContain('armorScore +2');
+  expect(derivedStats(c).armorSlots).toBe(3);
+  expect(statBreakdown(c).armor).toContainEqual({ label: 'Manual override', value: 1 });
+});
+
+it('edits base Evasion rather than its buffed total and records Proficiency pip edits', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.evasion = 10;
+  addEffect(c, { name: 'Evasion buff', kind: 'buff', modifiers: [{ stat: 'evasion', value: 3 }] });
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  expect(root.querySelectorAll('input').some(input => input.ariaLabel === 'Evasion base value')).toBe(false);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  const evasion = root.querySelectorAll('input').find(input => input.ariaLabel === 'Evasion base value')!;
+  expect(evasion.value).toBe('10');
+  evasion.value = '15';
+  evasion.listeners.get('change')?.();
+  expect(derivedStats(c).evasion).toBe(18);
+  const proficiency = root.querySelectorAll('div').find(node => node.dataset.kind === 'prof')!;
+  await proficiency.querySelectorAll('button')[3].click();
+  expect(c.proficiency.on).toBe(4);
+  expect(c.effects.find(isManualOverride)?.manualChanges).toEqual({ evasion: 5, proficiency: 3 });
+  await root.querySelectorAll('button').find(b => b.text() === 'Effects (2)')!.click();
+  expect(root.text()).toContain('Evasion: +5');
+  expect(root.text()).toContain('Proficiency: +3');
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  expect(root.querySelectorAll('button').find(b => b.text() === 'Remove')!.disabled).toBe(false);
+  expect(root.querySelectorAll('button').filter(b => b.text() === 'Remove')[1].disabled).toBe(true);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await root.querySelectorAll('button').filter(b => b.text() === 'Remove')[1].click();
+  expect(c.evasion).toBe(10);
+  expect(c.proficiency.on).toBe(1);
+  expect(c.effects.filter(isManualOverride)).toEqual([]);
+});
+
+it('uses resource pips for capacities only in edit mode and retains normal marking otherwise', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.hp.slots = 6;
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  const track = (kind: string) => root.querySelectorAll('div').find(node => node.dataset.kind === kind)!;
+  await track('hp').querySelectorAll('button')[2].click();
+  expect(c.hp.on).toBe(3);
+  expect(track('hp').querySelectorAll('button')[8].disabled).toBe(true);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await track('hp').querySelectorAll('button')[8].click();
+  expect(c.hp.slots).toBe(9);
+  expect(c.hp.on).toBe(3);
+  await track('hp').querySelectorAll('button')[4].click();
+  expect(c.hp.slots).toBe(4);
+  await track('stress').querySelectorAll('button')[8].click();
+  expect(c.stress.slots).toBe(9);
+  await track('armor').querySelectorAll('button')[0].click();
+  expect(c.armorTrack.slots).toBe(1);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await track('armor').querySelectorAll('button')[0].click();
+  expect(c.armorTrack.on).toBe(1);
+  expect(c.armorTrack.slots).toBe(1);
+});
+
+it('offers portrait editing only in edit mode, uploads images and surfaces upload failures', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ artwork: '/a/new.png' })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Invalid image' }), { status: 400 }));
+  vi.stubGlobal('fetch', fetch);
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  const root = renderSheetView({ character: c, actorId: 'hero', onRoll: () => true }) as unknown as Element;
+  expect(root.querySelectorAll('div').some(node => node.ariaLabel === 'Edit character image')).toBe(false);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  const portrait = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!;
+  expect(portrait.text()).toContain('Edit image');
+  const file = portrait.querySelectorAll('input')[0];
+  file.files = [new File(['image'], 'portrait.png', { type: 'image/png' })];
+  await file.listeners.get('change')?.();
+  expect(root.querySelectorAll('img')).toHaveLength(1);
+  expect(fetch.mock.calls[0][0]).toBe('/api/actors/hero/artwork');
+  const next = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!.querySelectorAll('input')[0];
+  next.files = file.files;
+  await next.listeners.get('change')?.();
+  expect(root.text()).toContain('Could not update character image: Invalid image');
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  expect(root.querySelectorAll('input').some(input => input.files)).toBe(false);
+});
+
+it('never lets edit mode bypass a disabled actor and restores it only after re-enabling', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  vi.stubGlobal('HTMLInputElement', Element);
+  vi.stubGlobal('HTMLTextAreaElement', Element);
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  const bus = new SheetBus();
+  let readOnly = false;
+  const root = renderSheetView({ character: c, bus, readOnly: () => readOnly, onRoll: () => true }) as unknown as Element;
+  const toggle = () => root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!;
+  await toggle().click();
+  const staleInput = root.querySelectorAll('input').find(input => input.ariaLabel === 'Agility base modifier')!;
+  readOnly = true;
+  bus.notify();
+  expect(toggle().disabled).toBe(true);
+  expect(toggle().attributes['aria-checked']).toBe('false');
+  expect(root.querySelectorAll('input').some(input => input.ariaLabel === 'Agility base modifier')).toBe(false);
+  staleInput.value = '99';
+  staleInput.listeners.get('change')?.();
+  expect(c.traits[0].mod).toBe(0);
+  await toggle().click();
+  expect(toggle().attributes['aria-checked']).toBe('false');
+  readOnly = false;
+  bus.notify();
+  expect(toggle().disabled).toBe(false);
+  expect(toggle().attributes['aria-checked']).toBe('true');
+});
 
 it('switches both zones globally without saving character data and preserves expanded full cards', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),

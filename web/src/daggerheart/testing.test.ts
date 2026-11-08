@@ -14,6 +14,8 @@ const data: RulesData = {
   weapons: load('weapons').entries, armor: load('armor').entries, consumables: load('consumables').entries,
   cards: load('domain-cards').entries, transformations: load('transformations').entries,
 };
+const catalogIndex = { categories: ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations']
+  .map(category => ({ category })) };
 const tester = () => Object.assign(emptyCharacter('Test hero'), { testingCharacter: true });
 
 describe('DM-marked testing characters', () => {
@@ -28,7 +30,8 @@ describe('DM-marked testing characters', () => {
     expect(Object.fromEntries(c.traits.map(t => [t.name, t.mod]))).toEqual(traits);
     expect(c.traits.filter(t => t.spellcast).map(t => t.name)).toEqual([subclassCard(data, c.testingBuild!.subclass, 'foundation')!.spellcastTrait]);
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
-      ok: true, json: async () => url.startsWith('/api/sheet/') ? { sheet: c, testingCharacter: true } : load(url.slice('/api/compendium/'.length)),
+      ok: true, json: async () => url.startsWith('/api/sheet/') ? { sheet: c, testingCharacter: true }
+        : url === '/api/compendium' ? catalogIndex : load(url.slice('/api/compendium/'.length)),
     })));
     try {
       const loaded = await loadCharacter('a', 'Test hero');
@@ -155,11 +158,12 @@ describe('DM-marked testing characters', () => {
     expect(c.hp.on).toBeGreaterThanOrEqual(1);
   });
 
-  it('uses the host marker on reload and refreshes the build, not a forged sheet marker', async () => {
+  it('uses the host marker on reload and refreshes automation, not a forged sheet marker', async () => {
     const c = tester();
     applyTestingBuild(data, c, defaultTestingBuild(data));
     const fetch = vi.fn(async (url: string) => {
       if (url.startsWith('/api/sheet/')) return { ok: true, json: async () => ({ sheet: c, testingCharacter: true }) };
+      if (url === '/api/compendium') return { ok: true, json: async () => catalogIndex };
       return { ok: true, json: async () => load(url.slice('/api/compendium/'.length)) };
     });
     vi.stubGlobal('fetch', fetch);

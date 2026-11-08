@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryConflict, getSheet, saveSheet } from '../api';
-import { applyFeatureState, applyInventory, autosave, featureTarget, updateCharacterAutomation } from './persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, loadCharacter, updateCharacterAutomation } from './persist';
 import { mockCharacter } from './data';
 import type { CompendiumFile } from './compendium';
 
@@ -12,6 +12,28 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('preserves saved testing-sheet manual edits and removed cards instead of rebuilding on every load', async () => {
+    const saved = mockCharacter();
+    saved.mancer = { done: true };
+    saved.testingBuild = { className: 'Ranger', subclass: 'Wayfinder', stage: 'foundation', level: 3,
+      ancestry: 'Human', community: 'Wildborne', multiclasses: [] };
+    saved.hp.slots = 9;
+    saved.stress.slots = 3;
+    saved.proficiency.on = 6;
+    saved.traits[0].mod = 99;
+    saved.loadout = [];
+    saved.vault = [];
+    vi.mocked(getSheet).mockResolvedValue({ testingCharacter: true, sheet: saved });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ categories: [] }))));
+    const loaded = await loadCharacter('tester', 'Tester');
+    expect(loaded.hp.slots).toBe(9);
+    expect(loaded.stress.slots).toBe(3);
+    expect(loaded.proficiency.on).toBe(6);
+    expect(loaded.traits[0].mod).toBe(99);
+    expect(loaded.loadout).toEqual([]);
+    expect(loaded.vault).toEqual([]);
+  });
+
   it('defers pending edits and blocks all background saves while read-only, then resumes when enabled', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', globalThis);

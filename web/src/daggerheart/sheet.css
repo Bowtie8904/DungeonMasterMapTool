@@ -352,6 +352,41 @@ dialog.dh-sorcerer-dialog::backdrop { background: rgba(0,0,0,.6); }
 .dh-win-title h2 { margin: 0; font-size: 14px; flex: 1; font-weight: 600; }
 .dh-win-title button { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; color: var(--text); font-size: 15px; cursor: pointer; border-radius: 6px; }
 .dh-win-title button:hover { background: #1f252d; }
+.dh-win-title .sheet-heading { display: flex; align-items: center; gap: 24px; flex: 1; min-width: 0; }
+.dh-win-title .sheet-heading h2 { flex: 0 1 auto; }
+.sheet-title { display: flex; align-items: center; gap: 24px; padding: 6px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sheet-title h2 { margin: 0; font-size: 14px; }
+.sheet-edit-control { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
+.sheet-edit-label { color: var(--text); }
+.sheet-edit-label.muted { color: var(--muted); }
+.sheet-edit-control .sheet-edit-switch { display: inline-flex; align-items: center; gap: 6px; width: auto; height: 28px; padding: 2px 6px; color: var(--text); background: transparent; border: 0; cursor: pointer; font: inherit; }
+.switch-track { width: 30px; height: 17px; padding: 2px; border-radius: 10px; background: #58606d; display: inline-flex; box-sizing: border-box; }
+.switch-thumb { width: 13px; height: 13px; background: #fff; border-radius: 50%; transition: transform .15s; }
+.sheet-edit-switch[aria-checked="true"] .switch-track { background: var(--hope, #f5b942); }
+.sheet-edit-switch[aria-checked="true"] .switch-thumb { transform: translateX(13px); }
+.sheet-edit-switch:focus-visible, .editable-portrait:focus-visible { outline: 2px solid var(--hope, #f5b942); outline-offset: 2px; }
+.sheet-edit-switch:disabled { opacity: .5; cursor: default; }
+.dh-win.minimised .sheet-edit-host { display: none; }
+.dh .portrait-wrap { flex-shrink: 0; width: 170px; }
+@container sheet (max-width: 850px) { .dh .portrait-wrap { width: 110px; } }
+.dh .editable-portrait { position: relative; cursor: pointer; overflow: hidden; }
+.dh .portrait-edit-indicator { position: absolute; inset: auto 0 0; padding: 6px 2px; text-align: center; background: #10151de6; color: #fff; font-size: 12px; opacity: 0; }
+.dh .editable-portrait:hover .portrait-edit-indicator, .dh .editable-portrait:focus-visible .portrait-edit-indicator { opacity: 1; }
+.dh .portrait-error { display: block; font-size: 11px; overflow-wrap: anywhere; }
+.dh .name input { width: min(100%, 300px); font: inherit; }
+.dh .trait input.md { width: 76px; max-width: 100%; text-align: center; padding: 2px; }
+.dh .v-e input { width: 100%; padding: 2px 0; text-align: center; }
+.dh .exp input[type="text"] { flex: 1; min-width: 0; }
+.dh .exp input[type="number"] { width: 64px; }
+.dh input[readonly], .dh textarea[readonly] { background: transparent; border-color: transparent; }
+.dh.edit-mode .pip.locked:not(:disabled) { opacity: .6; cursor: pointer; }
+.dh.edit-mode .pip.locked:hover:not(:disabled) { opacity: 1; border-style: solid; }
+.dh .pip:disabled:not(.locked) { cursor: default; }
+.dh.edit-mode .domain-list-summary:not(.feature-list-summary) { grid-template-columns: 24px minmax(0, 1fr) 80px 38px 28px 64px; }
+.dh.edit-mode .list-chat { gap: 6px; }
+@media (max-width: 680px) {
+  .dh.edit-mode .domain-list-summary:not(.feature-list-summary) { grid-template-columns: 20px minmax(0, 1fr) 58px 30px 24px 60px; }
+}
 .dh-win.minimised { height: auto !important; min-height: 0; resize: none; }
 .dh-win.minimised .dh-win-body { display: none; }
 .dh-win-mini { display: none; }

@@ -1100,6 +1100,7 @@ public final class OnlineSessionServer {
             if (grant != null) {
                 String path = ctx.path();
                 if (path.equals("/api/preferences") || path.equals("/api/sheet/" + grant.actorId())
+                        || path.equals("/api/actors/" + grant.actorId() + "/artwork")
                         || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))

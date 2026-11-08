@@ -226,9 +226,12 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
   c.testingCharacter = res.testingCharacter === true;
   if (!c.testingCharacter) delete c.testingBuild;
   if (c.testingCharacter) {
-    const data = await loadRulesData();
-    const build = c.testingBuild ?? defaultTestingBuild(data);
-    if (build.transformation !== 'Shapeshifter' || build.ancestryFeature) applyTestingBuild(data, c, build);
+    if (c.testingBuild && c.mancer?.done === true) await refreshCharacterAutomation(c);
+    else {
+      const data = await loadRulesData();
+      const build = c.testingBuild ?? defaultTestingBuild(data);
+      if (build.transformation !== 'Shapeshifter' || build.ancestryFeature) applyTestingBuild(data, c, build);
+    }
   } else if (res.sheet) {
     try { await refreshCharacterAutomation(c); }
     catch (e) {

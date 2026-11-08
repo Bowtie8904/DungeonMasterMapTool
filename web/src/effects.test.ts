@@ -13,6 +13,20 @@ describe('effectSource', () => {
     expect(rendered).toEqual([]);
   });
 
+  it('hides the combined and legacy manual override from the left-side overlay', () => {
+    const c = emptyCharacter('Hero');
+    c.effects = [{ id: 'manual', name: 'Manual override', kind: 'buff', source: 'manual:armor-slots',
+      manualChanges: { hp: 2, stress: -1, proficiency: 1, evasion: 3, 'trait.Agility': 5 } }];
+    const rendered: Array<Node | string> = [];
+    const host = { replaceChildren: (...nodes: Array<Node | string>) => { rendered.push(...nodes); } } as HTMLElement;
+    renderEffects(host, [{ actorId: 'hero', name: 'Hero', character: c }], new Set(), () => {}, () => {});
+    expect(rendered).toEqual([]);
+    delete c.effects[0].manualChanges;
+    renderEffects(host, [{ actorId: 'hero', name: 'Hero', character: c }], new Set(), () => {}, () => {});
+    expect(rendered).toEqual([]);
+    expect(c.effects).toHaveLength(1);
+  });
+
   const effect = (over: Partial<ActiveEffect> = {}): ActiveEffect => ({ id: 'e1', name: 'Fury', kind: 'buff', source: "Patron's Fury", ...over });
 
   it('shows the action source and effect details', () => {

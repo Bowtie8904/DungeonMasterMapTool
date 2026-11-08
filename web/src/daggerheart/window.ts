@@ -39,12 +39,19 @@ export class SheetWindow {
     };
     this.title = el('div', { class: 'dh-win-title' });
     const mini = el('div', { class: 'dh-win-mini' });
+    const editControl = el('div', { class: 'sheet-edit-host' });
+    const label = el('h2', {}, `${actorName} - Daggerheart sheet`);
     this.body = el('div', { class: 'dh-win-body' }, renderSheetView({
       ...options,
+      onEditControl: control => {
+        options.onEditControl?.(control);
+        editControl.replaceChildren(control);
+        label.textContent = `${options.character.name} - Daggerheart sheet`;
+      },
       onMiniStrip: (strip) => { options.onMiniStrip?.(strip); mini.replaceChildren(...(strip ? [strip] : [])); },
     }));
     this.title.append(
-      el('h2', {}, `${actorName} - Daggerheart sheet`),
+      el('div', { class: 'sheet-heading' }, label, editControl),
       mk('\u29C9', 'Pop out to a new browser window', () => { this.setOpen(false); onPopOut(); }),
       mk('\u2013', 'Minimise', () => this.element.classList.toggle('minimised')),
       mk('\u2715', 'Close', () => this.setOpen(false)),

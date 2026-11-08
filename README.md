@@ -203,7 +203,21 @@ Nothing starts until you click **Start online session**, so offline play and the
   Normal closing saves pending edits first. Sheets close when hosting ends or changes; DM access never requires
   logging in as a player.
 - **Daggerheart character sheet**: players get a sheet button in the sidebar rail and an "Open sheet"
-  button per actor. The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
+  button per actor. **Edit mode** is off by default; its labeled On/Off switch sits beside the sheet title
+  and is hidden when minimized, with extra spacing from the title and a muted gray label while off.
+  Enable it to edit the character name, portrait (hover/focus for **Edit image**),
+  base trait modifiers (-99 to +99, excluding buffs), Proficiency, transformation, Experiences and Background.
+  In edit mode, resource pips change the usable maximum: locked slots enable through the clicked slot;
+  enabled slots disable themselves and later slots. HP locks remain protected. Manual Armor adjustments
+  appear separately from equipment/buffs as **Manual override** in the hover breakdown.
+  Evasion is also editable as its base value. HP/Stress capacity, Proficiency, trait and Evasion edits
+  are tracked with Armor in one persistent **Manual override** effect, visible only in the sheet's
+  Effects tab, not the left-side overlay. Removing it in edit mode reverses the tracked adjustments.
+  Its source is labeled **sheet edit mode**; its redundant Armor badge is hidden, while other buffs
+  retain their modifier badges.
+  Domain cards gain a character-local delete button beside their chat links in Card and List views.
+  Outside edit mode, normal rolls, Hope and resource marking still work; disabled sheets remain read-only.
+  The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
   All six traits stack vertically in a persistent left sidebar, visible on every tab. Experiences are in Background.

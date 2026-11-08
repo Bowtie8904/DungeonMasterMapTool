@@ -18,6 +18,14 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 
 `starter: true` (weapons, armor) marks the basic gear the Character Mancer offers.
 
+Sheet edit mode stores one persistent **Manual override** effect (`source: "manual:armor-slots"`,
+including legacy Armor-only effects). Armor uses a normal `armorScore` modifier. Optional `manualChanges`
+records signed accumulated changes keyed by `hp`, `stress`, `proficiency`, `evasion`, and `trait.<Name>`.
+These changes are already applied to the sheet's base fields/tracks: never apply them again as passive
+modifiers. The metadata enables combined display and reversal on removal; returning all adjustments to
+zero removes the effect. It appears in the sheet Effects tab, not the map overlay. Older hosts retain the
+authoritative base values and existing Armor modifier; no compatibility-version change is required.
+
 ## Guided DM editor and live catalog links
 
 While hosting, the DM compendium's **Edit JSON catalogs** view edits all nine files above, including automation,

@@ -98,6 +98,24 @@ subfeatures. Search covers names, sources and full text (including grouped child
 and remains available on read-only sheets, as does row expansion. No settings or remote contracts change.
 
 The Java host serves the build output from the classpath `/web` (`/` and `/sheet/<actorId>` return `index.html`).
+Sheet edit mode is local to each open view and defaults off. Its labeled switch is next to the sheet title
+and hidden when minimized. The title and switch have 24 px separation; the **Edit mode** label is muted gray
+when off. It gates base traits (-99..99), Proficiency, transformation controls, character
+name/image, Experiences and Background fields; normal play controls remain available. Edit-mode HP/Stress/Armor
+pip clicks set a contiguous capacity, preserving permanent and temporary HP locks. HP/Stress use existing
+track fields; Armor uses an existing manual-duration `armorScore` effect with source `manual:armor-slots`.
+The same **Manual override** effect records HP/Stress capacity, Proficiency, base trait and base Evasion
+adjustments in `manualChanges`; these are already applied to base fields and must not be counted again
+as modifiers. Evasion has a base-value input in edit mode and a separate manual contribution in its tooltip.
+The effect is hidden from the left-side overlay but remains in the Effects tab; removing it in edit mode
+reverses its recorded adjustments while retaining other buffs/advancements and respecting HP locks.
+Its Effects card displays `from sheet edit mode` rather than its internal ID and hides only its
+redundant Armor modifier badge; other effects' badges and all stat calculations remain unchanged.
+Domain deletion removes only the character's
+card in either view. Portrait uploads reuse the authenticated artwork endpoint, including DM sheet sessions.
+No new settings, remote contracts or compatibility version are required.
+Saved testing sheets refresh automation without rebuilding on load, preserving manual edits and card
+removals; explicitly applying a new testing build still recalculates the build's stats and cards.
 `src/vectors.test.ts` checks `../src/test/resources/online/vectors.json` (shared with the Java tests) when it exists.
 
 Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `clock.ts`, `vision.ts`, `weather.ts`,

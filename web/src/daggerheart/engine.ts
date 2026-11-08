@@ -1,7 +1,7 @@
 // Automation engine for the dmmap-daggerheart data format (see docs/DAGGERHEART_DATA.md).
 // Pure functions over the CharacterSheet so they can be unit-tested without a DOM.
 
-import { Advantage, CharacterSheet, Feature, Weapon, TraitName, TRAIT_ORDER, tierOf } from './data';
+import { Advantage, CharacterSheet, Feature, Weapon, TraitName, TRAIT_ORDER, signed, tierOf } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 import { hpHealingFloor, syncDeathState } from './death';
@@ -39,6 +39,8 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  /** Already applied to base fields; recorded for display and reversal, never added as stat modifiers. */
+  manualChanges?: Partial<Record<ManualStat, number>>;
   rest?: Automation['rest'];
   exclusiveSource?: boolean;
   endOnMarkedHpCount?: number;
@@ -601,8 +603,10 @@ export function statBreakdown(c: CharacterSheet): Record<'evasion' | 'armor' | '
   const unarmored = unarmoredBase(c);
   const both = statSources(c, 'thresholds');
   const base = (label: string, value: number): StatSource[] => (value ? [{ label, value }] : []);
+  const manualEvasion = c.effects.find(isManualOverride)?.manualChanges?.evasion ?? 0;
   return {
-    evasion: [{ label: c.className ? `${c.className} base (with level-ups)` : 'Base', value: c.evasion }, ...statSources(c, 'evasion')],
+    evasion: [{ label: c.className ? `${c.className} base (with level-ups)` : 'Base', value: c.evasion - manualEvasion },
+      ...base('Manual override', manualEvasion), ...statSources(c, 'evasion')],
     armor: [...(armor ? [{ label: armor.name, value: armor.score }] : unarmored ? [{ label: unarmored.name, value: unarmored.score }] : []), ...statSources(c, 'armorScore')],
     major: [...base(armor?.name ?? unarmored?.name ?? 'No armor', armor ? (armor.major ?? armor.score + 4) : unarmored?.thresholds[0] ?? 0), { label: `Level ${c.level}`, value: c.level }, ...both, ...statSources(c, 'majorThreshold')],
     severe: [...base(armor?.name ?? unarmored?.name ?? 'No armor', armor ? (armor.severe ?? armor.score * 2 + 7) : unarmored?.thresholds[1] ?? 0), { label: armor || unarmored ? `Level ${c.level}` : `Level ${c.level} x2`, value: armor || unarmored ? c.level : c.level * 2 }, ...both, ...statSources(c, 'severeThreshold')],
@@ -628,6 +632,83 @@ export function syncDerived(c: CharacterSheet): DerivedStats {
   c.armorTrack.slots = Math.min(c.armorTrack.total, d.armorSlots);
   c.armorTrack.on = Math.min(c.armorTrack.on, c.armorTrack.slots);
   return d;
+}
+
+export type ManualStat = 'hp' | 'stress' | 'proficiency' | 'evasion' | `trait.${TraitName}`;
+export const MANUAL_OVERRIDE_SOURCE = 'manual:armor-slots';
+
+export function isManualOverride(effect: ActiveEffect): boolean {
+  return effect.source === MANUAL_OVERRIDE_SOURCE;
+}
+
+function manualOverride(c: CharacterSheet): ActiveEffect {
+  const existing = c.effects.find(isManualOverride);
+  return existing ?? addEffect(c, { name: 'Manual override', kind: 'buff', until: 'manual', modifiers: [] }, MANUAL_OVERRIDE_SOURCE);
+}
+
+function updateManualOverride(c: CharacterSheet, effect: ActiveEffect): void {
+  const changes = Object.entries(effect.manualChanges ?? {}).filter(([, value]) => value);
+  effect.modifiers = (effect.modifiers ?? []).filter(modifier => modifier.value !== 0);
+  const armor = effect.modifiers.find(modifier => modifier.stat === 'armorScore');
+  const rows = [...changes.map(([key, value]) => `${key.startsWith('trait.') ? `${key.slice(6)} base trait` : key === 'hp' ? 'HP slots' : key === 'stress' ? 'Stress slots' : key === 'evasion' ? 'Evasion' : 'Proficiency'}: ${signed(value!)}`),
+    ...(armor ? [`Armor slots: ${signed(Number(armor.value))}`] : [])];
+  effect.name = 'Manual override';
+  effect.kind = 'buff';
+  effect.until = 'manual';
+  effect.text = rows.join('\n');
+  if (!rows.length) c.effects = c.effects.filter(item => item !== effect);
+}
+
+function manualBase(c: CharacterSheet, stat: ManualStat): number {
+  if (stat === 'hp' || stat === 'stress') return c[stat].slots;
+  if (stat === 'proficiency') return c.proficiency.on;
+  if (stat === 'evasion') return c.evasion;
+  return c.traits.find(trait => `trait.${trait.name}` === stat)!.mod;
+}
+
+function writeManualBase(c: CharacterSheet, stat: ManualStat, value: number): void {
+  if (stat === 'hp' || stat === 'stress') {
+    const track = c[stat];
+    track.slots = Math.max(stat === 'hp' ? hpHealingFloor(c) : 0, Math.min(track.total, value));
+    track.on = Math.min(track.on, track.slots);
+  } else if (stat === 'proficiency') c.proficiency.on = Math.max(0, Math.min(c.proficiency.slots, value));
+  else if (stat === 'evasion') c.evasion = value;
+  else c.traits.find(trait => `trait.${trait.name}` === stat)!.mod = value;
+}
+
+export function setManualStat(c: CharacterSheet, stat: ManualStat, value: number): void {
+  const previous = manualBase(c, stat);
+  writeManualBase(c, stat, value);
+  const change = manualBase(c, stat) - previous;
+  if (!change) return;
+  const effect = manualOverride(c);
+  effect.manualChanges ??= {};
+  effect.manualChanges[stat] = (effect.manualChanges[stat] ?? 0) + change;
+  if (!effect.manualChanges[stat]) delete effect.manualChanges[stat];
+  updateManualOverride(c, effect);
+}
+
+export function removeManualOverride(c: CharacterSheet, effect: ActiveEffect): void {
+  if (!isManualOverride(effect) || !c.effects.includes(effect)) return;
+  for (const [stat, adjustment] of Object.entries(effect.manualChanges ?? {}) as Array<[ManualStat, number]>)
+    writeManualBase(c, stat, manualBase(c, stat) - adjustment);
+  c.effects = c.effects.filter(item => item !== effect);
+  syncDerived(c);
+}
+
+/** Manual Armor capacity stays additive to equipment and buffs, including on older hosts. */
+export function setTrackSlots(c: CharacterSheet, kind: 'hp' | 'stress' | 'armor', slots: number): void {
+  const track = kind === 'armor' ? c.armorTrack : c[kind];
+  const floor = kind === 'hp' ? hpHealingFloor(c) : 0;
+  slots = Math.max(floor, Math.min(track.total, slots));
+  if (kind === 'armor') {
+    const effect = manualOverride(c);
+    effect.modifiers = [];
+    const adjustment = slots - derivedStats(c).armorSlots;
+    if (adjustment) effect.modifiers.push({ stat: 'armorScore', value: adjustment });
+    updateManualOverride(c, effect);
+    syncDerived(c);
+  } else setManualStat(c, kind, slots);
 }
 
 export interface RollBonus {

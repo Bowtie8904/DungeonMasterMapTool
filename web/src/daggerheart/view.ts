@@ -1,5 +1,6 @@
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
+import { uploadArtwork } from '../api';
 import { chooseTalismanHope } from './witch-view';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
@@ -8,7 +9,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -20,6 +21,7 @@ import { chooseWarlockAmount } from './warlock-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
 import { characterFeatureGroups } from './feature-groups';
+import { isManualOverride, removeManualOverride, setManualStat } from './engine';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
@@ -102,6 +104,7 @@ export interface SheetViewOptions {
   supportsPartyFeatures?: () => boolean;
   /** Receives a compact Evasion and traits strip after every render (the floating window shows it on its minimised bar). */
   onMiniStrip?: (strip: HTMLElement | null) => void;
+  onEditControl?: (control: HTMLElement) => void;
 }
 
 type Page = 'char' | 'companion' | 'beastform' | 'equip' | 'loot' | 'cards' | 'effects' | 'bg';
@@ -109,7 +112,7 @@ const PAGES: Array<[Page, string]> = [
   ['char', 'Character'], ['companion', 'Companion'], ['beastform', 'Beastform'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
-export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0): HTMLElement {
+export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0, onSlotEdit?: (slots: number) => void, interactive = true): HTMLElement {
   const box = el('div', { class: 'pips' });
   box.dataset.kind = kind;
   box.style.setProperty('--c', color);
@@ -118,13 +121,19 @@ export function pips(track: Track, kind: string, color: string, round = false, o
   for (let i = 0; i < track.total; i++) {
     const locked = i >= track.slots || i < permanent + temporary;
     const scarred = i >= track.total - scars;
-    const b = el('button', { type: 'button', disabled: locked, class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}${scarred ? ' scarred' : ''}${i < permanent ? ' permanent-hp' : ''}`, title: i < permanent ? 'Permanently marked HP — cannot be healed' : scarred ? 'Crossed out by a permanent scar' : locked ? 'Locked - gained through advancement' : '' }, i < permanent ? '×' : scarred ? 'X' : '');
+    const b = el('button', { type: 'button', disabled: !interactive || locked && (!onSlotEdit || i < permanent + temporary), class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}${scarred ? ' scarred' : ''}${i < permanent ? ' permanent-hp' : ''}`, title: i < permanent ? 'Permanently marked HP — cannot be healed' : scarred ? 'Crossed out by a permanent scar' : onSlotEdit ? (i >= track.slots ? `Enable ${kind} slots through ${i + 1}` : `Disable ${kind} slot ${i + 1} and later slots`) : locked ? 'Locked - gained through advancement' : '' }, i < permanent ? '×' : scarred ? 'X' : '');
     b.setAttribute('aria-label', `${kind} ${i + 1}`);
     if (i >= permanent && i < permanent + temporary) {
       b.title = 'Marked HP locked by Volatile Toxins until your next rest';
       b.textContent = 'X';
     }
     b.addEventListener('click', () => {
+      if (!interactive) return;
+      if (onSlotEdit) {
+        if (i < permanent + temporary) return;
+        onSlotEdit(i >= track.slots ? i + 1 : i);
+        return;
+      }
       if (locked) return;
       track.on = Math.max(permanent + temporary, track.on === i + 1 ? i : i + 1);
       paint();
@@ -161,6 +170,8 @@ function featureCard(f: Feature, onUse?: () => void): HTMLElement {
 export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const c = opts.character;
   let page: Page = 'char';
+  let editMode = false;
+  const canEdit = () => editMode && !opts.readOnly?.();
   const root = el('div', { class: 'dh' });
   root.addEventListener('click', event => {
     if (!opts.readOnly?.()) return;
@@ -237,6 +248,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       remove.classList.add('share-icon', 'delete-item');
       header.append(remove);
     }
+    if (entry.category === 'domain' && canEdit()) header.append(deleteCardButton(entry.item));
     if (!opts.onShare) return node;
     const button = iconButton('chat', `Post ${entry.item.name} to chat`, () => opts.onShare!(entry));
     button.classList.add('share-icon');
@@ -375,7 +387,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   };
   for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, event => {
     const target = event.target as Element;
-    if (target.closest('.card-view-switch, .feature-search')
+    if (target.closest('.card-view-switch, .feature-search, .sheet-edit-control')
       || ev === 'click' && target.closest('.domain-list-summary') && !target.closest('button')) return;
     if (!opts.readOnly?.()) opts.onChange?.();
   });
@@ -698,7 +710,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return b;
   }
 
-  const render = () => {
+  const render = (save = true) => {
     hideSourceTooltip();
     cardLayoutObserver.disconnect();
     const scroll = root.querySelector('.pages')?.scrollTop ?? 0;
@@ -708,7 +720,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
     actionRefreshers = [];
-    root.replaceChildren(header(), ...(c.mancer?.done === false ? [startBanner()] : c.transformation === 'Shapeshifter' && !c.ancestryFeature ? [ancestryBanner()] : [
+    const editControl = editSwitch();
+    opts.onEditControl?.(editControl);
+    root.classList.toggle('edit-mode', canEdit());
+    root.replaceChildren(...(opts.onEditControl ? [] : [el('div', { class: 'sheet-title' }, el('h2', {}, 'Daggerheart sheet'), editControl)]), header(), ...(c.mancer?.done === false ? [startBanner()] : c.transformation === 'Shapeshifter' && !c.ancestryFeature ? [ancestryBanner()] : [
       el('div', { class: 'sheet-layout' },
         el('aside', { class: 'sheet-sidebar', ariaLabel: 'Traits' }, traits()),
         el('div', { class: 'sheet-main' }, tabs(), pages())),
@@ -718,13 +733,57 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
       applyReadOnlyControls();
-    } else opts.onChange?.();
+    } else if (save) opts.onChange?.();
     const p = root.querySelector('.pages');
     if (p) p.scrollTop = scroll;
     const sidebar = root.querySelector('.sheet-sidebar');
     if (sidebar) sidebar.scrollTop = sidebarScroll;
     requestAnimationFrame(() => { measureDescriptions(); layoutCards(); });
   };
+
+  function editSwitch(): HTMLElement {
+    const button = el('button', { type: 'button', class: 'sheet-edit-switch', role: 'switch', disabled: opts.readOnly?.() === true, ariaLabel: 'Edit mode' },
+      el('span', { class: 'switch-track', ariaHidden: 'true' }, el('span', { class: 'switch-thumb' })),
+      el('span', {}, canEdit() ? 'On' : 'Off'));
+    button.setAttribute('aria-checked', String(canEdit()));
+    button.addEventListener('click', () => {
+      if (opts.readOnly?.()) return;
+      editMode = !editMode;
+      render(false);
+    });
+    return el('div', { class: 'sheet-edit-control' }, el('span', { class: canEdit() ? 'sheet-edit-label' : 'sheet-edit-label muted' }, 'Edit mode'), button);
+  }
+
+  function textEdit(label: string, value: string, set: (value: string) => void): HTMLInputElement {
+    const input = el('input', { type: 'text', value, ariaLabel: label, readOnly: !canEdit() });
+    input.addEventListener('input', () => { if (canEdit()) set(input.value); });
+    return input;
+  }
+
+  function numberEdit(label: string, value: number, set: (value: number) => void, limit?: number): HTMLInputElement {
+    const input = el('input', { type: 'number', ...(limit === undefined ? {} : { min: String(-limit), max: String(limit) }), step: '1', value: String(value), ariaLabel: label });
+    input.addEventListener('click', event => event.stopPropagation());
+    input.addEventListener('change', () => {
+      if (!canEdit()) return;
+      if (!Number.isSafeInteger(input.valueAsNumber) || limit !== undefined && Math.abs(input.valueAsNumber) > limit) {
+        input.setCustomValidity(limit === undefined ? 'Enter a whole number.' : `Enter a whole number from -${limit} to +${limit}.`);
+        input.reportValidity();
+        return;
+      }
+      input.setCustomValidity('');
+      set(input.valueAsNumber);
+      render();
+    });
+    return input;
+  }
+
+  function slotEditor(kind: 'hp' | 'stress' | 'armor'): ((slots: number) => void) | undefined {
+    return canEdit() ? slots => {
+      if (!canEdit()) return;
+      setTrackSlots(c, kind, slots);
+      render();
+    } : undefined;
+  }
 
   function applyReadOnlyControls(): void {
     root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
@@ -765,9 +824,33 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       for (const resource of effect.resources ?? []) hidden.add(resource.id);
     }
     const extraResources = resourceDefinitions(c).filter((r) => !r.cardOnly && !hidden.has(r.id));
-    const portrait = el('div', { class: 'portrait', title: 'Character image' });
+    const portrait = el('div', { class: 'portrait', title: canEdit() ? 'Edit character image' : 'Character image' });
     if (opts.artwork) portrait.append(el('img', { src: opts.artwork, alt: '' }));
     else portrait.textContent = c.name.slice(0, 1).toUpperCase();
+    const portraitError = el('span', { class: 'error portrait-error', role: 'alert' });
+    if (canEdit() && opts.actorId) {
+      portrait.classList.add('editable-portrait');
+      portrait.tabIndex = 0;
+      portrait.setAttribute('role', 'button');
+      portrait.setAttribute('aria-label', 'Edit character image');
+      portrait.append(el('span', { class: 'portrait-edit-indicator' }, 'Edit image'));
+      const file = el('input', { type: 'file', accept: 'image/*', hidden: true });
+      portrait.append(file);
+      portrait.addEventListener('click', event => { if (event.target !== file && canEdit()) file.click(); });
+      portrait.addEventListener('keydown', event => {
+        if ((event.key === 'Enter' || event.key === ' ') && canEdit()) { event.preventDefault(); file.click(); }
+      });
+      file.addEventListener('change', async () => {
+        const image = file.files?.[0];
+        if (!image || !canEdit()) return;
+        portraitError.textContent = 'Uploading...';
+        try {
+          opts.artwork = await uploadArtwork(opts.actorId!, image);
+          render(false);
+        } catch (error) { portraitError.textContent = `Could not update character image: ${(error as Error).message}`; }
+        file.value = '';
+      });
+    }
     const sub = (label: string, ...bold: string[]) => el('div', { class: 'sub' }, label, ...bold.map((b) => el('b', {}, b)));
     const death = el('button', { class: 'small', type: 'button', title: 'Choose a death move when all HP are marked' }, 'Death move...');
     death.disabled = !canMakeDeathMove(c);
@@ -794,10 +877,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         'div', { class: 'ident-profile' },
         el(
           'div', { class: 'profile-top' },
-          portrait,
+          el('div', { class: 'portrait-wrap' }, portrait, portraitError),
           el(
             'div', { class: 'ident-main' },
-            el('p', { class: 'name' }, c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`),
+            el('p', { class: 'name' }, canEdit() ? textEdit('Character name', c.name, value => {
+              c.name = value;
+              if ('Name' in c.description) c.description.Name = value;
+            }) : c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`),
               ...(opts.readOnly?.() ? [el('span', { class: 'tag', style: 'margin-left:8px', role: 'status' }, 'Disabled - read-only')] : [])),
             ...(c.testingCharacter ? [tag('TESTING CHARACTER - unrestricted', 'hope')] : []),
             sub('Class: ', c.className, ` - Subclass: ${c.subclass}`),
@@ -820,7 +906,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           levelUpButton(),
         ),
         vital('Hope', el('div', {}, hopePips(), scars)),
-        vital('Proficiency', pips(c.proficiency, 'prof', 'var(--accent)', true, refreshActions)),
+        vital('Proficiency', proficiencyPips()),
         ...extraResources.map((r) => vital(r.label, poolControls(r))),
         ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? []).filter(r => !r.cardOnly)
           .map(r => vital(r.label, counterResource(r))),
@@ -911,6 +997,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return track;
   }
 
+  function proficiencyPips(): HTMLElement {
+    const draft = { ...c.proficiency };
+    return pips(draft, 'prof', 'var(--accent)', true, () => {
+      if (!canEdit()) return;
+      setManualStat(c, 'proficiency', draft.on);
+      render();
+    }, 0, 0, 0, undefined, canEdit());
+  }
+
   function tabs(): HTMLElement {
     const nav = el('nav', { class: 'tabs' });
     nav.setAttribute('role', 'tablist');
@@ -942,8 +1037,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const th2 = el('div', { class: 'th' }, el('span', { class: 'nm' }, name));
       if (t.spellcast) th2.append(el('span', { class: 'spell', title: 'Subclass Spellcast trait' }, '\u2726'));
       const total = traitTotal(c, name);
-      const md = el('span', { class: 'md', title: total !== t.mod ? `Base ${signed(t.mod)}, modified by equipment and effects` : '' }, signed(total));
-      if (total !== t.mod) md.style.color = total > t.mod ? 'var(--hope, #4a9)' : 'var(--hp, #c55)';
+      const md = canEdit() ? numberEdit(`${name} base modifier`, t.mod, value => { setManualStat(c, `trait.${name}`, value); }, 99)
+        : el('span', { class: 'md', title: total !== t.mod ? `Base ${signed(t.mod)}, modified by equipment and effects` : '' }, signed(total));
+      md.classList.add('md');
+      if (!canEdit() && total !== t.mod) md.style.color = total > t.mod ? 'var(--hope, #4a9)' : 'var(--hp, #c55)';
       const tile = el('div', { class: 'trait' }, mark, th2, md, el('span', { class: 'vb' }, TRAIT_ACTIONS[name]));
       tile.addEventListener('click', () => rollDuality(name, name, [`trait:${name}`]));
       traits.append(tile);
@@ -970,7 +1067,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function experiences(): HTMLElement {
-    return card('Experiences', null, el('div', { class: 'list' }, ...c.experiences.map((x) => el('div', { class: 'row exp' }, el('span', { class: 'grow' }, x.name), el('span', { class: 'mod' }, signed(x.mod))))));
+    const add = iconButton('add', 'Add Experience', () => {
+      if (!canEdit()) return;
+      c.experiences.push({ name: 'New Experience', mod: 2 });
+      render();
+    });
+    return card('Experiences', canEdit() ? add : null, el('div', { class: 'list' }, ...c.experiences.map((x, i) => {
+      if (!canEdit()) return el('div', { class: 'row exp' }, el('span', { class: 'grow' }, x.name), el('span', { class: 'mod' }, signed(x.mod)));
+      const remove = iconButton('delete', `Delete Experience ${i + 1}`, () => {
+        if (!canEdit()) return;
+        c.experiences.splice(c.experiences.indexOf(x), 1);
+        render();
+      });
+      return el('div', { class: 'row exp' }, textEdit(`Experience ${i + 1} name`, x.name, value => { x.name = value; }),
+        numberEdit(`Experience ${i + 1} bonus`, x.mod, value => { x.mod = value; }), remove);
+    })));
   }
 
   function vitals(): HTMLElement {
@@ -1020,12 +1131,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       'section', { class: 'vitals' },
       el(
         'div', { class: 'v-left' },
-        withSources(vital('Evasion', el('div', { class: 'big' }, String(th.evasion)), 'v-e'), srcs.evasion, th.evasion),
-        withSources(vital('Armor', pips(c.armorTrack, 'armor', 'var(--armor)', false, refreshActions), 'v-a'), srcs.armor, th.armorSlots, 'Armor slots'),
+        withSources(vital('Evasion', canEdit() ? numberEdit('Evasion base value', c.evasion, value => { setManualStat(c, 'evasion', value); })
+          : el('div', { class: 'big' }, String(th.evasion)), 'v-e'), srcs.evasion, th.evasion),
+        withSources(vital('Armor', pips(c.armorTrack, 'armor', 'var(--armor)', false, refreshActions, 0, 0, 0, slotEditor('armor')), 'v-a'), srcs.armor, th.armorSlots, 'Armor slots'),
         withSources(thresholds,
           [...srcs.major.map((r) => ({ ...r, label: `${r.label} (major)` })), ...srcs.severe.map((r) => ({ ...r, label: `${r.label} (severe)` }))], `${th.major} / ${th.severe}`, 'Total (major / severe)'),
-        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp, hpHealingFloor(c) - (c.permanentHp ?? 0)), 'v-hp'),
-        vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, render), 'v-st'),
+        vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp, hpHealingFloor(c) - (c.permanentHp ?? 0), slotEditor('hp')), 'v-hp'),
+        vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, render, 0, 0, 0, slotEditor('stress')), 'v-st'),
       ),
     );
   }
@@ -1125,18 +1237,25 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const untilText = (e: ActiveEffect) => ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
     const rows = c.effects.filter(e => !e.dicePool).map((e) => {
       const dismiss = el('button', { class: 'small', type: 'button' }, 'Remove');
-      dismiss.disabled = !!e.lockedHp || !!e.earthAuraGrant;
+      const manual = isManualOverride(e);
+      dismiss.disabled = !!e.lockedHp || !!e.earthAuraGrant || manual && !canEdit();
+      if (manual && !canEdit()) dismiss.title = 'Enable edit mode to remove the manual adjustments.';
       if (e.earthAuraGrant) dismiss.title = 'Ends automatically with the granting druid\'s Earth aura; select the roll option only when in range.';
       if (e.lockedHp) dismiss.title = 'This HP lock ends only when you rest.';
-      dismiss.addEventListener('click', () => { c.effects.splice(c.effects.indexOf(e), 1); render(); });
-      const mods = (e.modifiers ?? []).map((m) => {
+      dismiss.addEventListener('click', () => {
+        if (manual && !canEdit()) return;
+        if (manual) removeManualOverride(c, e);
+        else c.effects.splice(c.effects.indexOf(e), 1);
+        render();
+      });
+      const mods = (e.modifiers ?? []).filter(m => !manual || m.stat !== 'armorScore').map((m) => {
         const v = m.traitValue ? `${m.traitValue} (${signed(traitTotal(c, m.traitValue))})`
           : m.dice ? `+${m.dice}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
         return m.stat ? `${m.stat.replace('trait.', '')} ${v}` : `next ${(m.roll ?? '').replace('trait:', '')} roll ${v}`;
       });
       return el(
         'div', { class: `feat${e.kind === 'buff' ? ' hope' : ''}`, style: e.kind === 'debuff' ? 'border-left:3px solid var(--hp, #c55)' : '' },
-        el('div', { class: 'src' }, `${e.kind === 'buff' ? 'Buff' : 'Debuff'} - ${untilText(e)}${e.source ? ` - from ${e.source}` : ''}`),
+        el('div', { class: 'src' }, `${e.kind === 'buff' ? 'Buff' : 'Debuff'} - ${untilText(e)}${e.source ? ` - from ${manual ? 'sheet edit mode' : e.source}` : ''}`),
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
         rich(mutagenEffectSource(c, e)?.text ?? e.text),
         ...(e.counter ? [el('div', { class: 'badges' }, tag(`Die: ${e.counter.value} / d${effectCounterMax(c, e)}`))] : []),
@@ -1220,6 +1339,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     };
     const tf = el('button', { class: 'small', type: 'button', title: 'A character can have one transformation; it counts as heritage' }, c.transformation ? `Transformation: ${c.transformation} (change)` : 'Add a transformation');
     tf.addEventListener('click', () => {
+      if (!canEdit()) return;
       if (c.testingCharacter) void openTestingEditor(root, c, () => render());
       else void openTransformation(root, c, () => render());
     });
@@ -1271,7 +1391,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       layoutCards();
     });
     return el('div', { class: 'card' },
-      el('h3', { class: 'card-zone-header' }, 'Features', el('span', { class: 'right' }, search, tf, viewSwitch)), grid, none);
+      el('h3', { class: 'card-zone-header' }, 'Features', el('span', { class: 'right' }, search, ...(canEdit() ? [tf] : []), viewSwitch)), grid, none);
   }
 
   function beastformPage(): HTMLElement {
@@ -1683,6 +1803,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       button.classList.add('share-icon');
       chat.append(button);
     }
+    if (canEdit()) chat.append(deleteCardButton(d));
     const summary = draggableCard(el('summary', { class: 'domain-list-summary', title: `Expand or collapse ${d.name}` },
       el('span', { class: 'list-level', title: 'Level' }, String(d.level)),
       el('span', { class: 'list-name' }, d.name),
@@ -1702,6 +1823,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function cardMatches(d: DomainCard, q: string): boolean {
     return textMatches(`${d.name} ${d.domain} ${d.type} ${d.text}`, q);
+  }
+
+  function deleteCardButton(d: DomainCard): HTMLButtonElement {
+    const button = iconButton('delete', `Remove ${d.name} from this character`, () => {
+      if (!canEdit()) return;
+      const list = c.loadout.includes(d) ? c.loadout : c.vault;
+      const index = list.indexOf(d);
+      if (index < 0) return;
+      list.splice(index, 1);
+      expandedCards.delete(d);
+      render();
+    });
+    button.classList.add('share-icon', 'delete-domain-card');
+    return button;
   }
 
   function textMatches(text: string, q: string): boolean {
@@ -1755,13 +1890,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function bgPage(): HTMLElement {
     const area = (value: string, set: (v: string) => void, placeholder = '') => {
-      const t = el('textarea', { value, placeholder });
-      t.addEventListener('input', () => set(t.value));
+      const t = el('textarea', { value, placeholder, readOnly: !canEdit() });
+      t.addEventListener('input', () => { if (canEdit()) set(t.value); });
       return t;
     };
     const fields = el('div', { class: 'fields' }, ...Object.keys(c.description).map((k) => {
-      const i = el('input', { value: c.description[k] });
-      i.addEventListener('input', () => { c.description[k] = i.value; });
+      const i = textEdit(k, c.description[k], value => { c.description[k] = value; if (k === 'Name') c.name = value; });
       return el('label', { class: 'field' }, k, i);
     }));
     const qa = (list: string[], prefix: string) => el('div', { class: 'qa' }, ...list.map((v, i) => el('label', { class: 'q' }, `${prefix} ${i + 1}`, area(v, (x) => { list[i] = x; }))));
@@ -1773,7 +1907,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         card('Character description', null, fields, el('label', { class: 'field', style: 'margin-top:8px' }, 'Other details', area(c.otherDetails, (v) => { c.otherDetails = v; }))),
         card('Notes', null, area(c.notes, (v) => { c.notes = v; }, 'Free notes')),
       ),
-      el('div', {}, card('Background questions', el('span', { class: 'muted' }, 'From the class guide - editable'), qa(c.backgroundQuestions, 'Question')), card('Connections', el('span', { class: 'muted' }, 'Relationships with other PCs'), qa(c.connections, 'Connection question'))),
+      el('div', {}, card('Background questions', el('span', { class: 'muted' }, 'From the class guide'), qa(c.backgroundQuestions, 'Question')), card('Connections', el('span', { class: 'muted' }, 'Relationships with other PCs'), qa(c.connections, 'Connection question'))),
     );
   }
 

@@ -4,6 +4,7 @@ import { el } from './login';
 import { rich } from './daggerheart/rich';
 import type { CharacterSheet } from './daggerheart/data';
 import type { ActiveEffect } from './daggerheart/engine';
+import { isManualOverride } from './daggerheart/engine';
 
 export interface EffectGroup {
   actorId: string;
@@ -71,7 +72,7 @@ export function renderEffects(
 ): void {
   const blocks: HTMLElement[] = [];
   for (const g of groups) {
-    const effects = (g.character.effects ?? []).filter(e => !e.dicePool);
+    const effects = (g.character.effects ?? []).filter(e => !e.dicePool && !isManualOverride(e));
     if (!effects.length) continue;
     const rows = effects.map((e) => {
       const key = `${g.actorId}:${e.id}`;

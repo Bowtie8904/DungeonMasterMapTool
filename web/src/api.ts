@@ -80,14 +80,17 @@ export async function domainCardPreference(view?: DomainCardView): Promise<Domai
   return data;
 }
 
-export async function uploadArtwork(actorId: string, file: File): Promise<void> {
-  const res = await fetch(`/api/actors/${encodeURIComponent(actorId)}/artwork`, {
+export async function uploadArtwork(actorId: string, file: File): Promise<string> {
+  const res = await hostFetch(`/api/actors/${encodeURIComponent(actorId)}/artwork`, {
     method: 'PUT',
     credentials: 'same-origin',
     headers: { 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
   });
   if (!res.ok) throw await readError(res);
+  const data = await res.json() as { artwork?: string };
+  if (typeof data.artwork !== 'string' || !data.artwork) throw new Error('The host returned an invalid artwork URL.');
+  return data.artwork;
 }
 
 export interface SheetData {
