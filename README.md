@@ -407,6 +407,12 @@ Nothing starts until you click **Start online session**, so offline play and the
   Cannonball posts a claimable ally action: the thrower chooses Agility or Strength and rolls with their own
   stats and Proficiency. Clarity reports total available Stress recovery, Regeneration selects a healing target,
   and Warden's Protection reports its rolled ally count.
+  The Character tab has one searchable **Features** block, ordered Hope, class, subclass, ancestry,
+  community and transformation features. Card view uses the same two-column, height-balanced flow as
+  domain cards (one column on narrow sheets). Its compact Card/List switch is independent of the
+  domain-card preference and stays selected while the sheet is open. List rows show name, source and
+  chat link; expand a row to see the full feature, grouped subfeatures and actions. Search includes
+  sources and full text, including grouped subfeatures; read-only sheets can search and expand rows.
   Elemental Incarnation, Aura and Dominion each display their elements together on one feature card, with
   their individual buttons; their underlying per-element features remain separate. Channeling replaces the
   previous element and automatically enables the matching Dominion benefit. Aura is once per rest and ends

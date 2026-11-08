@@ -90,6 +90,13 @@ npm run build     # tsc --noEmit && vite build -> ../src/main/resources/web
 npm run dev       # dev server; proxies /api, /a, /t and /ws to http://localhost:7080
 ```
 
+The Character tab combines all features into one searchable block ordered Hope, class, subclass,
+ancestry, community and transformation. Card view shares domain cards' natural-height, shorter-column
+flow and narrow-sheet fallback. An independent compact Card/List switch lasts for the open sheet;
+list rows show name, source and chat link and expand to the complete feature with actions and grouped
+subfeatures. Search covers names, sources and full text (including grouped children), survives refreshes
+and remains available on read-only sheets, as does row expansion. No settings or remote contracts change.
+
 The Java host serves the build output from the classpath `/web` (`/` and `/sheet/<actorId>` return `index.html`).
 `src/vectors.test.ts` checks `../src/test/resources/online/vectors.json` (shared with the Java tests) when it exists.
 

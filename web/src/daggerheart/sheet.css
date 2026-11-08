@@ -181,6 +181,7 @@
 
 .dh .cards { position: relative; }
 .dh .cards > .dcard { position: absolute; width: 100%; }
+.dh .feature-cards > .feat { position: absolute; width: 100%; margin: 0; }
 .dh .dcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .dh .dcard .hd { display: flex; align-items: center; gap: 8px; }
 .dh .dcard .lv { width: 24px; height: 24px; border-radius: 6px; background: #2b3440; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
@@ -228,6 +229,8 @@
 .dh .list-chat { display: flex; justify-content: center; }
 .dh .domain-list-summary .share-icon { margin: 0; }
 .dh .domain-list-row > .dcard { margin: 0 6px 6px; }
+.dh .feature-list-row > .feat { margin: 0 6px 6px; }
+.dh .domain-list-summary.feature-list-summary { grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr) 28px; }
 .dh .card-view-error[hidden] { display: none; }
 @container sheet (max-width: 480px) {
   .dh .domain-list-summary { grid-template-columns: 20px minmax(0, 1fr) 58px 30px 24px 24px; gap: 4px; padding: 5px; }

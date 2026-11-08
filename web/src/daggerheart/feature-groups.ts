@@ -21,7 +21,21 @@ export function groupFeatures<T extends GroupableFeature>(features: T[]): Array<
       claimed.add(matches[0]);
       children.push(matches[0]);
     }
+
     childrenByParent.set(parent, children);
   }
   return features.filter(f => !claimed.has(f)).map(feature => ({ feature, children: childrenByParent.get(feature) ?? [] }));
+}
+
+export function characterFeatureGroups<T extends GroupableFeature & { hope?: boolean }>(features: T[], heritage: T[]): Array<{ feature: T; children: T[] }> {
+  const rank = (f: T) => {
+    if (f.hope || f.source?.startsWith('Hope feature')) return 0;
+    if (f.source?.startsWith('Subclass')) return 2;
+    if (f.source?.startsWith('Ancestry')) return 3;
+    if (f.source?.startsWith('Community')) return 4;
+    if (f.source?.startsWith('Transformation')) return 5;
+    return 1;
+  };
+  return [...groupFeatures(features), ...groupFeatures(heritage)]
+    .sort((a, b) => rank(a.feature) - rank(b.feature));
 }

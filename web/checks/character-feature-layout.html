@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Character feature layout check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
+
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const settled = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const character = emptyCharacter('Features');
+  character.mancer.done = true;
+  character.features = [
+    { source: 'Subclass foundation - Test', name: 'Foundation', text: 'Foundation rules' },
+    { source: 'Class feature - Test', name: 'Class', text: 'Class rules' },
+    { source: 'Hope feature - Test', name: 'Hope', text: 'Long rules. '.repeat(240), hope: true },
+    { source: 'Subclass mastery - Test', name: 'Elements', text: 'Element rules',
+      automation: { groupGrantedFeatures: true, grantsFeatures: ['Fire'] } },
+    { source: 'Subclass mastery - Test', name: 'Fire', text: 'Needle child rules' },
+  ];
+  character.heritage = [
+    { source: 'Transformation - Test', name: 'Transformation', text: 'Transformation rules' },
+    { source: 'Community - Test', name: 'Community', text: 'Community rules' },
+    { source: 'Ancestry - Test', name: 'Ancestry', text: 'Ancestry rules' },
+  ];
+  const saved = JSON.stringify([character.features, character.heritage]);
+  const host = document.querySelector('#host');
+  host.style.cssText = 'width:1200px;height:1000px;display:flex';
+  let readOnly = false;
+  let saves = 0;
+  const shares = [];
+  const bus = new SheetBus();
+  const sheet = renderSheetView({ character, bus, readOnly: () => readOnly,
+    onRoll: () => true, onChange: () => saves++, onShare: entry => shares.push(entry) });
+  host.append(sheet);
+  await settled();
+  const grid = () => sheet.querySelector('.feature-cards');
+  const search = () => sheet.querySelector('.feature-search');
+  const switchTo = view => sheet.querySelector(`[aria-label="Feature view"] button[title="${view} view"]`).click();
+  const check = () => {
+    const rects = [...grid().children].filter(n => !n.hidden).map(n => n.getBoundingClientRect());
+    const lefts = [...new Set(rects.map(r => r.left))].sort((a, b) => a - b);
+    const next = lefts.map(() => rects[0].top);
+    for (const r of rects) {
+      const column = next.length === 2 && next[1] < next[0] ? 1 : 0;
+      assert(r.left === lefts[column] && Math.abs(r.top - next[column]) < 1, 'Not filling the shortest column');
+      next[column] = r.bottom + 10;
+    }
+    assert(Math.abs(grid().getBoundingClientRect().bottom - Math.max(...rects.map(r => r.bottom))) < 1, 'Grid does not enclose cards');
+    return rects;
+  };
+  assert([...grid().children].map(n => n.querySelector('.feature-name').textContent).join() === 'Hope,Class,Foundation,Elements,Ancestry,Community,Transformation', 'Wrong feature order');
+  const rects = check();
+  assert(new Set(rects.map(r => r.left)).size === 2, 'Not two columns');
+  assert(rects[0].height > rects[1].height * 3 && rects[2].left === rects[1].left && rects[3].left === rects[1].left, 'Card heights ignored');
+  search().value = 'Needle';
+  search().dispatchEvent(new Event('input', { bubbles: true }));
+  assert(check().length === 1, 'Grouped child text is not searchable');
+  switchTo('List');
+  assert(search().value === 'Needle', 'Search lost when switching');
+  const row = [...grid().children].find(n => !n.hidden);
+  assert(row.querySelector('.list-name').textContent === 'Elements', 'Wrong list name');
+  assert(row.querySelector('.list-domain').textContent === 'Subclass mastery - Test', 'Source missing');
+  row.querySelector('.list-chat button').click();
+  assert(shares.length === 1 && shares[0].item.name === 'Elements' && !row.open, 'Chat link toggled row or shared wrong feature');
+  row.querySelector('summary').click();
+  await settled();
+  assert(row.open && row.querySelector('.feature-section').textContent.includes('Needle child rules'), 'Row does not expand to full grouped feature');
+  bus.notify();
+  await settled();
+  assert([...grid().children].find(n => !n.hidden).open && search().value === 'Needle', 'Refresh lost view/search/expansion');
+  readOnly = true;
+  bus.notify();
+  await settled();
+  const before = saves;
+  assert(!search().readOnly && !search().disabled, 'Read-only search is blocked');
+  search().value = '';
+  search().dispatchEvent(new Event('input', { bubbles: true }));
+  grid().querySelector('summary').click();
+  switchTo('Card');
+  await settled();
+  assert(saves === before, 'Read-only navigation saved the sheet');
+  assert(grid().querySelector('button').disabled, 'Read-only feature action enabled');
+  host.style.width = '700px';
+  await settled();
+  assert(new Set(check().map(r => r.left)).size === 1, 'Narrow sheet not one column');
+  host.style.width = '1200px';
+  await settled();
+  check();
+  grid().children[1].querySelector('.rich').textContent = 'Changed rules. '.repeat(100);
+  await settled();
+  check();
+  assert(JSON.stringify([character.features, character.heritage]) === saved, 'Saved feature data changed');
+  result.textContent = 'PASS';
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack || error}`;
+}
+</script></body></html>

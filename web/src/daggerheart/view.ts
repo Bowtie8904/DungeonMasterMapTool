@@ -19,7 +19,7 @@ import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
 import type { RollContribution, RollSource } from '../protocol';
 import { rollSourceFor } from './roll-source';
-import { groupFeatures } from './feature-groups';
+import { characterFeatureGroups } from './feature-groups';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
@@ -165,7 +165,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   root.addEventListener('click', event => {
     if (!opts.readOnly?.()) return;
     const target = event.target as Element;
-    if (target.closest('.tabs [role="tab"], .loot-description button, .card-view-switch button')
+    if (target.closest('.tabs [role="tab"], .loot-description button, .card-view-switch button, .feature-search')
       || target.closest('.domain-list-summary') && !target.closest('button')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -375,7 +375,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   };
   for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, event => {
     const target = event.target as Element;
-    if (target.closest('.card-view-switch')
+    if (target.closest('.card-view-switch, .feature-search')
       || ev === 'click' && target.closest('.domain-list-summary') && !target.closest('button')) return;
     if (!opts.readOnly?.()) opts.onChange?.();
   });
@@ -713,7 +713,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('aside', { class: 'sheet-sidebar', ariaLabel: 'Traits' }, traits()),
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
-    root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard').forEach(node => cardLayoutObserver.observe(node));
+    root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
     layoutCards();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
@@ -728,7 +728,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function applyReadOnlyControls(): void {
     root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
-      if (control.matches('.tabs [role="tab"], .loot-description button, .card-view-switch button')) return;
+      if (control.matches('.tabs [role="tab"], .loot-description button, .card-view-switch button, .feature-search')) return;
       if (control instanceof HTMLInputElement && ['text', 'number', 'search'].includes(control.type) || control instanceof HTMLTextAreaElement)
         control.readOnly = true;
       else control.disabled = true;
@@ -1175,7 +1175,17 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return el('div', { class: 'card' }, h, ...body);
   }
 
+  let featureView: DomainCardView = 'card';
+  let featureQuery = '';
+  const expandedFeatures = new Set<Feature>();
+  let featurePage: HTMLElement | undefined;
+
   function charPage(): HTMLElement {
+    featurePage = el('div', {}, featurePanel());
+    return featurePage;
+  }
+
+  function featurePanel(): HTMLElement {
     const feat = (f: Feature, children: Feature[] = []) => {
       const node = featureCard(f, f.hope && !f.automation?.actions ? () => {
         if (c.hope.on < (f.cost ?? 0)) return;
@@ -1213,11 +1223,55 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (c.testingCharacter) void openTestingEditor(root, c, () => render());
       else void openTransformation(root, c, () => render());
     });
-    return el(
-      'div', { class: 'cols char-cols' },
-      el('div', {}, card('Class & subclass features', null, ...groupFeatures(c.features).map(({ feature, children }) => feat(feature, children)))),
-      el('div', {}, card('Heritage features', tf, ...groupFeatures(c.heritage).map(({ feature, children }) => feat(feature, children)))),
-    );
+    const nodes = characterFeatureGroups(c.features, c.heritage).map(({ feature, children }) => {
+      const full = feat(feature, children);
+      if (featureView === 'card') return { feature, children, node: full };
+      const details = el('details', { class: 'domain-list-row feature-list-row', open: expandedFeatures.has(feature) });
+      const chat = el('span', { class: 'list-chat' });
+      if (opts.onShare) {
+        const button = iconButton('chat', `Post ${feature.name} to chat`, () => opts.onShare!({ category: 'feature', item: feature }));
+        button.classList.add('share-icon');
+        chat.append(button);
+      }
+      const summary = el('summary', { class: 'domain-list-summary feature-list-summary', title: `Expand or collapse ${feature.name}` },
+        el('span', { class: 'list-name' }, feature.name),
+        el('span', { class: 'list-domain' }, feature.source), chat);
+      summary.addEventListener('click', event => {
+        if ((event.target as Element).closest('button')) event.preventDefault();
+      });
+      details.addEventListener('toggle', () => {
+        if (details.open) expandedFeatures.add(feature);
+        else expandedFeatures.delete(feature);
+      });
+      details.append(summary, full);
+      return { feature, children, node: details };
+    });
+    const search = el('input', { class: 'feature-search', type: 'search', placeholder: 'Search name, source, text', value: featureQuery, ariaLabel: 'Search features' });
+    search.style.width = '190px';
+    const grid = el('div', { class: `cards feature-cards${featureView === 'list' ? ' cards-list' : ''}` }, ...nodes.map(n => n.node));
+    const none = el('p', { class: 'muted' }, 'No features match the search.');
+    const apply = () => {
+      featureQuery = search.value;
+      let shown = 0;
+      for (const { feature, children, node } of nodes) {
+        node.hidden = !textMatches([feature, ...children].map(f => `${f.name} ${f.source} ${f.text}`).join(' '), featureQuery);
+        if (!node.hidden) shown++;
+      }
+      none.hidden = shown > 0 || !featureQuery.trim();
+      layoutCards();
+    };
+    search.addEventListener('input', apply);
+    apply();
+    const viewSwitch = cardViewSwitch(featureView, false, 'Feature view', view => {
+      featureView = view;
+      cardLayoutObserver.disconnect();
+      featurePage?.replaceChildren(featurePanel());
+      if (opts.readOnly?.()) applyReadOnlyControls();
+      root.querySelectorAll<HTMLElement>('.cards, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
+      layoutCards();
+    });
+    return el('div', { class: 'card' },
+      el('h3', { class: 'card-zone-header' }, 'Features', el('span', { class: 'right' }, search, tf, viewSwitch)), grid, none);
   }
 
   function beastformPage(): HTMLElement {
@@ -1598,18 +1652,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     layoutCards();
   }
 
-  function cardViewSwitch(): HTMLElement {
+  function cardViewSwitch(current = cardState.view, pending = cardState.pending, label = 'Domain card view', onSelect?: (view: DomainCardView) => void): HTMLElement {
     const buttons = (['card', 'list'] as DomainCardView[]).map(view => {
       const button = iconButton(view === 'card' ? 'cards' : 'list', view === 'card' ? 'Card view' : 'List view', () => {
-        if (view === cardState.view || cardState.pending) return;
-        if (opts.cardPreferences) void opts.cardPreferences.save(view);
+        if (view === current || pending) return;
+        if (onSelect) onSelect(view);
+        else if (opts.cardPreferences) void opts.cardPreferences.save(view);
         else { cardState = { ...cardState, view }; updateCardPage(); }
       });
-      button.setAttribute('aria-pressed', String(cardState.view === view));
-      button.disabled = cardState.pending;
+      button.setAttribute('aria-pressed', String(current === view));
+      button.disabled = pending;
       return button;
     });
-    return el('span', { class: 'card-view-switch', role: 'group', ariaLabel: 'Domain card view' }, ...buttons);
+    return el('span', { class: 'card-view-switch', role: 'group', ariaLabel: label }, ...buttons);
   }
 
   function cardListRow(d: DomainCard, loadout: boolean): HTMLElement {
