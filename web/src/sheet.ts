@@ -77,7 +77,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     changed = autosave(actorId, sheet, report, 700, readOnly);
     if (dmSheetAuthorization()) window.dmmtFlushSheet = () => changed!.flush();
     document.addEventListener('dmmt-inventory-refreshed', (event) => {
-      if ((event as CustomEvent<string>).detail === actorId) bus.notify();
+      if ((event as CustomEvent<string>).detail === actorId) {
+        document.title = `${sheet.name} - Daggerheart`;
+        bus.notify();
+      }
     });
     document.addEventListener('dmmt-feature-refreshed', (event) => {
       if ((event as CustomEvent<string>).detail === actorId) bus.notify();
@@ -88,7 +91,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       readOnly,
       supportsPartyFeatures: () => conn.partyFeatures,
       artwork: actor?.artwork ?? artwork,
-      onChange: () => changed?.(),
+      onChange: () => {
+        document.title = `${sheet.name} - Daggerheart`;
+        changed?.();
+      },
       onFeature: async (key, actionId, amount) => {
         await changed!.flush();
         let targetActorId: string | undefined;

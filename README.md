@@ -209,6 +209,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   rules as players, acting on behalf of the character's owner. Saved changes synchronize live in both directions,
   including resources, equipment and notes. Concurrent stale saves are rejected with an explicit message instead
   of overwriting newer changes. Actor placement remains available through drag/drop and **Place at view centre**.
+  The actor and character sheet share one name: renaming either updates both actor lists and future chat identities;
+  past messages keep their original names.
   Normal closing saves pending edits first. Sheets close when hosting ends or changes; DM access never requires
   logging in as a player.
 - **Daggerheart character sheet**: players get a sheet button in the sidebar rail and an "Open sheet"

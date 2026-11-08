@@ -300,6 +300,10 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
           if (JSON.stringify(normalized) !== JSON.stringify(c))
             replace(data.sheet, data.version);
           else acceptSheetVersion(actorId, data.version);
+        } else if (data.version && !data.sheet && data.name) {
+          if (c.name !== data.name || c.description.Name !== data.name)
+            replace({ ...c, name: data.name, description: { ...c.description, Name: data.name } }, data.version);
+          else acceptSheetVersion(actorId, data.version);
         } else {
           if (data.sheet && applyInventory(c, data.sheet))
             document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));

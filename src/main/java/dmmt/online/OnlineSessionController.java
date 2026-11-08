@@ -171,6 +171,20 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    public void renameActor(Campaign edited, Campaign.Actor actor, String name) throws IOException {
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Enter a name.");
+        if (running()) {
+            if (edited != campaign) throw new IllegalArgumentException("The hosted campaign changed; reopen the actor menu.");
+            server.renameActor(actor.getId(), name);
+            publishNow();
+        } else {
+            String stored = store.loadSheet(edited.getId(), actor.getId());
+            ObjectNode sheet = stored == null ? null : (ObjectNode) MAPPER.readTree(stored);
+            if (sheet != null) OnlineSessionServer.setSheetName(sheet, name);
+            store.renameActor(edited, actor, name, sheet);
+        }
+    }
+
     /** Saves a regular map token's movement grant without changing its reusable definition. */
     public void setTokenControl(Campaign edited, String mapId, String tokenId, String playerId,
                                 boolean enabled) throws IOException {

@@ -1360,9 +1360,10 @@ public final class OnlineSessionServer {
             } else {
                 ObjectNode sheet = (ObjectNode) MAPPER.readTree(stored);
                 refreshCatalogSheet(sheet);
+                setSheetName(sheet, actor.getName());
                 body.set("sheet", sheet);
             }
-            body.put("version", sheetVersion(stored));
+            body.put("version", sheetVersion(stored, actor));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read the character sheet."));
             return;
@@ -1397,10 +1398,11 @@ public final class OnlineSessionServer {
             refreshCatalogSheet((ObjectNode) sheet);
             ObjectNode previous = storedSheet(actor.getId());
             String expected = ctx.header("If-Match");
-            if (expected != null && !expected.equals(sheetVersion(store.loadSheet(c.getId(), actor.getId())))) {
+            if (expected != null && !expected.equals(sheetVersion(store.loadSheet(c.getId(), actor.getId()), actor))) {
                 ObjectNode conflict = errorBody("The character sheet changed in another window. Latest sheet loaded; please reapply your edit.");
+                setSheetName(previous, actor.getName());
                 conflict.set("sheet", previous);
-                conflict.put("version", sheetVersion(store.loadSheet(c.getId(), actor.getId())));
+                conflict.put("version", sheetVersion(store.loadSheet(c.getId(), actor.getId()), actor));
                 json(ctx, 409, conflict);
                 return;
             }
@@ -1419,6 +1421,18 @@ public final class OnlineSessionServer {
                 return;
             }
             ObjectNode saved = (ObjectNode) sheet;
+            JsonNode requestedName = saved.get("name");
+            if (requestedName != null && (!requestedName.isTextual() || requestedName.asText().isBlank())) {
+                json(ctx, 400, errorBody("Character name must not be empty."));
+                return;
+            }
+            String name = actor.getName();
+            if (requestedName != null && (expected != null || !requestedName.asText().equals(previous.path("name").asText()))
+                    && !requestedName.asText().equals(actor.getName())) {
+                name = requestedName.asText().trim();
+            }
+            setSheetName(saved, name);
+            boolean renamed = !name.equals(actor.getName());
             refreshCatalogSheet(saved);
             validateDeathSave(saved, previous);
             WitchEffects.validateSave(saved, previous);
@@ -1443,11 +1457,16 @@ public final class OnlineSessionServer {
                     || !saved.path("pendingDeathRoll").equals(previous.path("pendingDeathRoll"))) {
                 ObjectNode report = deathReports.isEmpty() ? null : deathStateMessage(playerId, campaign.player(playerId).getName(),
                         actor.getName(), deathReports);
-                persistFeatureSheets(changes, report, report != null);
+                persistFeatureSheets(changes, report, report != null, null, renamed ? actor : null, name);
                 for (var entry : changes.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
                 if (report != null) deliver(report, null, false);
             } else {
-                store.saveSheet(c.getId(), actor.getId(), saved.toString());
+                if (renamed) store.renameActor(c, actor, name, saved);
+                else store.saveSheet(c.getId(), actor.getId(), saved.toString());
+            }
+            if (renamed) {
+                publishRoster();
+                host.campaignChanged(c);
             }
             stockChanged(actor.getId());
             handleSheet(ctx);
@@ -1460,8 +1479,28 @@ public final class OnlineSessionServer {
         }
     }
 
-    private static String sheetVersion(String stored) {
-        return "\"" + CampaignStore.sha256((stored == null ? "" : stored).getBytes(StandardCharsets.UTF_8)) + "\"";
+    private static String sheetVersion(String stored, Campaign.Actor actor) {
+        return "\"" + CampaignStore.sha256((stored == null ? "actor:" + actor.getName() : stored)
+                .getBytes(StandardCharsets.UTF_8)) + "\"";
+    }
+
+    static void setSheetName(ObjectNode sheet, String name) {
+        sheet.put("name", name);
+        if (sheet.path("description") instanceof ObjectNode description) description.put("Name", name);
+    }
+
+    /** Rename from the desktop actor tree under the same lock as sheet saves. */
+    public synchronized void renameActor(String actorId, String name) throws IOException {
+        Campaign.Actor actor = campaign.actor(actorId);
+        if (actor == null) throw new IllegalArgumentException("Unknown actor.");
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Enter a name.");
+        String stored = store.loadSheet(campaign.getId(), actorId);
+        ObjectNode sheet = stored == null ? null : (ObjectNode) MAPPER.readTree(stored);
+        if (sheet != null) setSheetName(sheet, name);
+        store.renameActor(campaign, actor, name, sheet);
+        sheetChanged(actorId);
+        publishRoster();
+        host.campaignChanged(campaign);
     }
 
     public synchronized void sheetChanged(String actorId) {
@@ -3514,6 +3553,11 @@ public final class OnlineSessionServer {
 
     private void persistFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode message, boolean newMessage,
                                       ObjectNode report) throws IOException {
+        persistFeatureSheets(changedSheets, message, newMessage, report, null, null);
+    }
+
+    private void persistFeatureSheets(Map<String, ObjectNode> changedSheets, ObjectNode message, boolean newMessage,
+                                      ObjectNode report, Campaign.Actor renamedActor, String name) throws IOException {
         List<String> stockChanges = new ArrayList<>();
         for (var entry : changedSheets.entrySet())
             if (entry.getValue().path("inventoryRevision").asLong() != storedSheet(entry.getKey()).path("inventoryRevision").asLong())
@@ -3527,7 +3571,10 @@ public final class OnlineSessionServer {
         List<ObjectNode> newMessages = new ArrayList<>();
         if (newMessage && message != null) newMessages.add(message);
         if (report != null) newMessages.add(report);
-        store.saveSheetsAndResults(campaign.getId(), changedSheets, newMessage ? null : message, newMessages);
+        if (renamedActor == null)
+            store.saveSheetsAndResults(campaign.getId(), changedSheets, newMessage ? null : message, newMessages);
+        else
+            store.saveSheetsAndRename(campaign, renamedActor, name, changedSheets, newMessage ? null : message, newMessages);
         stockChanges.forEach(this::stockChanged);
     }
 

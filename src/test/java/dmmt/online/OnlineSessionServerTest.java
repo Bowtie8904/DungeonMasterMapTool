@@ -2699,6 +2699,75 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void actorAndSheetRenamesStayInSyncAndChangeFutureChat() throws Exception {
+        Campaign.Actor actor = Campaign.Actor.builder().id("hero").name("Actor").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        store.save(campaign);
+        store.saveSheet(campaign.getId(), actor.getId(),
+                "{\"name\":\"Old sheet\",\"description\":{\"Name\":\"Old sheet\"},\"notes\":\"Keep\"}");
+        String cookie = cookie();
+        String token = URI.create(server.dmSheetUrl(actor.getId())).getFragment();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            socket.sendText("{\"type\":\"chat\",\"text\":\"before\"}", true).join();
+            assertEquals("Actor", inbox.next("chat").path("from").asText());
+            JsonNode initial = MAPPER.readTree(dmSheetHttp("hero", token, null, null).body());
+            assertEquals("Actor", initial.path("sheet").path("name").asText());
+            assertEquals("Actor", initial.path("sheet").path("description").path("Name").asText());
+            ObjectNode edit = initial.path("sheet").deepCopy();
+            edit.put("name", "Player name");
+            var response = saveDeathSheet(cookie, "hero", edit);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals("Player name", store.load(campaign.getId()).actor("hero").getName());
+            assertEquals("Player name", MAPPER.readTree(store.loadSheet(campaign.getId(), "hero"))
+                    .path("description").path("Name").asText());
+            socket.sendText("{\"type\":\"chat\",\"text\":\"after\"}", true).join();
+            assertEquals("Player name", inbox.next("chat").path("from").asText());
+            JsonNode playerSaved = MAPPER.readTree(response.body());
+            server.renameActor("hero", "DM name");
+            assertEquals("DM name", actor.getName());
+            assertEquals("DM name", store.load(campaign.getId()).actor("hero").getName());
+            JsonNode renamed = MAPPER.readTree(dmSheetHttp("hero", token, null, null).body());
+            assertEquals("DM name", renamed.path("sheet").path("name").asText());
+            assertEquals("DM name", renamed.path("sheet").path("description").path("Name").asText());
+            assertEquals("Keep", renamed.path("sheet").path("notes").asText());
+            assertEquals(409, dmSheetHttp("hero", token, edit, playerSaved.path("version").asText()).statusCode());
+            socket.sendText("{\"type\":\"chat\",\"text\":\"DM renamed\"}", true).join();
+            assertEquals("DM name", inbox.next("chat").path("from").asText());
+            assertEquals("Actor", store.historyTail(campaign.getId(), 50).stream()
+                    .filter(item -> "before".equals(item.path("text").asText())).findFirst().orElseThrow().path("from").asText());
+            ObjectNode dmEdit = renamed.path("sheet").deepCopy();
+            dmEdit.put("name", "Sheet DM name");
+            dmEdit.put("longRestRevision", 1);
+            assertEquals(200, dmSheetHttp("hero", token, dmEdit, renamed.path("version").asText()).statusCode());
+            assertEquals("Sheet DM name", store.load(campaign.getId()).actor("hero").getName());
+            assertEquals("Sheet DM name", MAPPER.readTree(store.loadSheet(campaign.getId(), "hero")).path("name").asText());
+        } finally {
+            socket.abort();
+        }
+    }
+
+    @Test
+    void renamingActorWithoutSavedSheetInvalidatesStaleSheetEdits() throws Exception {
+        Campaign.Actor actor = Campaign.Actor.builder().id("new-hero").name("Before").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        store.save(campaign);
+        String token = URI.create(server.dmSheetUrl(actor.getId())).getFragment();
+        JsonNode before = MAPPER.readTree(dmSheetHttp(actor.getId(), token, null, null).body());
+        assertTrue(before.path("sheet").isNull());
+        server.renameActor(actor.getId(), "After");
+        JsonNode after = MAPPER.readTree(dmSheetHttp(actor.getId(), token, null, null).body());
+        assertTrue(after.path("sheet").isNull());
+        assertEquals("After", after.path("name").asText());
+        assertFalse(before.path("version").asText().equals(after.path("version").asText()));
+        ObjectNode stale = MAPPER.createObjectNode().put("name", "Before");
+        assertEquals(409, dmSheetHttp(actor.getId(), token, stale, before.path("version").asText()).statusCode());
+        assertNull(store.loadSheet(campaign.getId(), actor.getId()));
+    }
+
+    @Test
     void disabledActorIsReadableButRejectsPlayerEditsAndRollsWhileDmCanEdit() throws Exception {
         dmCompendiumData();
         Campaign.Actor actor = campaign.actor("target");

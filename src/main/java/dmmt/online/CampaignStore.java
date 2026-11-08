@@ -322,6 +322,17 @@ public final class CampaignStore {
         writeSheet(campaignId, actorId, MAPPER.readTree(json).toString());
     }
 
+    /** Journal an actor rename together with its sheet, if one exists. */
+    public synchronized void renameActor(Campaign campaign, Campaign.Actor actor, String name, ObjectNode sheet)
+            throws IOException {
+        recoverSheetTransfer(campaign.getId());
+        ObjectNode transaction = MAPPER.createObjectNode();
+        if (sheet != null) transaction.set(actor.getId(), sheet);
+        transaction.putObject("$actorName").put("id", actor.getId()).put("name", name);
+        writeSheetTransaction(campaign.getId(), transaction);
+        actor.setName(name);
+    }
+
     public synchronized void transferSheets(String campaignId, String sourceId, ObjectNode source,
                                             String targetId, ObjectNode target) throws IOException {
         java.util.Map<String, ObjectNode> sheets = new java.util.LinkedHashMap<>();
@@ -358,6 +369,13 @@ public final class CampaignStore {
         saveSheetsAndResults(campaignId, sheets, replacement, messages, null);
     }
 
+    public synchronized void saveSheetsAndRename(Campaign campaign, Campaign.Actor actor, String name,
+                                                 java.util.Map<String, ObjectNode> sheets,
+                                                 ObjectNode replacement, List<ObjectNode> messages) throws IOException {
+        saveSheetsAndResults(campaign.getId(), sheets, replacement, messages, null, actor, name);
+        actor.setName(name);
+    }
+
     public synchronized void saveFearReward(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                              ObjectNode roll, int fear) throws IOException {
         saveSheetsAndResults(campaignId, sheets, roll, List.of(), fear);
@@ -370,6 +388,12 @@ public final class CampaignStore {
 
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                       ObjectNode replacement, List<ObjectNode> messages, Integer fear) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, null, null);
+    }
+
+    private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                      ObjectNode replacement, List<ObjectNode> messages, Integer fear,
+                                      Campaign.Actor actor, String name) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
@@ -379,6 +403,11 @@ public final class CampaignStore {
         if (messages.size() == 1) transaction.set("$message", messages.getFirst());
         else if (!messages.isEmpty()) transaction.set("$messages", MAPPER.valueToTree(messages));
         if (fear != null) transaction.put("$fear", fear);
+        if (actor != null) transaction.putObject("$actorName").put("id", actor.getId()).put("name", name);
+        writeSheetTransaction(campaignId, transaction);
+    }
+
+    private void writeSheetTransaction(String campaignId, ObjectNode transaction) throws IOException {
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         Path temp = journal.resolveSibling("sheet-transfer.json.tmp");
         Files.writeString(temp, transaction.toString(), StandardCharsets.UTF_8);
@@ -395,7 +424,7 @@ public final class CampaignStore {
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
-            if (List.of("$roll", "$message", "$messages", "$fear").contains(entry.getKey())) continue;
+            if (List.of("$roll", "$message", "$messages", "$fear", "$actorName").contains(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
         if (transaction.get("$roll") instanceof ObjectNode roll)
@@ -406,10 +435,22 @@ public final class CampaignStore {
             if (!(entry instanceof ObjectNode message)) throw new IOException("Invalid journaled chat result.");
             writeHistoryEntryRaw(campaignId, message.path("id").asLong(), message.path("ts").asLong(), message, true);
         }
-        if (transaction.has("$fear")) {
+        if (transaction.has("$fear") || transaction.has("$actorName")) {
             Path file = dir(campaignId).resolve("campaign.json");
             ObjectNode saved = (ObjectNode) MAPPER.readTree(file.toFile());
-            saved.put("fear", transaction.path("$fear").asInt());
+            if (transaction.has("$fear")) saved.put("fear", transaction.path("$fear").asInt());
+            if (transaction.has("$actorName")) {
+                JsonNode rename = transaction.path("$actorName");
+                boolean found = false;
+                for (JsonNode actor : saved.path("actors")) {
+                    if (actor instanceof ObjectNode object && rename.path("id").asText().equals(actor.path("id").asText())) {
+                        object.put("name", rename.path("name").asText());
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) throw new IOException("Cannot rename an actor missing from the saved campaign.");
+            }
             Path temp = file.resolveSibling("campaign.json.tmp");
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), saved);
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);

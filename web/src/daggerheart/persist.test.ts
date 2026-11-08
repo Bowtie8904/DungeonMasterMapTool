@@ -89,6 +89,19 @@ describe('chat inventory synchronization', () => {
     expect(c.notes).toBe('Pending DM edit');
   });
 
+  it('refreshes an unsaved sheet when its actor is renamed', async () => {
+    vi.stubGlobal('window', globalThis);
+    vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
+    const c = mockCharacter();
+    const save = autosave('new-actor', c, vi.fn());
+    vi.mocked(getSheet).mockResolvedValue({ version: '"empty"', name: 'New actor name', sheet: null });
+    await save.refresh();
+    expect(c.name).toBe('New actor name');
+    expect(c.description.Name).toBe('New actor name');
+    expect(saveSheet).not.toHaveBeenCalled();
+  });
+
   it('rejects full-sheet conflicts explicitly and adopts the latest complete state', async () => {
     vi.stubGlobal('window', globalThis);
     vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });

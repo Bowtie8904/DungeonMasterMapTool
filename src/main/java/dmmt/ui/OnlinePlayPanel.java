@@ -856,8 +856,12 @@ public final class OnlinePlayPanel extends VBox {
     private void renameActor(Campaign.Actor actor) {
         Dialogs.askText(window(), "Rename actor", "Rename " + actor.getName(), MaterialDesignR.RENAME_BOX,
                 "Rename", actor.getName(), required("a name")).ifPresent(name -> {
-            actor.setName(name);
-            persist();
+            try {
+                controller.renameActor(current, actor, name);
+            } catch (IOException | IllegalArgumentException ex) {
+                Dialogs.error(window(), "Could not rename the actor", ex.getMessage());
+            }
+            refresh();
         });
     }
 

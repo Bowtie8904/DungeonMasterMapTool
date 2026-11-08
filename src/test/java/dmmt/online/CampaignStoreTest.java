@@ -19,6 +19,31 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void interruptedActorRenameRecoversCampaignAndSheetTogether() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Names");
+        Campaign.Actor actor = Campaign.Actor.builder().id("hero").name("Before").build();
+        campaign.getActors().add(actor);
+        campaign.getActors().add(Campaign.Actor.builder().id("new").name("New").build());
+        store.save(campaign);
+        var transaction = mapper.createObjectNode();
+        transaction.putObject("$actorName").put("id", "hero").put("name", "After");
+        transaction.putObject("hero").put("name", "After").put("notes", "Keep");
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals("After", reopened.load(campaign.getId()).actor("hero").getName());
+        assertEquals("After", mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("name").asText());
+        assertEquals("Keep", mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("notes").asText());
+        assertTrue(Files.notExists(journal));
+        Campaign recovered = reopened.load(campaign.getId());
+        reopened.renameActor(recovered, recovered.actor("new"), "Without sheet", null);
+        assertEquals("Without sheet", reopened.load(campaign.getId()).actor("new").getName());
+        assertNull(reopened.loadSheet(campaign.getId(), "new"));
+    }
+
+    @Test
     void fearRewardRecoveryJournalsCampaignFearAndClaimTogether() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

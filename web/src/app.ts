@@ -328,7 +328,9 @@ export class App {
     this.chatRecipient.setAttribute('aria-label', 'Message recipient');
     const input = el('input', { type: 'text', placeholder: 'Message, /roll or /r 2d6+3', maxLength: 500 });
     const send = el('button', { class: 'primary' }, 'Send');
-    const submit = () => {
+    let submitting = false;
+    const submit = async () => {
+      if (submitting) return;
       const text = input.value.trim();
       if (!text) return;
       if (this.chatRecipient.selectedOptions[0]?.disabled) {
@@ -341,10 +343,22 @@ export class App {
         return;
       }
       const whisper = toId === 'dm';
+      const identity = this.myActors.find(actor => !actor.disabled);
+      const handle = identity && this.sheetHandles.get(identity.id);
+      if (handle && handle.character.name !== identity.name) {
+        submitting = true;
+        try {
+          await handle.save.flush();
+        } catch {
+          return;
+        } finally {
+          submitting = false;
+        }
+      }
       const roll = /^\/(?:roll|r)\s+(.+)$/i.exec(text);
       const sent = roll ? this.conn.send({ type: 'roll', expression: roll[1], toId, whisper })
         : this.conn.send({ type: 'chat', text, toId, whisper });
-      if (sent) input.value = '';
+      if (sent && input.value.trim() === text) input.value = '';
       else this.toast('Not connected. Your message was not sent.');
     };
     send.addEventListener('click', submit);
