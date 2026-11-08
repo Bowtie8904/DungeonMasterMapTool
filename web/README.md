@@ -156,7 +156,13 @@ artwork is missing or unavailable; older messages keep their existing initial av
 
 The preview and saved token use the normal DM token border thickness: 5.5% of the diameter, fully contained inside the artwork.
 
-Character portraits and the Actors list use the same circular, mandatory-border token editor. Choose or paste
+My actors uses compact, button-free rows: circular portrait, prominent character name, smaller
+class/subclass and a separated level column. Double-click the row (or press Enter/Space while focused)
+to open/focus its sheet; row text is not selectable and single-click never moves the camera. Sheet loads and edits refresh the summary,
+including level-ups/testing-build edits. Disabled/testing indicators remain visible and disabled sheets
+remain readable. Token customization and pop-out controls remain inside the sheet.
+
+Character-sheet portraits open the circular, mandatory-border token editor. Choose or paste
 an image (Ctrl+V works without clipboard-read permission), pan by dragging, zoom, choose a border color
 (default: the authenticated account's assigned color) and size (default: 1 tile; half-tile increments).
 The host retains the source/crop and renders the finished token for sheets, actor lists and linked map tokens.

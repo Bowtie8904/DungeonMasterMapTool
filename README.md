@@ -234,8 +234,12 @@ Nothing starts until you click **Start online session**, so offline play and the
   past messages keep their original names.
   Normal closing saves pending edits first. Sheets close when hosting ends or changes; DM access never requires
   logging in as a player.
-- **Daggerheart character sheet**: players get a sheet button in the sidebar rail and an "Open sheet"
-  button per actor. **Edit mode** is off by default; its labeled On/Off switch sits beside the sheet title
+- **Player actor list:** My actors uses compact rows with a portrait, prominent character name,
+  smaller class/subclass text and a separately divided level. Double-click a row to open/focus its
+  sheet, or focus it and press Enter/Space. Row text is not selectable, and single-clicking no longer moves the camera. Disabled and
+  testing indicators remain visible; token customization and pop-out controls are inside the sheet.
+- **Daggerheart character sheet**: players open sheets from My actors.
+  **Edit mode** is off by default; its labeled On/Off switch sits beside the sheet title
   and is hidden when minimized, with extra spacing from the title and a muted gray label while off.
   Enable it to edit the character name, portrait (hover/focus for **Edit image**),
   base trait modifiers (-99 to +99, excluding buffs), Proficiency, transformation, Experiences and Background.

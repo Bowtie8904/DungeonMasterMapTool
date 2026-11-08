@@ -1,5 +1,4 @@
 import { cardRequest, logout, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
-import { editTokenArtwork } from './token-artwork';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
@@ -40,6 +39,7 @@ type DrawingEdit = { action: 'create' | 'update' | 'delete'; id: string; shape?:
 type SheetHandle = { character: CharacterSheet; bus: SheetBus; save: SheetSave };
 
 export class App {
+  private actorRowUpdates = new Map<string, () => void>();
   private store = new Store();
   private view: MapView;
   private conn: Connection;
@@ -1443,7 +1443,10 @@ export class App {
         const readOnly = () => this.store.state?.actors.find(actor => actor.id === a.id)?.disabled === true;
         const changed = autosave(a.id, character, (m) => this.toast(m), 700, readOnly);
         this.sheetHandles.set(a.id, { character, bus, save: changed });
-        bus.subscribe(() => this.scheduleEffects());
+        bus.subscribe(() => {
+          this.actorRowUpdates.get(a.id)?.();
+          this.scheduleEffects();
+        });
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
           if ((event as CustomEvent<string>).detail === a.id) {
             bus.notify();
@@ -1459,6 +1462,7 @@ export class App {
             bus,
             onChange: () => {
               changed();
+              this.actorRowUpdates.get(a.id)?.();
               void this.sendMissingConditionEffects(a.id, character);
               this.scheduleEffects();
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
@@ -1512,6 +1516,7 @@ export class App {
         );
         this.sheetWindows.set(a.id, win);
         this.stageEl.append(win.element);
+        this.actorRowUpdates.get(a.id)?.();
         return { character, bus, save: changed };
       });
       load.catch(() => this.sheetLoads.delete(a.id));
@@ -1532,6 +1537,7 @@ export class App {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
     const changedStatus = mine.filter(actor => this.myActors.some(old => old.id === actor.id && !!old.disabled !== !!actor.disabled));
     this.myActors = mine;
+    this.actorRowUpdates.clear();
     for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
     if (changedStatus.length) this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
     for (const a of mine) void this.ensureSheet(a).then(handle => {
@@ -1546,36 +1552,49 @@ export class App {
     this.actorsEl.replaceChildren(
       ...(mine.length === 0 ? [el('p', { class: 'muted' }, 'No actors assigned to you.')] : []),
       ...mine.map((a) => {
-        const img = el('img', { class: 'art', alt: '' });
-        if (a.artwork) img.src = a.artwork;
-        const err = el('div', { class: 'error small' });
-        const canEdit = () => {
-          const actor = this.myActors.find(actor => actor.id === a.id);
-          return !!actor && !actor.disabled;
+        const portrait = el('div', { class: 'art' });
+        const name = el('span', { class: 'name', title: a.name }, a.name);
+        const identity = el('div', { class: 'actor-identity' }, name,
+          ...(a.disabled ? [el('span', { class: 'actor-status' }, 'Disabled')] : []),
+          ...(a.testingCharacter ? [el('span', { class: 'actor-status' }, 'Testing')] : []));
+        const detail = el('span', { class: 'actor-class' }, 'Loading character...');
+        const level = el('strong', {}, '--');
+        const row = el('div', { class: 'actor', tabIndex: 0, role: 'button',
+          ariaLabel: `Open character sheet for ${a.name}${a.disabled ? ' (disabled)' : ''}${a.testingCharacter ? ' (testing)' : ''}`,
+          title: 'Double-click to open character sheet' },
+          portrait, el('div', { class: 'grow' }, identity, detail),
+          el('div', { class: 'actor-level' }, el('span', {}, 'LVL'), level));
+        const update = () => {
+          const handle = this.sheetHandles.get(a.id);
+          const artwork = handle?.bus.artwork ?? a.artwork;
+          portrait.replaceChildren(artwork ? el('img', { src: artwork, alt: '' }) : a.name.slice(0, 1).toUpperCase());
+          if (!handle) return;
+          detail.classList.remove('error');
+          detail.removeAttribute('role');
+          detail.textContent = [handle.character.className, handle.character.subclass].filter(Boolean).join(' / ') || 'Character not created';
+          detail.title = detail.textContent;
+          level.textContent = String(handle.character.level);
+          level.title = `Level ${handle.character.level}`;
         };
-        const up = el('button', { disabled: !!a.disabled }, 'Customize token');
-        up.addEventListener('click', async () => {
-          up.disabled = true;
-          try {
-            const artwork = await editTokenArtwork(a.id, canEdit);
-            if (artwork) img.src = artwork;
-            err.textContent = '';
-          } catch (e) {
-            err.textContent = (e as Error).message;
-          }
-          finally { up.disabled = !canEdit(); }
+        this.actorRowUpdates.set(a.id, update);
+        update();
+        void this.ensureSheet(a).then(() => {
+          if (this.actorRowUpdates.get(a.id) === update) update();
+        }).catch((error: Error) => {
+          if (this.actorRowUpdates.get(a.id) !== update) return;
+          detail.textContent = `Cannot load character: ${error.message}`;
+          detail.title = detail.textContent;
+          detail.classList.add('error');
+          detail.setAttribute('role', 'alert');
         });
-        const open = el('button', { class: 'primary' }, 'Open sheet');
-        open.addEventListener('click', () => this.openSheet(a));
-        const pop = el('button', {}, 'Pop out sheet');
-        pop.addEventListener('click', () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'));
-        const find = s.tokens.find((t) => t.actorId === a.id);
-        const name = el('span', { class: 'name' }, a.name, ...(a.disabled ? [' (DISABLED)'] : []), ...(a.testingCharacter ? [' (TESTING)'] : []));
-        if (find) {
-          name.classList.add('link');
-          name.addEventListener('click', () => this.view.focus(find));
-        }
-        return el('div', { class: 'actor' }, img, el('div', { class: 'grow' }, name, el('div', { class: 'row' }, up), el('div', { class: 'row' }, open, pop), err));
+        row.addEventListener('dblclick', () => this.openSheet(a));
+        row.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (!event.repeat) this.openSheet(a);
+          }
+        });
+        return row;
       }),
     );
   }
