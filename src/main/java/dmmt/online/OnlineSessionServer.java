@@ -740,7 +740,8 @@ public final class OnlineSessionServer {
     // ---- roster ----
 
     /** {@code pingMs} is the best round trip among the player's connections, or -1 while unknown. */
-    public record RosterEntry(String playerId, String playerName, int connections, long pingMs, String chatIdentity) {
+    public record RosterEntry(String playerId, String playerName, int connections, long pingMs, String chatIdentity,
+                              String color) {
     }
 
     public List<RosterEntry> roster() {
@@ -756,13 +757,17 @@ public final class OnlineSessionServer {
             names.put(client.playerId, client.playerName);
         }
         List<RosterEntry> result = new ArrayList<>();
-        stats.forEach((id, s) -> result.add(new RosterEntry(id, names.get(id), (int) s[0], s[1],
-                chatIdentity(id))));
+        stats.forEach((id, s) -> {
+            Campaign.Player player = campaign.player(id);
+            if (player != null) result.add(new RosterEntry(id, names.get(id), (int) s[0], s[1],
+                    chatIdentity(id), player.getColor()));
+        });
         return result;
     }
 
     private void publishRoster() {
         ObjectNode out = MAPPER.createObjectNode().put("type", "roster");
+        out.put("dmColor", campaign.getDmColor());
         out.set("players", MAPPER.valueToTree(roster()));
         broadcast(out.toString());
     }
@@ -820,7 +825,8 @@ public final class OnlineSessionServer {
                 if (before == null && measurements.size() >= 500) {
                     throw new IllegalArgumentException("Measurement limit reached; delete old measurements");
                 }
-                measurements.put(id, OnlineMeasurement.parse(msg, client.playerId));
+                measurements.put(id, OnlineMeasurement.parse(msg, client.playerId,
+                        before == null ? campaign.player(client.playerId).getColor() : before.color()));
             } else throw new IllegalArgumentException("Unknown measurement action");
             publishMeasurements();
             host.measurementsChanged();
@@ -4309,6 +4315,8 @@ public final class OnlineSessionServer {
             ObjectNode hello = MAPPER.createObjectNode();
             hello.put("type", "hello").put("protocol", OnlineProtocol.VERSION);
             hello.put("playerId", playerId).put("playerName", player.getName());
+            hello.put("accountColor", client.dmActorId == null ? player.getColor() : c.getDmColor());
+            hello.put("measurementColors", true);
             hello.put("serverTime", System.currentTimeMillis());
             hello.put("sessionName", config.sessionName());
             hello.put("campaignName", c.getName());

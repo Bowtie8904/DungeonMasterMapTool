@@ -1283,6 +1283,12 @@ Largest brush size in tiles, enforced by the sidebar sliders and Alt + mouse whe
 
 Colour of new effect shapes (circle, box, freehand, pen, line) at startup until you pick a texture or colour. Picking
 a texture switches to the texture's default colour (`texture.<kind>.color`).
+Selecting an Online Play campaign instead initializes this picker from its saved DM account color (red by
+default). Account colors live in `campaign.json`, not this settings file; tool color changes do not modify them.
+The hosting-only measurement color picker also defaults to the campaign DM color. Hide it with
+`online.measure.color` in `ui.controls.hidden`; its color value remains accessible through the local API
+even when hidden, as do the other `online.measure` controls.
+The individual control is listed as **Measurement color** in the DM-control visibility settings and local API.
 
 *Keywords:* effect colour, spell colour, AoE colour, area of effect, default color
 

@@ -51,8 +51,8 @@ public final class OnlineMeasurementOverlay {
         gc.setLineWidth(2 / z);
         gc.setFont(Font.font(12 / z));
         for (OnlineMeasurement m : items) {
-            gc.setStroke(m.id().equals(selected) ? Color.WHITE : Color.web("#80d8ff"));
-            gc.setFill(Color.web("#80d8ff", 0.12));
+            gc.setStroke(m.id().equals(selected) ? Color.WHITE : Color.web(m.color()));
+            gc.setFill(Color.web(m.color(), 0.12));
             double r = Math.hypot(m.x2() - m.x1(), m.y2() - m.y1());
             gc.beginPath();
             switch (m.kind()) {

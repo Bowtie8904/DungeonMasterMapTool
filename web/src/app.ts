@@ -68,6 +68,10 @@ export class App {
   private expandedEffects = new Set<string>();
   private textureSelect = el('select', { id: 'effect-texture' });
   private colorInput = el('input', { type: 'color', id: 'drawing-color', value: '#55aa33' });
+  private drawingColor = '#55aa33';
+  private measureColorInput = el('input', { type: 'color', id: 'measurement-color', value: '#80d8ff' });
+  private accountColorKey = '';
+  private measurementColors = false;
   private colorEditing = false;
   private colorSelection: string | null = null;
   private colorTimer: number | null = null;
@@ -210,7 +214,8 @@ export class App {
     };
     this.view.onMeasurement = (m, remove) => {
       const state = this.store.state;
-      if (state) this.sendTool({ ...m, type: 'measurement', action: remove ? 'delete' : 'upsert', mapKey: `${state.mapId}/${state.levelId}` });
+      if (state) this.sendTool({ ...m, color: this.measurementColors ? m.color : undefined,
+        type: 'measurement', action: remove ? 'delete' : 'upsert', mapKey: `${state.mapId}/${state.levelId}` });
     };
     this.view.onSelection = (shape, measurement, count) => this.selectionChanged(shape, measurement, count);
     document.addEventListener('keydown', this.undoKey);
@@ -620,7 +625,11 @@ export class App {
       });
       button.setAttribute('aria-pressed', String(id === 'distance')); measureModes.append(button);
     }
-    this.measuringOptions.append(field('Measuring tool', measureModes), measureHint,
+    this.measureColorInput.addEventListener('input', () => {
+      this.view.measurementColor = this.measureColorInput.value;
+      this.view.invalidate();
+    });
+    this.measuringOptions.append(field('Measuring tool', measureModes), field('Color', this.measureColorInput), measureHint,
       el('p', { class: 'tool-hint' }, 'Shared with everyone. Remains after release; Navigate to move or delete your measurements. Cleared on map changes or restart.'));
     this.flyout.append(el('header', { class: 'panel-heading' }, this.toolTitle, iconButton('close', 'Close tool options', () => this.closeTools())),
       this.drawingOptions, this.measuringOptions);
@@ -712,6 +721,7 @@ export class App {
   }
 
   private readStyle(): void {
+    if (!this.colorSelection) this.drawingColor = this.colorInput.value;
     this.view.style = { color: this.colorInput.value, alpha: Number(this.alphaInput.value), size: Number(this.sizeInput.value),
       texture: this.textureSelect.value || 'none', border: this.borderInput.checked, emits: this.emitsInput.checked, above: this.aboveInput.checked };
     this.view.invalidate();
@@ -725,11 +735,16 @@ export class App {
   }
 
   private selectionChanged(shape: Overlay | null, measurement: boolean, count = 0): void {
+    const deselected = this.colorSelection !== null && shape === null;
     if (this.colorSelection !== (shape?.id ?? null)) {
       if (this.colorTimer !== null) clearTimeout(this.colorTimer);
       this.colorTimer = null;
       this.colorEditing = false;
       this.colorSelection = shape?.id ?? null;
+    }
+    if (deselected) {
+      this.colorInput.value = this.drawingColor;
+      this.readStyle();
     }
     this.deleteButton.disabled = !shape && !measurement;
     this.selectionHint.textContent = count ? `${count} owned object${count === 1 ? '' : 's'} selected. Drag to move; arrows move tokens by half a tile.${this.view.canRotateTokens ? ' Drag a token handle to rotate.' : ''} Delete removes drawings and measurements, not tokens.`
@@ -879,6 +894,11 @@ export class App {
     switch (msg.type) {
       case 'hello':
         this.playerId = msg.playerId;
+        this.setAccountColor(msg.campaignId ?? '', msg.playerId, msg.accountColor);
+        this.measurementColors = msg.measurementColors === true;
+        this.measureColorInput.disabled = !this.measurementColors;
+        this.measureColorInput.title = this.measurementColors ? 'Color for new measurements'
+          : 'Update the host to choose measurement colors.';
         this.notes.setSession(msg.notes === true, msg.campaignId ?? '', msg.playerId);
         if (this.section === 'notes') void this.notes.open();
         this.handouts.closeAll();
@@ -915,9 +935,17 @@ export class App {
           this.connectedPlayers = new Set(msg.players.filter(p => p.connections > 0).map(p => p.playerId));
         }
         this.updateRecipients(msg.players);
+        const colorDot = (color?: string) => {
+          const dot = el('span', { class: 'account-color-dot' });
+          dot.setAttribute('aria-hidden', 'true');
+          if (color && /^#[0-9a-f]{6}$/i.test(color)) dot.style.backgroundColor = color;
+          return dot;
+        };
         this.rosterEl.replaceChildren(this.rosterHeading,
-          el('div', { class: 'player-row' }, 'Dungeon Master', el('span', {}, 'Host')),
+          el('div', { class: 'player-row' }, colorDot(msg.dmColor),
+            el('span', { class: 'player-name' }, 'Dungeon Master'), el('span', {}, 'Host')),
           ...msg.players.map(p => el('div', { class: 'player-row' },
+            colorDot(p.color),
             el('span', { class: 'player-name' }, `${p.playerName}${p.chatIdentity ? ` (${p.chatIdentity})` : ''}${p.playerId === this.playerId ? ' (you)' : ''}`),
             el('span', {}, p.pingMs < 0 ? '--' : `${p.pingMs} ms`))));
         break;
@@ -1052,6 +1080,21 @@ export class App {
       default:
         break;
     }
+  }
+
+  private setAccountColor(campaignId: string, playerId: string, color?: string): void {
+    if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return;
+    const key = `${campaignId}:${playerId}:${color}`;
+    if (this.accountColorKey === key) return;
+    this.accountColorKey = key;
+    this.drawingColor = color;
+    if (!this.colorSelection) {
+      this.colorInput.value = color;
+      this.readStyle();
+    }
+    this.measureColorInput.value = color;
+    this.view.measurementColor = color;
+    this.view.invalidate();
   }
 
   /** Up to 12 filled/empty tokens; hidden when the host does not send a Fear count. */

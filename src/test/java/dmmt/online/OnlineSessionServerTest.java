@@ -5869,19 +5869,40 @@ class OnlineSessionServerTest {
         String cookie = cookie();
         Inbox first = new Inbox();
         WebSocket ws = connect(cookie, first);
+        JsonNode hello = first.next("hello");
+        assertEquals(campaign.player(playerId()).getColor(), hello.path("accountColor").asText());
+        assertTrue(hello.path("measurementColors").asBoolean());
+        assertEquals(OnlineProtocol.VERSION, hello.path("protocol").asInt());
         first.next("snapshot");
         first.next("measurements");
+        JsonNode roster = first.next("roster");
+        assertEquals(Campaign.DEFAULT_DM_COLOR, roster.path("dmColor").asText());
+        assertEquals(campaign.player(playerId()).getColor(), roster.path("players").get(0).path("color").asText());
         ws.sendText("""
                 {"type":"measurement","cmdId":"m1","action":"upsert","mapKey":"m1/l1",
                  "id":"ruler","kind":"distance","x1":0,"y1":0,"x2":30,"y2":40,"ownerId":"forged"}
                 """, true).join();
         JsonNode created = first.next("measurements").path("items").get(0);
         assertEquals(playerId(), created.path("ownerId").asText());
+        assertEquals(campaign.player(playerId()).getColor(), created.path("color").asText());
+        ws.sendText("""
+                {"type":"measurement","cmdId":"colored","action":"upsert","mapKey":"m1/l1",
+                 "id":"ruler","kind":"distance","x1":0,"y1":0,"x2":30,"y2":40,"color":"#ff9100"}
+                """, true).join();
+        assertEquals("#ff9100", first.next("measurements").path("items").get(0).path("color").asText());
+        ws.sendText("""
+                {"type":"measurement","cmdId":"bad-color","action":"upsert","mapKey":"m1/l1",
+                 "id":"ruler","kind":"distance","x1":0,"y1":0,"x2":30,"y2":40,"color":"red"}
+                """, true).join();
+        assertEquals("bad-color", first.next("reject").path("cmdId").asText());
+        assertEquals("#ff9100", first.next("measurements").path("items").get(0).path("color").asText());
         Inbox late = new Inbox();
         WebSocket second = connect(cookie, late);
         assertEquals(1, late.next("measurements").path("items").size());
         server.dmMeasurement(server.measurements().getFirst().translate(10, 20), false);
-        assertEquals(10, first.next("measurements").path("items").get(0).path("x1").asInt());
+        JsonNode moved = first.next("measurements").path("items").get(0);
+        assertEquals(10, moved.path("x1").asInt());
+        assertEquals("#ff9100", moved.path("color").asText());
         server.publish(state("m2", 0), "m2/l1");
         assertTrue(first.next("measurements").path("items").isEmpty());
         assertTrue(server.measurements().isEmpty());

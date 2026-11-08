@@ -105,7 +105,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .roster-heading .status { font-size: 10px; letter-spacing: normal; opacity: .75; }
 .player-row { display: flex; justify-content: space-between; gap: 9px; color: #bac2cb; font-size: 12px; margin-top: 7px; }
 .player-row span { color: #9da6b2; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.player-row .player-name { color: inherit; font-size: inherit; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.player-row .player-name { color: inherit; font-size: inherit; white-space: normal; overflow-wrap: anywhere; min-width: 0; flex: 1; }
+.account-color-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; align-self: center; background: #9da6b2; box-shadow: 0 0 0 1px #0008; }
 .row { display: flex; gap: 6px; }
 .row input[type='text'] { flex: 1; min-width: 0; }
 .check { color: var(--muted); }

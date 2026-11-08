@@ -285,7 +285,22 @@ class DmControlApiTest {
                 Set<String> expected = AppSettings.SIDEBAR_CONTROLS.stream()
                         .filter(control -> !Set.of("tokens", "session", "online").contains(control.sectionId())).map(AppSettings.SidebarControl::id)
                         .filter(id -> !id.equals("lighting.hint")).collect(Collectors.toSet());
+                expected.addAll(Set.of("online.measure.distance", "online.measure.radius", "online.measure.cone",
+                        "online.measure.rect", "online.measure.color"));
                 assertEquals(expected, api.describe().stream().map(d -> (String) d.get("id")).collect(Collectors.toSet()));
+                Field measureColorField = app.getClass().getDeclaredField("measureColorPicker");
+                measureColorField.setAccessible(true);
+                ColorPicker measureColor = (ColorPicker) measureColorField.get(app);
+                Field settingsField = app.getClass().getDeclaredField("preferences");
+                settingsField.setAccessible(true);
+                AppSettings settings = (AppSettings) settingsField.get(app);
+                settings.setHiddenControls(Set.of("online.measure.color"));
+                ((ControlVisibility) registry.get(app)).apply(settings.hiddenControls());
+                assertFalse(measureColor.isManaged());
+                assertEquals("Test measurement color", api.describe(List.of("online.measure.color")).getFirst().get("label"));
+                assertEquals("color", api.describe(List.of("online.measure.color")).getFirst().get("type"));
+                api.execute("online.measure.color", Map.of("value", "#123456"));
+                assertEquals(Color.web("#123456"), measureColor.getValue());
                 assertError(404, () -> api.execute("lighting.hint", Map.of()));
                 api.setUrlOptionsVisible(true);
                 api.attachUrlMenus(() -> "http://127.0.0.1:8080", ignored -> {});

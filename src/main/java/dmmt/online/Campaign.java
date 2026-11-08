@@ -20,6 +20,9 @@ public class Campaign {
     public static final String DEFAULT_SYSTEM = "Daggerheart";
     /** Game systems offered when creating a campaign. */
     public static final List<String> SYSTEMS = List.of(DEFAULT_SYSTEM);
+    public static final String DEFAULT_DM_COLOR = "#e53935";
+    public static final List<String> PLAYER_COLORS = List.of(
+            "#2979ff", "#00c853", "#ffd600", "#ff9100", "#aa00ff", "#00e5ff", "#ff4081", "#ffffff");
 
     /** Most Fear tokens the GM can hold; the browser overlay and DM overlay both show at most this many. */
     public static final int MAX_FEAR = 12;
@@ -48,6 +51,9 @@ public class Campaign {
 
     @Builder.Default
     private String dmDomainCardView = "card";
+
+    @Builder.Default
+    private String dmColor = DEFAULT_DM_COLOR;
 
     @Builder.Default
     private List<Countdown> countdowns = new ArrayList<>();
@@ -90,6 +96,7 @@ public class Campaign {
         private String chatIdentity = "";
         @Builder.Default
         private String domainCardView = "card";
+        private String color;
         /** {@code argon2id$m$t$p$saltB64$hashB64}; empty until the DM sets a password. */
         private String passwordHash;
     }
@@ -131,5 +138,22 @@ public class Campaign {
 
     public Actor actor(String actorId) {
         return actorId == null ? null : actors.stream().filter(a -> actorId.equals(a.getId())).findFirst().orElse(null);
+    }
+
+    public boolean ensureAccountColors() {
+        boolean changed = false;
+        if (dmColor == null || dmColor.isBlank()) {
+            dmColor = DEFAULT_DM_COLOR;
+            changed = true;
+        }
+        for (Player player : players) {
+            if (player.getColor() != null && !player.getColor().isBlank()) continue;
+            String next = PLAYER_COLORS.stream().min(java.util.Comparator.comparingLong(color ->
+                    players.stream().filter(p -> color.equalsIgnoreCase(p.getColor())).count()
+                            + (color.equalsIgnoreCase(dmColor) ? 1 : 0))).orElseThrow();
+            player.setColor(next);
+            changed = true;
+        }
+        return changed;
     }
 }

@@ -5,18 +5,31 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Set;
 
 /** Session-only world-space annotation. Distances are expressed in map grid tiles, not system-specific feet/metres. */
-public record OnlineMeasurement(String id, String ownerId, String kind, double x1, double y1, double x2, double y2) {
+public record OnlineMeasurement(String id, String ownerId, String kind, double x1, double y1, double x2, double y2,
+                                String color) {
+    public OnlineMeasurement(String id, String ownerId, String kind, double x1, double y1, double x2, double y2) {
+        this(id, ownerId, kind, x1, y1, x2, y2, "#80d8ff");
+    }
+
     public static OnlineMeasurement parse(JsonNode node, String ownerId) {
+        return parse(node, ownerId, "#80d8ff");
+    }
+
+    public static OnlineMeasurement parse(JsonNode node, String ownerId, String defaultColor) {
         String id = node.path("id").asText("");
         String kind = node.path("kind").asText("");
         if (id.isBlank() || id.length() > 100 || !Set.of("distance", "radius", "cone", "rect").contains(kind)) {
             throw new IllegalArgumentException("Invalid measurement");
         }
+        String color = node.has("color") ? node.path("color").asText("") : defaultColor;
+        if (color == null || !color.matches("#[0-9a-fA-F]{6}")) {
+            throw new IllegalArgumentException("Measurement color must be a six-digit hex color");
+        }
         return new OnlineMeasurement(id, ownerId, kind,
                 OnlineDrawingEdits.number(node, "x1", -1e7, 1e7),
                 OnlineDrawingEdits.number(node, "y1", -1e7, 1e7),
                 OnlineDrawingEdits.number(node, "x2", -1e7, 1e7),
-                OnlineDrawingEdits.number(node, "y2", -1e7, 1e7));
+                OnlineDrawingEdits.number(node, "y2", -1e7, 1e7), color);
     }
 
     /** Daggerheart SRD defined ranges on a one-inch grid: Melee 1, Very Close 3, Close 6, Far 12 squares, then Very Far. */
@@ -46,6 +59,6 @@ public record OnlineMeasurement(String id, String ownerId, String kind, double x
     }
 
     public OnlineMeasurement translate(double dx, double dy) {
-        return new OnlineMeasurement(id, ownerId, kind, x1 + dx, y1 + dy, x2 + dx, y2 + dy);
+        return new OnlineMeasurement(id, ownerId, kind, x1 + dx, y1 + dy, x2 + dx, y2 + dy, color);
     }
 }

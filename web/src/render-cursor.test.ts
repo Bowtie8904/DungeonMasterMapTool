@@ -69,6 +69,28 @@ describe('map interaction cursors', () => {
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+  it('creates drawings and measurements with the chosen account-default or tool-override color', () => {
+    view.style.color = '#2979ff';
+    view.onDrawing = vi.fn();
+    view.setTool('draw');
+    canvas.pointer('pointerdown', 700, 700);
+    canvas.pointer('pointermove', 750, 750);
+    canvas.pointer('pointerup', 750, 750);
+    expect(view.onDrawing).toHaveBeenCalledWith('create', expect.any(String), expect.objectContaining({ color: '#2979ff' }));
+    view.measurementColor = '#2979ff';
+    view.onMeasurement = vi.fn();
+    view.setTool('measure');
+    canvas.pointer('pointerdown', 700, 700);
+    canvas.pointer('pointermove', 750, 750);
+    canvas.pointer('pointerup', 750, 750);
+    expect(view.onMeasurement).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#2979ff' }), false);
+    view.measurementColor = '#ff9100';
+    canvas.pointer('pointerdown', 700, 700);
+    canvas.pointer('pointermove', 800, 800);
+    canvas.pointer('pointerup', 800, 800);
+    expect(view.onMeasurement).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#ff9100' }), false);
+  });
+
   it('places one tool ping at world coordinates and restores Select and its cursor', () => {
     const ping = vi.fn(), select = vi.fn();
     view.canPing = true; view.onPing = ping; view.onSelectTool = select;

@@ -97,11 +97,16 @@ public final class CampaignStore {
 
     public synchronized Campaign load(String campaignId) throws IOException {
         recoverSheetTransfer(campaignId);
-        return MAPPER.readValue(dir(campaignId).resolve("campaign.json").toFile(), Campaign.class);
+        JsonNode saved = MAPPER.readTree(dir(campaignId).resolve("campaign.json").toFile());
+        Campaign campaign = MAPPER.treeToValue(saved, Campaign.class);
+        boolean assigned = campaign.ensureAccountColors();
+        if (assigned || !saved.hasNonNull("dmColor")) save(campaign);
+        return campaign;
     }
 
     public synchronized void save(Campaign campaign) throws IOException {
         recoverSheetTransfer(campaign.getId());
+        campaign.ensureAccountColors();
         Path folder = dir(campaign.getId());
         Files.createDirectories(folder);
         Path target = folder.resolve("campaign.json");

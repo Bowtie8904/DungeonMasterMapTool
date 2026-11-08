@@ -41,6 +41,7 @@ export class MapView {
   tool: MapTool = 'navigate';
   drawMode: DrawMode = 'pen';
   measureMode: Measurement['kind'] = 'distance';
+  measurementColor = '#80d8ff';
   style: DrawingStyle = { color: '#55aa33', alpha: 1, texture: 'none', size: 2, border: false, emits: false, above: true };
   measurements: Measurement[] = [];
   onDrawing: (action: 'create' | 'update' | 'delete', id: string, shape?: Overlay) => void = () => {};
@@ -544,7 +545,7 @@ export class MapView {
       }
       if (this.tool === 'measure') {
         this.gesture = { start: w, create: true, measurement: { id: drawingId(), ownerId: this.playerId,
-          kind: this.measureMode, x1: w.x, y1: w.y, x2: w.x, y2: w.y } };
+          kind: this.measureMode, color: this.measurementColor, x1: w.x, y1: w.y, x2: w.x, y2: w.y } };
         this.invalidate(); return;
       }
       const hit = this.selectionAt(w.x, w.y);
@@ -1091,8 +1092,9 @@ export class MapView {
     const measures = [...this.measurements.filter(m => m.id !== this.gesture?.measurement?.id)];
     if (this.gesture?.measurement) measures.push(this.gesture.measurement);
     for (const m of measures) {
-      ctx.strokeStyle = m.id === this.selectedMeasure || this.selectedMeasures.has(m.id) ? '#fff' : '#80d8ff';
-      ctx.fillStyle = '#80d8ff22'; ctx.lineWidth = 2 / this.cam.scale;
+      const color = m.color ?? '#80d8ff';
+      ctx.strokeStyle = m.id === this.selectedMeasure || this.selectedMeasures.has(m.id) ? '#fff' : color;
+      ctx.fillStyle = `${color}22`; ctx.lineWidth = 2 / this.cam.scale;
       measurementPath(ctx, m);
       if (m.kind !== 'distance') ctx.fill();
       ctx.stroke();

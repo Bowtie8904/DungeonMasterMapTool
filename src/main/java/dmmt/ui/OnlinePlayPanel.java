@@ -50,6 +50,8 @@ public final class OnlinePlayPanel extends VBox {
         int foreignActorTokens(Campaign campaign);
 
         void removeForeignActorTokens(Campaign campaign);
+
+        default void campaignSelected(Campaign campaign) { }
     }
 
     /** Drag payload: the id of an actor of {@link #selectedCampaign()}. */
@@ -446,6 +448,7 @@ public final class OnlinePlayPanel extends VBox {
             if (running) current = controller.campaign();
             List<CampaignStore.Summary> all = store().list();
             if (current != null && all.stream().noneMatch(s -> s.id().equals(current.getId()))) current = null;
+            actions.campaignSelected(current);
             campaignTable.getItems().setAll(all);
             campaignTable.getSelectionModel().clearSelection();
             if (current != null) {

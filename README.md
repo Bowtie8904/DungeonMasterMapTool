@@ -650,6 +650,14 @@ Nothing starts until you click **Start online session**, so offline play and the
   left-drag on empty space box-selects your drawings, controlled actors/tokens and measurements. Drag a selected
   object to move the group. Delete removes selected drawings/measurements, not actors. Choosing a drawing or
   measuring mode in the still-open flyout reactivates that tool.
+- **Account colors:** Campaign players automatically receive one of eight distinct colors: blue, green, yellow,
+  orange, purple, cyan, pink or white. The DM defaults to red. Existing accounts receive colors when their campaign
+  is opened; colors stay saved through reconnects, renames and restarts. Larger campaigns reuse the least-used
+  palette color. Account-color editing will come in a future feature.
+  Browser drawing/shape and measurement pickers start with your account color; the DM's effect/drawing and
+  measurement pickers start with the campaign DM color. Tool overrides do not change account colors, and selecting
+  an existing drawing still shows its saved color. The browser Connected players overlay shows a matching dot
+  to the left of each player and the DM.
 - **Player drawings:** Drawing offers compact Pen, freehand brush, line, circle and rectangle buttons and a dropdown
   of all DM effect textures. Default opacity is 100%. Changing the texture while Select is active returns to your
   previously chosen drawing mode without closing the flyout. Pen and line are plain ink, just like the desktop tools. Drawings are ordinary effects
@@ -667,6 +675,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   plus the matching Daggerheart range (Melee ≤1, Very Close ≤3, Close ≤6, Far ≤12, Very Far beyond, per the SRD's
   1-inch-grid tile suggestion). The DM has the same tool in a hosting-only **Measure** rail icon below Chat
   (hide with `online.measure`).
+  Its color picker controls new measurements (hide only this control with `online.measure.color`);
+  the local API retains access to both hidden controls. Measurement colors remain intact when moved.
   Drag to create a measurement; everyone, including the DM, sees it while dragging and after release. In Navigate,
   the creator can move/delete it. In the DM's Select mode, drag a measurement to move it, or use Delete/right-click
   to remove it. A subtle cross beside each completed measurement also deletes it; only its creator and the DM

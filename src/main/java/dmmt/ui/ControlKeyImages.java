@@ -108,7 +108,7 @@ public final class ControlKeyImages {
             return sectionIcon(id);
         }
         Ikon specific = switch (id) {
-            case "effects.color", "text.color", "text.background", "text.border" -> MaterialDesignP.PALETTE_OUTLINE;
+            case "effects.color", "text.color", "text.background", "text.border", "online.measure.color" -> MaterialDesignP.PALETTE_OUTLINE;
             case "effects.opacity", "player.gridOpacity" -> MaterialDesignC.CIRCLE_OPACITY;
             case "online.chat" -> MaterialDesignC.CHAT_OUTLINE;
             case "online.measure" -> MaterialDesignR.RULER;

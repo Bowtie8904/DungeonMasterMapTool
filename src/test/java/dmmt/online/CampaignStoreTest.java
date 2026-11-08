@@ -19,6 +19,56 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void assignsEightDistinctPlayerColorsAndPreservesThemThroughReloadAndAccountChanges() throws Exception {
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Colors");
+        for (int i = 0; i < 8; i++) {
+            campaign.getPlayers().add(Campaign.Player.builder().id("player" + i).name("Player " + i).build());
+            store.save(campaign);
+        }
+        List<String> colors = campaign.getPlayers().stream().map(Campaign.Player::getColor).toList();
+        assertEquals(Campaign.PLAYER_COLORS, colors);
+        assertEquals(8, colors.stream().distinct().count());
+        assertTrue(colors.stream().noneMatch(Campaign.DEFAULT_DM_COLOR::equals));
+        assertEquals("#e53935", campaign.getDmColor());
+        Campaign reopened = new CampaignStore(dir).load(campaign.getId());
+        assertEquals(colors, reopened.getPlayers().stream().map(Campaign.Player::getColor).toList());
+        reopened.getPlayers().add(Campaign.Player.builder().id("extra").name("Extra").build());
+        store.save(reopened);
+        assertEquals(colors.getFirst(), reopened.player("extra").getColor());
+        reopened.getPlayers().removeIf(p -> p.getId().equals("player3"));
+        reopened.player("player1").setName("Renamed");
+        reopened.getPlayers().add(Campaign.Player.builder().id("replacement").name("Replacement").build());
+        store.save(reopened);
+        assertEquals(colors.get(3), reopened.player("replacement").getColor());
+        assertEquals(colors.get(1), store.load(campaign.getId()).player("player1").getColor());
+    }
+
+    @Test
+    void legacyColorsAreBackfilledOnDiskWithoutReplacingSavedPlayerOrDmColors() throws Exception {
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Legacy");
+        Path file = dir.resolve(campaign.getId()).resolve("campaign.json");
+        Files.writeString(file, """
+                {"id":"%s","name":"Legacy","dmColor":"#123456","players":[
+                  {"id":"new","name":"Missing"},{"id":"saved","name":"Saved","color":"#2979FF"},
+                  {"id":"blank","name":"Blank","color":""}]}
+                """.formatted(campaign.getId()));
+        Campaign loaded = store.load(campaign.getId());
+        assertEquals("#123456", loaded.getDmColor());
+        assertEquals("#2979FF", loaded.player("saved").getColor());
+        assertEquals("#00c853", loaded.player("new").getColor());
+        assertEquals("#ffd600", loaded.player("blank").getColor());
+        var disk = new com.fasterxml.jackson.databind.ObjectMapper().readTree(file.toFile());
+        assertEquals("#00c853", disk.path("players").get(0).path("color").asText());
+        assertEquals(loaded, new CampaignStore(dir).load(campaign.getId()));
+        Files.writeString(file, "{\"id\":\"" + campaign.getId() + "\",\"name\":\"Empty legacy\"}");
+        assertEquals(Campaign.DEFAULT_DM_COLOR, store.load(campaign.getId()).getDmColor());
+        assertEquals(Campaign.DEFAULT_DM_COLOR,
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(file.toFile()).path("dmColor").asText());
+    }
+
+    @Test
     void interruptedActorRenameRecoversCampaignAndSheetTogether() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

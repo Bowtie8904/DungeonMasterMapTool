@@ -482,6 +482,8 @@ public class DungeonMasterMapToolApplication extends Application {
     private boolean measureDraftPublished;
     private long measureLastSend;
     private ToggleGroup measureGroup;
+    private ColorPicker measureColorPicker;
+    private String colorCampaignId;
     private dmmt.online.OnlineMeasurement measurementDrag;
     private double measurementStartX;
     private double measurementStartY;
@@ -1799,6 +1801,8 @@ public class DungeonMasterMapToolApplication extends Application {
         filesSection = new ControlSection("Handouts", org.kordamp.ikonli.materialdesign2.MaterialDesignF.FOLDER_IMAGE, "files", handoutsPanel);
 
         measureGroup = new ToggleGroup();
+        measureColorPicker = new ColorPicker(Color.web(dmmt.online.Campaign.DEFAULT_DM_COLOR));
+        Icons.tooltip(measureColorPicker, "Color for new measurements");
         HBox measureRow = row();
         for (var spec : List.of(
                 new Object[]{"distance", MaterialDesignR.RULER, "Distance: drag from a start point to an end point"},
@@ -1821,7 +1825,9 @@ public class DungeonMasterMapToolApplication extends Application {
         measureHint.setMinHeight(Region.USE_PREF_SIZE);
         dmControlVisibility.registerRow("online.measure", measureRow, "distance", "radius", "cone", "rect");
         dmControlVisibility.register("online.measure.hint", measureHint);
-        ControlSection measureSection = new ControlSection("Measure", MaterialDesignR.RULER, "measure", measureRow, measureHint);
+        dmControlVisibility.register("online.measure.color", measureColorPicker);
+        ControlSection measureSection = new ControlSection("Measure", MaterialDesignR.RULER, "measure",
+                measureRow, measureColorPicker, measureHint);
 
         List<ControlSection> sectionList = List.of(
                 chatSection,
@@ -3290,7 +3296,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 onlineController.server().dmMeasurement(deleteHit, true);
             } else {
                 measureDraft = new dmmt.online.OnlineMeasurement("dm-" + java.util.UUID.randomUUID(), "dm", measureMode,
-                        point.x(), point.y(), point.x(), point.y());
+                        point.x(), point.y(), point.x(), point.y(), toHex(measureColorPicker.getValue()));
                 measureDraftPublished = false;
                 measureLastSend = 0;
                 measurementMapKey = onlineController.mapKey();
@@ -3309,7 +3315,7 @@ public class DungeonMasterMapToolApplication extends Application {
             var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(),
                     project.getViews().getDmCamera());
             measureDraft = new dmmt.online.OnlineMeasurement(measureDraft.id(), "dm", measureDraft.kind(),
-                    measureDraft.x1(), measureDraft.y1(), point.x(), point.y());
+                    measureDraft.x1(), measureDraft.y1(), point.x(), point.y(), measureDraft.color());
             long now = System.currentTimeMillis();
             if (now - measureLastSend >= 100) {
                 measureLastSend = now;
@@ -6318,6 +6324,10 @@ public class DungeonMasterMapToolApplication extends Application {
         draggingText = false;
         resizingTextHandle = -1;
         activeTool = tool == null ? EditorTool.SELECT : tool;
+        if (activeTool.isAoeTool()) {
+            selectedOverlayId = null;
+            overlayColorPicker.setValue(Color.web(overlayColor));
+        }
         if (activeTool != EditorTool.SELECT) {
             setMeasureMode(null);
         }
@@ -11046,6 +11056,19 @@ public class DungeonMasterMapToolApplication extends Application {
             }
             @Override public void removeForeignActorTokens(dmmt.online.Campaign campaign) {
                 removeForeignActorTokensOf(campaign);
+            }
+            @Override public void campaignSelected(dmmt.online.Campaign campaign) {
+                String id = campaign == null ? null : campaign.getId();
+                if (java.util.Objects.equals(colorCampaignId, id)) return;
+                colorCampaignId = id;
+                overlayColor = campaign == null ? Tuning.EFFECT_DEFAULT_COLOR.get() : campaign.getDmColor();
+                if (overlayColorPicker != null && selectedOverlayId == null) {
+                    overlayColorPicker.setValue(Color.web(overlayColor));
+                }
+                if (measureColorPicker != null) {
+                    measureColorPicker.setValue(Color.web(campaign == null
+                            ? dmmt.online.Campaign.DEFAULT_DM_COLOR : campaign.getDmColor()));
+                }
             }
         });
         onlineScroll = onlinePanel;

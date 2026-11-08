@@ -80,6 +80,7 @@ export interface EffectTexture {
 export interface Measurement {
   id: string;
   ownerId: string;
+  color?: string;
   kind: 'distance' | 'radius' | 'cone' | 'rect';
   x1: number;
   y1: number;
@@ -347,6 +348,8 @@ export interface Hello {
   protocol: number;
   playerId: string;
   playerName: string;
+  accountColor?: string;
+  measurementColors?: boolean;
   serverTime: number;
   sessionName?: string;
   sessionId?: string;
@@ -396,7 +399,7 @@ export type ServerMessage =
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }
   | FeatureSheetMessage
-  | { type: 'roster'; players: Array<{ playerId: string; playerName: string; chatIdentity?: string; connections: number; pingMs: number }> }
+  | { type: 'roster'; dmColor?: string; players: Array<{ playerId: string; playerName: string; color?: string; chatIdentity?: string; connections: number; pingMs: number }> }
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }
   | { type: 'delta'; seq: number; ops: DeltaOp[] }

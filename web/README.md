@@ -324,6 +324,14 @@ the normal map overlays, including generated effect textures. Texture choices/de
 than a separate browser list. Measurements are shared session-only annotations, replayed to late joiners and cleared
 on map/level changes. Both features are advertised in `hello`, so older hosts keep their tools disabled.
 Audio preferences and logout live in Settings; the roster reports host-measured round-trip ping.
+Campaign account colors are host-persisted: eight distinct player colors are assigned automatically to new
+and legacy accounts, while the DM defaults to red. Colors survive reconnects/renames/restarts; editing the
+account color is reserved for a future feature. Drawing and measurement pickers default to `hello.accountColor`,
+without resetting local overrides on same-account reconnects. The roster adds optional player `color` and
+`dmColor` fields, displayed as dots to the left of the names. `hello.measurementColors:true` enables the
+measurement picker; commands and broadcasts carry optional six-digit hex `color`, retained on moves.
+Older hosts retain legacy defaults with the measurement picker disabled; older clients still work and the
+host supplies their account color for new measurements. Online Play and DM Link versions remain unchanged.
 **Ping (P)** in the left toolbar activates a one-shot target cursor without opening a flyout. Left-click
 to send one ping and return to Select. In Select, holding left-click still for 600 ms also sends one ping;
 moving more than 4 screen pixels cancels the hold and keeps normal dragging/box selection. Release, focus

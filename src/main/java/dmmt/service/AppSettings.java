@@ -74,7 +74,7 @@ public final class AppSettings {
                 "countdowns|Countdown overlay (shown while hosting)", "countdowns.add|Create countdown",
                 "measure|Measure tab (shown while hosting)", "measure.distance|Measure distance",
                 "measure.radius|Measure radius", "measure.cone|Measure cone", "measure.rect|Measure rectangle",
-                "measure.hint|Measure hint",
+                "measure.hint|Measure hint", "measure.color|Measurement color",
                 "compendium|Compendium window (shown while hosting)", "files|Handouts tab (shown while hosting)",
                 "files.import|Add handout images", "files.paste|Handout from clipboard", "files.folder|New handout folder",
                 "files.refresh|Reload handouts");
