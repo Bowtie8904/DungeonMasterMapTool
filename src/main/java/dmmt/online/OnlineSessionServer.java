@@ -39,6 +39,7 @@ import java.util.zip.Inflater;
  * {@link Host}.
  */
 public final class OnlineSessionServer {
+    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(OnlineSessionServer.class.getName());
     public record Config(int port, String sessionName, int maxPlayers, int maxMessageBytes, int changeLogSize,
                          int maxDice, int loginMaxFailures, int loginLockoutSeconds) {
     }
@@ -742,7 +743,11 @@ public final class OnlineSessionServer {
 
     /** {@code pingMs} is the best round trip among the player's connections, or -1 while unknown. */
     public record RosterEntry(String playerId, String playerName, int connections, long pingMs, String chatIdentity,
-                              String color) {
+                              String color, String pronouns) {
+        public RosterEntry(String playerId, String playerName, int connections, long pingMs, String chatIdentity,
+                           String color) {
+            this(playerId, playerName, connections, pingMs, chatIdentity, color, "");
+        }
     }
 
     public List<RosterEntry> roster() {
@@ -760,10 +765,34 @@ public final class OnlineSessionServer {
         List<RosterEntry> result = new ArrayList<>();
         stats.forEach((id, s) -> {
             Campaign.Player player = campaign.player(id);
-            if (player != null) result.add(new RosterEntry(id, names.get(id), (int) s[0], s[1],
-                    chatIdentity(id), player.getColor()));
+            if (player != null) {
+                Campaign.Actor actor = chatActor(id);
+                result.add(new RosterEntry(id, names.get(id), (int) s[0], s[1],
+                        actor == null ? "" : actor.getName(), player.getColor(), rosterPronouns(actor)));
+            }
         });
         return result;
+    }
+
+    private String rosterPronouns(Campaign.Actor actor) {
+        if (actor == null) return "";
+        try {
+            String stored = store.loadSheet(campaign.getId(), actor.getId());
+            return stored == null ? "" : sheetPronouns(MAPPER.readTree(stored));
+        } catch (IOException e) {
+            LOG.log(java.util.logging.Level.WARNING, "Could not read pronouns for actor " + actor.getId(), e);
+            return "";
+        }
+    }
+
+    private static String sheetPronouns(JsonNode sheet) {
+        if (sheet == null) return "";
+        JsonNode description = sheet.path("description").path("Pronouns");
+        String background = description.isTextual() ? description.asText() : "";
+        if (!background.isBlank()) return background;
+        JsonNode pronouns = sheet.path("pronouns");
+        String value = pronouns.isTextual() ? pronouns.asText() : "";
+        return value.isBlank() ? "" : value;
     }
 
     private void publishRoster() {
@@ -1471,8 +1500,11 @@ public final class OnlineSessionServer {
                 if (renamed) store.renameActor(c, actor, name, saved);
                 else store.saveSheet(c.getId(), actor.getId(), saved.toString());
             }
-            if (renamed) {
+            if (renamed || !sheetPronouns(saved).equals(sheetPronouns(previous))) {
                 publishRoster();
+                host.rosterChanged();
+            }
+            if (renamed) {
                 host.campaignChanged(c);
             }
             stockChanged(actor.getId());

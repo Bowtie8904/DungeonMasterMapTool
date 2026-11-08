@@ -18,12 +18,17 @@ public final class ConnectedPlayersOverlay extends VBox {
         super(7);
         getStyleClass().add("connected-players-overlay");
         setId("connectedPlayersOverlay");
-        setPrefWidth(215);
+        setMinWidth(0);
         setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
         setMouseTransparent(true);
         setVisible(false);
         managedProperty().bind(visibleProperty());
         setAccessibleText("Connected players and ping to host");
+    }
+
+    @Override
+    protected double computePrefWidth(double height) {
+        return Math.max(215, super.computePrefWidth(height));
     }
 
     public void update(Campaign campaign, List<OnlineSessionServer.RosterEntry> players, boolean paused) {
@@ -39,11 +44,13 @@ public final class ConnectedPlayersOverlay extends VBox {
         status.getStyleClass().add("connected-players-status");
         HBox heading = new HBox(6, title, status);
         heading.setAlignment(Pos.CENTER_LEFT);
-        getChildren().addAll(heading, row(campaign.getDmColor(), "Dungeon Master", "Host"));
+        getChildren().addAll(heading, row(campaign.getDmColor(), "Gamemaster", "Host"));
         for (OnlineSessionServer.RosterEntry player : players) {
             if (player.connections() <= 0) continue;
             String identity = player.chatIdentity();
-            String name = player.playerName() + (identity == null || identity.isEmpty() ? "" : " (" + identity + ")");
+            String pronouns = player.pronouns();
+            String name = player.playerName() + (identity == null || identity.isEmpty() ? ""
+                    : " (" + identity + (pronouns == null || pronouns.isBlank() ? "" : " [" + pronouns + "]") + ")");
             getChildren().add(row(player.color(), name, player.pingMs() < 0 ? "--" : player.pingMs() + " ms"));
         }
     }

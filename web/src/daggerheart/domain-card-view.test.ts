@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CompendiumFile } from './compendium';
-import { emptyCharacter } from './data';
+import { emptyCharacter, normalizeSheet } from './data';
 import { renderSheetView, SheetBus, type RollRequest } from './view';
 import * as artworkEditor from '../token-artwork';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
@@ -58,6 +58,48 @@ class Element {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('shows Background pronouns in the header, synchronizes edits, and handles legacy mismatches', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.pronouns = 'she/her';
+  c.description.Pronouns = 'they/them';
+  let readOnly = false;
+  const root = renderSheetView({ character: c, onRoll: () => true, readOnly: () => readOnly }) as unknown as Element;
+  const header = () => root.querySelectorAll('p').find(p => p.className === 'name')!.text();
+  const pronouns = () => root.querySelectorAll('input').find(input => input.ariaLabel === 'Pronouns')!;
+  expect(header()).toBe('Hero (they/them)');
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  await root.querySelectorAll('button').find(b => b.text() === 'Background')!.click();
+  expect(pronouns().value).toBe('they/them');
+  pronouns().value = 'he/him';
+  pronouns().listeners.get('input')?.();
+  expect(header()).toContain(' (he/him)');
+  expect(c.pronouns).toBe('he/him');
+  expect(c.description.Pronouns).toBe('he/him');
+  const saved = normalizeSheet(JSON.parse(JSON.stringify(c)), 'Hero');
+  expect(saved.pronouns).toBe('he/him');
+  expect(saved.description.Pronouns).toBe('he/him');
+  pronouns().value = '';
+  pronouns().listeners.get('input')?.();
+  expect(header()).not.toContain('(');
+  expect(c.pronouns).toBe('');
+  expect(c.description.Pronouns).toBe('');
+  c.pronouns = 'she/her';
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  expect(header()).toBe('Hero (she/her)');
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  expect(pronouns().value).toBe('she/her');
+  readOnly = true;
+  pronouns().value = 'blocked';
+  pronouns().listeners.get('input')?.();
+  expect(c.pronouns).toBe('she/her');
+  expect(c.description.Pronouns).toBe('');
+});
 
 it('defaults edit mode off and gates base traits, Proficiency, names, background and Experiences', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),

@@ -114,8 +114,10 @@ The Java host serves the build output from the classpath `/web` (`/` and `/sheet
 Sheet edit mode is local to each open view and defaults off. Its labeled switch is next to the sheet title
 and hidden when minimized. The title and switch have 24 px separation; the **Edit mode** label is muted gray
 when off. It gates base traits (-99..99), Proficiency, transformation controls, character
-name/image, Experiences and Background fields; normal play controls remain available. Edit-mode HP/Stress/Armor
-pip clicks set a contiguous capacity, preserving permanent and temporary HP locks. HP/Stress use existing
+name/image, Experiences and Background fields; normal play controls remain available. Background pronouns update
+the header while typing; empty pronouns do not display parentheses. Legacy mismatches prefer nonempty Background
+pronouns, falling back to the top-level value; edits synchronize both fields. Edit-mode HP/Stress/Armor pip clicks
+set a contiguous capacity, preserving permanent and temporary HP locks. HP/Stress use existing
 track fields; Armor uses an existing manual-duration `armorScore` effect with source `manual:armor-slots`.
 The same **Manual override** effect records HP/Stress capacity, Proficiency, base trait and base Evasion
 adjustments in `manualChanges`; these are already applied to base fields and must not be counted again
@@ -178,7 +180,9 @@ Online protocol and DM Link compatibility versions are unchanged. No global sett
 The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
 There is no top-center session, campaign, map or account heading. The bottom-left **Connected players**
 overlay contains a slightly transparent connection-status badge, visible even before the first roster
-and retained across roster refreshes and reconnects. This layout-only change leaves compatibility versions unchanged.
+and retained across roster refreshes and reconnects. Players are shown as `username (character [pronouns])`
+when pronouns are available, without a self marker; the roster grows to fit up to the viewport width.
+The optional roster pronouns field is backward-compatible with older hosts and clients; compatibility versions remain unchanged.
 `countdowns.ts` renders the optional `state.countdowns` array (`id`, `name`, `initialValue`, `value`) as a
 read-only, translucent top-right list beside the sidebar. Countdown and collapsed active-effect rows use
 40%-opaque backgrounds for readability over maps; expanded effects retain a darker background. It follows sidebar expansion/collapse,

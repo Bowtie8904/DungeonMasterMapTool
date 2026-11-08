@@ -399,7 +399,7 @@ export type ServerMessage =
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }
   | FeatureSheetMessage
-  | { type: 'roster'; dmColor?: string; players: Array<{ playerId: string; playerName: string; color?: string; chatIdentity?: string; connections: number; pingMs: number }> }
+  | { type: 'roster'; dmColor?: string; players: Array<{ playerId: string; playerName: string; color?: string; chatIdentity?: string; pronouns?: string; connections: number; pingMs: number }> }
   | { type: 'measurements'; mapKey: string; items: Measurement[] }
   | { type: 'snapshot'; seq: number; state: GameState }
   | { type: 'delta'; seq: number; ops: DeltaOp[] }

@@ -6013,6 +6013,60 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void rosterPronounsFollowSavedSheetAndFirstEnabledActor() throws Exception {
+        Campaign.Actor first = Campaign.Actor.builder().id("pronouns-first").name("Mara").ownerId(playerId()).build();
+        Campaign.Actor second = Campaign.Actor.builder().id("pronouns-second").name("Rook").ownerId(playerId()).build();
+        campaign.getActors().add(first);
+        campaign.getActors().add(second);
+        ObjectNode sheet = warriorSheet("Brave");
+        sheet.put("name", "Mara").put("pronouns", "she/her");
+        sheet.putObject("description").put("Name", "Mara").put("Pronouns", "they/them");
+        store.saveSheet(campaign.getId(), first.getId(), sheet.toString());
+        store.saveSheet(campaign.getId(), second.getId(), "{\"pronouns\":\"he/him\"}");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            JsonNode initial = inbox.next("roster").path("players").get(0);
+            assertEquals("Mara", initial.path("chatIdentity").asText());
+            assertEquals("they/them", initial.path("pronouns").asText());
+            sheet.put("pronouns", "xe/xem");
+            sheet.withObject("/description").put("Pronouns", "xe/xem");
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(
+                            URI.create("http://localhost:" + port + "/api/sheet/" + first.getId()))
+                    .header("Cookie", cookie).header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals("xe/xem", nextRosterIdentity(inbox, "Mara", "xe/xem").path("pronouns").asText());
+            first.setDisabled(true);
+            server.setCampaign(campaign);
+            JsonNode changed = nextRosterIdentity(inbox, "Rook", "he/him");
+            assertEquals("Rook", changed.path("chatIdentity").asText());
+            assertEquals("he/him", changed.path("pronouns").asText());
+            second.setDisabled(true);
+            server.setCampaign(campaign);
+            changed = nextRosterIdentity(inbox, "", "");
+            assertEquals("", changed.path("chatIdentity").asText());
+            assertEquals("", changed.path("pronouns").asText());
+        } finally {
+            ws.abort();
+        }
+    }
+
+    private static JsonNode nextRosterIdentity(Inbox inbox, String identity, String pronouns) throws Exception {
+        long end = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < end) {
+            JsonNode message = inbox.messages.poll(200, TimeUnit.MILLISECONDS);
+            if (message == null || !"roster".equals(message.path("type").asText())) continue;
+            JsonNode player = message.path("players").path(0);
+            if (identity.equals(player.path("chatIdentity").asText()) && pronouns.equals(player.path("pronouns").asText()))
+                return player;
+        }
+        throw new AssertionError("No roster for " + identity + " with pronouns " + pronouns);
+    }
+
+    @Test
     void chatNamesFollowFirstEnabledActorAndFallbackToAccount() throws Exception {
         campaign.player(playerId()).setChatIdentity("Legacy name");
         Campaign.Actor firstActor = Campaign.Actor.builder().id("first").name("Mara").ownerId(playerId()).build();

@@ -122,7 +122,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   the browser: account color dots, player names and current character identities, and live ping in
   milliseconds (`--` until measured). The Dungeon Master has a colored **Host** row, and the heading
   shows whether the session is live or paused. It refreshes even with the Online Play sidebar closed
-  and does not intercept map clicks.
+  and does not intercept map clicks. Character pronouns, when present, appear as
+  `username (character [pronouns])`; both rosters grow with their contents and wrap at the map edge.
 - **Roll context:** feature actions and Spellcast rolls have a subtle, collapsed **Source** section in chat.
   Reports from chat action buttons (including Marked For Death and Death Strike) also show the activated
   feature's description and origin, retained in saved chat history rather than the original weapon's source.
@@ -224,6 +225,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   Enable it to edit the character name, portrait (hover/focus for **Edit image**),
   base trait modifiers (-99 to +99, excluding buffs), Proficiency, transformation, Experiences and Background.
   Character name edits (including Background Name) save only after leaving the text field, not during typing pauses.
+  Background pronouns appear beside the name when provided and update as you edit them.
   In edit mode, resource pips change the usable maximum: locked slots enable through the clicked slot;
   enabled slots disable themselves and later slots. HP locks remain protected. Manual Armor adjustments
   appear separately from equipment/buffs as **Manual override** in the hover breakdown.

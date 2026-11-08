@@ -13,6 +13,7 @@ import { SheetBus } from './daggerheart/view';
 import { cardPreferences } from './daggerheart/card-preferences';
 import { renderEffects } from './effects';
 import { renderCountdowns } from './countdowns';
+import { rosterPlayerName } from './roster';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { addToSheet } from './daggerheart/compendium';
@@ -944,10 +945,10 @@ export class App {
         };
         this.rosterEl.replaceChildren(this.rosterHeading,
           el('div', { class: 'player-row' }, colorDot(msg.dmColor),
-            el('span', { class: 'player-name' }, 'Dungeon Master'), el('span', {}, 'Host')),
+            el('span', { class: 'player-name' }, 'Gamemaster'), el('span', {}, 'Host')),
           ...msg.players.map(p => el('div', { class: 'player-row' },
             colorDot(p.color),
-            el('span', { class: 'player-name' }, `${p.playerName}${p.chatIdentity ? ` (${p.chatIdentity})` : ''}${p.playerId === this.playerId ? ' (you)' : ''}`),
+            el('span', { class: 'player-name' }, rosterPlayerName(p)),
             el('span', {}, p.pingMs < 0 ? '--' : `${p.pingMs} ms`))));
         break;
       case 'measurements':
