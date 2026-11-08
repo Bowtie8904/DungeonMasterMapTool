@@ -165,6 +165,7 @@ export interface Token {
   centerY?: number;
   actorId?: string;
   controlledBy?: string[];
+  conditions?: Array<{ id: string; type: 'hidden' | 'restrained' | 'vulnerable' | 'custom'; name: string }>;
 }
 
 export interface FogGridInfo {
@@ -354,6 +355,7 @@ export interface Hello {
   drawingTools?: boolean;
   measurementTools?: boolean;
   tokenRotation?: boolean;
+  tokenConditions?: boolean;
   portalControls?: boolean;
   playerWhispers?: boolean;
   chatCards?: boolean;

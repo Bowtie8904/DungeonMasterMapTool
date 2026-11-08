@@ -75,6 +75,8 @@ export class MapView {
   canControlPortals = false;
   onPortal: (id: string) => void = () => {};
   onRotate: (tokenId: string, rotationDeg: number) => void = () => {};
+  canEditConditions = false;
+  onTokenContext: (token: Token, screenX: number, screenY: number) => boolean = () => false;
   private rotation: { tokenId: string; startAngle: number; before: number; angle: number } | null = null;
   /** Fired (throttled by the caller) when new explored cells exist. */
   onExplored: () => void = () => {};
@@ -128,7 +130,12 @@ export class MapView {
       if (this.rotation || this.gesture || this.marquee || this.group) this.cancelGesture(e);
       else this.pointerUp(e);
     });
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const world = this.toWorld(e);
+      const token = this.state ? this.tokenAt(world.x, world.y) : null;
+      if (token && this.canEditConditions) this.onTokenContext(token, e.clientX, e.clientY);
+    });
     canvas.addEventListener('pointerleave', () => { this.hover = null; this.invalidate(); });
     canvas.addEventListener('blur', () => { if (this.rotation) this.cancelGesture(); });
     canvas.addEventListener('keydown', (e) => {
@@ -484,6 +491,11 @@ export class MapView {
     this.hover = w;
     const s = this.state;
     if (e.button === 2) {
+      const token = s ? this.tokenAt(w.x, w.y) : undefined;
+      if (token && this.canEditConditions) {
+        e.preventDefault();
+        return;
+      }
       this.cancelGesture();
       this.drag = { kind: 'pan', startX: e.clientX, startY: e.clientY, prevX: 0, prevY: 0, camX: this.cam.x, camY: this.cam.y };
       return;
@@ -1293,6 +1305,32 @@ export class MapView {
         ctx.fillText(t.name, pos.x, pos.y + r + 2 / this.cam.scale);
         ctx.restore();
       }
+      const conditions = t.conditions ?? [];
+      const badge = 15 / this.cam.scale;
+      conditions.slice(0, 5).forEach((condition, index) => {
+        const x = pos.x + r - badge / 2;
+        const y = pos.y - r + badge / 2 + index * badge * 0.9;
+        const colors: Record<string, string> = {
+          hidden: '#536fca', restrained: '#c27b24', vulnerable: '#c64754', custom: '#666b75',
+        };
+        const glyphs: Record<string, string> = {
+          hidden: 'H', restrained: 'R', vulnerable: 'V', custom: '•',
+        };
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, badge / 2, 0, Math.PI * 2);
+        ctx.fillStyle = colors[condition.type] ?? colors.custom;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5 / this.cam.scale;
+        ctx.stroke();
+        ctx.font = `bold ${badge * 0.68}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(glyphs[condition.type] ?? glyphs.custom, x, y);
+        ctx.restore();
+      });
     }
   }
   private flickerOf(s: GameState, l: { id: string; flicker?: { strength: number; speed: number } }): number {

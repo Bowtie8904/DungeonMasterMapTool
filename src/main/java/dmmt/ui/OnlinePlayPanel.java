@@ -146,6 +146,11 @@ public final class OnlinePlayPanel extends VBox {
         return current;
     }
 
+    public java.util.concurrent.CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
+            String tokenId, String type, String name, String conditionId, boolean enabled) {
+        return controller.setTokenCondition(tokenId, type, name, conditionId, enabled);
+    }
+
     public Menu tokenControlMenu(String mapId, DmProject.TokenInstance token) {
         Menu menu = new Menu("Player movement control");
         Campaign selected = controller.running() ? controller.campaign() : current;

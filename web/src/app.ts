@@ -29,6 +29,7 @@ import { Store } from './store';
 import { NotesPanel } from './notes';
 import { HandoutsPanel } from './handouts';
 import { openPopout } from './popout';
+import './conditions.css';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
@@ -63,6 +64,7 @@ export class App {
   private toolTitle = el('h2', {}, 'Drawing');
   private rosterEl = el('aside', { class: 'players-overlay' });
   private effectsEl = el('aside', { class: 'effects-overlay' });
+  private conditionMenu = el('div', { class: 'condition-menu hidden', role: 'menu', ariaLabel: 'Token conditions' });
   private expandedEffects = new Set<string>();
   private textureSelect = el('select', { id: 'effect-texture' });
   private colorInput = el('input', { type: 'color', id: 'drawing-color', value: '#55aa33' });
@@ -169,7 +171,8 @@ export class App {
     const left = this.buildTools();
     this.rosterEl.setAttribute('aria-label', 'Connected players and ping to host');
     this.rosterEl.append(this.rosterHeading);
-    this.stageEl.append(canvas, left, this.flyout, this.rosterEl, this.fearEl, this.countdownsEl, right, this.compendiumWindow.element, this.banner, this.toastEl);
+    this.stageEl.append(canvas, left, this.flyout, this.rosterEl, this.fearEl, this.countdownsEl, right,
+      this.compendiumWindow.element, this.banner, this.toastEl, this.conditionMenu);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
     this.view.maxParticles = settings.maxParticles;
@@ -188,6 +191,11 @@ export class App {
       const state = this.store.state;
       if (state) this.sendTool({ type: 'command',
         kind: 'rotateToken', tokenId, rotationDeg, mapId: state.mapId, levelId: state.levelId });
+    };
+    this.view.onTokenContext = (token, x, y) => {
+      if (!this.view.canEditConditions) return false;
+      this.showTokenConditionMenu(token, x, y);
+      return true;
     };
     this.view.onExplored = () => this.scheduleExplored();
     this.view.onDrawing = (action, id, shape) => {
@@ -595,6 +603,7 @@ export class App {
   }
 
   private effectsTimer: number | null = null;
+  private pendingConditionRemovals = new Set<string>();
 
   private scheduleEffects(): void {
     if (this.effectsTimer !== null) return;
@@ -610,6 +619,7 @@ export class App {
       const list = group.character.effects;
       const i = list.indexOf(effect);
       if (i >= 0) list.splice(i, 1);
+      void this.sendMissingConditionEffects(group.actorId, group.character);
       this.sheetHandles.get(group.actorId)?.save();
       this.sheetHandles.get(group.actorId)?.bus.notify();
     }, () => this.renderEffectsOverlay());
@@ -713,8 +723,10 @@ export class App {
     }
   }
 
-  private sendTool(command: Record<string, unknown>): void {
-    if (!this.conn.send({ ...command, cmdId: `tool-${++this.cmdCounter}` })) this.toast('Not connected. Your edit was not sent.');
+  private sendTool(command: Record<string, unknown>): boolean {
+    const sent = this.conn.send({ ...command, cmdId: `tool-${++this.cmdCounter}` });
+    if (!sent) this.toast('Not connected. Your edit was not sent.');
+    return sent;
   }
 
   private dispose(): void {
@@ -734,6 +746,106 @@ export class App {
     this.toastEl.textContent = text;
     this.toastEl.classList.remove('hidden');
     window.setTimeout(() => this.toastEl.classList.add('hidden'), 4000);
+  }
+
+  private conditionMenuDismiss = (event: PointerEvent): void => {
+    if (!this.conditionMenu.contains(event.target as Node)) this.closeTokenConditionMenu();
+  };
+
+  private showTokenConditionMenu(token: import('./protocol').Token, x: number, y: number): void {
+    const active = token.conditions ?? [];
+    const items: HTMLElement[] = [];
+    const builtIns = [
+      ['hidden', 'Hidden'], ['restrained', 'Restrained'], ['vulnerable', 'Vulnerable'],
+    ] as const;
+    for (const [type, name] of builtIns) {
+      const selected = active.some(condition => condition.type === type);
+      items.push(this.conditionMenuItem(name, selected, () => {
+        this.sendTokenCondition(token.id, { id: type, type, name }, !selected);
+      }));
+    }
+    const custom = active.filter(condition => condition.type === 'custom');
+    if (custom.length) {
+      items.push(el('div', { class: 'condition-menu-divider', role: 'separator' }));
+      for (const condition of custom) {
+        items.push(this.conditionMenuItem(condition.name, true, () => {
+          this.sendTokenCondition(token.id, condition, false);
+        }));
+      }
+    }
+    items.push(el('div', { class: 'condition-menu-divider', role: 'separator' }));
+    const add = el('button', { type: 'button', role: 'menuitem', class: 'condition-menu-add' }, 'Custom...');
+    add.addEventListener('click', () => {
+      this.closeTokenConditionMenu();
+      this.showCustomConditionDialog(token.id);
+    });
+    items.push(add);
+    this.conditionMenu.replaceChildren(...items);
+    this.conditionMenu.classList.remove('hidden');
+    const left = Math.max(8, Math.min(x, window.innerWidth - 220));
+    const top = Math.max(8, Math.min(y, window.innerHeight - Math.min(300, items.length * 38 + 16)));
+    this.conditionMenu.style.left = `${left}px`;
+    this.conditionMenu.style.top = `${top}px`;
+    window.setTimeout(() => document.addEventListener('pointerdown', this.conditionMenuDismiss), 0);
+    document.addEventListener('keydown', this.conditionMenuKeydown);
+  }
+
+  private conditionMenuKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') this.closeTokenConditionMenu();
+  };
+
+  private conditionMenuItem(name: string, selected: boolean, action: () => void): HTMLButtonElement {
+    const button = el('button', { type: 'button', role: 'menuitemcheckbox' },
+      el('span', { class: 'condition-menu-check' }, selected ? '\u2713' : ''), name);
+    button.setAttribute('aria-checked', String(selected));
+    button.addEventListener('click', () => {
+      this.closeTokenConditionMenu();
+      action();
+    });
+    return button;
+  }
+
+  private closeTokenConditionMenu(): void {
+    this.conditionMenu.classList.add('hidden');
+    document.removeEventListener('pointerdown', this.conditionMenuDismiss);
+    document.removeEventListener('keydown', this.conditionMenuKeydown);
+  }
+
+  private showCustomConditionDialog(tokenId: string): void {
+    const dialog = el('dialog', { class: 'condition-dialog', ariaLabel: 'Add custom condition' });
+    const input = el('input', { type: 'text', maxLength: 80, autocomplete: 'off', required: true });
+    const error = el('p', { class: 'condition-dialog-error', role: 'alert' });
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    const add = el('button', { type: 'submit', class: 'primary' }, 'Add condition');
+    const form = el('form', { method: 'dialog' },
+      el('h2', {}, 'Custom condition'),
+      el('label', {}, 'Condition name', input), error,
+      el('div', { class: 'condition-dialog-actions' }, cancel, add));
+    dialog.append(form);
+    document.body.append(dialog);
+    cancel.addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const name = input.value.trim();
+      if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
+        error.textContent = 'Enter a condition name of 1-80 characters without control characters.';
+        input.focus();
+        return;
+      }
+      dialog.close();
+      this.sendTokenCondition(tokenId, { type: 'custom', name }, true);
+    });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.showModal();
+    input.focus();
+  }
+
+  private sendTokenCondition(tokenId: string, condition: { id?: string; type: string; name: string }, enabled: boolean): boolean {
+    const state = this.store.state;
+    if (!state) return false;
+    return this.sendTool({ type: 'command', kind: 'setTokenCondition', tokenId,
+      condition: { ...condition, ...(condition.id ? { id: condition.id } : {}) },
+      enabled, mapId: state.mapId, levelId: state.levelId });
   }
 
   private handle(msg: ServerMessage): void {
@@ -757,6 +869,7 @@ export class App {
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
         this.view.canRotateTokens = msg.tokenRotation === true;
+        this.view.canEditConditions = msg.tokenConditions === true;
         this.view.canControlPortals = msg.portalControls === true;
         this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
         this.toolButtons.get('measure')!.disabled = !msg.measurementTools;
@@ -1142,6 +1255,110 @@ export class App {
   }
 
   private sheetLoads = new Map<string, Promise<SheetHandle>>();
+  private conditionSignatures = new Map<string, string>();
+
+  private syncTokenConditionEffects(actor: Actor, handle: SheetHandle): void {
+    const conditions = (this.store.state?.tokens ?? [])
+      .filter(token => token.actorId === actor.id)
+      .flatMap(token => (token.conditions ?? []).map(condition => ({ tokenId: token.id, condition })));
+    const signature = JSON.stringify(conditions);
+    if (this.conditionSignatures.get(actor.id) === signature) return;
+    this.conditionSignatures.set(actor.id, signature);
+    if (conditions.length || handle.character.effects.some(effect => !!effect.onlineCondition)) {
+      void handle.save.refresh().then(() => this.applyTokenConditionEffects(actor, handle))
+        .catch((error: Error) => this.toast(error.message));
+      return;
+    }
+    this.applyTokenConditionEffects(actor, handle);
+  }
+
+  private applyTokenConditionEffects(actor: Actor, handle: SheetHandle): void {
+    const conditions = (this.store.state?.tokens ?? [])
+      .filter(token => token.actorId === actor.id)
+      .flatMap(token => (token.conditions ?? []).map(condition => ({ tokenId: token.id, condition })));
+    handle.character.effects ??= [];
+    const expected = new Map(conditions.map(({ tokenId, condition }) =>
+      [`${tokenId}:${condition.id}`, { tokenId, condition }]));
+    const active = new Set((this.store.state?.tokens ?? []).flatMap(token =>
+      (token.conditions ?? []).map(condition => `${token.id}:${condition.id}`)));
+    for (const key of this.pendingConditionRemovals) {
+      if (!active.has(key)) this.pendingConditionRemovals.delete(key);
+    }
+    let changed = false;
+    for (const [key, { tokenId, condition }] of expected) {
+      if (this.pendingConditionRemovals.has(key)) continue;
+      const kind = condition.type === 'hidden' ? 'buff' : 'debuff';
+      const existing = handle.character.effects.find(effect => effect.onlineCondition
+          && effect.onlineCondition.id === condition.id);
+      if (existing) {
+        if (existing.kind !== kind) {
+          existing.kind = kind;
+          changed = true;
+        }
+        continue;
+      }
+      const text = condition.type === 'hidden'
+        ? 'Any rolls against a Hidden creature have disadvantage. After an adversary moves to where they would see you, you move into their line of sight, or you make an attack, you are no longer Hidden.'
+        : condition.type === 'restrained'
+          ? 'Restrained characters can’t move, but you can still take actions from their current position.'
+          : condition.type === 'vulnerable'
+            ? 'When a creature is Vulnerable, all rolls targeting them have advantage.'
+            : '';
+      handle.character.effects.push({
+        id: `online-condition:${tokenId}:${condition.id}`,
+        name: condition.name,
+        kind,
+        text,
+        onlineCondition: { tokenId, id: condition.id },
+      });
+      changed = true;
+    }
+    if (changed) {
+      handle.save();
+      handle.bus.notify();
+      this.scheduleEffects();
+    }
+  }
+
+  private async sendMissingConditionEffects(actorId: string, character: CharacterSheet): Promise<void> {
+    const state = this.store.state;
+    const handle = this.sheetHandles.get(actorId);
+    if (!state || !handle || !this.view.canEditConditions) return;
+    const { mapId, levelId } = state;
+    const removals = [];
+    for (const token of state.tokens.filter(candidate => candidate.actorId === actorId)) {
+      for (const condition of token.conditions ?? []) {
+        const key = `${token.id}:${condition.id}`;
+        if (character.effects.some(effect => effect.onlineCondition
+            && effect.onlineCondition.id === condition.id)
+            || this.pendingConditionRemovals.has(key)) continue;
+        this.pendingConditionRemovals.add(key);
+        removals.push({ key, tokenId: token.id, condition });
+      }
+    }
+    if (!removals.length) return;
+    try {
+      // The condition command also writes the sheet; save the removed effects first.
+      await handle.save.flush();
+    } catch {
+      // Autosave reports the failure and reloads conflicts. Do not send a competing write.
+      for (const { key } of removals) this.pendingConditionRemovals.delete(key);
+      handle.bus.notify();
+      this.scheduleEffects();
+      return;
+    }
+    for (const { key, tokenId, condition } of removals) {
+      const current = this.store.state;
+      if (!current || current.mapId !== mapId || current.levelId !== levelId
+          || character.effects.some(effect => effect.onlineCondition
+            && effect.onlineCondition.id === condition.id)
+          || !current.tokens.some(token => token.id === tokenId
+            && token.conditions?.some(active => active.id === condition.id))
+          || !this.sendTokenCondition(tokenId, condition, false)) {
+        this.pendingConditionRemovals.delete(key);
+      }
+    }
+  }
 
   private ensureSheet(a: Actor): Promise<SheetHandle> {
     let load = this.sheetLoads.get(a.id);
@@ -1167,6 +1384,7 @@ export class App {
             bus,
             onChange: () => {
               changed();
+              void this.sendMissingConditionEffects(a.id, character);
               this.scheduleEffects();
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
             },
@@ -1241,7 +1459,10 @@ export class App {
     this.myActors = mine;
     for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
     if (changedStatus.length) this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
-    for (const a of mine) void this.ensureSheet(a).then(() => this.scheduleEffects()).catch(() => { /* reported when the sheet is opened */ });
+    for (const a of mine) void this.ensureSheet(a).then(handle => {
+      this.syncTokenConditionEffects(a, handle);
+      this.scheduleEffects();
+    }).catch(() => { /* reported when the sheet is opened */ });
     this.scheduleEffects();
     this.actorsEl.replaceChildren(
       ...(mine.length === 0 ? [el('p', { class: 'muted' }, 'No actors assigned to you.')] : []),

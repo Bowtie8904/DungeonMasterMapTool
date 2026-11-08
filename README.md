@@ -87,7 +87,16 @@ Nothing starts until you click **Start online session**, so offline play and the
   have dashed square outlines and a small rotation handle (on supporting hosts). Drag the handle to rotate;
   arrow keys with the map focused move selected tokens by half a tile. The host still enforces control,
   pause and movement restrictions. Browser doors/windows use light-gray round icons, changing their glyph
-  rather than color when opened; no portal segments are drawn.
+  rather than color when opened; no portal segments are drawn. The DM and players can right-click tokens to
+  toggle Hidden, Restrained, Vulnerable, or multiple named custom conditions. Condition badges appear on
+  tokens; actor tokens also receive linked effects (Hidden is a buff; the others are debuffs),
+  and removing a linked effect clears its token badge. Token menus suppress the native browser context menu.
+  Restrained tokens cannot be moved by players, but the DM can still move them.
+  Moving, rotating or resizing tokens preserves their conditions, including through undo/redo.
+  Removing a linked effect saves the sheet before updating its token, avoiding competing saves and false version-conflict messages.
+  Actor conditions persist on the character sheet across map switches and token deletion. Fresh actor
+  tokens inherit those conditions, and revisiting a map refreshes existing actor tokens from the sheet.
+  Explicitly removing an actor condition clears it from that actor's tokens; non-actor conditions stay token-local.
 - **Door/window locks:** right-click a door or window on the DM map and toggle **Locked**. New and legacy
   portals default to unlocked; locks are saved with the map and support DM undo/redo. Locked portals show
   a small amber padlock on the DM badge only. Players left-click badges with Select to open/close unlocked

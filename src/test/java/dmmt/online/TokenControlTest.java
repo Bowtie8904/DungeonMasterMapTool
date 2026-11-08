@@ -28,6 +28,96 @@ class TokenControlTest {
     }
 
     @Test
+    void freshActorTokensInheritPersistedConditionsAndRevisitedTokensFollowSheetRemovals() throws Exception {
+        var controller = new OnlineSessionController(temp, new TestApp());
+        Campaign campaign = controller.store().create("Conditions");
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Actor").build());
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var sheet = mapper.createObjectNode();
+        sheet.put("notes", "Preserve unrelated character data");
+        var effects = sheet.putArray("effects");
+        effects.add(OnlineTokenConditions.effect(mapper.createObjectNode(), "old-map-token",
+                new DmProject.TokenCondition("restrained", "restrained", "Restrained")));
+        effects.add(OnlineTokenConditions.effect(mapper.createObjectNode(), "old-map-token",
+                new DmProject.TokenCondition("custom-fire", "custom", "On Fire")));
+        controller.store().saveSheet(campaign.getId(), "actor", sheet.toString());
+        var fresh = DmProject.TokenInstance.builder().id("new-map-token")
+                .actorId("actor").campaignId(campaign.getId()).build();
+        controller.inheritActorConditions(campaign, fresh);
+        assertEquals(List.of("restrained", "custom-fire"),
+                fresh.getConditions().stream().map(DmProject.TokenCondition::getId).toList());
+        assertEquals(sheet, mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor")));
+        var reopened = new OnlineSessionController(temp, new TestApp());
+        var revisited = DmProject.TokenInstance.builder().id("old-map-token")
+                .actorId("actor").campaignId(campaign.getId()).build();
+        reopened.inheritActorConditions(campaign, revisited);
+        assertEquals("On Fire", revisited.getConditions().getLast().getName());
+        effects.remove(0);
+        controller.store().saveSheet(campaign.getId(), "actor", sheet.toString());
+        reopened.inheritActorConditions(campaign, revisited);
+        assertEquals(List.of("custom-fire"),
+                revisited.getConditions().stream().map(DmProject.TokenCondition::getId).toList());
+        var regular = DmProject.TokenInstance.builder().id("regular")
+                .conditions(new java.util.ArrayList<>(fresh.getConditions())).build();
+        reopened.inheritActorConditions(campaign, regular);
+        assertEquals(2, regular.getConditions().size());
+        var foreign = DmProject.TokenInstance.builder().id("foreign").actorId("actor").campaignId("foreign")
+                .conditions(new java.util.ArrayList<>(fresh.getConditions())).build();
+        reopened.inheritActorConditions(campaign, foreign);
+        assertEquals(2, foreign.getConditions().size());
+    }
+
+    @Test
+    void liveSessionProjectsActorConditionsOntoEveryTokenAndRemovesLegacyEffects() throws Exception {
+        TestApp app = new TestApp();
+        var controller = new OnlineSessionController(temp, app);
+        Campaign campaign = controller.store().create("Shared conditions");
+        campaign.getPlayers().add(Campaign.Player.builder().id("player").name("Player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Actor").ownerId("player").build());
+        for (var token : app.project.getTokens()) {
+            token.setActorId("actor");
+            token.setCampaignId(campaign.getId());
+        }
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var sheet = mapper.createObjectNode();
+        sheet.putArray("effects").add(OnlineTokenConditions.effect(mapper.createObjectNode(), "previous-map",
+                new DmProject.TokenCondition("restrained", "restrained", "Restrained")));
+        controller.store().saveSheet(campaign.getId(), "actor", sheet.toString());
+        try {
+            onFx(() -> {
+                try (var socket = new java.net.ServerSocket(0)) {
+                    String port = String.valueOf(socket.getLocalPort());
+                    Tuning.apply(key -> "online.port".equals(key) ? port : null);
+                }
+                controller.start(campaign);
+                for (var token : app.project.getTokens()) {
+                    assertEquals("restrained", token.getConditions().getFirst().getId());
+                }
+                return null;
+            });
+            assertFalse(controller.moveToken("player", "token", 3, 0).get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.setTokenCondition("player", "token", "map", "level",
+                    "restrained", "Restrained", "restrained", false).get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> {
+                assertTrue(app.project.getTokens().stream().allMatch(token -> token.getConditions().isEmpty()));
+                return null;
+            });
+            assertTrue(mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor")).path("effects").isEmpty());
+            assertTrue(controller.setTokenCondition("token", "hidden", "Hidden", "hidden", true)
+                    .get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> {
+                assertTrue(app.project.getTokens().stream().allMatch(token ->
+                        token.getConditions().getFirst().getId().equals("hidden")));
+                return null;
+            });
+            assertEquals("buff", mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"))
+                    .path("effects").get(0).path("kind").asText());
+        } finally {
+            onFx(() -> { controller.stop(); Tuning.reset(); return null; });
+        }
+    }
+
+    @Test
     void grantsPersistPerInstanceAndMapAndFailedSavesRestorePermissions() throws Exception {
         TestApp app = new TestApp();
         var controller = new OnlineSessionController(temp, app);

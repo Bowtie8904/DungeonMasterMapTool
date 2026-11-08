@@ -1,5 +1,16 @@
 # Online Play web client
 
+Token condition menus open from the canceled browser `contextmenu` event, rather than on pointer press,
+so displaying the in-app menu cannot redirect the native context-menu event to a new DOM element.
+Hidden is a linked actor buff; Restrained, Vulnerable and custom conditions are debuffs.
+Existing linked Hidden effects are reclassified when synchronized with their token.
+Effect removal flushes the sheet save before sending `setTokenCondition`, so the host's linked-effect
+update does not race the client's versioned autosave. A failed save keeps the token unchanged and reports
+the existing save error; edits in another window still receive normal conflict protection.
+Linked actor conditions persist when their token is absent, hidden or on another map. Fresh tokens
+inherit saved conditions on the host; synchronization matches actor effects by condition ID, preserving
+legacy token linkage without duplicating effects when the token ID changes. Non-actor conditions remain local to the token.
+
 Wizard automation is maintained in `dmmap-daggerheart/classes.json`. Adept is an optional duality-roll
 choice requiring a selected Experience; it doubles that modifier and replaces the 1 Hope cost with
 1 Stress. Honed Expertise automatically rolls a client-local d6 at submission, showing the result

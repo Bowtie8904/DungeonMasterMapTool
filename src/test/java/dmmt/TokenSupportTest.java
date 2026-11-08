@@ -77,6 +77,30 @@ class TokenSupportTest
     }
 
     @Test
+    void movementPreservesConditionsAndIndependentHistorySnapshots() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            invoke(f.app, "addToken", definition(), 100.0, 100.0);
+            var placed = f.project.getTokens().getFirst();
+            String id = placed.getId();
+            placed.getConditions().add(new DmProject.TokenCondition("hidden", "hidden", "Hidden"));
+            placed.getConditions().add(new DmProject.TokenCondition("custom-1", "custom", "Blessed"));
+            f.drag(100, 100, 150, 150, false);
+            assertEquals(2, token(f, id).getConditions().size());
+            assertEquals("hidden", token(f, id).getConditions().getFirst().getType());
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(100, token(f, id).getX());
+            assertEquals(2, token(f, id).getConditions().size());
+            assertNotSame(placed.getConditions(), token(f, id).getConditions());
+            assertNotSame(placed.getConditions().getFirst(), token(f, id).getConditions().getFirst());
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(150, token(f, id).getX());
+            assertEquals(2, token(f, id).getConditions().size());
+        });
+    }
+
+    @Test
     void placementHalfSnapFreeMoveResizeAndRemovalAreUndoableAndPersist() throws Exception
     {
         onFx(() -> {

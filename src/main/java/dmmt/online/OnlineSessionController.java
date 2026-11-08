@@ -351,12 +351,34 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             return;
         }
         try {
+            synchronizeActorConditions(project);
             OnlineStateBuilder.Context ctx = new OnlineStateBuilder.Context(app.mapId(), app.levelId(),
                     app.mapName(), app.projectFile(), weatherSeed, current.isPaused(), app.showGrid());
             ObjectNode state = builder.build(project, ctx, campaign, assets, java.util.List.copyOf(chatTail));
             current.publish(state, app.mapId() + "/" + app.levelId());
-        } catch (RuntimeException ex) {
+        } catch (IOException | RuntimeException ex) {
             app.status("Online Play: could not publish the map state: " + ex.getMessage());
+        }
+    }
+
+    public void inheritActorConditions(Campaign source, DmProject.TokenInstance token) throws IOException {
+        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, source);
+        if (actor == null) return;
+        String saved = store.loadSheet(source.getId(), actor.getId());
+        if (saved != null) token.setConditions(OnlineTokenConditions.actorConditions(MAPPER.readTree(saved)));
+    }
+
+    private void synchronizeActorConditions(DmProject project) throws IOException {
+        var sheets = new java.util.HashMap<String, JsonNode>();
+        for (var token : project.getTokens()) {
+            Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
+            if (actor == null) continue;
+            if (!sheets.containsKey(actor.getId())) {
+                String saved = store.loadSheet(campaign.getId(), actor.getId());
+                sheets.put(actor.getId(), saved == null ? null : MAPPER.readTree(saved));
+            }
+            JsonNode sheet = sheets.get(actor.getId());
+            if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
         }
     }
 
@@ -393,6 +415,11 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     @Override
     public boolean supportsTokenRotation() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsTokenConditions() {
         return true;
     }
 
@@ -469,6 +496,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 DmProject project = app.project();
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
+                if (token != null) inheritActorConditions(campaign, token);
                 String problem = project == null ? "No map open" : movementBlockReason(token);
                 if (problem == null)
                     problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, phaseMovement(token));
@@ -486,6 +514,117 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             }
         });
         return result;
+    }
+
+    @Override
+    public CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
+            String playerId, String tokenId, String mapId, String levelId, String type, String name,
+            String conditionId, boolean enabled) {
+        CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            try {
+                if (!running() || app.project() == null || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)
+                        || playerId != null && paused()) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Map changed, game paused, or session stopped"));
+                    return;
+                }
+                DmProject project = app.project();
+                DmProject.TokenInstance token = project.getTokens().stream()
+                        .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
+                if (token == null) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Token not found"));
+                    return;
+                }
+                if (playerId != null) {
+                    String controlProblem = MoveValidator.checkControl(campaign, mapId, playerId, token);
+                    if (controlProblem != null) {
+                        result.complete(OnlineSessionServer.MoveResult.rejected(controlProblem));
+                        return;
+                    }
+                }
+                inheritActorConditions(campaign, token);
+                String resolvedName = name == null ? "" : name.trim();
+                String problem = OnlineTokenConditions.validationProblem(type, resolvedName);
+                if (problem != null) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected(problem));
+                    return;
+                }
+                String id = "custom".equals(type) ? conditionId : type;
+                if (enabled && "custom".equals(type) && (id == null || id.isBlank())) {
+                    id = "custom-" + java.util.UUID.randomUUID();
+                }
+                if (id == null || id.isBlank()) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Condition identifier is required"));
+                    return;
+                }
+                String resolvedId = id;
+                java.util.List<DmProject.TokenCondition> conditions = token.getConditions() == null
+                        ? new java.util.ArrayList<>() : new java.util.ArrayList<>(token.getConditions());
+                DmProject.TokenCondition existing = conditions.stream()
+                        .filter(c -> resolvedId.equals(c.getId())).findFirst().orElse(null);
+                if (enabled && existing == null) {
+                    if ("custom".equals(type) && conditions.stream().anyMatch(c -> "custom".equals(c.getType())
+                            && c.getName().equalsIgnoreCase(resolvedName))) {
+                        result.complete(OnlineSessionServer.MoveResult.rejected("That custom condition is already active"));
+                        return;
+                    }
+                    DmProject.TokenCondition added = DmProject.TokenCondition.builder()
+                            .id(resolvedId).type(type).name(resolvedName).build();
+                    updateActorConditionEffect(token, added, true);
+                    conditions.add(added);
+                } else if (!enabled && existing != null) {
+                    updateActorConditionEffect(token, existing, false);
+                    conditions.remove(existing);
+                } else if (enabled && existing != null && (!existing.getType().equals(type)
+                        || !existing.getName().equals(resolvedName))) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Condition changed; refresh the map and try again"));
+                    return;
+                } else {
+                    result.complete(OnlineSessionServer.MoveResult.accepted());
+                    return;
+                }
+                token.setConditions(conditions);
+                app.changed();
+                publishNow();
+                result.complete(OnlineSessionServer.MoveResult.accepted());
+            } catch (IOException ex) {
+                result.complete(OnlineSessionServer.MoveResult.rejected("Could not update the actor's condition effect"));
+            } catch (RuntimeException ex) {
+                result.complete(OnlineSessionServer.MoveResult.rejected("Condition update failed"));
+            }
+        });
+        return result;
+    }
+
+    public CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
+            String tokenId, String type, String name, String conditionId, boolean enabled) {
+        return setTokenCondition(null, tokenId, app.mapId(), app.levelId(), type, name, conditionId, enabled);
+    }
+
+    private void updateActorConditionEffect(DmProject.TokenInstance token, DmProject.TokenCondition condition,
+                                            boolean enabled) throws IOException {
+        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
+        if (actor == null) return;
+        String saved = store.loadSheet(campaign.getId(), actor.getId());
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode sheet =
+                saved == null ? mapper.createObjectNode() : (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(saved);
+        com.fasterxml.jackson.databind.node.ArrayNode effects = sheet.has("effects") && sheet.get("effects").isArray()
+                ? (com.fasterxml.jackson.databind.node.ArrayNode) sheet.get("effects") : sheet.putArray("effects");
+        boolean found = false;
+        for (int i = effects.size() - 1; i >= 0; i--) {
+            var effect = effects.get(i);
+            if (OnlineTokenConditions.matchesActorEffect(effect, condition.getId())) {
+                found = true;
+                if (!enabled) effects.remove(i);
+                else OnlineTokenConditions.effect((ObjectNode) effect, token.getId(), condition);
+            }
+        }
+        if (enabled && !found) effects.add(OnlineTokenConditions.effect(mapper.createObjectNode(), token.getId(), condition));
+        if (found || enabled) {
+            store.saveSheet(campaign.getId(), actor.getId(), mapper.writeValueAsString(sheet));
+            if (server != null) server.sheetChanged(actor.getId());
+        }
     }
 
     private String movementBlockReason(DmProject.TokenInstance token) {

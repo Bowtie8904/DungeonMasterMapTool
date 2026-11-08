@@ -21,5 +21,6 @@ Before implementing any code change, always open and review `plan.md` in the pro
 
 ## Browser interactions
 
+- After changing web client code or assets, run `npm run build` in `web`, then `mvn process-resources` from the project root before running the Java app: it serves classpath resources from `target\classes`, not `src\main\resources`; restart the host and reload browser pages, and rebuild the package when using a packaged app.
 - Never use native browser prompts (`alert`, `confirm`, or `prompt`). Use themed, accessible in-app dialogs or inline messages when user input is necessary.
 - Do not add confirmation steps to actions that already have explicit controls or usage limits unless the specification requires one.

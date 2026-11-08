@@ -614,8 +614,8 @@ public class CanvasMapRenderer {
     private record DmTextState(TextState text, boolean playerVisible, boolean roomLabel) {
     }
 
-    private record TokenDecorationState(double x, double y, double size, double rotation, DmProject.TokenShape shape, boolean playerVisible,
-                                        boolean nameVisible, String name) {
+    private record TokenDecorationState(double x, double y, double size, double rotation, DmProject.TokenShape shape,
+                                        boolean playerVisible, boolean nameVisible, String name) {
     }
 
     private record SegmentState(double x1, double y1, double x2, double y2) {
@@ -639,14 +639,22 @@ public class CanvasMapRenderer {
     }
 
     private record TokenState(String id, double x, double y, double size, double rotation, String image, String color,
-                              DmProject.TokenShape shape, boolean border, boolean visible) {
+                              DmProject.TokenShape shape, boolean border, boolean visible, List<String> conditions) {
         private static TokenState of(DmProject.TokenInstance token, DmProject project) {
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
             return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(), token.getRotationDeg(),
                     definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor(),
                     definition == null ? null : definition.getShape(), definition != null && definition.isBorder(),
-                    token.isPlayerVisible());
+                    token.isPlayerVisible(), conditionState(token));
         }
+    }
+
+    private static List<String> conditionState(DmProject.TokenInstance token) {
+        return token.getConditions() == null ? List.of() : token.getConditions().stream()
+                .filter(Objects::nonNull)
+                .map(condition -> Objects.toString(condition.getId(), "") + ":"
+                        + Objects.toString(condition.getType(), "") + ":" + Objects.toString(condition.getName(), ""))
+                .toList();
     }
 
     public static final class TokenLayerState {
@@ -712,6 +720,7 @@ public class CanvasMapRenderer {
                 TokenArt.draw(gc, definition, 0, 0, diameter);
                 gc.restore();
             }
+            if (!decorations) drawTokenConditionBadges(gc, token, x, y, radius);
             if (decorations) {
                 gc.save();
                 if (!token.isPlayerVisible()) {
@@ -728,6 +737,44 @@ public class CanvasMapRenderer {
                 }
                 gc.restore();
             }
+        }
+    }
+
+    private void drawTokenConditionBadges(GraphicsContext gc, DmProject.TokenInstance token,
+                                          double x, double y, double radius) {
+        List<DmProject.TokenCondition> conditions = token.getConditions();
+        if (conditions == null || conditions.isEmpty()) return;
+        double badge = 16;
+        for (int i = 0; i < Math.min(conditions.size(), 5); i++) {
+            DmProject.TokenCondition condition = conditions.get(i);
+            if (condition == null) continue;
+            String type = condition.getType();
+            Color color = switch (type == null ? "" : type) {
+                case "hidden" -> Color.web("#536fca");
+                case "restrained" -> Color.web("#c27b24");
+                case "vulnerable" -> Color.web("#c64754");
+                default -> Color.web("#666b75");
+            };
+            String glyph = switch (type == null ? "" : type) {
+                case "hidden" -> "H";
+                case "restrained" -> "R";
+                case "vulnerable" -> "V";
+                default -> "•";
+            };
+            double bx = x + radius - badge / 2;
+            double by = y - radius + badge / 2 + i * badge * .9;
+            gc.save();
+            gc.setFill(color);
+            gc.fillOval(bx - badge / 2, by - badge / 2, badge, badge);
+            gc.setStroke(Color.WHITE);
+            gc.setLineWidth(1);
+            gc.strokeOval(bx - badge / 2, by - badge / 2, badge, badge);
+            gc.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 10));
+            gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
+            gc.setTextBaseline(javafx.geometry.VPos.CENTER);
+            gc.setFill(Color.WHITE);
+            gc.fillText(glyph, bx, by);
+            gc.restore();
         }
     }
 

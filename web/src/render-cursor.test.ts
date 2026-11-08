@@ -19,7 +19,9 @@ class CanvasStub {
   hasPointerCapture() { return this.captured; }
   releasePointerCapture() { this.captured = false; }
   pointer(type: string, x: number, y: number, button = 0) {
-    this.listeners.get(type)?.(Object.assign(new Event(type), { clientX: x, clientY: y, button, pointerId: 1 }));
+    const event = Object.assign(new Event(type, { cancelable: true }), { clientX: x, clientY: y, button, pointerId: 1 });
+    this.listeners.get(type)?.(event);
+    return event;
   }
   key(key: string, modifiers: Partial<KeyboardEvent> = {}) {
     const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });
@@ -66,6 +68,28 @@ describe('map interaction cursors', () => {
     view.setMeasurements([{ ...measure }]);
   });
   afterEach(() => { view.destroy(); vi.unstubAllGlobals(); });
+
+  it('opens the token menu only after canceling the browser context menu', () => {
+    view.canEditConditions = true;
+    const open = vi.fn(() => true);
+    view.onTokenContext = open;
+    canvas.pointer('pointerdown', 100, 100, 2);
+    expect(open).not.toHaveBeenCalled();
+    const context = canvas.pointer('contextmenu', 100, 100, 2);
+    expect(context.defaultPrevented).toBe(true);
+    expect(open).toHaveBeenCalledWith(current.tokens[0], 100, 100);
+    canvas.pointer('pointerup', 100, 100, 2);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses native menus without exposing uncontrolled tokens or unsupported controls', () => {
+    const open = vi.fn(() => true);
+    view.onTokenContext = open;
+    expect(canvas.pointer('contextmenu', 100, 100, 2).defaultPrevented).toBe(true);
+    view.canEditConditions = true;
+    expect(canvas.pointer('contextmenu', 600, 100, 2).defaultPrevented).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+  });
 
   it('only advertises controlled tokens, owned drawings and owned measurements', () => {
     for (const [x, y] of [[100, 100], [250, 250], [450, 400]]) {

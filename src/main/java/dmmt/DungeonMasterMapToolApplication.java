@@ -9367,8 +9367,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 .rotationDeg(token.getRotationDeg())
                 .playerVisible(token.isPlayerVisible()).nameVisible(token.isNameVisible())
                 .actorId(token.getActorId()).campaignId(token.getCampaignId())
-                .light(token.getLight() == null ? null : cloneLight(token.getLight()))                .build();
-                    }
+                .conditions(token.getConditions() == null ? new java.util.ArrayList<>()
+                        : token.getConditions().stream().map(condition -> condition == null ? null
+                                : new DmProject.TokenCondition(condition.getId(), condition.getType(), condition.getName()))
+                        .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)))
+                .light(token.getLight() == null ? null : cloneLight(token.getLight())).build();
+    }
 
                     private void applyTokenState(String id, DmProject.TokenInstance state) {
                         int index = -1;
@@ -9531,6 +9535,9 @@ public class DungeonMasterMapToolApplication extends Application {
         MenuItem remove = new MenuItem("Remove token from map");
         remove.setOnAction(e -> removeToken(id));
         java.util.List<MenuItem> items = new java.util.ArrayList<>(java.util.List.of(visible, name, size));
+        if (onlinePanel != null) {
+            items.add(tokenConditionsMenu(token));
+        }
         if (onlinePanel != null && token.getActorId() == null) {
             String mapId = multiLevelManifest != null ? multiLevelManifest.getId() : project.getId();
             items.add(onlinePanel.tokenControlMenu(mapId, token));
@@ -9550,6 +9557,53 @@ public class DungeonMasterMapToolApplication extends Application {
         hideLightMenu();
         activeLightMenu = new ContextMenu(items.toArray(new MenuItem[0]));
         activeLightMenu.show(dmCanvas, screenX, screenY);
+    }
+
+    private Menu tokenConditionsMenu(DmProject.TokenInstance token) {
+        Menu menu = new Menu("Conditions");
+        java.util.List<DmProject.TokenCondition> active = token.getConditions() == null
+                ? java.util.List.of() : token.getConditions();
+        for (String type : java.util.List.of("hidden", "restrained", "vulnerable")) {
+            String conditionName = dmmt.online.OnlineTokenConditions.builtInName(type);
+            DmProject.TokenCondition condition = active.stream()
+                    .filter(item -> type.equals(item.getType())).findFirst().orElse(null);
+            CheckMenuItem item = new CheckMenuItem(conditionName);
+            item.setSelected(condition != null);
+            item.setOnAction(event -> setOnlineTokenCondition(token, type, conditionName,
+                    condition == null ? type : condition.getId(), item.isSelected()));
+            menu.getItems().add(item);
+        }
+        for (DmProject.TokenCondition condition : active) {
+            if (!"custom".equals(condition.getType())) continue;
+            CheckMenuItem item = new CheckMenuItem(condition.getName());
+            item.setSelected(true);
+            item.setOnAction(event -> setOnlineTokenCondition(token, "custom", condition.getName(),
+                    condition.getId(), item.isSelected()));
+            menu.getItems().add(item);
+        }
+        menu.getItems().add(new SeparatorMenuItem());
+        MenuItem custom = new MenuItem("Add custom condition...");
+        custom.setOnAction(event -> Dialogs.askText(primaryStage, "Custom condition", "Enter a condition name",
+                MaterialDesignP.PLUS, "Add", "", value ->
+                        dmmt.online.OnlineTokenConditions.validationProblem("custom", value))
+                .ifPresent(value -> setOnlineTokenCondition(token, "custom", value, null, true)));
+        menu.getItems().add(custom);
+        return menu;
+    }
+
+    private void setOnlineTokenCondition(DmProject.TokenInstance token, String type, String name,
+                                        String conditionId, boolean enabled) {
+        if (onlinePanel == null) return;
+        onlinePanel.setTokenCondition(token.getId(), type, name, conditionId, enabled)
+                .whenComplete((result, error) -> Platform.runLater(() -> {
+                    if (error != null) {
+                        Dialogs.error(primaryStage, "Could not update condition",
+                                java.util.Objects.requireNonNullElse(error.getMessage(), "The condition update failed."));
+                    } else if (result == null || !result.ok()) {
+                        Dialogs.error(primaryStage, "Could not update condition",
+                                result == null ? "The condition update failed." : result.reason());
+                    }
+                }));
     }
 
     private void addTokenLight(String id) {
@@ -11028,6 +11082,12 @@ public class DungeonMasterMapToolApplication extends Application {
                 .definitionId(definitionId).x(snapToken(worldX, false)).y(snapToken(worldY, false))
                 .sizeTiles(definition.getSizeTiles()).nameVisible(true)
                 .actorId(actor.getId()).campaignId(campaign.getId()).build();
+        try {
+            onlineController.inheritActorConditions(campaign, token);
+        } catch (IOException | IllegalArgumentException ex) {
+            status("Could not place actor: could not load character conditions: " + ex.getMessage());
+            return;
+        }
         executeWithHistory("Place actor", () -> applyTokenState(token.getId(), token),
                 () -> applyTokenState(token.getId(), null));
         selectedTokenId = token.getId();

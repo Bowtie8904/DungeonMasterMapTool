@@ -117,6 +117,9 @@ public class DmProject {
         /** Campaign owning {@link #actorId}; other campaigns show this token as an unknown actor. */
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private String campaignId;
+        /** Conditions applied to this token during Online Play. */
+        @Builder.Default
+        private List<TokenCondition> conditions = new ArrayList<>();
 
         /** The attached light always sits at the token center, so it follows every move, rotation and undo. */
         public LightSource getLight() {
@@ -126,6 +129,17 @@ public class DmProject {
             }
             return light;
         }
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TokenCondition {
+        private String id;
+        private String type;
+        private String name;
     }
 
     /** Lights placed on the map plus the lights attached to tokens, in that order. */

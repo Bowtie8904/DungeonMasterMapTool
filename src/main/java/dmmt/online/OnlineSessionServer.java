@@ -73,6 +73,14 @@ public final class OnlineSessionServer {
             return CompletableFuture.completedFuture(MoveResult.rejected("Token rotation is unavailable on this host"));
         }
 
+        default boolean supportsTokenConditions() { return false; }
+
+        default CompletableFuture<MoveResult> setTokenCondition(String playerId, String tokenId, String mapId,
+                                                                 String levelId, String type, String name,
+                                                                 String conditionId, boolean enabled) {
+            return CompletableFuture.completedFuture(MoveResult.rejected("Token conditions are unavailable on this host"));
+        }
+
         default void measurementsChanged() { }
 
         /** Folder with the Daggerheart compendium JSON files (docs/DAGGERHEART_DATA.md); null disables it. */
@@ -1450,7 +1458,7 @@ public final class OnlineSessionServer {
         return "\"" + CampaignStore.sha256((stored == null ? "" : stored).getBytes(StandardCharsets.UTF_8)) + "\"";
     }
 
-    private void sheetChanged(String actorId) {
+    public synchronized void sheetChanged(String actorId) {
         Campaign.Actor actor = campaign.actor(actorId);
         if (actor == null) return;
         String message = MAPPER.createObjectNode().put("type", "sheetChanged").put("actorId", actorId).toString();
@@ -4255,6 +4263,7 @@ public final class OnlineSessionServer {
             hello.put("sessionId", sessionId);
             hello.put("campaignId", c.getId()).put("drawingTools", host.supportsDrawing()).put("measurementTools", true);
             hello.put("tokenRotation", host.supportsTokenRotation());
+            hello.put("tokenConditions", host.supportsTokenConditions());
             hello.put("portalControls", host.supportsPortalControls());
             hello.put("playerWhispers", true);
             hello.put("chatCards", true);
@@ -4353,6 +4362,33 @@ public final class OnlineSessionServer {
 
     private void onCommand(Client client, JsonNode msg) {
         String cmdId = msg.path("cmdId").asText("");
+        if ("setTokenCondition".equals(msg.path("kind").asText())) {
+            String tokenId = msg.path("tokenId").asText("");
+            String type = msg.path("condition").path("type").asText("");
+            String name = msg.path("condition").path("name").asText("");
+            String conditionId = msg.path("condition").path("id").asText("");
+            boolean enabled = msg.path("enabled").asBoolean(false);
+            if (paused || !host.supportsTokenConditions() || tokenId.isBlank()
+                    || msg.path("condition").isMissingNode() || msg.path("condition").isNull()
+                    || !msg.path("mapId").isTextual() || msg.path("mapId").asText().isBlank()
+                    || !msg.path("levelId").isTextual() || msg.path("levelId").asText().isBlank()
+                    || !msg.path("enabled").isBoolean()) {
+                sendTo(client.ctx, reject(cmdId, paused ? "paused" : "Invalid or unsupported token condition", null));
+                return;
+            }
+            host.setTokenCondition(client.playerId, tokenId, msg.path("mapId").asText(),
+                    msg.path("levelId").asText(), type, name, conditionId, enabled)
+                    .orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
+                        if (error != null || result == null || !result.ok()) {
+                            sendTo(client.ctx, reject(cmdId,
+                                    error != null || result == null ? "Condition update failed" : result.reason(), null));
+                        } else {
+                            sendTo(client.ctx, MAPPER.createObjectNode().put("type", "ack")
+                                    .put("cmdId", cmdId).put("seq", seq()).toString());
+                        }
+                    });
+            return;
+        }
         if ("togglePortal".equals(msg.path("kind").asText())) {
             if (paused || !host.supportsPortalControls()
                     || !msg.path("id").isTextual() || msg.path("id").asText().isBlank()

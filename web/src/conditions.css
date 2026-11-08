@@ -1,0 +1,92 @@
+.condition-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 196px;
+  padding: 6px;
+  border: 1px solid #48505b;
+  border-radius: 8px;
+  background: #20242b;
+  color: #f2f3f5;
+  box-shadow: 0 8px 26px #0009;
+}
+
+.condition-menu button {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.condition-menu button:hover,
+.condition-menu button:focus-visible {
+  outline: none;
+  background: #343b46;
+}
+
+.condition-menu-check {
+  width: 16px;
+  color: #a9d2ff;
+  text-align: center;
+}
+
+.condition-menu-divider {
+  height: 1px;
+  margin: 5px 3px;
+  background: #454c56;
+}
+
+.condition-menu-add {
+  color: #a9d2ff !important;
+}
+
+.condition-dialog {
+  width: min(390px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid #48505b;
+  border-radius: 10px;
+  background: #20242b;
+  color: #f2f3f5;
+  box-shadow: 0 12px 40px #000b;
+}
+
+.condition-dialog::backdrop {
+  background: #080a0dcc;
+}
+
+.condition-dialog h2 {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+.condition-dialog label {
+  display: grid;
+  gap: 7px;
+}
+
+.condition-dialog input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #555e6a;
+  border-radius: 6px;
+  background: #15181e;
+  color: inherit;
+}
+
+.condition-dialog-error {
+  min-height: 1.2em;
+  color: #ff9a9a;
+}
+
+.condition-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

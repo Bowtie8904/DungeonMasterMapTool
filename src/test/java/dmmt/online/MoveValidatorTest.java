@@ -32,6 +32,20 @@ class MoveValidatorTest {
     }
 
     @Test
+    void restrainedTokenCannotBeMovedByPlayer() {
+        Campaign c = campaign();
+        DmProject project = new DmProject();
+        DmProject.TokenInstance t = token(c, true);
+        t.setConditions(List.of(DmProject.TokenCondition.builder()
+                .id("restrained").type("restrained").name("Restrained").build()));
+        assertEquals("This token is Restrained", MoveValidator.check(project, c, "m", "p1", t, 10, 10));
+
+        t.setConditions(List.of(DmProject.TokenCondition.builder()
+                .id("hidden").type("hidden").name("Hidden").build()));
+        assertNull(MoveValidator.check(project, c, "m", "p1", t, 10, 10));
+    }
+
+    @Test
     void disabledActorCannotBeMovedOrRotatedEvenWithExplicitControl() {
         Campaign c = campaign();
         DmProject.TokenInstance t = token(c, true);

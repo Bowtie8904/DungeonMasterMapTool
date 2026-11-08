@@ -341,6 +341,15 @@ public final class OnlineStateBuilder {
             for (String playerId : controllers(token, actor, campaign, mapId)) {
                 by.add(playerId);
             }
+            ArrayNode conditions = node.putArray("conditions");
+            if (token.getConditions() != null) {
+                for (DmProject.TokenCondition condition : token.getConditions()) {
+                    if (condition == null || condition.getId() == null || condition.getType() == null
+                            || condition.getName() == null) continue;
+                    conditions.addObject().put("id", condition.getId())
+                            .put("type", condition.getType()).put("name", condition.getName());
+                }
+            }
         }
         return tokens;
     }

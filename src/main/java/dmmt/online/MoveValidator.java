@@ -23,6 +23,10 @@ public final class MoveValidator {
         }
         String controlProblem = checkControl(campaign, mapId, playerId, token);
         if (controlProblem != null) return controlProblem;
+        if (token.getConditions() != null && token.getConditions().stream()
+                .anyMatch(condition -> condition != null && "restrained".equals(condition.getType()))) {
+            return "This token is Restrained";
+        }
         if (phaseMovement) {
             double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
             double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
