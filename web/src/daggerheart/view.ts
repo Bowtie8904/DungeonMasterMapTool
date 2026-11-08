@@ -179,6 +179,28 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const expandedDescriptions = new Set<string>();
   const descriptionObserver = new ResizeObserver(() => measureDescriptions());
   descriptionObserver.observe(root);
+  const cardLayoutObserver = new ResizeObserver(() => layoutCards());
+  function layoutCards(): void {
+    root.querySelectorAll<HTMLElement>('.cards').forEach(grid => {
+      const width = grid.clientWidth;
+      if (!width) return;
+      const gap = 10;
+      const columns = width >= 610 ? 2 : 1;
+      const cardWidth = (width - gap * (columns - 1)) / columns;
+      const cards = [...grid.children].filter((node): node is HTMLElement => node instanceof HTMLElement && !node.hidden);
+      for (const node of cards) node.style.width = `${cardWidth}px`;
+      const heights = cards.map(node => node.getBoundingClientRect().height);
+      const bottoms = Array<number>(columns).fill(0);
+      cards.forEach((node, i) => {
+        const column = columns === 2 && bottoms[1] < bottoms[0] ? 1 : 0;
+        node.style.left = `${column * (cardWidth + gap)}px`;
+        node.style.top = `${bottoms[column]}px`;
+        bottoms[column] += heights[i] + gap;
+      });
+      const height = `${Math.max(0, ...bottoms.map(bottom => bottom - gap))}px`;
+      if (grid.style.height !== height) grid.style.height = height;
+    });
+  }
   function measureDescriptions(): void {
     root.querySelectorAll<HTMLElement>('.loot-description').forEach(wrap => {
       const text = wrap.querySelector<HTMLElement>('.loot-description-text')!;
@@ -671,6 +693,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   const render = () => {
     hideSourceTooltip();
+    cardLayoutObserver.disconnect();
     const scroll = root.querySelector('.pages')?.scrollTop ?? 0;
     const sidebarScroll = root.querySelector('.sheet-sidebar')?.scrollTop ?? 0;
     const readOnly = opts.readOnly?.() === true;
@@ -683,6 +706,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('aside', { class: 'sheet-sidebar', ariaLabel: 'Traits' }, traits()),
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
+    root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard').forEach(node => cardLayoutObserver.observe(node));
+    layoutCards();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
       root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
@@ -697,7 +722,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (p) p.scrollTop = scroll;
     const sidebar = root.querySelector('.sheet-sidebar');
     if (sidebar) sidebar.scrollTop = sidebarScroll;
-    requestAnimationFrame(measureDescriptions);
+    requestAnimationFrame(() => { measureDescriptions(); layoutCards(); });
   };
 
   const launchMancer = () => { void openMancer(root, c, () => render()); };
@@ -1570,6 +1595,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       for (const { d, node } of nodes) { const ok = !q || cardMatches(d, q); node.hidden = !ok; if (ok) shown++; }
       for (const x of extras) x.hidden = !!q;
       none.hidden = !q || shown > 0 || nodes.length === 0;
+      layoutCards();
     };
     search.addEventListener('input', apply);
     apply();

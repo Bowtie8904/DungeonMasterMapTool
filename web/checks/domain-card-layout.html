@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Domain card layout check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { renderSheetView } from '../src/daggerheart/view.ts';
+
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const settled = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const character = emptyCharacter('Domain layout');
+  character.mancer.done = true;
+  character.testingCharacter = true;
+  character.loadout = Array.from({ length: 9 }, (_, i) => ({
+    name: `Card ${i + 1}`, level: i + 1, domain: 'Arcana', type: 'Ability', recall: 0,
+    text: i === 0 ? 'Long rules. '.repeat(240) : 'Short rules.',
+  })).reverse();
+  const savedOrder = character.loadout.map(card => card.name).join();
+  const host = document.querySelector('#host');
+  host.style.cssText = 'width:1200px;height:1000px;display:flex';
+  const sheet = renderSheetView({ character, onRoll: () => true });
+  host.append(sheet);
+  [...sheet.querySelectorAll('.tab')].find(tab => tab.textContent === 'Domain Cards').click();
+  const grid = sheet.querySelector('.cards');
+  const cards = [...grid.children];
+  assert(cards.map(card => card.querySelector('.nm').textContent).join() === [...character.loadout].reverse().map(card => card.name).join(), 'Level sort changed');
+  assert(character.loadout.map(card => card.name).join() === savedOrder, 'Saved card order changed');
+  const check = () => {
+    const visible = cards.filter(card => !card.hidden);
+    const rects = visible.map(card => card.getBoundingClientRect());
+    const bottoms = new Map();
+    for (let i = 0; i < visible.length; i++) {
+      assert(rects[i].height >= visible[i].scrollHeight, 'Card split or content clipped');
+      if (i) assert(rects[i].top >= rects[i - 1].top - 1, 'Higher-level card appears above a lower-level card');
+      const previous = bottoms.get(rects[i].left);
+      if (previous !== undefined) assert(rects[i].top >= previous + 9, 'Cards overlap or lack spacing');
+      bottoms.set(rects[i].left, rects[i].bottom);
+    }
+    assert(Math.abs(grid.getBoundingClientRect().bottom - Math.max(...rects.map(rect => rect.bottom))) < 1, 'Panel does not enclose its cards');
+    return rects;
+  };
+  const rects = check();
+  const columns = [...new Set(rects.map(rect => rect.left))];
+  assert(columns.length === 2, 'Wide panel does not have exactly two columns');
+  assert(rects[0].height > rects[1].height * 3, 'Short card stretched to match long card');
+  assert(rects[0].left < rects[1].left && rects[0].top === rects[1].top, 'Lowest levels are not at the top across both columns');
+  assert(rects[2].left === rects[1].left && rects[3].left === rects[1].left, 'Short cards are forced into alternating columns');
+  const nextTops = columns.map(() => rects[0].top);
+  for (const rect of rects) {
+    const expected = nextTops[1] < nextTops[0] ? 1 : 0;
+    assert(rect.left === columns[expected] && Math.abs(rect.top - nextTops[expected]) < 1, 'Card was not placed at the next available spot in the shorter column');
+    nextTops[expected] = rect.bottom + 10;
+  }
+  const counts = columns.map(left => rects.filter(rect => rect.left === left).length);
+  assert(counts[0] !== counts[1], 'Columns balanced by card count instead of height');
+  const bottoms = columns.map(left => Math.max(...rects.filter(rect => rect.left === left).map(rect => rect.bottom)));
+  assert(Math.abs(bottoms[0] - bottoms[1]) <= Math.max(...rects.map(rect => rect.height)) + 10, 'Columns are not height balanced');
+  const search = sheet.querySelector('input[type=search]');
+  search.value = 'Short';
+  search.dispatchEvent(new Event('input'));
+  const filtered = check();
+  assert(filtered.length === 8 && cards[0].hidden, 'Search did not hide the long card');
+  const filteredColumns = [...new Set(filtered.map(rect => rect.left))];
+  assert(filteredColumns.length === 2 && filtered.filter(rect => rect.left === filteredColumns[0]).length === 4, 'Search did not rebalance columns');
+  host.style.width = '700px';
+  await settled();
+  assert(new Set(check().map(rect => rect.left)).size === 1, 'Narrow panel did not collapse to one column');
+  search.value = '';
+  search.dispatchEvent(new Event('input'));
+  assert(check().length === 9, 'Clearing search did not restore cards');
+  host.style.width = '1200px';
+  await settled();
+  assert(new Set(check().map(rect => rect.left)).size === 2, 'Widening panel did not restore two columns');
+  cards[1].querySelector('.rich').textContent = 'Changed rules. '.repeat(100);
+  await settled();
+  check();
+  sheet.remove();
+  character.testingCharacter = false;
+  character.vault = character.loadout.slice(0, 7);
+  character.loadout = character.loadout.slice(7);
+  const normal = renderSheetView({ character, onRoll: () => true });
+  host.style.width = '1200px';
+  host.append(normal);
+  [...normal.querySelectorAll('.tab')].find(tab => tab.textContent === 'Domain Cards').click();
+  assert(normal.querySelectorAll('.dcard.empty').length === 3, 'Empty loadout slots missing');
+  const panels = () => [...normal.querySelectorAll('.cards')];
+  panels()[0].querySelector('.card-menu-btn').click();
+  panels()[0].querySelector('[role=menuitem]').click();
+  assert(character.loadout.length === 1 && character.vault.length === 8, 'Move to vault changed');
+  panels()[1].querySelector('.act button').click();
+  assert(character.loadout.length === 2 && character.vault.length === 7, 'Recall from vault changed');
+  assert(normal.querySelector('.dcard').draggable, 'Domain cards are no longer draggable');
+  result.textContent = 'PASS';
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack || error}`;
+}
+</script></body></html>

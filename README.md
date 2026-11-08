@@ -373,7 +373,10 @@ Nothing starts until you click **Start online session**, so offline play and the
     logged-in player and grants access. Hide with `online.files`; the local API controls `online.files`,
     `online.files.import`, `.paste`, `.folder` and `.refresh` remain available.
     The subtle add icon puts armor, weapons, potions, items and domain cards in the
-    matching sheet tab, choosing the receiving character when they own several. Compendium entries cannot be
+    matching sheet tab, choosing the receiving character when they own several. Sheet domain cards keep their
+    natural heights in two balanced columns (one in narrow panels). In level order, each card goes into the
+    shorter column, keeping lower levels at the top across both columns without fixed left/right alternation;
+    the columns may contain different numbers of cards. Compendium entries cannot be
     dragged onto sheets. Every row also has an inventory-style **Link in chat** icon to share its description
     without adding it to a character or offering inventory for transfer. Add and Link in chat are aligned,
     equally sized icon buttons with a larger, clearly visible plus for Add. Links use the selected chat recipient;

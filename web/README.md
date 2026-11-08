@@ -237,6 +237,10 @@ Removal is persisted on the host before notification, including revoking shared-
 Older clients ignore the event and converge on their next snapshot; Online and DM Link versions are unchanged.
 `shared-cards.ts` renders description-only feature/domain/equipment cards, with no sheet automation controls.
 On the sheet, loadout and vault domain cards are displayed in ascending level order without changing their saved order.
+Cards retain their natural heights in two height-balanced columns. In ascending level order, each card goes
+into the shorter column (left on ties), so levels flow from top to bottom across both columns, not by fixed alternation.
+Columns may contain different numbers of cards; narrow panels use one column. Searching and resizing rebalance
+the visible cards without stretching cards to match their neighbors or splitting a card between columns.
 Loadout domain-card resource counters use the label "Tokens" and sit in the card header between the domain and recall cost.
 They retain their existing editable values, limits and autosave behavior. Domain-card action groups have no enclosing border or panel padding; individual buttons retain their normal styling.
 Sheet chat icons and inventory-to-chat drags require `hello.chatCards:true`. Posting uses

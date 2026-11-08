@@ -179,7 +179,8 @@
 .dh .qty { display: inline-flex; align-items: center; gap: 4px; }
 .dh .qty button { width: 22px; height: 22px; padding: 0; line-height: 1; }
 
-.dh .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.dh .cards { position: relative; }
+.dh .cards > .dcard { position: absolute; width: 100%; }
 .dh .dcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .dh .dcard .hd { display: flex; align-items: center; gap: 8px; }
 .dh .dcard .lv { width: 24px; height: 24px; border-radius: 6px; background: #2b3440; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
