@@ -49,7 +49,7 @@ export function startToolPopout(root: HTMLElement, tool: 'note' | 'compendium', 
   let compendiumChat = false;
   let notes: NotesPanel | undefined;
   const compendium = tool === 'compendium' ? new CompendiumPanel({
-    actors: () => store.state?.actors.filter(a => a.ownerId === playerId).map(a => ({ id: a.id, name: a.name })) ?? [],
+    actors: () => store.state?.actors.filter(a => a.ownerId === playerId && !a.disabled).map(a => ({ id: a.id, name: a.name })) ?? [],
     add: addFromPopout,
     toast: report,
     link: async (category, entry) => {

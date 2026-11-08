@@ -35,7 +35,7 @@ import { actionReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { mutagenEffectSource } from '../effects';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
-import { activeCards, activeCardSources } from './copycat';
+import { activeCards, activeCardSources, actorAutomationAvailable, copiedCardAvailable } from './copycat';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
@@ -77,6 +77,7 @@ export interface SheetViewOptions {
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
   character: CharacterSheet;
+  readOnly?: () => boolean;
   artwork?: string;
   /** Sends a roll to the shared roll log; returns false when it could not be sent. */
   onRoll: (roll: RollRequest) => boolean;
@@ -158,6 +159,18 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const c = opts.character;
   let page: Page = 'char';
   const root = el('div', { class: 'dh' });
+  root.addEventListener('click', event => {
+    if (!opts.readOnly?.()) return;
+    const target = event.target as Element;
+    if (target.closest('.tabs [role="tab"], .loot-description button')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  for (const type of ['dragstart', 'dragover', 'drop']) {
+    root.addEventListener(type, event => {
+      if (opts.readOnly?.()) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, true);
+  }
   const deathDialog = (initial?: string) => openDeathDialog(document.body, c, async (move, extras) => {
     if (!opts.onDeathMove) throw new Error('This host does not support death moves. Update the host.');
     await opts.onDeathMove(move, extras);
@@ -658,7 +671,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     hideSourceTooltip();
     const scroll = root.querySelector('.pages')?.scrollTop ?? 0;
     const sidebarScroll = root.querySelector('.sheet-sidebar')?.scrollTop ?? 0;
-    const bonded = resolveBonded(c, rollLocal);
+    const readOnly = opts.readOnly?.() === true;
+    const bonded = readOnly ? null : resolveBonded(c, rollLocal);
     if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
     actionRefreshers = [];
@@ -668,7 +682,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
-    opts.onChange?.();
+    if (readOnly) {
+      root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
+        if (control.matches('.tabs [role="tab"], .loot-description button')) return;
+        if (control instanceof HTMLInputElement && ['text', 'number', 'search'].includes(control.type) || control instanceof HTMLTextAreaElement)
+          control.readOnly = true;
+        else control.disabled = true;
+      });
+      root.querySelectorAll<HTMLElement>('[draggable="true"]').forEach(node => { node.draggable = false; });
+    } else opts.onChange?.();
     const p = root.querySelector('.pages');
     if (p) p.scrollTop = scroll;
     const sidebar = root.querySelector('.sheet-sidebar');
@@ -737,7 +759,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           portrait,
           el(
             'div', { class: 'ident-main' },
-            el('p', { class: 'name' }, c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`)),
+            el('p', { class: 'name' }, c.name, el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, ` (${c.pronouns})`),
+              ...(opts.readOnly?.() ? [el('span', { class: 'tag', style: 'margin-left:8px', role: 'status' }, 'Disabled - read-only')] : [])),
             ...(c.testingCharacter ? [tag('TESTING CHARACTER - unrestricted', 'hope')] : []),
             sub('Class: ', c.className, ` - Subclass: ${c.subclass}`),
             ...multiclassesOf(c).map((m) => sub('Multiclass: ', m.className, ` - Subclass: ${m.subclass.replace(/^[^:]+:\s*/, '')} - Domain: ${m.domain}`)),
@@ -900,7 +923,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const total = traitTotal(c, name);
       const md = el('span', { class: 'md' }, signed(total));
       if (total !== base) md.style.color = total > base ? 'var(--hope, #4a9)' : 'var(--hp, #c55)';
-      const tile = el('button', { type: 'button', class: 'mini-trait', title: `Roll ${name}` }, el('span', { class: 'nm' }, name), md);
+      const tile = el('button', { type: 'button', class: 'mini-trait', title: `Roll ${name}`, disabled: opts.readOnly?.() === true }, el('span', { class: 'nm' }, name), md);
       tile.addEventListener('click', () => rollDuality(name, name, [`trait:${name}`]));
       group.append(tile);
     }
@@ -1080,13 +1103,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         rich(mutagenEffectSource(c, e)?.text ?? e.text),
         ...(e.counter ? [el('div', { class: 'badges' }, tag(`Die: ${e.counter.value} / d${effectCounterMax(c, e)}`))] : []),
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
-        ...(e.beastform ? [] : e.features ?? []).map(f => {
+        ...(e.beastform || !actorAutomationAvailable(e.sourceActorId) ? [] : e.features ?? []).map(f => {
           const node = featureCard(f);
           const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
           if (actions) node.append(actions);
           return node;
         }),
-        ...((e.actions?.length ?? 0) ? [el('div', { class: 'acts' },
+        ...((e.actions?.length ?? 0) && actorAutomationAvailable(e.sourceActorId) ? [el('div', { class: 'acts' },
           ...e.actions!.map(action => actionButton(`effect:${e.id}`, {}, action, e.name, {
             extraBlock: () => c.effects.includes(e) ? null : 'This effect is no longer active',
           })))] : []),
@@ -1456,8 +1479,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const pools = loadout ? (d.automation?.resources ?? []).map((r) => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
     const hd = el('div', { class: 'hd' }, el('span', { class: 'lv' }, String(d.level)), el('span', { class: 'dm' }, d.domain), ...pools, el('span', { class: 'rc' }, `\u26A1 ${d.recall}`), ...(loadout ? [control] : []));
     const copied = d.name === 'Copycat' && d.borrowedCard ? [
-      el('p', { class: 'muted' }, `Copied from ${d.borrowedCard.sourceActorName}. Ends on rest or source vaulting.`),
-      dcard(d.borrowedCard.card, loadout, true),
+      el('p', { class: 'muted' }, `Copied from ${d.borrowedCard.sourceActorName}. Ends on rest or source vaulting.${copiedCardAvailable(d) ? '' : ' Source disabled; copied card is unavailable.'}`),
+      ...(copiedCardAvailable(d) ? [dcard(d.borrowedCard.card, loadout, true)] : []),
     ] : [];
     const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? spells.map((s) => spellBlock(d, s, loadout)) : [rich(d.text)]), acts, ...copied), { category: 'domain', item: d });
     node.draggable = !c.testingCharacter;

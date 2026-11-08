@@ -8,7 +8,7 @@ import { hpHealingFloor, syncDeathState } from './death';
 import { syncBrawler } from './brawler';
 import { clearCompanionStress, companionAvailable, companionFeatures, companionWeapon, returnCompanion, syncCompanion } from './companion';
 import type { CompanionRules } from './companion';
-import { activeCards, activeCardSources, clearBorrowedCard } from './copycat';
+import { activeCards, activeCardSources, actorAutomationAvailable, clearBorrowedCard } from './copycat';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -343,7 +343,7 @@ export interface BeastformDef {
 }
 
 export function activeFeatures(c: CharacterSheet): Feature[] {
-  return [...c.features, ...companionFeatures(c), ...c.effects.flatMap(e => e.features ?? [])];
+  return [...c.features, ...companionFeatures(c), ...c.effects.filter(e => actorAutomationAvailable(e.sourceActorId)).flatMap(e => e.features ?? [])];
 }
 
 export function activeWeapons(c: CharacterSheet): Weapon[] {
@@ -735,12 +735,12 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, origin: featureRollOrigin(c, f), auto: f.automation })),
     ...activeCardSources(c),
     ...c.inventory.filter((i) => i.qty > 0 || i.automation?.rollOptions?.some((o) => o.effect && c.effects.some((e) => e.name === o.effect!.name))).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation, item: i })),
-    ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
+    ...c.effects.filter(e => actorAutomationAvailable(e.sourceActorId)).map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: {
       rollOptions: (e.unique ? e.rollOptions?.filter(o => targets.includes(o.roll)).slice(0, 1) : e.rollOptions)
         ?.map(o => o.effectValue ? { ...o, value: e.counter?.value ?? 0 } : o),
     } })),
   ];
-  const prepared: AvailableRollOption[] = c.effects.flatMap((e) => (e.modifiers ?? []).flatMap((modifier, i) => {
+  const prepared: AvailableRollOption[] = c.effects.filter(e => actorAutomationAvailable(e.sourceActorId)).flatMap((e) => (e.modifiers ?? []).flatMap((modifier, i) => {
     if (!modifier.consume || !modifier.roll || !targets.includes(modifier.roll)) return [];
     const option: RollOption = { id: `prepared:${e.id}:${i}`, label: 'prepared', roll: modifier.roll, value: modifier.value, dice: modifier.dice, diceByLevel: modifier.diceByLevel };
     return [{ key: `effect:${e.id}:${i}`, source: e.name, automation: {}, option, active: true, prepared: { effect: e, modifier } }];
@@ -1329,7 +1329,7 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
     ...activeCardSources(c),
     ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
-    ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
+    ...c.effects.filter(e => actorAutomationAvailable(e.sourceActorId)).map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];
   return sources.flatMap((s) => [...(s.auto?.rollTriggers ?? []), ...(s.auto?.conditionalRollTriggers ?? [])].filter((t) => !t.automatic && triggerApplies(c, t, ctx))
     .map((trigger) => ({ key: s.key, source: s.name,

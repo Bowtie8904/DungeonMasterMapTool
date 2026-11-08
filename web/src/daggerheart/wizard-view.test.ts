@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter } from './data';
-import { renderSheetView } from './view';
+import { renderSheetView, SheetBus } from './view';
 
 class Element {
   className = '';
   textContent = '';
   ariaLabel = '';
   disabled = false;
+  readOnly = false;
+  type = '';
+  attributes: Record<string, string> = {};
   style = { cssText: '', setProperty: () => {} };
   dataset = {};
   children: Array<Element | string> = [];
@@ -21,10 +24,14 @@ class Element {
   get text(): string { return this.textContent + this.children.map(c => typeof c === 'string' ? c : c.text).join(''); }
   append(...children: Array<Element | string>): void { this.children.push(...children); }
   replaceChildren(...children: Array<Element | string>): void { this.children = children; }
-  setAttribute(name: string, value: string): void { if (name === 'aria-label') this.ariaLabel = value; }
+  setAttribute(name: string, value: string): void { this.attributes[name] = value; if (name === 'aria-label') this.ariaLabel = value; }
   addEventListener(event: string, handler: () => void): void { this.listeners.set(event, handler); }
   querySelector(): null { return null; }
-  querySelectorAll(): Element[] { return []; }
+  querySelectorAll(selector: string): Element[] {
+    if (selector === 'input, textarea, select, button') return this.all().slice(1).filter(e => ['input', 'textarea', 'select', 'button'].includes(e.tag));
+    return [];
+  }
+  matches(): boolean { return this.attributes.role === 'tab' || this.className.split(' ').includes('description-toggle'); }
   focus(): void {}
   all(): Element[] { return [this, ...this.children.flatMap(c => typeof c === 'string' ? [] : c.all())]; }
 }
@@ -38,6 +45,7 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {},
   });
+
   vi.stubGlobal('ResizeObserver', class { observe(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
@@ -73,4 +81,44 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
   expect(miniStrips.at(-1)?.text).toContain('Evasion14');
   expect(onChange).toHaveBeenCalledTimes(3);
   expect(tooltipSources()).toContain('Conjure Shield');
+});
+
+it('updates sheet controls and minimized trait rolls when read-only is toggled', () => {
+  class Input extends Element {}
+  class Textarea extends Element {}
+  vi.stubGlobal('HTMLInputElement', Input);
+  vi.stubGlobal('HTMLTextAreaElement', Textarea);
+  vi.stubGlobal('document', {
+    createElement: (tag: string) => tag === 'input' ? new Input(tag) : tag === 'textarea' ? new Textarea(tag) : new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {},
+  });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Character');
+  c.mancer = { done: true };
+  const bus = new SheetBus();
+  const onChange = vi.fn();
+  const strips: Element[] = [];
+  let disabled = false;
+  const root = renderSheetView({ character: c, bus, readOnly: () => disabled, onRoll: () => false, onChange,
+    onMiniStrip: strip => { if (strip) strips.push(strip as unknown as Element); } }) as unknown as Element;
+  const miniButtons = () => strips.at(-1)!.all().filter(e => e.className === 'mini-trait');
+  const name = () => root.all().find(e => e.tag === 'p' && e.className === 'name')!;
+  expect(name().text).not.toContain('Disabled');
+  expect(miniButtons().every(button => !button.disabled)).toBe(true);
+  disabled = true;
+  bus.notify();
+  expect(name().text).toContain('Disabled - read-only');
+  expect(root.all().some(e => e.className === 'sheet-error')).toBe(false);
+  expect(miniButtons().every(button => button.disabled)).toBe(true);
+  const controls = root.querySelectorAll('input, textarea, select, button');
+  expect(controls.filter(control => control.attributes.role === 'tab').every(control => !control.disabled)).toBe(true);
+  expect(controls.filter(control => control.tag === 'button' && control.attributes.role !== 'tab').every(control => control.disabled)).toBe(true);
+  expect(onChange).toHaveBeenCalledTimes(1);
+  disabled = false;
+  bus.notify();
+  expect(name().text).not.toContain('Disabled');
+  expect(miniButtons().every(button => !button.disabled)).toBe(true);
+  expect(onChange).toHaveBeenCalledTimes(2);
 });

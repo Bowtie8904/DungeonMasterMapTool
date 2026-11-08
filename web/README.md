@@ -50,6 +50,12 @@ No settings or compatibility-version changes are required.
 
 Browser client for the Online Play host (plan.md section 3.41). Vanilla TypeScript, Canvas 2D, no runtime dependencies.
 
+Actor snapshots and sheet responses include an additive `disabled` flag. Disabled actors remain listed for
+their owner, but their sheets are read-only with a disabled indicator beside the name, and their tokens have no player controllers. The host rejects
+disabled-actor writes, actions, rolls and inventory claims even from older clients, and excludes them from
+actor-based targeting, effects and Copycat candidates. Existing effects remain, and the DM's authenticated
+sheet retains edit access. The flag defaults to false for older campaigns and hosts; DM Link compatibility is unchanged.
+
 Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the schema in
 `docs/DAGGERHEART_DATA.md`. `engine.ts` exposes configured trait/attack/damage actions, suggested roll modes,
 effect-gated mitigation and explicit Hope/Fear outcome overrides; `view.ts` shares those dialogs with chat

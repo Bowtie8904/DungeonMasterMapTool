@@ -71,7 +71,7 @@ const LONG_MOVES: RestMove[] = [
   { id: 'project', label: 'Work on a Project' },
 ];
 
-import { activeCardSources } from './copycat';
+import { activeCardSources, actorAutomationAvailable } from './copycat';
 
 interface Source { key: string; name: string; automation: Automation; item?: CharacterSheet['inventory'][number] }
 function sources(c: CharacterSheet): Source[] {
@@ -81,6 +81,7 @@ function sources(c: CharacterSheet): Source[] {
   };
   for (const f of [...c.features, ...companionFeatures(c), ...c.heritage]) add(`feat:${f.name}`, f.name, f.automation);
   for (const effect of c.effects) {
+    if (!actorAutomationAvailable(effect.sourceActorId)) continue;
     if (effect.actions?.length || effect.rest) add(`effect:${effect.id}`, effect.name, { actions: effect.actions, rest: effect.rest });
   }
   for (const source of activeCardSources(c)) add(source.key, source.name, source.auto);

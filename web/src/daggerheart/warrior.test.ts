@@ -9,6 +9,7 @@ import {
 import { availableMoves, resolveRest, restSlots } from './rest';
 import { creationIgnoresWeaponBurden, emptyChoices, type RulesData } from './rules';
 import { rollContext } from './rollbuttons';
+import { setDisabledCopycatSources } from './copycat';
 
 const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
 const primary: Weapon = { name: 'Greatsword', slot: 'Primary', damage: 'd10+3', damageType: 'phys', trait: 'Strength', range: 'Melee', hands: 2, tier: 1 };
@@ -28,6 +29,20 @@ function warrior(subclass = 'slayer') {
 }
 
 describe('Warrior automation', () => {
+  it('suspends granted downtime actions while the source is disabled and restores them on enabling', () => {
+    const source = warrior().features.find(f => f.automation?.partyDowntime)!;
+    const ally = emptyCharacter('Ally');
+    ally.effects.push({ id: 'grant', name: source.name, kind: 'buff', until: 'manual', modifiers: [],
+      partyDowntimeGrant: true, sourceActorId: 'warrior', actions: structuredClone(source.automation!.actions) });
+    try {
+      expect(availableMoves(ally, 'long').some(move => move.id === 'act:effect:grant|train')).toBe(true);
+      setDisabledCopycatSources(['warrior']);
+      expect(availableMoves(ally, 'long').some(move => move.id === 'act:effect:grant|train')).toBe(false);
+      expect(ally.effects).toHaveLength(1);
+      setDisabledCopycatSources([]);
+      expect(availableMoves(ally, 'long').some(move => move.id === 'act:effect:grant|train')).toBe(true);
+    } finally { setDisabledCopycatSources([]); }
+  });
   it('ignores burden in equipment and creation, but not for other classes', () => {
     const c = warrior();
     expect(ignoresWeaponBurden(c)).toBe(true);

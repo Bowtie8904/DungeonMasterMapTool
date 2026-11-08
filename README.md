@@ -241,6 +241,11 @@ Nothing starts until you click **Start online session**, so offline play and the
   Hover or focus Evasion, Armor or Thresholds to see their sources in an overlay above the tabs, without adding scrollbars.
   Sheets are saved on the host per actor (`<campaign>/sheets/<actorId>.json`, debounced autosave) and reload on
   the next visit. A new actor starts with an empty sheet that offers the **Character Mancer**.
+  The DM can right-click an actor in Online Play to disable or re-enable it. Its assigned player can still
+  read the disabled sheet, marked beside the character's name, but cannot edit it, use its actions, or move
+  its token; the DM retains control.
+  Disabled actors are excluded from targeting, transfers and actor-based automation. Previously applied
+  effects remain in place, and re-enabling restores access.
   Domain-card counters labeled "Tokens" sit in each loadout card's header between its domain and recall cost;
   loadout and vault cards are displayed in ascending level order without changing their saved order. Domain-card
   action groups have no enclosing border, while individual buttons retain their normal styling.

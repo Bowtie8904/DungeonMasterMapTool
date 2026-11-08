@@ -95,6 +95,18 @@ class OnlineSessionServerTest {
         assertEquals("Flight", saved.path("loadout").get(0).path("borrowedCard").path("card").path("name").asText());
         assertEquals("Copycat/Flight/flight", saved.path("loadout").get(0).path("borrowedCard").path("card")
                 .path("automation").path("resources").get(0).path("id").asText());
+        campaign.actor("source").setDisabled(true);
+        var filtered = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/copycat/copycat"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, filtered.statusCode(), filtered.body());
+        assertEquals(1, MAPPER.readTree(filtered.body()).path("cards").size());
+        assertEquals("duplicate", MAPPER.readTree(filtered.body()).path("cards").get(0).path("actorId").asText());
+        var savedWhileDisabled = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/copycat"))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(saved.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, savedWhileDisabled.statusCode(), savedWhileDisabled.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "copycat")).path("loadout").get(0).has("borrowedCard"));
+        campaign.actor("source").setDisabled(false);
         assertEquals(400, featureHttp(cookie, request).statusCode());
         assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "copycat")).path("hope").path("on").asInt());
         JsonNode vaulted = other.withArray("loadout").remove(0);
@@ -578,6 +590,35 @@ class OnlineSessionServerTest {
                 .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(), response.body());
         assertEquals(previous, store.loadSheet(campaign.getId(), "offline"));
+    }
+
+    @Test
+    void staleLegacyPartyDowntimeActionIsRejectedWhileSourceIsDisabled() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warrior").name("Warrior").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warrior", warriorSheet("Slayer").toString());
+        store.saveSheet(campaign.getId(), "ally", communitySheet("Seaborne").toString());
+        String cookie = cookie();
+        URI allySheet = URI.create("http://localhost:" + port + "/api/sheet/ally");
+        assertEquals(200, http.send(HttpRequest.newBuilder(allySheet).header("Cookie", cookie).GET().build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        ((ObjectNode) saved.path("effects").get(0)).remove("sourceActorId");
+        store.saveSheet(campaign.getId(), "ally", saved.toString());
+        campaign.actor("warrior").setDisabled(true);
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "ally")
+                .put("key", "effect:party-martial-preparation").put("actionId", "train");
+        var rejected = featureHttp(cookie, action);
+        assertEquals(400, rejected.statusCode(), rejected.body());
+        assertEquals(200, http.send(HttpRequest.newBuilder(allySheet).header("Cookie", cookie).GET().build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals("warrior", MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"))
+                .path("effects").get(0).path("sourceActorId").asText());
+        campaign.actor("warrior").setDisabled(false);
+        assertEquals(200, http.send(HttpRequest.newBuilder(allySheet).header("Cookie", cookie).GET().build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals("warrior", MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"))
+                .path("effects").get(0).path("sourceActorId").asText());
     }
 
     @Test
@@ -2599,6 +2640,45 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void disabledActorIsReadableButRejectsPlayerEditsAndRollsWhileDmCanEdit() throws Exception {
+        dmCompendiumData();
+        Campaign.Actor actor = campaign.actor("target");
+        actor.setDisabled(true);
+        store.save(campaign);
+        assertTrue(store.load(campaign.getId()).actor("target").isDisabled());
+        String cookie = cookie();
+        String url = "http://localhost:" + port + "/api/sheet/target";
+        var read = http.send(HttpRequest.newBuilder(URI.create(url)).header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, read.statusCode(), read.body());
+        JsonNode response = MAPPER.readTree(read.body());
+        assertTrue(response.path("disabled").asBoolean());
+        ObjectNode edited = response.path("sheet").deepCopy();
+        edited.put("notes", "Player edit");
+        var save = http.send(HttpRequest.newBuilder(URI.create(url)).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(edited.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, save.statusCode());
+        assertEquals(403, featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "target")
+                .put("key", "feat:Example").put("actionId", "use")).statusCode());
+        String dmToken = URI.create(server.dmSheetUrl("target")).getFragment();
+        edited.put("notes", "DM edit");
+        assertEquals(200, dmSheetHttp("target", dmToken, edited, null).statusCode());
+        assertEquals("DM edit", MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("notes").asText());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            ws.sendText("{\"type\":\"roll\",\"actorId\":\"target\",\"expression\":\"1d6\"}", true).join();
+            assertTrue(inbox.next("error").path("message").asText().contains("disabled"));
+            actor.setDisabled(false);
+            ws.sendText("{\"type\":\"roll\",\"actorId\":\"target\",\"expression\":\"1d6\"}", true).join();
+            assertEquals("target", inbox.next("roll").path("actorId").asText());
+        } finally { ws.abort(); }
+        edited.put("notes", "Player edit after enabling");
+        assertEquals(200, http.send(HttpRequest.newBuilder(URI.create(url)).header("Cookie", cookie)
+                .PUT(HttpRequest.BodyPublishers.ofString(edited.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
+    @Test
     void dmSheetsAreActorScopedRevocableAndSynchronizeOfflineOwnerEdits() throws Exception {
         dmCompendiumData();
         String url = server.dmSheetUrl("target");
@@ -3758,8 +3838,10 @@ class OnlineSessionServerTest {
                     if ("safe-haven".equals(card.path("id").asText())) caster.withArray("loadout").add(card.deepCopy());
                 campaign.getActors().add(Campaign.Actor.builder().id("haven-caster").name("Caster").ownerId(playerId()).build());
                 campaign.getActors().add(Campaign.Actor.builder().id("haven-target").name("Ally").ownerId("haven-ally").build());
+                campaign.getActors().add(Campaign.Actor.builder().id("haven-disabled").name("Disabled").ownerId("haven-ally").disabled(true).build());
                 store.saveSheet(campaign.getId(), "haven-caster", caster.toString());
                 store.saveSheet(campaign.getId(), "haven-target", communitySheet("Seaborne").toString());
+                store.saveSheet(campaign.getId(), "haven-disabled", communitySheet("Seaborne").toString());
                 ObjectNode action = MAPPER.createObjectNode().put("actorId", "haven-caster").put("key", "card:Safe Haven").put("actionId", "use");
                 var result = featureHttp(cookie(), action);
                 assertEquals(200, result.statusCode(), result.body());
@@ -3767,10 +3849,21 @@ class OnlineSessionServerTest {
                 assertEquals(3, saved.path("hope").path("on").asInt());
                 assertEquals(1, saved.path("effects").path(0).path("rest").path("extraMoves").asInt());
                 ObjectNode invitation = (ObjectNode) dmMessages.stream().filter(m -> m.has("actionBenefits")).findFirst().orElseThrow();
+                assertEquals(1, invitation.path("actionBenefits").path("actorIds").size());
+                assertEquals("haven-target", invitation.path("actionBenefits").path("actorIds").get(0).asText());
+                assertEquals(403, featureHttp(ally, benefitRequest("haven-disabled", invitation, "enter")).statusCode());
+                campaign.actor("haven-target").setDisabled(true);
+                assertEquals(403, featureHttp(ally, benefitRequest("haven-target", invitation, "enter")).statusCode());
+                campaign.actor("haven-target").setDisabled(false);
                 assertEquals(200, featureHttp(ally, benefitRequest("haven-target", invitation, "enter")).statusCode());
                 JsonNode target = MAPPER.readTree(store.loadSheet(campaign.getId(), "haven-target"));
                 assertEquals("rest", target.path("effects").path(0).path("until").asText());
                 assertEquals(1, target.path("effects").path(0).path("rest").path("extraMoves").asInt());
+                campaign.actor("haven-caster").setDisabled(true);
+                var targetRead = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/haven-target"))
+                        .header("Cookie", ally).GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, targetRead.statusCode(), targetRead.body());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "haven-target")).path("effects").size());
                 assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("Enter Safe Haven")));
     }
 

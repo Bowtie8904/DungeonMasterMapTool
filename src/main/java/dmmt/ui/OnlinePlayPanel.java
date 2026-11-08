@@ -798,6 +798,16 @@ public final class OnlinePlayPanel extends VBox {
         return menu(item("Place at view centre", MaterialDesignM.MAP_MARKER_RADIUS_OUTLINE,
                         () -> actions.placeActor(current, actor)),
                 item("Open character sheet", MaterialDesignB.BOOK_OPEN_VARIANT, () -> actions.openSheet(current, actor)),
+                item(actor.isDisabled() ? "Enable actor" : "Disable actor", MaterialDesignA.ACCOUNT_CIRCLE_OUTLINE, () -> {
+                    actor.setDisabled(!actor.isDisabled());
+                    try {
+                        controller.campaignEdited(current);
+                    } catch (IOException ex) {
+                        actor.setDisabled(!actor.isDisabled());
+                        Dialogs.error(window(), "Could not save the campaign", ex.getMessage());
+                    }
+                    refresh();
+                }),
                 owner,
                 new SeparatorMenuItem(),
                 item("Change artwork…", MaterialDesignI.IMAGE_PLUS, () -> chooseArtwork(actor)),
@@ -1071,7 +1081,7 @@ public final class OnlinePlayPanel extends VBox {
             setText(null);
             name.setText(actor.getName());
             Campaign.Player owner = current == null ? null : current.player(actor.getOwnerId());
-            detail.setText((actor.isTestingCharacter() ? "TESTING - " : "") + (owner == null ? "Unassigned" : owner.getName()));
+            detail.setText((actor.isDisabled() ? "DISABLED - " : "") + (actor.isTestingCharacter() ? "TESTING - " : "") + (owner == null ? "Unassigned" : owner.getName()));
             drawThumb(actor);
             setGraphic(actorBox);
             setContextMenu(actorMenu(actor));

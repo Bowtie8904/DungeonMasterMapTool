@@ -32,6 +32,20 @@ class MoveValidatorTest {
     }
 
     @Test
+    void disabledActorCannotBeMovedOrRotatedEvenWithExplicitControl() {
+        Campaign c = campaign();
+        DmProject.TokenInstance t = token(c, true);
+        c.getControlledTokens().add(Campaign.TokenLink.builder().playerId("p2").mapId("m").tokenId("t").build());
+        c.actor("a1").setDisabled(true);
+        assertTrue(OnlineStateBuilder.controllers(t, c.actor("a1"), c, "m").isEmpty());
+        assertNotNull(MoveValidator.checkControl(c, "m", "p1", t));
+        assertNotNull(MoveValidator.checkControl(c, "m", "p2", t));
+        c.actor("a1").setDisabled(false);
+        assertNull(MoveValidator.checkControl(c, "m", "p1", t));
+        assertNull(MoveValidator.checkControl(c, "m", "p2", t));
+    }
+
+    @Test
     void hiddenTokensAndWallsBlock() {
         Campaign c = campaign();
         DmProject project = new DmProject();

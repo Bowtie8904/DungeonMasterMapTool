@@ -98,6 +98,8 @@ public class Campaign {
         private String id = UUID.randomUUID().toString();
         private String name;
         private String ownerId;
+        /** Disabled actors remain assigned but do not participate in player actions or automation. */
+        private boolean disabled;
         /** DM-created testing actor; never granted by browser sheet data. */
         private boolean testingCharacter;
         /** sha256 hex of the re-encoded PNG in {@code artwork/}; {@code null} when none. */

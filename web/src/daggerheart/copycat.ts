@@ -9,9 +9,16 @@ export interface CopycatCandidate {
 
 export const copycatCost = (level: number): number => Math.ceil(level / 2);
 
+let disabledActors = new Set<string>();
+export function setDisabledCopycatSources(ids: Iterable<string>): void { disabledActors = new Set(ids); }
+export function actorAutomationAvailable(id?: string): boolean { return !id || !disabledActors.has(id); }
+export function copiedCardAvailable(card: DomainCard): boolean {
+  return !!card.borrowedCard && !disabledActors.has(card.borrowedCard.sourceActorId);
+}
+
 /** Borrowed cards contribute rules, but never occupy a slot or count toward Touched. */
 export function activeCards(c: CharacterSheet): DomainCard[] {
-  return c.loadout.flatMap(card => card.name === 'Copycat' && card.borrowedCard
+  return c.loadout.flatMap(card => card.name === 'Copycat' && card.borrowedCard && copiedCardAvailable(card)
     ? [card, card.borrowedCard.card] : [card]);
 }
 
@@ -19,7 +26,7 @@ export function activeCardSources(c: CharacterSheet): Array<{ key: string; name:
   return c.loadout.flatMap(card => {
     const sources = [{ key: `card:${card.name}`, name: card.name, auto: card.automation },
       ...(card.spells ?? []).map(spell => ({ key: `card:${card.name}/${spell.name}`, name: spell.name, auto: spell.automation }))];
-    if (card.name === 'Copycat' && card.borrowedCard) {
+    if (card.name === 'Copycat' && card.borrowedCard && copiedCardAvailable(card)) {
       const borrowed = card.borrowedCard.card;
       sources.push({ key: `card:Copycat/${borrowed.name}`, name: borrowed.name, auto: borrowed.automation },
         ...(borrowed.spells ?? []).map(spell => ({ key: `card:Copycat/${borrowed.name}/${spell.name}`, name: spell.name, auto: spell.automation })));

@@ -25,6 +25,7 @@ export interface RollButtonHost {
   sheet(actorId: string): Promise<RollButtonSheet | undefined>;
   actorIds?(): string[];
   targetActors?(): Actor[];
+  isActorActive?(actorId: string): boolean;
   send(roll: RollRequest): boolean;
   log(text: string, rollSource?: RollSource): void;
   toast(message: string): void;
@@ -158,7 +159,8 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
   let pending = false;
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
-    if (!claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)) {
+    if ((!m.actorId || host.isActorActive?.(m.actorId) !== false)
+        && !claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)) {
       for (const actorId of host.actorIds?.() ?? []) {
         if (!claims.actorIds.includes(actorId)) continue;
         const sheet = await host.sheet(actorId);
@@ -237,6 +239,9 @@ function chatDamageButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | 
     } catch (e) { host.toast((e as Error).message); }
   });
   box.append(button);
+  const refresh = () => { box.hidden = host.isActorActive?.(m.actorId!) === false; };
+  box.addEventListener('refresh-roll-actions', refresh);
+  refresh();
   return box;
 }
 function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
@@ -245,7 +250,7 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   let claiming = false;
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
-    for (const actorId of host.actorIds?.() ?? []) {
+    for (const actorId of host.isActorActive?.(m.actorId!) === false ? [] : host.actorIds?.() ?? []) {
       const sheet = await host.sheet(actorId);
       if (!sheet) continue;
       for (const feature of [...sheet.character.features, ...sheet.character.heritage].filter(f => f.automation?.restReroll)) {

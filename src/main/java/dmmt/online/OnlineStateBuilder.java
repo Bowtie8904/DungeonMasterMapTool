@@ -289,6 +289,7 @@ public final class OnlineStateBuilder {
         node.put("id", actor.getId());
         node.put("name", actor.getName());
         node.put("ownerId", actor.getOwnerId() == null ? "" : actor.getOwnerId());
+        node.put("disabled", actor.isDisabled());
         node.put("testingCharacter", actor.isTestingCharacter());
         String art = artworkUrl(actor, campaign, assets);
         if (art != null) {
@@ -356,6 +357,7 @@ public final class OnlineStateBuilder {
     public static java.util.Set<String> controllers(DmProject.TokenInstance token, Campaign.Actor actor,
                                                      Campaign campaign, String mapId) {
         java.util.Set<String> result = new java.util.LinkedHashSet<>();
+        if (actor != null && actor.isDisabled()) return result;
         if (actor != null && actor.getOwnerId() != null && !actor.getOwnerId().isBlank()) {
             result.add(actor.getOwnerId());
         }

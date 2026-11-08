@@ -13,16 +13,41 @@ final class WarriorAutomation {
     private WarriorAutomation() {}
 
     static void synchronizeDowntime(Map<String, ObjectNode> sheets) {
+        synchronizeDowntime(sheets, Map.of());
+    }
+
+    static void synchronizeDowntime(Map<String, ObjectNode> sheets, Map<String, ObjectNode> disabledSources) {
         JsonNode grantingFeature = null;
-        for (ObjectNode sheet : sheets.values()) {
-            for (JsonNode feature : sheet.path("features"))
-                if (feature.path("automation").path("partyDowntime").asBoolean()) grantingFeature = feature;
+        String grantingActorId = null;
+        for (var entry : sheets.entrySet()) {
+            for (JsonNode feature : entry.getValue().path("features"))
+                if (feature.path("automation").path("partyDowntime").asBoolean()) {
+                    grantingFeature = feature;
+                    grantingActorId = entry.getKey();
+                }
         }
         for (ObjectNode sheet : sheets.values()) {
             if (grantingFeature == null && !sheet.path("effects").isArray()) continue;
             ArrayNode effects = sheet.withArray("effects");
-            for (int i = effects.size() - 1; i >= 0; i--)
-                if (effects.get(i).path("partyDowntimeGrant").asBoolean()) effects.remove(i);
+            for (int i = effects.size() - 1; i >= 0; i--) {
+                JsonNode effect = effects.get(i);
+                if (!effect.path("partyDowntimeGrant").asBoolean()) continue;
+                String sourceId = effect.path("sourceActorId").asText();
+                if (grantingFeature == null && disabledSources.containsKey(sourceId)) continue;
+                if (grantingFeature == null && sourceId.isBlank()) {
+                    String legacySource = null;
+                    for (var entry : disabledSources.entrySet())
+                        for (JsonNode feature : entry.getValue().path("features"))
+                            if (feature.path("automation").path("partyDowntime").asBoolean()
+                                    && effect.path("name").asText().equals(feature.path("name").asText()))
+                                legacySource = entry.getKey();
+                    if (legacySource != null && effect instanceof ObjectNode object) {
+                        object.put("sourceActorId", legacySource);
+                        continue;
+                    }
+                }
+                effects.remove(i);
+            }
             boolean owns = false;
             for (JsonNode feature : sheet.path("features"))
                 if (feature.path("automation").path("partyDowntime").asBoolean()) owns = true;
@@ -30,6 +55,7 @@ final class WarriorAutomation {
             ObjectNode effect = effects.addObject();
             effect.put("id", "party-martial-preparation").put("name", grantingFeature.path("name").asText())
                     .put("kind", "buff").put("until", "manual").put("partyDowntimeGrant", true)
+                    .put("sourceActorId", grantingActorId)
                     .put("source", grantingFeature.path("name").asText()).put("text", grantingFeature.path("text").asText());
             effect.set("actions", grantingFeature.path("automation").path("actions").deepCopy());
         }

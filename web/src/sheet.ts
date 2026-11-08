@@ -12,6 +12,7 @@ import { postCard, transferable } from './shared-cards';
 import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
+import { setDisabledCopycatSources } from './daggerheart/copycat';
 
 declare global {
   interface Window { dmmtFlushSheet?: () => Promise<void> }
@@ -30,6 +31,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   const connectedPlayers = new Set<string>();
   let rulesWarning = '';
   let actorName = 'Character';
+  let disabled = false;
   let artwork: string | undefined;
   const bus = new SheetBus();
   const additions = new Map<string, Promise<string | null>>();
@@ -39,7 +41,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     error.textContent = message;
   };
   const receiveEntry = async (category: string, entry: CompendiumEntry): Promise<string | null> => {
-    if (!character || !changed || !allowed || unauthorized) throw new Error('The receiving character sheet is not ready.');
+    if (!character || !changed || !allowed || unauthorized || disabled && !dmSheetAuthorization()) throw new Error('The receiving character sheet is not ready or is read-only.');
     const target = addToSheet(character, category, entry);
     if (target) { bus.notify(); changed(); await changed.flush(); }
     return target ? `${character.name}'s ${target}` : null;
@@ -80,6 +82,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     });
     const view = renderSheetView({
       character: sheet,
+      readOnly: () => disabled && !dmSheetAuthorization(),
       supportsPartyFeatures: () => conn.partyFeatures,
       artwork: actor?.artwork ?? artwork,
       onChange: () => changed?.(),
@@ -90,7 +93,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         if (target === 'actor' || target === 'anyActor') {
           const ward = isLifeWard(sheet, key);
           if (ward && !conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
-          const candidates = (store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : (target === 'anyActor' || connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId));
+          const candidates = (store.state?.actors ?? []).filter(a => !a.disabled && (ward ? a.id !== actorId : (target === 'anyActor' || connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId)));
           const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
           if (!selected) return;
           targetActorId = selected.id;
@@ -210,6 +213,14 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'error' }, 'You were removed from the session.')));
           return;
         } else return;
+        const actorsChanged = m.type === 'snapshot' || store.changed.has('actors');
+        if (actorsChanged) setDisabledCopycatSources((store.state?.actors ?? []).filter(a => a.disabled).map(a => a.id));
+        const actor = store.state?.actors.find(a => a.id === actorId);
+        if (actor) disabled = !!actor.disabled;
+        if (shown && actorsChanged) {
+          bus.notify();
+          if (changed) void changed.refresh().catch((e: Error) => report(e.message));
+        }
         setGmFear(store.state?.fear);
         if (!unauthorized) refresh();
       },
@@ -222,6 +233,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     acceptSheetVersion(actorId, res.version);
     const name = store.state?.actors.find((a) => a.id === actorId)?.name ?? res.name ?? 'Character';
     actorName = name;
+    disabled = store.state?.actors.find(a => a.id === actorId)?.disabled ?? res.disabled ?? false;
     artwork = res.artwork;
     character = res.sheet ? normalizeSheet(res.sheet, name) : emptyCharacter(name);
     character.testingCharacter = res.testingCharacter === true;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeCardSources, clearBorrowedCard, copycatCost, prepareBorrowedCard, uniqueCopycatCandidates } from './copycat';
+import { activeCardSources, clearBorrowedCard, copycatCost, prepareBorrowedCard, setDisabledCopycatSources, uniqueCopycatCandidates } from './copycat';
 import { emptyCharacter, type DomainCard } from './data';
 import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, derivedStats, resourceDefinitions, runAction, syncResources } from './engine';
 import { availableMitigations } from './damage';
@@ -14,6 +14,17 @@ const borrow = (copied: DomainCard) => {
 };
 
 describe('Copycat', () => {
+  it('suspends borrowed automation while its source is disabled and restores it on enabling', () => {
+    const c = borrow(card('Borrowed'));
+    try {
+      expect(activeCardSources(c).map(source => source.name)).toContain('Borrowed');
+      setDisabledCopycatSources(['other']);
+      expect(activeCardSources(c).map(source => source.name)).not.toContain('Borrowed');
+      expect(c.loadout[0].borrowedCard).toBeDefined();
+      setDisabledCopycatSources([]);
+      expect(activeCardSources(c).map(source => source.name)).toContain('Borrowed');
+    } finally { setDisabledCopycatSources([]); }
+  });
   it('namespaces Safe Haven casting and prevents a second cast while its borrowed rest buff is active', () => {
     const copied = card('Safe Haven', 8);
     copied.automation = {

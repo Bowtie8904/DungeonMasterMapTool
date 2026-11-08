@@ -30,6 +30,7 @@ class WarriorAutomationTest {
         for (ObjectNode sheet : java.util.List.of(ally, offline)) {
             assertEquals("train", sheet.path("effects").get(0).path("actions").get(0).path("id").asText());
             assertEquals("manual", sheet.path("effects").get(0).path("until").asText());
+            assertEquals("warrior", sheet.path("effects").get(0).path("sourceActorId").asText());
             assertFalse(sheet.has("resources"));
         }
         ObjectNode snapshot = ally.deepCopy();
@@ -41,6 +42,27 @@ class WarriorAutomationTest {
         assertEquals(1, ally.path("effects").size());
         assertEquals("earned", ally.path("effects").get(0).path("id").asText());
         assertEquals(0, offline.path("effects").size());
+    }
+
+    @Test
+    void preservesAndIdentifiesExistingGrantsWhenSourceIsDisabledWithoutGrantingNewOnes() throws Exception {
+        ObjectNode warrior = MAPPER.createObjectNode();
+        var features = warrior.putArray("features");
+        for (var entry : MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile()).path("entries"))
+            if ("warrior-call-of-the-slayer-mastery".equals(entry.path("id").asText()))
+                features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
+        ObjectNode ally = MAPPER.createObjectNode();
+        WarriorAutomation.synchronizeDowntime(new LinkedHashMap<>(Map.of("warrior", warrior, "ally", ally)));
+        ((ObjectNode) ally.path("effects").get(0)).remove("sourceActorId");
+        ObjectNode newAlly = MAPPER.createObjectNode();
+        Map<String, ObjectNode> active = new LinkedHashMap<>(Map.of("ally", ally, "new", newAlly));
+        WarriorAutomation.synchronizeDowntime(active, Map.of("warrior", warrior));
+        assertEquals("warrior", ally.path("effects").get(0).path("sourceActorId").asText());
+        assertEquals(0, newAlly.path("effects").size());
+        active.put("warrior", warrior);
+        WarriorAutomation.synchronizeDowntime(active);
+        assertEquals("warrior", newAlly.path("effects").get(0).path("sourceActorId").asText());
+        assertEquals(1, ally.path("effects").size());
     }
 
     @Test

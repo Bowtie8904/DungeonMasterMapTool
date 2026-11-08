@@ -1118,6 +1118,27 @@ public final class OnlineSessionServer {
         String playerId = playerOf(ctx.cookie(OnlineProtocol.COOKIE));
         if (playerId == null) {
             json(ctx, 401, errorBody("Login required"));
+            return null;
+        }
+        String path = ctx.path();
+        String actorId = null;
+        if ("PUT".equals(ctx.method().name()) && (path.startsWith("/api/sheet/") || path.startsWith("/api/actors/"))) {
+            actorId = ctx.pathParam("id");
+        } else if (List.of("/api/feature", "/api/death-move", "/api/death-recovery", "/api/damage-taken",
+                "/api/chat-cards", "/api/roll-reward").contains(path)
+                || path.startsWith("/api/chat-cards/") && path.endsWith("/grab")) {
+            try {
+                JsonNode request = MAPPER.readTree(ctx.body());
+                if (request != null) actorId = request.path("actorId").asText(null);
+            } catch (IOException e) {
+                json(ctx, 400, errorBody("Invalid character request."));
+                return null;
+            }
+        }
+        Campaign.Actor actor = campaign == null ? null : campaign.actor(actorId);
+        if (actor != null && actor.isDisabled()) {
+            json(ctx, 403, errorBody("This actor is disabled and its sheet is read-only."));
+            return null;
         }
         return playerId;
     }
@@ -1263,6 +1284,7 @@ public final class OnlineSessionServer {
         body.put("saved", true);
         body.put("name", actor.getName());
         body.put("testingCharacter", actor.isTestingCharacter());
+        body.put("disabled", actor.isDisabled());
         ctx.header("Cache-Control", "no-store");
         try {
             Map<String, ObjectNode> grants = new java.util.LinkedHashMap<>();
@@ -1586,12 +1608,13 @@ public final class OnlineSessionServer {
         if (playerId == null) return;
         try {
             Campaign.Actor borrower = ownedActor(playerId, ctx.pathParam("id"));
+            if (borrower.isDisabled()) throw new IllegalArgumentException("This actor is disabled.");
             ObjectNode own = storedSheet(borrower.getId());
             if (CopycatCards.activeCard(own, "Copycat") == null)
                 throw new IllegalArgumentException("Copycat must be in your active loadout.");
             Map<String, ObjectNode> unique = new java.util.TreeMap<>();
             for (Campaign.Actor actor : campaign.getActors()) {
-                if (actor.getId().equals(borrower.getId())) continue;
+                if (actor.isDisabled() || actor.getId().equals(borrower.getId())) continue;
                 for (JsonNode loaded : storedSheet(actor.getId()).path("loadout")) {
                     String name = loaded.path("name").asText();
                     JsonNode catalog = catalogDomainCard(name);
@@ -1625,7 +1648,7 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("Copycat must be in your active loadout.");
         Campaign.Actor source = campaign.actor(request.path("copyActorId").asText());
         String name = request.path("copyCardName").asText();
-        if (source == null || source.getId().equals(borrower.getId()) || "Copycat".equals(name))
+        if (source == null || source.isDisabled() || source.getId().equals(borrower.getId()) || "Copycat".equals(name))
             throw new IllegalArgumentException("Choose a domain card from another actor's active loadout.");
         if (CopycatCards.activeCard(storedSheet(source.getId()), name) == null)
             throw new IllegalArgumentException("The source has vaulted or removed that card. Choose again.");
@@ -1760,7 +1783,7 @@ public final class OnlineSessionServer {
                         .noneMatch(card -> source.path("name").asText().equals(card.path("name").asText()))))
                     throw new IllegalArgumentException("Life Ward must be in the active loadout.");
                 Campaign.Actor target = c.actor(request.path("targetActorId").asText());
-                if (target == null || target.getOwnerId() == null || c.player(target.getOwnerId()) == null
+                if (target == null || target.isDisabled() || target.getOwnerId() == null || c.player(target.getOwnerId()) == null
                         || target.getId().equals(sourceActor.getId()))
                     throw new IllegalArgumentException("Choose an ally within Close range for Life Ward.");
                 if (!request.path("confirmRange").asBoolean())
@@ -1937,6 +1960,7 @@ public final class OnlineSessionServer {
                 if (!"effect".equals(step.path("op").asText())
                         || !(effect.path("endOnSourceSevere").asBoolean() || effect.path("exclusiveSource").asBoolean())) continue;
                 for (Campaign.Actor actor : c.getActors()) {
+                    if (actor.isDisabled()) continue;
                     ObjectNode existing = changedSheets.get(actor.getId());
                     boolean wasLoaded = existing != null;
                     if (existing == null) {
@@ -2110,7 +2134,7 @@ public final class OnlineSessionServer {
                 claims.putArray("claimedBy");
                 ArrayNode eligible = claims.putArray("actorIds");
                 for (Campaign.Actor actor : c.getActors())
-                    if (hasPlayerSheet(actor) && (definition.path("allowSourceOwner").asBoolean()
+                    if (!actor.isDisabled() && hasPlayerSheet(actor) && (definition.path("allowSourceOwner").asBoolean()
                             ? !actor.getId().equals(sourceActor.getId()) : !actor.getOwnerId().equals(sourceActor.getOwnerId()))) eligible.add(actor.getId());
             }
             if (definition.has("chatDamage") || fearGrant > 0) {
@@ -2388,6 +2412,8 @@ public final class OnlineSessionServer {
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         changed.put(actor.getId(), sheet);
         Campaign.Actor caster = campaign.actor(message.path("actorId").asText());
+        if (caster == null || caster.isDisabled())
+            throw new IllegalArgumentException("The source actor is disabled or no longer available.");
         if (benefit.path("transferStress").asBoolean()) {
             if (caster == null || caster.getId().equals(actor.getId()))
                 throw new IllegalArgumentException("Choose another willing creature to transfer Stress.");
@@ -2443,7 +2469,7 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("Choose a downtime die on that report.");
         if (die.path("used").asBoolean()) throw new IllegalArgumentException("That downtime die was already rerolled.");
         Campaign.Actor recipient = campaign.actor(message.path("actorId").asText());
-        if (recipient == null) throw new IllegalArgumentException("The resting character no longer exists.");
+        if (recipient == null || recipient.isDisabled()) throw new IllegalArgumentException("The resting character is disabled or no longer exists.");
         useFeatureLimit(sourceSheet, key, automation.path("uses"));
         int previous = die.path("value").asInt();
         int rolled = DiceRoller.roll(die.path("expression").asText(), config.maxDice(), diceRandom).total();
@@ -2512,7 +2538,7 @@ public final class OnlineSessionServer {
             String name = borrowed.path("card").path("name").asText();
             Campaign.Actor original = campaign.actor(borrowed.path("sourceActorId").asText());
             try {
-                if (original == null || CopycatCards.activeCard(storedSheet(original.getId()), name) == null)
+                if (original == null || original.isDisabled() || CopycatCards.activeCard(storedSheet(original.getId()), name) == null)
                     throw new IllegalArgumentException("The copied card's source has vaulted or removed it.");
             } catch (IOException e) { throw new FeatureIoException(e); }
             JsonNode card = borrowed.path("card");
@@ -2539,6 +2565,22 @@ public final class OnlineSessionServer {
             for (JsonNode candidate : sheet.path("effects"))
                 if (name.equals(candidate.path("id").asText())) effect = candidate;
             if (effect == null) throw new IllegalArgumentException("The effect is no longer active.");
+            Campaign.Actor effectSource = campaign.actor(effect.path("sourceActorId").asText());
+            if (effectSource != null && effectSource.isDisabled())
+                throw new IllegalArgumentException("The effect's source actor is disabled.");
+            if (effect.path("partyDowntimeGrant").asBoolean() && !effect.hasNonNull("sourceActorId")) {
+                boolean activeSource = false;
+                try {
+                    for (Campaign.Actor actor : campaign.getActors()) {
+                        if (actor.isDisabled() || store.loadSheet(campaign.getId(), actor.getId()) == null) continue;
+                        for (JsonNode feature : storedSheet(actor.getId()).path("features"))
+                            if (feature.path("automation").path("partyDowntime").asBoolean()
+                                    && effect.path("name").asText().equals(feature.path("name").asText()))
+                                activeSource = true;
+                    }
+                } catch (IOException e) { throw new FeatureIoException(e); }
+                if (!activeSource) throw new IllegalArgumentException("The effect's source actor is disabled or unavailable.");
+            }
             for (String field : List.of("features", "heritage")) {
                 for (JsonNode feature : sheet.path(field)) {
                     JsonNode auto = catalogAutomation("feat:" + feature.path("name").asText(),
@@ -2884,6 +2926,8 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This roll is not visible to you.");
         String rolledActorId = roll.path("actorId").asText("");
         Campaign.Actor rolledActor = campaign.actor(rolledActorId);
+        if (rolledActor != null && rolledActor.isDisabled())
+            throw new IllegalArgumentException("This roll's actor is disabled.");
         if (rolledActor == null && !"any".equals(trigger.path("on").asText()))
             throw new IllegalArgumentException("This roll is not linked to a character.");
         String audience = trigger.path("audience").asText("self");
@@ -3008,7 +3052,7 @@ public final class OnlineSessionServer {
         if ("allActors".equals(mode)) {
             List<Campaign.Actor> targets = new ArrayList<>();
             for (Campaign.Actor actor : c.getActors()) {
-                try { if (hasPlayerSheet(actor)) targets.add(actor); }
+                try { if (!actor.isDisabled() && hasPlayerSheet(actor)) targets.add(actor); }
                 catch (IOException e) { throw new FeatureIoException(e); }
             }
             return targets;
@@ -3016,16 +3060,16 @@ public final class OnlineSessionServer {
         if ("party".equals(mode)) {
             Set<String> online = new LinkedHashSet<>();
             clients.values().forEach(client -> online.add(client.playerId));
-            return c.getActors().stream().filter(a -> a.getOwnerId() != null && online.contains(a.getOwnerId())).toList();
+            return c.getActors().stream().filter(a -> !a.isDisabled() && a.getOwnerId() != null && online.contains(a.getOwnerId())).toList();
         }
         if ("anyActor".equals(mode)) {
             Campaign.Actor target = c.actor(targetActorId);
-            if (target == null) throw new IllegalArgumentException("Choose an existing actor as the target.");
+            if (target == null || target.isDisabled()) throw new IllegalArgumentException("Choose an active actor as the target.");
             return List.of(target);
         }
         if ("actor".equals(mode)) {
             Campaign.Actor target = c.actor(targetActorId);
-            if (target == null || target.getOwnerId() == null || campaign.player(target.getOwnerId()) == null
+            if (target == null || target.isDisabled() || target.getOwnerId() == null || campaign.player(target.getOwnerId()) == null
                     || clients.values().stream().noneMatch(client -> target.getOwnerId().equals(client.playerId)))
                 throw new IllegalArgumentException("Choose a connected player's character as the target.");
             return List.of(target);
@@ -3251,6 +3295,7 @@ public final class OnlineSessionServer {
     private boolean removeLifeWards(Map<String, ObjectNode> changes, String casterId) throws IOException {
         boolean anyRemoved = false;
         for (Campaign.Actor actor : campaign.getActors()) {
+            if (actor.isDisabled()) continue;
             ObjectNode sheet = changes.get(actor.getId());
             boolean loaded = sheet != null;
             if (!loaded) sheet = storedSheet(actor.getId());
@@ -3315,7 +3360,7 @@ public final class OnlineSessionServer {
         }
         Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
         for (Campaign.Actor actor : campaign.getActors()) {
-            if (!hasPlayerSheet(actor)) continue;
+            if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
             party.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
         }
         Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
@@ -3326,14 +3371,22 @@ public final class OnlineSessionServer {
         DruidEffects.synchronizeEarth(party);
         Map<String, ObjectNode> warriors = new java.util.LinkedHashMap<>(party);
         for (Campaign.Actor actor : campaign.getActors())
-            if (!warriors.containsKey(actor.getId()) && store.loadSheet(campaign.getId(), actor.getId()) != null)
+            if (!actor.isDisabled() && !warriors.containsKey(actor.getId()) && store.loadSheet(campaign.getId(), actor.getId()) != null)
                 warriors.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
         warriors.forEach((id, sheet) -> before.putIfAbsent(id, sheet.deepCopy()));
         Map<String, ObjectNode> previousCopycatParty = new java.util.LinkedHashMap<>();
-        for (String id : warriors.keySet()) previousCopycatParty.put(id, storedSheet(id));
-        CopycatCards.synchronize(warriors, previousCopycatParty);
-        WarriorAutomation.synchronizeDowntime(warriors);
+        Map<String, ObjectNode> copycatParty = new java.util.LinkedHashMap<>(warriors);
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (actor.isDisabled() && store.loadSheet(campaign.getId(), actor.getId()) != null)
+                copycatParty.put(actor.getId(), storedSheet(actor.getId()));
+        }
+        for (String id : copycatParty.keySet()) previousCopycatParty.put(id, storedSheet(id));
+        CopycatCards.synchronize(copycatParty, previousCopycatParty);
+        Map<String, ObjectNode> disabledSources = new java.util.LinkedHashMap<>(copycatParty);
+        disabledSources.keySet().removeAll(warriors.keySet());
+        WarriorAutomation.synchronizeDowntime(warriors, disabledSources);
         InvisibilityEffects.synchronize(warriors);
+        for (var entry : warriors.entrySet()) restoreDisabledSourceEffects(entry.getValue(), before.get(entry.getKey()));
         warriors.forEach((id, sheet) -> {
             if (!sheet.equals(before.get(id))) changes.put(id, sheet);
         });
@@ -3341,6 +3394,34 @@ public final class OnlineSessionServer {
             if (!sheet.equals(before.get(id))) changes.put(id, sheet);
         });
         return reports;
+    }
+
+    private void restoreDisabledSourceEffects(ObjectNode sheet, ObjectNode before) {
+        if (before == null) return;
+        for (JsonNode old : before.path("effects")) {
+            if (old.path("partyDowntimeGrant").asBoolean()) continue;
+            Campaign.Actor source = campaign.actor(old.path("sourceActorId").asText());
+            if (source == null || !source.isDisabled()) continue;
+            ArrayNode effects = sheet.withArray("effects");
+            boolean present = false;
+            for (JsonNode effect : effects)
+                if (effect.path("id").equals(old.path("id")) && effect.path("sourceActorId").equals(old.path("sourceActorId"))) present = true;
+            if (!present) effects.add(old.deepCopy());
+        }
+        for (JsonNode old : before.path("inventory")) {
+            Campaign.Actor source = campaign.actor(old.path("witchTalisman").path("sourceActorId").asText());
+            if (source == null || !source.isDisabled()) continue;
+            ArrayNode inventory = sheet.withArray("inventory");
+            boolean present = false;
+            for (JsonNode item : inventory) if (item.path("witchTalisman").equals(old.path("witchTalisman"))) present = true;
+            if (!present) inventory.add(old.deepCopy());
+        }
+        before.path("resources").fields().forEachRemaining(entry -> {
+            if (!entry.getKey().startsWith("talisman-tokens:")) return;
+            String[] parts = entry.getKey().split(":", 3);
+            Campaign.Actor source = parts.length > 1 ? campaign.actor(parts[1]) : null;
+            if (source != null && source.isDisabled()) sheet.withObject("/resources").set(entry.getKey(), entry.getValue().deepCopy());
+        });
     }
 
     private void commitFeatureSheets(Map<String, ObjectNode> changedSheets) throws IOException {
@@ -3528,6 +3609,7 @@ public final class OnlineSessionServer {
         List<String> lines = new ArrayList<>();
         try {
             for (Campaign.Actor actor : c.getActors()) {
+                if (actor.isDisabled()) continue;
                 if (store.loadSheet(c.getId(), actor.getId()) == null) continue;
                 ObjectNode sheet = storedSheet(actor.getId());
                 int uses = 0;
@@ -3646,6 +3728,7 @@ public final class OnlineSessionServer {
     private Map<String, ObjectNode> removeSourceSevereEffects(Campaign.Actor source) throws IOException {
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         for (Campaign.Actor target : campaign.getActors()) {
+            if (target.isDisabled()) continue;
             ObjectNode sheet = storedSheet(target.getId());
             JsonNode effects = sheet.path("effects");
             if (!effects.isArray()) continue;
@@ -3816,7 +3899,7 @@ public final class OnlineSessionServer {
         try {
             JsonNode card = visibleCard(playerId, ctx.pathParam("id"));
             int count = card.path("fromDm").asBoolean(false) ? dmRemaining(card)
-                    : campaign.actor(card.path("actorId").asText()) == null ? 0
+                    : campaign.actor(card.path("actorId").asText()) == null || campaign.actor(card.path("actorId").asText()).isDisabled() ? 0
                     : ChatCards.remaining(storedSheet(card.path("actorId").asText()), card);
             json(ctx, 200, MAPPER.createObjectNode().put("available", count));
         } catch (IllegalArgumentException e) {
@@ -3847,7 +3930,7 @@ public final class OnlineSessionServer {
             String sourceId = card.path("actorId").asText();
             Campaign.Actor sourceActor = campaign.actor(sourceId);
             Campaign.Actor targetActor = ownedActor(playerId, request.path("actorId").asText());
-            if (sourceActor == null || sourceId.equals(targetActor.getId())) {
+            if (sourceActor == null || sourceActor.isDisabled() || sourceId.equals(targetActor.getId())) {
                 throw new IllegalArgumentException("Choose a different receiving character.");
             }
             ObjectNode source = storedSheet(sourceId);
@@ -3964,7 +4047,7 @@ public final class OnlineSessionServer {
         try {
             if (campaign != null && sharedCard.path("fromDm").asBoolean(false))
                 return dmRemaining(sharedCard);
-            return campaign == null || campaign.actor(actorId) == null ? 0
+            return campaign == null || campaign.actor(actorId) == null || campaign.actor(actorId).isDisabled() ? 0
                     : ChatCards.remaining(storedSheet(actorId), sharedCard);
         } catch (IOException e) {
             return 0;
@@ -4177,6 +4260,14 @@ public final class OnlineSessionServer {
             return;
         }
         JsonNode msg = MAPPER.readTree(text);
+        if (client.dmActorId == null && List.of("roll", "chat").contains(msg.path("type").asText())
+                && msg.hasNonNull("actorId")) {
+            Campaign.Actor actor = campaign == null ? null : campaign.actor(msg.path("actorId").asText());
+            if (actor != null && actor.isDisabled()) {
+                sendTo(ctx, error("This actor is disabled."));
+                return;
+            }
+        }
         if (client.dmActorId != null) {
             if (!dmSheetGrants.containsKey(client.dmToken)
                     || campaign.actor(client.dmActorId) == null
@@ -4475,6 +4566,30 @@ public final class OnlineSessionServer {
         try {
             to = chatRecipient(msg);
             rollSource = rollSource(msg);
+            Campaign.Actor roller = campaign == null ? null : campaign.actor(msg.path("actorId").asText());
+            if (roller != null && client.playerId.equals(roller.getOwnerId())) {
+                ObjectNode rollerSheet = null;
+                for (String tag : msg.path("source").asText("").split(",")) {
+                    if (tag.startsWith("card:Copycat/")) {
+                        try {
+                            if (rollerSheet == null) rollerSheet = storedSheet(roller.getId());
+                            featureSource(rollerSheet, tag);
+                        }
+                        catch (IOException e) { throw new IllegalArgumentException("Could not verify the copied card.", e); }
+                    }
+                    if (tag.startsWith("option:effect:")) {
+                        try {
+                            if (rollerSheet == null) rollerSheet = storedSheet(roller.getId());
+                        } catch (IOException e) { throw new IllegalArgumentException("Could not verify the selected effect.", e); }
+                        for (JsonNode effect : rollerSheet.path("effects")) {
+                            String prefix = "option:effect:" + effect.path("id").asText() + ":";
+                            Campaign.Actor source = campaign.actor(effect.path("sourceActorId").asText());
+                            if (tag.startsWith(prefix) && source != null && source.isDisabled())
+                                throw new IllegalArgumentException("The selected effect's source actor is disabled.");
+                        }
+                    }
+                }
+            }
             result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
             if (msg.has("damageRules")) {
                 if (!msg.path("damageRules").isObject() || !List.of(msg.path("source").asText("").split(",")).contains("damage")
@@ -4634,6 +4749,7 @@ public final class OnlineSessionServer {
             Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
             Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
             for (Campaign.Actor candidate : campaign.getActors()) {
+                if (candidate.isDisabled()) continue;
                 if (!candidate.getId().equals(actor.getId()) && store.loadSheet(campaign.getId(), candidate.getId()) == null) continue;
                 ObjectNode other = candidate.getId().equals(actor.getId()) ? sheet : storedSheet(candidate.getId());
                 party.put(candidate.getId(), other);

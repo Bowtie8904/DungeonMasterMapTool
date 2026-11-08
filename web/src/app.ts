@@ -17,6 +17,7 @@ import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
+import { setDisabledCopycatSources } from './daggerheart/copycat';
 import type { CharacterSheet } from './daggerheart/data';
 import { MapTool } from './tools';
 import { MapView, MoveCommit } from './render';
@@ -109,9 +110,9 @@ export class App {
   private sheetHandles = new Map<string, SheetHandle>();
   private myActors: Actor[] = [];
   private compendium = new CompendiumPanel({
-    actors: () => this.myActors.map((a) => ({ id: a.id, name: a.name })),
+    actors: () => this.myActors.filter(a => !a.disabled).map((a) => ({ id: a.id, name: a.name })),
     add: async (id, category, entry) => {
-      const actor = this.myActors.find((a) => a.id === id);
+      const actor = this.myActors.find((a) => a.id === id && !a.disabled);
       if (!actor) return null;
       const handle = await this.ensureSheet(actor);
       const where = addToSheet(handle.character, category, entry);
@@ -398,7 +399,7 @@ export class App {
 
   private async grabCard(card: SharedCard, quantity: GrabQuantity): Promise<void> {
     if (quantity !== 'all' && quantity !== 1 && !this.grabQuantity) throw new Error('Update the host to grab a chosen quantity.');
-    const actors = this.myActors.filter(a => a.id !== card.actorId);
+    const actors = this.myActors.filter(a => !a.disabled && a.id !== card.actorId);
     if (!actors.length) throw new Error(`You need a different owned character to receive this ${card.category === 'gold' ? 'gold' : 'item'}.`);
     const picked = await pickActor(actors, `Receive ${card.item.name}`, quantity === 'all' ? 'Grab all' : 'Grab');
     const actor = picked ? actors.find(a => a.id === picked.id) : null;
@@ -621,7 +622,7 @@ export class App {
   }
 
   private renderEffectsOverlay(): void {
-    const groups = this.myActors.flatMap((a) => {
+    const groups = this.myActors.filter(a => !a.disabled).flatMap((a) => {
       const handle = this.sheetHandles.get(a.id);
       return handle ? [{ actorId: a.id, name: a.name, character: handle.character }] : [];
     });
@@ -654,7 +655,7 @@ export class App {
     if (target === 'actor' || target === 'anyActor') {
       const ward = isLifeWard(character, key);
       if (ward && !this.conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
-      const candidates = (this.store.state?.actors ?? []).filter(a => ward ? a.id !== actorId : (target === 'anyActor' || this.connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId));
+      const candidates = (this.store.state?.actors ?? []).filter(a => !a.disabled && (ward ? a.id !== actorId : (target === 'anyActor' || this.connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId)));
       const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
       if (!selected) return;
       targetActorId = selected.id;
@@ -981,7 +982,18 @@ export class App {
     if (full || this.store.changed.has('dmFog') || this.store.changed.has('fogGrid') || this.store.changed.has('fogMemory')) {
       void this.loadFog(s);
     }
-    if (full || this.store.changed.has('actors') || this.store.changed.has('tokens')) this.renderActors(s);
+    if (full || this.store.changed.has('actors') || this.store.changed.has('tokens')) {
+      if (full || this.store.changed.has('actors')) {
+        setDisabledCopycatSources(s.actors.filter(a => a.disabled).map(a => a.id));
+        for (const handle of this.sheetHandles.values()) {
+          handle.bus.notify();
+          void handle.save.refresh().catch((error: Error) => this.toast(error.message));
+        }
+      }
+      this.renderActors(s);
+      if (full || this.store.changed.has('actors'))
+        this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+    }
     if (full || this.store.changed.has('effectTextures')) {
       const previous = this.textureSelect.value || 'none';
       this.textureSelect.replaceChildren(...(s.effectTextures ?? []).map(t => el('option', { value: t.id }, t.label)));
@@ -1105,10 +1117,11 @@ export class App {
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
       supportsDeathMoveOptions: () => this.conn.deathMoveOptions,
-      actorIds: () => this.myActors.map(a => a.id),
-      targetActors: () => this.store.state?.actors ?? [],
+      actorIds: () => this.myActors.filter(a => !a.disabled).map(a => a.id),
+      targetActors: () => (this.store.state?.actors ?? []).filter(a => !a.disabled),
+      isActorActive: id => this.store.state?.actors.find(a => a.id === id)?.disabled !== true,
       sheet: async (id) => {
-        const actor = this.myActors.find(a => a.id === id);
+        const actor = this.myActors.find(a => a.id === id && !a.disabled);
         if (!actor) return undefined;
         await this.ensureSheet(actor);
         return this.sheetHandles.get(id);
@@ -1179,6 +1192,7 @@ export class App {
         const win = new SheetWindow(
           {
             character,
+            readOnly: () => this.store.state?.actors.find(actor => actor.id === a.id)?.disabled === true,
             bus,
             onChange: () => {
               changed();
@@ -1252,7 +1266,10 @@ export class App {
 
   private renderActors(s: GameState): void {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
+    const changedStatus = mine.filter(actor => this.myActors.some(old => old.id === actor.id && !!old.disabled !== !!actor.disabled));
     this.myActors = mine;
+    for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
+    if (changedStatus.length) this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
     for (const a of mine) void this.ensureSheet(a).then(() => this.scheduleEffects()).catch(() => { /* reported when the sheet is opened */ });
     this.scheduleEffects();
     this.actorsEl.replaceChildren(
@@ -1274,14 +1291,14 @@ export class App {
           }
           file.value = '';
         });
-        const up = el('button', {}, 'Upload artwork');
+        const up = el('button', { disabled: !!a.disabled }, 'Upload artwork');
         up.addEventListener('click', () => file.click());
         const open = el('button', { class: 'primary' }, 'Open sheet');
         open.addEventListener('click', () => this.openSheet(a));
         const pop = el('button', {}, 'Pop out sheet');
         pop.addEventListener('click', () => window.open(`/sheet/${encodeURIComponent(a.id)}`, '_blank', 'popup,width=900,height=900'));
         const find = s.tokens.find((t) => t.actorId === a.id);
-        const name = el('span', { class: 'name' }, a.name, ...(a.testingCharacter ? [' (TESTING)'] : []));
+        const name = el('span', { class: 'name' }, a.name, ...(a.disabled ? [' (DISABLED)'] : []), ...(a.testingCharacter ? [' (TESTING)'] : []));
         if (find) {
           name.classList.add('link');
           name.addEventListener('click', () => this.view.focus(find));

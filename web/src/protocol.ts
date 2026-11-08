@@ -185,6 +185,7 @@ export interface Actor {
   ownerId: string;
   artwork?: string;
   testingCharacter?: boolean;
+  disabled?: boolean;
 }
 
 export interface ChatMessage {
