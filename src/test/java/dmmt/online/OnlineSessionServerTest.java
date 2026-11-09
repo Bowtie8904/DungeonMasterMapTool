@@ -34,6 +34,153 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
+    private ObjectNode bloodSheet(String... ids) throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        ObjectNode sheet = witchHostSheet();
+        sheet.putArray("features");
+        var cards = sheet.putArray("loadout");
+        for (JsonNode card : MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries"))
+            if (List.of(ids).contains(card.path("id").asText())) cards.add(card.deepCopy());
+        return sheet;
+    }
+
+    @Test
+    void lifebloodHostCreationPaysHpAndRecastReplacesTheUniqueItem() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("blood").name("Blood").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "blood", bloodSheet("lifeblood-talisman").toString());
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "blood")
+                .put("key", "card:Lifeblood Talisman").put("actionId", "use");
+        String cookie = cookie();
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode first = MAPPER.readTree(store.loadSheet(campaign.getId(), "blood"));
+        assertEquals(1, first.path("hp").path("on").asInt());
+        assertEquals(1, first.path("inventory").size());
+        assertEquals(6, first.path("hope").path("on").asInt());
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        ObjectNode second = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "blood"));
+        assertEquals(2, second.path("hp").path("on").asInt());
+        assertEquals(1, second.path("inventory").size());
+        assertFalse(first.path("inventory").get(0).path("witchTalisman")
+                .equals(second.path("inventory").get(0).path("witchTalisman")));
+        second.withObject("/hp").put("on", 0);
+        response = saveDeathSheet(cookie, "blood", second);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "blood")).path("inventory").isEmpty());
+    }
+
+    @Test
+    void vitalWardClaimsAreBoundToOneCircleAndExpireForAlliesOnRecastOrSourceRemoval() throws Exception {
+        String ally = allyCookie("ward-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("ward").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ward-ally").name("Ally").ownerId("ward-player").build());
+        store.saveSheet(campaign.getId(), "ward", bloodSheet("vital-ward").toString());
+        store.saveSheet(campaign.getId(), "ward-ally", bloodSheet().toString());
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "ward").put("key", "card:Vital Ward").put("actionId", "physical");
+        var response = featureHttp(cookie, action);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode first = dmMessages.stream().filter(m -> m.has("actionBenefits")).toList().getLast();
+        response = featureHttp(ally, benefitRequest("ward-ally", first, "enter"));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode buff = MAPPER.readTree(store.loadSheet(campaign.getId(), "ward-ally")).path("effects").get(0);
+        assertEquals("physical", buff.path("mitigation").get(0).path("when").path("type").asText());
+        action.put("actionId", "magic");
+        response = featureHttp(cookie, action);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "ward-ally")).path("effects").isEmpty());
+        assertEquals(400, featureHttp(ally, benefitRequest("ward-ally", first, "enter")).statusCode());
+        JsonNode current = dmMessages.stream().filter(m -> m.has("actionBenefits")).toList().getLast();
+        response = featureHttp(ally, benefitRequest("ward-ally", current, "enter"));
+        assertEquals(200, response.statusCode(), response.body());
+        ObjectNode source = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "ward"));
+        source.putArray("effects");
+        response = saveDeathSheet(cookie, "ward", source);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "ward-ally")).path("effects").isEmpty());
+    }
+
+    @Test
+    void bloodbathRollPaysHopeAndRestUseAtomicallyAndAlliesPayStressForOneRecovery() throws Exception {
+        String ally = allyCookie("bath-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("bath").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("bath-ally").name("Ally").ownerId("bath-player").build());
+        store.saveSheet(campaign.getId(), "bath", bloodSheet("bloodbath").toString());
+        ObjectNode recipient = bloodSheet();
+        recipient.withObject("/hp").put("on", 2);
+        recipient.withObject("/stress").put("on", 6);
+        store.saveSheet(campaign.getId(), "bath-ally", recipient.toString());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            assertTrue(inbox.next("hello").path("bloodAutomation").asBoolean());
+            String cast = """
+                    {"type":"roll","kind":"duality","expression":"2d12","actorId":"bath",
+                     "source":"action,spellcast,card:Bloodbath,featureAction:card:Bloodbath:use"}
+                    """;
+            ws.sendText(cast, true).join();
+            JsonNode roll = inbox.next("roll");
+            assertTrue(roll.has("actionBenefits"));
+            JsonNode paid = MAPPER.readTree(store.loadSheet(campaign.getId(), "bath"));
+            assertEquals(5, paid.path("hope").path("on").asInt());
+            assertEquals(1, paid.path("usage").path("card:Bloodbath").path("used").asInt());
+            ObjectNode claim = benefitRequest("bath-ally", roll, "heal");
+            assertEquals(400, featureHttp(ally, claim).statusCode());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "bath-ally")).path("hp").path("on").asInt());
+            recipient.withObject("/stress").put("on", 1);
+            store.saveSheet(campaign.getId(), "bath-ally", recipient.toString());
+            var response = featureHttp(ally, claim);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode healed = MAPPER.readTree(store.loadSheet(campaign.getId(), "bath-ally"));
+            assertEquals(1, healed.path("hp").path("on").asInt());
+            assertEquals(2, healed.path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(ally, claim).statusCode());
+            ws.sendText(cast, true).join();
+            inbox.next("error");
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "bath")).path("hope").path("on").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void sanguineFeastChoicesShareOnePaymentAndRefundOnlyTheirCasterOnce() throws Exception {
+        String ally = allyCookie("feast-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("feast-ally").name("Ally").ownerId("feast-player").build());
+        store.saveSheet(campaign.getId(), "feast-ally", bloodSheet().toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            for (int hp = 1; hp <= 3; hp++) {
+                String id = "feast-" + hp;
+                campaign.getActors().add(Campaign.Actor.builder().id(id).name("Caster").ownerId(playerId()).build());
+                store.saveSheet(campaign.getId(), id, bloodSheet("sanguine-feast").toString());
+                ObjectNode cast = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", "2d12+100").put("actorId", id).put("source", "action,spellcast,card:Sanguine Feast")
+                        .put("difficulty", 1);
+                ws.sendText(cast.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode action = MAPPER.createObjectNode().put("actorId", id).put("key", "card:Sanguine Feast")
+                        .put("actionId", List.of("one", "two", "three").get(hp - 1));
+                action.putObject("roll").setAll((ObjectNode) MAPPER.createObjectNode().put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong()));
+                var response = featureHttp(cookie, action);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode paid = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+                assertEquals(hp, paid.path("hp").path("on").asInt());
+                assertEquals(4, paid.path("hope").path("on").asInt());
+                action.put("actionId", hp == 1 ? "three" : "one");
+                assertEquals(400, featureHttp(cookie, action).statusCode());
+                JsonNode report = dmMessages.stream().filter(m -> m.has("actionBenefits")).toList().getLast();
+                assertTrue(report.path("text").asText().contains("target marks " + hp * 2 + " HP"));
+                assertEquals(400, featureHttp(ally, benefitRequest("feast-ally", report, "refund")).statusCode());
+                response = featureHttp(cookie, benefitRequest(id, report, "refund"));
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), id)).path("hp").path("on").asInt());
+                assertEquals(400, featureHttp(cookie, benefitRequest(id, report, "refund")).statusCode());
+            }
+        } finally { ws.abort(); }
+    }
+
     @Test
     void vitalityMigrationAndEditRemovalAreVersionedAndCannotBeUndoneByStaleSaves() throws Exception {
         var actor = Campaign.Actor.builder().id("vitality-hero").name("Hero").ownerId(playerId()).build();

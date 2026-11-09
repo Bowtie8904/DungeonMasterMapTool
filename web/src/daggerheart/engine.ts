@@ -48,9 +48,10 @@ export interface EffectDef {
   rest?: Automation['rest'];
   exclusiveSource?: boolean;
   endOnMarkedHpCount?: number;
-  witchGrant?: 'circle' | 'moonbeam' | 'talisman';
-  witchLinked?: 'circle' | 'moonbeam' | 'talisman';
+  witchGrant?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood';
+  witchLinked?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood';
   activationId?: string;
+  requiresSourceEffect?: string;
   resources?: ResourceDef[];
   tokenResource?: string;
   /** Host-owned tokens on sourceActorId's source card, not this recipient's resources. */
@@ -94,6 +95,8 @@ export interface EffectDef {
 }
 
 export interface ChatBenefit {
+  cost?: ActionDef['cost'];
+  sourceOnly?: boolean;
   report?: ActionDef['report'];
   transferStress?: boolean;
   id: string;
@@ -113,6 +116,9 @@ export interface Step {
 }
 
 export interface ActionDef {
+  bloodAutomation?: boolean;
+  deferSourceUse?: boolean;
+  hostRollAction?: boolean;
   specialAction?: 'vitality' | 'massDisguise' | 'nightTerror';
   toggleEffect?: EffectDef;
   copycat?: boolean;
@@ -125,7 +131,7 @@ export interface ActionDef {
   requiresZeroHope?: boolean;
   loadoutDomain?: { domain: string; min: number };
   hopeDice?: { sides: number; type: 'magic' | 'physical' };
-  witchAction?: 'talisman' | 'lunarRoll' | 'lunarAdvance';
+  witchAction?: 'talisman' | 'lifeblood' | 'lunarRoll' | 'lunarAdvance';
   patronDice?: 'heal' | 'vengeance' | 'ire';
   spendFavor?: boolean;
   menacingReach?: boolean;
@@ -1278,7 +1284,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       log.push(`gained ${definition.name}`);
     }
   }
-  if (a.uses) {
+  if (a.uses && !action.deferSourceUse) {
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
     u.used++;
     c.usage[key] = u;

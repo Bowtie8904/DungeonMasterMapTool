@@ -89,6 +89,7 @@ export interface SheetViewOptions {
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
   supportsDomainCardAutomation?: () => boolean;
+  supportsBloodAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
   supportsBrawlerRolls?: () => boolean;
@@ -470,12 +471,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
       b.textContent = `Attack ${signed(traitTotal(c, trait))} (${trait})`;
     }
-    const block = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
+    const blocker = () => action.bloodAutomation && !opts.supportsBloodAutomation?.()
+      ? 'Update the host to use Blood automation.' : hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
+    const block = blocker();
     if (block) { b.disabled = true; b.title = block; }
     let busy = false;
     actionRefreshers.push(() => {
       if (busy || !b.isConnected) return;
-      const current = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
+      const current = blocker();
       b.disabled = !!current;
       b.title = current ?? '';
       const currentCost = costText(actionCost(c, action), c);
@@ -483,7 +486,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     });
     const setBusy = (value: boolean) => { busy = value; b.disabled = value; };
     b.addEventListener('click', async () => {
-      const currentBlock = hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
+      const currentBlock = blocker();
       if (currentBlock) { b.title = currentBlock; return; }
       if (action.specialAction) {
         if (!opts.supportsSpecialCardActions?.() || !opts.onSpecialCard) { opts.onLog?.('Update the host to use this special card action.'); return; }
@@ -518,6 +521,18 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if ((action.witchAction || a.resources?.some(r => r.whileEffect) || action.steps?.some(s => s.effect?.witchGrant) || a.rollTriggers?.some(t => t.automatic))
           && !opts.supportsWitchAutomation?.()) {
         opts.onLog?.('Update the host to use Witch automation.');
+        return;
+      }
+      if (action.bloodAutomation && !opts.supportsBloodAutomation?.()) {
+        opts.onLog?.('Update the host to use Blood automation.');
+        return;
+      }
+      if (action.witchAction === 'lifeblood') {
+        if (!opts.onFeature) { opts.onLog?.('Update the host to create a Lifeblood Talisman.'); return; }
+        setBusy(true);
+        try { await opts.onFeature(key, action.id); hooks.after?.(); render(); }
+        catch (e) { opts.onLog?.((e as Error).message); }
+        finally { setBusy(false); }
         return;
       }
       if (action.witchAction === 'talisman') {
@@ -691,7 +706,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.target === 'allActors' || action.chatBenefits) {
         if (!opts.supportsPartyFeatures?.()) { opts.onLog?.('Update the host to use party feature actions.'); return; }
       }
-      if (action.target || action.check || action.chatBenefits) {
+      if (action.target || action.check || action.chatBenefits && !action.actionRoll) {
         if (a.deathMove?.kind === 'lifeWard' && !await confirmDialog('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
@@ -721,7 +736,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         const weapon = spec.attack && damage ? featureWeapon(label, damage) : undefined;
         openRollDialog(root, c, action.label, trait ? traitContributions(c, trait) : [], bonus,
           (request) => sendRoll(targets.join(','), weapon?.name, rollSourceFor(c, key))({ ...request, difficulty: spec.difficulty }),
-          () => { runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(); render(); },
+          () => { if (!action.hostRollAction) runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(); render(); },
           targets, undefined, undefined, weapon, false, { key, automation: a, action }, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
         return;
       }

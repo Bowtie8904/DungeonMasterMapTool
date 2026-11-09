@@ -22,16 +22,18 @@ final class WitchEffects {
         String mirrorResource() { return "talisman-tokens:" + key(); }
         String resource() { return "circle".equals(kind()) ? "circle-of-power" : "enchanted-talisman"; }
         int tokens() { return Math.max(0, sheet.path("resources").path(resource()).asInt()); }
+        boolean item() { return "talisman".equals(kind()) || "lifeblood".equals(kind()); }
+        boolean tokenBound() { return "circle".equals(kind()) || "talisman".equals(kind()); }
     }
 
     static void validateSave(ObjectNode sheet, ObjectNode previous) {
         if (!talismans(sheet).equals(talismans(previous)))
             throw new IllegalArgumentException("Enchanted Talismans can only be moved through an inventory transfer. Refresh the sheet.");
         for (JsonNode marker : sheet.path("effects")) {
-            if (!"talisman".equals(marker.path("witchGrant").asText())) continue;
+            if (!List.of("talisman", "lifeblood").contains(marker.path("witchGrant").asText())) continue;
             boolean known = false;
             for (JsonNode old : previous.path("effects"))
-                if ("talisman".equals(old.path("witchGrant").asText()) && old.path("id").equals(marker.path("id"))) known = true;
+                if (old.path("witchGrant").equals(marker.path("witchGrant")) && old.path("id").equals(marker.path("id"))) known = true;
             if (!known) throw new IllegalArgumentException("Create an Enchanted Talisman using its feature action.");
         }
         boolean activeTalisman = false;
@@ -59,12 +61,13 @@ final class WitchEffects {
             for (int i = effects.size() - 1; i >= 0; i--) {
                 if (!(effects.get(i) instanceof ObjectNode marker)) continue;
                 String kind = marker.path("witchGrant").asText();
-                if (!List.of("circle", "moonbeam", "talisman").contains(kind)) continue;
-                if (rested && !"moonbeam".equals(kind)) {
+                if (!List.of("circle", "moonbeam", "talisman", "lifeblood").contains(kind)) continue;
+                if (rested && List.of("circle", "talisman").contains(kind)
+                        || "lifeblood".equals(kind) && sheet.path("hp").path("on").asInt() <= 0) {
                     effects.remove(i);
                     continue;
                 }
-                marker.put("until", "moonbeam".equals(kind) ? "scene" : "rest");
+                marker.put("until", "lifeblood".equals(kind) ? "manual" : "moonbeam".equals(kind) ? "scene" : "rest");
                 if (marker.path("id").asText().isBlank()) marker.put("id", "witch-" + UUID.randomUUID());
                 if (old != null) for (JsonNode oldMarker : old.path("effects")) {
                     if (!marker.path("id").equals(oldMarker.path("id"))
@@ -75,7 +78,7 @@ final class WitchEffects {
                     }
                 }
                 Grant grant = new Grant(id, marker, sheet);
-                if (!"moonbeam".equals(kind) && grant.tokens() == 0) {
+                if (grant.tokenBound() && grant.tokens() == 0) {
                     effects.remove(i);
                     continue;
                 }
@@ -104,15 +107,18 @@ final class WitchEffects {
         }
 
         for (Grant grant : List.copyOf(grants.values())) {
-            if (!"moonbeam".equals(grant.kind()) && grant.tokens() == 0) {
+            if (grant.tokenBound() && grant.tokens() == 0) {
                 ArrayNode effects = grant.sheet.withArray("effects");
                 for (int i = effects.size() - 1; i >= 0; i--)
                     if (effects.get(i) == grant.marker) effects.remove(i);
                 grants.remove(grant.key());
-            } else if ("talisman".equals(grant.kind()) && !grant.marker.path("witchTalismanCreated").asBoolean()) {
+            } else if (grant.item() && !grant.marker.path("witchTalismanCreated").asBoolean()) {
                 ObjectNode item = grant.sheet.withArray("inventory").addObject();
-                item.put("name", "Enchanted Talisman").put("qty", 1).put("type", "gear")
-                        .put("note", "Imbued with protective essence. The holder can spend tokens to reduce HP marked by one per token. "
+                item.put("name", "lifeblood".equals(grant.kind()) ? "Lifeblood Talisman" : "Enchanted Talisman").put("qty", 1).put("type", "gear")
+                        .put("note", "lifeblood".equals(grant.kind())
+                                ? "Enchanted with the caster's life essence. When marking 2 or more HP, spend 1 Hope to mark 1 fewer. "
+                                    + "Disappears when the caster has no marked HP or casts this spell again."
+                                : "Imbued with protective essence. The holder can spend tokens to reduce HP marked by one per token. "
                                 + "Tokens are tracked on the creator. Expires when the creator rests or its tokens are depleted.");
                 item.putObject("witchTalisman").put("sourceActorId", grant.actorId).put("activationId", grant.activation());
                 grant.marker.put("witchTalismanCreated", true);
@@ -128,7 +134,7 @@ final class WitchEffects {
                 if (!item.has("witchTalisman")) continue;
                 String key = itemKey(item);
                 Grant grant = grants.get(key);
-                if (grant == null || !"talisman".equals(grant.kind()) || item.path("qty").asInt() != 1
+                if (grant == null || !grant.item() || item.path("qty").asInt() != 1
                         || holders.putIfAbsent(key, id) != null) {
                     items.remove(i);
                     inventoryChanged(sheet);
@@ -159,7 +165,7 @@ final class WitchEffects {
                 effects.remove(i);
             }
             for (Grant grant : grants.values()) {
-                if ("talisman".equals(grant.kind())) {
+                if (grant.item()) {
                     if (id.equals(holders.get(grant.key()))) effects.add(linked(grant));
                     continue;
                 }
@@ -245,11 +251,12 @@ final class WitchEffects {
         String name = switch (grant.kind()) {
             case "circle" -> "Circle of Power";
             case "moonbeam" -> "Moonbeam";
+            case "lifeblood" -> "Lifeblood Talisman";
             default -> "Enchanted Talisman";
         };
         ObjectNode effect = JsonNodeFactory.instance.objectNode()
                 .put("id", "witch-" + grant.key()).put("name", name + " benefits").put("kind", "buff")
-                .put("until", "moonbeam".equals(grant.kind()) ? "scene" : "rest")
+                .put("until", "lifeblood".equals(grant.kind()) ? "manual" : "moonbeam".equals(grant.kind()) ? "scene" : "rest")
                 .put("witchLinked", grant.kind()).put("sourceActorId", grant.actorId)
                 .put("sourceKey", grant.marker.path("sourceKey").asText("feat:" + name))
                 .put("source", name).put("activationId", grant.activation());
@@ -260,7 +267,14 @@ final class WitchEffects {
             modifiers.addObject().put("stat", "thresholds").put("value", 2);
             modifiers.addObject().put("stat", "evasion").put("value", 2);
         }
-        if (!"talisman".equals(grant.kind())) {
+        if ("lifeblood".equals(grant.kind())) {
+            effect.put("text", "When marking 2 or more HP, spend 1 Hope to mark 1 fewer. "
+                    + "Ends when the caster has no marked HP or casts Lifeblood Talisman again.");
+            ObjectNode protect = effect.putArray("mitigation").addObject().put("id", "protect")
+                    .put("label", name).put("hp", -1).put("markedHpOnly", true);
+            protect.putObject("when").put("minMarkedHp", 2);
+            protect.putObject("cost").put("hope", 1);
+        } else if (!"talisman".equals(grant.kind())) {
             effect.putArray("rollOptions").addObject().put("id", grant.kind()).put("label", name)
                     .put("roll", "circle".equals(grant.kind()) ? "attack" : "spellcast")
                     .put("value", "circle".equals(grant.kind()) ? 2 : 1).put("defaultOn", true);

@@ -38,6 +38,7 @@ export interface MitigationWhen {
   /** Only while the value (for example "@cards_splendor") is at least `at`. */
   min?: { value: ModValue; at: number };
   markingHp?: boolean;
+  minMarkedHp?: number;
 }
 
 export interface MitigationRoll {
@@ -330,6 +331,8 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   const remaining = Math.max(0, c.hp.slots - c.hp.on);
   drop((m) => m.option.when?.lastHp && !(hp > 0 && hp >= remaining) ? 'Only when you would mark your last HP' : null);
   const hpBeforeReplace = Math.min(hp, remaining);
+  drop(m => m.option.when?.minMarkedHp && hpBeforeReplace < m.option.when.minMarkedHp
+    ? `Requires marking at least ${m.option.when.minMarkedHp} HP` : null);
   hp = Math.max(0, hpBeforeReplace + active.filter(m => m.option.markedHpOnly)
     .reduce((n, m) => n + (m.option.hp ?? 0) * effectScale(m, hpBeforeReplace), 0));
   if (active.some((m) => m.option.replaceHp)) hp = 0;

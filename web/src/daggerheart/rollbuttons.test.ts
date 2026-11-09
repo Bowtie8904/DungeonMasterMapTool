@@ -514,6 +514,46 @@ describe('cross-player roll buttons', () => {
     expect(card.queryAll('button').map(button => button.text)).toEqual(['Clear 1 HP · Ally']);
   });
 
+  it('renders paid Bloodbath benefits on the roll and rejects unsupported-host controls', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Ally', undefined);
+    c.stress.on = c.stress.slots;
+    const { host } = hostFor({ a: c });
+    const supported = { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true,
+      supportsBloodAutomation: () => true, sessionId: () => 'session' };
+    const message: RollMessage = { ...original, fromId: 'caster-player', actorId: 'caster',
+      actionBenefits: { sessionId: 'session', actorIds: ['a'], claimedBy: [], options: [
+        { id: 'heal', label: 'Mark 1 Stress, clear 1 HP', cost: { stress: 1 }, steps: [{ op: 'clear', resource: 'hp', amount: 1 }] },
+      ] } };
+    const old = rollButtons(message, { ...supported, supportsBloodAutomation: () => false }) as unknown as FakeElement;
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(old.queryAll('button')).toHaveLength(0);
+    expect(box.queryAll('button')).toHaveLength(1);
+    expect(box.queryAll('button')[0].disabled).toBe(true);
+    c.stress.on = 0;
+    for (const actions of box.queryAll('div')) for (const refresh of actions.listeners.get('refresh-roll-actions') ?? []) await refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')[0].disabled).toBe(false);
+    await box.queryAll('button')[0].click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'a', benefitId: 'heal', roll: { id: original.id, ts: original.ts } });
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
+  it('shows Sanguine Feast refunds only for the original actor, even with shared ownership', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const { host } = hostFor({ a: character('Caster', undefined), b: character('Other', undefined) });
+    const box = rollButtons({ id: 8, ts: 100, fromId: 'caster-player', from: 'Caster', actorId: 'a', text: 'Sanguine Feast',
+      actionBenefits: { sessionId: 'session', actorIds: ['a', 'b'], claimedBy: [], allowSourceOwner: true, options: [
+        { id: 'refund', label: 'Target died: recover 2 HP', sourceOnly: true, steps: [{ op: 'clear', resource: 'hp', amount: 2 }] },
+      ] } }, { ...host, playerId: 'caster-player', supportsPartyFeatures: () => true, supportsBloodAutomation: () => true,
+      sessionId: () => 'session' }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button').map(button => button.text)).toEqual(['Target died: recover 2 HP · Caster']);
+  });
+
   it('offers performance claims to eligible allies once per player, not once per actor or option', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));

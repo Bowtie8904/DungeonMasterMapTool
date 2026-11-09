@@ -75,6 +75,8 @@ Desktop tool for tabletop dungeon masters that:
 
 - **Grace/Codex feedback pass:** remove shadowing duplicate grimoire automation keys; use consistent compact Spellcast controls and Banish difficulty layout. Targeted Tava's Armor and Parallela select one actor, including offline sheets, with explained buff reports; Parallela offers a preselected consumable attack option. Move outcome-dependent payments/damage onto successful cast results, retaining independent wall damage controls. Tie cast-time and success-time limits to the specified stage. Inspirational Words regenerates without preparation controls and reports recipient choices. Never Upstaged gains tokens through confirmed damage and preselects whole-pool damage spending, preserving the printed damage bonus rather than modifying the attack's hit roll. Invisibility links a targeted effect's action option to the caster's token pool. Share the Burden uses one exclusive, bounded, atomic ally Stress transfer and caster Hope reward. Safe Haven grants rest-expiring extra-move effects to caster and entering allies, including casting from downtime. Endless Charisma offers paid individual Duality-die rerolls; Grace-Touched payments are manual. Copycat selects unique level-8-or-lower cards from other actors' active loadouts, in ascending level order, costs half level rounded **up**, and embeds usable borrowed automation until rest or source vaulting. Reuse these shared workflows for directly analogous cards; retain backward-compatible capability gating.
 
+- **Blood feedback pass:** Lifeblood Talisman creates a unique transferable enchanted item with bearer-only, 1-Hope mitigation when marking at least 2 HP; it disappears on recast or when its caster has no marked HP (not merely on rest). Brand of Castigation pays Stress on damage results. Vitality Manipulation pays Stress on successful cast results and reports marking/clearing 1 Stress, or 2 with Hope/critical; ally-cast advantage is optional. Parasite of the Will pays HP on successful cast results. Mutual Suffering has a Spellcast-trait Reaction button and a rest counter consumed only by the successful-result action; the original incoming HP amount and adversary marks remain table-managed. Vital Ward invites allies through chat, links resistance to the particular caster circle, and expires all linked benefits when that circle ends. Bloodbath combines its Hope payment and Spellcast attempt in one card control and puts each ally's paid Stress/HP recovery claim on the roll. Glyph of Hemorrhaging pays HP and grants its caster buff on successful cast results; Severe damage ends it and the GM can remove it manually for 2 Fear. Sanguine Feast offers mutually exclusive successful-result payments of 2 Hope and 1/2/3 HP, reports 2/4/6 target HP, and attaches a caster-only, once-per-message conditional refund for the original HP amount if the target dies. Claims, costs, expiry and replay exclusions are host-validated. These are additive online capabilities; retain older-client/host connections and the DM Link compatibility version, gate new semantics on a new online capability, and rebuild the web bundle and classpath resources. No settings or DM controls change.
+
 - **Domain-card automation corrections:** Astral Projection marks 1 Stress; Bloodbath, Arcane Deflection and Shared Clarity spend 1 Hope when their existing actions are used. Bold Presence's condition avoidance has its own once-per-rest limit without limiting its Presence roll option. Targets' narrative effects remain manual. The completed individual review and remaining automation decisions are recorded in the ledger below.
 
 - **Further domain-card cost and roll-option corrections:** Deft Maneuvers and Wild Surge mark Stress; Divination, Manifest Wall, Reaper's Strike, Smite and Transcendent Union spend the stated Hope on their existing actions. Deft Deceiver and Reckless offer their paid advantage as optional roll choices, rather than charging separately from the roll. Narrative prerequisites remain manual; the complete review and remaining implementation decisions are recorded below.
@@ -125,7 +127,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Safe Haven and Specter of the Dark:** Safe Haven charges Hope when summoned, not again when selecting its extra rest move. Specter of the Dark grants a manually ended physical-damage immunity effect until the player makes an action roll targeting another creature.
 - **Additional printed Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam and Veil of Night use their printed difficulties in the Spellcast roll. Their subsequent target, duration, cost, recovery, or vault consequences remain manual.
 - **Complete catalog audit follow-through:** individually inspect all 236 cards and every nested grimoire spell against the class/subclass patterns. Record each disposition below, including narrative-only behavior and genuine pattern uncertainties. Fix non-fixed chat damage so configured costs and shared limits are checked before sending and consumed only after sending; cancellation spends nothing. Bare Bones replaces the unarmored base score/thresholds while retaining level and passive bonuses. Natural Familiar's damage/eyes controls require a summoned familiar. Quantity roll options and mitigation reuse the existing token-pool patterns. Grace-Touched retains its loadout-gated passive, but substitutions and payments are table-managed without action buttons. Unknown target difficulties require player-confirmed success, while known failed rolls cannot claim success-only benefits.
-- **Protective domain effects:** Shield Aura uses a host-targeted effect with one recipient per caster; recasting removes the caster's previous aura without affecting another caster's aura. Its extra armor reduction applies only to that recipient and ends when its applied reduction leaves zero HP. Vital Ward chooses physical/magic resistance at cast time, replaces the previous choice, and ends after damage marks at least 2 HP; leaving the circle and ally participation are table-managed. Rejuvenation Barrier grants the caster and eligible ally claimants d4 healing and a manually ended, situational physical-resistance effect. New host-dependent effect metadata is capability-gated, preserving older clients/hosts without changing the LAN compatibility version.
+- **Protective domain effects:** Shield Aura uses a host-targeted effect with one recipient per caster; recasting removes the caster's previous aura without affecting another caster's aura. Its extra armor reduction applies only to that recipient and ends when its applied reduction leaves zero HP. Vital Ward chooses physical/magic resistance at cast time, replaces the previous choice, and ends after caster damage marks at least 2 HP; allies enter through activation-bound chat claims, and leaving the circle is table-managed. Rejuvenation Barrier grants the caster and eligible ally claimants d4 healing and a manually ended, situational physical-resistance effect. New host-dependent effect metadata is capability-gated, preserving older clients/hosts without changing the LAN compatibility version.
 
 - **Individual domain-card review:** all 236 catalog entries and every nested grimoire spell have been read individually against the class/subclass examples. The ledger below records the result, not a claim that every narrative clause is automated. Supported costs, dice, limits, passives, prepared effects and party claims use the existing patterns. Target movement, adversary conditions, hidden difficulties and narrative prerequisites remain table-confirmed. The explicitly open items below need a choice of semantics or a new shared workflow; they have not been silently treated as fully automated.
 - **Final audit corrections:** nested grimoire reactions resolve their exact book/spell source on the host and require the book to remain active. Blighting Strike failure payments are mutually exclusive and cannot be claimed on critical successes. Signature Move uses a d20 Hope die and its successful-result recovery is linked to selecting that option. Runic Adrenaline's HP-paid d8 is post-roll, with a conditional d8 advantage die. Boost pays before the attack and prepares separate attack/damage bonuses; a missed attack's damage bonus is explicitly discarded. Smite stores a charge until the next successful weapon damage, doubles the total, changes its type to magic, and excludes spell damage. Rain of Blades and Towering Stalk pay at cast time rather than when damage is rolled. Never Upstaged and Sigil of Retribution spend their whole pools. Not Good Enough offers one reroll of all 1s/2s; selecting an arbitrary subset remains manual.
@@ -157,7 +159,7 @@ Desktop tool for tabletop dungeon masters that:
 | 17 | Blood Puppet | Supported: separate control/attack casts, successful-control Hope payment, puppet damage. |
 | 18 | Blood Spike | Supported: successful Spellcast physical damage. |
 | 19 | Blood-Touched | Supported: active count, marked-HP Evasion and post-mitigation Hope reward. |
-| 20 | Bloodbath | Manual: Hope/use payment; affected adversaries are table-resolved. |
+| 20 | Bloodbath | Supported: combined host-paid Hope/use and Spellcast, paid ally healing claims on the roll; adversaries table-resolved. |
 | 21 | Body Basher | Supported: eligible weapon damage uses current Strength. |
 | 22 | Bold Presence | Supported: current Strength Presence bonus and separate limited avoidance action. |
 | 23 | Bolt Beacon | Supported: successful Spellcast magic damage; beacon consequences are manual. |
@@ -177,7 +179,7 @@ Desktop tool for tabletop dungeon masters that:
 | 37 | Book of Yarrow | Timejammer: fixed difficulty, table time effects. Magic Immunity: paid, rest-expiring magic immunity effect. |
 | 38 | Boost | Supported: Stress before attack, separate prepared advantage/d10 effects; explicit miss discard. |
 | 39 | Brace | Supported: existing payment and incoming-damage mitigation. |
-| 40 | Brand of Castigation | Manual: post-damage Stress payment; target mark and narrative consequences manual. |
+| 40 | Brand of Castigation | Supported: Stress-paid action on damage results; target mark and narrative consequences manual. |
 | 41 | Breaking Blow | Manual: existing payment; adversary armor changes need the GM. |
 | 42 | Burning Blood | Supported: Difficulty 12 and successful-result HP payment; ignition targets manual. |
 | 43 | Chain Lightning | Open: secondary target sequence and damage carryover. |
@@ -232,7 +234,7 @@ Desktop tool for tabletop dungeon masters that:
 | 92 | Get Back Up | Supported: existing payment and mitigation/recovery. |
 | 93 | Gifted Tracker | Supported: one-Hope question and contextual Evasion report; tracked identities manual. |
 | 94 | Glancing Blow | Supported: failed-attack chat action; linked weapon damage at half current Proficiency rounded up. |
-| 95 | Glyph of Hemorrhaging | Supported: separate successful HP payment and later Stress extra-HP payment. |
+| 95 | Glyph of Hemorrhaging | Supported: successful-result HP payment creates a Severe-expiring caster buff with Stress-paid extra-HP action. |
 | 96 | Glyph of Nightfall | Supported: success-only Hope payment; difficulty reduction manual. |
 | 97 | Goad Them On | Manual: existing payment; forced adversary behavior manual. |
 | 98 | Gore and Glory | Manual: existing payment/reward; defeat condition table-confirmed. |
@@ -259,7 +261,7 @@ Desktop tool for tabletop dungeon masters that:
 | 119 | Lean on Me | Supported: shared-rest self clear and one matching ally claim. |
 | 120 | Life Leash | Open: redistribute existing HP between two willing actors and track per-ally rest limits. |
 | 121 | Life Ward | Supported: existing host-targeted death-move effect; proximity remains table-confirmed. |
-| 122 | Lifeblood Talisman | Open: transferring the talisman's HP benefit and consumption across actors. |
+| 122 | Lifeblood Talisman | Supported: transferable enchanted item, bearer Hope mitigation, caster zero-HP/recast expiry. |
 | 123 | Manifest Wall | Supported: printed difficulty/Hope/use payment; wall geometry manual. |
 | 124 | Mass Disguise | Supported: Stress payment creates a real Countdown (8); appearances manual. |
 | 125 | Mass Enrapture | Manual: existing payment; per-target attention/interruptions manual. |
@@ -267,7 +269,7 @@ Desktop tool for tabletop dungeon masters that:
 | 127 | Mending Touch | Supported: targeted healing choices/costs and shared long-rest upgrade; touching and fiction table-confirmed. |
 | 128 | Midnight Spirit | Supported: paid one-spirit summon, effect-gated cast and current-Spellcast-count damage that consumes the spirit; carrying/movement manual. |
 | 129 | Midnight-Touched | Supported: gated Fear-die damage and independent zero-Hope action; GM Fear prevention manual. |
-| 130 | Mutual Suffering | Open: original HP event, Spellcast Reaction and success-only rest use/target marks. |
+| 130 | Mutual Suffering | Supported: Spellcast Reaction button and success-only rest counter; incoming HP and adversary marks table-managed. |
 | 131 | Natural Familiar | Supported: summoned-effect-gated dice/eyes and rest expiry; creature fiction manual. |
 | 132 | Nature's Tongue | Supported: situational option/payment; dialogue manual. |
 | 133 | Never Upstaged | Supported: HP-event-confirmed token award and all-token next-success damage spending. |
@@ -280,7 +282,7 @@ Desktop tool for tabletop dungeon masters that:
 | 140 | Onslaught | Manual: existing payment; adversary sequence manual. |
 | 141 | Otherworldly Shimmer | Manual: limited action; affected creature circumstances manual. |
 | 142 | Overwhelming Aura | Supported: printed difficulty; adversary reactions manual. |
-| 143 | Parasite of the Will | Supported: separate successful HP payment and subsequent Hope disadvantage action; target manual. |
+| 143 | Parasite of the Will | Supported: successful-result HP payment and subsequent Hope disadvantage action; target manual. |
 | 144 | Phantom Retreat | Supported: Hope-paid toggle effect ending on return or rest; movement manual. |
 | 145 | Pick and Pull | Supported: optional lock/trap/steal advantage. |
 | 146 | Plant Dominion | Supported: printed difficulty/use; plant manipulation manual. |
@@ -306,7 +308,7 @@ Desktop tool for tabletop dungeon masters that:
 | 166 | Safe Haven | Supported: summon payment, caster/ally entry buff and one extra downtime move until rest; downtime cast supported. |
 | 167 | Sage-Touched | Supported: active gate, natural-environment option and shared-rest trait bonus. |
 | 168 | Salvation Beam | Open: printed difficulty exists; variable recipients, paid quantity and HP distribution. |
-| 169 | Sanguine Feast | Open: variable HP sacrifice, doubled target marks and defeat-contingent exact refund. |
+| 169 | Sanguine Feast | Supported: exclusive 1/2/3-HP payments, doubled target report, caster-only exact conditional refund; defeat table-confirmed. |
 | 170 | Savor the Anguish | Manual: existing payment/recovery; target damage condition table-confirmed. |
 | 171 | Scramble | Supported: existing limited action; movement manual. |
 | 172 | Second Wind | Supported: existing limited recovery. |
@@ -360,9 +362,9 @@ Desktop tool for tabletop dungeon masters that:
 | 220 | Veil of Night | Supported: printed difficulty; visibility/party membership manual. |
 | 221 | Versatile Fighter | Supported: preselected highest-current-trait attack dropdown and Stress-paid individual damage-die maximum. |
 | 222 | Vicious Entangle | Supported: successful Spellcast magic damage; temporary restraint manual. |
-| 223 | Vital Ward | Supported: paid physical/magic resistance choice and 2-marked-HP damage expiry; circle membership/manual non-damage HP termination. |
+| 223 | Vital Ward | Supported: paid resistance choice, activation-bound ally entry buffs and caster 2-marked-HP damage expiry; movement/non-damage termination manual. |
 | 224 | Vitality | Supported: one-time two-benefit selection and permanent vaulting, including testing-sheet selection. |
-| 225 | Vitality Manipulation | Open: ally-cast advantage and outcome-dependent target Stress transaction. |
+| 225 | Vitality Manipulation | Supported: ally-cast advantage, success-result Stress payment and outcome-dependent target Stress report. |
 | 226 | Voice of Dread | Manual: ordinary Spellcast; target Stress/restraint handled by GM. |
 | 227 | Voice of Reason | Supported: situational social advantage and full-Stress extra damage die. |
 | 228 | Wall of Hunger | Supported: fixed difficulty/payment; wall geometry and targets manual. |
@@ -380,8 +382,8 @@ Desktop tool for tabletop dungeon masters that:
 - **Roll replacement and undo:** Adjust Reality, Premonition and Support Tank. Adjust Reality chooses a plausible total for self/ally dice, not a reroll; Premonition undoes the move and its consequences, not just its total; Support Tank rerolls either chosen ally Duality die. Consider linked result revisions versus original-result edits and a transaction that reverses already-applied consequences.
 - **Merged actors:** Transcendent Union still needs shared trait, cost and use ownership. Copycat's separate caster-owned borrowed automation, rounded-up cost and source-vault/rest expiry are now implemented.
 - **Mounts:** Conjured Steeds. Named recipient effects can encode the attack/damage bonuses, but resolve variable steed count, rider versus steed ownership and steed damage expiry without applying those bonuses to every ally.
-- **Targeted healing and condition changes:** Healing Hands, Salvation Beam and Vitality Manipulation. Bard claims fit fixed party benefits; per-target limits, distributing a Stress-paid healing quantity and outcome-dependent Stress changes instead require targeted transactions. Mending Touch, Healing Strike and Restoration already use targeted actions and are not unresolved for recipient ownership.
-- **Transfers and linked damage:** I Am Your Shield, Redirect, Life Leash, Lifeblood Talisman, Mutual Suffering, Shared Trauma, Sanguine Feast and Encore. Consider a shared source-event transaction versus sender payment plus recipient claim. Exact HP amounts, success-only uses, death/defeat and conditional refunds must use the original event, not an unrelated editable number. Share the Burden now has an exclusive atomic Stress transfer with bounded caster Hope gain.
+- **Targeted healing and condition changes:** Healing Hands and Salvation Beam. Bard claims fit fixed party benefits; per-target limits and distributing a Stress-paid healing quantity instead require targeted transactions. Vitality Manipulation now uses outcome-specific target reports as requested. Mending Touch, Healing Strike and Restoration already use targeted actions and are not unresolved for recipient ownership.
+- **Transfers and linked damage:** I Am Your Shield, Redirect, Life Leash, Shared Trauma and Encore. Consider a shared source-event transaction versus sender payment plus recipient claim. Exact HP amounts, success-only uses, death/defeat and conditional refunds must use the original event, not an unrelated editable number. Lifeblood Talisman now transfers as a unique enchanted item; Mutual Suffering tracks its Reaction/success-only use with incoming HP table-managed; Sanguine Feast binds its conditional refund to the original payment. Share the Burden has an exclusive atomic Stress transfer with bounded caster Hope gain.
 - **Variable damage sequences:** Chain Lightning and Splintering Strike. Consider one roll with per-target application versus sequential linked rolls. Chain Lightning stores the cast total as the targets' reaction Difficulty and expands to new targets; Splintering Strike distributes one damage total with additional per-target dice. Shared-use consumption must not duplicate the original use.
 - **Unleash Chaos:** editable token controls exist. Resolve session-start current-Spellcast preparation, choosing/spending tokens before the cast, success-only damage and Stress-paid replenishment. Consider a cast-time quantity dialog with linked damage versus a prepared pending expenditure.
 - **Permanent grants:** Master of the Craft remains open: resolve Experience ownership, reversibility and re-import before permanent mutation. Vitality now has an explicit one-time two-benefit selection and permanent vaulting.

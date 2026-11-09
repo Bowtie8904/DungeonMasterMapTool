@@ -1962,7 +1962,7 @@ public final class OnlineSessionServer {
             else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
                     && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
                     && !definition.path("menacingReach").asBoolean()
-                    && !"talisman".equals(definition.path("witchAction").asText()))
+                    && !List.of("talisman", "lifeblood").contains(definition.path("witchAction").asText()))
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
             if (definition.path("halfProficiencyDamage").asBoolean()) {
@@ -2090,6 +2090,13 @@ public final class OnlineSessionServer {
                     : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
             useFeatureLimit(sourceSheet, key, effectiveFeatureUses(sourceSheet, key, uses));
             resolveWarlockAction(sourceSheet, definition, request, reportLines);
+            if ("lifeblood".equals(definition.path("witchAction").asText())) {
+                removeEffects(sourceSheet, "Lifeblood Talisman source", null, null);
+                sourceSheet.withArray("effects").addObject().put("id", "blood-" + java.util.UUID.randomUUID())
+                        .put("witchGrant", "lifeblood").put("name", "Lifeblood Talisman source")
+                        .put("kind", "buff").put("until", "manual").put("sourceKey", key);
+                reportLines.add("Created a Lifeblood Talisman. Give it from Loot to transfer its protection.");
+            }
             if ("talisman".equals(definition.path("witchAction").asText())) {
                 JsonNode amount = request.path("amount");
                 if (!amount.isInt() || amount.asInt() < 1)
@@ -2323,17 +2330,7 @@ public final class OnlineSessionServer {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, null);
                 benefitReport.put("actorId", sourceActor.getId());
-                ObjectNode claims = benefitReport.putObject("actionBenefits");
-                claims.put("sessionId", sessionId);
-                if (java.util.stream.StreamSupport.stream(benefits.spliterator(), false).anyMatch(b -> b.path("transferStress").asBoolean()))
-                    claims.put("stressCapacity", Math.max(0, sourceSheet.path("stress").path("slots").asInt() - sourceSheet.path("stress").path("on").asInt()));
-                if (definition.path("allowSourceOwner").asBoolean()) claims.put("allowSourceOwner", true);
-                claims.set("options", benefits);
-                claims.putArray("claimedBy");
-                ArrayNode eligible = claims.putArray("actorIds");
-                for (Campaign.Actor actor : c.getActors())
-                    if (!actor.isDisabled() && hasPlayerSheet(actor) && (definition.path("allowSourceOwner").asBoolean()
-                            ? !actor.getId().equals(sourceActor.getId()) : !actor.getOwnerId().equals(sourceActor.getOwnerId()))) eligible.add(actor.getId());
+                attachActionBenefits(benefitReport, sourceActor, sourceSheet, definition, benefits);
             }
             if (definition.has("chatDamage") || fearGrant > 0) {
                 if (benefitReport == null)
@@ -2750,6 +2747,36 @@ public final class OnlineSessionServer {
         return benefits;
     }
 
+    private void attachActionBenefits(ObjectNode message, Campaign.Actor source, ObjectNode sheet,
+                                      JsonNode action, ArrayNode benefits) throws IOException {
+        benefits = benefits.deepCopy();
+        boolean self = false;
+        for (JsonNode benefit : benefits) {
+            self |= benefit.path("sourceOnly").asBoolean();
+            for (JsonNode step : benefit.path("steps")) {
+                if (!(step.path("effect") instanceof ObjectNode effect) || !effect.has("requiresSourceEffect")) continue;
+                JsonNode marker = null;
+                for (JsonNode candidate : sheet.path("effects"))
+                    if (effect.path("requiresSourceEffect").asText().equals(candidate.path("name").asText())) marker = candidate;
+                if (marker == null) throw new IllegalArgumentException("The source effect is no longer active.");
+                effect.put("activationId", marker.path("id").asText());
+            }
+        }
+        ObjectNode claims = message.putObject("actionBenefits").put("sessionId", sessionId);
+        if (self || action.path("allowSourceOwner").asBoolean()) claims.put("allowSourceOwner", true);
+        if (java.util.stream.StreamSupport.stream(benefits.spliterator(), false).anyMatch(b -> b.path("transferStress").asBoolean()))
+            claims.put("stressCapacity", Math.max(0, sheet.path("stress").path("slots").asInt() - sheet.path("stress").path("on").asInt()));
+        claims.set("options", benefits);
+        claims.putArray("claimedBy");
+        ArrayNode eligible = claims.putArray("actorIds");
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
+            boolean sourceActor = actor.getId().equals(source.getId());
+            if (sourceActor && self || !sourceActor && (action.path("allowSourceOwner").asBoolean()
+                    || !actor.getOwnerId().equals(source.getOwnerId()))) eligible.add(actor.getId());
+        }
+    }
+
     private void claimActionBenefit(JsonNode request, Campaign.Actor actor) throws IOException {
         ObjectNode sheet = storedSheet(actor.getId());
         JsonNode ref = request.path("roll");
@@ -2757,7 +2784,7 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("That performance is not from this hosting session.");
         ObjectNode message = null;
         for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE))
-            if ("chat".equals(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
+            if (List.of("chat", "roll").contains(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
                     && entry.path("ts").equals(ref.path("ts")) && entry instanceof ObjectNode object) {
                 message = object.deepCopy();
                 break;
@@ -2774,6 +2801,8 @@ public final class OnlineSessionServer {
         for (JsonNode option : claims.path("options"))
             if (option.path("id").asText().equals(request.path("benefitId").asText())) { benefit = option; break; }
         if (benefit == null) throw new IllegalArgumentException("That benefit is not available.");
+        if (benefit.path("sourceOnly").asBoolean() && !actor.getId().equals(message.path("actorId").asText()))
+            throw new IllegalArgumentException("Only the original caster can recover this payment.");
         if (benefit.path("exclusiveClaim").asBoolean() && !claims.withArray("claimedBy").isEmpty())
             throw new IllegalArgumentException("Another ally has already accepted this action.");
         ObjectNode before = sheet.deepCopy();
@@ -2783,6 +2812,21 @@ public final class OnlineSessionServer {
         Campaign.Actor caster = campaign.actor(message.path("actorId").asText());
         if (caster == null || caster.isDisabled())
             throw new IllegalArgumentException("The source actor is disabled or no longer available.");
+        ObjectNode casterSheetForEffects = storedSheet(caster.getId());
+        for (JsonNode step : benefit.path("steps")) {
+            JsonNode effect = step.path("effect");
+            if (!effect.has("requiresSourceEffect")) continue;
+            boolean active = false;
+            for (JsonNode marker : casterSheetForEffects.path("effects"))
+                if (effect.path("requiresSourceEffect").equals(marker.path("name"))
+                        && effect.path("activationId").equals(marker.path("id"))) active = true;
+            if (!active) throw new IllegalArgumentException("That circle has ended. Use the invitation from the current cast.");
+        }
+        if (benefit.has("cost") && DeathMoves.recoverableHp(sheet) <= 0
+                && java.util.stream.StreamSupport.stream(benefit.path("steps").spliterator(), false)
+                .anyMatch(step -> "clear".equals(step.path("op").asText()) && "hp".equals(step.path("resource").asText())))
+            throw new IllegalArgumentException("There is no recoverable HP to clear. No Stress was marked.");
+        applyFeatureCost(sheet, benefit.path("cost"));
         if (benefit.path("transferStress").asBoolean()) {
             if (caster == null || caster.getId().equals(actor.getId()))
                 throw new IllegalArgumentException("Choose another willing creature to transfer Stress.");
@@ -2813,7 +2857,8 @@ public final class OnlineSessionServer {
         if (!deathReports.isEmpty()) report.put("text", report.path("text").asText() + "\n" + String.join("\n", deathReports));
         persistFeatureSheets(changed, message, false, report);
         for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
-        broadcastChatUpdate(message);
+        if ("roll".equals(message.path("type").asText())) broadcastRollUpdate(message);
+        else broadcastChatUpdate(message);
         deliver(report, null, false);
     }
 
@@ -3737,6 +3782,21 @@ public final class OnlineSessionServer {
         Map<String, ObjectNode> previousParty = new java.util.LinkedHashMap<>();
         for (String id : party.keySet()) previousParty.put(id, storedSheet(id));
         WitchEffects.synchronize(party, previousParty);
+        for (ObjectNode sheet : party.values()) {
+            if (!(sheet.path("effects") instanceof ArrayNode effects)) continue;
+            for (int i = effects.size() - 1; i >= 0; i--) {
+                JsonNode effect = effects.get(i);
+                if (!effect.has("requiresSourceEffect")) continue;
+                Campaign.Actor source = campaign.actor(effect.path("sourceActorId").asText());
+                if (source != null && source.isDisabled()) continue;
+                ObjectNode caster = party.get(effect.path("sourceActorId").asText());
+                boolean active = false;
+                if (caster != null) for (JsonNode marker : caster.path("effects"))
+                    if (effect.path("requiresSourceEffect").equals(marker.path("name"))
+                            && effect.path("activationId").equals(marker.path("id"))) active = true;
+                if (!active) effects.remove(i);
+            }
+        }
         DruidEffects.synchronizeEarth(party);
         Map<String, ObjectNode> warriors = new java.util.LinkedHashMap<>(party);
         for (Campaign.Actor actor : campaign.getActors())
@@ -4666,6 +4726,7 @@ public final class OnlineSessionServer {
             hello.put("domainCardAutomation", true);
             hello.put("domainCardAutomationV2", true);
             hello.put("domainCardAutomationV3", true);
+            hello.put("bloodAutomation", true);
             hello.put("specialCardActions", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
@@ -5260,6 +5321,28 @@ public final class OnlineSessionServer {
             });
         }
         List<String> tags = List.of(roll.path("source").asText("").split(","));
+        for (String tag : tags) {
+            if (!tag.startsWith("featureAction:card:")) continue;
+            String key = tag.substring("featureAction:".length(), tag.lastIndexOf(':'));
+            JsonNode source = featureSource(sheet, key);
+            JsonNode automation = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            for (JsonNode action : automation.path("actions")) {
+                if (!action.path("actionRoll").isObject() || !action.path("chatBenefits").isArray()
+                        || !tag.equals("featureAction:" + key + ":" + action.path("id").asText())) continue;
+                boolean active = key.startsWith("card:Copycat/");
+                for (JsonNode card : sheet.path("loadout"))
+                    if (key.equals("card:" + card.path("name").asText())) active = true;
+                if (!active) throw new IllegalArgumentException("This spell must be in your active loadout.");
+                if (action.path("hostRollAction").asBoolean()) {
+                    if (!tags.contains("spellcast") || tags.contains("reaction"))
+                        throw new IllegalArgumentException("This action requires a Spellcast action roll.");
+                    applyFeatureCost(sheet, action.path("cost"));
+                    useFeatureLimit(sheet, key, automation.path("uses"));
+                }
+                attachActionBenefits(roll, actor, sheet, action, actionBenefits(sheet, key, action));
+                changed = true;
+            }
+        }
         if (tags.contains("spellcast")) {
             for (String tag : tags) {
                 if (!tag.startsWith("card:Copycat/")) continue;

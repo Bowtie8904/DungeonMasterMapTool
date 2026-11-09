@@ -655,6 +655,7 @@ describe('domain-card cost and limit corrections', () => {
     const c = emptyCharacter('Test');
     c.stress.slots = 6;
     c.hope.on = 2;
+    c.traits.find(trait => trait.name === 'Knowledge')!.spellcast = true;
     const automation = rules(id, spell);
     const action = automation.actions![0];
     const key = `card:${id}${spell ? `/${spell}` : ''}`;

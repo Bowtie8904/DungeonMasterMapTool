@@ -431,6 +431,16 @@ and spend nothing on cancellation or disconnected sends. `domain-card-correction
 `domain-card-view.test.ts`, `rollbuttons.test.ts` and `damage.test.ts` cover these paths.
 Browser action confirmations and notices use the themed, keyboard-accessible dialogs in `src/dialogs.ts`,
 never native `alert`, `confirm` or `prompt`. Prayer Dice rolls and Ethereal Visage rewards have no confirmation.
+Blood spell automation uses damage-result Brand of Castigation and success-result payments for Vitality
+Manipulation, Parasite of the Will, Glyph of Hemorrhaging and Sanguine Feast. Vitality reports 1 Stress
+or 2 with Hope/critical; Feast's three exclusive payments report double target HP and publish a caster-only
+one-time refund for the original payment if the target dies. Mutual Suffering defers its rest use until
+the successful Reaction result is accepted. Lifeblood Talisman uses the unique transferable enchanted-item
+inventory and bearer buff, expiring on recast or zero caster marked HP, not rest alone. Vital Ward's ally
+entry claims are linked to that activation and end with the caster's circle. Bloodbath's single cast control
+has host-paid Hope/use and puts paid ally recovery claims directly on the roll. These new host-dependent
+semantics require the additive `bloodAutomation` capability; older hosts remain connectable.
+
 Witch automation rolls Commune's Spellcast-trait d6s and includes the sensory chart. Walk Between Worlds
 Witch token counters and the Lunar die appear only on their feature cards, never as header class resources. Walk Between Worlds
 and Night's Glamour roll against 13; spirit entry has a success-only chat action, while Glamour is

@@ -14,6 +14,45 @@ import static org.junit.jupiter.api.Assertions.*;
 class WitchEffectsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    @Test
+    void lifebloodTransfersItsHopeMitigationAndExpiresOnlyOnCasterHealingOrRecast() {
+        Map<String, ObjectNode> sheets = new LinkedHashMap<>();
+        ObjectNode caster = source("lifeblood", 0);
+        caster.putObject("hp").put("on", 2);
+        ObjectNode holder = MAPPER.createObjectNode();
+        sheets.put("caster", caster);
+        sheets.put("holder", holder);
+        WitchEffects.synchronize(sheets, copy(sheets));
+        assertEquals("Lifeblood Talisman", caster.path("inventory").get(0).path("name").asText());
+        Map<String, ObjectNode> previous = copy(sheets);
+        ChatCards.transfer(caster, holder, "item", caster.path("inventory").get(0).deepCopy());
+        WitchEffects.synchronize(sheets, previous);
+        assertTrue(linked(caster, "lifeblood").isMissingNode());
+        JsonNode buff = linked(holder, "lifeblood");
+        assertEquals("manual", buff.path("until").asText());
+        assertEquals(2, buff.path("mitigation").get(0).path("when").path("minMarkedHp").asInt());
+        assertEquals(1, buff.path("mitigation").get(0).path("cost").path("hope").asInt());
+        assertFalse(buff.has("tokenResource"));
+        previous = copy(sheets);
+        caster.put("shortRestsInRow", 1);
+        caster.withObject("/hp").put("on", 1);
+        WitchEffects.synchronize(sheets, previous);
+        assertEquals(1, holder.path("inventory").size());
+        assertFalse(linked(holder, "lifeblood").isMissingNode());
+        previous = copy(sheets);
+        ((ObjectNode) caster.path("effects").get(0)).put("id", "replacement");
+        ((ObjectNode) caster.path("effects").get(0)).remove("witchTalismanCreated");
+        WitchEffects.synchronize(sheets, previous);
+        assertTrue(holder.path("inventory").isEmpty());
+        assertTrue(linked(holder, "lifeblood").isMissingNode());
+        assertEquals(1, caster.path("inventory").size());
+        previous = copy(sheets);
+        caster.withObject("/hp").put("on", 0);
+        WitchEffects.synchronize(sheets, previous);
+        assertTrue(caster.path("inventory").isEmpty());
+        assertTrue(caster.path("effects").isEmpty());
+    }
+
     private ObjectNode source(String kind, int tokens) {
         ObjectNode sheet = MAPPER.createObjectNode();
         sheet.putArray("effects").addObject().put("id", "activation").put("witchGrant", kind)

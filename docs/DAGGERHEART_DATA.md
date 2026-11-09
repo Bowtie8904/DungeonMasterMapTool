@@ -138,6 +138,8 @@ deliberately manual narrative consequences are distinguished from the complete o
   caused HP to become zero, not when ordinary Armor or negation already prevented damage.
   `endOnMarkedHpCount` expires Vital Ward after actual HP marked by incoming damage reaches the
   specified threshold; non-damage HP changes and leaving the circle are explicitly manual.
+  Vital Ward's recipient effects use activation-bound entry claims (below), so only the caster's
+  damage ends the circle, not an ally's damage.
 
 The host advertises optional `domainCardAutomationV3` alongside retained V1/V2 capabilities.
 Current clients require V3 for host-dependent audited actions; older hosts disable those controls
@@ -173,6 +175,33 @@ without blocking connection. LAN compatibility version and settings contracts ar
 - Invisibility's recipient effect uses `linkedTokenResource`, `sourceActorId` and `sourceKey`.
   Its preselected action option spends the caster's token pool only when the host commits the roll;
   resending the same roll cannot spend twice. Zero tokens or source removal ends the linked buff.
+
+### Blood metadata
+
+- Actions/triggers with `bloodAutomation: true` require the additive host capability of the same name.
+  Older hosts remain connectable; no DM Link compatibility version or settings change is required.
+- `witchAction: "lifeblood"` pays the configured HP cost and creates a host-owned source activation.
+  The existing `witchTalisman` inventory marker links one transferable Lifeblood Talisman and its
+  holder-only mitigation to that activation. It expires on recast or zero caster marked HP, not rest
+  alone. Its `when.minMarkedHp: 2` mitigation checks actual HP before replacement, after remaining
+  HP and Armor, and spends 1 Hope for a single HP reduction, with no token pool.
+- `deferSourceUse` checks the source use limit without consuming it on the card's action roll.
+  Mutual Suffering consumes the rest use only through its successful-result trigger.
+- `hostRollAction` on an action with `actionRoll` and `chatBenefits` pays the configured cost and
+  source use on the host when the tagged roll commits; the browser must not pay them again.
+  Bloodbath uses this to publish benefits on the Spellcast result itself. Claims accept both roll
+  and chat references and persist the claim and recipient changes atomically.
+- `chatBenefits[].cost` is paid by the claimant before applying the benefit; no free Stress slot
+  rejects Bloodbath's healing without spending or claiming. `sourceOnly` restricts a benefit to the
+  exact original caster actor, including among multiple actors owned by one player. Sanguine Feast's
+  fixed 1/2/3-HP refunds use this with once-per-message claims; the defeat condition is table-confirmed.
+- Effect `requiresSourceEffect` names a caster effect. The host stamps its exact `activationId` into
+  chat benefit definitions, rejects stale invitations, and removes recipient effects when that
+  activation ends or is replaced. Vital Ward uses this for physical/magic circle entry. Removing a
+  recipient buff when leaving does not recreate it automatically.
+- Glyph of Hemorrhaging grants a caster buff with `endOnDamage: 3` and an effect-local Stress action.
+  Vitality Manipulation uses `when: "fear"` / `"hopeOrCritical"`, `successIfKnown`, and one
+  `exclusiveRollGroup` for its calm/anxious result actions. Target Stress changes remain narrative reports.
 
 ### Witch metadata
 

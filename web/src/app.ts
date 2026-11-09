@@ -1290,6 +1290,7 @@ export class App {
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
       supportsWitchAutomation: () => this.conn.witchAutomation,
       supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
+      supportsBloodAutomation: () => this.conn.bloodAutomation,
       supportsGlancingBlowDamage: () => this.conn.glancingBlowDamage,
       supportsWarriorAutomation: () => this.conn.warriorAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
@@ -1537,6 +1538,7 @@ export class App {
             supportsWarlockAutomation: () => this.conn.warlockAutomation,
             supportsWitchAutomation: () => this.conn.witchAutomation,
             supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
+            supportsBloodAutomation: () => this.conn.bloodAutomation,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {

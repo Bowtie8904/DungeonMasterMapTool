@@ -31,6 +31,7 @@ export class Connection {
   warlockAutomation = false;
   witchAutomation = false;
   domainCardAutomation = false;
+  bloodAutomation = false;
   specialCardActions = false;
   sessionId = '';
   deathMoves = false;
@@ -94,6 +95,7 @@ export class Connection {
     this.warlockAutomation = false;
     this.witchAutomation = false;
     this.domainCardAutomation = false;
+    this.bloodAutomation = false;
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.sheetSync = false;
@@ -143,6 +145,7 @@ export class Connection {
         this.warlockAutomation = msg.warlockAutomation === true;
         this.witchAutomation = msg.witchAutomation === true;
         this.domainCardAutomation = msg.domainCardAutomationV3 === true;
+        this.bloodAutomation = msg.bloodAutomation === true;
         this.specialCardActions = msg.specialCardActions === true;
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;

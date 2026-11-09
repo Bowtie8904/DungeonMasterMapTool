@@ -434,6 +434,13 @@
      {
       "id": "use",
       "label": "Bloodbath",
+      "bloodAutomation": true,
+      "hostRollAction": true,
+      "actionRoll": { "trait": "spellcast" },
+      "chatBenefits": [{
+       "id": "heal", "label": "Bloodbath: mark 1 Stress, clear 1 HP", "cost": { "stress": 1 },
+       "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }]
+      }],
       "cost": {
        "hope": 1
       }
@@ -1055,8 +1062,8 @@
   {
    "id": "brand-of-castigation",
    "name": "Brand of Castigation",
-   "automation": { "actions": [
-    { "id": "use", "label": "After dealing damage: Brand of Castigation", "cost": { "stress": 1 },
+   "automation": { "conditionalRollTriggers": [
+    { "id": "use", "label": "Brand of Castigation", "on": "damage", "cost": { "stress": 1 },
       "report": { "text": "Mark the damaged creature. Direction, retaliation and replacement are table-managed." } }
    ] },
    "cardType": "Spell",
@@ -2372,16 +2379,14 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a creature within Far range. On a success, **mark a Hit Point** to sear the target with a magical glyph that lasts until the GM spends 2 Fear to remove it or you take Severe damage. Whenever the target marks any Hit Points while the glyph remains, you can **mark a Stress** to make them mark an additional Hit Point.",
    "automation": {
-    "actions": [
-     { "id": "cast", "label": "Successful Spellcast: sear glyph", "cost": { "hp": 1 },
-       "report": { "text": "Track the chosen target and remove the glyph when the GM spends 2 Fear or you take Severe damage." } },
-     {
-      "id": "use",
-      "label": "Glyph target marks HP: force another HP",
-      "cost": {
-       "stress": 1
-      }
-     }
+    "conditionalRollTriggers": [
+     { "id": "cast", "label": "Sear Glyph of Hemorrhaging", "on": "card:Glyph of Hemorrhaging", "successIfKnown": true,
+       "cost": { "hp": 1 }, "steps": [{ "op": "effect", "effect": {
+        "name": "Glyph of Hemorrhaging", "kind": "buff", "until": "manual", "endOnDamage": 3,
+        "text": "Whenever the glyph's target marks HP, mark 1 Stress to make them mark 1 additional HP. Ends when you take Severe damage or the GM spends 2 Fear to remove it.",
+        "actions": [{ "id": "use", "label": "Glyph target marks HP: force another HP", "cost": { "stress": 1 },
+         "report": { "text": "The glyph's target marks 1 additional HP." } }]
+       } }] }
     ]
    }
   },
@@ -2987,6 +2992,8 @@
      {
       "id": "use",
       "label": "Lifeblood Talisman",
+      "bloodAutomation": true,
+      "witchAction": "lifeblood",
       "cost": {
        "hp": 1
       }
@@ -3170,7 +3177,14 @@
    "domain": "Blood",
    "level": 5,
    "recall": 1,
-   "text": "When an attack from a creature causes you to mark one or more Hit Points, you can make a **Reaction Roll** using your Spellcast trait against the creature. On a success, the creature marks the same number of Hit Points as you did, and you can’t use this spell again until you finish a rest."
+   "text": "When an attack from a creature causes you to mark one or more Hit Points, you can make a **Reaction Roll** using your Spellcast trait against the creature. On a success, the creature marks the same number of Hit Points as you did, and you can’t use this spell again until you finish a rest.",
+   "automation": {
+    "uses": { "max": 1, "per": "rest" },
+    "actions": [{ "id": "react", "label": "Mutual Suffering: Reaction", "deferSourceUse": true,
+     "actionRoll": { "trait": "spellcast", "reaction": true } }],
+    "conditionalRollTriggers": [{ "id": "reflect", "label": "Successful Mutual Suffering", "on": "featureAction:card:Mutual Suffering:react",
+     "successIfKnown": true, "report": { "text": "The attacking creature marks the same number of HP you marked from its attack. Mutual Suffering is spent until your next rest." } }]
+   }
   },
   {
    "id": "natural-familiar",
@@ -3513,8 +3527,10 @@
    "recall": 1,
    "text": "Make a **Spellcast Roll** against a creature within Very Far range. On a success, **mark a Hit Point** to conjure a tiny magical bloodworm that burrows into the target. On a success with Hope, the target isn’t aware of the worm within.\n\nYou have advantage on any Presence roll against the target, and whenever they make a roll, you can **spend a Hope** to give the roll disadvantage. You can destroy the bloodworm to cause the target to mark a Hit Point.",
    "automation": {
+    "conditionalRollTriggers": [
+     { "id": "cast", "label": "Conjure bloodworm", "on": "card:Parasite of the Will", "successIfKnown": true, "cost": { "hp": 1 } }
+    ],
     "actions": [
-     { "id": "cast", "label": "Successful Spellcast: conjure bloodworm", "cost": { "hp": 1 } },
      {
       "id": "use",
       "label": "Bloodworm target rolls: give disadvantage",
@@ -4140,7 +4156,24 @@
    "domain": "Blood",
    "level": 10,
    "recall": 2,
-   "text": "Make a **Spellcast Roll** against an adversary within Close range. On a success, **spend 2 Hope** to mark 1–3 Hit Points, and the target marks twice the number of the Hit Points you marked. If this causes the target to mark their last Hit Point, you can clear the Hit Points you marked to cast this spell."
+   "text": "Make a **Spellcast Roll** against an adversary within Close range. On a success, **spend 2 Hope** to mark 1–3 Hit Points, and the target marks twice the number of the Hit Points you marked. If this causes the target to mark their last Hit Point, you can clear the Hit Points you marked to cast this spell.",
+   "automation": { "conditionalRollTriggers": [
+    { "id": "one", "label": "Sanguine Feast: mark 1 HP (target marks 2)", "on": "card:Sanguine Feast",
+     "bloodAutomation": true, "successIfKnown": true, "exclusiveRollGroup": "feast", "cost": { "hope": 2, "hp": 1 },
+     "report": { "text": "The target marks 2 HP. If this marks its last HP, recover the 1 HP paid using this message." },
+     "chatBenefits": [{ "id": "refund", "label": "Target died: recover 1 HP", "sourceOnly": true,
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] }] },
+    { "id": "two", "label": "Sanguine Feast: mark 2 HP (target marks 4)", "on": "card:Sanguine Feast",
+     "bloodAutomation": true, "successIfKnown": true, "exclusiveRollGroup": "feast", "cost": { "hope": 2, "hp": 2 },
+     "report": { "text": "The target marks 4 HP. If this marks its last HP, recover the 2 HP paid using this message." },
+     "chatBenefits": [{ "id": "refund", "label": "Target died: recover 2 HP", "sourceOnly": true,
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }] }] },
+    { "id": "three", "label": "Sanguine Feast: mark 3 HP (target marks 6)", "on": "card:Sanguine Feast",
+     "bloodAutomation": true, "successIfKnown": true, "exclusiveRollGroup": "feast", "cost": { "hope": 2, "hp": 3 },
+     "report": { "text": "The target marks 6 HP. If this marks its last HP, recover the 3 HP paid using this message." },
+     "chatBenefits": [{ "id": "refund", "label": "Target died: recover 3 HP", "sourceOnly": true,
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 3 }] }] }
+   ] }
   },
   {
    "id": "savor-the-anguish",
@@ -5603,16 +5636,24 @@
    "text": "**Mark a Hit Point** to trace a circle of blood around yourself at Very Close range. While in the circle, you have resistance to your choice of physical or magic damage (choose when you cast the spell). Allies also gain this benefit while in the circle. The circle disappears if you move out of it, mark 2 or more Hit Points, or cast this spell again.",
    "automation": {
     "conditionalActions": [
-     { "id": "physical", "label": "Vital Ward: physical resistance", "cost": { "hp": 1 }, "steps": [
+     { "id": "physical", "label": "Vital Ward: physical resistance", "bloodAutomation": true, "cost": { "hp": 1 }, "steps": [
       { "op": "effect", "effect": { "name": "Vital Ward", "kind": "buff", "until": "manual", "endOnMarkedHpCount": 2,
-       "text": "Physical resistance within the circle. End when you leave the circle or mark 2 or more HP; allies apply the chosen resistance manually.",
+       "text": "Physical resistance within the circle. End when you leave the circle or mark 2 or more HP.",
        "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "physical" }, "halve": true }] } }
-     ] },
-     { "id": "magic", "label": "Vital Ward: magic resistance", "cost": { "hp": 1 }, "steps": [
+     ], "chatBenefits": [{ "id": "enter", "label": "Enter Vital Ward (physical)", "steps": [{ "op": "effect", "effect": {
+      "name": "Vital Ward benefits", "kind": "buff", "until": "manual", "requiresSourceEffect": "Vital Ward",
+      "text": "Physical resistance while within the caster's circle. Remove when you leave; ends automatically when the caster's circle ends.",
+      "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "physical" }, "halve": true }]
+     } }] }] },
+     { "id": "magic", "label": "Vital Ward: magic resistance", "bloodAutomation": true, "cost": { "hp": 1 }, "steps": [
       { "op": "effect", "effect": { "name": "Vital Ward", "kind": "buff", "until": "manual", "endOnMarkedHpCount": 2,
-       "text": "Magic resistance within the circle. End when you leave the circle or mark 2 or more HP; allies apply the chosen resistance manually.",
+       "text": "Magic resistance within the circle. End when you leave the circle or mark 2 or more HP.",
        "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "magic" }, "halve": true }] } }
-     ] }
+     ], "chatBenefits": [{ "id": "enter", "label": "Enter Vital Ward (magic)", "steps": [{ "op": "effect", "effect": {
+      "name": "Vital Ward benefits", "kind": "buff", "until": "manual", "requiresSourceEffect": "Vital Ward",
+      "text": "Magic resistance while within the caster's circle. Remove when you leave; ends automatically when the caster's circle ends.",
+      "mitigation": [{ "id": "ward", "label": "Vital Ward", "passive": true, "when": { "type": "magic" }, "halve": true }]
+     } }] }] }
     ]
    }
   },
@@ -5633,7 +5674,20 @@
    "domain": "Blood",
    "level": 2,
    "recall": 0,
-   "text": "Make a **Spellcast Roll** against a target within Very Close range. If you cast this on an ally, make the roll with advantage. On a success, **mark a Stress**, and choose one of the following effects:\n\n- The target grows calmer and clears a Stress. On a success with Hope, they clear 2 Stress.\n- The target grows more anxious and marks a Stress. On a success with Hope, they mark 2 Stress."
+   "text": "Make a **Spellcast Roll** against a target within Very Close range. If you cast this on an ally, make the roll with advantage. On a success, **mark a Stress**, and choose one of the following effects:\n\n- The target grows calmer and clears a Stress. On a success with Hope, they clear 2 Stress.\n- The target grows more anxious and marks a Stress. On a success with Hope, they mark 2 Stress.",
+   "automation": {
+    "conditionalRollOptions": [{ "id": "ally", "label": "Vitality Manipulation: ally target", "roll": "card:Vitality Manipulation", "advantage": "advantage" }],
+    "conditionalRollTriggers": [
+     { "id": "calm", "label": "Calm target: clear 1 Stress", "on": "card:Vitality Manipulation", "successIfKnown": true,
+      "when": "fear", "exclusiveRollGroup": "vitality", "cost": { "stress": 1 }, "report": { "text": "The target grows calmer and clears 1 Stress." } },
+     { "id": "anxious", "label": "Anxious target: mark 1 Stress", "on": "card:Vitality Manipulation", "successIfKnown": true,
+      "when": "fear", "exclusiveRollGroup": "vitality", "cost": { "stress": 1 }, "report": { "text": "The target grows more anxious and marks 1 Stress." } },
+     { "id": "calm-hope", "label": "Calm target: clear 2 Stress", "on": "card:Vitality Manipulation", "successIfKnown": true,
+      "when": "hopeOrCritical", "exclusiveRollGroup": "vitality", "cost": { "stress": 1 }, "report": { "text": "The target grows calmer and clears 2 Stress." } },
+     { "id": "anxious-hope", "label": "Anxious target: mark 2 Stress", "on": "card:Vitality Manipulation", "successIfKnown": true,
+      "when": "hopeOrCritical", "exclusiveRollGroup": "vitality", "cost": { "stress": 1 }, "report": { "text": "The target grows more anxious and marks 2 Stress." } }
+    ]
+   }
   },
   {
    "id": "voice-of-dread",

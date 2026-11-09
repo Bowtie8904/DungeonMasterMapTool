@@ -87,6 +87,17 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Banish:** roll its difficulty from the Spellcast result in chat; the highest d20 is stored on the card and can be adjusted manually.
 - **Arcana-Touched:** with four Arcana cards in the active loadout, swap the Hope and Fear dice of a roll from chat once per rest.
 - **Blood- and Valor-Touched:** their loadout-gated Evasion and damage rewards are applied by the character sheet and damage dialog.
+- **Blood spells:** Lifeblood Talisman creates a transferable enchanted item whose bearer can spend Hope
+  to reduce a mark of at least 2 HP by one; it disappears on recast or when its caster has no marked HP.
+  Brand of Castigation acts on damage results; Vitality Manipulation, Parasite of the Will and Glyph of
+  Hemorrhaging pay on successful Spellcast results. Vitality reports the target's outcome-dependent Stress;
+  Glyph grants a buff that ends on Severe damage. Mutual Suffering has a Reaction button and a
+  success-consumed rest counter. Vital Ward invites allies into its chosen resistance circle through chat,
+  removing linked buffs when the caster's circle ends; remove your buff when leaving the circle.
+  Bloodbath spends Hope and rolls from one control, with Stress-paid ally healing on the roll.
+  Sanguine Feast offers 1/2/3-HP payments for 2 Hope, reports 2/4/6 target HP, and offers the caster
+  a one-time refund of that payment if the target dies. Confirm targets, successful hidden-Difficulty
+  rolls, Mutual Suffering's incoming HP and defeat conditions at the table.
 - **Codex-Touched:** swap it for a chosen vault card once per rest without paying Recall; its Stress-paid Spellcast bonus remains independent.
 - **Midnight-Touched:** add an attack’s Fear die to damage for Stress, or gain Hope at zero Hope once per rest when the GM would gain Fear.
 - **Frenzy and Healing Field:** Frenzy's bonuses and Armor restriction apply while its effect is active; end it when combatants are no longer in sight. Healing Field offers free or Hope-paid healing, with allies claiming their own healing.

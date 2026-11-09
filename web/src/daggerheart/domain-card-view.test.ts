@@ -30,6 +30,7 @@ class Element {
   listeners = new Map<string, () => unknown>();
   attributes: Record<string, string> = {};
   constructor(readonly tag: string) {}
+  get ownerDocument(): Document { return document; }
   append(...children: Array<Element | string>): void { this.children.push(...children); }
   insertBefore(child: Element, before: Element | null): void {
     const i = before ? this.children.indexOf(before) : -1;
@@ -643,6 +644,42 @@ it('rolls Arcane Barrage only after a successful send and charges the chosen Hop
   expect(requests.at(-1)?.expression).toBe('3d6');
   expect(c.hope.on).toBe(1);
   expect(c.usage['card:Book of Illiat/Arcane Barrage'].used).toBe(1);
+});
+
+it('gives Bloodbath one cast control and sends without duplicate browser-side payment', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const entry = catalog.entries.find(item => item.id === 'bloodbath')!;
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.hope.on = 4;
+  c.traits.find(trait => trait.name === 'Knowledge')!.spellcast = true;
+  c.loadout = [{ name: entry.name, domain: 'Blood', level: 9, type: 'Spell', recall: 2,
+    text: entry.text ?? '', spellcast: 'Knowledge', automation: entry.automation }];
+  const requests: RollRequest[] = [];
+  let connected = false;
+  const root = renderSheetView({ character: c, onRoll: request => { requests.push(request); return connected; },
+    supportsBloodAutomation: () => true, supportsPartyFeatures: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  expect(root.querySelectorAll('button').filter(button => button.text() === 'Spellcast roll')).toHaveLength(0);
+  const cast = root.querySelectorAll('button').filter(button => button.text().startsWith('Bloodbath ('));
+  expect(cast).toHaveLength(1);
+  await cast[0].click();
+  let send = body.querySelectorAll('button').find(button => button.text() === 'Roll to chat')!;
+  await send.click();
+  expect(c.hope.on).toBe(4);
+  expect(c.usage['card:Bloodbath']).toBeUndefined();
+  connected = true;
+  await send.click();
+  expect(requests.at(-1)?.source).toContain('featureAction:card:Bloodbath:use');
+  expect(requests.at(-1)?.source).toContain('spellcast');
+  expect(c.hope.on).toBe(4);
+  expect(c.usage['card:Bloodbath']).toBeUndefined();
 });
 
 it('does not spend Hope or a rest use when Arcane Barrage is canceled', async () => {

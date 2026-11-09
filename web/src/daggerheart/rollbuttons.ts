@@ -39,6 +39,7 @@ export interface RollButtonHost {
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
   supportsDomainCardAutomation?: () => boolean;
+  supportsBloodAutomation?: () => boolean;
   supportsGlancingBlowDamage?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
   sessionId?: () => string;
@@ -152,7 +153,7 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
   };
 }
 
-function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTMLElement | null {
   const claims = m.actionBenefits;
   if (!claims || !host.supportsPartyFeatures?.() || !host.playerId || m.fromId === host.playerId && !claims.allowSourceOwner
       || claims.sessionId !== host.sessionId?.()) return null;
@@ -167,9 +168,14 @@ function benefitButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | nul
         const sheet = await host.sheet(actorId);
         if (!sheet) continue;
         for (const benefit of claims.options) {
+          if (benefit.sourceOnly && actorId !== m.actorId) continue;
+          if ((benefit.sourceOnly || benefit.cost || benefit.steps.some(step => step.effect?.requiresSourceEffect))
+              && !host.supportsBloodAutomation?.()) continue;
           if ((benefit.transferStress || benefit.steps.some(step => step.effect?.rest)) && !host.supportsDomainCardAutomation?.()) continue;
           const button = el('button', { type: 'button', class: 'small' }, `${benefit.label} · ${sheet.character.name}`);
-          button.disabled = pending;
+          const blocker = actionBlocker(sheet.character, '', {}, { id: benefit.id, label: benefit.label, cost: benefit.cost });
+          button.disabled = pending || !!blocker;
+          if (blocker) button.title = blocker;
           button.addEventListener('click', async () => {
             if (pending) return;
             pending = true;
@@ -468,7 +474,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.trigger.halfProficiencyDamage && !host.supportsGlancingBlowDamage?.()
+        const unsupported = t.trigger.bloodAutomation && !host.supportsBloodAutomation?.()
+          ? 'Update the host to use Blood automation.'
+          : t.trigger.halfProficiencyDamage && !host.supportsGlancingBlowDamage?.()
           ? 'Update the host to resolve paid Glancing Blow damage.'
           : (t.automation.conditionalRollTriggers?.includes(t.trigger)
           || t.trigger.target === 'anyActor' || t.trigger.giveFear || t.trigger.chatDamage || t.trigger.rerollDualityDie
@@ -606,5 +614,6 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
   box.hidden = true;
   box.addEventListener('refresh-roll-actions', () => { void paintFor().catch((error: Error) => host.toast(error.message)); });
   void paintFor().catch((error: Error) => host.toast(error.message));
-  return box;
+  const benefits = benefitButtons(m, host);
+  return benefits ? el('div', {}, box, benefits) : box;
 }

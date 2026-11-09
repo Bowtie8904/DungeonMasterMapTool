@@ -228,6 +228,7 @@ export interface RollDetail extends RollContribution {
 }
 
 export interface RollMessage {
+  actionBenefits?: ChatMessage['actionBenefits'];
   id: string | number;
   ts: number;
   fromId: string;
@@ -387,6 +388,7 @@ export interface Hello {
   domainCardAutomation?: boolean;
   domainCardAutomationV2?: boolean;
   domainCardAutomationV3?: boolean;
+  bloodAutomation?: boolean;
   specialCardActions?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
