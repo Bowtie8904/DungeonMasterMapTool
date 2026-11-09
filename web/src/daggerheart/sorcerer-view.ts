@@ -114,7 +114,7 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
   if (trigger.damageDice) {
     const dice = el('div', { class: 'roll-dice' });
     const buttons: HTMLButtonElement[] = [];
-    for (const die of damageDieChoices(m)) {
+    for (const die of damageDieChoices(m).filter(die => !trigger.damageDiceBelow || die.value > 0 && die.value < trigger.damageDiceBelow)) {
       const button = el('button', { type: 'button', class: `roll-die${die.kept ? '' : ' discarded'}`, ariaPressed: 'false',
         ariaLabel: `${die.label}, die ${die.index + 1}: d${die.sides}, rolled ${die.value}${die.kept ? '' : ', discarded'}` },
       el('span', { class: 'roll-die-name' }, `d${die.sides}`), el('strong', {}, String(die.value)));
@@ -130,7 +130,7 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
       dice.append(button);
     }
     ui.dialog.append(el('p', { class: 'muted' }, trigger.damageDice === 'reroll'
-      ? 'Select any number of damage dice to reroll. New results replace the selected dice, even if lower.'
+      ? `Select any number of ${trigger.damageDiceBelow ? `damage dice below ${trigger.damageDiceBelow}` : 'damage dice'} to reroll. New results replace the selected dice, even if lower.`
       : 'Select one damage die to double its value.'), dice);
   } else {
     for (const choice of trigger.choices ?? []) {

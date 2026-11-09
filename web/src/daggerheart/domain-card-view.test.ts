@@ -59,6 +59,31 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('keeps Vitality visible under Effects but removable only in edit mode, reversing its benefits', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  c.vitalityBenefits = ['hp', 'thresholds'];
+  c.hp.slots = 7;
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(b => b.text() === 'Effects (1)')!.click();
+  const remove = () => root.querySelectorAll('button').find(b => b.text() === 'Remove')!;
+  expect(root.text()).toContain('Vitality');
+  expect(remove().disabled).toBe(true);
+  await remove().click();
+  expect(c.hp.slots).toBe(7);
+  await root.querySelectorAll('button').find(b => b.ariaLabel === 'Edit mode')!.click();
+  expect(remove().disabled).toBe(false);
+  await remove().click();
+  expect(c.hp.slots).toBe(6);
+  expect(c.effects).toHaveLength(0);
+  expect(c.vitalityBenefits).toEqual(['hp', 'thresholds']);
+  expect(c.vitalityEffectRemoved).toBe(true);
+});
+
 it('shows Background pronouns in the header, synchronizes edits, and handles legacy mismatches', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });

@@ -9,6 +9,7 @@ import { syncBrawler } from './brawler';
 import { clearCompanionStress, companionAvailable, companionFeatures, companionWeapon, returnCompanion, syncCompanion } from './companion';
 import type { CompanionRules } from './companion';
 import { activeCards, activeCardSources, actorAutomationAvailable, clearBorrowedCard } from './copycat';
+import { migrateVitality } from './vitality';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -39,6 +40,9 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  vitality?: boolean;
+  vitalityTotalChanges?: Partial<Record<'hp' | 'stress', number>>;
+  onlineCondition?: { tokenId?: string; id: string; iconId?: string };
   /** Already applied to base fields; recorded for display and reversal, never added as stat modifiers. */
   manualChanges?: Partial<Record<ManualStat, number>>;
   rest?: Automation['rest'];
@@ -109,6 +113,8 @@ export interface Step {
 }
 
 export interface ActionDef {
+  specialAction?: 'vitality' | 'massDisguise' | 'nightTerror';
+  toggleEffect?: EffectDef;
   copycat?: boolean;
   giveFear?: number;
   chatDamage?: ActionDef['damage'];
@@ -194,6 +200,10 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  chooseTrait?: boolean;
+  maximizeDie?: boolean;
+  linkedDamageTrait?: TraitName;
+  linkedDamageMultiplier?: number;
   allResourceDice?: { resource: string; sides: number };
   advantageDie?: 8;
   magicDamage?: boolean;
@@ -234,11 +244,13 @@ export interface RollOption extends ActionDef {
   fearDie?: 20;
   resourceEmpty?: string;
   input?: { label: string; default: number; min: number; max: number; source?: 'attackFear' };
-  quantity?: { resource: string; label: string };
+  quantity?: { resource: string; label: string; max?: number };
 }
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  damageDiceBelow?: number;
+  halfProficiencyDamage?: boolean;
   rerollDualityDie?: 'hope' | 'fear';
   criticalOnly?: boolean;
   exclusiveRollGroup?: string;
@@ -389,7 +401,7 @@ export interface ActiveEffect extends EffectDef {
   id: string;
   source?: string;
   hpMaintenance?: number;
-  onlineCondition?: { tokenId: string; id: string; iconId?: string };
+  onlineCondition?: { tokenId?: string; id: string; iconId?: string };
 }
 
 const TRAIT_SET = new Set<string>(TRAIT_ORDER);
@@ -621,6 +633,7 @@ export function traitTotal(c: CharacterSheet, name: TraitName): number {
 
 /** Keeps the pip tracks consistent with derived values (armor slots follow the equipped armor). */
 export function syncDerived(c: CharacterSheet): DerivedStats {
+  migrateVitality(c);
   syncCompanion(c);
   syncEffectDependencies(c);
   syncDeathState(c);
@@ -763,11 +776,19 @@ export interface AvailableRollOption {
   prepared?: { effect: ActiveEffect; modifier: Modifier };
 }
 
+export function rollOptionQuantityMax(c: CharacterSheet, option: RollOption): number {
+  const resource = option.quantity?.resource;
+  const available = resource === 'hope' ? c.hope.on
+    : resource === 'stress' ? Math.max(0, c.stress.slots - c.stress.on)
+      : c.resources?.[resource ?? ''] ?? 0;
+  return Math.min(option.quantity?.max ?? Infinity, available);
+}
+
 export function configuredRollOption(c: CharacterSheet, selection: AvailableRollOption, input?: number): AvailableRollOption {
   const { option } = selection;
   if (!option.input && !option.quantity) return selection;
   const min = option.input?.min ?? 1;
-  const max = option.input?.max ?? (option.quantity?.resource === 'hope' ? c.hope.on : c.resources?.[option.quantity!.resource] ?? 0);
+  const max = option.input?.max ?? rollOptionQuantityMax(c, option);
   const value = input ?? option.input?.default ?? 1;
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${option.input?.label ?? option.quantity?.label}: choose a whole number from ${min} to ${max}`);
   return { ...selection, option: { ...option,
@@ -775,6 +796,7 @@ export function configuredRollOption(c: CharacterSheet, selection: AvailableRoll
     ...(option.quantity ? {
       dice: rollOptionDice(c, option)?.replace(/(\d*)d(\d+)/gi, (_term, count: string, sides: string) => `${Number(count || 1) * value}d${sides}`),
       diceByLevel: undefined, diceByFeature: undefined, diceConditions: undefined,
+      ...(option.linkedDamageTrait ? { linkedDamageMultiplier: (option.linkedDamageMultiplier ?? 2) * value } : {}),
     } : {}),
     cost: option.quantity ? Object.fromEntries(Object.entries(option.cost ?? {}).map(([key, cost]) => [key, evalValue(cost, c) * value])) : option.cost,
   } };
@@ -834,6 +856,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
     .filter((o) => !o.condition || conditionMatches(c, o.condition))
+    .filter((o) => !o.chooseTrait || !!weapon && targets.includes('attack'))
     .filter((o) => !o.secondaryWeaponDie || activeWeapons(c).some(w => w.slot === 'Secondary' && /\d*d\d+/i.test(w.damage)))
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
     .filter((o) => !o.weaponRanges || !!weapon && !targets.includes('spelldamage') && o.weaponRanges.some(range => range.toLowerCase() === weapon.range.toLowerCase()))
@@ -881,6 +904,38 @@ export function damageRollFormula(expression: string, contributions: RollContrib
     expression: `(${expression})*2`,
     contributions: contributions.map((part) => ({ ...part, expression: `(${part.expression})*2`, notes: [...(part.notes ?? []), ...notes] })),
   };
+}
+
+/** Replace one positive die with its maximum without rolling it. */
+export function maximizeDamageDie(expression: string, index: number): string {
+  let offset = 0;
+  let changed = false;
+  const result = expression.replace(/([+-]?)(\d*)d(\d+)(?:kh(\d+))?/gi, (term, sign: string, countText: string, sidesText: string, keptText: string | undefined) => {
+    const count = Number(countText || 1), sides = Number(sidesText), kept = keptText ? Number(keptText) : count;
+    const selected = index >= offset && index < offset + count;
+    offset += count;
+    if (!selected) return term;
+    if (sign === '-' || kept < 1) throw new Error('This damage die cannot be maximized.');
+    changed = true;
+    const remaining = count - 1;
+    const keptRemaining = kept - 1;
+    return `${sign}${remaining ? `${remaining}d${sides}${keptRemaining < remaining ? `kh${keptRemaining}` : ''}+` : ''}${sides}`;
+  });
+  if (!changed) throw new Error('Choose an available damage die.');
+  return result;
+}
+
+export function maximizableDamageDice(expression: string): Array<{ index: number; sides: number }> {
+  const dice: Array<{ index: number; sides: number }> = [];
+  let offset = 0;
+  for (const match of expression.matchAll(/([+-]?)(\d*)d(\d+)(?:kh(\d+))?/gi)) {
+    const count = Number(match[2] || 1), sides = Number(match[3]), kept = match[4] ? Number(match[4]) : count;
+    if (match[1] !== '-' && kept > 0) {
+      for (let i = 0; i < count; i++) dice.push({ index: offset + i, sides });
+    }
+    offset += count;
+  }
+  return dice;
 }
 
 export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: AvailableRollOption[]): RollBonus {
@@ -1213,6 +1268,16 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   payCost(c, resolvedCost);
   const cost = costText(resolvedCost, c);
   if (cost) log.push(`spent ${cost}`);
+  if (action.toggleEffect) {
+    const definition = action.toggleEffect;
+    if (c.effects.some(effect => effect.name === definition.name)) {
+      c.effects = c.effects.filter(effect => effect.name !== definition.name);
+      log.push(`ended ${definition.name}`);
+    } else {
+      addEffect(c, structuredClone(definition), label);
+      log.push(`gained ${definition.name}`);
+    }
+  }
   if (a.uses) {
     const u = c.usage[key] ?? { used: 0, per: a.uses.per };
     u.used++;

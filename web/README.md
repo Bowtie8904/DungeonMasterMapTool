@@ -279,6 +279,23 @@ DM windows. `GET` and successful `PUT /api/sheet/{id}` include an opaque `versio
 Pending local edits are not silently overwritten by notifications. Legacy clients keep the existing partial
 inventory/feature revisions; Online Play and DM Link compatibility versions and settings are unchanged.
 
+Blade/Midnight automation uses result-card actions for Not Good Enough, Whirlwind,
+Glancing Blow (half current Proficiency rounded up) and successful-Spellcast Eclipse.
+Versatile Fighter selects an attack trait (highest current trait by default) and can maximize
+one selected damage die for Stress. Rage Up's attack choice follows only that attack's
+linked damage, with one 1-2 use spinner, and Reaper's Strike is selected with an attack.
+Glancing Blow opens the normal damage window at half Proficiency rounded up, including damage options.
+Pick and Pull and Uncanny Disguise's avoid-scrutiny advantage exclude weapon attacks.
+Uncanny Disguise has one Stress-paid activation replacing its tokens; its buff preselects
+spending a token on action rolls, never reactions, and ends when tokens run out.
+Deadly/Uncanny Focus end with the scene. Phantom Retreat toggles for Hope and ends at rest;
+Vanishing Dodge applies linked Hidden for manual removal.
+Dark Whispers pays Stress with its Spellcast roll. Mass Disguise creates a campaign Countdown (8).
+Spellcharge automatically awards capped tokens for actual magic-damage HP, with the gain in
+the damage report. Night Terror chooses Fear from the live pool and reports its d6 damage.
+Vitality provides a one-time permanent two-benefit picker, also on testing sheets. Its buff is hidden
+from the left sidebar and can only be removed in sheet edit mode, reversing its benefits.
+
 Chat's recipient dropdown targets Everyone,
 Gamemaster or another connected player; private messages and rolls are purple with a Whisper recipient label.
 Messages use separate sender/timestamp cards. Roll cards have styled dice, a summed modifier, a large total and

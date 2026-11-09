@@ -396,6 +396,18 @@ public final class CampaignStore {
         saveSheetsAndResults(campaignId, sheets, roll, messages, fear);
     }
 
+    public synchronized void saveSpecialCardAction(String campaignId, String actorId, ObjectNode sheet,
+                                                    ObjectNode message, int fear, List<Campaign.Countdown> countdowns) throws IOException {
+        recoverSheetTransfer(campaignId);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+        ObjectNode transaction = MAPPER.createObjectNode();
+        transaction.set(actorId, sheet);
+        transaction.set("$message", message);
+        transaction.put("$fear", fear);
+        transaction.set("$countdowns", MAPPER.valueToTree(countdowns));
+        writeSheetTransaction(campaignId, transaction);
+    }
+
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                       ObjectNode replacement, List<ObjectNode> messages, Integer fear) throws IOException {
         saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, null, null);
@@ -435,7 +447,7 @@ public final class CampaignStore {
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
-            if (List.of("$roll", "$message", "$messages", "$fear", "$actorName").contains(entry.getKey())) continue;
+            if (List.of("$roll", "$message", "$messages", "$fear", "$actorName", "$countdowns").contains(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
         if (transaction.get("$roll") instanceof ObjectNode roll)
@@ -446,10 +458,11 @@ public final class CampaignStore {
             if (!(entry instanceof ObjectNode message)) throw new IOException("Invalid journaled chat result.");
             writeHistoryEntryRaw(campaignId, message.path("id").asLong(), message.path("ts").asLong(), message, true);
         }
-        if (transaction.has("$fear") || transaction.has("$actorName")) {
+        if (transaction.has("$fear") || transaction.has("$actorName") || transaction.has("$countdowns")) {
             Path file = dir(campaignId).resolve("campaign.json");
             ObjectNode saved = (ObjectNode) MAPPER.readTree(file.toFile());
             if (transaction.has("$fear")) saved.put("fear", transaction.path("$fear").asInt());
+            if (transaction.has("$countdowns")) saved.set("countdowns", transaction.path("$countdowns"));
             if (transaction.has("$actorName")) {
                 JsonNode rename = transaction.path("$actorName");
                 boolean found = false;

@@ -225,15 +225,17 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         if (!running() || campaign == null) {
             return;
         }
-        int before = campaign.getFear();
-        campaign.setFear(before + delta);
-        if (campaign.getFear() == before) {
-            return;
-        }
-        try {
-            store.save(campaign);
-        } catch (IOException ex) {
-            app.status("Online Play: could not save the Fear count: " + ex.getMessage());
+        synchronized (server) {
+            int before = campaign.getFear();
+            campaign.setFear(before + delta);
+            if (campaign.getFear() == before) return;
+            try {
+                store.save(campaign);
+            } catch (IOException ex) {
+                campaign.setFear(before);
+                app.status("Online Play: could not save the Fear count: " + ex.getMessage());
+                return;
+            }
         }
         publishNow();
         app.changed();
@@ -259,27 +261,33 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     public void addCountdown(String name, int initialValue) throws IOException {
         requireCountdownHost();
-        var countdown = new Campaign.Countdown(java.util.UUID.randomUUID().toString(), name, initialValue, initialValue);
-        var next = new java.util.ArrayList<>(campaign.getCountdowns());
-        next.add(countdown);
-        saveCountdowns(next);
+        synchronized (server) {
+            var countdown = new Campaign.Countdown(java.util.UUID.randomUUID().toString(), name, initialValue, initialValue);
+            var next = new java.util.ArrayList<>(campaign.getCountdowns());
+            next.add(countdown);
+            saveCountdowns(next);
+        }
     }
 
     public void stepCountdown(String id, int delta) throws IOException {
         requireCountdownHost();
-        var next = new java.util.ArrayList<>(campaign.getCountdowns());
-        int index = countdownIndex(id);
-        var stepped = next.get(index).step(delta);
-        if (stepped.equals(next.get(index))) return;
-        next.set(index, stepped);
-        saveCountdowns(next);
+        synchronized (server) {
+            var next = new java.util.ArrayList<>(campaign.getCountdowns());
+            int index = countdownIndex(id);
+            var stepped = next.get(index).step(delta);
+            if (stepped.equals(next.get(index))) return;
+            next.set(index, stepped);
+            saveCountdowns(next);
+        }
     }
 
     public void deleteCountdown(String id) throws IOException {
         requireCountdownHost();
-        var next = new java.util.ArrayList<>(campaign.getCountdowns());
-        next.remove(countdownIndex(id));
-        saveCountdowns(next);
+        synchronized (server) {
+            var next = new java.util.ArrayList<>(campaign.getCountdowns());
+            next.remove(countdownIndex(id));
+            saveCountdowns(next);
+        }
     }
 
     private void requireCountdownHost() {

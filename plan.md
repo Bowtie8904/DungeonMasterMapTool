@@ -33,6 +33,10 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Blade/Midnight follow-up:** Uncanny Disguise's avoid-scrutiny advantage excludes weapon attacks. Vitality records its permanent benefits as a buff hidden from the left sidebar, removable only in sheet edit mode; removal reverses the selected benefits. Rage Up uses one attack option with a 1-2 spinner. Glancing Blow opens the normal damage window with half current Proficiency rounded up, retaining damage options and cancellation-safe, atomic Stress payment and chat delivery.
+
+- **Blade/Midnight feedback:** Not Good Enough is a post-damage reroll action updating the result and reporting in chat; Whirlwind, failed-attack Glancing Blow (half current Proficiency rounded up), and successful-Spellcast Eclipse are chat actions. Pick and Pull excludes weapon attacks. Versatile Fighter offers a preselected highest-current-trait attack selector and a Stress-paid individual damage-die maximizer. Rage Up and Reaper's Strike are attack options, with Rage Up carried to that attack's damage. Uncanny Disguise replaces its tokens on its single Stress-paid disguise action, tracks a buff and preselects token consumption for actions, not reactions. Uncanny/Deadly Focus end with the scene; Phantom Retreat toggles a rest-expiring buff; Vanishing Dodge applies manually removed Hidden. Dark Whispers pays Stress with Spellcast; Mass Disguise creates a real countdown; Spellcharge automatically gains/reports tokens on committed incoming magic damage; Night Terror chooses Fear up to the live pool and reports its d6 results. Vitality must offer its printed permanent choices on testing characters. Keep existing clients/hosts compatible; no settings changes.
+
 - **Player actor list:** Use compact, button-free rows with a circular portrait, prominent character name, smaller class/subclass text and a clearly separated level column. Row text is not selectable. Double-click anywhere on a row to open/focus its sheet; Enter/Space provides keyboard access. Single-clicking the name or row never moves the camera. Preserve disabled/testing indicators and read-only sheet access. Refresh level/class/subclass from the existing owned sheet handles on load and edits; report load failures inline. Token customization and sheet pop-out remain accessible inside the sheet, not as actor-list buttons. Browser presentation only; no settings, API contracts or remote compatibility-version changes.
 
 - **Full Stress Vulnerable:** Saving a character with every Stress slot marked automatically adds the linked Vulnerable debuff if no Vulnerable effect already exists. Persist full-Stress provenance on the generated effect; clearing any Stress removes only that generated effect, never a pre-existing Vulnerable effect from another source. Explicitly applying Vulnerable through token controls takes manual ownership. Normalize all sheet persistence paths, including resource actions, rests and multi-actor transactions, and keep actor token badges synchronized. This is additive saved-sheet metadata using existing condition messages; no settings, new DM tool or remote compatibility-version change.
@@ -111,13 +115,13 @@ Desktop tool for tabletop dungeon masters that:
 
 - **Dread-Touched Fear prevention:** with four active Dread cards, offer a Stress-paid reaction on Fear rolls. Reject known failures; when the GM keeps Difficulty hidden, the player confirms success. The GM handles the prevented Fear manually, and the reaction does not consume the separate once-per-rest bonus.
 
-- **Further domain-card corrections:** Body Basher applies its current Strength to eligible Melee weapon damage; Cruel Precision uses one current Finesse or Agility bonus on weapon damage, never both. Deadly Focus creates a manually ended +1 Proficiency effect; Critical Inspiration uses a shared-use Bard-style ally claim. Book of Yarrow's Magic Immunity creates an effect that negates magic damage until rest.
+- **Further domain-card corrections:** Body Basher applies its current Strength to eligible Melee weapon damage; Cruel Precision uses one current Finesse or Agility bonus on weapon damage, never both. Deadly Focus creates a +1 Proficiency effect ending with the scene or manual removal; Critical Inspiration uses a shared-use Bard-style ally claim. Book of Yarrow's Magic Immunity creates an effect that negates magic damage until rest.
 
 - **Grimoire difficulties and Lean on Me:** use printed fixed Spellcast difficulties for Wall of Flame, Transform, Illusion, Mysterious Mist, Arcane Door and Timejammer. Runic Lock consumes its rest use only on a successful Difficulty 15 cast, like Homet. Lean on Me clears the user's Stress and lets exactly one ally claim the matching benefit; the failed roll and proximity remain player-confirmed.
 
 - **Conjure Swarm beetles:** marking Stress conjures a tracked effect. While active, the next non-negated incoming damage automatically drops one severity, even if it is reduced to no HP; the beetles disperse unless the player spends Hope to retain them. Previewing or canceling damage does not consume the effect or Hope.
 
-- **Weave the Flesh, Pick and Pull, and Uncanny Focus:** Weave the Flesh costs 1 HP and offers a free choice of ally HP/Stress recovery or a Stress-paid upgrade for both, sharing the rest limit. Pick and Pull offers optional situational advantage. Uncanny Focus uses the same manually ended Proficiency effect as Deadly Focus; its target's additional HP and the GM's Fear are handled at the table.
+- **Weave the Flesh, Pick and Pull, and Uncanny Focus:** Weave the Flesh costs 1 HP and offers a free choice of ally HP/Stress recovery or a Stress-paid upgrade for both, sharing the rest limit. Pick and Pull offers optional situational advantage outside weapon attacks. Uncanny Focus uses the same scene-expiring Proficiency effect as Deadly Focus; its target's additional HP and the GM's Fear are handled at the table.
 - **Safe Haven and Specter of the Dark:** Safe Haven charges Hope when summoned, not again when selecting its extra rest move. Specter of the Dark grants a manually ended physical-damage immunity effect until the player makes an action roll targeting another creature.
 - **Additional printed Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam and Veil of Night use their printed difficulties in the Spellcast roll. Their subsequent target, duration, cost, recovery, or vault consequences remain manual.
 - **Complete catalog audit follow-through:** individually inspect all 236 cards and every nested grimoire spell against the class/subclass patterns. Record each disposition below, including narrative-only behavior and genuine pattern uncertainties. Fix non-fixed chat damage so configured costs and shared limits are checked before sending and consumed only after sending; cancellation spends nothing. Bare Bones replaces the unarmored base score/thresholds while retaining level and passive bonuses. Natural Familiar's damage/eyes controls require a summoned familiar. Quantity roll options and mitigation reuse the existing token-pool patterns. Grace-Touched retains its loadout-gated passive, but substitutions and payments are table-managed without action buttons. Unknown target difficulties require player-confirmed success, while known failed rolls cannot claim success-only benefits.
@@ -194,9 +198,9 @@ Desktop tool for tabletop dungeon masters that:
 | 58 | Cruel Precision | Supported: exclusive current Agility/Finesse weapon damage bonus. |
 | 59 | Damnation | Supported: chosen Stress d20 damage; successful target/defeat consequences manual. |
 | 60 | Dark Army | Supported: cast difficulty, summon/rest pools, quantity damage and defense. |
-| 61 | Dark Whispers | Manual: existing payment; GM information. |
+| 61 | Dark Whispers | Supported: Stress-paid Spellcast; GM information manual. |
 | 62 | Darkfire | Manual: existing use/payment; target effects table-resolved. |
-| 63 | Deadly Focus | Supported: limited manually ended Proficiency effect. |
+| 63 | Deadly Focus | Supported: limited Proficiency effect ending with the scene or manual removal. |
 | 64 | Death Grip | Supported: explicit vines damage; target Reaction (13) and restraint manual. |
 | 65 | Deathrun | Manual: existing payment; movement and adversary marks manual. |
 | 66 | Deft Deceiver | Supported: Stress-paid situational advantage selected with the roll. |
@@ -207,7 +211,7 @@ Desktop tool for tabletop dungeon masters that:
 | 71 | Divination | Supported: Hope/rest payment; prophecy content manual. |
 | 72 | Dread-Touched | Supported: active gate, limited Fear-pool bonus and successful Fear-prevention payment. |
 | 73 | Earthquake | Supported: printed difficulty/use; terrain and targets manual. |
-| 74 | Eclipse | Supported: printed difficulty/use; visibility and target effects manual. |
+| 74 | Eclipse | Supported: printed difficulty/use and successful-Spellcast chat action; visibility and target effects manual. |
 | 75 | Eldritch Flesh | Supported: marked-Stress thresholds and explicit Fear-triggered armor action. |
 | 76 | Encore | Open: link ally damage to a new Spellcast and vault on Fear success. |
 | 77 | Endless Charisma | Manual: existing payment/recovery; social prerequisites table-confirmed. |
@@ -227,7 +231,7 @@ Desktop tool for tabletop dungeon masters that:
 | 91 | Full Surge | Supported: existing limited-use recovery/payment. |
 | 92 | Get Back Up | Supported: existing payment and mitigation/recovery. |
 | 93 | Gifted Tracker | Supported: one-Hope question and contextual Evasion report; tracked identities manual. |
-| 94 | Glancing Blow | Open: weapon selection, half-Proficiency rounding, and failed-attack damage linkage. |
+| 94 | Glancing Blow | Supported: failed-attack chat action; linked weapon damage at half current Proficiency rounded up. |
 | 95 | Glyph of Hemorrhaging | Supported: separate successful HP payment and later Stress extra-HP payment. |
 | 96 | Glyph of Nightfall | Supported: success-only Hope payment; difficulty reduction manual. |
 | 97 | Goad Them On | Manual: existing payment; forced adversary behavior manual. |
@@ -257,7 +261,7 @@ Desktop tool for tabletop dungeon masters that:
 | 121 | Life Ward | Supported: existing host-targeted death-move effect; proximity remains table-confirmed. |
 | 122 | Lifeblood Talisman | Open: transferring the talisman's HP benefit and consumption across actors. |
 | 123 | Manifest Wall | Supported: printed difficulty/Hope/use payment; wall geometry manual. |
-| 124 | Mass Disguise | Manual: existing payment; recipient appearances manual. |
+| 124 | Mass Disguise | Supported: Stress payment creates a real Countdown (8); appearances manual. |
 | 125 | Mass Enrapture | Manual: existing payment; per-target attention/interruptions manual. |
 | 126 | Master of the Craft | Open: one-time permanent Experience selection and permanently vaulted card. |
 | 127 | Mending Touch | Supported: targeted healing choices/costs and shared long-rest upgrade; touching and fiction table-confirmed. |
@@ -267,8 +271,8 @@ Desktop tool for tabletop dungeon masters that:
 | 131 | Natural Familiar | Supported: summoned-effect-gated dice/eyes and rest expiry; creature fiction manual. |
 | 132 | Nature's Tongue | Supported: situational option/payment; dialogue manual. |
 | 133 | Never Upstaged | Supported: HP-event-confirmed token award and all-token next-success damage spending. |
-| 134 | Night Terror | Manual: limited action; target fear/conditions manual. |
-| 135 | Not Good Enough | Open: supported reroll-all-1s/2s choice; selecting only some eligible dice requires a die selector. |
+| 134 | Night Terror | Supported: limited live-Fear quantity selection, Fear removal and d6 chat damage; target conditions manual. |
+| 135 | Not Good Enough | Supported: post-damage reroll action updating the result and reporting in chat. |
 | 136 | Notorious | Supported: existing passive/situational roll modifiers. |
 | 137 | Octarine Brace | Supported: existing incoming-damage mitigation. |
 | 138 | Octarine Wall | Supported: printed difficulty/use; wall geometry and eligible attacks manual. |
@@ -277,16 +281,16 @@ Desktop tool for tabletop dungeon masters that:
 | 141 | Otherworldly Shimmer | Manual: limited action; affected creature circumstances manual. |
 | 142 | Overwhelming Aura | Supported: printed difficulty; adversary reactions manual. |
 | 143 | Parasite of the Will | Supported: separate successful HP payment and subsequent Hope disadvantage action; target manual. |
-| 144 | Phantom Retreat | Manual: existing payment; teleport/movement manual. |
+| 144 | Phantom Retreat | Supported: Hope-paid toggle effect ending on return or rest; movement manual. |
 | 145 | Pick and Pull | Supported: optional lock/trap/steal advantage. |
 | 146 | Plant Dominion | Supported: printed difficulty/use; plant manipulation manual. |
 | 147 | Power Through Pain | Supported: damage derived from twice marked HP. |
 | 148 | Premonition | Open: rescind a move and all its consequences after GM narration, then choose another move. |
 | 149 | Preservation Blast | Supported: current Spellcast-trait dice count, not Proficiency; successful magic damage. |
-| 150 | Rage Up | Manual: existing payment; adversary effects table-resolved. |
+| 150 | Rage Up | Supported: paid attack option carrying its bonus to linked damage. |
 | 151 | Rain of Blades | Supported: Hope paid on cast, successful magic damage; Vulnerable target extra die remains manual. |
 | 152 | Rapid Riposte | Open: failed incoming Melee attack versus a chosen active weapon's Stress-paid damage. |
-| 153 | Reaper's Strike | Manual: Hope/rest payment; target's additional HP manual. |
+| 153 | Reaper's Strike | Supported: Hope/rest-paid attack option; target's additional HP manual. |
 | 154 | Reassurance | Manual: limited benefit/payment; narrative prerequisite table-confirmed. |
 | 155 | Reckless | Supported: paid optional attack advantage. |
 | 156 | Recovery | Supported: existing recovery/rest move pattern. |
@@ -321,7 +325,7 @@ Desktop tool for tabletop dungeon masters that:
 | 185 | Soothing Speech | Supported: existing rest-recovery modifier. |
 | 186 | Specter of the Dark | Supported: physical immunity effect; qualifying targeting action ends it manually. |
 | 187 | Spectral Mist | Manual: existing payment; visibility/target consequences manual. |
-| 188 | Spellcharge | Supported: editable token pool and quantity damage spending. |
+| 188 | Spellcharge | Supported: automatic tokens from committed magic HP, capped at current Spellcast and reported in damage chat; quantity damage spending. |
 | 189 | Splendor-Touched | Supported: active gate, passive benefit and shared limited damage substitutions. |
 | 190 | Splintering Strike | Open: secondary-target damage sequence and shared use/result consumption. |
 | 191 | Stealth Expertise | Supported: existing stealth preparation/result pattern. |
@@ -345,26 +349,26 @@ Desktop tool for tabletop dungeon masters that:
 | 209 | Twilight Toll | Supported: rest-cleared token pool and quantity damage spending. |
 | 210 | Umbral Veil | Supported: existing editable resource/actions; visibility/manual duration. |
 | 211 | Unbreakable | Supported: existing death-move action. |
-| 212 | Uncanny Disguise | Supported: existing resource/actions; identity narrative manual. |
+| 212 | Uncanny Disguise | Supported: single Stress-paid replacement-token disguise buff; preselected action-only token spending, ending at zero. |
 | 213 | Uncanny Focus | Supported: limited Proficiency effect; additional target HP/GM Fear manual. |
 | 214 | Unleash Chaos | Open: current-Spellcast session pool, token commitment before cast and success-only d10 damage. |
 | 215 | Untouchable | Open: half-Agility rounding, including negative/odd current values. |
 | 216 | Unyielding Armor | Supported: existing damage mitigation. |
 | 217 | Valor-Touched | Supported: gated threshold bonus and post-damage Armor recovery. |
 | 218 | Vampiric Strike | Supported: Hope-paid self HP/Stress recovery; successful attack causing 2+ target HP is table-confirmed. |
-| 219 | Vanishing Dodge | Manual: existing payment; attack avoidance/teleport consequence manual. |
+| 219 | Vanishing Dodge | Supported: Hope-paid linked Hidden buff, removed manually; teleport manual. |
 | 220 | Veil of Night | Supported: printed difficulty; visibility/party membership manual. |
-| 221 | Versatile Fighter | Open: choose an alternate weapon trait and Stress-paid maximum of one selected damage die. |
+| 221 | Versatile Fighter | Supported: preselected highest-current-trait attack dropdown and Stress-paid individual damage-die maximum. |
 | 222 | Vicious Entangle | Supported: successful Spellcast magic damage; temporary restraint manual. |
 | 223 | Vital Ward | Supported: paid physical/magic resistance choice and 2-marked-HP damage expiry; circle membership/manual non-damage HP termination. |
-| 224 | Vitality | Open: one-time permanent two-benefit selection and permanently vaulted ownership. |
+| 224 | Vitality | Supported: one-time two-benefit selection and permanent vaulting, including testing-sheet selection. |
 | 225 | Vitality Manipulation | Open: ally-cast advantage and outcome-dependent target Stress transaction. |
 | 226 | Voice of Dread | Manual: ordinary Spellcast; target Stress/restraint handled by GM. |
 | 227 | Voice of Reason | Supported: situational social advantage and full-Stress extra damage die. |
 | 228 | Wall of Hunger | Supported: fixed difficulty/payment; wall geometry and targets manual. |
 | 229 | Wall Walk | Manual: existing payment; movement manual. |
 | 230 | Weave the Flesh | Supported: shared-rest HP payment and exclusive ally recovery/paid upgrade. |
-| 231 | Whirlwind | Manual: existing payment; multi-target consequences manual. |
+| 231 | Whirlwind | Supported: paid attack chat action; multi-target consequences manual. |
 | 232 | Wild Fortress | Supported: printed difficulty/Hope payment and dome HP pool; geometry/destruction manual. |
 | 233 | Wild Surge | Open: Guardian-style rising die fits, but forced increment and overflow/rest Stress need shared expiry handling. |
 | 234 | Words of Discord | Supported: fixed difficulty and repeat-target -5 option; control/target identities manual. |
@@ -380,14 +384,14 @@ Desktop tool for tabletop dungeon masters that:
 - **Transfers and linked damage:** I Am Your Shield, Redirect, Life Leash, Lifeblood Talisman, Mutual Suffering, Shared Trauma, Sanguine Feast and Encore. Consider a shared source-event transaction versus sender payment plus recipient claim. Exact HP amounts, success-only uses, death/defeat and conditional refunds must use the original event, not an unrelated editable number. Share the Burden now has an exclusive atomic Stress transfer with bounded caster Hope gain.
 - **Variable damage sequences:** Chain Lightning and Splintering Strike. Consider one roll with per-target application versus sequential linked rolls. Chain Lightning stores the cast total as the targets' reaction Difficulty and expands to new targets; Splintering Strike distributes one damage total with additional per-target dice. Shared-use consumption must not duplicate the original use.
 - **Unleash Chaos:** editable token controls exist. Resolve session-start current-Spellcast preparation, choosing/spending tokens before the cast, success-only damage and Stress-paid replenishment. Consider a cast-time quantity dialog with linked damage versus a prepared pending expenditure.
-- **Permanent grants:** Master of the Craft and Vitality. Consider one-time character-creation/advancement records versus permanent effects. Resolve reversibility, card removal/re-import, duplicate grants and permanently vaulted cards before mutating Experiences or pip-track capacities.
+- **Permanent grants:** Master of the Craft remains open: resolve Experience ownership, reversibility and re-import before permanent mutation. Vitality now has an explicit one-time two-benefit selection and permanent vaulting.
 - **Transformations:** Force of Nature and Avatar of Terror. Existing toggled effects, Fear-based dice and defeat/spotlight confirmations fit individually; a mandatory Hope payment before every action, including non-card actions, needs one shared path with automatic no-Hope reversion and cancellation-safe expiry. An optional cost checkbox would not enforce the rule.
 - **Grace-Touched:** substitutions are intentionally resolved by players, without action buttons, as requested in the feedback pass.
 - **Invigoration:** Hope quantity dice are implemented. Consider a host selector for a specific actor/feature exhaustion record versus an ally claim authorizing a manual reset. Do not reset every use or confuse once-per-session with rest limits.
-- **Untouchable and Glancing Blow:** choose how half current Agility/Proficiency rounds, especially odd or negative values. No repository-wide rounding rule was found. Glancing Blow also needs a linked owned-weapon damage chooser, as does Rapid Riposte.
-- **Versatile Fighter:** consider a per-roll alternate-trait selector versus editing the weapon's stored trait. Maximizing exactly one damage die for Stress needs an individual die selector; it is not equivalent to maximum-Ones or doubling all dice.
+- **Untouchable:** half current Agility rounding remains open. Glancing Blow uses half current Proficiency rounded up, confirmed for this feature; this does not establish a general rounding rule. Rapid Riposte's weapon linkage remains open.
+- **Versatile Fighter:** the per-roll trait selector leaves the stored weapon unchanged; its damage option maximizes exactly one selected die for Stress.
 - **Wild Surge:** Guardian's counter/effect pattern is appropriate, but its optional advance button is insufficient for mandatory advancement after every action and Stress on overflow/rest/manual expiry. A shared automatic expiry/payment hook is required.
-- **Not Good Enough:** the implemented optional reroll-all choice uses the existing damage reroller. Selecting only some eligible 1s/2s needs an individual die selector rather than silently rerolling every eligible die.
+- **Not Good Enough:** offered after damage, not as a pre-roll option; the reroll revises the existing damage result and posts a chat report.
 - **Towering Stalk interpretation:** climbing has a once-per-rest use and the separate Stress-paid attack is unlimited in the current metadata, following the separate paragraphs. Confirm whether the opening once-per-rest limitation instead governs attack casts too.
 - **Non-fixed damage reactions:** costs and limits are checked again and paid only after a successful client send, matching other sheet damage. Local per-roll markers are not a host-authoritative cross-reload transaction; moving these reactions into the shared host damage workflow would give stronger duplicate/acknowledgment guarantees.
 - **Vital Ward termination:** incoming damage marking at least 2 HP ends the effect. Manual HP pips and HP costs do not carry an incoming-damage event; decide whether the same threshold should include those marks or remain explicitly table-resolved.

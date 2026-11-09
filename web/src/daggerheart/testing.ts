@@ -92,7 +92,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   const removed = [...keys(c)].filter((key) => !nextKeys.has(key));
   const removedNames = new Set(removed.map((key) => key.slice(key.indexOf(':') + 1)));
   c.effects = c.effects.filter((e) => {
-    if (e.lockedHp) return true;
+    if (e.lockedHp || e.vitality) return true;
     const source = e.source;
     return !source || ![...removedNames].some((name) => source === name || source.startsWith(`${name} - `));
   });
@@ -106,9 +106,11 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   c.transformation = base.transformation;
   c.level = b.level;
   c.evasion = base.evasion;
-  c.hp.slots = base.hp.slots;
+  c.hp.slots = base.hp.slots + (c.vitalityEffectRemoved ? 0 : c.vitalityBenefits?.includes('hp') ? 1 : 0);
+  c.hp.total = Math.max(c.hp.total, c.hp.slots);
   c.hp.on = Math.min(c.hp.on, c.hp.slots);
-  c.stress.slots = base.stress.slots;
+  c.stress.slots = base.stress.slots + (c.vitalityEffectRemoved ? 0 : c.vitalityBenefits?.includes('stress') ? 1 : 0);
+  c.stress.total = Math.max(c.stress.total, c.stress.slots);
   c.stress.on = Math.min(c.stress.on, c.stress.slots);
   c.proficiency.on = b.level < 2 ? 1 : b.level < 5 ? 2 : b.level < 8 ? 3 : 4;
   c.traits = base.traits;

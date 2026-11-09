@@ -9,6 +9,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DiceRollerTest {
     @Test
+    void zeroKeptDiceRemainVisibleButDoNotAffectTheTotal() {
+        var result = DiceRoller.roll("2d8kh0+8+2", 2, faces(4, 7));
+        assertEquals(List.of(4, 7), result.rolls());
+        assertEquals(10, result.total());
+        assertEquals(10, DiceRoller.breakdown(result, List.of(
+                new DiceRoller.Contribution("Weapon", "2d8kh0+8"),
+                new DiceRoller.Contribution("Bonus", "2")), 2).stream().mapToInt(DiceRoller.Detail::total).sum());
+    }
+
+    @Test
     void selectedDamageDiceRetainOtherFacesKeepsMixedSidesAndWholeRollMultipliers() {
         var original = DiceRoller.roll("(2d8kh1+1d4+3)*2", 3, faces(2, 6, 4));
         var rerolled = DiceRoller.editDice(original, List.of(0, 2), true, 3, faces(8, 1));
@@ -143,7 +153,7 @@ class DiceRollerTest {
 
     @Test
     void rejectsInvalidKeepCountsAndCountsDiscardedDiceAgainstLimit() {
-        for (String expression : List.of("4d6kh0", "4d6kh5", "4d6kh", "4d6kh-1", "4d6kh1.5",
+        for (String expression : List.of("4d6kh5", "4d6kh", "4d6kh-1", "4d6kh1.5",
                 "0d6kh0", "4d6kh1000000", "4d6kl3", "4d6kh3kh2", "1kh1", "d6kh2",
                 "4d6kh1+1d4", "5d6kh1", "999999d6kh1")) {
             assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll(expression, 4, faces()), expression);

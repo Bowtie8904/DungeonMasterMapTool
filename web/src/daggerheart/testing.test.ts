@@ -7,6 +7,7 @@ import { resourceDefinitions, runAction } from './engine';
 import { loadCharacter } from './persist';
 import { classEntries, RulesData, subclassCard, subclassesOf } from './rules';
 import { applyTestingBuild, defaultTestingBuild, testingBuildProblems } from './testing';
+import { removeVitality } from './vitality';
 
 const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', `${name}.json`), 'utf8'));
 const data: RulesData = {
@@ -19,6 +20,27 @@ const catalogIndex = { categories: ['classes', 'ancestries', 'communities', 'wea
 const tester = () => Object.assign(emptyCharacter('Test hero'), { testingCharacter: true });
 
 describe('DM-marked testing characters', () => {
+  it('retains permanent Vitality benefits without changing the fixed testing cards', () => {
+    const c = tester();
+    const b = defaultTestingBuild(data);
+    applyTestingBuild(data, c, b);
+    const hp = c.hp.slots, stress = c.stress.slots;
+    const cards = c.loadout.map(card => card.name);
+    c.vitalityBenefits = ['hp', 'stress'];
+    applyTestingBuild(data, c, b);
+    expect(c.hp.slots).toBe(hp + 1);
+    expect(c.stress.slots).toBe(stress + 1);
+    expect(c.loadout.map(card => card.name)).toEqual(cards);
+    applyTestingBuild(data, c, b);
+    expect(c.hp.slots).toBe(hp + 1);
+    expect(c.effects.filter(effect => effect.vitality)).toHaveLength(1);
+    removeVitality(c, c.effects.find(effect => effect.vitality)!, true);
+    applyTestingBuild(data, c, b);
+    expect(c.hp.slots).toBe(hp);
+    expect(c.stress.slots).toBe(stress);
+    expect(c.effects.some(effect => effect.vitality)).toBe(false);
+    expect(c.loadout.map(card => card.name)).toEqual(cards);
+  });
   it('accepts unrestricted integer traits and preserves them across rebuilds and reloads', async () => {
     const c = tester();
     const b = defaultTestingBuild(data);

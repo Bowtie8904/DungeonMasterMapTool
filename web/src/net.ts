@@ -18,6 +18,8 @@ export class Connection {
   brawlerRolls = false;
   druidAutomation = false;
   keptDice = false;
+  zeroKeptDice = false;
+  glancingBlowDamage = false;
   rollMultipliers = false;
   rollRewards = false;
   partyFeatures = false;
@@ -29,6 +31,7 @@ export class Connection {
   warlockAutomation = false;
   witchAutomation = false;
   domainCardAutomation = false;
+  specialCardActions = false;
   sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
@@ -76,6 +79,8 @@ export class Connection {
 
   private open(): void {
     this.keptDice = false;
+    this.zeroKeptDice = false;
+    this.glancingBlowDamage = false;
     this.brawlerRolls = false;
     this.druidAutomation = false;
     this.rollMultipliers = false;
@@ -123,6 +128,8 @@ export class Connection {
       }
       if (msg.type === 'hello') {
         this.keptDice = msg.keptDice === true;
+        this.zeroKeptDice = msg.zeroKeptDice === true;
+        this.glancingBlowDamage = msg.glancingBlowDamage === true;
         this.brawlerRolls = msg.brawlerRolls === true;
         this.druidAutomation = msg.druidAutomation === true;
         this.rollMultipliers = msg.rollMultipliers === true;
@@ -136,6 +143,7 @@ export class Connection {
         this.warlockAutomation = msg.warlockAutomation === true;
         this.witchAutomation = msg.witchAutomation === true;
         this.domainCardAutomation = msg.domainCardAutomationV3 === true;
+        this.specialCardActions = msg.specialCardActions === true;
         this.sessionId = msg.sessionId ?? '';
         this.deathMoves = msg.deathMoves === true;
         this.deathMoveOptions = msg.deathMoveOptions === true;

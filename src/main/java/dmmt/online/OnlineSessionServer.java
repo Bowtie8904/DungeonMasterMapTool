@@ -1397,6 +1397,7 @@ public final class OnlineSessionServer {
             } else {
                 ObjectNode sheet = (ObjectNode) MAPPER.readTree(stored);
                 refreshCatalogSheet(sheet);
+                SpecialCardActions.migrateVitality(sheet);
                 setSheetName(sheet, actor.getName());
                 body.set("sheet", sheet);
             }
@@ -1452,6 +1453,7 @@ public final class OnlineSessionServer {
                 return;
             }
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
+            SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
             if (problem != null) {
                 json(ctx, 403, errorBody(problem));
@@ -1825,6 +1827,47 @@ public final class OnlineSessionServer {
         deliver(report, null, false);
     }
 
+    private void resolveSpecialCardAction(JsonNode request, Campaign.Actor actor, ObjectNode sheet,
+                                          JsonNode source, String key, JsonNode automation, JsonNode definition) throws IOException {
+        String kind = definition.path("specialAction").asText();
+        String expected = switch (kind) {
+            case "vitality" -> "Vitality";
+            case "massDisguise" -> "Mass Disguise";
+            case "nightTerror" -> "Night Terror";
+            default -> throw new IllegalArgumentException("Unknown special card action.");
+        };
+        if (!key.equals("card:" + expected) || request.has("roll")
+                || java.util.stream.StreamSupport.stream(sheet.path("loadout").spliterator(), false)
+                .noneMatch(card -> expected.equals(card.path("name").asText())))
+            throw new IllegalArgumentException("This special card must be in your active loadout.");
+        useFeatureLimit(sheet, key, automation.path("uses"));
+        SpecialCardActions.Result result = SpecialCardActions.apply(sheet, actor, campaign, kind, request, config.maxDice(), diceRandom);
+        DeathMoves.sync(sheet);
+        sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+        if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+            throw new IllegalArgumentException("The character sheet is too large.");
+        ObjectNode report = result.roll() == null
+                ? actionReportMessage(actor, source, expected, result.lines(), null)
+                : featureRollMessage(actor, source, expected + " damage", result.roll());
+        if (result.roll() != null) {
+            report.put("source", "damage");
+            report.putObject("featureRoll").put("name", expected).put("result", result.roll().total())
+                    .put("consequence", String.join(" ", result.lines()));
+        }
+        store.saveSpecialCardAction(campaign.getId(), actor.getId(), sheet, report, result.fear(), result.countdowns());
+        campaign.setFear(result.fear());
+        campaign.setCountdowns(result.countdowns());
+        if (current != null) {
+            ObjectNode next = current.deepCopy();
+            next.put("fear", result.fear());
+            next.set("countdowns", MAPPER.valueToTree(result.countdowns()));
+            publish(next, currentMapKey);
+        }
+        host.campaignChanged(campaign);
+        sendFeatureState(actor, sheet);
+        deliver(report, null, false);
+    }
+
     private synchronized void handleFeature(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) return;
@@ -1863,6 +1906,11 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            if (definition.has("specialAction")) {
+                resolveSpecialCardAction(request, sourceActor, sourceSheet, source, key, automation, definition);
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             if (definition.path("copycat").asBoolean()) {
                 copycatAction(request, sourceActor, sourceSheet, key, automation, definition);
                 json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
@@ -1916,6 +1964,14 @@ public final class OnlineSessionServer {
                     && !definition.path("menacingReach").asBoolean()
                     && !"talisman".equals(definition.path("witchAction").asText()))
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
+
+            if (definition.path("halfProficiencyDamage").asBoolean()) {
+                if (clients.values().stream().noneMatch(client -> playerId.equals(client.playerId)))
+                    throw new IllegalArgumentException("Reconnect before rolling Glancing Blow damage. No Stress was paid.");
+                resolveGlancingBlow(sourceActor, sourceSheet, source, key, automation, definition, originalRoll, request.path("damage"));
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
 
             String targetMode = definition.path("target").asText("");
             boolean lifeWard = "lifeWard".equals(automation.path("deathMove").path("kind").asText());
@@ -2350,6 +2406,173 @@ public final class OnlineSessionServer {
         }
     }
 
+    private void resolveGlancingBlow(Campaign.Actor actor, ObjectNode sheet, JsonNode source, String key,
+                                     JsonNode automation, JsonNode definition, ObjectNode attack, JsonNode requestedDamage) throws IOException {
+        if (attack == null || !"duality".equals(attack.path("kind").asText())
+                || !actor.getId().equals(attack.path("actorId").asText()))
+            throw new IllegalArgumentException("Glancing Blow requires your own failed weapon attack.");
+        String weaponName = attack.path("weapon").asText();
+        JsonNode weapon = null;
+        JsonNode replacement = null;
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.path("weapon").isObject()) { replacement = effect.path("weapon"); break; }
+        if (replacement != null) {
+            if (weaponName.equals(replacement.path("name").asText())) weapon = replacement;
+        } else for (JsonNode candidate : sheet.path("activeWeapons"))
+            if (weaponName.equals(candidate.path("name").asText())) { weapon = candidate; break; }
+        if (weapon == null) throw new IllegalArgumentException("The attack's weapon is no longer equipped.");
+        int proficiency = Math.max(1, (CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear()) + 1) / 2);
+        String expression = weapon.path("damage").asText().replaceAll("\\s", "");
+        if (!expression.matches("(?i)(?:\\d*d\\d+\\+)*\\d*d\\d+(?:[+-]\\d+)?"))
+            throw new IllegalArgumentException("The attack's weapon has no valid damage dice.");
+        int extra = weapon.path("automation").path("damage").path("extraDice").asInt();
+        int drop = weapon.path("automation").path("damage").path("dropLowest").asInt();
+        boolean maximumOnes = weapon.path("automation").path("damage").path("maximumOnes").asBoolean();
+        for (JsonNode effect : sheet.path("effects")) {
+            JsonNode pool = effect.path("damage");
+            if (pool.path("proficiencyOnly").asBoolean() && weapon.path("fixedDice").asBoolean()) continue;
+            extra += pool.path("extraDice").asInt();
+            drop += pool.path("dropLowest").asInt();
+            maximumOnes |= pool.path("maximumOnes").asBoolean();
+        }
+        var matcher = java.util.regex.Pattern.compile("(?i)(\\d*)d(\\d+)").matcher(expression);
+        StringBuilder formula = new StringBuilder();
+        while (matcher.find()) {
+            int count = (weapon.path("fixedDice").asBoolean()
+                    ? matcher.group(1).isEmpty() ? 1 : Integer.parseInt(matcher.group(1)) : proficiency) + extra;
+            if (count < 1 || drop < 0 || drop >= count)
+                throw new IllegalArgumentException("The attack's weapon damage pool is invalid.");
+            matcher.appendReplacement(formula, count + "d" + matcher.group(2) + (drop > 0 ? "kh" + (count - drop) : ""));
+        }
+        matcher.appendTail(formula);
+        ResolvedDice resolved = null;
+        DiceRoller.Result result;
+        if (!requestedDamage.isMissingNode()) {
+            validateGlancingDamage(sheet, weapon, proficiency, extra, drop, requestedDamage);
+            ObjectNode damageRequest = requestedDamage.deepCopy();
+            damageRequest.put("source", "damage");
+            if (maximumOnes) damageRequest.withObject("/damageRules").put("maximumOnes", true);
+            resolved = resolveDice(damageRequest);
+            result = resolved.result();
+        } else {
+            result = DiceRoller.roll(formula.toString(), config.maxDice(), diceRandom);
+            if (maximumOnes) result = DiceRoller.maximumOnes(result, config.maxDice());
+        }
+        applyFeatureCost(sheet, definition.path("cost"));
+        useFeatureLimit(sheet, key, effectiveFeatureUses(sheet, key, automation.path("uses")));
+        ObjectNode damage = featureRollMessage(actor, source, "Glancing Blow - " + weaponName + " damage", result);
+        if (resolved != null) putDiceBreakdown(damage, resolved);
+        boolean magic = "magic".equals(weapon.path("damageType").asText())
+                || List.of(requestedDamage.path("source").asText().split(",")).contains("magicdamage");
+        damage.put("source", magic ? "damage,magicdamage" : "damage").put("weapon", weaponName);
+        damage.putObject("linkedAttack").set("id", attack.path("id"));
+        damage.withObject("/linkedAttack").set("ts", attack.path("ts"));
+        damage.putObject("featureRoll").put("name", source.path("name").asText()).put("result", result.total())
+                .put("consequence", "Marked 1 Stress. " + (magic ? "Magic" : "Physical")
+                        + " weapon damage using half Proficiency rounded up (" + proficiency + ").");
+        String recipient = attack.path("toId").asText(null);
+        putRecipient(damage, recipient);
+        attack.withArray("featureUses").add(actor.getId() + ":" + key + ":" + definition.path("id").asText());
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        normalizeDeathChanges(changed);
+        persistFeatureSheets(changed, attack, false, damage);
+        sessionRolls.add(rollKey(damage.path("id").asLong(), damage.path("ts").asLong()));
+        sendFeatureState(actor, sheet);
+        broadcastRollUpdate(attack);
+        deliver(damage, recipient, false);
+    }
+
+    private void validateGlancingDamage(ObjectNode sheet, JsonNode weapon, int proficiency, int extra, int drop,
+                                        JsonNode damage) {
+        JsonNode context = damage.path("weaponDamage");
+        if (!damage.isObject() || !context.path("proficiency").isInt()
+                || context.path("proficiency").asInt() != proficiency)
+            throw new IllegalArgumentException("Proficiency changed. Reopen Glancing Blow's damage window.");
+        int bonus = 0;
+        boolean maximize = false;
+        boolean doubleDamage = false;
+        if (!context.path("options").isArray() || context.path("options").size() > 64)
+            throw new IllegalArgumentException("Invalid damage options.");
+        Set<String> selected = new java.util.HashSet<>();
+        for (JsonNode option : context.path("options")) {
+            String optionKey = option.path("key").asText().replaceFirst(":roll:[^:]+$", "");
+            String id = option.path("id").asText();
+            if (!selected.add(optionKey + ":" + id)) throw new IllegalArgumentException("Duplicate damage option.");
+            // Prepared bonuses cannot change the weapon's proficiency, multiplier or maximization.
+            if (id.startsWith("prepared:")) continue;
+            JsonNode source;
+            if (optionKey.startsWith("effect:")) {
+                source = null;
+                for (JsonNode effect : sheet.path("effects"))
+                    if (optionKey.equals("effect:" + effect.path("id").asText())) source = effect;
+                if (source == null) throw new IllegalArgumentException("The selected effect is no longer active.");
+            } else source = featureSource(sheet, optionKey);
+            JsonNode auto = optionKey.startsWith("effect:") ? source : catalogAutomation(optionKey,
+                    source.path("name").asText(), source.path("automation"));
+            JsonNode chosen = null;
+            for (String field : List.of("rollOptions", "conditionalRollOptions"))
+                for (JsonNode candidate : auto.path(field))
+                    if (id.equals(candidate.path("id").asText()) && "damage".equals(candidate.path("roll").asText())) chosen = candidate;
+            if (chosen == null) throw new IllegalArgumentException("The selected damage option is no longer available.");
+            bonus += chosen.path("proficiency").asInt();
+            maximize |= chosen.path("maximizeDie").asBoolean();
+            doubleDamage |= chosen.path("multiplier").asInt() == 2;
+        }
+        // The normal dialog permits manually marking a critical, including critical-melee proficiency.
+        int criticalBonus = 0;
+        if (damage.path("contributions").findValuesAsText("label").stream().anyMatch(label -> label.equals("Critical hit (maximum dice)")))
+            for (String field : List.of("features", "heritage"))
+                for (JsonNode feature : sheet.path(field))
+                    criticalBonus += feature.path("automation").path("criticalMelee").path("proficiency").asInt();
+        if (!context.path("proficiencyBonus").isInt()
+                || context.path("proficiencyBonus").asInt() != bonus + criticalBonus
+                || context.path("multiplier").asInt() != (doubleDamage ? 2 : 1)
+                || context.has("maximizeDie") && (!maximize || !context.path("maximizeDie").isInt()
+                    || context.path("maximizeDie").asInt() < 0))
+            throw new IllegalArgumentException("The weapon damage options changed. Reopen the damage window.");
+        String expression = weapon.path("damage").asText().replaceAll("\\s", "");
+        var matcher = java.util.regex.Pattern.compile("(?i)(\\d*)d(\\d+)").matcher(expression);
+        StringBuilder base = new StringBuilder();
+        while (matcher.find()) {
+            int count = (weapon.path("fixedDice").asBoolean()
+                    ? matcher.group(1).isEmpty() ? 1 : Integer.parseInt(matcher.group(1)) : proficiency + bonus + criticalBonus) + extra;
+            if (count < 1 || drop < 0 || drop >= count) throw new IllegalArgumentException("Invalid weapon damage pool.");
+            matcher.appendReplacement(base, count + "d" + matcher.group(2) + (drop > 0 ? "kh" + (count - drop) : ""));
+        }
+        matcher.appendTail(base);
+        String expected = base.toString();
+        var simple = java.util.regex.Pattern.compile("(?i)^(\\d+d\\d+(?:kh\\d+)?)([+-]\\d+)?$").matcher(expected);
+        if (simple.matches()) expected = simple.group(1);
+        int index = context.path("maximizeDie").asInt(-1);
+        if (index >= 0) expected = maximizeWeaponDamageDie(expected, index);
+        if (doubleDamage) expected = "(" + expected + ")*2";
+        JsonNode first = damage.path("contributions").path(0);
+        String expectedLabel = weapon.path("name").asText() + " damage (Proficiency " + (proficiency + bonus + criticalBonus) + ")";
+        if (!expected.equals(first.path("expression").asText())
+                || !expectedLabel.substring(0, Math.min(120, expectedLabel.length())).equals(first.path("label").asText()))
+            throw new IllegalArgumentException("Weapon damage must use half current Proficiency rounded up.");
+    }
+
+    private String maximizeWeaponDamageDie(String expression, int index) {
+        var matcher = java.util.regex.Pattern.compile("(?i)(\\d*)d(\\d+)(?:kh(\\d+))?").matcher(expression);
+        StringBuilder result = new StringBuilder();
+        int offset = 0;
+        while (matcher.find()) {
+            int count = matcher.group(1).isEmpty() ? 1 : Integer.parseInt(matcher.group(1));
+            int sides = Integer.parseInt(matcher.group(2));
+            int kept = matcher.group(3) == null ? count : Integer.parseInt(matcher.group(3));
+            if (index >= offset && index < offset + count) {
+                int remaining = count - 1;
+                matcher.appendReplacement(result, (remaining > 0 ? remaining + "d" + sides
+                        + (kept < count ? "kh" + (kept - 1) : "") + "+" : "") + sides);
+            }
+            offset += count;
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
     private static final class FeatureIoException extends RuntimeException {
         FeatureIoException(IOException cause) { super(cause); }
     }
@@ -2419,6 +2642,10 @@ public final class OnlineSessionServer {
         for (JsonNode index : selection) {
             if (!index.isInt() || index.asInt() < 0 || index.asInt() >= roll.path("rolls").size() || !selected.add(index.asInt()))
                 throw new IllegalArgumentException("Select distinct dice from this damage roll.");
+            int threshold = definition.path("damageDiceBelow").asInt();
+            if (threshold > 0 && (roll.path("rolls").path(index.asInt()).asInt() <= 0
+                    || roll.path("rolls").path(index.asInt()).asInt() >= threshold))
+                throw new IllegalArgumentException("Only eligible damage dice below " + threshold + " can be rerolled.");
         }
 
         ArrayNode details = roll.withArray("breakdown");
@@ -3625,7 +3852,7 @@ public final class OnlineSessionServer {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
         for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
-                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision",
+                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision", "vitalityBenefits", "vitalityEffectRemoved",
                 "inventoryRevision", "compendiumRevision", "inventory", "loadout", "vault")) {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
@@ -3912,6 +4139,7 @@ public final class OnlineSessionServer {
         if (!(sheet instanceof ObjectNode object))
             throw new IOException("Invalid stored sheet");
         refreshCatalogSheet(object);
+        SpecialCardActions.migrateVitality(object);
         return object;
     }
 
@@ -4421,6 +4649,8 @@ public final class OnlineSessionServer {
             hello.put("grabQuantity", true);
             hello.put("notes", true);
             hello.put("keptDice", true);
+            hello.put("zeroKeptDice", true);
+            hello.put("glancingBlowDamage", true);
             hello.put("brawlerRolls", true);
             hello.put("druidAutomation", true);
             hello.put("rollMultipliers", true);
@@ -4436,6 +4666,7 @@ public final class OnlineSessionServer {
             hello.put("domainCardAutomation", true);
             hello.put("domainCardAutomationV2", true);
             hello.put("domainCardAutomationV3", true);
+            hello.put("specialCardActions", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -4832,7 +5063,53 @@ public final class OnlineSessionServer {
                     }
                 }
             }
-            result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
+            ResolvedDice resolved = resolveDice(msg);
+            result = resolved.result();
+            breakdown = resolved.breakdown();
+            breakdownNotes = resolved.notes();
+        } catch (IllegalArgumentException e) {
+            sendTo(client.ctx, error(e.getMessage()));
+            return;
+        }
+        ObjectNode out = MAPPER.createObjectNode();
+        synchronized (this) {
+            out.put("id", ++chatId);
+        }
+        out.put("type", "roll").put("ts", System.currentTimeMillis());
+        out.put("fromId", client.playerId).put("from", chatName(client.playerId, client.playerName));
+        putChatArtwork(out, client.playerId);
+        putRecipient(out, to);
+        out.put("expression", result.expression());
+        ArrayNode rolls = out.putArray("rolls");
+        result.rolls().forEach(rolls::add);
+        out.put("total", result.total());
+        if (rollSource != null) out.set("rollSource", rollSource);
+        if (breakdown != null) {
+            ArrayNode details = MAPPER.valueToTree(breakdown);
+            for (int i = 0; i < breakdownNotes.size(); i++) {
+                if (!breakdownNotes.get(i).isEmpty()) {
+                    ((ObjectNode)details.get(i)).set("notes", breakdownNotes.get(i));
+                }
+            }
+            out.set("breakdown", details);
+        }
+        completeRoll(client, msg, out, to, result);
+    }
+
+    private record ResolvedDice(DiceRoller.Result result, List<DiceRoller.Detail> breakdown, List<ArrayNode> notes) {}
+
+    private void putDiceBreakdown(ObjectNode out, ResolvedDice resolved) {
+        if (resolved.breakdown() == null) return;
+        ArrayNode details = MAPPER.valueToTree(resolved.breakdown());
+        for (int i = 0; i < resolved.notes().size(); i++)
+            if (!resolved.notes().get(i).isEmpty()) ((ObjectNode) details.get(i)).set("notes", resolved.notes().get(i));
+        out.set("breakdown", details);
+    }
+
+    private ResolvedDice resolveDice(JsonNode msg) {
+        DiceRoller.Result result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
+        List<DiceRoller.Detail> breakdown = null;
+        List<ArrayNode> breakdownNotes = new ArrayList<>();
             if (msg.has("damageRules")) {
                 if (!msg.path("damageRules").isObject() || !List.of(msg.path("source").asText("").split(",")).contains("damage")
                         || "duality".equals(msg.path("kind").asText()))
@@ -4919,32 +5196,11 @@ public final class OnlineSessionServer {
                         .put("impact", "Matching damage dice add " + extra + " additional damage.");
                 result = new DiceRoller.Result(result.expression(), result.rolls(), result.total() + extra);
             }
-        } catch (IllegalArgumentException e) {
-            sendTo(client.ctx, error(e.getMessage()));
-            return;
-        }
-        ObjectNode out = MAPPER.createObjectNode();
-        synchronized (this) {
-            out.put("id", ++chatId);
-        }
-        out.put("type", "roll").put("ts", System.currentTimeMillis());
-        out.put("fromId", client.playerId).put("from", chatName(client.playerId, client.playerName));
-        putChatArtwork(out, client.playerId);
-        putRecipient(out, to);
-        out.put("expression", result.expression());
-        ArrayNode rolls = out.putArray("rolls");
-        result.rolls().forEach(rolls::add);
-        out.put("total", result.total());
-        if (rollSource != null) out.set("rollSource", rollSource);
-        if (breakdown != null) {
-            ArrayNode details = MAPPER.valueToTree(breakdown);
-            for (int i = 0; i < breakdownNotes.size(); i++) {
-                if (!breakdownNotes.get(i).isEmpty()) {
-                    ((ObjectNode)details.get(i)).set("notes", breakdownNotes.get(i));
-                }
-            }
-            out.set("breakdown", details);
-        }
+        return new ResolvedDice(result, breakdown, breakdownNotes);
+    }
+
+    private void completeRoll(Client client, JsonNode msg, ObjectNode out, String to, DiceRoller.Result result) {
+        String invisibilityRef = invisibilityRollRef(client, msg);
         String label = msg.path("label").asText("").strip();
         if (!label.isEmpty()) {
             out.put("label", label.length() > 80 ? label.substring(0, 80) : label);

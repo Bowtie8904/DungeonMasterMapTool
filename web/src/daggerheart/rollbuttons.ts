@@ -10,7 +10,7 @@ import { actionBlocker, automationSources, availableRollTriggers, costText, eval
 import type { AvailableRollTrigger, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
-import { chooseRollModification } from './sorcerer-view';
+import { chooseRollModification, damageDieChoices } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
 import { pickActor } from '../actor-picker';
 import type { Actor } from '../protocol';
@@ -39,6 +39,7 @@ export interface RollButtonHost {
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
   supportsDomainCardAutomation?: () => boolean;
+  supportsGlancingBlowDamage?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
@@ -435,7 +436,12 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       const damage = el('button', { class: 'small primary', type: 'button', title: `Roll damage for ${m.weapon}` }, 'Damage');
       damage.addEventListener('click', () => {
         const proficiency = Number(m.source?.split(',').find(tag => /^proficiency:\d+$/.test(tag))?.split(':')[1] ?? 0);
-        if (!rolledActor.sheet.bus.damage?.(m.weapon!, critical, ctx?.kind !== 'damage' ? ctx?.fear : undefined, proficiency)) host.toast(`${m.weapon} is no longer equipped.`);
+        const linkedBonus = Number(m.source?.split(',').find(tag => /^linkedDamage:-?\d+$/.test(tag))?.split(':')[1] ?? 0);
+        const fear = ctx?.kind !== 'damage' ? ctx?.fear : undefined;
+        const opened = linkedBonus
+          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus)
+          : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency);
+        if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
       });
       buttons.push(damage);
     }
@@ -443,6 +449,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
     for (const { actorId: featureActorId, sheet } of sheets) {
       const c = sheet.character;
       for (const t of availableRollTriggers(c, ctx ?? { source: m.source ?? '', hope: 0, fear: 0, total: m.total, kind: 'damage' })) {
+        if (t.trigger.damageDiceBelow && !damageDieChoices(m).some(die => die.value > 0 && die.value < t.trigger.damageDiceBelow!)) continue;
         if (!ctx && t.trigger.on !== 'any') continue;
         if (usesLeft(c, t.key, t.automation) === 0) continue;
         const trigger = t.trigger as typeof t.trigger & {
@@ -461,7 +468,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = (t.automation.conditionalRollTriggers?.includes(t.trigger)
+        const unsupported = t.trigger.halfProficiencyDamage && !host.supportsGlancingBlowDamage?.()
+          ? 'Update the host to resolve paid Glancing Blow damage.'
+          : (t.automation.conditionalRollTriggers?.includes(t.trigger)
           || t.trigger.target === 'anyActor' || t.trigger.giveFear || t.trigger.chatDamage || t.trigger.rerollDualityDie
           || t.trigger.steps?.some(step => step.effect?.linkedTokenResource)) && !host.supportsDomainCardAutomation?.()
           ? 'Update the host to use this domain-card action.'
@@ -469,7 +478,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           ? 'Update the host to use Witch roll actions.'
           : t.trigger.rerollResourceDice && !host.supportsWarriorAutomation?.()
           ? 'Update the host to reroll Slayer Dice.'
-          : (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable) && !host.supportsWarlockAutomation?.()
+          : (t.trigger.spendFavor || t.trigger.primaryWeapon || t.trigger.repeatable && !t.trigger.damageDiceBelow) && !host.supportsWarlockAutomation?.()
           ? 'Update the host to use Warlock automation.'
           : (t.trigger.damageDice || t.trigger.choices) && !host.supportsSorcererAutomation?.()
           ? 'Update the host to use Sorcerer roll actions.'
@@ -484,6 +493,27 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.halfProficiencyDamage) {
+            const opened = m.weapon && sheet.bus.damage?.(m.weapon, false, ctx?.fear, 0, 0, {
+              pending: { key: t.key, automation: t.automation, action: t.trigger, blocker: () =>
+                !t.trigger.repeatable && m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)
+                  ? 'This feature was already used on this roll.'
+                  : availableRollTriggers(c, ctx!).some(current => current.key === t.key && current.trigger.id === t.trigger.id)
+                    ? null : 'The feature is no longer available for this roll.' },
+              submit: async damage => {
+                await sheet.save.flush?.();
+                await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id,
+                  roll: { id: m.id, ts: m.ts }, damage });
+                await sheet.save.refresh?.();
+                m.featureUses ??= [];
+                m.featureUses.push(`${featureActorId}:${t.key}:${t.trigger.id}`);
+                return true;
+              },
+            });
+            if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
+            b.disabled = false;
+            return;
+          }
           if (t.trigger.spendHopeAmount) {
             openHopeAmount(t, c, async amount => {
               await sheet.save.flush?.();

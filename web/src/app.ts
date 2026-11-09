@@ -1290,6 +1290,7 @@ export class App {
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
       supportsWitchAutomation: () => this.conn.witchAutomation,
       supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
+      supportsGlancingBlowDamage: () => this.conn.glancingBlowDamage,
       supportsWarriorAutomation: () => this.conn.warriorAutomation,
       supportsGuardianRolls: () => this.conn.guardianRolls,
       sessionId: () => this.conn.sessionId,
@@ -1494,6 +1495,13 @@ export class App {
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
+            supportsSpecialCardActions: () => this.conn.specialCardActions,
+            gmFear: () => this.store.state?.fear ?? 0,
+            onSpecialCard: async (key, actionId, choice) => {
+              await changed.flush();
+              await useFeature({ actorId: a.id, key, actionId, ...choice });
+              await changed.refresh();
+            },
             onCopycat: (key, actionId) => openCopycat(character, a.id, key, actionId, changed),
             onDamageTaken: async (severity) => {
               await changed.flush();
@@ -1521,6 +1529,7 @@ export class App {
             },
             artwork: a.artwork,
             supportsKeptDice: () => this.conn.keptDice,
+            supportsZeroKeptDice: () => this.conn.zeroKeptDice,
             supportsBrawlerRolls: () => this.conn.brawlerRolls,
             supportsDruidAutomation: () => this.conn.druidAutomation,
             supportsSeraphAutomation: () => this.conn.seraphAutomation,

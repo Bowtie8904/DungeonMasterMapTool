@@ -272,6 +272,8 @@ export interface FeatureSheetMessage {
   scars?: number;
   permanentHp?: number;
   longRestRevision?: number;
+  vitalityBenefits?: Array<'hp' | 'stress' | 'thresholds'>;
+  vitalityEffectRemoved?: boolean;
   spectralBlocked?: boolean;
   deathNarrative?: string;
   pendingDeathRoll?: { id: number; ts: number } | null;
@@ -368,6 +370,8 @@ export interface Hello {
   goldTransfers?: boolean;
   grabQuantity?: boolean;
   keptDice?: boolean;
+  zeroKeptDice?: boolean;
+  glancingBlowDamage?: boolean;
   brawlerRolls?: boolean;
   druidAutomation?: boolean;
   rollMultipliers?: boolean;
@@ -383,6 +387,7 @@ export interface Hello {
   domainCardAutomation?: boolean;
   domainCardAutomationV2?: boolean;
   domainCardAutomationV3?: boolean;
+  specialCardActions?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

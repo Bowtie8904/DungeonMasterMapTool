@@ -52,7 +52,20 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Prepared attacks and damage:** Boost pays Stress before the attack; Smite holds a charge for doubled
   magic weapon damage. Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
   offers a d8 advantage die with marked HP and its paid d8 after the trait roll. Never Upstaged and Sigil
-  spend their complete pools; Not Good Enough optionally rerolls all damage 1s/2s once.
+  spend their complete pools; Not Good Enough rerolls damage 1s/2s from an action on the damage result.
+- **Blade and Midnight roll actions:** Whirlwind, Glancing Blow (half Proficiency rounded up),
+  and successful-Spellcast Eclipse offer chat buttons. Versatile Fighter offers a highest-trait
+  attack selector and a Stress-paid individual damage-die maximizer. Rage Up carries its attack
+  bonus to that attack's damage, with one spinner selecting one or two uses; Reaper's Strike is an attack option.
+  Glancing Blow opens the normal damage window at half Proficiency, retaining damage options.
+  Pick and Pull and Uncanny Disguise's avoid-scrutiny advantage exclude weapon attacks.
+- **Midnight effects:** Uncanny Disguise replaces its tokens when activated and preselects spending
+  one on action rolls, never reactions. Phantom Retreat toggles a buff that also ends on rest.
+  Vanishing Dodge applies Hidden until manually removed. Dark Whispers links Stress to Spellcast;
+  Mass Disguise creates a Countdown (8). Spellcharge automatically stores tokens for actual magic-damage
+  HP and reports them in chat. Night Terror chooses Fear from the live pool and reports its d6 damage.
+  Vitality offers its permanent two-benefit selection, including on testing characters, as a buff hidden
+  from the left sidebar. Remove it only in sheet edit mode to reverse its benefits.
 - **Grimoires and protective effects:** nested spells have their own host-validated sources and target
   pickers. Counterspell vaults only after its successful reaction. Shield Aura moves between recipients
   when recast; Vital Ward chooses resistance type; Tava's Armor and Parallela grant targeted effects.
@@ -80,7 +93,7 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Eldritch Flesh and Power Through Pain:** marked Stress increases damage thresholds; marked HP increases damage rolls respectively.
 - **Shadowhunter and Voice of Reason:** toggle low-light benefits on Shadowhunter; Voice of Reason offers its situational advantage and its extra damage die when Stress is full.
 - **Dread-Touched:** mark Stress from a successful Fear roll to prevent the GM gaining Fear; confirm success with the GM if the Difficulty is hidden.
-- **Deadly Focus, Critical Inspiration, and Magic Immunity:** track focus until ended, let nearby allies claim their critical-attack benefit, and negate magic damage while immunity lasts.
+- **Deadly/Uncanny Focus, Critical Inspiration, and Magic Immunity:** focus ends automatically with the scene (or can be removed earlier); nearby allies can claim their critical-attack benefit, and Magic Immunity negates magic damage while active.
 - **Grimoires and Lean on Me:** several spells now use their printed difficulties, Runic Lock tracks successful casts per rest, and one consoled ally can claim Lean on Me’s Stress clearing.
 - **Conjure Swarm:** conjure armored beetles for Stress; incoming damage consumes their automatic severity reduction unless Hope is spent to retain them.
 - **Weave the Flesh:** mark HP to offer allies a healing choice, with an optional Stress-paid upgrade to both benefits.

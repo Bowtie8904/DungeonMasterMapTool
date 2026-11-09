@@ -171,9 +171,11 @@ export interface FeatureRequest {
   restDie?: number;
   benefitId?: string;
   choiceId?: string;
+  choices?: Array<'hp' | 'stress' | 'thresholds'>;
   dice?: number[];
   expectedDice?: number[];
   roll?: { id: number | string; ts: number };
+  damage?: import('./daggerheart/view').RollRequest;
 }
 
 export async function useFeature(request: FeatureRequest): Promise<void> {

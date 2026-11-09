@@ -34,6 +34,107 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
+    @Test
+    void vitalityMigrationAndEditRemovalAreVersionedAndCannotBeUndoneByStaleSaves() throws Exception {
+        var actor = Campaign.Actor.builder().id("vitality-hero").name("Hero").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        ObjectNode initial = witchHostSheet();
+        initial.putArray("features");
+        initial.putArray("loadout");
+        initial.putArray("vault").addObject().put("name", "Vitality");
+        initial.putArray("vitalityBenefits").add("hp").add("thresholds");
+        initial.withObject("/hp").put("slots", 7).put("total", 12).put("on", 7);
+        store.saveSheet(campaign.getId(), actor.getId(), initial.toString());
+        String cookie = cookie();
+        URI uri = URI.create("http://localhost:" + port + "/api/sheet/" + actor.getId());
+        var loaded = http.send(HttpRequest.newBuilder(uri).header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        JsonNode data = MAPPER.readTree(loaded.body());
+        ObjectNode sheet = (ObjectNode) data.path("sheet");
+        assertEquals(7, sheet.path("hp").path("slots").asInt());
+        assertTrue(sheet.path("effects").get(0).path("vitality").asBoolean());
+        ObjectNode stale = sheet.deepCopy();
+        sheet.putArray("effects");
+        var save = HttpRequest.newBuilder(uri).header("Cookie", cookie).header("Content-Type", "application/json");
+        assertEquals(400, http.send(save.header("If-Match", data.path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        sheet.withObject("/hp").put("slots", 6);
+        sheet.put("vitalityEffectRemoved", true);
+        sheet.putObject("vitalityRemoval").put("effectId", "vitality-permanent").put("editMode", true);
+        var unversioned = HttpRequest.newBuilder(uri).header("Cookie", cookie).header("Content-Type", "application/json");
+        assertEquals(400, http.send(unversioned.PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        var removed = http.send(save.PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, removed.statusCode(), removed.body());
+        JsonNode result = MAPPER.readTree(removed.body());
+        assertTrue(result.path("sheet").path("vitalityEffectRemoved").asBoolean());
+        assertFalse(result.path("sheet").has("vitalityRemoval"));
+        assertEquals(6, result.path("sheet").path("hp").path("slots").asInt());
+        assertEquals(6, result.path("sheet").path("hp").path("on").asInt());
+        assertTrue(result.path("sheet").path("effects").isEmpty());
+        var oldSave = http.send(save.PUT(HttpRequest.BodyPublishers.ofString(stale.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, oldSave.statusCode());
+        var unversionedStale = http.send(unversioned.PUT(HttpRequest.BodyPublishers.ofString(stale.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, unversionedStale.statusCode());
+        JsonNode persisted = MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId()));
+        assertTrue(persisted.path("vitalityEffectRemoved").asBoolean());
+        assertEquals(6, persisted.path("hp").path("slots").asInt());
+        assertTrue(persisted.path("effects").isEmpty());
+        assertEquals(1, persisted.path("vault").size());
+    }
+
+    @Test
+    void specialCardsCommitPermanentChoicesCountdownAndLiveFearWithRestLimit() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        var actor = Campaign.Actor.builder().id("special-hero").name("Hero").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        ObjectNode sheet = witchHostSheet();
+        sheet.putArray("features");
+        var cards = sheet.putArray("loadout");
+        for (JsonNode card : MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries"))
+            if (List.of("Vitality", "Mass Disguise", "Night Terror").contains(card.path("name").asText())) cards.add(card.deepCopy());
+        store.saveSheet(campaign.getId(), actor.getId(), sheet.toString());
+        store.save(campaign);
+        String cookie = cookie();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", actor.getId()).put("key", "card:Vitality").put("actionId", "choose");
+        request.putArray("choices").add("hp").add("hp");
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId())).has("vitalityBenefits"));
+        request.putArray("choices").add("hp").add("thresholds");
+        int hp = sheet.path("hp").path("slots").asInt();
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId()));
+        assertEquals(hp + 1, saved.path("hp").path("slots").asInt());
+        assertEquals(2, saved.path("vitalityBenefits").size());
+        assertEquals("Vitality", saved.path("vault").get(0).path("name").asText());
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        request.remove("choices");
+        request.put("key", "card:Mass Disguise").put("actionId", "use");
+        actor.setDisabled(true);
+        assertEquals(403, featureHttp(cookie, request).statusCode());
+        actor.setDisabled(false);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(8, campaign.getCountdowns().getFirst().value());
+        assertEquals(8, new CampaignStore(temp.resolve("campaigns")).load(campaign.getId()).getCountdowns().getFirst().value());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId()));
+        assertEquals(sheet.path("stress").path("on").asInt() + 1, saved.path("stress").path("on").asInt());
+        campaign.setFear(3);
+        store.save(campaign);
+        request.put("key", "card:Night Terror").put("amount", 4);
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(3, campaign.getFear());
+        request.put("amount", 2);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(1, campaign.getFear());
+        assertEquals(1, new CampaignStore(temp.resolve("campaigns")).load(campaign.getId()).getFear());
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId()));
+        assertEquals(1, saved.path("usage").path("card:Night Terror").path("used").asInt());
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @TempDir
@@ -3703,6 +3804,167 @@ class OnlineSessionServerTest {
             assertEquals(15, inbox.next("roll").path("difficulty").asInt());
             socket.sendText(msg.toString(), true).join();
             assertTrue(inbox.next("error").path("message").asText().contains("no uses remaining"));
+        } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void glancingBlowAtomicallyPaysOnceAndRollsOnlyTheFailedAttacksWeaponPrivately() throws Exception {
+        ObjectNode fighter = communitySheet("Seaborne");
+        JsonNode card = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> "glancing-blow".equals(item.path("id").asText())).findFirst().orElseThrow();
+        fighter.withArray("loadout").add(card.deepCopy());
+        fighter.withObject("/proficiency").put("on", 5);
+        fighter.withObject("/stress").put("on", 6).put("slots", 6);
+        fighter.putArray("activeWeapons").addObject().put("name", "Blade").put("slot", "Primary")
+                .put("damage", "d8+2").put("damageType", "physical");
+        campaign.getActors().add(Campaign.Actor.builder().id("fighter").name("Fighter").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "fighter", fighter.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("glancingBlowDamage").asBoolean());
+            diceSeed(0);
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("actorId", "fighter").put("source", "action,attack").put("weapon", "Blade")
+                    .put("difficulty", 99).put("expression", "2d12").put("toId", "dm");
+            socket.sendText(message.toString(), true).join();
+            JsonNode attack = inbox.next("roll");
+            assertTrue(attack.path("rolls").path(0).asInt() != attack.path("rolls").path(1).asInt());
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "fighter").put("key", "card:Glancing Blow")
+                    .put("actionId", "use").put("expression", "99d20").put("proficiency", 99);
+            request.putObject("roll").put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong());
+            int before = store.historyTail(campaign.getId(), 100).size();
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(before, store.historyTail(campaign.getId(), 100).size());
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            fighter.withObject("/stress").put("on", 0);
+            store.saveSheet(campaign.getId(), "fighter", fighter.toString());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode damage = inbox.next("roll");
+            assertEquals("3d8+2", damage.path("expression").asText());
+            assertEquals(3, damage.path("rolls").size());
+            assertEquals("Blade", damage.path("weapon").asText());
+            assertEquals("dm", damage.path("toId").asText());
+            assertEquals(attack.path("id"), damage.path("linkedAttack").path("id"));
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            assertEquals(before + 1, store.historyTail(campaign.getId(), 100).size());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(before + 1, store.historyTail(campaign.getId(), 100).size());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            message.put("difficulty", 1);
+            socket.sendText(message.toString(), true).join();
+            JsonNode success = inbox.next("roll");
+            request.withObject("/roll").put("id", success.path("id").asLong()).put("ts", success.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+        } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void glancingBlowAcceptsNormalDamageOptionsButRejectsStaleOrForgedWeaponPoolsWithoutCost() throws Exception {
+        ObjectNode fighter = communitySheet("Seaborne");
+        JsonNode card = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> "glancing-blow".equals(item.path("id").asText())).findFirst().orElseThrow();
+        fighter.withArray("loadout").add(card.deepCopy());
+        fighter.withObject("/proficiency").put("on", 5);
+        fighter.withObject("/stress").put("on", 0).put("slots", 6);
+        fighter.putArray("activeWeapons").addObject().put("name", "Blade").put("slot", "Primary")
+                .put("damage", "d8+2").put("damageType", "physical");
+        ObjectNode effect = fighter.withArray("effects").addObject().put("id", "empowered").put("name", "Empowered");
+        effect.putArray("rollOptions").addObject().put("id", "double").put("label", "Double damage")
+                .put("roll", "damage").put("multiplier", 2).put("maximizeDie", true);
+        campaign.getActors().add(Campaign.Actor.builder().id("fighter").name("Fighter").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "fighter", fighter.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            diceSeed(0);
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("actorId", "fighter").put("source", "action,attack").put("weapon", "Blade")
+                    .put("difficulty", 99).put("expression", "2d12").put("toId", "dm");
+            socket.sendText(message.toString(), true).join();
+            JsonNode attack = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "fighter").put("key", "card:Glancing Blow")
+                    .put("actionId", "use");
+            request.putObject("roll").put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong());
+            ObjectNode damage = request.putObject("damage").put("expression", "(2d8+8+2+1d6+4)*2");
+            ObjectNode context = damage.putObject("weaponDamage").put("proficiency", 3)
+                    .put("proficiencyBonus", 0).put("multiplier", 2).put("maximizeDie", 0);
+            context.putArray("options").addObject().put("key", "effect:empowered").put("id", "double");
+            var contributions = damage.putArray("contributions");
+            contributions.addObject().put("label", "Blade damage (Proficiency 3)").put("expression", "(2d8+8)*2");
+            contributions.addObject().put("label", "Blade damage bonus").put("expression", "(2)*2");
+            contributions.addObject().put("label", "Other damage option").put("expression", "(1d6+4)*2");
+            int before = store.historyTail(campaign.getId(), 100).size();
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            context.put("proficiency", 99);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            context.put("proficiency", 3);
+            ((ObjectNode) contributions.get(0)).put("expression", "(99d20)*2");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            ((ObjectNode) contributions.get(0)).put("expression", "(2d8+8)*2");
+            damage.put("expression", "99d20");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            damage.put("expression", "(2d8+8+2+1d6+4)*2");
+            assertEquals(before, store.historyTail(campaign.getId(), 100).size());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode rolled = inbox.next("roll");
+            assertEquals("(2d8+8+2+1d6+4)*2", rolled.path("expression").asText());
+            assertEquals(3, rolled.path("rolls").size());
+            assertEquals(3, rolled.path("breakdown").size());
+            assertEquals("dm", rolled.path("toId").asText());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(before + 1, store.historyTail(campaign.getId(), 100).size());
+            diceSeed(0);
+            socket.sendText(message.toString(), true).join();
+            JsonNode disconnectedAttack = inbox.next("roll");
+            request.withObject("/roll").put("id", disconnectedAttack.path("id").asLong())
+                    .put("ts", disconnectedAttack.path("ts").asLong());
+            socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            awaitConnections(0);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "fighter")).path("stress").path("on").asInt());
+        } finally { if (!socket.isOutputClosed()) socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void notGoodEnoughRerollsOnlyEligibleDamageDiceAndPersistsTheUpdatedRoll() throws Exception {
+        ObjectNode fighter = communitySheet("Seaborne");
+        JsonNode card = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> "not-good-enough".equals(item.path("id").asText())).findFirst().orElseThrow();
+        fighter.withArray("loadout").add(card.deepCopy());
+        campaign.getActors().add(Campaign.Actor.builder().id("fighter").name("Fighter").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "fighter", fighter.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            socket.sendText(MAPPER.createObjectNode().put("type", "roll").put("actorId", "fighter")
+                    .put("source", "damage").put("expression", "1d1-1d1").toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "fighter")
+                    .put("key", "card:Not Good Enough").put("actionId", "reroll");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            request.set("expectedDice", roll.path("rolls"));
+            request.putArray("dice").add(1);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.putArray("dice").add(0);
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode updated = inbox.next("rollUpdate");
+            assertEquals(0, updated.path("total").asInt());
+            assertTrue(store.historyTail(campaign.getId(), 1).getLast().path("text").asText().contains("Rerolled damage die"));
+            request.putArray("expectedDice").add(99);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
         } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
     }
 

@@ -3,6 +3,7 @@
 
 import type { ActiveEffect, Automation } from './engine';
 import { syncDeathState } from './death';
+import { migrateVitality } from './vitality';
 
 export type TraitName = 'Agility' | 'Strength' | 'Finesse' | 'Instinct' | 'Presence' | 'Knowledge';
 
@@ -183,6 +184,10 @@ export interface CharacterSheet {
   brawlerTrait?: TraitName;
   /** Authoritative marker supplied by the actor's host, not a player toggle. */
   testingCharacter?: boolean;
+  vitalityBenefits?: Array<'hp' | 'stress' | 'thresholds'>;
+  vitalityEffectRemoved?: boolean;
+  /** One-save edit-mode intent; the host checks the current sheet version and reversals. */
+  vitalityRemoval?: { effectId: string; editMode: true };
   testingBuild?: TestingBuild;
   /** Host-owned transfer generation; stale inventory saves are rejected. */
   inventoryRevision?: number;
@@ -407,6 +412,7 @@ export function normalizeSheet(stored: Partial<CharacterSheet>, name: string): C
   const base = emptyCharacter(name);
   const sheet = { ...base, ...stored } as CharacterSheet;
   if (!stored.mancer) sheet.mancer = { done: true };
+  migrateVitality(sheet);
   syncDeathState(sheet);
   return sheet;
 }

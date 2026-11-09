@@ -4,7 +4,7 @@ import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from '.
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest } from './engine';
-import type { SheetBus } from './view';
+import type { SheetBus, WeaponDamageAction } from './view';
 import { renderLogEntry } from '../chat';
 
 class FakeElement {
@@ -116,6 +116,61 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers the correct Blade chat actions and carries Rage Up only from the clicked attack', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const c = character('Fighter', undefined);
+    c.loadout = ['not-good-enough', 'glancing-blow', 'whirlwind'].map(id => {
+      const card = catalog.entries.find((entry: { id: string }) => entry.id === id);
+      return { name: card.name, domain: card.domain, type: card.cardType, level: card.level, recall: card.recall, text: card.text, automation: card.automation };
+    });
+    const damage = vi.fn((..._args: unknown[]) => true);
+    const { host, sent } = hostFor({ 'actor-b': c });
+    const supported = { ...host, playerId: original.fromId, supportsDomainCardAutomation: () => true, supportsGlancingBlowDamage: () => true,
+      supportsSorcererAutomation: () => true,
+      sheet: async () => ({ character: c, bus: { damage } as unknown as SheetBus, save: Object.assign(() => undefined, { flush: async () => undefined }) }) };
+    const attack = { ...original, source: 'action,attack,linkedDamage:6', weapon: 'Dagger', difficulty: 20 };
+    const failed = rollButtons(attack, supported) as unknown as FakeElement;
+    const oldHost = rollButtons(attack, { ...supported, supportsGlancingBlowDamage: () => false }) as unknown as FakeElement;
+    const success = rollButtons({ ...attack, difficulty: 10 }, supported) as unknown as FakeElement;
+    const dice = rollButtons({ ...original, kind: 'damage', source: 'damage', expression: '2d8', rolls: [1, 5], total: 6, breakdown: undefined }, supported) as unknown as FakeElement;
+    const noDice = rollButtons({ ...original, kind: 'damage', source: 'damage', expression: '2d8', rolls: [3, 5], total: 8, breakdown: undefined }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(failed.text).toContain('Glancing Blow');
+    expect(oldHost.queryAll('button').find(button => button.text.includes('Glancing Blow'))!.disabled).toBe(true);
+    expect(failed.text).not.toContain('Whirlwind');
+    expect(success.text).toContain('Whirlwind');
+    expect(success.text).not.toContain('Glancing Blow');
+    expect(dice.text).toContain('Not Good Enough');
+    expect(noDice.text).not.toContain('Not Good Enough');
+    await failed.queryAll('button').find(button => button.text === 'Damage')!.click();
+    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 0, 6);
+    await failed.queryAll('button').find(button => button.text.includes('Glancing Blow'))!.click();
+    expect(damage).toHaveBeenCalledTimes(2);
+    expect(damage.mock.calls[1].slice(0, 5)).toEqual(['Dagger', false, 9, 0, 0]);
+    expect(sent).toHaveLength(0);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(c.stress.on).toBe(2);
+    const action = damage.mock.calls[1][5] as WeaponDamageAction;
+    await action.submit({ label: 'Dagger damage', expression: '2d8+1d6' });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      key: 'card:Glancing Blow', actionId: 'use', roll: { id: original.id, ts: original.ts },
+      damage: { expression: '2d8+1d6' },
+    });
+    expect(action.pending.blocker?.()).toContain('already used');
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Not enough STRESS.' }), { status: 400 }));
+    const retry = rollButtons({ ...attack, id: 22, featureUses: [] }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await retry.queryAll('button').find(button => button.text.includes('Glancing Blow'))!.click();
+    expect(damage).toHaveBeenCalledTimes(3);
+    const retryAction = damage.mock.calls[2][5] as WeaponDamageAction;
+    await expect(retryAction.submit({ label: 'Dagger damage', expression: '2d8' })).rejects.toThrow('Not enough STRESS.');
+    expect(sent).toHaveLength(0);
+    expect(c.stress.on).toBe(2);
+  });
+
   it('hides both Endless Charisma alternatives once either choice has been used', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));

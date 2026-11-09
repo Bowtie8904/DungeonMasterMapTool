@@ -211,7 +211,7 @@ public final class DiceRoller {
                 int count = matcher.group(2).isEmpty() ? 1 : parse(matcher.group(2));
                 int sides = parse(matcher.group(3));
                 int kept = matcher.group(4) == null ? count : parse(matcher.group(4));
-                if (count < 1 || sides < 1 || sides > MAX_SIDES || kept < 1 || kept > count) {
+                if (count < 1 || sides < 1 || sides > MAX_SIDES || kept < 0 || kept > count) {
                     throw new IllegalArgumentException("Invalid dice expression");
                 }
                 dice += count;

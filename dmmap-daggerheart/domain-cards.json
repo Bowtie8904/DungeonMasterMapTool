@@ -1533,6 +1533,7 @@
      {
       "id": "use",
       "label": "Dark Whispers",
+      "actionRoll": { "trait": "spellcast" },
       "cost": {
        "stress": 1
       }
@@ -1579,7 +1580,7 @@
       "id": "use",
       "label": "Deadly Focus",
       "steps": [{ "op": "effect", "effect": {
-       "name": "Deadly Focus", "kind": "buff", "until": "manual",
+       "name": "Deadly Focus", "kind": "buff", "until": "scene",
        "text": "End this effect if you attack another creature, defeat the target, or the battle ends.",
        "modifiers": [{ "stat": "proficiency", "value": 1 }]
       } }]
@@ -1823,10 +1824,15 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
-      "label": "Eclipse"
+      "label": "Eclipse",
+      "on": "card:Eclipse",
+      "when": "success",
+      "difficulty": 16,
+      "report": { "text": "The area within Far range is plunged into darkness only you and your allies can see through. Attacks against you and allies in the shadow have disadvantage; when you or an ally succeeds with Hope against an adversary in the shadow, it marks a Stress. Ends when the GM spends a Fear on their turn or you take Severe damage." },
+      "description": "Plunge the area within Far range into darkness only you and your allies can see through. Attacks against you and allies in the shadow have disadvantage; successful attacks with Hope against adversaries there cause them to mark a Stress. Ends when the GM spends a Fear on their turn or you take Severe damage."
      }
     ]
    }
@@ -2342,10 +2348,14 @@
    "recall": 1,
    "text": "When you fail an attack, you can **mark a Stress** to deal weapon damage using half your Proficiency.",
    "automation": {
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
       "label": "Glancing Blow",
+      "on": "attack",
+      "failedOnly": true,
+      "weaponAttack": true,
+      "halfProficiencyDamage": true,
       "cost": {
        "stress": 1
       }
@@ -3023,6 +3033,7 @@
      {
       "id": "use",
       "label": "Mass Disguise",
+      "specialAction": "massDisguise",
       "cost": {
        "stress": 1
       }
@@ -3311,7 +3322,8 @@
     "actions": [
      {
       "id": "use",
-      "label": "Night Terror"
+      "label": "Night Terror",
+      "specialAction": "nightTerror"
      }
     ]
    }
@@ -3319,9 +3331,8 @@
   {
    "id": "not-good-enough",
    "name": "Not Good Enough",
-   "automation": { "rollOptions": [
-    { "id": "reroll", "label": "Not Good Enough: reroll all 1s and 2s", "roll": "damage", "rerollBelow": 3,
-      "description": "Optional: reroll each damage die below 3 once. To choose only some eligible dice, reroll those manually." }
+   "automation": { "conditionalRollTriggers": [
+    { "id": "reroll", "label": "Not Good Enough: reroll 1s and 2s", "on": "damage", "damageDice": "reroll", "damageDiceBelow": 3, "repeatable": true }
    ] },
    "cardType": "Ability",
    "domain": "Blade",
@@ -3527,6 +3538,10 @@
      {
       "id": "use",
       "label": "Phantom Retreat",
+      "toggleEffect": {
+       "name": "Phantom Retreat", "kind": "buff", "until": "rest",
+       "text": "Activate Phantom Retreat again, spending another Hope, to return to the original location and end this effect."
+      },
       "cost": {
        "hope": 1
       }
@@ -3544,7 +3559,7 @@
    "text": "You have advantage on action rolls to pick nonmagical locks, disarm nonmagical traps, or steal items from a target (either through stealth or by force).",
    "automation": {
     "rollOptions": [
-     { "id": "advantage", "label": "Pick and Pull", "roll": "action", "advantage": "advantage",
+     { "id": "advantage", "label": "Pick and Pull", "roll": "action", "advantage": "advantage", "excludeRolls": ["attack"],
        "description": "Use when picking a nonmagical lock, disarming a nonmagical trap, or stealing an item." }
     ]
    }
@@ -3637,14 +3652,9 @@
    "recall": 1,
    "text": "Before you make an attack, you can **mark a Stress** to gain a bonus to your damage roll equal to twice your Strength.\n\nYou can Rage Up twice per attack.",
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Rage Up",
-      "cost": {
-       "stress": 1
-      }
-     }
+    "rollOptions": [
+     { "id": "rage1", "label": "Rage Up", "roll": "attack", "linkedDamageTrait": "Strength",
+       "quantity": { "resource": "stress", "label": "Rage Up uses", "max": 2 }, "cost": { "stress": 1 } }
     ]
    }
   },
@@ -3705,10 +3715,12 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "rollOptions": [
      {
       "id": "use",
       "label": "Reaper’s Strike",
+      "roll": "attack",
+      "description": "The GM identifies targets in range this roll succeeds against; choose one to mark 5 HP.",
       "cost": {
        "hope": 1
       }
@@ -4593,19 +4605,11 @@
       "max": "@total_spellcast"
      }
     ],
-    "actions": [
-     {
-      "id": "gain",
-      "label": "Magic damage: store one token per marked HP",
-      "steps": [
-       {
-        "op": "gain",
-        "resource": "spellcharge",
-        "amount": 1
-       }
-      ]
-     }
-    ],
+    "mitigation": [{
+     "id": "charge", "label": "Spellcharge", "passive": true,
+     "when": { "type": "magic", "markingHp": true },
+     "gainTokens": { "resource": "spellcharge", "perHp": 1 }
+    }],
     "rollOptions": [
      {
       "id": "charge",
@@ -5304,35 +5308,29 @@
     "actions": [
      {
       "id": "cast",
-      "label": "Successful cast: prepare tokens",
+      "label": "Disguise",
       "steps": [
+       { "op": "clear", "resource": "disguise", "amount": "all" },
        {
         "op": "gain",
         "resource": "disguise",
-        "amount": "@spellcast"
-       }
+        "amount": "@total_spellcast"
+       },
+       { "op": "effect", "effect": {
+        "name": "Uncanny Disguise", "kind": "buff", "until": "manual", "tokenResource": "disguise",
+        "resources": [{ "id": "disguise", "label": "Disguise tokens", "initial": 0 }],
+        "text": "While disguised, spend a token on each action roll, not reactions. The disguise ends after the last token is spent. Advantage on Presence rolls to avoid scrutiny.",
+        "rollOptions": [
+         { "id": "act", "label": "Disguise: spend a token", "roll": "action", "excludeRolls": ["reaction"],
+           "defaultOn": true, "cost": { "disguise": 1 } },
+         { "id": "scrutiny", "label": "Disguise: avoid scrutiny", "roll": "trait:Presence",
+           "excludeRolls": ["reaction", "attack"], "advantage": "advantage" }
+        ]
+       } }
       ],
       "cost": {
        "stress": 1
       }
-     },
-     {
-      "id": "tick",
-      "label": "Affected creature acts: spend token",
-      "cost": {
-       "disguise": 1
-      }
-     },
-     {
-      "id": "end",
-      "label": "Effect ends: clear tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "disguise",
-        "amount": "all"
-       }
-      ]
      }
     ]
    }
@@ -5355,7 +5353,7 @@
       "id": "use",
       "label": "Uncanny Focus",
       "steps": [{ "op": "effect", "effect": {
-       "name": "Uncanny Focus", "kind": "buff", "until": "manual",
+       "name": "Uncanny Focus", "kind": "buff", "until": "scene",
        "text": "End this effect if you attack another creature, defeat the target, or the battle ends. The extra HP and GM Fear are handled at the table.",
        "modifiers": [{ "stat": "proficiency", "value": 1 }]
       } }]
@@ -5535,6 +5533,11 @@
      {
       "id": "use",
       "label": "Vanishing Dodge",
+      "steps": [{ "op": "effect", "effect": {
+       "name": "Hidden", "kind": "buff", "until": "manual",
+       "onlineCondition": { "id": "hidden", "iconId": "cond_invisible" },
+       "text": "Any rolls against a Hidden creature have disadvantage. Remove this effect manually when no longer Hidden."
+      } }],
       "cost": {
        "hope": 1
       }
@@ -5561,14 +5564,9 @@
    "recall": 1,
    "text": "You can use a different character trait for an equipped weapon, rather than the trait the weapon calls for.\n\nWhen you deal damage, you can **mark a Stress** to use the maximum result of one of your damage dice instead of rolling it.",
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Versatile Fighter",
-      "cost": {
-       "stress": 1
-      }
-     }
+    "rollOptions": [
+     { "id": "trait", "label": "Versatile Fighter: choose weapon trait", "roll": "attack", "weapon": "any", "chooseTrait": true, "defaultOn": true },
+     { "id": "maximum", "label": "Versatile Fighter: maximize a damage die", "roll": "damage", "maximizeDie": true, "cost": { "stress": 1 } }
     ]
    }
   },
@@ -5625,7 +5623,8 @@
    "domain": "Blade",
    "level": 5,
    "recall": 0,
-   "text": "When you choose this card, permanently gain two of the following benefits:\n\n- One Stress slot\n- One Hit Point slot\n- +2 bonus to your damage thresholds\nThen place this card in your vault permanently."
+   "text": "When you choose this card, permanently gain two of the following benefits:\n\n- One Stress slot\n- One Hit Point slot\n- +2 bonus to your damage thresholds\nThen place this card in your vault permanently.",
+   "automation": { "actions": [{ "id": "choose", "label": "Choose two permanent benefits", "specialAction": "vitality" }] }
   },
   {
    "id": "vitality-manipulation",
@@ -5747,10 +5746,14 @@
    "recall": 0,
    "text": "When you make a successful attack against a target within Very Close range, you can **spend a Hope** to use the attack against all other targets within Very Close range. All additional adversaries you succeed against with this ability take half damage.",
    "automation": {
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
       "label": "Whirlwind",
+      "on": "attack",
+      "successIfKnown": true,
+      "report": { "text": "Use this attack against all other targets within Very Close range; additional adversaries hit take half damage." },
+      "description": "Use the attack against other targets within Very Close range; additional adversaries hit take half damage.",
       "cost": {
        "hope": 1
       }

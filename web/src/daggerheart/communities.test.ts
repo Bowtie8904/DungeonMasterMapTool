@@ -110,6 +110,58 @@ describe('community catalog automation', () => {
   }
 
   describe('community roll dialog wiring', () => {
+    it.each([[true, 1], [false, 1], [true, 2], [false, 2]] as const)('uses the highest current weapon trait and links only this attack’s Rage Up to damage (sent=%s, uses=%s)', (sent, uses) => {
+      const cards = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8')).entries;
+      const c = emptyCharacter('Fighter');
+      c.stress.slots = 6;
+      c.traits.find(t => t.name === 'Strength')!.mod = 3;
+      c.traits.find(t => t.name === 'Finesse')!.mod = 1;
+      c.loadout = ['versatile-fighter', 'rage-up'].map(id => {
+        const card = cards.find((entry: { id: string }) => entry.id === id);
+        return { name: card.name, domain: card.domain, type: card.cardType, level: card.level, recall: card.recall, text: card.text, automation: card.automation };
+      });
+      const weapon = { name: 'Dagger', slot: 'Primary' as const, trait: 'Finesse' as const, damage: 'd8', damageType: 'phys' as const, range: 'Melee', hands: 1 as const, tier: 1 };
+      c.activeWeapons = [weapon];
+      const body = new DialogElement('body');
+      vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
+      const send = vi.fn((_request: RollRequest) => sent);
+      openRollDialog(body as unknown as HTMLElement, c, 'Attack', [{ label: 'Finesse', expression: '1' }],
+        rollBonus(c, ['attack', 'action', 'trait:Finesse'], weapon, false), send, () => undefined,
+        ['attack', 'action', 'trait:Finesse'], undefined, undefined, weapon);
+      const trait = body.find(e => e.tag === 'label' && e.text.startsWith('Weapon trait')).find(e => e.tag === 'select');
+      expect(trait.value).toBe('Strength');
+      const rage = body.find(e => e.tag === 'label' && e.text.includes('Rage Up') && !e.text.includes('second use')).find(e => e.tag === 'input');
+      rage.checked = true;
+      rage.fire('change');
+      const spinner = body.find(e => e.tag === 'label' && e.text === 'Rage Up uses').find(e => e.tag === 'input');
+      spinner.value = String(uses);
+      spinner.fire('input');
+      body.find(e => e.tag === 'button' && e.text === 'Roll to chat').fire('click');
+      expect(send.mock.calls[0][0]).toMatchObject({ expression: '2d12+3', source: expect.stringContaining(`linkedDamage:${6 * uses}`) });
+      expect(send.mock.calls[0][0].source).toContain('trait:Strength');
+      expect(c.stress.on).toBe(sent ? uses : 0);
+    });
+
+    it.each([true, false])('maximizes one damage die before rolling and pays Stress only on send (%s)', sent => {
+      const cards = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8')).entries;
+      const card = cards.find((entry: { id: string }) => entry.id === 'versatile-fighter');
+      const c = emptyCharacter('Fighter');
+      c.proficiency.on = 2;
+      c.stress.slots = 6;
+      c.loadout = [{ name: card.name, domain: card.domain, type: card.cardType, level: card.level, recall: card.recall, text: card.text, automation: card.automation }];
+      const weapon = { name: 'Dagger', slot: 'Primary' as const, trait: 'Finesse' as const, damage: 'd8+2', damageType: 'phys' as const, range: 'Melee', hands: 1 as const, tier: 1 };
+      const body = new DialogElement('body');
+      vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
+      const send = vi.fn((_request: RollRequest) => sent);
+      openRollDialog(body as unknown as HTMLElement, c, 'Damage', [], rollBonus(c, ['damage']), send, () => undefined, ['damage'], weapon);
+      const check = body.find(e => e.tag === 'label' && e.text.includes('maximize a damage die')).find(e => e.tag === 'input');
+      check.checked = true;
+      check.fire('change');
+      body.find(e => e.tag === 'button' && e.text === 'Roll to chat').fire('click');
+      expect(send.mock.calls[0][0].expression).toBe('1d8+8+2');
+      expect(c.stress.on).toBe(sent ? 1 : 0);
+    });
+
     it.each(['Reborne', 'Seaborne'])('keeps %s numeric controls beside their own option with separate labels', name => {
       const { body } = rollDialog(name, true, name === 'Seaborne' ? 3 : undefined);
       const row = body.find(element => element.className === 'dh-roll-option-row');

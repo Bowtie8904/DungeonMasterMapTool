@@ -441,7 +441,7 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       if (!definition) throw new Error(`Resource unavailable: ${gain.resource}`);
       const before = c.resources?.[gain.resource] ?? 0;
       const amount = Math.max(0, gain.amount ?? hpMarked * (gain.perHp ?? 1));
-      const max = definition.max === undefined ? Infinity : evalValue(definition.max, c);
+      const max = definition.max === undefined ? Infinity : Math.max(0, evalValue(definition.max, c));
       c.resources ??= {};
       c.resources[gain.resource] = Math.min(max, before + amount);
       notes.push(`${m.source}: gained ${c.resources[gain.resource] - before} ${definition.label}.`);

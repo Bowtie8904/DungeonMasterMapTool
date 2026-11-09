@@ -88,6 +88,13 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     const view = renderSheetView({
       cardPreferences,
       character: sheet,
+      supportsSpecialCardActions: () => conn.specialCardActions,
+      gmFear: () => store.state?.fear ?? 0,
+      onSpecialCard: async (key, actionId, choice) => {
+        await changed!.flush();
+        await useFeature({ actorId, key, actionId, ...choice });
+        await changed!.refresh();
+      },
       readOnly,
       supportsPartyFeatures: () => conn.partyFeatures,
       artwork: actor?.artwork ?? artwork,
@@ -148,6 +155,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       },
       onRoll: (r) => conn.send({ type: 'roll', ...r }),
       supportsKeptDice: () => conn.keptDice,
+      supportsZeroKeptDice: () => conn.zeroKeptDice,
       supportsBrawlerRolls: () => conn.brawlerRolls,
       supportsDruidAutomation: () => conn.druidAutomation,
       supportsSeraphAutomation: () => conn.seraphAutomation,

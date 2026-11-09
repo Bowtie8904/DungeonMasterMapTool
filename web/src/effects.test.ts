@@ -4,6 +4,15 @@ import { emptyCharacter } from './daggerheart/data';
 import type { ActiveEffect } from './daggerheart/engine';
 
 describe('effectSource', () => {
+  it('hides the persistent Vitality buff from the left-side overlay without removing it', () => {
+    const c = emptyCharacter('Hero');
+    c.effects = [{ id: 'vitality-permanent', name: 'Vitality', kind: 'buff', vitality: true, manualChanges: { hp: 1 } }];
+    const rendered: Array<Node | string> = [];
+    const host = { replaceChildren: (...nodes: Array<Node | string>) => { rendered.push(...nodes); } } as HTMLElement;
+    renderEffects(host, [{ actorId: 'hero', name: 'Hero', character: c }], new Set(), () => {}, () => {});
+    expect(rendered).toEqual([]);
+    expect(c.effects).toHaveLength(1);
+  });
   it('does not render class-resource dice as individual effect rows', () => {
     const c = emptyCharacter('Seraph');
     c.effects = [{ id: 'pool-prayer-1', name: 'Prayer Dice 1', kind: 'buff', dicePool: 'prayer' }];

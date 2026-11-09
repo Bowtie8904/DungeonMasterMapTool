@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter, type DomainCard } from './data';
-import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, derivedStats, damageRollFormula, rollBonus, rollOptionDice, runAction, selectedRollBonus, selectionBlocker, setGmFear, statBreakdown, statSources, suggestedAdvantage, traitTotal, type Automation } from './engine';
+import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, derivedStats, damageRollFormula, maximizeDamageDie, maximizableDamageDice, rollBonus, rollOptionDice, runAction, selectedRollBonus, selectionBlocker, setGmFear, statBreakdown, statSources, suggestedAdvantage, traitTotal, type Automation } from './engine';
 import { availableMitigations, mitigationBlocker } from './damage';
 
 const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
@@ -532,7 +532,6 @@ describe('domain-card cost and limit corrections', () => {
   it.each([
     ['deft-maneuvers', 'stress', 1],
     ['divination', 'hope', 3],
-    ['reapers-strike', 'hope', 1],
     ['smite', 'hope', 3],
     ['summon-horror', 'stress', 1],
     ['transcendent-union', 'hope', 5],
@@ -546,6 +545,38 @@ describe('domain-card cost and limit corrections', () => {
     expect(action.cost).toEqual({ [resource]: amount });
     expect(runAction(c, `card:${id}`, automation, action, id)).not.toBeNull();
     expect(resource === 'hope' ? c.hope.on : c.stress.on).toBe(resource === 'hope' ? 6 - amount : amount);
+  });
+
+  it('charges Reaper’s Strike on the selected attack option', () => {
+    const c = emptyCharacter('Test');
+    c.hope.on = 2;
+    c.loadout = [{ name: 'Reaper’s Strike', domain: 'Blade', level: 9, type: 'Ability', recall: 3, text: '', automation: rules('reapers-strike') }];
+    const option = availableRollOptions(c, ['attack'])[0];
+    expect(option.option.cost).toEqual({ hope: 1 });
+    commitRollOptions(c, [option]);
+    expect(c.hope.on).toBe(1);
+    expect(availableRollOptions(c, ['attack']).length).toBe(1);
+    expect(selectionBlocker(c, [option])).not.toBeNull();
+  });
+
+  it('maximizes exactly one die while preserving mixed dice and keep-highest pools', () => {
+    expect(maximizableDamageDice('2d8kh1+1d6+3')).toEqual([{ index: 0, sides: 8 }, { index: 1, sides: 8 }, { index: 2, sides: 6 }]);
+    expect(maximizeDamageDie('2d8kh1+1d6+3', 1)).toBe('1d8kh0+8+1d6+3');
+    expect(maximizeDamageDie('2d8kh1+1d6+3', 2)).toBe('2d8kh1+6+3');
+    expect(() => maximizeDamageDie('1d8-1d6', 1)).toThrow();
+  });
+
+  it('limits Pick and Pull to non-attack action rolls and Eclipse to a successful cast', () => {
+    const c = emptyCharacter('Test');
+    c.loadout = ['pick-and-pull', 'eclipse'].map(id => ({
+      name: id === 'eclipse' ? 'Eclipse' : 'Pick and Pull', domain: 'Midnight', level: 1,
+      type: id === 'eclipse' ? 'Spell' : 'Ability', recall: 0, text: '', automation: rules(id),
+    }));
+    expect(availableRollOptions(c, ['action', 'trait:Finesse']).map(o => o.source)).toContain('Pick and Pull');
+    expect(availableRollOptions(c, ['action', 'attack', 'trait:Finesse']).map(o => o.source)).not.toContain('Pick and Pull');
+    const context = { source: 'action,spellcast,card:Eclipse', hope: 5, fear: 4, total: 15 };
+    expect(availableRollTriggers(c, context).map(t => t.source)).not.toContain('Eclipse');
+    expect(availableRollTriggers(c, { ...context, total: 16 }).map(t => t.source)).toContain('Eclipse');
   });
 
   it('shares Mending Touch’s upgrade limit without limiting its base healing', () => {
