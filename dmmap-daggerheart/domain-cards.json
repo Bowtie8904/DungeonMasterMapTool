@@ -84,11 +84,11 @@
      "modifiers": [
       {
        "move": "repair",
-       "note": "allies also clear 1 Armor Slot"
+       "repairAllies": 1
       },
       {
        "move": "repair-all",
-       "note": "allies also clear 1 Armor Slot"
+       "repairAllies": 1
       }
      ]
     }
@@ -1081,14 +1081,20 @@
    "recall": 3,
    "text": "When you make a successful attack, you can **mark a Stress** to make the next successful attack against that same target deal an extra **2d12** damage.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
       "label": "Breaking Blow",
+      "on": "attack",
+      "weaponAttack": true,
+      "successIfKnown": true,
+      "steps": [{"op":"effect","effect":{"name":"Breaking Blow","kind":"buff","until":"manual","rollOptions":[{"id":"damage","label":"Breaking Blow: next attack against the same target","roll":"damage","weapon":"any","defaultOn":true,"dice":"2d12","endEffect":"Breaking Blow","hostOwned":true}]}}],
       "cost": {
        "stress": 1
       }
-     }
+     },
+      {"id":"damage","label":"Breaking Blow","on":"damage","weaponDamage":true,"cost":{"stress":1},
+       "steps":[{"op":"effect","effect":{"name":"Breaking Blow","kind":"buff","until":"manual","rollOptions":[{"id":"damage","label":"Breaking Blow: next attack against the same target","roll":"damage","weapon":"any","defaultOn":true,"dice":"2d12","endEffect":"Breaking Blow","hostOwned":true}]}}]}
     ]
    }
   },
@@ -1435,18 +1441,11 @@
     "rollOptions": [
      {
       "id": "finesse",
-      "label": "Cruel Precision: Finesse",
+      "label": "Cruel Precision",
       "roll": "damage",
-      "traitValue": "Finesse",
-      "exclusive": "cruel-precision",
-      "excludeRolls": ["spelldamage"],
-      "description": "Use only after a successful weapon attack."
-     },
-     {
-      "id": "agility",
-      "label": "Cruel Precision: Agility",
-      "roll": "damage",
-      "traitValue": "Agility",
+      "traitChoices": ["Finesse", "Agility"],
+      "defaultOn": true,
+      "weapon": "any",
       "exclusive": "cruel-precision",
       "excludeRolls": ["spelldamage"],
       "description": "Use only after a successful weapon attack."
@@ -1621,11 +1620,16 @@
      {
       "id": "use",
       "label": "Deathrun",
+      "hostOwned": true,
+      "excludesEffect": "Deathrun",
+      "steps":[{"op":"effect","effect":{"name":"Deathrun","kind":"buff","until":"manual","deathrun":true,"counter":{"value":0,"max":100},"rollOptions":[{"id":"damage","label":"Deathrun damage","roll":"damage","weapon":"any","defaultOn":true,"deathrun":true,"hostOwned":true}],"actions":[{"id":"end","label":"End Run","hostOwned":true,"endEffect":"Deathrun"}]}}],
       "cost": {
        "hope": 3
       }
      }
-    ]
+    ],
+    "rollOptions":[{"id":"run","label":"Deathrun","roll":"attack","weapon":"any","cost":{"hope":3},"hostOwned":true,"excludesEffect":"Deathrun","effect":{"name":"Deathrun","kind":"buff","until":"manual","deathrun":true,"counter":{"value":0,"max":100},"rollOptions":[{"id":"damage","label":"Deathrun damage","roll":"damage","weapon":"any","defaultOn":true,"deathrun":true,"hostOwned":true}],"actions":[{"id":"end","label":"End Run","hostOwned":true,"endEffect":"Deathrun"}]}}],
+    "rollTriggers":[{"id":"end","label":"End Run","on":"damage","deathrunResult":true,"endEffect":"Deathrun"}]
    }
   },
   {
@@ -2183,6 +2187,7 @@
       "label": "Forceful Push",
       "roll": "damage",
       "dice": "1d6",
+      "requiresRollOutcome": "hopeOrCritical",
       "description": "Primary weapon Melee attack succeeds with Hope; knockback manual."
      }
     ],
@@ -2513,12 +2518,14 @@
      {
       "id": "use",
       "label": "Ground Pound",
+      "hostRollAction": true,
       "actionRoll": { "trait": "Strength" },
       "cost": {
        "hope": 2
       }
      }
-    ]
+    ],
+    "rollTriggers":[{"id":"damage","label":"Damage (half if Reaction succeeds)","on":"featureAction:card:Ground Pound:use","damage":{"dice":"4d10+8","fixed":true,"type":"physical"}}]
    }
   },
   {
@@ -2613,6 +2620,8 @@
    "name": "Hold the Line",
    "automation": { "actions": [
     { "id": "use", "label": "Hold the Line", "cost": { "hope": 1 },
+      "hostOwned": true,
+      "steps":[{"op":"effect","effect":{"name":"Hold the Line","kind":"buff","until":"manual","text":"Ends on movement, failed Fear roll or the GM spending 2 Fear."}}],
       "report": { "text": "Track your stance and affected enemies. Ends on movement, failed Fear roll or the GM spending 2 Fear." } }
    ] },
    "cardType": "Ability",
@@ -2696,6 +2705,7 @@
      {
       "id": "use",
       "label": "Roll d4 against this attack",
+      "hostOwned": true,
       "cost": {
        "stress": 1
       },
@@ -2711,8 +2721,8 @@
   {
    "id": "inevitable",
    "name": "Inevitable",
-   "automation": { "actions": [
-    { "id": "prepare", "label": "Failed action: prepare Inevitable", "steps": [{ "op": "effect", "effect": {
+   "automation": { "rollTriggers": [
+    { "id": "prepare", "label": "Failed action: prepare Inevitable", "on": "action", "steps": [{ "op": "effect", "effect": {
      "name": "Inevitable", "kind": "buff", "until": "manual",
      "rollOptions": [{ "id": "advantage", "label": "Inevitable: next action", "roll": "action", "advantage": "advantage",
        "defaultOn": true, "endEffect": "Inevitable" }]
@@ -2864,11 +2874,16 @@
    "text": "When observing a creature, you can make an **Instinct Roll** against them. On a success, **spend a Hope** and ask the GM for one set of information about the target from the following options:\n\n- Their unmarked Hit Points and Stress.\n- Their Difficulty and damage thresholds.\n- Their tactics and standard attack damage dice.\n- Their features and Experiences.\nAdditionally on a success, you can **mark a Stress** to remove a Fear from the GM’s Fear Pool.",
    "automation": {
     "actions": [
-     { "id": "observe", "label": "Observe creature", "actionRoll": { "trait": "Instinct" } },
-     { "id": "information", "label": "Successful Instinct roll: ask for information", "cost": { "hope": 1 } },
+     { "id": "observe", "label": "Observe creature", "actionRoll": { "trait": "Instinct" } }
+    ],
+    "rollTriggers": [
+     { "id": "information", "label": "Successful Instinct roll: ask for information", "on": "trait:Instinct", "successIfKnown": true, "cost": { "hope": 1 } },
      {
       "id": "use",
-      "label": "Successful Instinct roll: remove GM Fear (manual)",
+      "label": "Successful Instinct roll: remove GM Fear",
+      "on": "trait:Instinct",
+      "successIfKnown": true,
+      "removeFear": 1,
       "cost": {
        "stress": 1
       }
@@ -2885,10 +2900,12 @@
    "recall": 3,
    "text": "When you deal damage to an adversary, you can **mark a Stress** and describe how you encourage your allies. The next PC to make an attack against that adversary can clear a Stress or gain a Hope.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
       "label": "Lead by Example",
+      "on": "damage",
+      "chatBenefits":[{"id":"stress","label":"Next attack against this adversary: clear 1 Stress","exclusiveClaim":true,"steps":[{"op":"clear","resource":"stress","amount":1}]},{"id":"hope","label":"Next attack against this adversary: gain 1 Hope","exclusiveClaim":true,"steps":[{"op":"gain","resource":"hope","amount":1}]}],
       "cost": {
        "stress": 1
       }
@@ -3400,7 +3417,8 @@
       "when": {
        "armor": true
       },
-      "armorSlots": "any"
+      "armorSlots": "any",
+      "giveFear": 1
      }
     ]
    }
@@ -3796,18 +3814,9 @@
    "recall": 1,
    "text": "During a short rest, you can choose a long rest downtime move instead. You can **spend a Hope** to let an ally do the same.",
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Recovery",
-      "cost": {
-       "hope": 1
-      },
-      "timing": "rest"
-     }
-    ],
     "rest": {
-     "longMovesInShort": true
+     "longMovesInShort": true,
+     "passives":[{"id":"ally","label":"Spend 1 Hope: allow an ally one long-rest move","rest":"short","defaultOn":false,"chooseAlly":true,"hostOwned":true,"cost":{"hope":1},"steps":[{"op":"effect","effect":{"name":"Recovery","kind":"buff","until":"rest","consumeLongRestMove":true,"rest":{"longMovesInShort":true}}}]}]
     }
    }
   },
@@ -3823,12 +3832,12 @@
     "actions": [
      {
       "id": "use",
-      "label": "Redirect",
-      "cost": {
-       "stress": 1
-      }
+      "label": "Redirect: roll Proficiency d6s",
+      "hostOwned": true,
+      "sendRoll": {"dice":"@total_proficiencyd6","label":"Redirect"}
      }
-    ]
+    ],
+    "rollTriggers":[{"id":"redirect","label":"Redirect attack to adversary within Very Close range","on":"featureAction:card:Redirect:use","containsDie":6,"cost":{"stress":1}}]
    }
   },
   {
@@ -3984,19 +3993,7 @@
       "value": "@proficiency"
      }
     ],
-    "actions": [
-     {
-      "id": "clear",
-      "label": "After attack marks HP: clear Stress",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "stress",
-        "amount": 1
-       }
-      ]
-     }
-    ]
+    "mitigation": [{"id":"rise","label":"Rise Up","passive":true,"when":{"markingHp":true},"clearStress":1}]
    }
   },
   {
@@ -4012,13 +4009,15 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
       "label": "Rousing Strike: after critical attack",
+      "on": "attack",
+      "criticalOnly": true,
       "chatBenefits": [
-       { "id": "hp", "label": "Clear 1 HP", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
-       { "id": "stress", "label": "Clear d4 Stress", "exclusiveClaim": true, "steps": [{ "op": "clear", "resource": "stress", "amount": "1d4" }] }
+       { "id": "hp", "label": "Clear 1 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+       { "id": "stress", "label": "Clear d4 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": "1d4" }] }
       ],
       "allowSourceOwner": true
      }
@@ -4776,35 +4775,12 @@
     ],
     "actions": [
      {
-      "id": "rest",
-      "label": "Long rest: place tokens",
-      "steps": [
-       { "op": "clear", "resource": "strategic", "amount": "all" },
-       {
-        "op": "gain",
-        "resource": "strategic",
-        "amount": "@total_knowledge", "minimumAmount": 1
-       }
-      ]
-     },
-     {
       "id": "spend",
       "label": "First Close attack: clear eligible ally Stress", "target": "actor",
       "cost": {
        "strategic": 1
       },
       "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }]
-     },
-     {
-      "id": "clear",
-      "label": "Long rest: clear tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "strategic",
-        "amount": "all"
-       }
-      ]
      }
     ],
     "rollOptions": [
@@ -4871,13 +4847,19 @@
    "recall": 2,
    "text": "When an ally within Close range fails a roll, you can **spend 2 Hope** to allow them to reroll either their Hope or Fear Die.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
-      "label": "Support Tank",
-      "cost": {
-       "hope": 2
-      }
+      "label": "Support Tank: reroll Hope",
+      "on": "duality",
+      "audience": "ally",
+      "cost": {"hope":2},
+      "rerollDualityDie": "hope",
+      "exclusiveRollGroup": "support"
+     },
+     {
+      "id":"fear","label":"Support Tank: reroll Fear","on":"duality","audience":"ally",
+      "cost":{"hope":2},"rerollDualityDie":"fear","exclusiveRollGroup":"support"
      }
     ]
    }
@@ -5465,7 +5447,8 @@
    "domain": "Bone",
    "level": 1,
    "recall": 1,
-   "text": "Gain a bonus to your Evasion equal to half your Agility."
+   "text": "Gain a bonus to your Evasion equal to half your Agility.",
+   "automation": {"modifiers":[{"stat":"evasion","traitValue":"Agility","divisor":2,"round":"up"}]}
   },
   {
    "id": "unyielding-armor",
@@ -5479,6 +5462,7 @@
     "mitigation": [
      {
       "id": "unyielding",
+      "hiddenRoll": true,
       "label": "Unyielding Armor",
       "description": "Roll d6s equal to your Proficiency; on any 6 reduce severity without marking the Armor Slot.",
       "defaultOn": true,
@@ -5880,11 +5864,10 @@
       "id": "use",
       "label": "Wrangle",
       "actionRoll": { "trait": "Agility" },
-      "cost": {
-       "hope": 1
-      }
+      "hostRollAction": true
      }
-    ]
+    ],
+    "rollTriggers":[{"id":"move","label":"Wrangle: move successful targets and willing allies","on":"featureAction:card:Wrangle:use","cost":{"hope":1}}]
    }
   },
   {

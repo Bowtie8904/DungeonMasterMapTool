@@ -18,6 +18,8 @@ export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'se
 export type ModValue = number | string;
 
 export interface Modifier {
+  divisor?: number;
+  round?: 'up' | 'down';
   hopeMin?: number;
   requiresArmor?: boolean;
   markedHpDivisor?: number;
@@ -40,6 +42,10 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  deathrun?: boolean;
+  deathrunRoll?: Pick<import('../protocol').RollMessage, 'expression' | 'total' | 'breakdown' | 'weapon'> & { rolls: number[] };
+  deathrunRemaining?: number[];
+  consumeLongRestMove?: boolean;
   vitality?: boolean;
   vitalityTotalChanges?: Partial<Record<'hp' | 'stress', number>>;
   onlineCondition?: { tokenId?: string; id: string; iconId?: string };
@@ -116,6 +122,8 @@ export interface Step {
 }
 
 export interface ActionDef {
+  hostOwned?: boolean;
+  removeFear?: number;
   bloodAutomation?: boolean;
   deferSourceUse?: boolean;
   hostRollAction?: boolean;
@@ -206,6 +214,9 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  deathrun?: boolean;
+  traitChoices?: TraitName[];
+  requiresRollOutcome?: 'hopeOrCritical';
   chooseTrait?: boolean;
   maximizeDie?: boolean;
   linkedDamageTrait?: TraitName;
@@ -255,6 +266,9 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  weaponDamage?: boolean;
+  containsDie?: number;
+  deathrunResult?: boolean;
   damageDiceBelow?: number;
   halfProficiencyDamage?: boolean;
   rerollDualityDie?: 'hope' | 'fear';
@@ -383,6 +397,7 @@ export function syncEffectDependencies(c: CharacterSheet): void {
 }
 
 export interface RestBenefit extends ActionDef {
+  chooseAlly?: boolean;
   castBeforeRest?: string;
   defaultOn: boolean;
   rest?: RestKind;
@@ -395,6 +410,7 @@ export interface RestBenefit extends ActionDef {
 }
 
 export interface RestMoveModifier {
+  repairAllies?: number;
   move: string;
   rest?: RestKind;
   target?: 'ally';
@@ -551,7 +567,8 @@ function modifierValue(m: Modifier, c: CharacterSheet): number {
   if (m.markedHpDivisor && m.markedHpDivisor > 0) return Math.floor(c.hp.on / m.markedHpDivisor);
   if (m.markedHpMultiplier !== undefined) return c.hp.on * m.markedHpMultiplier;
   if (m.markedStressMultiplier !== undefined) return c.stress.on * m.markedStressMultiplier;
-  return evalValue(m.value, c);
+  const value = m.traitValue ? traitTotal(c, m.traitValue) : evalValue(m.value, c);
+  return m.divisor ? m.round === 'up' ? Math.ceil(value / m.divisor) : Math.floor(value / m.divisor) : value;
 }
 
 export interface DerivedStats {
@@ -578,6 +595,12 @@ export function derivedStats(c: CharacterSheet): DerivedStats {
     proficiency: Math.max(1, c.proficiency.on + statTotal(c, 'proficiency')),
     loadoutMax: Math.max(0, 5 + statTotal(c, 'loadoutMax')),
   };
+}
+
+export function deathrunProficiency(c: CharacterSheet, count: number): number {
+  const run = c.effects.find(e => e.deathrun && e.deathrunRoll);
+  if (run?.deathrunRemaining) return run.deathrunRemaining.length - 1;
+  return Math.max(0, c.proficiency.on + statTotal(c, 'proficiency')) + 1 - count;
 }
 
 function unarmoredBase(c: CharacterSheet): { name: string; score: number; thresholds: [number, number] } | undefined {
@@ -837,7 +860,7 @@ export function sourceActionLabel(origin: string | undefined, source: string, ac
 }
 
 /** Optional effects are selected by the player, never inferred from situational prose. */
-export function availableRollOptions(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number]): AvailableRollOption[] {
+export function availableRollOptions(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number], outcome?: 'hope' | 'fear' | 'critical'): AvailableRollOption[] {
   const sources: Array<{ key: string; name: string; origin?: string; auto?: Automation; item?: CharacterSheet['inventory'][number]; weapon?: CharacterSheet['activeWeapons'][number] }> = [
     ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
     ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.name, auto: w.automation, weapon: w })),
@@ -861,7 +884,10 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
       || o.roll === 'duality' && (targets.includes('action') || targets.includes('reaction')))
     .filter((o) => !o.requiresFeature || hasFeature(c, o.requiresFeature))
     .filter((o) => !o.excludesFeature || !hasFeature(c, o.excludesFeature))
+    .filter((o) => !o.excludesEffect || !c.effects.some(e => e.name === o.excludesEffect))
     .filter((o) => !o.condition || conditionMatches(c, o.condition))
+    .filter((o) => !o.requiresRollOutcome || outcome === 'hope' || outcome === 'critical')
+    .filter((o) => o.weapon !== 'any' || !!weapon && !targets.includes('spelldamage'))
     .filter((o) => !o.chooseTrait || !!weapon && targets.includes('attack'))
     .filter((o) => !o.secondaryWeaponDie || activeWeapons(c).some(w => w.slot === 'Secondary' && /\d*d\d+/i.test(w.damage)))
     .filter((o) => !o.weaponRange || weapon?.range.toLowerCase() === o.weaponRange.toLowerCase())
@@ -1008,6 +1034,7 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
 
 /** Commit only after the send succeeded and the entire selection was checked together. */
 export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOption[], experience = false, targets: string[] = [], refundExperience = false): void {
+  selected = selected.filter(s => !s.option.hostOwned);
   const blocker = selectionBlocker(c, selected, experience);
   if (blocker) throw new Error(blocker);
   if (experience && !refundExperience) {
@@ -1015,6 +1042,7 @@ export function commitRollOptions(c: CharacterSheet, selected: AvailableRollOpti
     else c.hope.on--;
   }
   for (const s of selected) {
+    if (s.option.hostOwned) continue;
     if (s.prepared) {
       const { effect, modifier } = s.prepared;
       effect.modifiers = (effect.modifiers ?? []).filter((m) => m !== modifier);
@@ -1401,6 +1429,8 @@ export function isTrait(name: string): name is TraitName {
 }
 
 export interface RollContext {
+  dice?: number[];
+  deathrun?: { effectId: string; count: number };
   resourceOnes?: string[];
   /** Comma separated roll targets of the original roll, for example `attack,trait:Agility,action`. */
   source: string;
@@ -1427,6 +1457,9 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.containsDie !== undefined && !ctx.dice?.includes(t.containsDie)) return false;
+  if (t.deathrunResult && !ctx.deathrun) return false;
+  if (t.weaponDamage && (!ctx.weapon || ctx.kind !== 'damage' || ctx.source.split(',').includes('spelldamage'))) return false;
   if (t.criticalOnly && (ctx.kind === 'damage' || ctx.hope < 1 || ctx.hope !== ctx.fear)) return false;
   if (!loadoutDomainMatches(c, t.loadoutDomain)) return false;
   if (t.successIfKnown && ctx.difficulty !== undefined && ctx.hope !== ctx.fear && ctx.total < ctx.difficulty) return false;

@@ -1454,6 +1454,7 @@ public final class OnlineSessionServer {
             }
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
             SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
+            BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
             if (problem != null) {
                 json(ctx, 403, errorBody(problem));
@@ -1871,7 +1872,8 @@ public final class OnlineSessionServer {
     private synchronized void handleFeature(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) return;
-        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+        int requestBytes = ctx.bodyAsBytes().length;
+        if (requestBytes > (long) MAX_SHEET_BYTES + config.maxMessageBytes()) {
             json(ctx, 413, errorBody("Feature request is too large."));
             return;
         }
@@ -1879,9 +1881,37 @@ public final class OnlineSessionServer {
             JsonNode request = MAPPER.readTree(ctx.body());
             if (request == null || !request.isObject())
                 throw new IllegalArgumentException("Invalid feature request.");
+            JsonNode transactionSheet = request.has("incomingDamage") ? request.path("incomingDamage").path("sheet")
+                    : !request.has("transactionalRoll") && request.has("rest") ? request.path("rest").path("sheet") : null;
+            int sheetBytes = transactionSheet != null && transactionSheet.isObject()
+                    ? MAPPER.writeValueAsBytes(transactionSheet).length : 0;
+            if (sheetBytes > MAX_SHEET_BYTES) {
+                json(ctx, 413, errorBody("Sheet is too large"));
+                return;
+            }
+            if (requestBytes - sheetBytes > config.maxMessageBytes()) {
+                json(ctx, 413, errorBody("Feature request is too large."));
+                return;
+            }
             Campaign c = campaign;
             if (c == null) throw new IllegalArgumentException("No online session is running.");
             Campaign.Actor sourceActor = ownedActor(playerId, request.path("actorId").asText());
+            if (sourceActor.isDisabled()) throw new IllegalArgumentException("This character is disabled.");
+            if (request.has("incomingDamage")) {
+                resolveBoneValorDamage(sourceActor, request.path("incomingDamage"));
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
+            if (request.has("transactionalRoll")) {
+                resolveCardOptionRoll(sourceActor, request.path("transactionalRoll"));
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
+            if (request.has("rest")) {
+                resolveBoneValorRest(sourceActor, request.path("rest"));
+                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                return;
+            }
             if (request.has("benefitId")) {
                 claimActionBenefit(request, sourceActor);
                 json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
@@ -1956,12 +1986,14 @@ public final class OnlineSessionServer {
                     if (definition.path("requiresEffect").asText().equals(effect.path("name").asText())) active = true;
                 if (!active) throw new IllegalArgumentException("The required effect is no longer active.");
             }
+            if (definition.has("excludesEffect") && DruidEffects.hasEffect(sourceSheet, definition.path("excludesEffect").asText()))
+                throw new IllegalArgumentException("This effect is already active.");
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
             else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
                     && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
-                    && !definition.path("menacingReach").asBoolean()
+                    && !definition.path("menacingReach").asBoolean() && !definition.path("hostOwned").asBoolean()
                     && !List.of("talisman", "lifeblood").contains(definition.path("witchAction").asText()))
                 throw new IllegalArgumentException("This feature action must be made from its character sheet.");
 
@@ -2027,6 +2059,10 @@ public final class OnlineSessionServer {
             }
             List<String> reportLines = new ArrayList<>();
             int fearGrant = definition.path("giveFear").asInt();
+            int fearRemoval = definition.path("removeFear").asInt();
+            if (fearRemoval < 0 || fearRemoval > 1 || fearRemoval > c.getFear())
+                throw new IllegalArgumentException("There is no GM Fear to remove.");
+            if (fearRemoval > 0) reportLines.add("Removed " + fearRemoval + " GM Fear.");
             if (fearGrant < 0 || fearGrant > 1) throw new IllegalArgumentException("Invalid GM Fear grant.");
             if (fearGrant > 0) reportLines.add("Gave the GM " + fearGrant + " Fear.");
             if (definition.path("report").isObject()) {
@@ -2303,9 +2339,14 @@ public final class OnlineSessionServer {
 
             for (Campaign.Actor target : targets) {
                 ObjectNode targetSheet = changedSheets.get(target.getId());
-                if (hasRoll && definition.has("endEffect")) {
+                if (definition.has("endEffect")) {
                     String effectName = definition.path("endEffect").asText();
-                    removeEffects(targetSheet, effectName, null, null);
+                    if (definition.path("deathrunResult").asBoolean()) {
+                        ArrayNode effects = targetSheet.withArray("effects");
+                        for (int i = effects.size() - 1; i >= 0; i--)
+                            if (effectName.equals(effects.get(i).path("name").asText())
+                                    && originalRoll.path("deathrun").path("effectId").equals(effects.get(i).path("id"))) effects.remove(i);
+                    } else removeEffects(targetSheet, effectName, null, null);
                 }
                 if (definition.path("steps").isArray()) {
                     List<String> targetLines = new ArrayList<>();
@@ -2326,6 +2367,20 @@ public final class OnlineSessionServer {
 
             ArrayNode benefits = actionBenefits(sourceSheet, key, definition);
             ObjectNode benefitReport = null;
+            if (utilityRoll != null) {
+                benefitReport = featureRollMessage(sourceActor, source, actionLabel, utilityRoll);
+                benefitReport.put("source", "featureAction:" + key + ":" + actionId);
+                benefitReport.putObject("featureRoll").put("name", reportSource).put("result", utilityRoll.total())
+                        .put("consequence", definition.path("sendRoll").path("base").asText().equals("evasion")
+                                ? "+" + utilityRoll.total() + " Evasion against this attack." : String.join(" ", reportLines));
+            }
+            if (damageRoll != null) {
+                benefitReport = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
+                String damageType = definition.path("damage").path("type").asText("physical");
+                benefitReport.put("source", "magic".equals(damageType) ? "damage,magicdamage" : "damage");
+                benefitReport.putObject("featureRoll").put("name", reportSource).put("result", damageRoll.total())
+                        .put("consequence", damageType + " damage. " + definition.path("description").asText(""));
+            }
             if (!benefits.isEmpty()) {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, null);
@@ -2341,14 +2396,20 @@ public final class OnlineSessionServer {
                     button.set("damage", definition.path("chatDamage"));
                 }
             }
-            if (fearGrant > 0) {
+            if (benefitReport == null && banishRoll == null && !definition.has("reroll")) {
+                if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
+                benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+            }
+            if (fearGrant > 0 || fearRemoval > 0) {
+                if (benefitReport == null)
+                    benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
                 List<String> deathReports = normalizeDeathChanges(changedSheets);
                 for (ObjectNode sheet : changedSheets.values()) {
                     sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
                     if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                         throw new IllegalArgumentException("The character sheet is too large.");
                 }
-                int fear = Math.addExact(c.getFear(), fearGrant);
+                int fear = Math.addExact(c.getFear(), fearGrant) - fearRemoval;
                 List<ObjectNode> reports = new ArrayList<>();
                 reports.add(benefitReport);
                 if (!deathReports.isEmpty()) reports.add(deathStateMessage("dm", "DM", "Party", deathReports));
@@ -2401,6 +2462,371 @@ public final class OnlineSessionServer {
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not save the feature action."));
         }
+    }
+
+    private static boolean containsNumber(JsonNode values, int number) {
+        for (JsonNode value : values) if (value.isInt() && value.asInt() == number) return true;
+        return false;
+    }
+
+    private synchronized void resolveBoneValorDamage(Campaign.Actor actor, JsonNode request) throws IOException {
+        ObjectNode before = storedSheet(actor.getId());
+        if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid damage result.");
+        if (next.path("featureRevision").asLong() != before.path("featureRevision").asLong())
+            throw new IllegalArgumentException("The character changed. Reopen incoming damage.");
+        JsonNode result = request.path("result");
+        JsonNode input = request.path("input");
+        int armorUsed = result.path("armorUsed").asInt(-1), armorMarked = result.path("armorMarked").asInt(-1);
+        int hp = result.path("hp").asInt(-1);
+        if (!input.path("damage").isInt() || input.path("damage").asInt() < 1 || armorUsed < 0 || armorMarked < 0
+                || armorMarked > armorUsed || hp < 0 || hp > 4
+                || armorUsed > before.path("armorTrack").path("slots").asInt() - before.path("armorTrack").path("on").asInt())
+            throw new IllegalArgumentException("Invalid committed damage or Armor Slots.");
+        int fearGrant = 0;
+        boolean special = false;
+        ObjectNode paidLimits = before.deepCopy();
+        String report = request.path("report").asText();
+        List<JsonNode> mitigations = new ArrayList<>();
+        List<Integer> quantities = new ArrayList<>();
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (JsonNode selected : result.path("applied")) {
+            String key = selected.path("key").asText(), id = selected.path("id").asText();
+            if (!ids.add(key + "/" + id)) throw new IllegalArgumentException("Duplicate mitigation option.");
+            JsonNode auto;
+            if (key.startsWith("effect:")) {
+                auto = null;
+                for (JsonNode effect : before.path("effects"))
+                    if (key.equals("effect:" + effect.path("id").asText())) auto = effect;
+                if (auto == null) throw new IllegalArgumentException("The selected mitigation effect is no longer active.");
+            } else {
+                JsonNode source = featureSource(before, key);
+                auto = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            }
+            JsonNode option = null;
+            for (String field : List.of("mitigation", "conditionalMitigation"))
+                for (JsonNode candidate : auto.path(field))
+                    if (id.equals(candidate.path("id").asText())) option = candidate;
+            if (option == null || key.startsWith("card:") && !activeCardKey(before, key))
+                throw new IllegalArgumentException("A selected mitigation is no longer available.");
+            if (!option.path("passive").asBoolean() && !(input.path("selected") instanceof ArrayNode selectedIds
+                    && containsText(selectedIds, key + "/" + id)))
+                throw new IllegalArgumentException("The mitigation was not selected.");
+            if (option.path("when").path("armor").asBoolean() && (!input.path("armor").asBoolean() || armorUsed < 1))
+                throw new IllegalArgumentException("This mitigation requires marking Armor Slots.");
+            if (option.path("when").path("markingHp").asBoolean() && result.path("hpBeforeReplace").asInt(hp) < 1)
+                throw new IllegalArgumentException("This mitigation requires committed HP damage.");
+            JsonNode limit = option.path("uses");
+            if ("source".equals(limit.asText())) useFeatureLimit(paidLimits, key, auto.path("uses"));
+            else if (limit.isObject()) useFeatureLimit(paidLimits, key + ":mitigation:" + id, limit);
+            mitigations.add(option);
+            int quantity = option.path("quantity").asBoolean() ? input.path("quantities").path(key + "/" + id).asInt(1) : 1;
+            if (quantity < 1) throw new IllegalArgumentException("Invalid mitigation quantity.");
+            quantities.add(quantity);
+            if (option.has("giveFear")) { fearGrant += option.path("giveFear").asInt(); special = true; }
+            if (option.has("clearStress")) special = true;
+            if (option.path("hiddenRoll").asBoolean()) {
+                int count = CharacterSheetRules.proficiencyTotal(before, campaign.getFear());
+                if (count < 1) throw new IllegalArgumentException("Unyielding Armor needs positive current Proficiency.");
+                DiceRoller.Result dice = DiceRoller.roll(count + "d6", config.maxDice(), diceRandom);
+                int saved = dice.rolls().contains(6) ? 1 : 0;
+                int clientSaved = armorUsed - armorMarked;
+                int difference = clientSaved - saved;
+                next.withObject("/armorTrack").put("on", next.path("armorTrack").path("on").asInt() + difference);
+                armorMarked += difference;
+                report = report.replaceAll("Unyielding Armor \\[[^\\]]*\\]", "Unyielding Armor " + dice.rolls())
+                        .replaceAll("Used \\d+ Armor Slots?(?: \\(\\d+ marked\\))?",
+                                "Used " + armorUsed + " Armor Slot" + (armorUsed == 1 ? "" : "s")
+                                        + (armorMarked == armorUsed ? "" : " (" + armorMarked + " marked)"));
+                special = true;
+            }
+        }
+        if (!special || fearGrant < 0 || fearGrant > 1) throw new IllegalArgumentException("No Bone/Valor damage benefit selected.");
+        if (paidLimits.has("usage")) next.set("usage", paidLimits.path("usage"));
+        for (JsonNode option : mitigations) {
+            for (var fields = option.path("armorCost").fields(); fields.hasNext();) {
+                var cost = fields.next();
+                int difference = armorMarked - result.path("armorMarked").asInt();
+                if (difference == 0) continue;
+                int amount = featureAmount(cost.getValue(), before) * difference;
+                ObjectNode track = requireTrack(next, cost.getKey());
+                track.put("on", track.path("on").asInt() + ("hope".equals(cost.getKey()) ? -amount : amount));
+            }
+        }
+        BoneValorRules.validateDamage(before, next, hp);
+        int stressCost = 0, hopeCost = 0, clearStress = 0, gainHope = 0;
+        for (int i = 0; i < mitigations.size(); i++) {
+            JsonNode option = mitigations.get(i);
+            stressCost += mitigationAmount(option.path("cost").path("stress"), before, hp) * quantities.get(i)
+                    + mitigationAmount(option.path("armorCost").path("stress"), before, hp) * armorMarked;
+            hopeCost += mitigationAmount(option.path("cost").path("hope"), before, hp) * quantities.get(i)
+                    + mitigationAmount(option.path("armorCost").path("hope"), before, hp) * armorMarked;
+            if (hp > 0) clearStress += option.path("clearStress").asInt();
+            if (option.path("recoveryChoice").asBoolean()) {
+                boolean recoverStress = "stress".equals(input.path("recovery").asText())
+                        || !input.has("recovery") && before.path("hope").path("on").asInt() >= before.path("hope").path("slots").asInt();
+                if (recoverStress) clearStress++;
+                else gainHope++;
+            }
+        }
+        for (JsonNode card : before.path("loadout")) {
+            for (JsonNode reward : card.path("automation").path("conditionalDamageRewards")) {
+                if (hp < Math.max(1, reward.path("minHp").asInt())
+                        || reward.path("noArmorMarked").asBoolean() && armorMarked > 0) continue;
+                JsonNode gate = reward.path("loadoutDomain");
+                int count = 0;
+                for (JsonNode active : before.path("loadout"))
+                    if (gate.path("domain").asText().equalsIgnoreCase(active.path("domain").asText())) count++;
+                if (!gate.isMissingNode() && count < gate.path("min").asInt()) continue;
+                gainHope += reward.path("gainHope").asInt();
+            }
+        }
+        if (stressCost > before.path("stress").path("slots").asInt() - before.path("stress").path("on").asInt()
+                || hopeCost > before.path("hope").path("on").asInt())
+            throw new IllegalArgumentException("Not enough Hope or unmarked Stress for the selected mitigation.");
+        next.withObject("/stress").put("on", Math.max(0, before.path("stress").path("on").asInt() + stressCost - clearStress));
+        next.withObject("/hope").put("on", Math.min(before.path("hope").path("slots").asInt(),
+                before.path("hope").path("on").asInt() - hopeCost + gainHope));
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), next);
+        if (result.path("final").asInt() >= 3) {
+            changed.putAll(removeSourceSevereEffects(actor));
+            JsonNode ending = changed.get(actor.getId());
+            if (ending != null && ending != next) {
+                java.util.Set<String> retained = new java.util.HashSet<>();
+                for (JsonNode effect : ending.path("effects")) retained.add(effect.path("id").asText());
+                if (next.path("effects") instanceof ArrayNode effects)
+                    for (int i = effects.size() - 1; i >= 0; i--)
+                        if (effects.path(i).path("endOnSourceSevere").asBoolean()
+                                && !retained.contains(effects.path(i).path("id").asText())) effects.remove(i);
+            }
+        }
+        changed.put(actor.getId(), next);
+        if (fearGrant > 0) report += "\nOctarine Brace: gave the GM " + fearGrant + " Fear.";
+        ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, report);
+        message.put("actorId", actor.getId());
+        int fear = campaign.getFear() + fearGrant;
+        normalizeDeathChanges(changed);
+        for (ObjectNode sheet : changed.values()) sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+        store.saveFearReward(campaign.getId(), changed, null, List.of(message), fear);
+        campaign.setFear(fear);
+        if (current != null && fearGrant > 0) {
+            ObjectNode snapshot = current.deepCopy();
+            snapshot.put("fear", fear);
+            publish(snapshot, currentMapKey);
+        }
+        host.campaignChanged(campaign);
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        deliver(message, null, false);
+    }
+
+    private synchronized void resolveCardOptionRoll(Campaign.Actor actor, JsonNode request) throws IOException {
+        if (!(request instanceof ObjectNode input)) throw new IllegalArgumentException("Invalid card roll.");
+        String ref = input.path("ref").asText();
+        if (ref.isBlank() || ref.length() > 80) throw new IllegalArgumentException("The card roll needs a request identifier.");
+        String reference = sessionId + ":card:" + actor.getId() + ":" + ref;
+        if (invisibilityRolls.containsKey(reference)) return;
+        ObjectNode sheet = storedSheet(actor.getId());
+        List<String> tags = List.of(input.path("source").asText().split(","));
+        boolean damage = tags.contains("damage");
+        if (!damage && (!"duality".equals(input.path("kind").asText()) || !input.path("expression").asText()
+                .matches("^(?:2d12|1d(?:12|20)\\+1d(?:12|20))(?:[+-](?:\\d*d\\d+|\\d+))*$")))
+            throw new IllegalArgumentException("This option requires a real Duality action roll.");
+        String weaponName = input.path("weapon").asText();
+        JsonNode weapon = null;
+        for (JsonNode candidate : sheet.path("activeWeapons"))
+            if (weaponName.equals(candidate.path("name").asText())) weapon = candidate;
+        for (JsonNode effect : sheet.path("effects"))
+            if (weaponName.equals(effect.path("weapon").path("name").asText())) weapon = effect.path("weapon");
+        ObjectNode run = null;
+        List<String> lines = new ArrayList<>();
+        List<JsonNode> definitions = new ArrayList<>();
+        List<String> keys = new ArrayList<>();
+        java.util.Set<String> selected = new java.util.HashSet<>();
+        for (JsonNode selection : input.path("hostOptions")) {
+            String key = selection.path("key").asText();
+            String id = selection.path("id").asText();
+            if (!selected.add(key + ":" + id)) throw new IllegalArgumentException("Duplicate card roll option.");
+            JsonNode source = featureSource(sheet, key);
+            JsonNode automation = key.startsWith("effect:") ? source.path("automation")
+                    : catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            JsonNode definition = null;
+            for (JsonNode option : automation.path("rollOptions"))
+                if (id.equals(option.path("id").asText())) definition = option;
+            if (definition == null) throw new IllegalArgumentException("This card roll option is no longer available.");
+            if (key.startsWith("card:") && !activeCardKey(sheet, key))
+                throw new IllegalArgumentException("This card must be in the active loadout.");
+            if (!tags.contains(definition.path("roll").asText())
+                    || definition.has("weapon") && (weapon == null || tags.contains("spelldamage")))
+                throw new IllegalArgumentException("This option requires a matching equipped weapon roll.");
+            if (definition.path("deathrun").asBoolean()) {
+                for (JsonNode effect : sheet.path("effects"))
+                    if (key.equals("effect:" + effect.path("id").asText()) && effect.path("deathrun").asBoolean())
+                        run = (ObjectNode) effect;
+                if (run == null || !input.path("deathrun").path("effectId").asText().equals(run.path("id").asText())
+                        || !input.path("deathrun").path("count").isInt()
+                        || input.path("deathrun").path("count").asInt() != run.path("counter").path("value").asInt())
+                    throw new IllegalArgumentException("Deathrun changed. Reopen its damage window.");
+                int proficiency = run.has("deathrunRoll") ? run.path("deathrunRemaining").size() - 1
+                        : CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear()) + 1 - run.path("counter").path("value").asInt();
+                if (proficiency <= 0) throw new IllegalArgumentException("Deathrun is exhausted. End Run before rolling damage.");
+                if (!run.has("deathrunRoll")) BoneValorRules.validateWeaponDice(input, weapon, proficiency, sheet);
+            }
+            if (definition.has("endEffect") && !DruidEffects.hasEffect(sheet, definition.path("endEffect").asText()))
+                throw new IllegalArgumentException("This prepared effect is no longer active.");
+            if (definition.has("dice")) {
+                String expected = "0+" + definition.path("dice").asText();
+                boolean contributed = false;
+                for (JsonNode part : input.path("contributions"))
+                    if (part.path("label").asText().contains(definition.path("label").asText())
+                            && expected.equals(part.path("expression").asText())) contributed = true;
+                if (!contributed) throw new IllegalArgumentException("The selected prepared damage dice must be rolled.");
+            }
+            applyFeatureCost(sheet, definition.path("cost"));
+            useFeatureLimit(sheet, key, automation.path("uses"));
+            definitions.add(definition);
+            keys.add(key);
+        }
+        JsonNode actionSource = null;
+        if (input.path("hostAction").isObject()) {
+            String key = input.path("hostAction").path("key").asText();
+            actionSource = featureSource(sheet, key);
+            JsonNode automation = catalogAutomation(key, actionSource.path("name").asText(), actionSource.path("automation"));
+            JsonNode definition = featureDefinition(automation, input.path("hostAction").path("id").asText(), false);
+            if (definition == null || !definition.path("hostRollAction").asBoolean() || !activeCardKey(sheet, key)
+                    || !"duality".equals(input.path("kind").asText()) || tags.contains("reaction")
+                    || !tags.contains("featureAction:" + key + ":" + definition.path("id").asText())
+                    || !tags.contains("trait:" + definition.path("actionRoll").path("trait").asText()))
+                throw new IllegalArgumentException("This card requires its action roll.");
+            applyFeatureCost(sheet, definition.path("cost"));
+            useFeatureLimit(sheet, key, automation.path("uses"));
+        }
+        if (definitions.isEmpty() && actionSource == null) throw new IllegalArgumentException("No transactional card option was selected.");
+        ResolvedDice resolved = run != null && run.path("deathrunRoll").isObject() ? null : resolveDice(input);
+        JsonNode source = actionSource == null ? MAPPER.createObjectNode().put("name", weaponName) : actionSource;
+        ObjectNode roll;
+        if (resolved == null) {
+            if (!weaponName.equals(run.path("deathrunRoll").path("weapon").asText()))
+                throw new IllegalArgumentException("Continue Deathrun with the weapon used for its first damage roll.");
+            roll = BoneValorRules.continueDeathrun(run, input.path("deathrunRemove"));
+            roll.put("id", nextChatId()).put("ts", System.currentTimeMillis());
+            roll.put("label", input.path("label").asText("Deathrun damage"));
+            roll.putObject("featureRoll").put("name", "Deathrun").put("result", roll.path("total").asInt())
+                    .put("consequence", "Removed one chosen weapon die; reused the remaining first-roll damage.");
+        } else {
+            roll = featureRollMessage(actor, source, input.path("label").asText("Roll"), resolved.result());
+            putDiceBreakdown(roll, resolved);
+        }
+        roll.put("ref", ref).put("source", input.path("source").asText());
+        if (!weaponName.isBlank()) roll.put("weapon", weaponName);
+        if ("duality".equals(input.path("kind").asText())) {
+            roll.put("kind", "duality").put("rewardClaimed", false);
+            if (input.path("difficulty").isInt()) roll.set("difficulty", input.path("difficulty"));
+        }
+        for (int i = 0; i < definitions.size(); i++) {
+            JsonNode definition = definitions.get(i);
+            if (definition.path("steps").isArray())
+                applyFeatureSteps(sheet, definition.path("steps"), definition.path("label").asText(), actor, keys.get(i), lines);
+            if (definition.has("effect")) {
+                if (DruidEffects.hasEffect(sheet, definition.path("effect").path("name").asText()))
+                    throw new IllegalArgumentException("This run is already active. End it before starting another.");
+                ArrayNode steps = MAPPER.createArrayNode();
+                steps.addObject().put("op", "effect").set("effect", definition.path("effect"));
+                applyFeatureSteps(sheet, steps, definition.path("label").asText(), actor, keys.get(i), lines);
+            }
+            if (definition.has("endEffect")) removeEffects(sheet, definition.path("endEffect").asText(), null, null);
+        }
+        if (damage && sheet.path("effects") instanceof ArrayNode effects) {
+            for (int i = effects.size() - 1; i >= 0; i--) {
+                JsonNode effect = effects.path(i);
+                boolean preserved = definitions.stream().anyMatch(d -> d.path("preserveEffect").asText().equals(effect.path("name").asText()));
+                if (effect.path("endOnDealtDamage").asBoolean() && !preserved) effects.remove(i);
+            }
+        }
+        if (run != null) {
+            int count = run.path("counter").path("value").asInt();
+            if (!run.has("deathrunRoll")) {
+                ObjectNode first = BoneValorRules.deathrunSnapshot(roll);
+                run.set("deathrunRoll", first);
+                ArrayNode remaining = run.putArray("deathrunRemaining");
+                for (int index : BoneValorRules.keptWeaponDice(first.path("breakdown").path(0))) remaining.add(index);
+            }
+            roll.putObject("deathrun").put("effectId", run.path("id").asText()).put("count", count);
+            run.withObject("/counter").put("value", count + 1);
+            run.put("text", "Damage rolls used: " + (count + 1) + ". Next weapon damage has "
+                    + Math.max(0, run.path("deathrunRemaining").size() - 1) + " dice. End Run when no targets remain.");
+        }
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        commitFeatureSheets(changed, roll, true);
+        sessionRolls.add(rollKey(roll.path("id").asLong(), roll.path("ts").asLong()));
+        invisibilityRolls.put(reference, roll.deepCopy());
+        sendFeatureState(actor, sheet);
+        deliver(roll, null, false);
+    }
+
+    private boolean activeCardKey(ObjectNode sheet, String key) {
+        for (JsonNode card : sheet.path("loadout"))
+            if (key.equals("card:" + card.path("name").asText()) || key.startsWith("card:" + card.path("name").asText() + "/")) return true;
+        return false;
+    }
+
+    private synchronized void resolveBoneValorRest(Campaign.Actor actor, JsonNode request) throws IOException {
+        ObjectNode before = storedSheet(actor.getId());
+        if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid rest sheet.");
+        String kind = request.path("kind").asText();
+        if (!List.of("short", "long").contains(kind)) throw new IllegalArgumentException("Choose a short or long rest.");
+        if (next.path("featureRevision").asLong() != before.path("featureRevision").asLong())
+            throw new IllegalArgumentException("The character changed. Reopen downtime.");
+        String problem = CharacterSheetRules.problem(next, before, actor.isTestingCharacter(), campaign.getFear());
+        if (problem != null) throw new IllegalArgumentException(problem);
+        BoneValorRules.validateRest(before, next, request);
+        refreshCatalogSheet(next);
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), next);
+        List<String> report = new ArrayList<>();
+        report.add(request.path("report").asText("Completed rest."));
+        for (JsonNode card : before.path("loadout")) {
+            String key = "card:" + card.path("name").asText();
+            JsonNode automation = catalogAutomation(key, card.path("name").asText(), card.path("automation"));
+            for (JsonNode modifier : automation.path("rest").path("modifiers")) {
+                int repair = modifier.path("repairAllies").asInt();
+                if (repair <= 0) continue;
+                for (JsonNode pick : request.path("picks")) {
+                    if (!modifier.path("move").asText().equals(pick.path("move").asText()) || pick.path("ally").asBoolean()) continue;
+                    for (Campaign.Actor ally : campaign.getActors()) {
+                        if (ally.getId().equals(actor.getId()) || ally.isDisabled() || !hasPlayerSheet(ally)) continue;
+                        ObjectNode sheet = changed.computeIfAbsent(ally.getId(), id -> {
+                            try { return storedSheet(id); } catch (IOException e) { throw new FeatureIoException(e); }
+                        });
+                        int marked = sheet.path("armorTrack").path("on").asInt();
+                        int cleared = Math.min(marked, repair);
+                        sheet.withObject("/armorTrack").put("on", marked - cleared);
+                        report.add("Armorer: " + ally.getName() + " cleared " + cleared + " Armor Slot.");
+                    }
+                }
+            }
+            for (JsonNode benefit : automation.path("rest").path("passives")) {
+                String id = key + "|" + benefit.path("id").asText();
+                if (!benefit.path("chooseAlly").asBoolean() || !request.path("options").path("passives").path(id).asBoolean()) continue;
+                if (!"short".equals(kind)) throw new IllegalArgumentException("Recovery is a short-rest option.");
+                Campaign.Actor ally = campaign.actor(request.path("options").path("allies").path(id).asText());
+                if (ally == null || ally.isDisabled() || actor.getId().equals(ally.getId()) || !hasPlayerSheet(ally))
+                    throw new IllegalArgumentException("Choose an active ally for Recovery.");
+                applyFeatureCost(next, benefit.path("cost"));
+                ObjectNode sheet = changed.computeIfAbsent(ally.getId(), targetId -> {
+                    try { return storedSheet(targetId); } catch (IOException e) { throw new FeatureIoException(e); }
+                });
+                applyFeatureSteps(sheet, benefit.path("steps"), "Recovery", actor, key, report);
+                report.add("Recovery: " + ally.getName() + " may choose exactly one long-rest move at their short rest.");
+            }
+        }
+        ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, String.join("\n", report));
+        message.put("actorId", actor.getId());
+        if ("short".equals(kind) && request.path("result").path("dice").isArray()) message.set("restDice", request.path("result").path("dice"));
+        commitFeatureSheets(changed, message, true);
+        sessionRolls.add(rollKey(message.path("id").asLong(), message.path("ts").asLong()));
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        deliver(message, null, false);
     }
 
     private void resolveGlancingBlow(Campaign.Actor actor, ObjectNode sheet, JsonNode source, String key,
@@ -2772,7 +3198,7 @@ public final class OnlineSessionServer {
         for (Campaign.Actor actor : campaign.getActors()) {
             if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
             boolean sourceActor = actor.getId().equals(source.getId());
-            if (sourceActor && self || !sourceActor && (action.path("allowSourceOwner").asBoolean()
+            if (sourceActor && (self || action.path("allowSourceOwner").asBoolean()) || !sourceActor && (action.path("allowSourceOwner").asBoolean()
                     || !actor.getOwnerId().equals(source.getOwnerId()))) eligible.add(actor.getId());
         }
     }
@@ -2982,6 +3408,19 @@ public final class OnlineSessionServer {
             Campaign.Actor effectSource = campaign.actor(effect.path("sourceActorId").asText());
             if (effectSource != null && effectSource.isDisabled())
                 throw new IllegalArgumentException("The effect's source actor is disabled.");
+            if (effect.path("sourceKey").asText().startsWith("card:")) {
+                String cardKey = effect.path("sourceKey").asText();
+                JsonNode cardSource = featureSource(sheet, cardKey);
+                JsonNode auto = catalogAutomation(cardKey, cardSource.path("name").asText(), cardSource.path("automation"));
+                for (JsonNode definition : auto.findValues("effect")) {
+                    if (!definition.path("name").asText().equals(effect.path("name").asText())) continue;
+                    ObjectNode source = MAPPER.createObjectNode().put("name", effect.path("name").asText());
+                    ObjectNode automation = source.putObject("automation");
+                    for (String field : List.of("actions", "rollOptions", "rollTriggers"))
+                        if (definition.path(field).isArray()) automation.set(field, definition.path(field));
+                    return source;
+                }
+            }
             if (effect.path("partyDowntimeGrant").asBoolean() && !effect.hasNonNull("sourceActorId")) {
                 boolean activeSource = false;
                 try {
@@ -3351,6 +3790,12 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
         String source = roll.path("source").asText("");
         List<String> tags = List.of(source.split(","));
+        if (trigger.has("containsDie") && !containsNumber(roll.path("rolls"), trigger.path("containsDie").asInt()))
+            throw new IllegalArgumentException("This roll has no qualifying die.");
+        if (trigger.path("deathrunResult").asBoolean() && !roll.path("deathrun").isObject())
+            throw new IllegalArgumentException("This is not a Deathrun damage result.");
+        if (trigger.path("weaponDamage").asBoolean() && (!tags.contains("damage") || tags.contains("spelldamage") || roll.path("weapon").asText().isBlank()))
+            throw new IllegalArgumentException("This feature requires weapon damage.");
         if (trigger.path("criticalOnly").asBoolean()
                 && (roll.path("rolls").path(0).asInt() < 1
                     || roll.path("rolls").path(0).asInt() != roll.path("rolls").path(1).asInt()
@@ -3427,7 +3872,7 @@ public final class OnlineSessionServer {
                 sourceActor.getId() + ":" + key + ":group:" + trigger.path("exclusiveRollGroup").asText()))
             throw new IllegalArgumentException("Another choice from this feature was already used on that roll.");
         if (!duality) {
-            if (!List.of("damage", "any").contains(on) || !"always".equals(trigger.path("when").asText("always"))
+            if (!(List.of("damage", "any").contains(on) || trigger.has("containsDie") && tags.contains(on)) || !"always".equals(trigger.path("when").asText("always"))
                     || trigger.has("outcome") || trigger.has("reroll") || trigger.has("dualityDieBonus") || trigger.path("swapDuality").asBoolean())
                 throw new IllegalArgumentException("This feature requires a Duality roll.");
             return;
@@ -3660,6 +4105,10 @@ public final class OnlineSessionServer {
             catch (NumberFormatException ignored) { }
         }
         throw new IllegalArgumentException("This feature uses a value the host cannot apply.");
+    }
+
+    private int mitigationAmount(JsonNode amount, ObjectNode sheet, int hp) {
+        return amount.isMissingNode() ? 0 : "@hp".equals(amount.asText()) ? hp : featureAmount(amount, sheet);
     }
 
     private int gainTrack(ObjectNode sheet, String resource, int amount) {
@@ -4726,6 +5175,7 @@ public final class OnlineSessionServer {
             hello.put("domainCardAutomation", true);
             hello.put("domainCardAutomationV2", true);
             hello.put("domainCardAutomationV3", true);
+            hello.put("boneValorAutomation", true);
             hello.put("bloodAutomation", true);
             hello.put("specialCardActions", true);
             hello.put("deathMoves", true);

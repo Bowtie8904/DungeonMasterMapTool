@@ -71,6 +71,12 @@ final class CharacterSheetRules {
         return Math.max(0, statTotal(sheet, "proficiency", sheet.path("proficiency").path("on").asDouble(), fear));
     }
 
+    static int traitTotal(com.fasterxml.jackson.databind.node.ObjectNode sheet, String name, int fear) {
+        for (JsonNode trait : sheet.path("traits"))
+            if (name.equals(trait.path("name").asText())) return statTotal(sheet, "trait." + name, trait.path("mod").asDouble(), fear);
+        return 0;
+    }
+
     private static int statTotal(com.fasterxml.jackson.databind.node.ObjectNode sheet, String stat, double base, int fear) {
         List<JsonNode> sources = new ArrayList<>();
         sources.add(sheet.path("activeArmor").path("automation"));
@@ -106,7 +112,13 @@ final class CharacterSheetRules {
                     if (card.path("domain").asText().equalsIgnoreCase(required.path("domain").asText())) count++;
                 if (count < required.path("min").asInt()) continue;
             }
-            total += value(modifier.path("value"), sheet, fear);
+            double amount = modifier.has("traitValue") ? traitTotal(sheet, modifier.path("traitValue").asText(), fear)
+                    : value(modifier.path("value"), sheet, fear);
+            if (modifier.path("divisor").asDouble() > 0) {
+                amount /= modifier.path("divisor").asDouble();
+                amount = "up".equals(modifier.path("round").asText()) ? Math.ceil(amount) : Math.floor(amount);
+            }
+            total += amount;
         }
         return (int) total;
     }

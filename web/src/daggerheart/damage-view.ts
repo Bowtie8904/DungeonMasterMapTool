@@ -1,13 +1,15 @@
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
 import type { CharacterSheet } from './data';
+import type { FeatureRequest } from '../api';
 import { costText, usesLeft } from './engine';
 import {
   AvailableMitigation, DamageInput, DamageType, SEVERITY_LABELS, applyDamage, availableMitigations, computeDamage, mitigationBlocker, quantityMax,
 } from './damage';
 
 /** Incoming-damage dialog: enter damage, pick mitigation, preview the HP to mark, then apply. */
-export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null }): void {
+export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null },
+  commit?: (damage: NonNullable<FeatureRequest['incomingDamage']>) => Promise<void>): void {
   const options = availableMitigations(c).filter(m => !initial?.excludeCompanionIntercept || !m.option.companionIntercept);
   const input: DamageInput = {
     damage: initial?.damage ?? 0, type: initial?.type ?? 'physical', armor: false, armorCount: 1, selected: new Set(options.filter((m) => m.option.defaultOn).map((m) => m.id)),
@@ -103,7 +105,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         const text = el('span', {}, el('b', {}, m.option.label), el('span', { class: 'muted' }, ` - ${m.source}${info ? ` (${info})` : ''}`));
         if (m.option.description) text.append(el('small', { class: 'muted' }, m.option.description));
         const faces = r.used[m.id];
-        if (box.checked && faces?.length) text.append(el('small', {}, `Rolled ${faces.join(', ')}`));
+        if (box.checked && faces?.length && !m.option.hiddenRoll) text.append(el('small', {}, `Rolled ${faces.join(', ')}`));
         const why = box.checked ? r.inactive[m.id] : staticWhy;
         if (why) text.append(el('small', { class: 'error' }, why));
         const row = el('div', { class: 'dh-roll-option-row' },
@@ -128,7 +130,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         const faces = r.used[m.id];
         list.append(el(
           'div', { class: on ? 'on' : 'muted' },
-          `${on ? '\u2713' : '\u2013'} ${m.option.label} (${m.source})${info ? ` - ${info}` : ''}${on && faces?.length ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
+          `${on ? '\u2713' : '\u2013'} ${m.option.label} (${m.source})${info ? ` - ${info}` : ''}${on && faces?.length && !m.option.hiddenRoll ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
         ));
       }
       body.append(list);
@@ -155,10 +157,21 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         && !await confirmDialog('Confirm this is attack damage and you are within Close range of your available companion. They take the damage instead, using the selected Stress or Armored option.')) return;
       const currentGuard = initial?.guard?.();
       if (currentGuard) { error.textContent = currentGuard; return; }
-      const summary = applyDamage(c, r, input.type);
-      if (!summary) { error.textContent = 'Could not apply damage'; return; }
-      close();
-      onDone(summary, r.negated ? 0 : r.final);
+      apply.disabled = cancel.disabled = true;
+      try {
+        const next = structuredClone(c);
+        const resolved = computeDamage(next, availableMitigations(next), input);
+        const summary = applyDamage(next, resolved, input.type);
+        if (!summary) throw new Error('Could not apply damage');
+        const hostDamage = resolved.applied.some(m => m.option.giveFear || m.option.hiddenRoll || m.option.clearStress);
+        if (commit && hostDamage) await commit({ sheet: next, input: { ...input, selected: [...input.selected] },
+          result: { armorUsed: resolved.armorUsed, armorMarked: resolved.armorMarked, hp: resolved.hp, hpBeforeReplace: resolved.hpBeforeReplace, final: resolved.final,
+            applied: resolved.applied.map(m => ({ key: m.key, id: m.option.id })) }, report: summary });
+        else if (resolved.applied.some(m => m.option.giveFear)) throw new Error('Update the host to grant GM Fear with this armor option.');
+        else { Object.assign(c, next); onDone(summary, resolved.negated ? 0 : resolved.final); }
+        close();
+      } catch (e) { error.textContent = (e as Error).message; }
+      finally { apply.disabled = cancel.disabled = false; }
     };
   }
 

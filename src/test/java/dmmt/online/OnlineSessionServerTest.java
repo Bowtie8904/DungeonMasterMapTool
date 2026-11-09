@@ -551,6 +551,225 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void boneValorSupportTankRerollsAllyAndChargesOnlyFeatureOwnerAtomically() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        campaign.getActors().add(Campaign.Actor.builder().id("tank").name("Tank").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "tank", bloodSheet("support-tank").toString());
+        store.saveSheet(campaign.getId(), "ally", witchHostSheet().toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+        ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action,attack\",\"actorId\":\"ally\"}", true).join();
+        JsonNode roll = inbox.next("roll");
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "tank").put("key", "card:Support Tank").put("actionId", "use");
+        request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "tank")).path("hope").path("on").asInt());
+        assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hope").path("on").asInt());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("type").asText().equals("rollUpdate")
+                && m.path("rolls").path(1).asInt() == roll.path("rolls").path(1).asInt()));
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        request.put("actionId", "fear");
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "tank")).path("hope").path("on").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void boneValorUtilityActionsRollActualDiceAndPersistTheirPaymentAndChat() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        campaign.getActors().add(Campaign.Actor.builder().id("bone").name("Bone").ownerId(playerId()).build());
+        ObjectNode sheet = bloodSheet("i-see-it-coming", "redirect", "hold-the-line");
+        sheet.putObject("proficiency").put("on", 3);
+        store.saveSheet(campaign.getId(), "bone", sheet.toString());
+        String cookie = cookie();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "bone").put("key", "card:I See It Coming").put("actionId", "use");
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "bone")).path("stress").path("on").asInt());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("kind").asText().equals("dice")
+                && m.path("rolls").size() == 1 && m.path("rolls").path(0).asInt() >= 1
+                && m.path("rolls").path(0).asInt() <= 4));
+        request.put("key", "card:Redirect");
+        long seed = 0;
+        while (new java.util.Random(seed).nextInt(6) != 5) seed++;
+        diceSeed(seed);
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("expression").asText().equals("3d6")));
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "bone")).path("stress").path("on").asInt());
+        JsonNode redirect = dmMessages.stream().filter(m -> m.path("expression").asText().equals("3d6")).findFirst().orElseThrow();
+        request.put("actionId", "redirect").putObject("roll").put("id", redirect.path("id").asLong()).put("ts", redirect.path("ts").asLong());
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "bone")).path("stress").path("on").asInt());
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        request.remove("roll");
+        request.put("actionId", "use");
+        request.put("key", "card:Hold the Line");
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "bone"));
+        assertEquals(5, saved.path("hope").path("on").asInt());
+        assertTrue(java.util.stream.StreamSupport.stream(saved.path("effects").spliterator(), false)
+                .anyMatch(effect -> effect.path("name").asText().equals("Hold the Line")));
+    }
+
+    @Test
+    void boneValorRestPaysRecoveryOnceRepairsNamedAlliesAndRejectsDuplicateCommit() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Resting").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("rest-ally").name("Repaired Ally").ownerId(playerId()).build());
+        ObjectNode before = bloodSheet("recovery", "armorer");
+        before.putObject("description").put("Notes", "r".repeat(70_000));
+        before.putObject("armorTrack").put("on", 3).put("slots", 6);
+        store.saveSheet(campaign.getId(), "resting", before.toString());
+        ObjectNode ally = bloodSheet();
+        ally.putObject("armorTrack").put("on", 2).put("slots", 6);
+        store.saveSheet(campaign.getId(), "rest-ally", ally.toString());
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "resting");
+        ObjectNode rest = body.putObject("rest").put("kind", "short").put("report", "Repair Armor.");
+        ObjectNode next = before.deepCopy().put("shortRestsInRow", 1);
+        next.withObject("/armorTrack").put("on", 0);
+        rest.set("sheet", next);
+        rest.putArray("picks").addObject().put("move", "repair");
+        ObjectNode options = rest.putObject("options");
+        options.putObject("passives").put("card:Recovery|ally", true);
+        options.putObject("allies").put("card:Recovery|ally", "rest-ally");
+        String cookie = cookie();
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")).path("hope").path("on").asInt());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "rest-ally"));
+        assertEquals(1, saved.path("armorTrack").path("on").asInt());
+        assertTrue(saved.path("effects").path(0).path("consumeLongRestMove").asBoolean());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("Repaired Ally cleared 1 Armor Slot")));
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+    }
+
+    @Test
+    void boneValorIncomingDamageGrantsFearAndClearsRiseUpStressOnlyOnce() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("braced").name("Braced").ownerId(playerId()).build());
+        ObjectNode before = bloodSheet("octarine-brace", "rise-up");
+        before.putObject("description").put("Notes", "d".repeat(70_000));
+        before.putObject("armorTrack").put("on", 0).put("slots", 6);
+        before.withObject("/stress").put("on", 3);
+        store.saveSheet(campaign.getId(), "braced", before.toString());
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "braced");
+        ObjectNode damage = body.putObject("incomingDamage").put("report", "Damage taken.");
+        ObjectNode next = before.deepCopy();
+        next.withObject("/armorTrack").put("on", 1);
+        next.withObject("/hp").put("on", 1);
+        next.withObject("/stress").put("on", 2);
+        damage.set("sheet", next);
+        ObjectNode input = damage.putObject("input").put("damage", 12).put("type", "physical").put("armor", true);
+        input.putArray("selected").add("card:Octarine Brace/octarine");
+        ObjectNode result = damage.putObject("result").put("armorUsed", 1).put("armorMarked", 1).put("hp", 1).put("final", 1);
+        var applied = result.putArray("applied");
+        applied.addObject().put("key", "card:Octarine Brace").put("id", "octarine");
+        applied.addObject().put("key", "card:Rise Up").put("id", "rise");
+        int fear = campaign.getFear();
+        String cookie = cookie();
+        assertTrue(MAPPER.writeValueAsBytes(body).length > 65536);
+        ObjectNode oversizedSheet = body.deepCopy();
+        ((ObjectNode) oversizedSheet.path("incomingDamage").path("sheet").path("description")).put("Notes", "s".repeat(OnlineSessionServer.MAX_SHEET_BYTES));
+        var rejectedSheet = featureHttp(cookie, oversizedSheet);
+        assertEquals(413, rejectedSheet.statusCode());
+        assertEquals("Sheet is too large", MAPPER.readTree(rejectedSheet.body()).path("error").asText());
+        ObjectNode oversizedMetadata = body.deepCopy();
+        ((ObjectNode) oversizedMetadata.path("incomingDamage")).put("report", "m".repeat(65536));
+        assertEquals(413, featureHttp(cookie, oversizedMetadata).statusCode());
+        assertEquals(fear, campaign.getFear());
+        assertEquals(before, MAPPER.readTree(store.loadSheet(campaign.getId(), "braced")));
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "braced")).path("stress").path("on").asInt());
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(fear + 1, campaign.getFear());
+    }
+
+    @Test
+    void ordinaryFeatureRequestsKeepTheMessageSizeLimit() throws Exception {
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "ordinary")
+                .put("key", "card:Hold the Line").put("actionId", "use").put("padding", "x".repeat(65536));
+        var response = featureHttp(cookie(), body);
+        assertEquals(413, response.statusCode(), response.body());
+        assertEquals("Feature request is too large.", MAPPER.readTree(response.body()).path("error").asText());
+    }
+
+    @Test
+    void boneValorIncomingDamagePreservesExistingRecoveryAndQuantityCosts() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("recovering").name("Recovering").ownerId(playerId()).build());
+        ObjectNode before = bloodSheet("rise-up");
+        before.putObject("armorTrack").put("on", 0).put("slots", 6);
+        before.withObject("/stress").put("on", 3);
+        before.withObject("/hope").put("on", 6);
+        ObjectNode auto = before.withArray("features").addObject().put("name", "Mitigation").putObject("automation");
+        var options = auto.putArray("mitigation");
+        options.addObject().put("id", "recover").put("label", "Not Done Yet").put("passive", true).put("recoveryChoice", true);
+        options.addObject().put("id", "paid").put("label", "Paid").put("quantity", true).putObject("cost").put("hope", 1);
+        store.saveSheet(campaign.getId(), "recovering", before.toString());
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "recovering");
+        ObjectNode damage = body.putObject("incomingDamage").put("report", "Damage taken.");
+        ObjectNode next = before.deepCopy();
+        next.withObject("/hp").put("on", 3);
+        next.withObject("/stress").put("on", 1);
+        next.withObject("/hope").put("on", 4);
+        damage.set("sheet", next);
+        ObjectNode input = damage.putObject("input").put("damage", 30).put("type", "physical").put("recovery", "stress");
+        input.putArray("selected").add("feat:Mitigation/paid");
+        input.putObject("quantities").put("feat:Mitigation/paid", 2);
+        ObjectNode result = damage.putObject("result").put("armorUsed", 0).put("armorMarked", 0).put("hp", 3).put("final", 3);
+        var applied = result.putArray("applied");
+        applied.addObject().put("key", "card:Rise Up").put("id", "rise");
+        applied.addObject().put("key", "feat:Mitigation").put("id", "recover");
+        applied.addObject().put("key", "feat:Mitigation").put("id", "paid");
+        var response = featureHttp(cookie(), body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "recovering"));
+        assertEquals(1, saved.path("stress").path("on").asInt());
+        assertEquals(4, saved.path("hope").path("on").asInt());
+    }
+
+    @Test
+    void boneValorDeathrunCommitsFirstDiceThenReusesAndRejectsStaleCounters() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("runner").name("Runner").ownerId(playerId()).build());
+        ObjectNode sheet = bloodSheet("deathrun");
+        sheet.putObject("proficiency").put("on", 2);
+        sheet.putArray("activeWeapons").addObject().put("name", "Sword").put("damage", "d8").put("trait", "Strength");
+        store.saveSheet(campaign.getId(), "runner", sheet.toString());
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "runner").put("key", "card:Deathrun").put("actionId", "use");
+        var response = featureHttp(cookie, action);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode effect = MAPPER.readTree(store.loadSheet(campaign.getId(), "runner")).path("effects").path(0);
+        String effectId = effect.path("id").asText();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "runner");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "run-first").put("kind", "dice")
+                .put("source", "damage").put("weapon", "Sword").put("expression", "3d8");
+        roll.putArray("contributions").addObject().put("label", "Sword").put("expression", "3d8");
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + effectId).put("id", "damage");
+        roll.putObject("deathrun").put("effectId", effectId).put("count", 0);
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode first = dmMessages.stream().filter(m -> m.path("ref").asText().equals("run-first")).findFirst().orElseThrow();
+        assertEquals(200, featureHttp(cookie, body).statusCode());
+        roll.put("ref", "stale-first");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        roll.withObject("/deathrun").put("count", 1);
+        roll.put("ref", "run-second").put("deathrunRemove", 1);
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode second = dmMessages.stream().filter(m -> m.path("ref").asText().equals("run-second")).findFirst().orElseThrow();
+        assertEquals(first.path("total").asInt() - first.path("rolls").path(1).asInt(), second.path("total").asInt());
+        assertEquals(2, second.path("rolls").size());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "runner")).path("hope").path("on").asInt());
+    }
+
+    @Test
     void invisibilityCastsOnOfflineSheetsReplacesRecipientAndSpendsCasterTokensOnlyOnCommittedActions() throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");
         campaign.getActors().add(Campaign.Actor.builder().id("invisible-caster").name("Caster").ownerId(playerId()).build());

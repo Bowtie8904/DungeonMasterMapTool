@@ -170,6 +170,20 @@ Nothing starts until you click **Start online session**, so offline play and the
   feature's description and origin, retained in saved chat history rather than the original weapon's source.
   Expand it to read the feature, card or individual grimoire spell without opening the sheet.
   Spellcast titles name their source; descriptions stay with history, follow-up spell damage and rerolls.
+- **Bone/Valor automation:** Redirect rolls its dice before offering Stress payment on a 6; Support Tank
+  offers separate Hope/Fear rerolls on ally results. Know Thy Enemy, Rousing Strike, Inevitable,
+  Breaking Blow, Wrangle and Lead by Example offer contextual chat actions. Cruel Precision is one
+  preselected Agility/Finesse damage option, defaulting to the higher current trait. Breaking Blow
+  prepares a consumable +2d12 weapon-damage buff. Deathrun tracks its initial +1-Proficiency weapon
+  dice, lets you remove a chosen die for each subsequent target without rerolling, and offers **End Run**.
+  The latest damage result also offers **Continue Run** to open the next damage dialog while dice remain.
+  Its die-removal selector sits on the right within the Deathrun option, defaults to the lowest remaining
+  die, and appears only when continuing the run, not on ordinary or initial damage rolls.
+  Host-backed damage and rest actions support full-size character sheets without using the smaller chat-message allowance.
+  Recovery can grant an ally one long-rest move during their short rest; Armorer repairs allies and
+  names them in rest chat. Untouchable adds half current Agility rounded up to Evasion, Rise Up clears
+  Stress on HP damage, and Octarine Brace grants GM Fear. Unyielding Armor's dice appear only in the
+  final damage report. These host-backed actions require an updated host; no settings changed.
 - **Witch automation (Daggerheart):** Commune rolls its Spellcast-trait d6s in chat with the sensory chart.
   Witch tokens and the Lunar die are tracked only on their feature cards, not as header class resources.
   Enchanted Talisman asks for Hope, tracks protective tokens and creates transferable loot; its holder can

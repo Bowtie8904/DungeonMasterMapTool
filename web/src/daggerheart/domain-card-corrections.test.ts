@@ -314,7 +314,8 @@ describe('domain-card cost and limit corrections', () => {
     const ranged = { ...melee, range: 'Far' };
     let options = availableRollOptions(c, ['damage'], melee);
     expect(selectedRollBonus(c, rollBonus(c, ['damage'], melee), [options.find(o => o.source === 'Body Basher')!]).value).toBe(3);
-    expect(selectionBlocker(c, options.filter(o => o.source === 'Cruel Precision'))).toContain('only one');
+    expect(options.filter(o => o.source === 'Cruel Precision')).toHaveLength(1);
+    expect(options.find(o => o.source === 'Cruel Precision')!.option).toMatchObject({ defaultOn: true, traitChoices: ['Finesse', 'Agility'] });
     options = availableRollOptions(c, ['damage'], ranged);
     expect(options.some(o => o.source === 'Body Basher')).toBe(false);
     expect(availableRollOptions(c, ['damage', 'spelldamage'], melee)).toHaveLength(0);

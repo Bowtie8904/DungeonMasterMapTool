@@ -52,6 +52,9 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  giveFear?: number;
+  clearStress?: number;
+  hiddenRoll?: boolean;
   gainTokens?: { resource: string; perHp?: number; amount?: number };
   endEffectIfNoHp?: string;
   loadoutDomain?: { domain: string; min: number };
@@ -338,6 +341,7 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   if (active.some((m) => m.option.replaceHp)) hp = 0;
   hp = Math.min(hp, remaining);
   drop((m) => m.option.when?.markingHp && hpBeforeReplace <= 0 ? 'Requires marking at least one HP' : null);
+  drop(m => m.option.clearStress && hp <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.preserveEffect && hp <= 0 ? 'No HP will be marked; the effect is already maintained' : null);
   drop(m => m.option.patronDice === 'vengeance' && hp <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
@@ -448,6 +452,11 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       c.resources ??= {};
       c.resources[gain.resource] = Math.min(max, before + amount);
       notes.push(`${m.source}: gained ${c.resources[gain.resource] - before} ${definition.label}.`);
+    }
+    if (m.option.clearStress && hpMarked > 0) {
+      const cleared = Math.min(m.option.clearStress, c.stress.on);
+      c.stress.on -= cleared;
+      notes.push(`${m.source}: cleared ${cleared} Stress.`);
     }
     if (m.option.patronDice === 'vengeance') notes.push(vengeanceReport(c, r.hp, roll));
     if (m.option.companionIntercept) notes.push(m.option.companionArmored

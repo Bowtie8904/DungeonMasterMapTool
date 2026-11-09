@@ -2,6 +2,8 @@ import { el } from '../login';
 import { CharacterSheet, TRAIT_ORDER } from './data';
 import type { RestKind } from './engine';
 import { activeCardSources } from './copycat';
+import type { Actor } from '../protocol';
+import type { FeatureRequest } from '../api';
 import { chooseAncestryFeature } from './ancestry-choice';
 import {
   RestOptions, RestPick, RestResult, canTakeLongMovesInShortRest, moveBlocker, passiveOn, resolveRest, restPassives, restSlots, restSummary,
@@ -10,7 +12,8 @@ import {
 
 /** Downtime choices do not change the sheet until confirmation, including any host-backed casting. */
 export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string, result: RestResult) => void,
-  castBeforeRest?: (key: string, actionId: string) => Promise<void>): void {
+  castBeforeRest?: (key: string, actionId: string) => Promise<void>, actors?: () => Actor[],
+  commit?: (rest: NonNullable<FeatureRequest['rest']>) => Promise<void>): void {
   const o: RestOptions = {};
   const picks: RestPick[] = [];
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -103,8 +106,17 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       ...(longInShort ? [el('div', { class: 'muted' }, 'You may choose one long-rest move during this short rest.')] : []),
       ...(blocker ? [el('div', { class: 'error' }, blocker)] : []),
       ...rows,
-      ...(passives.length ? [el('div', { class: 'dh-rest-passives' }, ...passives.map((p) =>
-        check(p.label, () => passiveOn(preview, kind, o, p.id), (v) => { (o.passives ??= {})[p.id] = v; })))] : []),
+      ...(passives.length ? [el('div', { class: 'dh-rest-passives' }, ...passives.map((p) => {
+        const source = activeCardSources(c).find(s => p.id.startsWith(`${s.key}|`));
+        const benefit = source?.auto?.rest?.passives?.find(b => p.id.endsWith(`|${b.id}`));
+        const toggle = check(p.label, () => passiveOn(preview, kind, o, p.id), (v) => { (o.passives ??= {})[p.id] = v; });
+        if (!benefit?.chooseAlly || !passiveOn(preview, kind, o, p.id)) return toggle;
+        const target = el('select', { ariaLabel: 'Recovery ally' }, el('option', { value: '' }, 'Choose an ally'),
+          ...(actors?.() ?? []).map(actor => el('option', { value: actor.id }, actor.name)));
+        target.value = o.allies?.[p.id] ?? '';
+        target.addEventListener('change', () => { (o.allies ??= {})[p.id] = target.value; });
+        return el('div', {}, toggle, target);
+      }))] : []),
     );
     go.disabled = !!blocker || invalid;    error.textContent = '';
   }
@@ -124,9 +136,17 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
         delete o.passives?.[id];
       }
       const chosen = picks.map((p) => ({ ...p }));
-      const result = resolveRest(c, kind, chosen, o);
+      const next = structuredClone(c);
+      const result = resolveRest(next, kind, chosen, o);
+      const summary = restSummary(next, kind, chosen, result);
+      const hostRest = Object.values(o.passives ?? {}).some(Boolean) && Object.keys(o.allies ?? {}).length > 0
+        || c.effects.some(e => e.consumeLongRestMove)
+        || activeCardSources(c).some(s => s.auto?.rest?.modifiers?.some(m => m.repairAllies && chosen.some(p => !p.ally && p.move === m.move)));
+      if (commit && hostRest) await commit({ kind, picks: chosen, options: o, sheet: next, result, report: summary });
+      else if (!commit && hostRest) throw new Error('Update the host to resolve this rest benefit.');
+      else Object.assign(c, next);
       close();
-      onDone(restSummary(c, kind, chosen, result), result);
+      if (!commit || !hostRest) onDone(summary, result);
     } catch (e) {
       error.textContent = e instanceof Error ? e.message : 'Resting failed.';
     } finally {

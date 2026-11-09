@@ -4,7 +4,7 @@ import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from '.
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest } from './engine';
-import type { SheetBus, WeaponDamageAction } from './view';
+import { SheetBus, type WeaponDamageAction } from './view';
 import { renderLogEntry } from '../chat';
 
 class FakeElement {
@@ -146,7 +146,7 @@ describe('cross-player roll buttons', () => {
     expect(dice.text).toContain('Not Good Enough');
     expect(noDice.text).not.toContain('Not Good Enough');
     await failed.queryAll('button').find(button => button.text === 'Damage')!.click();
-    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 0, 6);
+    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 0, 6, undefined, 'fear');
     await failed.queryAll('button').find(button => button.text.includes('Glancing Blow'))!.click();
     expect(damage).toHaveBeenCalledTimes(2);
     expect(damage.mock.calls[1].slice(0, 5)).toEqual(['Dagger', false, 9, 0, 0]);
@@ -402,6 +402,46 @@ describe('cross-player roll buttons', () => {
     expect(used.queryAll('button').some(b => b.text === 'Increase die')).toBe(false);
   });
 
+  it('continues only the latest owned active Deathrun with dice remaining and rechecks on click', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    c.effects = [{ id: 'run', name: 'Deathrun', kind: 'buff', deathrun: true,
+      counter: { value: 1, max: 10 }, deathrunRemaining: [0, 1, 2],
+      deathrunRoll: { expression: '3d8', total: 12, rolls: [5, 4, 3] } }];
+    const { host } = hostFor({ 'actor-b': c });
+    const sheet = await host.sheet('actor-b');
+    const damage = vi.fn(() => true);
+    const bus = new SheetBus();
+    bus.damage = damage;
+    const supported = { ...host, playerId: original.fromId, supportsDomainCardAutomation: () => true,
+      sheet: async () => ({ ...sheet!, bus }) };
+    const message: RollMessage = { ...original, kind: 'dice', source: 'damage', weapon: 'Dagger',
+      deathrun: { effectId: 'run', count: 0 } };
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const next = box.queryAll('button').find(button => button.text === 'Continue Run')!;
+    expect(next).toBeDefined();
+    await next.click();
+    expect(damage).toHaveBeenCalledWith('Dagger');
+    c.effects[0].counter!.value = 2;
+    await next.click();
+    expect(damage).toHaveBeenCalledTimes(1);
+    expect(host.toast).toHaveBeenCalledWith(expect.stringContaining('no longer current'));
+    for (const variant of [
+      { ...message },
+      { ...message, deathrun: { effectId: 'ended', count: 1 } },
+      { ...message, fromId: 'another-player', deathrun: { effectId: 'run', count: 1 } },
+    ]) {
+      const stale = rollButtons(variant, supported) as unknown as FakeElement;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(stale.queryAll('button').some(button => button.text === 'Continue Run')).toBe(false);
+    }
+    c.effects[0].deathrunRemaining = [0];
+    const exhausted = rollButtons({ ...message, deathrun: { effectId: 'run', count: 1 } }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(exhausted.queryAll('button').some(button => button.text === 'Continue Run')).toBe(false);
+  });
+
   it('carries Honed Proficiency from only the clicked attack into damage', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Bob', undefined);
@@ -412,7 +452,7 @@ describe('cross-player roll buttons', () => {
       { ...host, sheet: async () => ({ ...sheet!, bus: { damage } }) } as never) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     await box.queryAll('button').find(b => b.text === 'Damage')!.click();
-    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 1);
+    expect(damage).toHaveBeenCalledWith('Dagger', false, 9, 1, undefined, undefined, 'fear');
   });
 
   it('opens Focus Cannon damage only on its own Instinct roll without paying Focus again', async () => {
@@ -704,7 +744,7 @@ describe('cross-player roll buttons', () => {
       { ...host, sheet: async () => ({ ...sheet!, bus: { damage } }) } as never) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     await box.queryAll('button').find((b) => b.text === 'Damage')!.click();
-    expect(damage).toHaveBeenCalledWith('Dagger', critical, fear, 0);
+    expect(damage).toHaveBeenCalledWith('Dagger', critical, fear, 0, undefined, undefined, critical ? 'critical' : 'fear');
   });
 
   it('offers damage reactions on single-die damage, without Duality rewards or triggers', async () => {

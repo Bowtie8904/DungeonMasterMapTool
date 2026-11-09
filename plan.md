@@ -33,6 +33,14 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Continue Deathrun from chat:** Alongside End Run, the latest owned Deathrun damage result offers Continue Run while its matching active run has at least two original weapon dice remaining. Open the existing weapon-damage dialog with its preselected Deathrun option and lowest-die removal selector; reuse original damage, never reroll. Hide continuation for stale results, ended/exhausted runs and other players; recheck current state on click. Additive browser UI only; no settings or remote contract change.
+
+- **Sheet-backed feature request sizes:** Incoming-damage and rest transactions may carry a character sheet up to the existing 512 KiB sheet limit, plus the configured message allowance for transaction metadata. Keep ordinary feature requests bounded by the message limit; reject oversized sheets and metadata before applying changes. Cover large-sheet Octarine Brace/Recovery requests and rejection without side effects. Backward-compatible host fix; no settings or remote-version change.
+
+- **Deathrun roll-control visibility:** Honor `hidden` on nested roll-dialog controls despite label layout styles. Place the original-die removal selector inside the Deathrun option row on the right, matching other dropdowns/spinners, defaulting to the lowest-valued remaining original die (first remaining die on ties). Show it only when continuing a selected Deathrun after its first damage roll, never on ordinary rolls or the initial damage roll. Browser-only correction; no settings or compatibility changes.
+
+- **Bone/Valor online automation feedback:** Forceful Push is offered only after Hope/critical rolls; Untouchable adds half current Agility rounded up to Evasion (3 gives +2, -1 gives 0); I See It Coming rolls/reports its d4; Strategic Approach has no manual long-rest prepare/clear controls. Octarine Brace grants GM Fear. Redirect rolls d6s from its card and offers Stress payment/reporting only on results containing a 6. Support Tank offers paid Hope/Fear rerolls on ally rolls, not a card action. Armorer repairs allies automatically and names them in rest chat. Know Thy Enemy's information and automatic Fear removal are Instinct-result actions; Rousing Strike is a critical-attack action; Inevitable is a player-confirmed failed-action buff. Recovery is a short-rest ally selection granting one long-rest move at that ally's short rest. Rise Up clears Stress automatically on committed incoming damage. Cruel Precision is one preselected weapon-damage option with a highest-current-trait Agility/Finesse selector on both attack-result and equipment damage paths. Breaking Blow's attack/damage actions grant a buff preselecting +2d12 on the next weapon damage, consumed only when selected. Ground Pound's result offers 4d10+8 damage; Wrangle pays Hope from its result. Hold the Line grants a manually removed buff. Lead by Example offers Stress payment on damage results. Deathrun is a weapon-attack option and card action granting a tracked buff: auto-selected damage option starts at +1 Proficiency, then removes a chosen die from the original damage for each subsequent target without rerolling, offers End Run on each result, and ends before rolling zero dice. Unyielding Armor dice remain hidden until the committed damage report. Preserve existing remote clients/hosts through additive automation metadata and existing message paths; no settings or new DM tools.
+
 - **Blade/Midnight follow-up:** Uncanny Disguise's avoid-scrutiny advantage excludes weapon attacks. Vitality records its permanent benefits as a buff hidden from the left sidebar, removable only in sheet edit mode; removal reverses the selected benefits. Rage Up uses one attack option with a 1-2 spinner. Glancing Blow opens the normal damage window with half current Proficiency rounded up, retaining damage options and cancellation-safe, atomic Stress payment and chat delivery.
 
 - **Blade/Midnight feedback:** Not Good Enough is a post-damage reroll action updating the result and reporting in chat; Whirlwind, failed-attack Glancing Blow (half current Proficiency rounded up), and successful-Spellcast Eclipse are chat actions. Pick and Pull excludes weapon attacks. Versatile Fighter offers a preselected highest-current-trait attack selector and a Stress-paid individual damage-die maximizer. Rage Up and Reaper's Strike are attack options, with Rage Up carried to that attack's damage. Uncanny Disguise replaces its tokens on its single Stress-paid disguise action, tracks a buff and preselects token consumption for actions, not reactions. Uncanny/Deadly Focus end with the scene; Phantom Retreat toggles a rest-expiring buff; Vanishing Dodge applies manually removed Hidden. Dark Whispers pays Stress with Spellcast; Mass Disguise creates a real countdown; Spellcharge automatically gains/reports tokens on committed incoming magic damage; Night Terror chooses Fear up to the live pool and reports its d6 results. Vitality must offer its printed permanent choices on testing characters. Keep existing clients/hosts compatible; no settings changes.
@@ -180,7 +188,7 @@ Desktop tool for tabletop dungeon masters that:
 | 38 | Boost | Supported: Stress before attack, separate prepared advantage/d10 effects; explicit miss discard. |
 | 39 | Brace | Supported: existing payment and incoming-damage mitigation. |
 | 40 | Brand of Castigation | Supported: Stress-paid action on damage results; target mark and narrative consequences manual. |
-| 41 | Breaking Blow | Manual: existing payment; adversary armor changes need the GM. |
+| 41 | Breaking Blow | Supported: weapon attack/damage result actions grant a preselected next-weapon-damage 2d12 buff, consumed only on committed use. |
 | 42 | Burning Blood | Supported: Difficulty 12 and successful-result HP payment; ignition targets manual. |
 | 43 | Chain Lightning | Open: secondary target sequence and damage carryover. |
 | 44 | Chains of Affliction | Manual: existing payment; adversary conditions and ending are GM-resolved. |
@@ -197,14 +205,14 @@ Desktop tool for tabletop dungeon masters that:
 | 55 | Counterspell | Supported: explicit Spellcast Reaction and host success-only vaulting transaction. |
 | 56 | Crimson Adamance | Supported: existing incoming-damage mitigation. |
 | 57 | Critical Inspiration | Supported: limited Bard-style exclusive ally benefit. |
-| 58 | Cruel Precision | Supported: exclusive current Agility/Finesse weapon damage bonus. |
+| 58 | Cruel Precision | Supported: one preselected weapon-damage option with a current Agility/Finesse dropdown, highest selected by default. |
 | 59 | Damnation | Supported: chosen Stress d20 damage; successful target/defeat consequences manual. |
 | 60 | Dark Army | Supported: cast difficulty, summon/rest pools, quantity damage and defense. |
 | 61 | Dark Whispers | Supported: Stress-paid Spellcast; GM information manual. |
 | 62 | Darkfire | Manual: existing use/payment; target effects table-resolved. |
 | 63 | Deadly Focus | Supported: limited Proficiency effect ending with the scene or manual removal. |
 | 64 | Death Grip | Supported: explicit vines damage; target Reaction (13) and restraint manual. |
-| 65 | Deathrun | Manual: existing payment; movement and adversary marks manual. |
+| 65 | Deathrun | Supported: paid attack option/card action, tracked first-roll weapon dice with +1 Proficiency, subsequent chosen-die removal without rerolling, exhaustion and End Run actions; movement/targets manual. |
 | 66 | Deft Deceiver | Supported: Stress-paid situational advantage selected with the roll. |
 | 67 | Deft Maneuvers | Supported: Stress/rest use; situational maneuver manual. |
 | 68 | Delerium Grasp | Supported: successful Spellcast magic damage; condition manual. |
@@ -226,7 +234,7 @@ Desktop tool for tabletop dungeon masters that:
 | 84 | Floating Eye | Manual: payment; sensory navigation manual. |
 | 85 | Forager | Manual: existing action; found supplies/fiction manual. |
 | 86 | Force of Nature | Open: mandatory Hope before actions, transformation bonuses and defeat-linked armor recovery. |
-| 87 | Forceful Push | Supported: existing situational roll option; displacement manual. |
+| 87 | Forceful Push | Supported: damage option restricted to Hope/critical attack context; displacement manual. |
 | 88 | Forest Sprites | Supported: printed cast difficulty; sprite tasks/manual duration. |
 | 89 | Fortified Armor | Supported: thresholds only with equipped armor. |
 | 90 | Frenzy | Supported: temporary damage/Severe bonuses and Armor prohibition. |
@@ -240,12 +248,12 @@ Desktop tool for tabletop dungeon masters that:
 | 98 | Gore and Glory | Manual: existing payment/reward; defeat condition table-confirmed. |
 | 99 | Grace-Touched | Manual: gated passive remains; players resolve substitutions themselves without action buttons. |
 | 100 | Grisly Harpoon | Supported: successful physical damage; pulling targets manual. |
-| 101 | Ground Pound | Supported: Strength action roll; target reactions and terrain manual. |
+| 101 | Ground Pound | Supported: Strength action roll and 4d10+8 result damage button; target reactions, half damage and terrain manual. |
 | 102 | Healing Field | Supported: shared long-rest healing choices and party claims. |
 | 103 | Healing Hands | Open: fixed cast difficulty exists; independent target long-rest limits and healing ownership. |
 | 104 | Healing Strike | Supported: Hope-paid targeted ally healing; prior adversary damage and proximity table-confirmed. |
 | 105 | Hideous Retribution | Supported: explicitly confirmed reaction, Stress-paid magic damage. |
-| 106 | Hold the Line | Manual: cost and narrative target restrictions. |
+| 106 | Hold the Line | Supported: paid manually removed stance buff; movement and narrative target restrictions manual. |
 | 107 | Hush | Supported: cast-success payment; target silencing/ending manual. |
 | 108 | Hypnotic Shimmer | Manual: limited payment; target attention manual. |
 | 109 | I Am Your Shield | Open: transfer the original incoming attack/damage to a different actor without duplicate application. |
@@ -256,8 +264,8 @@ Desktop tool for tabletop dungeon masters that:
 | 114 | Invisibility | Supported: successful-cast target effect; recipient action option spends caster tokens and ends at zero. |
 | 115 | Invoke Torment | Supported: confirmed full-Stress target doubles damage; explicit qualifying-defeat Hope reward. |
 | 116 | Jump Scare | Manual: existing payment; target proximity and condition manual. |
-| 117 | Know Thy Enemy | Supported: Instinct roll, information Hope payment and optional separate Stress/Fear payment. |
-| 118 | Lead by Example | Manual: existing action; ally situational benefit table-confirmed. |
+| 117 | Know Thy Enemy | Supported: Instinct-result information Hope payment and optional Stress payment automatically removing GM Fear. |
+| 118 | Lead by Example | Supported: damage-result Stress payment and exclusive next-ally Hope/Stress claim; eligible adversary table-confirmed. |
 | 119 | Lean on Me | Supported: shared-rest self clear and one matching ally claim. |
 | 120 | Life Leash | Open: redistribute existing HP between two willing actors and track per-ally rest limits. |
 | 121 | Life Ward | Supported: existing host-targeted death-move effect; proximity remains table-confirmed. |
@@ -276,7 +284,7 @@ Desktop tool for tabletop dungeon masters that:
 | 134 | Night Terror | Supported: limited live-Fear quantity selection, Fear removal and d6 chat damage; target conditions manual. |
 | 135 | Not Good Enough | Supported: post-damage reroll action updating the result and reporting in chat. |
 | 136 | Notorious | Supported: existing passive/situational roll modifiers. |
-| 137 | Octarine Brace | Supported: existing incoming-damage mitigation. |
+| 137 | Octarine Brace | Supported: incoming-damage mitigation grants GM Fear atomically on application. |
 | 138 | Octarine Wall | Supported: printed difficulty/use; wall geometry and eligible attacks manual. |
 | 139 | On the Brink | Supported: existing incoming-damage mitigation. |
 | 140 | Onslaught | Manual: existing payment; adversary sequence manual. |
@@ -295,14 +303,14 @@ Desktop tool for tabletop dungeon masters that:
 | 153 | Reaper's Strike | Supported: Hope/rest-paid attack option; target's additional HP manual. |
 | 154 | Reassurance | Manual: limited benefit/payment; narrative prerequisite table-confirmed. |
 | 155 | Reckless | Supported: paid optional attack advantage. |
-| 156 | Recovery | Supported: existing recovery/rest move pattern. |
-| 157 | Redirect | Open: retarget incoming damage and establish one authoritative application. |
+| 156 | Recovery | Supported: one long-rest move in a short rest; optional paid ally selection grants a temporary one-long-move rest buff. |
+| 157 | Redirect | Supported: card rolls current-Proficiency d6s, offers Stress payment/report only when a 6 appears; target application manual. |
 | 158 | Rejuvenation Barrier | Supported: caster/party d4 recovery and situational resistance effect; barrier membership manual. |
 | 159 | Restoration | Supported: current-Spellcast long-rest pool and targeted HP/Stress recovery; other condition clearing is manual. |
 | 160 | Resurrection | Open: fixed difficulty exists; dead actor state, permanent consequences and success transaction. |
 | 161 | Rift Walker | Supported: fixed difficulty; journey/return manual. |
-| 162 | Rise Up | Supported: existing passive/action recovery; eligible circumstances manual. |
-| 163 | Rousing Strike | Supported: limited exclusive self/ally HP-or-d4-Stress claim; critical attack and seeing/hearing table-confirmed. |
+| 162 | Rise Up | Supported: passive Proficiency and automatic Stress recovery on committed HP damage. |
+| 163 | Rousing Strike | Supported: limited critical-attack result action with self/ally HP-or-d4-Stress claims; seeing/hearing table-confirmed. |
 | 164 | Rune Ward | Supported: existing incoming-damage mitigation. |
 | 165 | Runic Adrenaline | Supported: conditional d8 advantage and HP-paid post-trait-roll d8. |
 | 166 | Safe Haven | Supported: summon payment, caster/ally entry buff and one extra downtime move until rest; downtime cast supported. |
@@ -334,7 +342,7 @@ Desktop tool for tabletop dungeon masters that:
 | 192 | Strategic Approach | Supported: current-Knowledge long-rest tokens, minimum one, existing spending options. |
 | 193 | Stunning Sunlight | Supported: per-target Hope payment and two fixed reaction-outcome damage buttons; target Reaction/condition manual. |
 | 194 | Summon Horror | Manual: Stress/scene payment; horror actions/targets manual. |
-| 195 | Support Tank | Open: after a nearby ally fails, 2-Hope reroll of their chosen Hope or Fear die. |
+| 195 | Support Tank | Supported: two ally-result actions pay the feature owner's 2 Hope and reroll the selected Duality die; range/failure table-confirmed. |
 | 196 | Swift Step | Manual: existing payment; movement manual. |
 | 197 | Tactician | Supported: Tag Team Hope d20 option; ally Experience contribution manual. |
 | 198 | Telekinesis | Supported: separate lift/throw casts and throw-only physical damage; movement manual. |
@@ -354,8 +362,8 @@ Desktop tool for tabletop dungeon masters that:
 | 212 | Uncanny Disguise | Supported: single Stress-paid replacement-token disguise buff; preselected action-only token spending, ending at zero. |
 | 213 | Uncanny Focus | Supported: limited Proficiency effect; additional target HP/GM Fear manual. |
 | 214 | Unleash Chaos | Open: current-Spellcast session pool, token commitment before cast and success-only d10 damage. |
-| 215 | Untouchable | Open: half-Agility rounding, including negative/odd current values. |
-| 216 | Unyielding Armor | Supported: existing damage mitigation. |
+| 215 | Untouchable | Supported: half current Agility rounded up adds to Evasion, including negative/odd values and source breakdowns. |
+| 216 | Unyielding Armor | Supported: host-rolled mitigation dice appear only in the final committed damage report. |
 | 217 | Valor-Touched | Supported: gated threshold bonus and post-damage Armor recovery. |
 | 218 | Vampiric Strike | Supported: Hope-paid self HP/Stress recovery; successful attack causing 2+ target HP is table-confirmed. |
 | 219 | Vanishing Dodge | Supported: Hope-paid linked Hidden buff, removed manually; teleport manual. |
@@ -374,12 +382,12 @@ Desktop tool for tabletop dungeon masters that:
 | 232 | Wild Fortress | Supported: printed difficulty/Hope payment and dome HP pool; geometry/destruction manual. |
 | 233 | Wild Surge | Open: Guardian-style rising die fits, but forced increment and overflow/rest Stress need shared expiry handling. |
 | 234 | Words of Discord | Supported: fixed difficulty and repeat-target -5 option; control/target identities manual. |
-| 235 | Wrangle | Supported: Agility action roll; target movement/manual reactions. |
+| 235 | Wrangle | Supported: Agility action roll and Hope-payment result action; target movement manual. |
 | 236 | Zone of Protection | Supported: fixed difficulty/use; zone membership and affected adversary consequences manual. |
 
 ### Open automation decisions and alternatives
 
-- **Roll replacement and undo:** Adjust Reality, Premonition and Support Tank. Adjust Reality chooses a plausible total for self/ally dice, not a reroll; Premonition undoes the move and its consequences, not just its total; Support Tank rerolls either chosen ally Duality die. Consider linked result revisions versus original-result edits and a transaction that reverses already-applied consequences.
+- **Roll replacement and undo:** Adjust Reality and Premonition. Adjust Reality chooses a plausible total for self/ally dice, not a reroll; Premonition undoes the move and its consequences, not just its total. Consider linked result revisions versus original-result edits and a transaction that reverses already-applied consequences. Support Tank now authoritatively rerolls the chosen ally Duality die with atomic owner payment.
 - **Merged actors:** Transcendent Union still needs shared trait, cost and use ownership. Copycat's separate caster-owned borrowed automation, rounded-up cost and source-vault/rest expiry are now implemented.
 - **Mounts:** Conjured Steeds. Named recipient effects can encode the attack/damage bonuses, but resolve variable steed count, rider versus steed ownership and steed damage expiry without applying those bonuses to every ally.
 - **Targeted healing and condition changes:** Healing Hands and Salvation Beam. Bard claims fit fixed party benefits; per-target limits and distributing a Stress-paid healing quantity instead require targeted transactions. Vitality Manipulation now uses outcome-specific target reports as requested. Mending Touch, Healing Strike and Restoration already use targeted actions and are not unresolved for recipient ownership.
@@ -390,7 +398,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Transformations:** Force of Nature and Avatar of Terror. Existing toggled effects, Fear-based dice and defeat/spotlight confirmations fit individually; a mandatory Hope payment before every action, including non-card actions, needs one shared path with automatic no-Hope reversion and cancellation-safe expiry. An optional cost checkbox would not enforce the rule.
 - **Grace-Touched:** substitutions are intentionally resolved by players, without action buttons, as requested in the feedback pass.
 - **Invigoration:** Hope quantity dice are implemented. Consider a host selector for a specific actor/feature exhaustion record versus an ally claim authorizing a manual reset. Do not reset every use or confuse once-per-session with rest limits.
-- **Untouchable:** half current Agility rounding remains open. Glancing Blow uses half current Proficiency rounded up, confirmed for this feature; this does not establish a general rounding rule. Rapid Riposte's weapon linkage remains open.
+- **Untouchable:** half current Agility rounds up, explicitly confirmed for this feature. Glancing Blow also rounds half current Proficiency up; these do not establish a general rounding rule. Rapid Riposte's weapon linkage remains open.
 - **Versatile Fighter:** the per-roll trait selector leaves the stored weapon unchanged; its damage option maximizes exactly one selected die for Stress.
 - **Wild Surge:** Guardian's counter/effect pattern is appropriate, but its optional advance button is insufficient for mandatory advancement after every action and Stress on overflow/rest/manual expiry. A shared automatic expiry/payment hook is required.
 - **Not Good Enough:** offered after damage, not as a pre-roll option; the reroll revises the existing damage result and posts a chat report.

@@ -48,6 +48,7 @@ function brewMutagens(c: CharacterSheet, source: Source, action: ActionDef, pick
 /** A passive benefit of the sheet that the player may switch off for this rest (e.g. not using the bedroll). */
 export interface RestPassive { id: string; label: string; defaultOn: boolean }
 export interface RestOptions {
+  allies?: Record<string, string>;
   /** Overrides per passive id; absent means the passive's default. */
   passives?: Record<string, boolean>;
   ancestries?: CompendiumEntry[];
@@ -202,6 +203,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const chosen = picks.filter((p) => p.move);
   const previousEffects = new Set(c.effects.map((e) => e.id));
   const selected = benefits(c, kind).filter(({ id }) => passiveOn(c, kind, o, id));
+  for (const { b, id } of selected) if (b.chooseAlly && !o.allies?.[id]) throw new Error('Recovery: choose an ally.');
   if (selected.some(({ b }) => b.castBeforeRest)) throw new Error('Cast the selected Safe Haven before resolving downtime.');
   const reroll = selected.some(({ b }) => b.reroll);
   const dice = (expr: string): { value: number; text: string } => {
@@ -222,6 +224,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   };
 
   const execute = (s: Source, action: ActionDef): void => {
+    if (action.hostOwned) return;
     const rolls: string[] = [];
     const result = runAction(c, s.key, s.automation, action, `${s.name}: ${action.label}`, (expression, clearingResource) => {
       const r = dice(expression);
@@ -243,6 +246,8 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
     if (b.consumeItem) consume(s);
   }
   const modifiers = sources(c).flatMap((s) => (s.automation.rest?.modifiers ?? []).map((m) => ({ s, m })));
+  if (kind === 'short' && chosen.some(p => LONG_IDS.has(p.move)))
+    c.effects = c.effects.filter(e => !e.consumeLongRestMove);
 
   for (const p of chosen) {
     const companionStressBefore = c.stress.on;
@@ -328,6 +333,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   }
 
   for (const { s, b } of selected.filter(({ b }) => !b.extraMoves && !b.move && !b.reroll && b.condition !== 'noRecovery')) {
+    if (b.chooseAlly) continue; // The host pays and grants cross-character benefits atomically.
     if (b.condition === 'armorMarked' && c.armorTrack.on === 0) continue;
     execute(s, b);
     if (b.consumeItem) consume(s);

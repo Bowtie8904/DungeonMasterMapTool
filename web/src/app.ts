@@ -1496,6 +1496,13 @@ export class App {
               this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
+            restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
+            onRest: async rest => {
+              if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
+              await changed.flush();
+              await useFeature({ actorId: a.id, key: '', actionId: 'rest', rest });
+              await changed.refresh();
+            },
             supportsSpecialCardActions: () => this.conn.specialCardActions,
             gmFear: () => this.store.state?.fear ?? 0,
             onSpecialCard: async (key, actionId, choice) => {
@@ -1507,6 +1514,12 @@ export class App {
             onDamageTaken: async (severity) => {
               await changed.flush();
               await damageTaken(a.id, severity);
+            },
+            onIncomingDamage: async incomingDamage => {
+              if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
+              await changed.flush();
+              await useFeature({ actorId: a.id, key: '', actionId: 'damage', incomingDamage });
+              await changed.refresh();
             },
             onDeathOptions: async () => {
               await changed.flush();
@@ -1542,6 +1555,15 @@ export class App {
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,
             onRoll: (r) => {
+              if (r.hostOptions?.length || r.hostAction) {
+                return (async () => {
+                  if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
+                  await changed.flush();
+                  await useFeature({ actorId: a.id, key: '', actionId: 'roll', transactionalRoll: r });
+                  await changed.refresh();
+                  return true;
+                })();
+              }
               const sent = this.conn.send({ type: 'roll', ...r });
               if (!sent) this.toast('Not connected. Your roll was not sent.');
               return sent;

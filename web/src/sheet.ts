@@ -118,9 +118,22 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         await changed!.refresh();
       },
       onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
+      restActors: () => (store.state?.actors ?? []).filter(a => !a.disabled && a.id !== actorId && !!a.ownerId),
+      onRest: async rest => {
+        if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
+        await changed!.flush();
+        await useFeature({ actorId, key: '', actionId: 'rest', rest });
+        await changed!.refresh();
+      },
       onDamageTaken: async (severity) => {
         await changed!.flush();
         await damageTaken(actorId, severity);
+      },
+      onIncomingDamage: async incomingDamage => {
+        if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
+        await changed!.flush();
+        await useFeature({ actorId, key: '', actionId: 'damage', incomingDamage });
+        await changed!.refresh();
       },
       onDeathOptions: async () => {
         await changed!.flush();
@@ -153,7 +166,18 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         if (restDice) { changed!(); void changed!.flush().then(send).catch((e: Error) => report(e.message)); }
         else send();
       },
-      onRoll: (r) => conn.send({ type: 'roll', ...r }),
+      onRoll: (r) => {
+        if (r.hostOptions?.length || r.hostAction) {
+          return (async () => {
+            if (!conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
+            await changed!.flush();
+            await useFeature({ actorId, key: '', actionId: 'roll', transactionalRoll: r });
+            await changed!.refresh();
+            return true;
+          })();
+        }
+        return conn.send({ type: 'roll', ...r });
+      },
       supportsKeptDice: () => conn.keptDice,
       supportsZeroKeptDice: () => conn.zeroKeptDice,
       supportsBrawlerRolls: () => conn.brawlerRolls,

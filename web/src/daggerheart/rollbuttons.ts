@@ -52,8 +52,10 @@ export function rollContext(m: RollMessage): RollContext | null {
   const resourceOnes = (m.breakdown ?? []).filter(detail => detail.rolls.includes(1))
     .flatMap(detail => (detail.notes ?? []).filter(note => note.label === 'Dice resource').map(note => note.impact));
   if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
-    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes };
+    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes, dice: m.rolls as number[], deathrun: m.deathrun };
   }
+  if (m.kind !== 'duality' && m.source?.includes('featureAction:card:Redirect:use'))
+    return { source: m.source, hope: 0, fear: 0, total: m.total, kind: 'damage', dice: m.rolls as number[] };
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
   return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon, difficulty: m.difficulty, resourceOnes } as RollContext;
@@ -445,11 +447,31 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const linkedBonus = Number(m.source?.split(',').find(tag => /^linkedDamage:-?\d+$/.test(tag))?.split(':')[1] ?? 0);
         const fear = ctx?.kind !== 'damage' ? ctx?.fear : undefined;
         const opened = linkedBonus
-          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus)
-          : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency);
+          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus, undefined, critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear'))
+          : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, undefined, undefined, critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear'));
         if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
       });
       buttons.push(damage);
+    }
+
+    const canContinueDeathrun = (c: CharacterSheet) => !!m.deathrun && c.effects.some(effect =>
+      effect.deathrun && effect.id === m.deathrun!.effectId && !!effect.deathrunRoll
+      && effect.counter?.value === m.deathrun!.count + 1 && (effect.deathrunRemaining?.length ?? 0) > 1);
+    if (rolledActor && ctx?.kind === 'damage' && m.weapon && m.fromId === host.playerId
+        && host.supportsDomainCardAutomation?.() && canContinueDeathrun(rolledActor.sheet.character)) {
+      const next = el('button', { class: 'small primary', type: 'button' }, 'Continue Run');
+      next.addEventListener('click', async () => {
+        next.disabled = true;
+        try {
+          await rolledActor.sheet.save.flush?.();
+          const current = await host.sheet(rolledActor.actorId);
+          if (!current || !canContinueDeathrun(current.character))
+            throw new Error('This Deathrun result is no longer current. Continue from its latest damage result.');
+          if (!current.bus.damage?.(m.weapon!)) throw new Error(`${m.weapon} is no longer equipped.`);
+        } catch (error) { host.toast((error as Error).message); }
+        finally { next.disabled = false; }
+      });
+      buttons.push(next);
     }
 
     for (const { actorId: featureActorId, sheet } of sheets) {

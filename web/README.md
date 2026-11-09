@@ -148,6 +148,22 @@ card in either view. Portrait uploads reuse the authenticated artwork endpoint, 
 No new settings, remote contracts or compatibility version are required.
 Saved testing sheets refresh automation without rebuilding on load, preserving manual edits and card
 removals; explicitly applying a new testing build still recalculates the build's stats and cards.
+
+Bone/Valor automation uses contextual result actions instead of advance payments: Redirect requires
+a rolled 6, Support Tank rerolls an ally's chosen Duality die, and Ground Pound offers fixed damage.
+Cruel Precision is one preselected current-Agility/Finesse selector on both weapon-damage entry points.
+Breaking Blow consumes its prepared 2d12 only on a committed selected roll. Deathrun rolls its
+initial +1-Proficiency weapon pool once, then removes a chosen die per target, with tracked exhaustion
+and End Run controls. The latest damage result offers Continue Run while another target can
+receive damage, opening the existing damage dialog without rerolling the original dice.
+The die-removal selector sits on the right inside the Deathrun option row,
+defaults to the lowest-valued remaining die, and stays hidden until continuing a selected Deathrun
+after its first damage roll. Recovery's short-rest ally choice and Armorer's named ally repairs commit with
+the rest. Sheet-backed damage/rest requests use the host's character-sheet size allowance separately
+from their bounded transaction metadata. Untouchable rounds half current Agility up. Rise Up, Octarine Brace and hidden Unyielding
+Armor dice commit with incoming damage. The optional `boneValorAutomation` host capability gates
+the new transactions; older clients remain connectable and no LAN compatibility bump is needed.
+
 `src/vectors.test.ts` checks `../src/test/resources/online/vectors.json` (shared with the Java tests) when it exists.
 
 Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `clock.ts`, `vision.ts`, `weather.ts`,

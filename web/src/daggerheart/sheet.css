@@ -259,7 +259,7 @@ dialog.dh-sorcerer-dialog::backdrop { background: rgba(0,0,0,.6); }
 .dh-option-rolldlg { overflow: hidden; }
 .dh-option-rolldlg > :not(.dh-roll-options) { flex-shrink: 0; }
 .dh-option-rolldlg > .dh-roll-options { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.dh-option-rolldlg > [hidden] { display: none !important; }
+.dh-option-rolldlg [hidden] { display: none !important; }
 .dh-copycat-dialog { overflow: hidden; }
 .dh-copycat-dialog > :not(.dh-copycat-list) { flex-shrink: 0; }
 .dh-copycat-dialog .dh-copycat-list { min-height: 0; overflow-y: auto; }

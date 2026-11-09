@@ -9,6 +9,7 @@ class Element {
   value = '';
   checked = false;
   disabled = false;
+  onclick?: () => Promise<void>;
   classList = { toggle: () => {} };
   children: Array<Element | string> = [];
   listeners = new Map<string, () => void>();
@@ -71,4 +72,31 @@ it('groups mitigation and Armor Slot counts beside independent checkboxes, and a
   expect(dialog.children.some(child => child instanceof Element && child.children.includes(recovery))).toBe(true);
   expect(options.all(element => element === recovery)).toHaveLength(0);
   expect(options.all(element => element.className === 'dh-roll-option-row').length).toBeGreaterThan(0);
+});
+
+it('keeps Unyielding Armor faces out of every mitigation preview and reveals them only on Apply', async () => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  vi.spyOn(Math, 'random').mockReturnValue(0.999);
+  try {
+    const c = mockCharacter();
+    c.heritage = []; c.loadout = []; c.inventory = []; c.activeWeapons = []; c.activeArmor = undefined;
+    c.armorTrack = { on: 0, slots: 3, total: 3 };
+    c.proficiency.on = 2;
+    c.features = [{ source: 'Test', name: 'Unyielding Armor', text: '', automation: { mitigation: [
+      { id: 'hidden', label: 'Unyielding Armor', hiddenRoll: true, defaultOn: true, when: { armor: true },
+        roll: { count: '@proficiency', sides: 6, success: 6 }, saveArmor: 1 },
+    ] } }];
+    const root = new Element('root');
+    const done = vi.fn();
+    openDamageDialog(root as unknown as HTMLElement, c, done, { damage: 15, type: 'physical' });
+    const armor = root.all(e => e.className === 'dh-roll-option-row').find(row => row.text.includes('Reduces severity'))!;
+    const box = armor.all(e => e.type === 'checkbox')[0];
+    box.checked = true; box.fire('change');
+    expect(root.text).not.toMatch(/rolled\s+6|\[6,\s*6\]/i);
+    expect(done).not.toHaveBeenCalled();
+    await root.all(e => e.tag === 'button' && e.text === 'Apply')[0].onclick!();
+    expect(done).toHaveBeenCalledOnce();
+    expect(done.mock.calls[0][0]).toContain('Unyielding Armor [6, 6]');
+  } finally { vi.restoreAllMocks(); }
 });

@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter, normalizeSheet } from './data';
-import { renderSheetView, SheetBus, type RollRequest } from './view';
+import { openRollDialog, renderSheetView, SheetBus, type RollRequest } from './view';
 import * as artworkEditor from '../token-artwork';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
-import { addEffect, applyRest, derivedStats, isManualOverride, removeManualOverride, setManualStat, setTrackSlots, statBreakdown, syncDerived, traitTotal } from './engine';
+import { addEffect, applyRest, derivedStats, isManualOverride, removeManualOverride, rollBonus, setManualStat, setTrackSlots, statBreakdown, syncDerived, traitTotal } from './engine';
 
 class Element {
   className = '';
@@ -59,6 +59,108 @@ class Element {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('keeps hidden nested roll controls hidden despite label layout styles', () => {
+  const css = readFileSync(new URL('./sheet.css', import.meta.url), 'utf8');
+  expect(css).toMatch(/\.dh-option-rolldlg\s+\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+});
+
+it.each(['ordinary', 'initial', 'continuing'] as const)('shows Deathrun die removal only for a selected continuation (%s)', state => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = emptyCharacter('Hero');
+  if (state !== 'ordinary') {
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const automation = catalog.entries.find(entry => entry.id === 'deathrun')!.automation!;
+    addEffect(c, automation.actions![0].steps![0].effect!);
+    if (state === 'continuing') {
+      c.effects[0].deathrunRoll = { expression: '3d8', total: 12, rolls: [5, 4, 3] };
+      c.effects[0].deathrunRemaining = [0, 2];
+    }
+  }
+  const weapon = { name: 'Sword', slot: 'Primary' as const, trait: 'Strength' as const, range: 'Melee', damage: 'd8', damageType: 'phys' as const, hands: 1 as const, tier: 1 };
+  openRollDialog(body as unknown as HTMLElement, c, 'Sword damage', [], rollBonus(c, ['damage'], weapon),
+    () => true, () => {}, ['damage'], weapon);
+  const control = body.querySelectorAll('label').find(label => label.text().includes('Remove one die from the first damage roll'));
+  if (state !== 'continuing') {
+    expect(control).toBeUndefined();
+    return;
+  }
+  expect(control!.hidden).toBe(false);
+  const select = control!.querySelectorAll('select')[0];
+  expect(select.querySelectorAll('option').map(option => option.value)).toEqual(['0', '2']);
+  expect(select.value).toBe('2');
+  const row = body.querySelectorAll('div').find(div => div.className.includes('dh-deathrun-option-row'))!;
+  expect(row.children[1]).toBe(control);
+  expect(row.querySelectorAll('input')).toHaveLength(1);
+  if (state === 'continuing') {
+    const option = body.querySelectorAll('label').find(label => label.text().includes('Deathrun') && label.querySelectorAll('input').length)!;
+    const checkbox = option.querySelectorAll('input')[0];
+    checkbox.checked = false;
+    checkbox.listeners.get('change')?.();
+    expect(control!.hidden).toBe(true);
+    checkbox.checked = true;
+    checkbox.listeners.get('change')?.();
+    expect(control!.hidden).toBe(false);
+  }
+});
+
+it('preselects one Cruel Precision option and the highest current printed trait in weapon damage', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = emptyCharacter('Hero');
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  c.loadout = [{ name: 'Cruel Precision', level: 3, domain: 'Bone', type: 'Ability', recall: 1, text: '',
+    automation: catalog.entries.find(entry => entry.id === 'cruel-precision')!.automation }];
+  c.traits.find(trait => trait.name === 'Finesse')!.mod = 2;
+  c.traits.find(trait => trait.name === 'Agility')!.mod = 1;
+  addEffect(c, { name: 'Nimble', kind: 'buff', modifiers: [{ stat: 'trait.Agility', value: 3 }] });
+  const weapon = { name: 'Sword', slot: 'Primary' as const, trait: 'Strength' as const, range: 'Melee', damage: 'd8', damageType: 'phys' as const, hands: 1 as const, tier: 1 };
+  const rolls: RollRequest[] = [];
+  openRollDialog(body as unknown as HTMLElement, c, 'Sword damage', [], rollBonus(c, ['damage'], weapon),
+    request => { rolls.push(request); return true; }, () => {}, ['damage'], weapon);
+  const option = body.querySelectorAll('label').find(label => label.text().includes('Cruel Precision') && label.querySelectorAll('input').length)!;
+  expect(option.querySelectorAll('input')[0].checked).toBe(true);
+  const traits = body.querySelectorAll('select').find(select => select.ariaLabel === 'Damage bonus trait')!;
+  expect(traits.querySelectorAll('option').map(choice => choice.value)).toEqual(['Finesse', 'Agility']);
+  expect(traits.value).toBe('Agility');
+  traits.value = 'Finesse';
+  traits.listeners.get('change')?.();
+  await body.querySelectorAll('button').find(button => button.text() === 'Roll to chat')!.click();
+  expect(rolls).toHaveLength(1);
+  expect(rolls[0].contributions?.some(part => part.label.includes('Cruel Precision') && part.expression === '2')).toBe(true);
+});
+
+it('preserves ordinary option payments alongside a host-owned Deathrun activation', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = emptyCharacter('Hero');
+  c.hope.on = 6;
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  c.loadout = [{ name: 'Deathrun', level: 10, domain: 'Bone', type: 'Ability', recall: 1, text: '',
+    automation: catalog.entries.find(entry => entry.id === 'deathrun')!.automation }];
+  c.features = [{ name: 'Ordinary option', source: 'Custom', text: '', automation: { rollOptions: [
+    { id: 'bonus', label: 'Ordinary bonus', roll: 'attack', cost: { hope: 1 }, value: 1, defaultOn: true },
+  ] } }];
+  const weapon = { name: 'Sword', slot: 'Primary' as const, trait: 'Strength' as const, range: 'Melee', damage: 'd8', damageType: 'phys' as const, hands: 1 as const, tier: 1 };
+  openRollDialog(body as unknown as HTMLElement, c, 'Attack', [], rollBonus(c, ['action', 'attack'], weapon),
+    async request => {
+      expect(request.hostOptions).toEqual([{ key: 'card:Deathrun', id: 'run', trait: undefined }]);
+      c.hope.on -= 3;
+      return true;
+    }, () => {}, ['action', 'attack'], undefined, undefined, weapon);
+  const run = body.querySelectorAll('label').find(label => label.text().includes('Deathrun') && label.querySelectorAll('input').length)!;
+  run.querySelectorAll('input')[0].checked = true;
+  run.querySelectorAll('input')[0].listeners.get('change')?.();
+  await body.querySelectorAll('button').find(button => button.text() === 'Roll to chat')!.click();
+  expect(c.hope.on).toBe(2);
+});
 
 it('keeps Vitality visible under Effects but removable only in edit mode, reversing its benefits', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),

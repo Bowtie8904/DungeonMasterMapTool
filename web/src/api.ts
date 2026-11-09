@@ -160,6 +160,9 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise
 }
 
 export interface FeatureRequest {
+  incomingDamage?: { sheet: import('./daggerheart/data').CharacterSheet; input: Omit<import('./daggerheart/damage').DamageInput, 'selected'> & { selected: string[] }; result: { armorUsed: number; armorMarked: number; hp: number; hpBeforeReplace: number; final: number; applied: Array<{ key: string; id: string }> }; report: string };
+  transactionalRoll?: import('./daggerheart/view').RollRequest;
+  rest?: { kind: 'short' | 'long'; picks: import('./daggerheart/rest').RestPick[]; options: import('./daggerheart/rest').RestOptions; sheet: import('./daggerheart/data').CharacterSheet; result: import('./daggerheart/rest').RestResult; report: string };
   actorId: string;
   key: string;
   actionId: string;

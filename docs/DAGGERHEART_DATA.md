@@ -145,6 +145,34 @@ The host advertises optional `domainCardAutomationV3` alongside retained V1/V2 c
 Current clients require V3 for host-dependent audited actions; older hosts disable those controls
 without blocking connection. LAN compatibility version and settings contracts are unchanged.
 
+### Bone/Valor feedback metadata
+
+- Passive modifiers support `traitValue`, `divisor` and `round: "up" | "down"`; Untouchable uses
+  half current Agility rounded up. Roll options with `traitChoices` render one dropdown defaulting
+  to the highest current trait; `defaultOn` preselects it. `weapon: "any"` requires a weapon roll
+  and excludes spell-damage contexts. `requiresRollOutcome: "hopeOrCritical"` restricts Forceful Push
+  to damage opened from an eligible attack result.
+- Result triggers support `containsDie` (Redirect), `weaponDamage` (Breaking Blow), and
+  `deathrunResult` (End Run). Existing `criticalOnly`, `audience: "ally"`, `rerollDualityDie`,
+  `successIfKnown`, `chatBenefits` and `removeFear` place payments on the relevant results.
+  Unknown attack success, proximity and narrative consequences remain table-confirmed.
+- `hostOwned` actions/options and `hostRollAction` casts use the existing feature endpoint for
+  transactional payment, dice, effects and chat. Breaking Blow's host-owned damage option consumes
+  its prepared effect only when selected and committed. Deathrun effects retain `deathrunRoll`,
+  `deathrunRemaining` and a host-owned counter: the first weapon pool gains +1 Proficiency,
+  later uses remove a chosen initial die without rerolling, and exhausting the pool ends the run
+  before another damage window. Saved result `deathrun` metadata identifies the activation for End Run.
+- Rest modifiers with `repairAllies` clear that many marked Armor Slots on eligible allies and
+  name the recipients in chat. A rest passive with `chooseAlly` selects a recipient;
+  Recovery pays Hope and grants an effect with `rest.longMovesInShort` and `consumeLongRestMove`.
+  This allows exactly one long-rest move and expires at the recipient's rest.
+- Mitigation `giveFear` grants GM Fear on application; `clearStress` clears Stress only on committed
+  HP damage. `hiddenRoll` conceals dice in the dialog and rolls authoritatively on application,
+  publishing faces only in the final damage report.
+- The optional `boneValorAutomation` hello capability advertises these feature-endpoint transactions.
+  Existing messages/endpoints and saved sheets remain readable by older clients; settings, Online Play
+  protocol and LAN compatibility versions are unchanged.
+
 ### Grace/Codex feedback metadata
 
 - `target: "anyActor"` opens a single-target picker including offline actors; it does not apply an
