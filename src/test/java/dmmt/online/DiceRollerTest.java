@@ -35,6 +35,9 @@ class DiceRollerTest {
         assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(original, List.of(3), true, 3, faces()));
         var negative = DiceRoller.roll("d8-d6", 2, faces(6, 2));
         assertThrows(IllegalArgumentException.class, () -> DiceRoller.editDice(negative, List.of(1), true, 2, faces()));
+        var charm = DiceRoller.editDice(negative, List.of(1), true, 2, faces(5), true);
+        assertEquals(List.of(6, -5), charm.rolls());
+        assertEquals(1, charm.total());
     }
 
     @Test

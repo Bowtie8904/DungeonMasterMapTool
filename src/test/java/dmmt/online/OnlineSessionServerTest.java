@@ -800,6 +800,378 @@ class OnlineSessionServerTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private ObjectNode sageArcanaSheet(String... names) throws Exception {
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.putArray("traits").addObject().put("name", "Instinct").put("mod", 3).put("spellcast", true);
+        sheet.withArray("traits").addObject().put("name", "Agility").put("mod", 2);
+        sheet.putArray("loadout");
+        sheet.putArray("vault");
+        for (String name : names)
+            for (JsonNode card : MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries"))
+                if (name.equals(card.path("name").asText())) sheet.withArray("loadout").add(card.deepCopy());
+        assertEquals(names.length, sheet.path("loadout").size());
+        return sheet;
+    }
+
+    @Test
+    void faneCriticalRewardAcceptsSageSpellcastsButRejectsOtherRollsAndDuplicateClaims() throws Exception {
+        ObjectNode sheet = sageArcanaSheet("Fane of the Wilds", "Vicious Entangle", "Flight");
+        sheet.withObject("/resources").put("fane", 0);
+        campaign.getActors().add(Campaign.Actor.builder().id("sage").name("Sage").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "sage", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            long criticalSeed = 0, noncriticalSeed = 0;
+            while (true) {
+                var random = new java.util.Random(criticalSeed);
+                if (random.nextInt(12) == random.nextInt(12)) break;
+                criticalSeed++;
+            }
+            while (true) {
+                var random = new java.util.Random(noncriticalSeed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                noncriticalSeed++;
+            }
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("actorId", "sage")
+                    .put("expression", "2d12").put("source", "action,spellcast,card:Vicious Entangle").put("kind", "duality");
+            ObjectNode claim = MAPPER.createObjectNode().put("actorId", "sage")
+                    .put("key", "card:Fane of the Wilds").put("actionId", "crit");
+            for (String scenario : List.of("sage", "noncritical", "arcana", "attack", "dice")) {
+                diceSeed("noncritical".equals(scenario) ? noncriticalSeed : criticalSeed);
+                message.put("source", switch (scenario) {
+                    case "arcana" -> "action,spellcast,card:Flight";
+                    case "attack" -> "action,attack";
+                    default -> "action,spellcast,card:Vicious Entangle";
+                });
+                message.put("kind", "dice".equals(scenario) ? "dice" : "duality");
+                socket.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                claim.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, claim);
+                assertEquals("sage".equals(scenario) ? 200 : 400, response.statusCode(), scenario + ": " + response.body());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "sage")).path("resources").path("fane").asInt());
+                if ("sage".equals(scenario)) {
+                    assertEquals(roll.path("rolls").get(0), roll.path("rolls").get(1));
+                    assertEquals(400, featureHttp(cookie, claim).statusCode());
+                }
+            }
+        } finally { socket.abort(); }
+    }
+
+    @Test
+    void viciousEntangleChatActionsRollDamageAndPayHopeWithoutBypassingTriggerValidation() throws Exception {
+        ObjectNode sheet = sageArcanaSheet("Vicious Entangle");
+        campaign.getActors().add(Campaign.Actor.builder().id("entangler").name("Caster").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "entangler", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("actorId", "entangler").put("expression", "2d12+100")
+                    .put("source", "action,spellcast,card:Vicious Entangle").put("difficulty", 10);
+            socket.sendText(message.toString(), true).join();
+            JsonNode original = inbox.next("roll");
+            ObjectNode action = MAPPER.createObjectNode().put("actorId", "entangler")
+                    .put("key", "card:Vicious Entangle").put("actionId", "damage");
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+            action.putObject("roll").put("id", original.path("id").asLong()).put("ts", original.path("ts").asLong());
+            var response = featureHttp(cookie, action);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode damage = inbox.next("roll");
+            assertEquals("1d8+1", damage.path("expression").asText());
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "entangler")).path("hope").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+            action.put("actionId", "restrain");
+            response = featureHttp(cookie, action);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "entangler")).path("hope").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+
+            message.put("source", "action,spellcast,card:Flight");
+            socket.sendText(message.toString(), true).join();
+            JsonNode unrelated = inbox.next("roll");
+            action.withObject("/roll").put("id", unrelated.path("id").asLong()).put("ts", unrelated.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, action).statusCode());
+
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            message.put("source", "action,spellcast,card:Vicious Entangle").put("expression", "2d12-100");
+            socket.sendText(message.toString(), true).join();
+            JsonNode failed = inbox.next("roll");
+            action.withObject("/roll").put("id", failed.path("id").asLong()).put("ts", failed.path("ts").asLong());
+            for (String id : List.of("damage", "restrain")) {
+                action.put("actionId", id);
+                assertEquals(400, featureHttp(cookie, action).statusCode());
+            }
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "entangler")).path("hope").path("on").asInt());
+        } finally { socket.abort(); }
+    }
+
+    @Test
+    void chaosSessionRefillsAndCastDamageUsesTheSavedSpendNotTheCurrentPool() throws Exception {
+        ObjectNode sheet = sageArcanaSheet("Unleash Chaos");
+        sheet.remove("resources");
+        campaign.getActors().add(Campaign.Actor.builder().id("chaos").name("Caster").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "chaos", sheet.toString());
+        assertNull(server.newSession());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "chaos")).path("resources").path("chaos").asInt());
+        String cookie = cookie();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "chaos");
+        ObjectNode cast = body.putObject("transactionalRoll").put("ref", "chaos-cast").put("kind", "duality")
+                .put("expression", "2d12+100").put("source", "action,spellcast,card:Unleash Chaos,featureAction:card:Unleash Chaos:cast");
+        cast.putObject("hostAction").put("key", "card:Unleash Chaos").put("id", "cast").put("amount", 0);
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        cast.withObject("/hostAction").put("amount", 2);
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode original = dmMessages.stream().filter(m -> "chaos-cast".equals(m.path("ref").asText())).findFirst().orElseThrow();
+        assertEquals(2, original.path("spentTokens").path("amount").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "chaos")).path("resources").path("chaos").asInt());
+        ObjectNode damage = MAPPER.createObjectNode().put("actorId", "chaos").put("key", "card:Unleash Chaos").put("actionId", "damage");
+        damage.putObject("roll").put("id", original.path("id").asLong()).put("ts", original.path("ts").asLong());
+        response = featureHttp(cookie, damage);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(dmMessages.stream().anyMatch(m -> "2d10".equals(m.path("expression").asText())));
+        assertEquals(400, featureHttp(cookie, damage).statusCode());
+    }
+
+    @Test
+    void flightActivatesOnlyAfterSuccessAndItsLastTransactionalActionRemovesTheBuff() throws Exception {
+        ObjectNode sheet = sageArcanaSheet("Flight");
+        campaign.getActors().add(Campaign.Actor.builder().id("flier").name("Caster").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "flier", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("actorId", "flier").put("expression", "2d12-100").put("source", "action,spellcast,card:Flight");
+            socket.sendText(message.toString(), true).join();
+            inbox.next("roll");
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "flier")).path("effects").isEmpty());
+            message.put("expression", "2d12+100");
+            socket.sendText(message.toString(), true).join();
+            inbox.next("roll");
+            ObjectNode active = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "flier"));
+            assertEquals(2, active.path("resources").path("flight").asInt());
+            JsonNode effect = active.path("effects").get(0);
+            String effectKey = "effect:" + effect.path("id").asText();
+            for (int i = 0; i < 2; i++) {
+                ObjectNode body = MAPPER.createObjectNode().put("actorId", "flier");
+                ObjectNode roll = body.putObject("transactionalRoll").put("ref", "flying-action-" + i).put("kind", "duality")
+                        .put("expression", "2d12").put("source", "action,option:" + effectKey + ":flying");
+                roll.putArray("hostOptions").addObject().put("key", effectKey).put("id", "flying");
+                var response = featureHttp(cookie, body);
+                assertEquals(200, response.statusCode(), response.body());
+            }
+            JsonNode depleted = MAPPER.readTree(store.loadSheet(campaign.getId(), "flier"));
+            assertEquals(0, depleted.path("resources").path("flight").asInt());
+            assertTrue(depleted.path("effects").isEmpty());
+        } finally { socket.abort(); }
+    }
+
+    @Test
+    void wildSurgeRejectsStaleBonusesAndItsSeventhTokenEndsTheFormWithStressAndChat() throws Exception {
+        ObjectNode sheet = sageArcanaSheet("Wild Surge");
+        campaign.getActors().add(Campaign.Actor.builder().id("surger").name("Caster").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "surger", sheet.toString());
+        String cookie = cookie();
+        var response = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "surger").put("key", "card:Wild Surge").put("actionId", "use"));
+        assertEquals(200, response.statusCode(), response.body());
+        ObjectNode active = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "surger"));
+        active.withObject("/resources").put("wild-surge", 6);
+        store.saveSheet(campaign.getId(), "surger", active.toString());
+        String key = "effect:" + active.path("effects").get(0).path("id").asText();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "surger");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "surge-final").put("kind", "duality")
+                .put("expression", "2d12+5").put("source", "action,option:" + key + ":surge");
+        roll.putArray("hostOptions").addObject().put("key", key).put("id", "surge");
+        var contributions = roll.putArray("contributions");
+        contributions.addObject().put("label", "Hope die").put("expression", "1d12");
+        contributions.addObject().put("label", "Fear die").put("expression", "1d12");
+        ObjectNode bonus = contributions.addObject().put("label", "Wild Surge die").put("expression", "5");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        bonus.put("expression", "6");
+        roll.put("expression", "2d12+6");
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode ended = MAPPER.readTree(store.loadSheet(campaign.getId(), "surger"));
+        assertTrue(ended.path("effects").isEmpty());
+        assertEquals(0, ended.path("resources").path("wild-surge").asInt());
+        assertEquals(5, ended.path("stress").path("on").asInt());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("featureRoll").path("consequence").asText().contains("exceeded 6")));
+    }
+
+    @Test
+    void consumedLuckCharmResolvesCanonicalRerollAndEndsItsBuffOnActionDamageAndOrdinaryDice() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("gatherer").name("Gatherer").ownerId(playerId()).build());
+        ObjectNode sheet = sageArcanaSheet("Forager");
+        ObjectNode charm = (ObjectNode) deathEntry("consumables.json", "Foraged Luck Charm");
+        ObjectNode effect = (ObjectNode) charm.path("automation").path("actions").get(0)
+                .path("steps").get(0).path("effect").deepCopy();
+        effect.put("id", "prepared-charm").put("source", "Foraged Luck Charm");
+        sheet.putArray("inventory");
+        sheet.putArray("effects").add(effect);
+        store.saveSheet(campaign.getId(), "gatherer", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            for (String scenario : List.of("action", "damage", "dice")) {
+                ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "gatherer"));
+                ObjectNode prepared = effect.deepCopy();
+                if ("damage".equals(scenario)) prepared.put("sourceKey", "item:Foraged Luck Charm");
+                // Saved client rules cannot widen the canonical one-die reroll.
+                ((ObjectNode) prepared.path("rollTriggers").get(0)).put("rerollAnyDie", false);
+                saved.putArray("effects").add(prepared);
+                store.saveSheet(campaign.getId(), "gatherer", saved.toString());
+                ObjectNode message = MAPPER.createObjectNode().put("type", "roll").put("actorId", "gatherer")
+                        .put("expression", "action".equals(scenario) ? "2d12" : "2d6")
+                        .put("source", scenario).put("kind", "action".equals(scenario) ? "duality" : "dice");
+                socket.sendText(message.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "gatherer")
+                        .put("key", "effect:prepared-charm").put("actionId", "reroll");
+                request.putObject("roll").set("id", roll.path("id"));
+                request.withObject("/roll").set("ts", roll.path("ts"));
+                request.set("expectedDice", roll.path("rolls"));
+                request.putArray("dice").add(0).add(1);
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "gatherer")).path("effects").size());
+                request.putArray("dice").add(0);
+                request.putArray("expectedDice").add(-1);
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                request.set("expectedDice", roll.path("rolls"));
+                diceSeed(0);
+                var response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode update = inbox.next("rollUpdate");
+                assertEquals(new java.util.Random(0).nextInt("action".equals(scenario) ? 12 : 6) + 1,
+                        update.path("rolls").get(0).asInt());
+                assertEquals(roll.path("rolls").get(1), update.path("rolls").get(1));
+                assertEquals(update.path("rolls").get(0).asInt() + update.path("rolls").get(1).asInt(),
+                        update.path("total").asInt());
+                saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "gatherer"));
+                assertTrue(saved.path("inventory").isEmpty());
+                assertTrue(saved.path("effects").isEmpty());
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+            }
+        } finally { socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
+    }
+
+    @Test
+    void foragerRepeatedVialsStackForRolledAndChosenRewardsWithoutMergingDifferentItems() throws Exception {
+        ObjectNode before = sageArcanaSheet("Forager");
+        campaign.getActors().add(Campaign.Actor.builder().id("gatherer").name("Gatherer").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "gatherer", before.toString());
+        String cookie = cookie();
+        long vialSeed = 0, choiceSeed = 0;
+        while (new java.util.Random(vialSeed).nextInt(6) != 3) vialSeed++;
+        while (new java.util.Random(choiceSeed).nextInt(6) != 5) choiceSeed++;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "gatherer"));
+            if (attempt == 1) {
+                ObjectNode customized = saved.path("inventory").get(0).deepCopy();
+                customized.put("note", "Personalized vial");
+                saved.withArray("inventory").add(customized);
+                store.saveSheet(campaign.getId(), "gatherer", saved.toString());
+            }
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "gatherer");
+            ObjectNode rest = request.putObject("rest").put("kind", "long");
+            rest.set("sheet", saved.deepCopy().put("shortRestsInRow", 0));
+            rest.putArray("picks").addObject().put("move", "act:card:Forager|forage");
+            diceSeed(attempt == 2 ? choiceSeed : vialSeed);
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            if (attempt == 2) {
+                JsonNode reward = dmMessages.stream().filter(m -> m.path("actionBenefits").path("options").size() == 5)
+                        .reduce((first, last) -> last).orElseThrow();
+                response = featureHttp(cookie, benefitRequest("gatherer", reward, "foraged-vial"));
+                assertEquals(200, response.statusCode(), response.body());
+            }
+            JsonNode inventory = MAPPER.readTree(store.loadSheet(campaign.getId(), "gatherer")).path("inventory");
+            assertEquals(attempt == 0 ? 1 : 2, inventory.size(), inventory.toString());
+            assertEquals(attempt + 1, inventory.get(0).path("qty").asInt());
+            assertEquals("Foraged Healing Vial", inventory.get(0).path("name").asText());
+            assertTrue(inventory.get(0).path("automation").isObject());
+            if (attempt > 0) {
+                assertEquals(1, inventory.get(1).path("qty").asInt());
+                assertEquals("Personalized vial", inventory.get(1).path("note").asText());
+            }
+        }
+    }
+
+    @Test
+    void foragerSixOffersOneInventoryChoiceAndThePartyCarryLimitRejectsFurtherForaging() throws Exception {
+        ObjectNode before = sageArcanaSheet("Forager");
+        campaign.getActors().add(Campaign.Actor.builder().id("forager").name("Forager").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "forager", before.toString());
+        String cookie = cookie();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "forager");
+        ObjectNode rest = request.putObject("rest").put("kind", "short");
+        rest.set("sheet", before.deepCopy().put("shortRestsInRow", 1));
+        rest.putArray("picks").addObject().put("move", "act:card:Forager|forage");
+        long seed = 0;
+        while (new java.util.Random(seed).nextInt(6) != 5) seed++;
+        diceSeed(seed);
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode reward = dmMessages.stream().filter(m -> m.path("actionBenefits").path("options").size() == 5).findFirst().orElseThrow();
+        ObjectNode claim = benefitRequest("forager", reward, "foraged-rune");
+        response = featureHttp(cookie, claim);
+        assertEquals(200, response.statusCode(), response.body());
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "forager"));
+        assertEquals("Foraged Arcane Rune", saved.path("inventory").get(0).path("name").asText());
+        assertEquals(2, saved.path("inventory").get(0).path("automation").path("rollOptions").get(0).path("value").asInt());
+        claim.put("benefitId", "foraged-vial");
+        assertEquals(400, featureHttp(cookie, claim).statusCode());
+        ((ObjectNode) saved.path("inventory").get(0)).put("qty", 5);
+        store.saveSheet(campaign.getId(), "forager", saved.toString());
+        rest.set("sheet", saved.deepCopy().put("shortRestsInRow", 2));
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "forager")).path("shortRestsInRow").asInt());
+    }
+
+    @Test
+    void conjuredSteedsPaysSelectedHopeAndRestrictsClaimsToThePurchasedMounts() throws Exception {
+        String first = allyCookie("first-rider"), second = allyCookie("second-rider");
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("rider-one").name("First Rider").ownerId("first-rider").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("rider-two").name("Second Rider").ownerId("second-rider").build());
+        store.saveSheet(campaign.getId(), "summoner", sageArcanaSheet("Conjured Steeds").toString());
+        store.saveSheet(campaign.getId(), "rider-one", sageArcanaSheet().toString());
+        store.saveSheet(campaign.getId(), "rider-two", sageArcanaSheet().toString());
+        String cookie = cookie();
+        var response = featureHttp(cookie, MAPPER.createObjectNode().put("actorId", "summoner").put("key", "card:Conjured Steeds")
+                .put("actionId", "conjure").put("amount", 2));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode invitation = dmMessages.stream().filter(m -> m.path("actionBenefits").path("maxClaims").asInt() == 1).findFirst().orElseThrow();
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner")).path("hope").path("on").asInt());
+        assertEquals(400, featureHttp(cookie, benefitRequest("summoner", invitation, "ride")).statusCode());
+        response = featureHttp(first, benefitRequest("rider-one", invitation, "ride"));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode mounted = MAPPER.readTree(store.loadSheet(campaign.getId(), "rider-one")).path("effects").get(0);
+        assertEquals("longRest", mounted.path("until").asText());
+        assertEquals(-2, mounted.path("rollOptions").get(0).path("value").asInt());
+        assertEquals(2, mounted.path("rollOptions").get(1).path("value").asInt());
+        assertEquals(400, featureHttp(second, benefitRequest("rider-two", invitation, "ride")).statusCode());
+    }
+
     @Test
     void boneValorSupportTankRerollsAllyAndChargesOnlyFeatureOwnerAtomically() throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");

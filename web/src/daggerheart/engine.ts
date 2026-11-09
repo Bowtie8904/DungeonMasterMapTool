@@ -42,6 +42,9 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  surgeResource?: string;
+  maintainOnAction?: string;
+  endOnAttack?: boolean;
   deathrun?: boolean;
   deathrunRoll?: Pick<import('../protocol').RollMessage, 'expression' | 'total' | 'breakdown' | 'weapon'> & { rolls: number[] };
   deathrunRemaining?: number[];
@@ -54,8 +57,8 @@ export interface EffectDef {
   rest?: Automation['rest'];
   exclusiveSource?: boolean;
   endOnMarkedHpCount?: number;
-  witchGrant?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood';
-  witchLinked?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood';
+  witchGrant?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood' | 'runeWard' | 'sprites';
+  witchLinked?: 'circle' | 'moonbeam' | 'talisman' | 'lifeblood' | 'runeWard' | 'sprites';
   activationId?: string;
   requiresSourceEffect?: string;
   resources?: ResourceDef[];
@@ -113,15 +116,23 @@ export interface ChatBenefit {
 }
 
 export interface Step {
+  itemId?: string;
   minimumAmount?: number;
   fallbackEffect?: EffectDef;
-  op: 'clear' | 'gain' | 'mark' | 'effect';
+  op: 'clear' | 'gain' | 'mark' | 'effect' | 'inventory';
   resource?: Resource;
   amount?: number | string;
   effect?: EffectDef;
 }
 
 export interface ActionDef {
+  benefitsPerAmount?: boolean;
+  excludeSourceActor?: boolean;
+  selectAmount?: { resource: string; label: string; min?: number; store?: string; base?: number; addToRoll?: boolean };
+  castTokens?: { resource: string; sides: number };
+  selectedAmount?: number;
+  spentTokenDamage?: { sides: number };
+  layerRoll?: string;
   hostOwned?: boolean;
   removeFear?: number;
   bloodAutomation?: boolean;
@@ -170,7 +181,7 @@ export interface ActionDef {
     rest?: RestKind;
     additional?: boolean;
     consumeItem?: boolean;
-    table?: { expression: string; outcomes: string[]; repeat?: string };
+    table?: { expression: string; outcomes: string[]; repeat?: string; forage?: boolean };
   };
   cost?: Partial<Record<Resource, ModValue>>;
   costConditions?: Array<SheetCondition & { cost: NonNullable<ActionDef['cost']> }>;
@@ -199,6 +210,7 @@ export interface ActionDef {
 }
 
 export interface ResourceDef {
+  sessionReset?: ModValue;
   resetValue?: ModValue;
   minimumReset?: number;
   cardOnly?: boolean;
@@ -266,6 +278,8 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  rerollAnyDie?: boolean;
+  spellDomain?: string;
   weaponDamage?: boolean;
   containsDie?: number;
   deathrunResult?: boolean;
@@ -310,6 +324,8 @@ export interface RollTrigger extends ActionDef {
 }
 
 export interface Automation {
+  hideSpellcast?: boolean;
+  spellcastSuccessSteps?: Step[];
   unarmoredBase?: { score: number; trait: TraitName; thresholdsByTier: Record<string, [number, number]> };
   conditionalDamageRewards?: Array<{ minHp: number; noArmorMarked?: boolean; gainHope?: number; clearArmor?: number; loadoutDomain?: { domain: string; min: number } }>;
   banishDifficulty?: boolean;
@@ -1152,6 +1168,10 @@ export function applyRest(c: CharacterSheet, kind: RestKind): void {
     if (r.longRestLoss) c.resources![r.id] = Math.max(0, c.resources![r.id] - r.longRestLoss);
   }
   const expiring: Until[] = kind === 'long' ? ['rest', 'shortRest', 'longRest', 'scene'] : ['shortRest', 'rest', 'scene'];
+  for (const effect of c.effects.filter(e => e.surgeResource)) {
+    c.stress.on = Math.min(c.stress.slots, c.stress.on + 1);
+    c.resources![effect.surgeResource!] = 0;
+  }
   c.effects = c.effects.filter((e) => !expiring.includes(e.until ?? 'manual'));
   for (const r of restResources) {
     if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
@@ -1196,6 +1216,12 @@ function track(c: CharacterSheet, r: Resource) {
   return r === 'hp' ? c.hp : r === 'stress' ? c.stress : r === 'hope' ? c.hope : r === 'armor' ? c.armorTrack : undefined;
 }
 
+export function amountAvailable(c: CharacterSheet, resource: string): number {
+  syncResources(c);
+  const t = track(c, resource);
+  return Math.max(0, t ? resource === 'hope' ? t.on : t.slots - t.on : c.resources?.[resource] ?? 0);
+}
+
 function costBlocker(c: CharacterSheet, cost: ActionDef['cost']): string | null {
   syncResources(c);
   for (const [res, value] of Object.entries(cost ?? {})) {
@@ -1238,6 +1264,9 @@ export function routeDeathAction(action: ActionDef, open: (move: string) => void
 
 /** Returns why the action cannot be used, or null when it can. */
 export function actionBlocker(c: CharacterSheet, key: string, a: Automation, action: ActionDef, context: 'sheet' | 'rest' = 'sheet'): string | null {
+  const amountResource = action.castTokens?.resource ?? action.selectAmount?.resource ?? action.resourceRoll?.resource;
+  const minimum = action.selectAmount?.min ?? 1;
+  if (amountResource && amountAvailable(c, amountResource) < minimum) return `Not enough ${amountResource}`;
   if (!loadoutDomainMatches(c, action.loadoutDomain)) return 'Requires more matching domain cards in the active loadout';
   if (action.requiresZeroHope && c.hope.on !== 0) return 'Requires zero Hope';
   if (action.usesSource === false) a = { ...a, uses: undefined };
@@ -1457,6 +1486,8 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.spellDomain && !activeCards(c).some(card => card.domain === t.spellDomain
+    && ctx.source.split(',').includes(`card:${card.name}`))) return false;
   if (t.containsDie !== undefined && !ctx.dice?.includes(t.containsDie)) return false;
   if (t.deathrunResult && !ctx.deathrun) return false;
   if (t.weaponDamage && (!ctx.weapon || ctx.kind !== 'damage' || ctx.source.split(',').includes('spelldamage'))) return false;

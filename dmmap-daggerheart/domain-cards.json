@@ -1122,11 +1122,29 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Chain Lightning",
+      "id": "cast",
+      "label": "Spellcast Roll",
       "cost": {
        "stress": 2
-      }
+      },
+      "actionRoll": {
+       "trait": "spellcast"
+      },
+      "hostRollAction": true
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "damage",
+      "label": "Chain Lightning damage",
+      "on": "card:Chain Lightning",
+      "successIfKnown": true,
+      "damage": {
+       "dice": "2d8+4",
+       "type": "magic",
+       "fixed": true
+      },
+      "description": "Targets failing the reaction take this damage; continue the chain as described on the card."
      }
     ]
    }
@@ -1205,7 +1223,19 @@
       "on": "card:Cinder Grasp",
       "damage": {
        "dice": "1d20+3",
-       "fixed": true, "type": "magic"
+       "fixed": true,
+       "type": "magic"
+      }
+     }
+    ],
+    "actions": [
+     {
+      "id": "ongoing",
+      "label": "Ongoing flames: 2d6 damage",
+      "damage": {
+       "dice": "2d6",
+       "type": "magic",
+       "fixed": true
       }
      }
     ]
@@ -1220,13 +1250,52 @@
    "recall": 2,
    "text": "When you make a successful **Spellcast Roll** to cast a different spell, you can **spend a Hope** to become *Cloaked*. While *Cloaked*, you remain unseen if you are stationary when an adversary moves to where they would normally see you. When you move into or within an adversary’s line of sight or make an attack, you are no longer *Cloaked*.",
    "automation": {
+    "hideSpellcast": true,
     "actions": [
      {
       "id": "use",
-      "label": "Cloaking Blast",
+      "label": "Become Cloaked",
       "cost": {
        "hope": 1
-      }
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Cloaked",
+         "kind": "buff",
+         "until": "manual",
+         "endOnAttack": true,
+         "text": "Unseen while stationary. Remove when moving into or within an adversary line of sight; ends automatically when attacking."
+        }
+       }
+      ]
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "cloak",
+      "label": "Become Cloaked",
+      "cost": {
+       "hope": 1
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Cloaked",
+         "kind": "buff",
+         "until": "manual",
+         "endOnAttack": true,
+         "text": "Unseen while stationary. Remove when moving into or within an adversary line of sight; ends automatically when attacking."
+        }
+       }
+      ],
+      "on": "spellcast",
+      "successIfKnown": true,
+      "excludeRolls": [
+       "card:Cloaking Blast"
+      ]
      }
     ]
    }
@@ -1264,10 +1333,48 @@
      "max": 1,
      "per": "longRest"
     },
+    "resources": [
+     {
+      "id": "aura-layers",
+      "label": "Confusing Aura layers",
+      "initial": 0
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "activate",
+      "label": "Create Confusing Aura",
+      "on": "card:Confusing Aura",
+      "successIfKnown": true,
+      "selectAmount": {
+       "resource": "stress",
+       "label": "Additional Stress to mark",
+       "min": 0,
+       "store": "aura-layers",
+       "base": 1
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Confusing Aura",
+         "kind": "buff",
+         "until": "manual",
+         "tokenResource": "aura-layers",
+         "text": "Roll a d6 per layer when attacked. Any 5+ prevents the attack and destroys one layer; otherwise the aura ends."
+        }
+       }
+      ]
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Confusing Aura"
+      "id": "defend",
+      "label": "Roll Confusing Aura layers",
+      "hostOwned": true,
+      "usesSource": false,
+      "requiresEffect": "Confusing Aura",
+      "layerRoll": "aura-layers"
      }
     ]
    }
@@ -1280,35 +1387,75 @@
    "level": 2,
    "recall": 1,
    "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.\n\n***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
-   "automation": {
-    "conditionalActions": [
-     { "id": "beetles", "label": "Conjure Tekaira Armored Beetles", "cost": { "stress": 1 },
-       "steps": [{ "op": "effect", "effect": {
-        "name": "Tekaira Armored Beetles", "kind": "buff", "until": "manual", "endAfterIncomingDamage": true,
-        "text": "Reduce the next damage severity by one; spend a Hope to retain the beetles.",
-        "mitigation": [
-         { "id": "reduce", "label": "Tekaira Armored Beetles", "passive": true, "severity": 1 },
-         { "id": "keep", "label": "Keep the beetles", "cost": { "hope": 1 }, "requiresEffect": "Tekaira Armored Beetles",
-           "preserveAfterIncomingDamage": "Tekaira Armored Beetles" }
+   "automation": {},
+   "spells": [
+    {
+     "name": "Tekaira Armored Beetles",
+     "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.",
+     "automation": {
+      "actions": [
+       {
+        "id": "beetles",
+        "label": "Conjure Tekaira Armored Beetles",
+        "cost": {
+         "stress": 1
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Tekaira Armored Beetles",
+           "kind": "buff",
+           "until": "manual",
+           "endAfterIncomingDamage": true,
+           "text": "Reduce the next damage severity by one; spend a Hope to retain the beetles.",
+           "mitigation": [
+            {
+             "id": "reduce",
+             "label": "Tekaira Armored Beetles",
+             "passive": true,
+             "severity": 1
+            },
+            {
+             "id": "keep",
+             "label": "Keep the beetles",
+             "cost": {
+              "hope": 1
+             },
+             "requiresEffect": "Tekaira Armored Beetles",
+             "preserveAfterIncomingDamage": "Tekaira Armored Beetles"
+            }
+           ]
+          }
+         }
         ]
-       } }] }
-    ],
-    "conditionalRollTriggers": [
-     {
-      "id": "damage",
-      "successIfKnown": true,
-      "label": "Fire Flies: spend a Hope, roll 2d8+3 damage",
-      "on": "card:Conjure Swarm",
-      "damage": {
-       "dice": "2d8+3",
-       "fixed": true, "type": "magic"
-      },
-      "cost": {
-       "hope": 1
-      }
+       }
+      ]
      }
-    ]
-   }
+    },
+    {
+     "name": "Fire Flies",
+     "text": "***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
+     "automation": {
+      "conditionalRollTriggers": [
+       {
+        "id": "damage",
+        "label": "Fire Flies: spend a Hope, roll 2d8+3 damage",
+        "on": "card:Fire Flies",
+        "successIfKnown": true,
+        "cost": {
+         "hope": 1
+        },
+        "damage": {
+         "dice": "2d8+3",
+         "type": "magic",
+         "fixed": true
+        }
+       }
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "conjured-steeds",
@@ -1317,7 +1464,87 @@
    "domain": "Sage",
    "level": 6,
    "recall": 0,
-   "text": "**Spend any number of Hope** to conjure that many magical steeds (such as horses, camels, or elephants) that you and your allies can ride until your next long rest or the steeds take any damage. The steeds double your land speed while traveling and, when in danger, allow you to move within Far range without having to roll. Creatures riding a steed gain a −2 penalty to attack rolls and a +2 bonus to damage rolls."
+   "text": "**Spend any number of Hope** to conjure that many magical steeds (such as horses, camels, or elephants) that you and your allies can ride until your next long rest or the steeds take any damage. The steeds double your land speed while traveling and, when in danger, allow you to move within Far range without having to roll. Creatures riding a steed gain a −2 penalty to attack rolls and a +2 bonus to damage rolls.",
+   "automation": {
+    "actions": [
+     {
+      "id": "conjure",
+      "label": "Conjure Steeds",
+      "hostOwned": true,
+      "benefitsPerAmount": true,
+      "excludeSourceActor": true,
+      "selectAmount": {
+       "resource": "hope",
+       "label": "Hope to spend"
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Conjured Steed",
+         "kind": "buff",
+         "until": "longRest",
+         "text": "Double land travel speed; move within Far range without a roll in danger. Remove when the steed takes damage. Unselect mounted options when dismounted.",
+         "rollOptions": [
+          {
+           "id": "mounted-attack",
+           "label": "Mounted on conjured steed",
+           "roll": "attack",
+           "value": -2,
+           "defaultOn": true
+          },
+          {
+           "id": "mounted-damage",
+           "label": "Mounted on conjured steed",
+           "roll": "damage",
+           "value": 2,
+           "defaultOn": true
+          }
+         ]
+        }
+       }
+      ],
+      "allowSourceOwner": true,
+      "chatBenefits": [
+       {
+        "id": "ride",
+        "label": "Ride a conjured steed",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Conjured Steed",
+           "kind": "buff",
+           "until": "longRest",
+           "text": "Double land travel speed; move within Far range without a roll in danger. Remove when the steed takes damage. Unselect mounted options when dismounted.",
+           "rollOptions": [
+            {
+             "id": "mounted-attack",
+             "label": "Mounted on conjured steed",
+             "roll": "attack",
+             "value": -2,
+             "defaultOn": true
+            },
+            {
+             "id": "mounted-damage",
+             "label": "Mounted on conjured steed",
+             "roll": "damage",
+             "value": 2,
+             "defaultOn": true
+            }
+           ],
+           "requiresSourceEffect": "Conjured Steed"
+          }
+         }
+        ]
+       }
+      ],
+      "report": {
+       "text": "Conjured one steed per Hope spent. Claim a steed only while one is available."
+      }
+     }
+    ]
+   }
   },
   {
    "id": "copycat",
@@ -1695,7 +1922,21 @@
       "label": "Delerium Grasp: give the GM a Fear, roll d12+3 damage",
       "on": "card:Delerium Grasp",
       "damage": {
-       "dice": "d12+3", "type": "magic"
+       "dice": "d12+3",
+       "type": "magic"
+      },
+      "giveFear": 1,
+      "hostOwned": true
+     }
+    ],
+    "actions": [
+     {
+      "id": "ongoing",
+      "label": "Ongoing flames: 2d6 damage",
+      "damage": {
+       "dice": "2d6",
+       "type": "magic",
+       "fixed": true
       }
      }
     ]
@@ -1813,10 +2054,20 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
-      "id": "use",
-      "label": "Earthquake"
+      "id": "damage",
+      "label": "Earthquake damage",
+      "on": "card:Earthquake",
+      "successIfKnown": true,
+      "damage": {
+       "dice": "3d10+8",
+       "type": "physical",
+       "fixed": true
+      },
+      "report": {
+       "text": "Targets failing Reaction (18) take full damage and become Vulnerable; successful targets take half. Terrain becomes difficult."
+      }
      }
     ]
    }
@@ -1947,10 +2198,23 @@
   {
    "id": "falling-sky",
    "name": "Falling Sky",
-   "automation": { "actions": [
-    { "id": "damage", "label": "Falling Sky: Stress damage to successful targets",
-      "resourceRoll": { "resource": "stress", "sides": 20, "bonusPerDie": 2, "type": "magic" } }
-   ] },
+   "automation": {
+    "conditionalRollTriggers": [
+     {
+      "id": "damage",
+      "label": "Falling Sky damage",
+      "on": "card:Falling Sky",
+      "successIfKnown": true,
+      "resourceRoll": {
+       "resource": "stress",
+       "sides": 20,
+       "bonusPerDie": 2,
+       "type": "magic"
+      },
+      "hostOwned": true
+     }
+    ]
+   },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 10,
@@ -1970,29 +2234,29 @@
      {
       "id": "fane",
       "label": "Fane of the Wilds tokens",
-      "initial": 0, "resetOn": "longRest", "resetValue": "@cards_sage"
+      "initial": 0,
+      "resetOn": "longRest",
+      "resetValue": "@cards_sage"
      }
     ],
-    "actions": [
+    "conditionalRollTriggers": [
      {
-      "id": "rest",
-      "label": "Long rest: place tokens (Sage cards in loadout and vault)",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "fane",
-        "amount": "all"
-       },
-       {
-        "op": "gain",
-        "resource": "fane",
-        "amount": "@cards_sage"
-       }
-      ]
+      "id": "bonus",
+      "label": "Fane of the Wilds: spend tokens",
+      "on": "spellcast",
+      "repeatable": true,
+      "selectAmount": {
+       "resource": "fane",
+       "label": "Tokens to spend",
+       "addToRoll": true
+      }
      },
      {
       "id": "crit",
       "label": "Critical Sage spell: gain a token",
+      "on": "spellcast",
+      "criticalOnly": true,
+      "spellDomain": "Sage",
       "steps": [
        {
         "op": "gain",
@@ -2000,23 +2264,7 @@
         "amount": 1
        }
       ]
-     },
-     {
-      "id": "clear",
-      "label": "Long rest: clear tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "fane",
-        "amount": "all"
-       }
-      ]
      }
-    ],
-    "conditionalRollTriggers": [
-     { "id": "bonus", "label": "Fane of the Wilds: spend tokens after roll", "on": "spellcast",
-       "description": "Spend one token per +1. Token quantity and target-domain critical awards are managed with the card's controls.",
-       "repeatable": true, "cost": { "fane": 1 }, "addDice": "1" }
     ]
    }
   },
@@ -2067,36 +2315,39 @@
       "initial": 0
      }
     ],
-    "actions": [
+    "spellcastSuccessSteps": [
      {
-      "id": "cast",
-      "label": "Successful cast: place tokens",
-      "steps": [
-       { "op": "clear", "resource": "flight", "amount": "all" },
-       {
-        "op": "gain",
-        "resource": "flight",
-        "amount": "@total_agility", "minimumAmount": 1
-       }
-      ]
+      "op": "clear",
+      "resource": "flight",
+      "amount": "all"
      },
      {
-      "id": "spend",
-      "label": "Action roll while flying: spend token",
-      "cost": {
-       "flight": 1
+      "op": "gain",
+      "resource": "flight",
+      "amount": "@total_agility",
+      "minimumAmount": 1
+     },
+     {
+      "op": "effect",
+      "effect": {
+       "name": "Flight",
+       "kind": "buff",
+       "until": "manual",
+       "tokenResource": "flight",
+       "text": "Flying. Spend a token on each action roll while flying; descend after the last token.",
+       "rollOptions": [
+        {
+         "id": "flying",
+         "label": "Action while flying",
+         "roll": "action",
+         "defaultOn": true,
+         "cost": {
+          "flight": 1
+         },
+         "hostOwned": true
+        }
+       ]
       }
-     },
-     {
-      "id": "land",
-      "label": "Land: clear tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "flight",
-        "amount": "all"
-       }
-      ]
      }
     ]
    }
@@ -2145,7 +2396,8 @@
          "A healing vial (consumable: clear 2 HP)",
          "A luck charm (consumable: reroll any die)",
          "Choose one of the options above"
-        ]
+        ],
+        "forage": true
        }
       }
      }
@@ -2167,7 +2419,53 @@
       "label": "Force of Nature",
       "cost": {
        "stress": 1
-      }
+      },
+      "hostOwned": true,
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Force of Nature",
+         "kind": "buff",
+         "until": "manual",
+         "maintainOnAction": "maintain",
+         "text": "Cannot be Restrained. Spend Hope before every action or revert. Clear Armor only when defeating a creature within Close range.",
+         "rollOptions": [
+          {
+           "id": "damage",
+           "label": "Force of Nature damage",
+           "roll": "damage",
+           "value": 10,
+           "defaultOn": true
+          },
+          {
+           "id": "maintain",
+           "label": "Maintain Force of Nature",
+           "roll": "action",
+           "cost": {
+            "hope": 1
+           },
+           "defaultOn": true,
+           "hostOwned": true
+          }
+         ],
+         "rollTriggers": [
+          {
+           "id": "absorb",
+           "label": "Defeated creature within Close: clear Armor",
+           "on": "damage",
+           "steps": [
+            {
+             "op": "clear",
+             "resource": "armor",
+             "amount": 1
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -2210,7 +2508,42 @@
    "level": 8,
    "recall": 2,
    "text": "Make a **Spellcast Roll (13)**. On a success, **spend any number of Hope** to create an equal number of small forest sprites who appear at points you choose within Far range, providing the following benefits:\n\n- Your allies gain a +3 bonus to attack rolls against adversaries within Melee range of a sprite.\n- An ally who marks an Armor Slot while within Melee range of a sprite can mark an additional Armor Slot.\nA sprite vanishes after granting a benefit or taking any damage.",
-   "automation": { "spellcastDifficulty": 13 }
+   "automation": {
+    "spellcastDifficulty": 13,
+    "resources": [
+     {
+      "id": "sprites",
+      "label": "Forest Sprites tokens",
+      "initial": 0
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "summon",
+      "label": "Summon Forest Sprites",
+      "on": "card:Forest Sprites",
+      "successIfKnown": true,
+      "selectAmount": {
+       "resource": "hope",
+       "label": "Hope to spend",
+       "store": "sprites"
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Forest Sprites source",
+         "kind": "buff",
+         "until": "manual",
+         "witchGrant": "sprites",
+         "tokenResource": "sprites",
+         "text": "Use only within Melee range of a sprite. Each attack bonus or additional Armor Slot consumes one shared sprite."
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "fortified-armor",
@@ -2340,11 +2673,20 @@
   {
    "id": "gifted-tracker",
    "name": "Gifted Tracker",
-   "automation": { "actions": [
-    { "id": "question", "label": "Gifted Tracker: ask one question", "cost": { "hope": 1 },
-      "report": { "text": "Ask one listed tracking question. Evasion is +1 only against creatures tracked this way." } },
-    { "id": "evasion", "label": "Tracked creature: show Evasion +1", "sendRoll": { "dice": "1", "base": "evasion", "label": "Gifted Tracker: Evasion against tracked creature" } }
-   ] },
+   "automation": {
+    "actions": [
+     {
+      "id": "question",
+      "label": "Gifted Tracker: ask one question",
+      "cost": {
+       "hope": 1
+      },
+      "report": {
+       "text": "Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
+      }
+     }
+    ]
+   },
    "cardType": "Ability",
    "domain": "Sage",
    "level": 1,
@@ -3612,10 +3954,12 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
-      "label": "Plant Dominion"
+      "label": "Plant Dominion",
+      "on": "card:Plant Dominion",
+      "successIfKnown": true
      }
     ]
    }
@@ -3854,26 +4198,70 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
-     "label": "Successful Spellcast: Rejuvenation Barrier",
-     "steps": [
-      { "op": "clear", "resource": "hp", "amount": "1d4" },
-      { "op": "effect", "effect": {
-       "name": "Rejuvenation Barrier", "kind": "buff", "until": "manual",
-       "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
-       "mitigation": [{ "id": "barrier", "label": "Inside Rejuvenation Barrier; damage from outside", "when": { "type": "physical" }, "halve": true }]
-      } }
-     ],
-     "chatBenefits": [{ "id": "barrier", "label": "Within barrier when cast: heal d4 HP and gain barrier benefit", "steps": [
-      { "op": "clear", "resource": "hp", "amount": "1d4" },
-      { "op": "effect", "effect": {
-       "name": "Rejuvenation Barrier", "kind": "buff", "until": "manual",
-       "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
-       "mitigation": [{ "id": "barrier", "label": "Inside Rejuvenation Barrier; damage from outside", "when": { "type": "physical" }, "halve": true }]
-      } }
-     ] }]
+      "label": "Successful Spellcast: Rejuvenation Barrier",
+      "on": "card:Rejuvenation Barrier",
+      "successIfKnown": true,
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": "1d4"
+       },
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Rejuvenation Barrier",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
+         "mitigation": [
+          {
+           "id": "barrier",
+           "label": "Inside Rejuvenation Barrier; damage from outside",
+           "when": {
+            "type": "physical"
+           },
+           "halve": true
+          }
+         ]
+        }
+       }
+      ],
+      "chatBenefits": [
+       {
+        "id": "barrier",
+        "label": "Within barrier when cast: heal d4 HP and gain barrier benefit",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": "1d4"
+         },
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Rejuvenation Barrier",
+           "kind": "buff",
+           "until": "manual",
+           "text": "Dismiss when the barrier ends or you leave it. Only physical damage originating outside the barrier is resisted.",
+           "mitigation": [
+            {
+             "id": "barrier",
+             "label": "Inside Rejuvenation Barrier; damage from outside",
+             "when": {
+              "type": "physical"
+             },
+             "halve": true
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
      }
     ]
    }
@@ -4033,17 +4421,44 @@
    "recall": 0,
    "text": "You have a deeply personal trinket that can be infused with protective magic and held as a ward by you or an ally. Describe what it is and why it’s important to you. The ward’s holder can spend a Hope to reduce incoming damage by **1d8**.\n\nIf the Ward Die result is 8, the ward’s power ends after it reduces damage this turn. It can be recharged for free on your next rest.",
    "automation": {
-    "mitigation": [
+    "uses": {
+     "max": 1,
+     "per": "rest"
+    },
+    "resources": [
      {
-      "id": "ward",
-      "label": "Rune Ward",
-      "description": "Spend a Hope to reduce damage by 1d8. On an 8 the ward's power ends.",
-      "roll": {
-       "sides": 8
-      },
-      "cost": {
-       "hope": 1
-      }
+      "id": "rune-ward",
+      "label": "Rune Ward power",
+      "initial": 0,
+      "max": 1
+     }
+    ],
+    "actions": [
+     {
+      "id": "infuse",
+      "label": "Infuse Rune Ward trinket",
+      "hostOwned": true,
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "rune-ward",
+        "amount": "all"
+       },
+       {
+        "op": "gain",
+        "resource": "rune-ward",
+        "amount": 1
+       },
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Rune Ward source",
+         "kind": "buff",
+         "until": "manual",
+         "witchGrant": "runeWard"
+        }
+       }
+      ]
      }
     ]
    }
@@ -4272,12 +4687,8 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Sensory Projection"
-     }
-    ]
+    "automaticRestUse": true,
+    "automaticRestUseOnAttempt": true
    }
   },
   {
@@ -4915,13 +5326,21 @@
   {
    "id": "telekinesis",
    "name": "Telekinesis",
-   "automation": { "actions": [
-    { "id": "lift", "label": "Telekinesis: lift Spellcast roll", "actionRoll": { "trait": "spellcast" } },
-    { "id": "throw", "label": "Telekinesis: throw Spellcast roll", "actionRoll": { "trait": "spellcast" } }
-   ], "conditionalRollTriggers": [
-    { "id": "damage", "label": "Telekinesis: throw damage", "on": "featureAction:card:Telekinesis:throw", "successIfKnown": true,
-      "damage": { "dice": "d12+4", "type": "physical" } }
-   ] },
+   "automation": {
+    "conditionalRollTriggers": [
+     {
+      "id": "damage",
+      "label": "Telekinesis damage",
+      "on": "card:Telekinesis",
+      "successIfKnown": true,
+      "damage": {
+       "dice": "d12+4",
+       "type": "physical",
+       "fixed": false
+      }
+     }
+    ]
+   },
    "cardType": "Spell",
    "domain": "Arcana",
    "level": 6,
@@ -5015,35 +5434,30 @@
      {
       "id": "cast",
       "label": "Once per rest: sprout thorns",
-      "uses": { "max": 1, "per": "rest" },
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
       "steps": [
        {
         "op": "gain",
         "resource": "thorns",
         "amount": "@spellcast"
+       },
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Thorn Skin",
+         "kind": "buff",
+         "until": "rest",
+         "tokenResource": "thorns",
+         "text": "Spend tokens in incoming damage to reduce it by d6 per token; retaliate when in Melee range."
+        }
        }
       ],
       "cost": {
        "hope": 1
       }
-     },
-     {
-      "id": "spend",
-      "label": "Spend token: roll reduction/retaliation manually",
-      "cost": {
-       "thorns": 1
-      }
-     },
-     {
-      "id": "clear",
-      "label": "Rest: clear thorns",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "thorns",
-        "amount": "all"
-       }
-      ]
      }
     ],
     "mitigation": [
@@ -5390,52 +5804,54 @@
       "id": "chaos",
       "label": "Unleash Chaos tokens",
       "initial": 0,
-      "max": "@spellcast"
+      "max": "@spellcast",
+      "session": true,
+      "sessionReset": "@spellcast"
      }
     ],
     "actions": [
      {
-      "id": "session",
-      "label": "Start session: prepare tokens",
-      "steps": [
-       {
-        "op": "gain",
-        "resource": "chaos",
-        "amount": "@spellcast"
-       }
-      ]
+      "id": "cast",
+      "label": "Spellcast Roll",
+      "actionRoll": {
+       "trait": "spellcast"
+      },
+      "hostRollAction": true,
+      "castTokens": {
+       "resource": "chaos",
+       "sides": 10
+      }
      },
      {
       "id": "replenish",
       "label": "Replenish chaos",
-      "steps": [
-       {
-        "op": "gain",
-        "resource": "chaos",
-        "amount": "@spellcast"
-       }
-      ],
       "cost": {
        "stress": 1
-      }
-     },
-     {
-      "id": "spend",
-      "label": "Spend token: roll 1d10 spell damage manually",
-      "cost": {
-       "chaos": 1
-      }
-     },
-     {
-      "id": "clear",
-      "label": "End session: clear tokens",
+      },
       "steps": [
        {
         "op": "clear",
         "resource": "chaos",
         "amount": "all"
+       },
+       {
+        "op": "gain",
+        "resource": "chaos",
+        "amount": "@spellcast"
        }
       ]
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "damage",
+      "label": "Unleash Chaos damage",
+      "on": "card:Unleash Chaos",
+      "successIfKnown": true,
+      "spentTokenDamage": {
+       "sides": 10
+      },
+      "hostOwned": true
      }
     ]
    }
@@ -5604,7 +6020,20 @@
       "on": "card:Vicious Entangle",
       "damage": {
        "dice": "1d8+1",
-       "fixed": true, "type": "physical"
+       "fixed": true,
+       "type": "physical"
+      }
+     },
+     {
+      "id": "restrain",
+      "label": "Restrain another adversary",
+      "on": "card:Vicious Entangle",
+      "successIfKnown": true,
+      "cost": {
+       "hope": 1
+      },
+      "report": {
+       "text": "Temporarily Restrain another adversary within Very Close range of the original target."
       }
      }
     ]
@@ -5733,7 +6162,20 @@
       "label": "Wall Walk",
       "cost": {
        "hope": 1
-      }
+      },
+      "target": "anyActor",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Wall Walk",
+         "kind": "buff",
+         "until": "scene",
+         "exclusiveSource": true,
+         "text": "Climb walls and ceilings as easily as walking. Ends at scene end or when this caster casts Wall Walk again."
+        }
+       }
+      ]
      }
     ]
    }
@@ -5802,11 +6244,48 @@
   {
    "id": "wild-fortress",
    "name": "Wild Fortress",
-   "automation": { "spellcastDifficulty": 13, "actions": [
-    { "id": "cast", "label": "Successful Spellcast: grow fortress", "cost": { "hope": 2 },
-      "steps": [{ "op": "clear", "resource": "fortress", "amount": "all" }] },
-    { "id": "hit", "label": "Fortress marks a Hit Point", "steps": [{ "op": "gain", "resource": "fortress", "amount": 1 }] }
-   ], "resources": [{ "id": "fortress", "label": "Fortress marked HP (ends at 3)", "initial": 0, "max": 3 }] },
+   "automation": {
+    "spellcastDifficulty": 13,
+    "actions": [
+     {
+      "id": "hit",
+      "label": "Fortress marks a Hit Point",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "fortress",
+        "amount": 1
+       }
+      ]
+     }
+    ],
+    "resources": [
+     {
+      "id": "fortress",
+      "label": "Fortress marked HP (ends at 3)",
+      "initial": 0,
+      "max": 3
+     }
+    ],
+    "conditionalRollTriggers": [
+     {
+      "id": "cast",
+      "label": "Grow Wild Fortress",
+      "on": "card:Wild Fortress",
+      "successIfKnown": true,
+      "cost": {
+       "hope": 2
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "fortress",
+        "amount": "all"
+       }
+      ]
+     }
+    ]
+   },
    "cardType": "Spell",
    "domain": "Sage",
    "level": 5,
@@ -5826,13 +6305,65 @@
      "max": 1,
      "per": "longRest"
     },
+    "resources": [
+     {
+      "id": "wild-surge",
+      "label": "Wild Surge die",
+      "initial": 0,
+      "max": 7,
+      "resetOn": "rest"
+     }
+    ],
     "actions": [
      {
       "id": "use",
       "label": "Wild Surge",
+      "hostOwned": true,
       "cost": {
        "stress": 1
-      }
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "wild-surge",
+        "amount": "all"
+       },
+       {
+        "op": "gain",
+        "resource": "wild-surge",
+        "amount": 1
+       },
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Wild Surge",
+         "kind": "buff",
+         "until": "rest",
+         "tokenResource": "wild-surge",
+         "surgeResource": "wild-surge",
+         "rollOptions": [
+          {
+           "id": "surge",
+           "label": "Wild Surge die",
+           "roll": "action",
+           "defaultOn": true,
+           "resourceMultiplier": {
+            "resource": "wild-surge",
+            "value": 1
+           },
+           "hostOwned": true,
+           "steps": [
+            {
+             "op": "gain",
+             "resource": "wild-surge",
+             "amount": 1
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }

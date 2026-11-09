@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { keptRolls, renderLogEntry, rollDetails } from './chat';
-import type { RollMessage } from './protocol';
+import type { ChatMessage, RollMessage } from './protocol';
 
 const message: RollMessage = {
   id: 1, ts: 0, fromId: 'player', from: 'Player', kind: 'duality',
@@ -8,6 +8,43 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it.each([
+    ['long', true, false],
+    ['short', true, false],
+    ['short', false, true],
+    ['short', true, true],
+    ['long', false, false],
+  ] as const)('renders %s rest actions with rewards=%s and recovery dice=%s', (kind, reward, dice) => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute() {}
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      const m: ChatMessage = {
+        id: 2, ts: 0, fromId: 'player', from: 'Player', actorId: 'forager',
+        text: `${kind.toUpperCase()} REST\nForager completed downtime.\nForager: 1d6 = 6.`,
+        ...(reward ? { actionBenefits: {
+          options: [{ id: 'foraged-rune', label: 'Choose Arcane Rune', sourceOnly: true, exclusiveClaim: true,
+            steps: [{ op: 'inventory', itemId: 'foraged-rune' }] }],
+          actorIds: ['forager'], claimedBy: [], sessionId: 'session', allowSourceOwner: true,
+        } } : {}),
+        ...(dice ? { restDice: [{ line: 2, expression: '1d6', value: 6 }] } : {}),
+      };
+      const actions = document.createElement('div');
+      const renderActions = vi.fn(() => actions);
+      const card = renderLogEntry({ kind: 'chat', m }, 'player', undefined, undefined, renderActions) as unknown as Element;
+      expect(card.className).toContain('rest-report');
+      expect(renderActions).toHaveBeenCalledTimes(reward || dice ? 1 : 0);
+      if (reward || dice) {
+        expect(renderActions).toHaveBeenCalledWith(m);
+        expect(card.children.filter(child => child === (actions as unknown as Element))).toHaveLength(1);
+      }
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('shows sender portraits for chat and rolls and falls back when artwork fails', () => {
     class Element {
       className = '';

@@ -293,6 +293,25 @@ JavaFX styled text for bold, italic, bold italic, lists and line breaks rather t
 Map links respect the chat recipient;
 standalone links go to Everyone. Older hosts and disconnected sessions show an explicit error. These are additive
 contracts; Online and DM Link compatibility versions are unchanged.
+
+Sage and Arcana use host-owned feature transactions for variable Hope, Stress and token payments.
+The themed amount dialog validates whole numbers against the current pool; cancellation spends nothing.
+Unleash Chaos saves its cast's token count for later damage and refills on the host's New Session.
+Flight activates only on a successful Spellcast. Wild Surge advances its shared card counter on selected
+action rolls, ending with additional Stress and a chat explanation above 6. Force of Nature drops
+when its preselected Hope-maintenance option is omitted. Conjured Steeds invitations cannot exceed
+the mounts purchased, exclude the already-buffed caster, and expire with that casting.
+Rune Ward reuses transferable talismans: its holder can spend Hope for a d8 mitigation roll, reported
+separately in chat; an 8 destroys the item and benefit. Forest Sprites gives every character attack
+and additional-Armor options backed by the caster's single shared pool, removing all benefits at zero.
+Forager's host-rolled downtime adds one of five automated inventory consumables, or a one-choice
+rest-chat reward on a 6; the party may carry five. Rest cards render these reward actions even
+without recovery dice, including long rests. Its Luck Charm rerolls exactly one selected die,
+including Duality, Disadvantage and Combo dice. Conjure Swarm renders two independent spells.
+Success-dependent spells keep their payments, buffs and damage on their own chat results.
+These are additive catalog and message fields on existing endpoints; compatibility versions and
+settings are unchanged. Rebuild with `npm run build` in `web`, then `mvn process-resources` at the
+project root; restart the Java host and reload browser pages to serve the new classpath bundle.
 `popout.test.ts` covers window opening, source/origin
 checks, acknowledged additions, existing-sheet reuse, blocked pop-ups and timeout handling.
 `checks/tool-popouts.html` exercises both standalone tools and the receiving live sheet in a real browser;

@@ -189,4 +189,14 @@ describe('Sorcerer catalog automation', () => {
       ] });
     expect(dice.map(d => [d.index, d.sides, d.value, d.kept])).toEqual([[0, 8, 2, false], [1, 8, 6, true], [2, 4, 4, true]]);
   });
+
+  it('lets the Foraged Luck Charm select a Disadvantage or Combo die without widening ordinary rerolls', () => {
+    const roll = { id: 1, ts: 1, fromId: 'p', from: 'P', total: 11, expression: '2d12-1d6+3',
+      rolls: [5, 6, -3, 3], breakdown: [
+        { label: 'Action', expression: '2d12-1d6', rolls: [5, 6, -3], total: 8 },
+        { label: 'Combo Strike rolls', expression: '1d4', rolls: [3], total: 3 },
+      ] };
+    expect(damageDieChoices(roll).map(d => d.index)).toEqual([0, 1]);
+    expect(damageDieChoices(roll, true).map(d => [d.index, d.sides])).toEqual([[0, 12], [1, 12], [2, 6], [3, 4]]);
+  });
 });

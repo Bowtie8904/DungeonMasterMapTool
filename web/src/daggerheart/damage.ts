@@ -52,6 +52,8 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  destroyResourceOnMax?: string;
+  reportRoll?: boolean;
   giveFear?: number;
   clearStress?: number;
   hiddenRoll?: boolean;
@@ -442,6 +444,11 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
     }
   }
   for (const m of r.applied) {
+    if (m.option.destroyResourceOnMax && r.used[m.id]?.includes(m.option.roll!.sides)) {
+      c.resources ??= {};
+      c.resources[m.option.destroyResourceOnMax] = 0;
+      notes.push(`${m.option.label}: maximum Ward Die result; the trinket is destroyed after reducing this damage.`);
+    }
     if (m.option.gainTokens && hpMarked > 0) {
       const gain = m.option.gainTokens;
       const definition = resourceDefinitions(c).find(resource => resource.id === gain.resource);

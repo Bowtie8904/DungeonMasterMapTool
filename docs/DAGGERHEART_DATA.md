@@ -173,6 +173,40 @@ without blocking connection. LAN compatibility version and settings contracts ar
   Existing messages/endpoints and saved sheets remain readable by older clients; settings, Online Play
   protocol and LAN compatibility versions are unchanged.
 
+### Sage and Arcana amounts, tokens and grants
+
+- Actions/triggers may declare `selectAmount: {resource,label,min?,store?,base?,addToRoll?}`.
+  The browser asks for a whole number (minimum 1 unless overridden); the host validates current
+  availability and pays the selected amount atomically. `store` replaces that token pool with the
+  selected amount plus `base`. `addToRoll` adds the selected number to the persisted result.
+  Confusing Aura permits zero additional Stress and always retains its initial layer.
+- `castTokens: {resource,sides}` selects a cast payment and persists `spentTokens: {key,amount}`
+  on its roll. Its `spentTokenDamage: {sides}` result action uses that saved amount, never the
+  current pool. `resourceRoll: {resource,sides,bonusPerDie?,type?}` instead chooses a current
+  resource payment on the result and rolls the scaled damage, as used by Falling Sky.
+- `spellcastSuccessSteps` runs automatically at `spellcastDifficulty` (including critical success).
+  Step `minimumAmount` clamps expressions such as `@total_agility` to Flight's minimum one token.
+  `hideSpellcast` suppresses prose-derived generic casting controls. Resources with `sessionReset`
+  refill from that expression at New Session; ordinary session pools still clear.
+- Token-bound buffs use existing `tokenResource` and preselected `hostOwned` roll options.
+  Effect `surgeResource` ends an overflowing Wild Surge above 6, resets its pool and marks Stress.
+  `maintainOnAction` names the exact selected effect option needed to retain Force of Nature;
+  `endOnAttack` removes Cloaked. Fane's critical trigger adds `spellDomain: "Sage"`.
+- `layerRoll: "<resource>"` rolls a d6 per current layer: any 5+ prevents the attack and removes
+  one layer; otherwise all layers end. The result and remaining pool are reported in chat.
+  Conjured Steeds uses `benefitsPerAmount` and
+  `excludeSourceActor`: persisted invitations have `maxClaims` equal to selected Hope minus
+  the caster's mount and cannot grant another mount to the caster.
+- `witchGrant`/`witchLinked` also accept `runeWard` and `sprites`. Rune Ward uses the transferable
+  talisman inventory marker and a one-token mirrored pool; mitigation `destroyResourceOnMax`
+  depletes it on the maximum die face, while `reportRoll` emits its separate chat report.
+  Sprites mirror the caster's pool on all characters for attack and extra-Armor payments.
+- Downtime table `forage: true` defers rolling/rewards to the host. A 6 creates source-only,
+  exclusive rest-chat choices whose `inventory` step supplies an `itemId` from the five approved
+  `foraged-*` consumables. The host enforces the party carry limit and copies catalog automation.
+  Luck Charm's `rerollAnyDie: true` widens its result trigger to any roll and exactly one die,
+  without widening ordinary damage reroll restrictions.
+
 ### Grace/Codex feedback metadata
 
 - `target: "anyActor"` opens a single-target picker including offline actors; it does not apply an

@@ -13,6 +13,7 @@ import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification, damageDieChoices } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
+import { chooseActionAmount } from './amount-view';
 import { pickActor } from '../actor-picker';
 import type { Actor } from '../protocol';
 
@@ -165,9 +166,11 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
     if ((!m.actorId || host.isActorActive?.(m.actorId) !== false)
-        && !claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)) {
+        && !claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)
+        && (claims.maxClaims === undefined || claims.claimedBy.length < claims.maxClaims)) {
       for (const actorId of host.actorIds?.() ?? []) {
         if (!claims.actorIds.includes(actorId)) continue;
+        if (claims.excludeSourceActor && actorId === m.actorId) continue;
         const sheet = await host.sheet(actorId);
         if (!sheet) continue;
         for (const benefit of claims.options) {
@@ -522,6 +525,16 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.selectAmount || t.trigger.resourceRoll) {
+            try {
+              const amount = await chooseActionAmount(c, t.trigger);
+              if (amount === undefined) return;
+              await sheet.save.flush?.();
+              await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+            } catch (e) { host.toast((e as Error).message); }
+            finally { b.disabled = false; }
+            return;
+          }
           if (t.trigger.halfProficiencyDamage) {
             const opened = m.weapon && sheet.bus.damage?.(m.weapon, false, ctx?.fear, 0, 0, {
               pending: { key: t.key, automation: t.automation, action: t.trigger, blocker: () =>
@@ -564,7 +577,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             }, () => { b.disabled = false; });
             return;
           }
-          if (t.trigger.damage && !t.trigger.damage.fixed) {
+          if (t.trigger.damage && !t.trigger.damage.fixed && !t.trigger.hostOwned) {
             const opened = sheet.bus.spellDamage?.(t.trigger.label, t.trigger.damage, critical, () => {
               const report = runAction(c, t.key, t.automation, t.trigger, t.source);
               if (!report) throw new Error('The feature payment changed before the damage roll completed.');

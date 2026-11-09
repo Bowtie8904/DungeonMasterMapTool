@@ -2306,6 +2306,149 @@
    "name": "Chanting Candle",
    "rarity": "Uncommon",
    "text": "When you spend a Hope or mark a Stress while making a roll or activating a feature regarding the use of fire magic, you can burn out the candle instead.\n\nOtherwise: if you light up the candle, creatures within Close range have advantage on rolls to perform music or influence someone else’s behavior until the end of the scene, then the candle is consumed."
+  },
+  {
+   "id": "foraged-food",
+   "name": "Foraged Unique Food",
+   "rarity": "Foraged",
+   "text": "Clear 2 Stress.",
+   "foraged": true,
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Consume food",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 2
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "foraged-relic",
+   "name": "Foraged Beautiful Relic",
+   "rarity": "Foraged",
+   "text": "Gain 2 Hope.",
+   "foraged": true,
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use relic",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 2
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "foraged-rune",
+   "name": "Foraged Arcane Rune",
+   "rarity": "Foraged",
+   "text": "Add +2 to one Spellcast Roll.",
+   "foraged": true,
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Use rune",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Foraged Arcane Rune",
+         "kind": "buff",
+         "until": "manual",
+         "modifiers": [
+          {
+           "roll": "spellcast",
+           "value": 2,
+           "consume": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "use",
+      "label": "Use foraged arcane rune",
+      "roll": "spellcast",
+      "value": 2,
+      "consumeItem": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "foraged-vial",
+   "name": "Foraged Healing Vial",
+   "rarity": "Foraged",
+   "text": "Clear 2 Hit Points.",
+   "foraged": true,
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Drink vial",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 2
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "foraged-charm",
+   "name": "Foraged Luck Charm",
+   "rarity": "Foraged",
+   "text": "Reroll any die.",
+   "foraged": true,
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Prepare luck charm",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Foraged Luck Charm",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Reroll one die from a chat result.",
+         "rollTriggers": [
+          {
+           "id": "reroll",
+           "label": "Use foraged luck charm: reroll a die",
+           "on": "any",
+           "rerollAnyDie": true,
+           "damageDice": "reroll",
+           "endEffect": "Foraged Luck Charm"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
   }
  ]
 }

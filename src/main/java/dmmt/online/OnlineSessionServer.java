@@ -2104,7 +2104,16 @@ public final class OnlineSessionServer {
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
-            else if (!definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
+            if (hasRoll) ArcanaSageRules.validateDomain(sourceSheet, definition, originalRoll);
+            definition = ArcanaSageRules.selectAmount(definition, request, sourceSheet);
+            if (definition.has("spentTokenDamage")) {
+                JsonNode tokens = originalRoll == null ? MAPPER.nullNode() : originalRoll.path("spentTokens");
+                if (!key.equals(tokens.path("key").asText()) || tokens.path("amount").asInt() < 1)
+                    throw new IllegalArgumentException("This cast has no spent Chaos tokens.");
+                ((ObjectNode) definition).putObject("damage").put("dice", tokens.path("amount").asInt() + "d"
+                        + definition.path("spentTokenDamage").path("sides").asInt()).put("fixed", true).put("type", "magic");
+            }
+            else if (!hasRoll && !definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
                     && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
                     && !definition.path("menacingReach").asBoolean() && !definition.path("hostOwned").asBoolean()
                     && !List.of("talisman", "lifeblood").contains(definition.path("witchAction").asText()))
@@ -2166,11 +2175,33 @@ public final class OnlineSessionServer {
             }
             if (definition.path("damage").isObject()) {
                 JsonNode damage = definition.path("damage");
-                if (!damage.path("fixed").asBoolean())
-                    throw new IllegalArgumentException("Only fixed damage is supported for this feature reaction.");
-                damageRoll = DiceRoller.roll(damage.path("dice").asText(""), config.maxDice(), diceRandom);
+                String expression = damage.path("dice").asText("");
+                if (!damage.path("fixed").asBoolean()) {
+                    if (!definition.path("hostOwned").asBoolean())
+                        throw new IllegalArgumentException("Use the feature damage dialog for this reaction.");
+                    int proficiency = CharacterSheetRules.proficiencyTotal(sourceSheet, c.getFear());
+                    expression = expression.replaceAll("\\d*d(\\d+)", proficiency + "d$1");
+                }
+                damageRoll = DiceRoller.roll(expression, config.maxDice(), diceRandom);
+            }
+            if (definition.has("layerRoll")) {
+                String resource = definition.path("layerRoll").asText();
+                int layers = sourceSheet.path("resources").path(resource).asInt();
+                if (layers < 1) throw new IllegalArgumentException("Confusing Aura has no remaining layers.");
+                utilityRoll = DiceRoller.roll(layers + "d6", config.maxDice(), diceRandom);
+                boolean avoided = utilityRoll.rolls().stream().anyMatch(face -> face >= 5);
+                sourceSheet.withObject("/resources").put(resource, avoided ? layers - 1 : 0);
             }
             List<String> reportLines = new ArrayList<>();
+            if (definition.has("selectedAmount"))
+                reportLines.add("Selected " + definition.path("selectedAmount").asInt() + " "
+                        + (definition.has("selectAmount") ? definition.path("selectAmount").path("resource").asText() : definition.path("resourceRoll").path("resource").asText()) + ".");
+            if (definition.has("layerRoll")) {
+                int remaining = sourceSheet.path("resources").path(definition.path("layerRoll").asText()).asInt();
+                boolean avoided = utilityRoll.rolls().stream().anyMatch(face -> face >= 5);
+                reportLines.add(avoided ? "Attack fails; one layer is destroyed. " + remaining + " layers remain."
+                        : "All dice were 4 or lower: take the damage and Confusing Aura ends.");
+            }
             int fearGrant = definition.path("giveFear").asInt();
             int fearRemoval = definition.path("removeFear").asInt();
             if (fearRemoval < 0 || fearRemoval > 1 || fearRemoval > c.getFear())
@@ -2794,12 +2825,25 @@ public final class OnlineSessionServer {
                             && expected.equals(part.path("expression").asText())) contributed = true;
                 if (!contributed) throw new IllegalArgumentException("The selected prepared damage dice must be rolled.");
             }
+            if (definition.has("resourceMultiplier")) {
+                JsonNode multiplier = definition.path("resourceMultiplier");
+                int bonus = Math.multiplyExact(sheet.path("resources").path(multiplier.path("resource").asText()).asInt(),
+                        multiplier.path("value").asInt());
+                boolean contributed = false;
+                for (JsonNode part : input.path("contributions"))
+                    if (part.path("label").asText().contains(definition.path("label").asText())
+                            && String.valueOf(bonus).equals(part.path("expression").asText())) contributed = true;
+                if (bonus <= 0 || !contributed)
+                    throw new IllegalArgumentException("The token bonus changed. Reopen this action roll.");
+            }
             applyFeatureCost(sheet, definition.path("cost"));
             useFeatureLimit(sheet, key, automation.path("uses"));
             definitions.add(definition);
             keys.add(key);
         }
         JsonNode actionSource = null;
+        JsonNode actionDefinition = null;
+        String actionKey = null;
         if (input.path("hostAction").isObject()) {
             String key = input.path("hostAction").path("key").asText();
             actionSource = featureSource(sheet, key);
@@ -2808,10 +2852,14 @@ public final class OnlineSessionServer {
             if (definition == null || !definition.path("hostRollAction").asBoolean() || !activeCardKey(sheet, key)
                     || !"duality".equals(input.path("kind").asText()) || tags.contains("reaction")
                     || !tags.contains("featureAction:" + key + ":" + definition.path("id").asText())
-                    || !tags.contains("trait:" + definition.path("actionRoll").path("trait").asText()))
+                    || !tags.contains("spellcast".equals(definition.path("actionRoll").path("trait").asText())
+                        ? "spellcast" : "trait:" + definition.path("actionRoll").path("trait").asText()))
                 throw new IllegalArgumentException("This card requires its action roll.");
+            definition = ArcanaSageRules.selectAmount(definition, input.path("hostAction"), sheet);
             applyFeatureCost(sheet, definition.path("cost"));
             useFeatureLimit(sheet, key, automation.path("uses"));
+            actionDefinition = definition;
+            actionKey = key;
         }
         if (definitions.isEmpty() && actionSource == null) throw new IllegalArgumentException("No transactional card option was selected.");
         ResolvedDice resolved = run != null && run.path("deathrunRoll").isObject() ? null : resolveDice(input);
@@ -2830,11 +2878,14 @@ public final class OnlineSessionServer {
             putDiceBreakdown(roll, resolved);
         }
         roll.put("ref", ref).put("source", input.path("source").asText());
+        if (actionDefinition != null && actionDefinition.has("castTokens"))
+            roll.putObject("spentTokens").put("key", actionKey).put("amount", actionDefinition.path("selectedAmount").asInt());
         if (!weaponName.isBlank()) roll.put("weapon", weaponName);
         if ("duality".equals(input.path("kind").asText())) {
             roll.put("kind", "duality").put("rewardClaimed", false);
             if (input.path("difficulty").isInt()) roll.set("difficulty", input.path("difficulty"));
         }
+        applyDomainSuccess(sheet, actor, roll);
         for (int i = 0; i < definitions.size(); i++) {
             JsonNode definition = definitions.get(i);
             if (definition.path("steps").isArray())
@@ -2868,6 +2919,9 @@ public final class OnlineSessionServer {
             run.put("text", "Damage rolls used: " + (count + 1) + ". Next weapon damage has "
                     + Math.max(0, run.path("deathrunRemaining").size() - 1) + " dice. End Run when no targets remain.");
         }
+        lines.addAll(ArcanaSageRules.finishForms(sheet, roll));
+        if (!lines.isEmpty()) roll.putObject("featureRoll").put("name", "Card automation")
+                .put("result", roll.path("total").asInt()).put("consequence", String.join(" ", lines));
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         changed.put(actor.getId(), sheet);
         commitFeatureSheets(changed, roll, true);
@@ -2881,6 +2935,26 @@ public final class OnlineSessionServer {
         for (JsonNode card : sheet.path("loadout"))
             if (key.equals("card:" + card.path("name").asText()) || key.startsWith("card:" + card.path("name").asText() + "/")) return true;
         return false;
+    }
+
+    private boolean applyDomainSuccess(ObjectNode sheet, Campaign.Actor actor, ObjectNode roll) throws IOException {
+        List<String> tags = List.of(roll.path("source").asText().split(","));
+        if (!"duality".equals(roll.path("kind").asText()) || !tags.contains("spellcast") || tags.contains("reaction")) return false;
+        boolean changed = false;
+        for (String key : tags) {
+            if (!key.startsWith("card:") || !activeCardKey(sheet, key)) continue;
+            JsonNode source = featureSource(sheet, key);
+            JsonNode automation = catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+            if (!automation.path("spellcastSuccessSteps").isArray()) continue;
+            JsonNode difficulty = automation.path("spellcastDifficulty");
+            if (!difficulty.isInt()) throw new IllegalArgumentException("Automatic spell activation needs a known difficulty.");
+            roll.set("difficulty", difficulty);
+            if (roll.path("rolls").path(0).asInt() != roll.path("rolls").path(1).asInt()
+                    && roll.path("total").asInt() < difficulty.asInt()) continue;
+            applyFeatureSteps(sheet, automation.path("spellcastSuccessSteps"), source.path("name").asText(), actor, key, new ArrayList<>());
+            changed = true;
+        }
+        return changed;
     }
 
     private synchronized void resolveBoneValorRest(Campaign.Actor actor, JsonNode request) throws IOException {
@@ -2935,11 +3009,87 @@ public final class OnlineSessionServer {
         }
         ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, String.join("\n", report));
         message.put("actorId", actor.getId());
+        for (JsonNode card : before.path("loadout")) {
+            String key = "card:" + card.path("name").asText();
+            JsonNode automation = catalogAutomation(key, card.path("name").asText(), card.path("automation"));
+            for (JsonNode action : automation.path("actions")) {
+                if (!action.path("downtime").path("table").path("forage").asBoolean()) continue;
+                long picks = java.util.stream.StreamSupport.stream(request.path("picks").spliterator(), false)
+                        .filter(pick -> !pick.path("ally").asBoolean()
+                                && ("act:" + key + "|" + action.path("id").asText()).equals(pick.path("move").asText())).count();
+                if (picks > 1) throw new IllegalArgumentException("Forage only once per rest.");
+                if (picks == 0) continue;
+                ensureForageCapacity(next, actor.getId());
+                DiceRoller.Result forage = DiceRoller.roll("1d6", config.maxDice(), diceRandom);
+                int face = forage.total();
+                report.add("Forager: 1d6 = " + face + ".");
+                if (face < 6) addForagedItem(next, actor.getId(), FORAGED_ITEMS.get(face - 1), report);
+                else {
+                    ArrayNode choices = MAPPER.createArrayNode();
+                    for (String id : FORAGED_ITEMS) {
+                        JsonNode item = foragedItem(id);
+                        ObjectNode choice = choices.addObject().put("id", id).put("label", "Forager: " + item.path("name").asText())
+                                .put("sourceOnly", true).put("exclusiveClaim", true);
+                        choice.putArray("steps").addObject().put("op", "inventory").put("itemId", id);
+                    }
+                    attachActionBenefits(message, actor, next, MAPPER.createObjectNode().put("allowSourceOwner", true), choices);
+                    report.add("Choose one foraged consumable using this message's buttons.");
+                }
+            }
+        }
+        message.put("text", String.join("\n", report));
         if ("short".equals(kind) && request.path("result").path("dice").isArray()) message.set("restDice", request.path("result").path("dice"));
         commitFeatureSheets(changed, message, true);
         sessionRolls.add(rollKey(message.path("id").asLong(), message.path("ts").asLong()));
         for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
         deliver(message, null, false);
+    }
+
+    private static final List<String> FORAGED_ITEMS = List.of("foraged-food", "foraged-relic", "foraged-rune", "foraged-vial", "foraged-charm");
+
+    private JsonNode foragedItem(String id) throws IOException {
+        if (!FORAGED_ITEMS.contains(id)) throw new IllegalArgumentException("Choose a Forager consumable.");
+        java.nio.file.Path directory = host.compendiumDirectory();
+        if (directory == null) throw new IllegalArgumentException("The consumable compendium is unavailable.");
+        for (JsonNode entry : MAPPER.readTree(directory.resolve("consumables.json").toFile()).path("entries"))
+            if (id.equals(entry.path("id").asText())) return entry;
+        throw new IllegalArgumentException("The foraged consumable is missing from the compendium.");
+    }
+
+    private void ensureForageCapacity(ObjectNode sheet, String actorId) throws IOException {
+        int carried = 0;
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (!hasPlayerSheet(actor)) continue;
+            JsonNode inventory = (actorId.equals(actor.getId()) ? sheet : storedSheet(actor.getId())).path("inventory");
+            for (JsonNode item : inventory)
+                if (item.path("foraged").asBoolean() || item.path("name").asText().startsWith("Foraged "))
+                    carried = Math.addExact(carried, Math.max(0, item.path("qty").asInt()));
+        }
+        if (carried >= 5) throw new IllegalArgumentException("The party can carry at most five foraged consumables. Use or remove one before foraging.");
+    }
+
+    private void addForagedItem(ObjectNode sheet, String actorId, String id, List<String> report) throws IOException {
+        ensureForageCapacity(sheet, actorId);
+        JsonNode entry = foragedItem(id);
+        ObjectNode item = MAPPER.createObjectNode().put("name", entry.path("name").asText())
+                .put("qty", 1).put("type", "consumable").put("note", entry.path("text").asText()).put("foraged", true);
+        item.set("automation", entry.path("automation").deepCopy());
+        ObjectNode identity = ChatCards.identity(item);
+        identity.remove("foraged");
+        ObjectNode stack = null;
+        for (JsonNode existing : sheet.withArray("inventory")) {
+            if (!(existing instanceof ObjectNode object) || object.path("name").asText("").isBlank()) continue;
+            ObjectNode existingIdentity = ChatCards.identity(object);
+            existingIdentity.remove(List.of("catalog", "foraged"));
+            if (existingIdentity.equals(identity)) {
+                stack = object;
+                break;
+            }
+        }
+        if (stack == null) sheet.withArray("inventory").add(item);
+        else stack.put("qty", Math.addExact(Math.max(0, stack.path("qty").asInt(1)), 1)).put("foraged", true);
+        sheet.put("inventoryRevision", sheet.path("inventoryRevision").asLong() + 1);
+        report.add("Added " + entry.path("name").asText() + " to inventory.");
     }
 
     private void resolveGlancingBlow(Campaign.Actor actor, ObjectNode sheet, JsonNode source, String key,
@@ -3171,6 +3321,8 @@ public final class OnlineSessionServer {
         if (!roll.path("rolls").equals(request.path("expectedDice")))
             throw new IllegalArgumentException("The damage dice changed. Reopen this action from the updated roll.");
         JsonNode selection = request.path("dice");
+        if (definition.path("rerollAnyDie").asBoolean() && selection.size() != 1)
+            throw new IllegalArgumentException("Select exactly one die for the luck charm.");
         boolean reroll = "reroll".equals(definition.path("damageDice").asText());
         if (!selection.isArray() || selection.isEmpty() || selection.size() > config.maxDice() || !reroll && selection.size() != 1)
             throw new IllegalArgumentException(reroll ? "Select at least one damage die." : "Select exactly one damage die.");
@@ -3198,11 +3350,11 @@ public final class OnlineSessionServer {
             List<Integer> local = new ArrayList<>();
             for (int i = 0; i < values.size(); i++) if (selected.contains(offset + i)) local.add(i);
             if (!local.isEmpty()) {
-                if (detail.path("label").asText().startsWith("Combo Strike"))
+                if (detail.path("label").asText().startsWith("Combo Strike") && !definition.path("rerollAnyDie").asBoolean())
                     throw new IllegalArgumentException("Combo Dice cannot be modified.");
                 DiceRoller.Result before = new DiceRoller.Result(detail.path("expression").asText(), values, detail.path("total").asInt());
-                DiceRoller.Result after = DiceRoller.editDice(before, local, reroll, config.maxDice(), diceRandom);
-                for (int i : local) reportLines.add((reroll ? "Rerolled" : "Doubled") + " damage die " + (offset + i + 1)
+                DiceRoller.Result after = DiceRoller.editDice(before, local, reroll, config.maxDice(), diceRandom, definition.path("rerollAnyDie").asBoolean());
+                for (int i : local) reportLines.add((reroll ? "Rerolled" : "Doubled") + (definition.path("rerollAnyDie").asBoolean() ? " die " : " damage die ") + (offset + i + 1)
                         + ": " + values.get(i) + " -> " + after.rolls().get(i) + ".");
                 // Preserve non-dice adjustments already recorded on this contribution.
                 int originalFormulaTotal = DiceRoller.totalFor(before.expression(), before.rolls(), config.maxDice());
@@ -3221,7 +3373,12 @@ public final class OnlineSessionServer {
         int previousTotal = roll.path("total").asInt();
         int updatedTotal = Math.addExact(previousTotal, delta);
         roll.put("total", updatedTotal);
-        reportLines.add("Damage total: " + previousTotal + " -> " + updatedTotal + ".");
+        if (definition.path("rerollAnyDie").asBoolean() && "duality".equals(roll.path("kind").asText())) {
+            int hope = roll.path("rolls").path(0).asInt(), fear = roll.path("rolls").path(1).asInt();
+            if (hope == fear) roll.remove("outcome");
+            else roll.put("outcome", hope > fear ? "hope" : "fear");
+        }
+        reportLines.add((definition.path("rerollAnyDie").asBoolean() ? "Roll" : "Damage") + " total: " + previousTotal + " -> " + updatedTotal + ".");
     }
 
     private void rerollFeatureDualityDie(ObjectNode roll, String die, List<String> report) {
@@ -3302,6 +3459,8 @@ public final class OnlineSessionServer {
             }
         }
         ObjectNode claims = message.putObject("actionBenefits").put("sessionId", sessionId);
+        if (action.has("chatBenefitLimit")) claims.put("maxClaims", action.path("chatBenefitLimit").asInt());
+        if (action.path("excludeSourceActor").asBoolean()) claims.put("excludeSourceActor", true);
         if (self || action.path("allowSourceOwner").asBoolean()) claims.put("allowSourceOwner", true);
         if (java.util.stream.StreamSupport.stream(benefits.spliterator(), false).anyMatch(b -> b.path("transferStress").asBoolean()))
             claims.put("stressCapacity", Math.max(0, sheet.path("stress").path("slots").asInt() - sheet.path("stress").path("on").asInt()));
@@ -3332,6 +3491,10 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("Choose an eligible ally who received this performance.");
         if (containsText(claims.withArray("claimedBy"), actor.getOwnerId()))
             throw new IllegalArgumentException("You already claimed a benefit from this performance.");
+        if (claims.has("maxClaims") && claims.path("claimedBy").size() >= claims.path("maxClaims").asInt())
+            throw new IllegalArgumentException("All conjured steeds from this cast are already claimed.");
+        if (claims.path("excludeSourceActor").asBoolean() && actor.getId().equals(message.path("actorId").asText()))
+            throw new IllegalArgumentException("The caster already has a conjured steed.");
         JsonNode benefit = null;
         for (JsonNode option : claims.path("options"))
             if (option.path("id").asText().equals(request.path("benefitId").asText())) { benefit = option; break; }
@@ -3564,6 +3727,23 @@ public final class OnlineSessionServer {
                         }
                 }
             }
+            try {
+                JsonNode consumables = catalogs().document("consumables");
+                if (consumables != null) for (JsonNode item : consumables.path("entries")) {
+                    String sourceKey = effect.path("sourceKey").asText();
+                    if (!sourceKey.isBlank() && !sourceKey.equals("item:" + item.path("name").asText())) continue;
+                    for (JsonNode action : item.path("automation").path("actions"))
+                        for (JsonNode step : action.path("steps")) {
+                            JsonNode definition = step.path("effect");
+                            if (effect.path("name").asText().equals(definition.path("name").asText())
+                                    && definition.path("rollTriggers").isArray()) {
+                                ObjectNode source = MAPPER.createObjectNode().put("name", item.path("name").asText());
+                                source.putObject("automation").set("rollTriggers", definition.path("rollTriggers"));
+                                return source;
+                            }
+                        }
+                }
+            } catch (IOException e) { throw new FeatureIoException(e); }
             throw new IllegalArgumentException("The effect's feature is no longer available.");
         }
         List<String> fields = switch (kind) {
@@ -3857,10 +4037,10 @@ public final class OnlineSessionServer {
         if (trigger.path("weaponDamage").asBoolean() && (!tags.contains("damage") || tags.contains("spelldamage") || roll.path("weapon").asText().isBlank()))
             throw new IllegalArgumentException("This feature requires weapon damage.");
         if (trigger.path("criticalOnly").asBoolean()
-                && (roll.path("rolls").path(0).asInt() < 1
-                    || roll.path("rolls").path(0).asInt() != roll.path("rolls").path(1).asInt()
-                    || !tags.contains("attack")))
-            throw new IllegalArgumentException("This feature requires a critical attack.");
+                && (!"duality".equals(roll.path("kind").asText())
+                    || roll.path("rolls").path(0).asInt() < 1
+                    || roll.path("rolls").path(0).asInt() != roll.path("rolls").path(1).asInt()))
+            throw new IllegalArgumentException("This feature requires a critical Duality roll.");
         if (trigger.path("failedOnly").asBoolean()
                 && (roll.path("rolls").path(0).asInt() > 0
                     && roll.path("rolls").path(0).asInt() == roll.path("rolls").path(1).asInt()
@@ -3880,7 +4060,8 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature requires magic damage.");
         if (trigger.path("magicAction").asBoolean() && !(tags.contains("spellcast") || tags.contains("attack") && magic))
             throw new IllegalArgumentException("This feature requires a Spellcast roll or a magic-damage attack.");
-        if (trigger.has("damageDice") && ("duality".equals(roll.path("kind").asText()) || !tags.contains("damage")))
+        if (trigger.has("damageDice") && !trigger.path("rerollAnyDie").asBoolean()
+                && ("duality".equals(roll.path("kind").asText()) || !tags.contains("damage")))
             throw new IllegalArgumentException("Select dice from a damage roll.");
         String on = trigger.path("on").asText("");
         for (JsonNode excluded : trigger.path("excludeRolls")) {
@@ -4037,10 +4218,15 @@ public final class OnlineSessionServer {
         for (JsonNode step : steps) {
             String operation = step.path("op").asText("");
             String resource = step.path("resource").asText("");
+            if ("inventory".equals(operation)) {
+                try { addForagedItem(sheet, sourceActor.getId(), step.path("itemId").asText(), report); }
+                catch (IOException e) { throw new FeatureIoException(e); }
+                continue;
+            }
             if (("gain".equals(operation) || "mark".equals(operation) || "clear".equals(operation)) && isTrack(resource)) {
                 ObjectNode track = requireTrack(sheet, resource);
                 int before = track.path("on").asInt();
-                int amount = featureAmount(step.path("amount"), sheet);
+                int amount = Math.max(step.path("minimumAmount").asInt(), featureAmount(step.path("amount"), sheet));
                 if ("all".equals(step.path("amount").asText())) amount = before;
                 if ("clear".equals(operation)) track.put("on", Math.max("hp".equals(resource) ? DeathMoves.hpHealingFloor(sheet) : 0,
                         before - Math.max(0, amount)));
@@ -4059,7 +4245,8 @@ public final class OnlineSessionServer {
                 ObjectNode resources = sheet.withObject("/resources");
                 int before = resources.path(resource).asInt(0);
                 int max = definition.has("max") ? featureAmount(definition.get("max"), sheet) : Integer.MAX_VALUE;
-                int amount = "all".equals(step.path("amount").asText()) ? before : featureAmount(step.path("amount"), sheet);
+                int amount = "all".equals(step.path("amount").asText()) ? before
+                        : Math.max(step.path("minimumAmount").asInt(), featureAmount(step.path("amount"), sheet));
                 if (amount < 0) throw new IllegalArgumentException("Invalid resource amount.");
                 int after = "gain".equals(operation) ? (int) Math.min(max, (long) before + amount) : Math.max(0, before - amount);
                 resources.put(resource, after);
@@ -4154,6 +4341,11 @@ public final class OnlineSessionServer {
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
             if ("@proficiency".equals(text)) return Math.max(0, sheet.path("proficiency").path("on").asInt());
             if ("@total_proficiency".equals(text)) return CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear());
+            if (text.startsWith("@total_")) {
+                String name = text.substring("@total_".length());
+                name = name.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + name.substring(1);
+                return CharacterSheetRules.traitTotal(sheet, name, campaign.getFear());
+            }
             if ("@spellcast".equals(text)) {
                 return CharacterSheetRules.spellcastTotal(sheet, campaign.getFear());
             }
@@ -4572,7 +4764,7 @@ public final class OnlineSessionServer {
         return resetPeriod(false);
     }
 
-    /** DM button: starts a new play session; also ends the scene and empties session resource pools. */
+    /** DM button: starts a new play session, ends the scene and clears or refills session resource pools. */
     public synchronized String newSession() {
         return resetPeriod(true);
     }
@@ -4608,6 +4800,7 @@ public final class OnlineSessionServer {
                     if (!ended.isEmpty()) sheet.set("effects", kept);
                 }
                 List<String> cleared = new ArrayList<>();
+                if (session && !sheet.has("resources")) sheet.putObject("resources");
                 if (sheet.get("resources") instanceof ObjectNode resources) {
                     for (String id : resourceIds) {
                         if (resources.path(id).asInt(0) != 0) {
@@ -4620,6 +4813,12 @@ public final class OnlineSessionServer {
                                 cleared.add(id.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + id.substring(1));
                             }
                             resources.put(id, 0);
+                        }
+                        JsonNode definition = findResourceDefinition(sheet, id);
+                        if (definition != null && definition.has("sessionReset")) {
+                            int amount = Math.max(0, featureAmount(definition.path("sessionReset"), sheet));
+                            resources.put(id, amount);
+                            cleared.add("prepared " + amount + " " + definition.path("label").asText(id));
                         }
                     }
                 }
@@ -5992,6 +6191,13 @@ public final class OnlineSessionServer {
                 roll.withArray("featureUses").add(actor.getId() + ":" + key + ":" + trigger.path("id").asText());
                 changed = true;
             }
+        }
+        changed |= applyDomainSuccess(sheet, actor, roll);
+        List<String> formReports = ArcanaSageRules.finishForms(sheet, roll);
+        if (!formReports.isEmpty()) {
+            roll.putObject("featureRoll").put("name", "Card automation").put("result", roll.path("total").asInt())
+                    .put("consequence", String.join(" ", formReports));
+            changed = true;
         }
         if (!changed) return false;
         commitFeatureSheets(changedSheets, roll, true);

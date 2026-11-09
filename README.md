@@ -83,6 +83,19 @@ Nothing starts until you click **Start online session**, so offline play and the
   when recast; Vital Ward chooses resistance type; Tava's Armor and Parallela grant targeted effects.
   Flight replaces its tokens with current Agility (minimum one), and long-rest preparation regenerates
   Inspirational Words, Restoration, Strategic Approach and Fane tokens automatically.
+- **Sage and Arcana spell automation:** successful Spellcast results offer their damage, activation
+  and resource-spending actions instead of redundant card controls. Vicious Entangle's damage and
+  Hope-paid additional restraint run directly from its Spellcast chat result. Unleash Chaos refills each session
+  and remembers the tokens spent on its cast; Flight, Thorn Skin, Wild Surge and Confusing Aura track
+  their active buffs and tokens. Rune Ward creates a transferable, Hope-powered protective trinket
+  destroyed on an 8. Forest Sprites shares one token pool across the party; Conjured Steeds grants
+  long-rest buffs with optional attack/damage adjustments. Forager adds automated consumables to
+  inventory and offers a choice on a 6 directly on short- or long-rest chat reports.
+  Repeated identical Forager rewards increase the existing item's quantity.
+  A prepared Luck Charm can reroll one chat die after the charm is consumed; rerolling removes its buff.
+  Wall Walk targets one recipient; Force of Nature offers
+  preselected Hope maintenance and damage, plus Armor clearing on damage results.
+  Fane of the Wilds grants its token from a critical Sage Spellcast result, including non-attack spells.
 - **Touched-card passives:** Arcana, Blade, Bone, Splendor and Valor automatically apply their passive
   bonuses while at least four matching domain cards are in the active loadout. Vaulted cards do not count;
   Codex, Sage and Dread also offer loadout-gated roll options; Bone's attack avoidance and Splendor's damage

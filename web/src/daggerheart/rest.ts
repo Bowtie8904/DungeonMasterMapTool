@@ -304,7 +304,8 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         }
         execute(s, a);
         const table = a.downtime?.table;
-        if (table) {
+        if (table?.forage) lines.push(`${s.name}: the host rolls for your foraged consumable.`);
+        else if (table) {
           const evaluate = (expression: string) => expression.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c)));
           const countRoll = table.repeat ? dice(evaluate(table.repeat)) : null;
           const count = countRoll ? Math.max(0, Math.floor(countRoll.value)) : 1;
@@ -342,6 +343,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   c.shortRestsInRow = kind === 'long' ? 0 : (c.shortRestsInRow ?? 0) + 1;
   if (kind === 'long') c.longRestRevision = (c.longRestRevision ?? 0) + 1;
   const gainedEffects = c.effects.filter((e) => !previousEffects.has(e.id));
+  if (c.effects.some(e => e.surgeResource)) lines.push('Wild Surge ends at rest: mark an additional Stress.');
   applyRest(c, kind);
   // Effects created by a downtime move last until the next rest, not this one.
   c.effects.push(...gainedEffects.filter((e) => !c.effects.some((current) => current.id === e.id)));

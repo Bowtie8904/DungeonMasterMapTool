@@ -140,6 +140,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
       const result = resolveRest(next, kind, chosen, o);
       const summary = restSummary(next, kind, chosen, result);
       const hostRest = Object.values(o.passives ?? {}).some(Boolean) && Object.keys(o.allies ?? {}).length > 0
+        || activeCardSources(c).some(s => s.auto?.actions?.some(a => a.downtime?.table?.forage && chosen.some(p => p.move === `act:${s.key}|${a.id}`)))
         || c.effects.some(e => e.consumeLongRestMove)
         || activeCardSources(c).some(s => s.auto?.rest?.modifiers?.some(m => m.repairAllies && chosen.some(p => !p.ally && p.move === m.move)));
       if (commit && hostRest) await commit({ kind, picks: chosen, options: o, sheet: next, result, report: summary });

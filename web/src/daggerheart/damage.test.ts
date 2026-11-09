@@ -6,10 +6,10 @@ import { applyDamage, availableMitigations, computeDamage, severityOf, type Dama
 import { formatDamageReport, parseDamageReport } from './damage-summary';
 
 function rules(category: string, name: string): Automation {
-  const file: { entries: Array<{ name: string; automation?: Automation; feature?: { name: string }; features?: Array<{ name: string; automation?: Automation }> }> } =
+  const file: { entries: Array<{ name: string; automation?: Automation; feature?: { name: string }; spells?: Array<{ name: string; automation?: Automation }>; features?: Array<{ name: string; automation?: Automation }> }> } =
     JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${category}.json`, import.meta.url), 'utf8'));
   type Source = { name: string; automation?: Automation; feature?: { name: string } };
-  const source = file.entries.flatMap((e): Source[] => [e, ...(e.features ?? [])]).find((e) => e.name === name || e.feature?.name === name);
+  const source = file.entries.flatMap((e): Source[] => [e, ...(e.features ?? []), ...(e.spells ?? [])]).find((e) => e.name === name || e.feature?.name === name);
   if (!source?.automation) throw new Error(`Missing automation: ${category}/${name}`);
   return structuredClone(source.automation);
 }
@@ -130,10 +130,10 @@ describe('damage calculation', () => {
 
   it('conjures beetles and reduces the next damage, optionally retaining them for Hope', () => {
     const { c, major } = setup();
-    const automation = rules('domain-cards', 'Conjure Swarm');
+    const automation = rules('domain-cards', 'Tekaira Armored Beetles');
     c.loadout = [{ name: 'Conjure Swarm', domain: 'Sage', level: 2, type: 'Spell', recall: 1, text: '', automation }];
     expect(availableMitigations(c)).toHaveLength(0);
-    runAction(c, 'card:Conjure Swarm', automation, automation.conditionalActions![0], 'Conjure Swarm');
+    runAction(c, 'card:Conjure Swarm/Tekaira Armored Beetles', automation, automation.actions![0], 'Tekaira Armored Beetles');
     expect(c.stress.on).toBe(1);
     const keep = availableMitigations(c).find(m => m.option.id === 'keep')!;
     const input = { damage: major, selected: new Set([keep.id]) };
@@ -154,9 +154,9 @@ describe('damage calculation', () => {
 
   it('does not spend Hope or dismiss beetles when damage is negated', () => {
     const { c, major } = setup();
-    const automation = rules('domain-cards', 'Conjure Swarm');
+    const automation = rules('domain-cards', 'Tekaira Armored Beetles');
     c.loadout = [{ name: 'Conjure Swarm', domain: 'Sage', level: 2, type: 'Spell', recall: 1, text: '', automation }];
-    runAction(c, 'card:Conjure Swarm', automation, automation.conditionalActions![0], 'Conjure Swarm');
+    runAction(c, 'card:Conjure Swarm/Tekaira Armored Beetles', automation, automation.actions![0], 'Tekaira Armored Beetles');
     c.effects.push({ id: 'immune', name: 'immune', kind: 'buff', mitigation: [{ id: 'negate', label: 'Negate', passive: true, negate: true }] });
     const keep = availableMitigations(c).find(m => m.option.id === 'keep')!;
     const result = run(c, { damage: major, selected: new Set([keep.id]) });

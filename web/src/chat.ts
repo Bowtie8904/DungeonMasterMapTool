@@ -159,7 +159,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
       el('strong', {}, report.kind === 'long' ? 'Long rest' : 'Short rest')),
     el('div', { class: 'rest-subtitle' }, report.subtitle),
     el('ul', { class: 'rest-moves' }, ...report.lines.map((l) => el('li', {}, l))));
-    if (e.kind === 'chat' && rollActions && e.m.restDice?.length) {
+    if (e.kind === 'chat' && rollActions && (e.m.restDice?.length || e.m.actionBenefits)) {
       const actions = rollActions(e.m);
       if (actions) card.append(actions);
     }

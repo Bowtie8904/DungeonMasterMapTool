@@ -2,6 +2,7 @@ import { el } from '../login';
 import { confirmDialog } from '../dialogs';
 import { editTokenArtwork } from '../token-artwork';
 import { chooseTalismanHope } from './witch-view';
+import { chooseActionAmount } from './amount-view';
 import { chooseSpecialCard, type SpecialCardChoice } from './special-card-view';
 import {
   Advantage, Armor, CharacterSheet, DomainCard, Feature, InventoryItem, Spell, Track, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, Weapon,
@@ -47,7 +48,7 @@ const CARD_DRAG = 'application/x-dmmt-domain-card';
 
 export interface RollRequest {
   hostOptions?: Array<{ key: string; id: string; trait?: TraitName }>;
-  hostAction?: { key: string; id: string };
+  hostAction?: { key: string; id: string; amount?: number };
   deathrun?: { effectId: string; count: number };
   deathrunRemove?: number;
   weaponDamage?: { proficiency: number; proficiencyBonus: number; maximizeDie?: number; multiplier: number; options: Array<{ key: string; id: string }> };
@@ -526,13 +527,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.actionRoll?.trait !== 'highest') b.textContent = currentCost ? `${action.label} (${currentCost})` : action.label;
     });
     const setBusy = (value: boolean) => { busy = value; b.disabled = value; };
+    const originalAction = action;
     b.addEventListener('click', async () => {
+      let action = originalAction;
       const currentBlock = blocker();
       if (currentBlock) { b.title = currentBlock; return; }
+      if (action.castTokens || action.selectAmount) {
+        const amount = await chooseActionAmount(c, action);
+        if (amount === undefined) return;
+        action = { ...action, selectedAmount: amount, ...(action.castTokens
+          ? { cost: { ...action.cost, [action.castTokens.resource]: amount } } : {}) };
+      }
       if (action.hostOwned && !action.actionRoll) {
         if (!opts.onFeature || !opts.supportsDomainCardAutomation?.()) { opts.onLog?.('Update the host to use this card action.'); return; }
         setBusy(true);
-        try { await opts.onFeature(key, action.id); hooks.after?.(); render(false); }
+        try { await opts.onFeature(key, action.id, action.selectedAmount); hooks.after?.(); render(false); }
         catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
         finally { setBusy(false); }
         return;
@@ -1244,7 +1253,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (severity >= 3 && opts.onDamageTaken) {
           void opts.onDamageTaken(severity).catch((e: Error) => opts.onLog?.(`Could not expire damage-linked effects: ${e.message}`));
         }
-      }, undefined, opts.onIncomingDamage);
+      }, undefined, opts.onIncomingDamage, (label, value) => opts.onLog?.(`${label}\nWard Die: 1d8 = ${value}\nIncoming damage reduced by ${value}.${value === 8 ? ' The Rune Ward trinket is destroyed.' : ''}`));
     });
     damageButton.classList.add('dh-dmg-btn');
     damageButton.addEventListener('click', (e) => e.stopPropagation());
@@ -1763,7 +1772,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const cardKey = embedded ? `card:Copycat/${d.name}` : `card:${d.name}`;
     const acts = el('div', { class: 'act' });
     const spells = d.spells?.length ? d.spells : null;
-    if (!spells && d.spellcast && asksSpellcastRoll(d.text) && !d.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
+    if (!spells && d.spellcast && !d.automation?.hideSpellcast && asksSpellcastRoll(d.text) && !d.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
       const tracked = d.automation?.automaticRestUse;
       const blocked = tracked && (!opts.supportsDomainCardAutomation?.() || usesLeft(c, cardKey, d.automation!) === 0);
@@ -2327,7 +2336,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     } : {
       label,
       source: [...effectiveTargets(),
-        ...selected().filter(s => s.key.startsWith('card:') || c.effects.some(effect => effect.linkedTokenResource && s.key === `effect:${effect.id}`)).map(s => `option:${s.key}:${s.option.id}`),
+        ...selected().filter(s => s.key.startsWith('card:') || s.key.startsWith('effect:')).map(s => `option:${s.key}:${s.option.id}`),
         ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : []),
         ...(selected().some(s => s.option.linkedDamageTrait) ? [`linkedDamage:${selected().reduce((n, s) => n + (s.option.linkedDamageTrait ? (s.option.linkedDamageMultiplier ?? 2) * traitTotal(c, s.option.linkedDamageTrait) : 0), 0)}`] : [])].join(','),
       expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12,
@@ -2352,7 +2361,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     if (hostOptions.length) {
       request.hostOptions = hostOptions.map(s => ({ key: s.key, id: s.option.id, trait: s.option.traitValue }));
     }
-    if (pendingAction?.action.hostRollAction) request.hostAction = { key: pendingAction.key, id: pendingAction.action.id };
+    if (pendingAction?.action.hostRollAction) request.hostAction = { key: pendingAction.key, id: pendingAction.action.id, amount: pendingAction.action.selectedAmount };
     const run = hostOptions.find(s => s.option.deathrun);
     if (run) {
       const effect = c.effects.find(e => run.key === `effect:${e.id}`)!;

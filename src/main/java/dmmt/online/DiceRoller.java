@@ -141,6 +141,10 @@ public final class DiceRoller {
 
     /** Edits selected damage dice without losing keep-highest or whole-roll multipliers. */
     public static Result editDice(Result result, List<Integer> selected, boolean reroll, int maxDice, Random random) {
+        return editDice(result, selected, reroll, maxDice, random, false);
+    }
+
+    public static Result editDice(Result result, List<Integer> selected, boolean reroll, int maxDice, Random random, boolean anyDie) {
         Terms parsed = terms(result.expression(), maxDice);
         if (parsed.dice().size() != result.rolls().size())
             throw new IllegalArgumentException("The damage dice no longer match their formula.");
@@ -149,9 +153,10 @@ public final class DiceRoller {
             throw new IllegalArgumentException("Choose " + (reroll ? "one or more distinct dice." : "exactly one die."));
         List<Integer> values = new ArrayList<>(result.rolls());
         for (int index : selected) {
-            if (index < 0 || index >= values.size() || parsed.dice().get(index) <= 0)
+            if (index < 0 || index >= values.size() || parsed.dice().get(index) == 0 || !anyDie && parsed.dice().get(index) < 0)
                 throw new IllegalArgumentException("Choose a positive damage die.");
-            values.set(index, reroll ? random.nextInt(parsed.dice().get(index)) + 1 : Math.multiplyExact(values.get(index), 2));
+            int sides = parsed.dice().get(index);
+            values.set(index, reroll ? (random.nextInt(Math.abs(sides)) + 1) * Integer.signum(sides) : Math.multiplyExact(values.get(index), 2));
         }
         return new Result(result.expression(), values, total(parsed, values));
     }

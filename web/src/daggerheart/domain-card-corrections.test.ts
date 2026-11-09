@@ -48,10 +48,11 @@ describe('domain-card cost and limit corrections', () => {
     trait.mod = 2;
     c.effects.push({ id: 'agility', name: 'Agility bonus', kind: 'buff', modifiers: [{ stat: 'trait.Agility', value: 1 }] });
     c.resources = { flight: 9 };
-    runAction(c, 'card:Flight', a, a.actions![0], 'Flight');
+    const success = { id: 'success', label: 'Flight success', steps: a.spellcastSuccessSteps };
+    runAction(c, 'card:Flight', a, success, 'Flight');
     expect(c.resources!.flight).toBe(3);
     trait.mod = -4;
-    runAction(c, 'card:Flight', a, a.actions![0], 'Flight');
+    runAction(c, 'card:Flight', a, success, 'Flight');
     expect(c.resources!.flight).toBe(1);
   });
 
@@ -542,6 +543,7 @@ describe('domain-card cost and limit corrections', () => {
     c.hope.on = 6;
     c.stress.slots = 6;
     const automation = rules(id);
+    load(c, id);
     const action = automation.actions![0];
     expect(action.cost).toEqual({ [resource]: amount });
     expect(runAction(c, `card:${id}`, automation, action, id)).not.toBeNull();
@@ -617,7 +619,9 @@ describe('domain-card cost and limit corrections', () => {
     const key = `card:${name}`;
     expect(runAction(c, key, automation, cast, name)).not.toBeNull();
     expect(actionBlocker(c, key, automation, cast)).toBeTruthy();
-    expect(actionBlocker(c, key, automation, automation.actions!.find(action => action.id === 'clear')!)).toBeNull();
+    const manualClear = automation.actions!.find(action => action.id === 'clear');
+    if (manualClear) expect(actionBlocker(c, key, automation, manualClear)).toBeNull();
+    else expect(automation.actions).toHaveLength(1);
     c.resources![resource] = 2;
     applyRest(c, 'short');
     expect(c.resources![resource]).toBe(0);

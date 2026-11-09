@@ -89,7 +89,7 @@ export function chooseFeatureEffects(action: ActionDef, submit: (ids: string[], 
 
 export interface DamageDieChoice { index: number; sides: number; value: number; label: string; kept: boolean }
 
-export function damageDieChoices(m: RollMessage): DamageDieChoice[] {
+export function damageDieChoices(m: RollMessage, anyDie = false): DamageDieChoice[] {
   const out: DamageDieChoice[] = [];
   let index = 0;
   for (const detail of rollDetails(m)) {
@@ -98,8 +98,8 @@ export function damageDieChoices(m: RollMessage): DamageDieChoice[] {
       .flatMap(match => Array.from({ length: Number(match[2] || 1) }, () => Number(match[3]) * (match[1] === '-' ? -1 : 1)));
     detail.rolls.forEach((value, i) => {
       const current = index++;
-      if (sides[i] > 0 && !detail.label.startsWith('Combo Strike'))
-        out.push({ index: current, sides: sides[i], value, label: detail.label, kept: kept[i] !== false });
+      if (sides[i] && (anyDie || sides[i] > 0 && !detail.label.startsWith('Combo Strike')))
+        out.push({ index: current, sides: Math.abs(sides[i]), value, label: detail.label, kept: kept[i] !== false });
     });
   }
   return out;
@@ -116,14 +116,14 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
   if (trigger.damageDice) {
     const dice = el('div', { class: 'roll-dice' });
     const buttons: HTMLButtonElement[] = [];
-    for (const die of damageDieChoices(m).filter(die => !trigger.damageDiceBelow || die.value > 0 && die.value < trigger.damageDiceBelow)) {
+    for (const die of damageDieChoices(m, trigger.rerollAnyDie).filter(die => !trigger.damageDiceBelow || die.value > 0 && die.value < trigger.damageDiceBelow)) {
       const button = el('button', { type: 'button', class: `roll-die${die.kept ? '' : ' discarded'}`, ariaPressed: 'false',
         ariaLabel: `${die.label}, die ${die.index + 1}: d${die.sides}, rolled ${die.value}${die.kept ? '' : ', discarded'}` },
       el('span', { class: 'roll-die-name' }, `d${die.sides}`), el('strong', {}, String(die.value)));
       button.dataset.index = String(die.index);
       button.addEventListener('click', () => {
         const had = selected.has(die.index);
-        if (trigger.damageDice === 'double') selected.clear();
+        if (trigger.damageDice === 'double' || trigger.rerollAnyDie) selected.clear();
         if (had) selected.delete(die.index); else selected.add(die.index);
         buttons.forEach(b => b.setAttribute('aria-pressed', String(selected.has(Number(b.dataset.index)))));
         go.disabled = selected.size === 0;
@@ -131,7 +131,7 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
       buttons.push(button);
       dice.append(button);
     }
-    ui.dialog.append(el('p', { class: 'muted' }, trigger.damageDice === 'reroll'
+    ui.dialog.append(el('p', { class: 'muted' }, trigger.rerollAnyDie ? 'Select one die to reroll, keeping the new result.' : trigger.damageDice === 'reroll'
       ? `Select any number of ${trigger.damageDiceBelow ? `damage dice below ${trigger.damageDiceBelow}` : 'damage dice'} to reroll. New results replace the selected dice, even if lower.`
       : 'Select one damage die to double its value.'));
     options.append(dice);

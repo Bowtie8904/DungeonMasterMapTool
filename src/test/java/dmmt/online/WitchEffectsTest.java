@@ -15,6 +15,55 @@ class WitchEffectsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
+    void runeWardTransfersItsDieMitigationSurvivesRestAndDisappearsWhenItsPowerIsSpent() {
+        ObjectNode caster = source("runeWard", 0);
+        caster.withObject("/resources").put("rune-ward", 1);
+        ObjectNode ally = MAPPER.createObjectNode();
+        Map<String, ObjectNode> sheets = new LinkedHashMap<>(Map.of("caster", caster, "ally", ally));
+        WitchEffects.synchronize(sheets, copy(sheets));
+        assertEquals("Rune Ward", caster.path("inventory").get(0).path("name").asText());
+        Map<String, ObjectNode> previous = copy(sheets);
+        ChatCards.transfer(caster, ally, "item", caster.path("inventory").get(0).deepCopy());
+        WitchEffects.synchronize(sheets, previous);
+        JsonNode ward = linked(ally, "runeWard");
+        assertEquals(8, ward.path("mitigation").get(0).path("roll").path("sides").asInt());
+        assertEquals(1, ward.path("mitigation").get(0).path("cost").path("hope").asInt());
+        previous = copy(sheets);
+        caster.put("shortRestsInRow", 1);
+        WitchEffects.synchronize(sheets, previous);
+        assertEquals(1, ally.path("inventory").size());
+        previous = copy(sheets);
+        ally.withObject("/resources").put("talisman-tokens:caster:activation", 0);
+        WitchEffects.synchronize(sheets, previous);
+        assertTrue(ally.path("inventory").isEmpty());
+        assertTrue(linked(ally, "runeWard").isMissingNode());
+        assertEquals(0, caster.path("resources").path("rune-ward").asInt());
+    }
+
+    @Test
+    void spritesShareTheCasterPoolAcrossAttackAndArmorBenefitsAndEndForEveryone() {
+        ObjectNode caster = source("sprites", 0);
+        caster.withObject("/resources").put("sprites", 2);
+        ObjectNode ally = MAPPER.createObjectNode();
+        Map<String, ObjectNode> sheets = new LinkedHashMap<>(Map.of("caster", caster, "ally", ally));
+        WitchEffects.synchronize(sheets, copy(sheets));
+        JsonNode buff = linked(ally, "sprites");
+        assertEquals(3, buff.path("rollOptions").get(0).path("value").asInt());
+        assertEquals(1, buff.path("mitigation").get(0).path("armorSlots").asInt());
+        String pool = "talisman-tokens:caster:activation";
+        assertEquals(2, ally.path("resources").path(pool).asInt());
+        Map<String, ObjectNode> previous = copy(sheets);
+        ally.withObject("/resources").put(pool, 1);
+        WitchEffects.synchronize(sheets, previous);
+        assertEquals(1, caster.path("resources").path("sprites").asInt());
+        assertEquals(1, caster.path("resources").path(pool).asInt());
+        previous = copy(sheets);
+        caster.withObject("/resources").put(pool, 0);
+        WitchEffects.synchronize(sheets, previous);
+        for (ObjectNode sheet : sheets.values()) assertTrue(linked(sheet, "sprites").isMissingNode());
+    }
+
+    @Test
     void lifebloodTransfersItsHopeMitigationAndExpiresOnlyOnCasterHealingOrRecast() {
         Map<String, ObjectNode> sheets = new LinkedHashMap<>();
         ObjectNode caster = source("lifeblood", 0);

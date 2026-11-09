@@ -56,7 +56,7 @@ describe('daggerheart rests', () => {
     expect(() => resolveRest(c, 'short', [{ move: forage }, { move: ingredients }, { move: 'prepare' }])).toThrow('Too many downtime moves');
     const hp = c.hp.on, stress = c.stress.on;
     const result = resolveRest(c, 'short', [{ move: forage }, { move: ingredients }], {}, () => 1);
-    expect(result.lines.some((l) => l.includes('A unique food'))).toBe(true);
+    expect(result.lines.some((l) => l.includes('host rolls for your foraged consumable'))).toBe(true);
     expect(result.lines.some((l) => l.includes('Heal'))).toBe(true);
     expect([c.hp.on, c.stress.on]).toEqual([hp, stress]);
     c.heritage.push(feature('Celestial Trance'));
