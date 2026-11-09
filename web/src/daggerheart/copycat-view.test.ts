@@ -46,7 +46,7 @@ function dom(): Element {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   return body;
 }

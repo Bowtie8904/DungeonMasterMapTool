@@ -602,10 +602,10 @@ class MapBuildingToolsTest {
                 f.press(100, 70, MouseButton.SECONDARY, false);
                 ContextMenu menu = (ContextMenu) get(f.app, "activeLightMenu");
                 assertNotNull(menu);
-                assertEquals(java.util.List.of("Door", "Window", "Delete"),
+                assertEquals(java.util.List.of("Locked", "Door", "Window", "Delete"),
                         menu.getItems().stream().filter(item -> !(item instanceof javafx.scene.control.SeparatorMenuItem))
                                 .map(javafx.scene.control.MenuItem::getText).toList());
-                menu.getItems().getFirst().fire();
+                menu.getItems().stream().filter(item -> "Door".equals(item.getText())).findFirst().orElseThrow().fire();
                 assertEquals("door", portal.getType());
                 assertEquals("open", portal.getState());
                 f.api.execute("tools.undo", Map.of());

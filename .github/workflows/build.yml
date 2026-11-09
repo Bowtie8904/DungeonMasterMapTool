@@ -29,6 +29,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force jpackage-input | Out-Null
           Copy-Item target/DungeonMasterMapTool-*-all.jar jpackage-input/DungeonMasterMapTool.jar
+          Copy-Item dmmap-daggerheart jpackage-input\dmmap-daggerheart -Recurse
           jpackage --type app-image `
             --name DungeonMasterMapTool `
             --input jpackage-input `
@@ -41,6 +42,7 @@ jobs:
             --dest dist
           if ($LASTEXITCODE -ne 0) { throw "jpackage failed" }
           Copy-Item README.md dist/DungeonMasterMapTool/
+          & .\packaging\verify-package.ps1
           Compress-Archive -Path dist/DungeonMasterMapTool -DestinationPath DungeonMasterMapTool-windows.zip
 
       - name: Upload Windows artifact

@@ -68,7 +68,7 @@ function fakeDom() {
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {},
   });
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
 }
 

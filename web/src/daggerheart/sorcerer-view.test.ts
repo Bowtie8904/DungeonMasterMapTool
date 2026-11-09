@@ -65,7 +65,7 @@ function setup() {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   return body;
 }
@@ -212,7 +212,7 @@ describe('Sorcerer selection dialogs', () => {
     const group = root.querySelectorAll('span').find(e => e.ariaLabel === 'Enchanted Aid limited actions')!;
     expect(group.text()).toContain('1/1 per long rest');
     expect(group.text()).not.toContain('Help an Ally');
-    const manual = group.querySelectorAll('button').find(b => b.text() === 'Swap Duality dice (manual)')!;
+    const manual = group.querySelectorAll('button').find(b => b.text() === 'Swap Duality dice')!;
     expect(manual.disabled).toBe(false);
     manual.click();
     expect(c.usage['feat:Enchanted Aid'].used).toBe(1);

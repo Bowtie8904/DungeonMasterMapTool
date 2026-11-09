@@ -297,10 +297,11 @@ class CompendiumWindowTest {
                         "Real character sheet must render in WebView without a player login: " + sheetText);
                 assertTrue(server.roster().isEmpty(), "DM sheets must not connect offline owners");
                 assertEquals("0", fx(() -> String.valueOf(sheetWeb.getEngine().executeScript("location.hash.length"))));
-                fx(() -> { sheetWeb.getEngine().executeScript("document.querySelector('[data-kind=\"hope\"] button').click()"); return null; });
-                for (int attempt = 0; attempt < 100 && !store.loadSheet(campaign.getId(), "hero").contains("\"on\":1"); attempt++)
-                    Thread.sleep(100);
                 var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                fx(() -> { sheetWeb.getEngine().executeScript("document.querySelector('[data-kind=\"hope\"] button').click()"); return null; });
+                for (int attempt = 0; attempt < 100
+                        && mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("hope").path("on").asInt() != 1; attempt++)
+                    Thread.sleep(100);
                 var saved = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(store.loadSheet(campaign.getId(), "hero"));
                 assertEquals(1, saved.path("hope").path("on").asInt(), "DM resource edits must persist: "
                         + fx(() -> String.valueOf(sheetWeb.getEngine().executeScript("document.body.textContent"))));

@@ -937,6 +937,14 @@ Re-extracting or replacing the export may overwrite this manual configuration ch
 
 ## Build and run
 
+Windows builds made with `packaging\build-exe.bat` (including its console wrapper) and CI include
+the nine editable Daggerheart catalogs in `app\dmmap-daggerheart`. Browser HTML, JavaScript/CSS,
+desktop and browser condition icons, the application icon and desktop styles are bundled inside
+`app\DungeonMasterMapTool.jar`. Keep the complete application folder, not just its EXE.
+Each Windows build checks these resources against the source files before reporting success.
+You can repeat the resource check with `powershell -NoProfile -ExecutionPolicy Bypass -File packaging\verify-package.ps1`
+(use `-AppImage <folder>` for another app image). This checks package contents, not a live play session.
+
 ```powershell
 # run from the source tree
 mvn javafx:run
@@ -947,6 +955,9 @@ java -XX:+UseCompactObjectHeaders -jar target\DungeonMasterMapTool-1.0-SNAPSHOT-
 
 # run the unit tests
 mvn test
+
+# run the separate Online Play browser tests
+npm --prefix web test
 ```
 
 Main class: `dmmt.DungeonMasterMapToolLauncher`.
@@ -954,6 +965,7 @@ Main class: `dmmt.DungeonMasterMapToolLauncher`.
 Tests use temporary copies of `src/test/resources/dmmt/service/test-settings.ini`, never the project-root
 settings files, in both Maven and IDE JUnit runs. Keep any additional settings fixtures in test resources.
 Profiler accounting tests use deterministic timing rather than real-time waits.
+Remote rejection tests check certificate pins and compatibility versions separately so TCP backlog contention cannot mask the intended rejection.
 To regenerate the optional built-in defaults reference, explicitly run
 `mvn test -Dtest=DefaultSettingsFileTest -Dupdate.default.settings=true`.
 

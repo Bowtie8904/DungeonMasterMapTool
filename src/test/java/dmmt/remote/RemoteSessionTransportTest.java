@@ -728,14 +728,16 @@ class RemoteSessionTransportTest {
     void wrongPinsAndBuildsNeverTriggerHostApprovalOrReplaceLocalSettings() throws Exception {
         try (var host = new Host(directory.resolve("host.ini"))) {
             try (var wrongPin = RemoteSessionClient.pair(host.address(), "0".repeat(64), BUILD, 2000,
-                    host.code(), "Desktop B");
-                 var wrongBuild = RemoteSessionClient.pair(host.address(), identity.fingerprint(), "other-build", 2000,
-                         host.code(), "Desktop B")) {
-                await(() -> wrongPin.phase() == RemoteSessionClient.Phase.DISCONNECTED
-                        && wrongBuild.phase() == RemoteSessionClient.Phase.DISCONNECTED);
+                    host.code(), "Desktop B")) {
+                await(() -> wrongPin.phase() == RemoteSessionClient.Phase.DISCONNECTED);
                 assertNull(wrongPin.latestState());
                 assertEquals("Remote connection lost or rejected. Verify the host fingerprint, address and remote compatibility versions.",
                         wrongPin.lastError());
+                assertNull(host.pending());
+            }
+            try (var wrongBuild = RemoteSessionClient.pair(host.address(), identity.fingerprint(), "other-build", 2000,
+                    host.code(), "Desktop B")) {
+                await(() -> wrongBuild.phase() == RemoteSessionClient.Phase.DISCONNECTED);
                 assertNull(wrongBuild.latestState());
                 assertTrue(wrongBuild.lastError().contains("Incompatible remote application"));
                 assertTrue(wrongBuild.lastError().contains("other-build"));

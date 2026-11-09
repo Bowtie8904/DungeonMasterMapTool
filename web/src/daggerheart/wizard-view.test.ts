@@ -19,19 +19,20 @@ class Element {
     toggle: () => {}, add: () => {},
     contains: (name: string) => this.className.split(' ').includes(name),
   };
-  listeners = new Map<string, () => void>();
+  listeners = new Map<string, (event: { target: Element }) => void>();
   constructor(readonly tag: string) {}
   get text(): string { return this.textContent + this.children.map(c => typeof c === 'string' ? c : c.text).join(''); }
   append(...children: Array<Element | string>): void { this.children.push(...children); }
   replaceChildren(...children: Array<Element | string>): void { this.children = children; }
   setAttribute(name: string, value: string): void { this.attributes[name] = value; if (name === 'aria-label') this.ariaLabel = value; }
-  addEventListener(event: string, handler: () => void): void { this.listeners.set(event, handler); }
+  addEventListener(event: string, handler: (event: { target: Element }) => void): void { this.listeners.set(event, handler); }
   querySelector(): null { return null; }
   querySelectorAll(selector: string): Element[] {
     if (selector === 'input, textarea, select, button') return this.all().slice(1).filter(e => ['input', 'textarea', 'select', 'button'].includes(e.tag));
     return [];
   }
   matches(): boolean { return this.attributes.role === 'tab' || this.className.split(' ').includes('description-toggle'); }
+  closest(): null { return null; }
   focus(): void {}
   all(): Element[] { return [this, ...this.children.flatMap(c => typeof c === 'string' ? [] : c.all())]; }
 }
@@ -46,7 +47,7 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
     addEventListener: () => {},
   });
 
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
   const shield = catalog.entries.find(e => e.id === 'wizard-school-of-war-specialization')!.features!
@@ -63,7 +64,10 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
   const root = renderSheetView({ character: c, onRoll: () => false, onChange,
     onMiniStrip: strip => { if (strip) miniStrips.push(strip as unknown as Element); } }) as unknown as Element;
   const evasion = () => root.all().find(e => e.classList.contains('v-e'))!;
-  const clickHope = (n: number) => root.all().find(e => e.ariaLabel === `hope ${n}`)!.listeners.get('click')!();
+  const clickHope = (n: number) => {
+    const target = root.all().find(e => e.ariaLabel === `hope ${n}`)!;
+    target.listeners.get('click')!({ target });
+  };
   const tooltipSources = () => created.filter(e => e.className === 'stat-tooltip').find(e => e.text.includes('Total'))!.text;
   expect(evasion().text).toBe('Evasion14');
   expect(tooltipSources()).toContain('Conjure Shield');
@@ -93,7 +97,7 @@ it('updates sheet controls and minimized trait rolls when read-only is toggled',
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {},
   });
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   const c = emptyCharacter('Character');
   c.mancer = { done: true };
@@ -115,15 +119,15 @@ it('updates sheet controls and minimized trait rolls when read-only is toggled',
   const controls = root.querySelectorAll('input, textarea, select, button');
   expect(controls.filter(control => control.attributes.role === 'tab').every(control => !control.disabled)).toBe(true);
   expect(controls.filter(control => control.tag === 'button' && control.attributes.role !== 'tab').every(control => control.disabled)).toBe(true);
-  root.listeners.get('click')!();
-  root.listeners.get('input')!();
-  root.listeners.get('change')!();
+  root.listeners.get('click')!({ target: root });
+  root.listeners.get('input')!({ target: root });
+  root.listeners.get('change')!({ target: root });
   expect(onChange).toHaveBeenCalledTimes(1);
   disabled = false;
   bus.notify();
   expect(name().text).not.toContain('Disabled');
   expect(miniButtons().every(button => !button.disabled)).toBe(true);
   expect(onChange).toHaveBeenCalledTimes(2);
-  root.listeners.get('click')!();
+  root.listeners.get('click')!({ target: root });
   expect(onChange).toHaveBeenCalledTimes(3);
 });

@@ -5,6 +5,11 @@ when correcting data or adding entries, or use **DM Compendium > Edit JSON catal
 with `online.daggerheartDirectory`. The host serves it at `GET /api/compendium` and
 `GET /api/compendium/{category}`.
 
+Windows batch and CI app images include all nine catalogs in `app\dmmap-daggerheart`,
+beside the packaged JAR and default settings file. These are editable files, not JAR resources;
+keep this folder when copying the application. Standalone JAR distributions still need the catalog
+folder beside their settings file, or an explicit `online.daggerheartDirectory` path.
+
 Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", "entries": [] }`.
 
 | File | Notable entry fields |

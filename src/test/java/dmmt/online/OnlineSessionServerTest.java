@@ -18,6 +18,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -2855,6 +2857,7 @@ class OnlineSessionServerTest {
         JsonNode before = MAPPER.readTree(dmSheetHttp(actor.getId(), token, null, null).body());
         assertTrue(before.path("sheet").isNull());
         server.renameActor(actor.getId(), "After");
+        assertEquals(Optional.empty(), changedActorSheets.get(actor.getId()));
         JsonNode after = MAPPER.readTree(dmSheetHttp(actor.getId(), token, null, null).body());
         assertTrue(after.path("sheet").isNull());
         assertEquals("After", after.path("name").asText());
@@ -5045,7 +5048,7 @@ class OnlineSessionServerTest {
     }
 
     private volatile OnlineSessionServer.MoveResult drawingResult = OnlineSessionServer.MoveResult.accepted();
-    private final java.util.List<String> changedActorSheets = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Map<String, Optional<String>> changedActorSheets = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Test
     void savingPlayerResourcesNotifiesTheDmAfterPersistence() throws Exception {
@@ -5055,7 +5058,9 @@ class OnlineSessionServerTest {
                 .header("Cookie", cookie()).PUT(HttpRequest.BodyPublishers.ofString(sheet)).build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(), response.body());
-        assertTrue(changedActorSheets.contains("hero"));
+        JsonNode notifiedSheet = MAPPER.readTree(changedActorSheets.get("hero").orElseThrow());
+        assertEquals(2, notifiedSheet.path("hp").path("on").asInt());
+        assertEquals(3, notifiedSheet.path("stress").path("on").asInt());
         assertEquals(new ActorTokenResources(2, 6, 3, 6, null, null), ActorTokenResources.load(campaign, store).get("hero"));
     }
 
@@ -5153,11 +5158,10 @@ class OnlineSessionServerTest {
                     @Override
                     public void actorSheetChanged(String actorId) {
                         try {
-                            assertNotNull(store.loadSheet(campaign.getId(), actorId));
+                            changedActorSheets.put(actorId, Optional.ofNullable(store.loadSheet(campaign.getId(), actorId)));
                         } catch (java.io.IOException ex) {
                             throw new AssertionError(ex);
                         }
-                        changedActorSheets.add(actorId);
                     }
 
                     @Override
