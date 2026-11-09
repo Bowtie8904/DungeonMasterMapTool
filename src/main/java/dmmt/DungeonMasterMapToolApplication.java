@@ -9387,7 +9387,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 .actorId(token.getActorId()).campaignId(token.getCampaignId())
                 .conditions(token.getConditions() == null ? new java.util.ArrayList<>()
                         : token.getConditions().stream().map(condition -> condition == null ? null
-                                : new DmProject.TokenCondition(condition.getId(), condition.getType(), condition.getName()))
+                        : new DmProject.TokenCondition(condition.getId(), condition.getType(),
+                        condition.getName(), condition.getIconId()))
                         .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)))
                 .light(token.getLight() == null ? null : cloneLight(token.getLight())).build();
     }
@@ -9588,7 +9589,8 @@ public class DungeonMasterMapToolApplication extends Application {
             CheckMenuItem item = new CheckMenuItem(conditionName);
             item.setSelected(condition != null);
             item.setOnAction(event -> setOnlineTokenCondition(token, type, conditionName,
-                    condition == null ? type : condition.getId(), item.isSelected()));
+                    condition == null ? type : condition.getId(),
+                    dmmt.online.OnlineTokenConditions.iconId(type, null), item.isSelected()));
             menu.getItems().add(item);
         }
         for (DmProject.TokenCondition condition : active) {
@@ -9596,23 +9598,23 @@ public class DungeonMasterMapToolApplication extends Application {
             CheckMenuItem item = new CheckMenuItem(condition.getName());
             item.setSelected(true);
             item.setOnAction(event -> setOnlineTokenCondition(token, "custom", condition.getName(),
-                    condition.getId(), item.isSelected()));
+                    condition.getId(), dmmt.online.OnlineTokenConditions.iconId("custom", condition.getIconId()),
+                    item.isSelected()));
             menu.getItems().add(item);
         }
         menu.getItems().add(new SeparatorMenuItem());
         MenuItem custom = new MenuItem("Add custom condition...");
-        custom.setOnAction(event -> Dialogs.askText(primaryStage, "Custom condition", "Enter a condition name",
-                MaterialDesignP.PLUS, "Add", "", value ->
-                        dmmt.online.OnlineTokenConditions.validationProblem("custom", value))
-                .ifPresent(value -> setOnlineTokenCondition(token, "custom", value, null, true)));
+        custom.setOnAction(event -> dmmt.ui.OnlineConditionDialog.show(primaryStage)
+                .ifPresent(value -> setOnlineTokenCondition(token, "custom", value.name(), null,
+                        value.iconId(), true)));
         menu.getItems().add(custom);
         return menu;
     }
 
     private void setOnlineTokenCondition(DmProject.TokenInstance token, String type, String name,
-                                        String conditionId, boolean enabled) {
+                                        String conditionId, String iconId, boolean enabled) {
         if (onlinePanel == null) return;
-        onlinePanel.setTokenCondition(token.getId(), type, name, conditionId, enabled)
+        onlinePanel.setTokenCondition(token.getId(), type, name, conditionId, iconId, enabled)
                 .whenComplete((result, error) -> Platform.runLater(() -> {
                     if (error != null) {
                         Dialogs.error(primaryStage, "Could not update condition",

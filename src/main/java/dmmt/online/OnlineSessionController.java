@@ -570,7 +570,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     @Override
     public CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
             String playerId, String tokenId, String mapId, String levelId, String type, String name,
-            String conditionId, boolean enabled) {
+            String conditionId, String iconId, boolean enabled) {
         CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
         Platform.runLater(() -> {
             try {
@@ -596,6 +596,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 inheritActorConditions(campaign, token);
                 String resolvedName = name == null ? "" : name.trim();
                 String problem = OnlineTokenConditions.validationProblem(type, resolvedName);
+                if (problem == null) problem = OnlineTokenConditions.iconValidationProblem(type, iconId);
                 if (problem != null) {
                     result.complete(OnlineSessionServer.MoveResult.rejected(problem));
                     return;
@@ -609,6 +610,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     return;
                 }
                 String resolvedId = id;
+                String resolvedIconId = OnlineTokenConditions.iconId(type, iconId);
                 java.util.List<DmProject.TokenCondition> conditions = token.getConditions() == null
                         ? new java.util.ArrayList<>() : new java.util.ArrayList<>(token.getConditions());
                 DmProject.TokenCondition existing = conditions.stream()
@@ -620,14 +622,16 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                         return;
                     }
                     DmProject.TokenCondition added = DmProject.TokenCondition.builder()
-                            .id(resolvedId).type(type).name(resolvedName).build();
+                            .id(resolvedId).type(type).name(resolvedName).iconId(resolvedIconId).build();
                     updateActorConditionEffect(token, added, true);
                     conditions.add(added);
                 } else if (!enabled && existing != null) {
                     updateActorConditionEffect(token, existing, false);
                     conditions.remove(existing);
                 } else if (enabled && existing != null && (!existing.getType().equals(type)
-                        || !existing.getName().equals(resolvedName))) {
+                        || !existing.getName().equals(resolvedName)
+                        || !OnlineTokenConditions.iconId(existing.getType(), existing.getIconId())
+                        .equals(resolvedIconId))) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Condition changed; refresh the map and try again"));
                     return;
                 } else if (enabled && existing != null && "vulnerable".equals(type)) {
@@ -650,8 +654,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     }
 
     public CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
-            String tokenId, String type, String name, String conditionId, boolean enabled) {
-        return setTokenCondition(null, tokenId, app.mapId(), app.levelId(), type, name, conditionId, enabled);
+            String tokenId, String type, String name, String conditionId, String iconId, boolean enabled) {
+        return setTokenCondition(null, tokenId, app.mapId(), app.levelId(), type, name, conditionId, iconId, enabled);
     }
 
     private void updateActorConditionEffect(DmProject.TokenInstance token, DmProject.TokenCondition condition,

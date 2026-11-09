@@ -222,6 +222,27 @@
     -fx-text-fill: -dm-accent;
 }
 
+.condition-icon-choice {
+    -fx-background-color: #252a32;
+    -fx-background-radius: 6;
+    -fx-border-color: #555e6a;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
+    -fx-padding: 3;
+    -fx-cursor: hand;
+}
+
+.condition-icon-choice:hover {
+    -fx-border-color: -dm-accent;
+}
+
+.condition-icon-choice:selected {
+    -fx-background-color: #263d55;
+    -fx-border-color: #72b7ff;
+    -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, #72b7ff99, 8, 0.25, 0, 0);
+}
+
 .segmented {
     -fx-background-color: -dm-bg;
     -fx-background-radius: 8;

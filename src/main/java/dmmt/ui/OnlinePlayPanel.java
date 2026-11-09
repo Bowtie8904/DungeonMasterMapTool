@@ -151,8 +151,8 @@ public final class OnlinePlayPanel extends VBox {
     }
 
     public java.util.concurrent.CompletableFuture<OnlineSessionServer.MoveResult> setTokenCondition(
-            String tokenId, String type, String name, String conditionId, boolean enabled) {
-        return controller.setTokenCondition(tokenId, type, name, conditionId, enabled);
+            String tokenId, String type, String name, String conditionId, String iconId, boolean enabled) {
+        return controller.setTokenCondition(tokenId, type, name, conditionId, iconId, enabled);
     }
 
     public Menu tokenControlMenu(String mapId, DmProject.TokenInstance token) {

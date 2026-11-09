@@ -4,6 +4,18 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.model.DmProject;
 
 public final class OnlineTokenConditions {
+    public static final String DEFAULT_CUSTOM_ICON_ID = "cond_bleeding";
+    private static final java.util.List<String> ICON_IDS = java.util.List.of(
+            "cond_bleeding", "cond_blessed", "cond_blinded", "cond_burning", "cond_charmed",
+            "cond_concentrating", "cond_dead", "cond_deafened", "cond_exhaustion", "cond_frightened",
+            "cond_grappled", "cond_hasted", "cond_hidden", "cond_incapacitated", "cond_invisible",
+            "cond_paralyzed", "cond_petrified", "cond_poisoned", "cond_prone", "cond_raging",
+            "cond_restrained", "cond_slowed", "cond_stunned", "cond_unconscious");
+    private static final java.util.Set<String> BUILT_IN_ICON_IDS =
+            java.util.Set.of("cond_invisible", "cond_restrained", "cond_concentrating");
+    private static final java.util.Set<String> CUSTOM_ICON_IDS = ICON_IDS.stream()
+            .filter(iconId -> !BUILT_IN_ICON_IDS.contains(iconId))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     public static final String FULL_STRESS_EFFECT_ID = "full-stress:vulnerable";
     public static final String HIDDEN_TEXT = "Any rolls against a Hidden creature have disadvantage. After an adversary moves to where they would see you, you move into their line of sight, or you make an attack, you are no longer Hidden.";
     public static final String RESTRAINED_TEXT = "Restrained characters can’t move, but you can still take actions from their current position.";
@@ -23,6 +35,38 @@ public final class OnlineTokenConditions {
         }
         if (!"custom".equals(type) && !normalized.equals(builtInName(type))) {
             return "The built-in condition name cannot be changed.";
+        }
+        return null;
+    }
+
+    public static java.util.List<String> customIconIds() {
+        return ICON_IDS.stream().filter(CUSTOM_ICON_IDS::contains).toList();
+    }
+
+    public static String iconId(String type, String requestedIconId) {
+        return switch (type == null ? "" : type) {
+            case "hidden" -> "cond_invisible";
+            case "restrained" -> "cond_restrained";
+            case "vulnerable" -> "cond_concentrating";
+            case "custom" -> requestedIconId != null && CUSTOM_ICON_IDS.contains(requestedIconId)
+                    ? requestedIconId : DEFAULT_CUSTOM_ICON_ID;
+            default -> DEFAULT_CUSTOM_ICON_ID;
+        };
+    }
+
+    public static String iconValidationProblem(String type, String iconId) {
+        if ("custom".equals(type) && iconId != null && !iconId.isBlank()
+                && !CUSTOM_ICON_IDS.contains(iconId)) {
+            return "Choose an available custom condition icon.";
+        }
+        String builtInIconId = switch (type == null ? "" : type) {
+            case "hidden" -> "cond_invisible";
+            case "restrained" -> "cond_restrained";
+            case "vulnerable" -> "cond_concentrating";
+            default -> null;
+        };
+        if (builtInIconId != null && iconId != null && !iconId.isBlank() && !builtInIconId.equals(iconId)) {
+            return "The built-in condition icon cannot be changed.";
         }
         return null;
     }
@@ -52,7 +96,8 @@ public final class OnlineTokenConditions {
         effect.put("name", condition.getName());
         effect.put("kind", "hidden".equals(condition.getType()) ? "buff" : "debuff");
         effect.put("text", description(condition.getType()));
-        effect.putObject("onlineCondition").put("tokenId", tokenId).put("id", condition.getId());
+        effect.putObject("onlineCondition").put("tokenId", tokenId).put("id", condition.getId())
+                .put("iconId", iconId(condition.getType(), condition.getIconId()));
         return effect;
     }
 
@@ -109,7 +154,9 @@ public final class OnlineTokenConditions {
             if (id.isBlank() || validationProblem(type, name) != null) {
                 throw new IllegalArgumentException("The character sheet contains an invalid linked condition.");
             }
-            conditions.putIfAbsent(id, new DmProject.TokenCondition(id, type, name));
+            String iconId = link.path("iconId").asText(null);
+            conditions.putIfAbsent(id, new DmProject.TokenCondition(id, type, name,
+                    OnlineTokenConditions.iconId(type, iconId)));
         }
         return new java.util.ArrayList<>(conditions.values());
     }

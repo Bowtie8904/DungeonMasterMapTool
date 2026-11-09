@@ -12,7 +12,7 @@ export function openDeathDialog(root: HTMLElement, c: CharacterSheet, take: (mov
     el('option', { value: 'risk' }, 'Risk It All'));
   const descriptions: Record<DeathMove, string> = {
     blaze: 'Take one final action at the GM\'s discretion. It critically succeeds, then you cross through the veil of death.',
-    avoid: 'Fall unconscious and work with the GM to worsen the situation. Movement is blocked, but actions are not enforced. Wake when an ally clears at least 1 marked HP or the party finishes a long rest. Roll a Hope d12; at or below your level, gain a permanent scar that crosses out one Hope slot.',
+    avoid: 'Fall unconscious and work with the GM to worsen the situation. Wake when an ally clears at least 1 marked HP or the party finishes a long rest. Roll a Hope d12; at or below your level, gain a permanent scar that crosses out one Hope slot.',
     risk: 'Roll Hope and Fear d12s. Adjusted Hope at least Fear: stay up and divide recovery between HP and Stress. Raw matching dice: clear all recoverable HP and Stress. Higher Fear: cross through the veil. Apply recovery manually on older hosts, or use the result in chat.',
     spectral: 'Clear 1 HP and enter Spectral Form: physical resistance and movement through walls and closed doors. Clearing further HP ends the form. Reaching full HP ends it and prevents choosing it for that trigger. Repositioning inside solid objects is GM-controlled.',
     egg: 'Consume one Cathartoid Egg and record your narrative transformation. This does not heal HP or change your build. Agree the transformation with your GM.',

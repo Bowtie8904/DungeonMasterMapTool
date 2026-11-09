@@ -28,7 +28,7 @@ function fixture() {
   const save = autosave('actor', character, errors);
   const bus = { notify: vi.fn() };
   const tokens: Token[] = [{ id: 'token', actorId: 'actor', x: 0, y: 0, sizeTiles: 1,
-    conditions: [{ id: 'restrained', type: 'restrained', name: 'Restrained' }] }];
+    conditions: [{ id: 'restrained', type: 'restrained', name: 'Restrained', iconId: 'cond_restrained' }] }];
   const context = {
     store: { state: { mapId: 'map', levelId: 'level', tokens } },
     view: { canEditConditions: true },
@@ -42,6 +42,19 @@ function fixture() {
 }
 
 describe('linked condition removal persistence', () => {
+  it('persists the selected condition icon in linked actor effects', () => {
+    const f = fixture();
+    f.character.effects = [];
+    f.context.store.state.tokens[0].conditions = [
+      { id: 'custom-fire', type: 'custom', name: 'On Fire', iconId: 'cond_burning' },
+    ];
+    Reflect.get(App.prototype, 'applyTokenConditionEffects').call(
+      f.context, { id: 'actor' }, f.context.sheetHandles.get('actor'));
+    expect(f.character.effects[0].onlineCondition).toEqual({
+      tokenId: 'token', id: 'custom-fire', iconId: 'cond_burning',
+    });
+  });
+
   it('saves removed effects and unrelated edits before the host condition command, without duplicate commands', async () => {
     const f = fixture();
     let finishSave!: () => void;
@@ -64,7 +77,7 @@ describe('linked condition removal persistence', () => {
     expect(saveSheet).toHaveBeenCalledTimes(1);
     expect(f.context.sendTokenCondition).toHaveBeenCalledTimes(1);
     expect(f.context.sendTokenCondition).toHaveBeenCalledWith('token',
-      { id: 'restrained', type: 'restrained', name: 'Restrained' }, false);
+      { id: 'restrained', type: 'restrained', name: 'Restrained', iconId: 'cond_restrained' }, false);
     expect(f.errors).not.toHaveBeenCalled();
   });
 
@@ -137,6 +150,6 @@ describe('linked condition removal persistence', () => {
     vi.mocked(saveSheet).mockResolvedValue(undefined);
     await f.remove();
     expect(f.context.sendTokenCondition).toHaveBeenCalledWith('fresh-token',
-      { id: 'restrained', type: 'restrained', name: 'Restrained' }, false);
+      { id: 'restrained', type: 'restrained', name: 'Restrained', iconId: 'cond_restrained' }, false);
   });
 });

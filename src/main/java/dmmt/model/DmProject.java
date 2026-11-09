@@ -140,6 +140,12 @@ public class DmProject {
         private String id;
         private String type;
         private String name;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String iconId;
+
+        public TokenCondition(String id, String type, String name) {
+            this(id, type, name, null);
+        }
     }
 
     /** Lights placed on the map plus the lights attached to tokens, in that order. */

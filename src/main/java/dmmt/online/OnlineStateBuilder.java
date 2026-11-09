@@ -351,7 +351,8 @@ public final class OnlineStateBuilder {
                     if (condition == null || condition.getId() == null || condition.getType() == null
                             || condition.getName() == null) continue;
                     conditions.addObject().put("id", condition.getId())
-                            .put("type", condition.getType()).put("name", condition.getName());
+                            .put("type", condition.getType()).put("name", condition.getName())
+                            .put("iconId", OnlineTokenConditions.iconId(condition.getType(), condition.getIconId()));
                 }
             }
         }

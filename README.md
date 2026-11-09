@@ -103,7 +103,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   pause and movement restrictions. Browser doors/windows use light-gray round icons, changing their glyph
   rather than color when opened; no portal segments are drawn. The DM and players can right-click tokens to
   toggle Hidden, Restrained, Vulnerable, or multiple named custom conditions. Condition badges appear on
-  tokens; actor tokens also receive linked effects (Hidden is a buff; the others are debuffs),
+  tokens using bundled icons (Hidden is invisible, Restrained has its own icon, and Vulnerable uses the
+  concentrating icon). Custom conditions choose an unlabeled icon when added, defaulting to bleeding;
+  the three built-in icons are reserved and the current choice is highlighted. Actor tokens also receive linked effects (Hidden is a buff; the others are debuffs),
   and removing a linked effect clears its token badge. Token menus suppress the native browser context menu.
   Restrained tokens cannot be moved by players, but the DM can still move them.
   Moving, rotating or resizing tokens preserves their conditions, including through undo/redo.

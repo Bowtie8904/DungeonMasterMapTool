@@ -166,7 +166,7 @@ export interface Token {
   centerY?: number;
   actorId?: string;
   controlledBy?: string[];
-  conditions?: Array<{ id: string; type: 'hidden' | 'restrained' | 'vulnerable' | 'custom'; name: string }>;
+  conditions?: Array<{ id: string; type: 'hidden' | 'restrained' | 'vulnerable' | 'custom'; name: string; iconId?: string }>;
 }
 
 export interface FogGridInfo {

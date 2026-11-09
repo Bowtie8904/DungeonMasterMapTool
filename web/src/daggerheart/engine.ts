@@ -389,7 +389,7 @@ export interface ActiveEffect extends EffectDef {
   id: string;
   source?: string;
   hpMaintenance?: number;
-  onlineCondition?: { tokenId: string; id: string };
+  onlineCondition?: { tokenId: string; id: string; iconId?: string };
 }
 
 const TRAIT_SET = new Set<string>(TRAIT_ORDER);

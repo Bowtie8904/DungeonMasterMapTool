@@ -48,7 +48,7 @@
 }
 
 .condition-dialog {
-  width: min(390px, calc(100vw - 32px));
+  width: min(410px, calc(100vw - 32px));
   padding: 20px;
   border: 1px solid #48505b;
   border-radius: 10px;
@@ -69,6 +69,58 @@
 .condition-dialog label {
   display: grid;
   gap: 7px;
+}
+
+.condition-icon-options {
+  display: grid;
+  grid-template-columns: repeat(7, 36px);
+  justify-content: center;
+  gap: 5px;
+}
+
+.condition-icon-choice {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 2px;
+  border: 1px solid #555e6a;
+  border-radius: 6px;
+  background: #15181e;
+  cursor: pointer;
+}
+
+.condition-icon-choice img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.condition-icon-choice:hover,
+.condition-icon-choice:focus-visible,
+.condition-icon-choice.selected {
+  outline: none;
+  border-color: #72b7ff;
+  background: #263d55;
+  box-shadow: 0 0 0 2px #72b7ff99, 0 0 10px #72b7ff66;
+}
+
+.condition-icon-choice.selected::after {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid #20242b;
+  border-radius: 50%;
+  background: #72b7ff;
+  color: #101923;
+  content: '\2713';
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .condition-dialog input {

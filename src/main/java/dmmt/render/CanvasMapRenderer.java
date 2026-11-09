@@ -10,6 +10,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.lighting.VisibilityService;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
+import dmmt.online.OnlineTokenConditions;
 import dmmt.service.FogService;
 import dmmt.service.Tuning;
 import dmmt.ui.Icons;
@@ -48,9 +49,11 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
 public class CanvasMapRenderer {
+    private static final Map<String, Image> CONDITION_ICONS = new ConcurrentHashMap<>();
     private String resourceCampaignId;
     private Map<String, dmmt.online.ActorTokenResources> actorResources = Map.of();
 
@@ -834,38 +837,25 @@ public class CanvasMapRenderer {
                                           double x, double y, double radius) {
         List<DmProject.TokenCondition> conditions = token.getConditions();
         if (conditions == null || conditions.isEmpty()) return;
-        double badge = 16;
+        double badge = 19;
         for (int i = 0; i < Math.min(conditions.size(), 5); i++) {
             DmProject.TokenCondition condition = conditions.get(i);
             if (condition == null) continue;
             String type = condition.getType();
-            Color color = switch (type == null ? "" : type) {
-                case "hidden" -> Color.web("#536fca");
-                case "restrained" -> Color.web("#c27b24");
-                case "vulnerable" -> Color.web("#c64754");
-                default -> Color.web("#666b75");
-            };
-            String glyph = switch (type == null ? "" : type) {
-                case "hidden" -> "H";
-                case "restrained" -> "R";
-                case "vulnerable" -> "V";
-                default -> "•";
-            };
             double bx = x + radius - badge / 2;
             double by = y - radius + badge / 2 + i * badge * .9;
-            gc.save();
-            gc.setFill(color);
-            gc.fillOval(bx - badge / 2, by - badge / 2, badge, badge);
-            gc.setStroke(Color.WHITE);
-            gc.setLineWidth(1);
-            gc.strokeOval(bx - badge / 2, by - badge / 2, badge, badge);
-            gc.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 10));
-            gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
-            gc.setTextBaseline(javafx.geometry.VPos.CENTER);
-            gc.setFill(Color.WHITE);
-            gc.fillText(glyph, bx, by);
-            gc.restore();
+            String iconId = OnlineTokenConditions.iconId(type, condition.getIconId());
+            gc.drawImage(conditionIcon(iconId), bx - badge / 2, by - badge / 2, badge, badge);
         }
+    }
+
+    private static Image conditionIcon(String iconId) {
+        return CONDITION_ICONS.computeIfAbsent(iconId, id -> {
+            var resource = Objects.requireNonNull(CanvasMapRenderer.class
+                    .getResource("/condition-icons/" + id + "_round.png"),
+                    "Missing bundled condition icon: " + id);
+            return new Image(resource.toExternalForm(), false);
+        });
     }
 
     /**

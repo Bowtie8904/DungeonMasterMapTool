@@ -31,6 +31,7 @@ import { NotesPanel } from './notes';
 import { HandoutsPanel } from './handouts';
 import { openPopout } from './popout';
 import './conditions.css';
+import { CUSTOM_CONDITION_ICON_IDS, DEFAULT_CUSTOM_CONDITION_ICON, conditionIconId, conditionIconUrl } from './conditions';
 
 const EXPLORED_MIN_INTERVAL_MS = 2000;
 
@@ -805,7 +806,7 @@ export class App {
     for (const [type, name] of builtIns) {
       const selected = active.some(condition => condition.type === type);
       items.push(this.conditionMenuItem(name, selected, () => {
-        this.sendTokenCondition(token.id, { id: type, type, name }, !selected);
+        this.sendTokenCondition(token.id, { id: type, type, name, iconId: conditionIconId(type) }, !selected);
       }));
     }
     const custom = active.filter(condition => condition.type === 'custom');
@@ -861,9 +862,28 @@ export class App {
     const error = el('p', { class: 'condition-dialog-error', role: 'alert' });
     const cancel = el('button', { type: 'button' }, 'Cancel');
     const add = el('button', { type: 'submit', class: 'primary' }, 'Add condition');
+    let selectedIconId = DEFAULT_CUSTOM_CONDITION_ICON;
+    let iconChoices: HTMLButtonElement[] = [];
+    iconChoices = CUSTOM_CONDITION_ICON_IDS.map(iconId => {
+      const choice = el('button', { type: 'button', class: 'condition-icon-choice',
+        ariaLabel: iconId, ariaPressed: String(iconId === selectedIconId) },
+      el('img', { src: conditionIconUrl(iconId), alt: '' }));
+      if (iconId === selectedIconId) choice.classList.add('selected');
+      choice.addEventListener('click', () => {
+        selectedIconId = iconId;
+        iconChoices.forEach(button => {
+          const selected = button === choice;
+          button.classList.toggle('selected', selected);
+          button.setAttribute('aria-pressed', String(selected));
+        });
+      });
+      return choice;
+    });
     const form = el('form', { method: 'dialog' },
       el('h2', {}, 'Custom condition'),
-      el('label', {}, 'Condition name', input), error,
+      el('label', {}, 'Condition name', input),
+      el('div', { class: 'condition-icon-options', role: 'group', ariaLabel: 'Condition icon' }, ...iconChoices),
+      error,
       el('div', { class: 'condition-dialog-actions' }, cancel, add));
     dialog.append(form);
     document.body.append(dialog);
@@ -877,14 +897,14 @@ export class App {
         return;
       }
       dialog.close();
-      this.sendTokenCondition(tokenId, { type: 'custom', name }, true);
+      this.sendTokenCondition(tokenId, { type: 'custom', name, iconId: selectedIconId }, true);
     });
     dialog.addEventListener('close', () => dialog.remove(), { once: true });
     dialog.showModal();
     input.focus();
   }
 
-  private sendTokenCondition(tokenId: string, condition: { id?: string; type: string; name: string }, enabled: boolean): boolean {
+  private sendTokenCondition(tokenId: string, condition: { id?: string; type: string; name: string; iconId?: string }, enabled: boolean): boolean {
     const state = this.store.state;
     if (!state) return false;
     return this.sendTool({ type: 'command', kind: 'setTokenCondition', tokenId,
@@ -1370,6 +1390,12 @@ export class App {
           existing.kind = kind;
           changed = true;
         }
+        const iconId = conditionIconId(condition.type, condition.iconId);
+        const link = existing.onlineCondition;
+        if (link && link.iconId !== iconId) {
+          link.iconId = iconId;
+          changed = true;
+        }
         continue;
       }
       const text = condition.type === 'hidden'
@@ -1384,7 +1410,7 @@ export class App {
         name: condition.name,
         kind,
         text,
-        onlineCondition: { tokenId, id: condition.id },
+        onlineCondition: { tokenId, id: condition.id, iconId: conditionIconId(condition.type, condition.iconId) },
       });
       changed = true;
     }

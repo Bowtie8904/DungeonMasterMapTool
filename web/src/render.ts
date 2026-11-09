@@ -15,6 +15,7 @@ import {
   Polygon,
 } from './vision';
 import { applyWeatherConfig, drawWeather, flashStyle, lightningFlash, weatherIndoors, weatherKind } from './weather';
+import { conditionIconId, conditionIconUrl } from './conditions';
 
 const AMBIENT_SIGHT_TILES = 40;
 const MIN_FRAME_MS = 33;
@@ -1335,30 +1336,14 @@ export class MapView {
       }
       ctx.restore();
       const conditions = t.conditions ?? [];
-      const badge = 15 / this.cam.scale;
+      const badge = 18 / this.cam.scale;
       conditions.slice(0, 5).forEach((condition, index) => {
         const x = pos.x + r - badge / 2;
         const y = pos.y - r + badge / 2 + index * badge * 0.9;
-        const colors: Record<string, string> = {
-          hidden: '#536fca', restrained: '#c27b24', vulnerable: '#c64754', custom: '#666b75',
-        };
-        const glyphs: Record<string, string> = {
-          hidden: 'H', restrained: 'R', vulnerable: 'V', custom: '•',
-        };
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(x, y, badge / 2, 0, Math.PI * 2);
-        ctx.fillStyle = colors[condition.type] ?? colors.custom;
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5 / this.cam.scale;
-        ctx.stroke();
-        ctx.font = `bold ${badge * 0.68}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff';
-        ctx.fillText(glyphs[condition.type] ?? glyphs.custom, x, y);
-        ctx.restore();
+        const image = this.getImage(conditionIconUrl(conditionIconId(condition.type, condition.iconId)));
+        if (image.complete && image.naturalWidth > 0) {
+          ctx.drawImage(image, x - badge / 2, y - badge / 2, badge, badge);
+        }
       });
     }
   }

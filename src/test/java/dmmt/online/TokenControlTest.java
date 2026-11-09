@@ -97,17 +97,24 @@ class TokenControlTest {
             });
             assertFalse(controller.moveToken("player", "token", 3, 0).get(5, TimeUnit.SECONDS).ok());
             assertTrue(controller.setTokenCondition("player", "token", "map", "level",
-                    "restrained", "Restrained", "restrained", false).get(5, TimeUnit.SECONDS).ok());
+                    "restrained", "Restrained", "restrained", "cond_restrained", false).get(5, TimeUnit.SECONDS).ok());
             onFx(() -> {
                 assertTrue(app.project.getTokens().stream().allMatch(token -> token.getConditions().isEmpty()));
                 return null;
             });
             assertTrue(mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor")).path("effects").isEmpty());
-            assertTrue(controller.setTokenCondition("token", "hidden", "Hidden", "hidden", true)
+            assertTrue(controller.setTokenCondition("token", "hidden", "Hidden", "hidden", "cond_invisible", true)
+                    .get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.setTokenCondition("token", "custom", "On Fire", null, "cond_invisible", true)
+                    .get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.setTokenCondition("token", "custom", "On Fire", null, "cond_burning", true)
                     .get(5, TimeUnit.SECONDS).ok());
             onFx(() -> {
                 assertTrue(app.project.getTokens().stream().allMatch(token ->
-                        token.getConditions().getFirst().getId().equals("hidden")));
+                        token.getConditions().stream().anyMatch(condition -> "hidden".equals(condition.getId())
+                                && "cond_invisible".equals(condition.getIconId()))
+                                && token.getConditions().stream().anyMatch(condition -> "custom".equals(condition.getType())
+                                && "cond_burning".equals(condition.getIconId()))));
                 return null;
             });
             assertEquals("buff", mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"))
@@ -135,7 +142,8 @@ class TokenControlTest {
             full.withObject("/stress").put("on", 6);
             controller.store().saveSheet(campaign.getId(), "actor", full.toString());
             onFx(() -> { controller.campaignEdited(campaign); return null; });
-            assertTrue(controller.setTokenCondition("token", "vulnerable", "Vulnerable", "vulnerable", true)
+            assertTrue(controller.setTokenCondition("token", "vulnerable", "Vulnerable", "vulnerable",
+                    "cond_concentrating", true)
                     .get(5, TimeUnit.SECONDS).ok());
             var manual = (com.fasterxml.jackson.databind.node.ObjectNode)
                     mapper.readTree(controller.store().loadSheet(campaign.getId(), "actor"));

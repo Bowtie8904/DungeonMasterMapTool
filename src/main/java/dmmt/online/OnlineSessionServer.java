@@ -84,7 +84,7 @@ public final class OnlineSessionServer {
 
         default CompletableFuture<MoveResult> setTokenCondition(String playerId, String tokenId, String mapId,
                                                                  String levelId, String type, String name,
-                                                                 String conditionId, boolean enabled) {
+                                                                 String conditionId, String iconId, boolean enabled) {
             return CompletableFuture.completedFuture(MoveResult.rejected("Token conditions are unavailable on this host"));
         }
 
@@ -4535,6 +4535,7 @@ public final class OnlineSessionServer {
             String type = msg.path("condition").path("type").asText("");
             String name = msg.path("condition").path("name").asText("");
             String conditionId = msg.path("condition").path("id").asText("");
+            String iconId = msg.path("condition").path("iconId").asText(null);
             boolean enabled = msg.path("enabled").asBoolean(false);
             if (paused || !host.supportsTokenConditions() || tokenId.isBlank()
                     || msg.path("condition").isMissingNode() || msg.path("condition").isNull()
@@ -4545,7 +4546,7 @@ public final class OnlineSessionServer {
                 return;
             }
             host.setTokenCondition(client.playerId, tokenId, msg.path("mapId").asText(),
-                    msg.path("levelId").asText(), type, name, conditionId, enabled)
+                    msg.path("levelId").asText(), type, name, conditionId, iconId, enabled)
                     .orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
                         if (error != null || result == null || !result.ok()) {
                             sendTo(client.ctx, reject(cmdId,

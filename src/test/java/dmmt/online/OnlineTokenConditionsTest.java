@@ -99,6 +99,33 @@ class OnlineTokenConditionsTest {
     }
 
     @Test
+    void assignsReservedBuiltInIconsAndValidatesCustomChoices() {
+        assertEquals("cond_invisible", OnlineTokenConditions.iconId("hidden", null));
+        assertEquals("cond_restrained", OnlineTokenConditions.iconId("restrained", null));
+        assertEquals("cond_concentrating", OnlineTokenConditions.iconId("vulnerable", null));
+        assertEquals("cond_bleeding", OnlineTokenConditions.iconId("custom", null));
+        assertEquals("cond_bleeding", OnlineTokenConditions.iconId("custom", "cond_invisible"));
+        assertEquals("cond_blessed", OnlineTokenConditions.iconId("custom", "cond_blessed"));
+        assertEquals(21, OnlineTokenConditions.customIconIds().size());
+        assertFalse(OnlineTokenConditions.customIconIds().contains("cond_invisible"));
+        assertFalse(OnlineTokenConditions.customIconIds().contains("cond_restrained"));
+        assertFalse(OnlineTokenConditions.customIconIds().contains("cond_concentrating"));
+        assertNotNull(OnlineTokenConditions.iconValidationProblem("custom", "cond_invisible"));
+        assertNotNull(OnlineTokenConditions.iconValidationProblem("hidden", "cond_blessed"));
+        assertNull(OnlineTokenConditions.iconValidationProblem("custom", "cond_blessed"));
+    }
+
+    @Test
+    void preservesCustomIconThroughLinkedActorEffects() {
+        var condition = new DmProject.TokenCondition("custom-fire", "custom", "On Fire", "cond_burning");
+        var effect = OnlineTokenConditions.effect(MAPPER.createObjectNode(), "token", condition);
+        assertEquals("cond_burning", effect.path("onlineCondition").path("iconId").asText());
+        var sheet = MAPPER.createObjectNode();
+        sheet.putArray("effects").add(effect);
+        assertEquals("cond_burning", OnlineTokenConditions.actorConditions(sheet).getFirst().getIconId());
+    }
+
+    @Test
     void createsDistinctLinkedEffectsWithSrdDescriptions() {
         var hidden = DmProject.TokenCondition.builder()
                 .id("hidden").type("hidden").name("Hidden").build();
