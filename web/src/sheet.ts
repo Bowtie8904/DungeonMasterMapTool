@@ -1,9 +1,9 @@
-import { acceptSheetVersion, getSheet, useFeature, damageTaken, takeDeathMove, getDeathOptions, dmSheetAuthorization } from './api';
+import { acceptSheetVersion, getSheet, damageTaken, takeDeathMove, getDeathOptions, dmSheetAuthorization } from './api';
 import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
 import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
-import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, rememberLoadedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
 import { basicDeathOptions } from './daggerheart/death';
 import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
@@ -79,11 +79,11 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     document.addEventListener('dmmt-inventory-refreshed', (event) => {
       if ((event as CustomEvent<string>).detail === actorId) {
         document.title = `${sheet.name} - Daggerheart`;
-        bus.notify();
+        bus.notify(false);
       }
     });
     document.addEventListener('dmmt-feature-refreshed', (event) => {
-      if ((event as CustomEvent<string>).detail === actorId) bus.notify();
+      if ((event as CustomEvent<string>).detail === actorId) bus.notify(false);
     });
     const view = renderSheetView({
       cardPreferences,
@@ -92,8 +92,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       gmFear: () => store.state?.fear ?? 0,
       onSpecialCard: async (key, actionId, choice) => {
         await changed!.flush();
-        await useFeature({ actorId, key, actionId, ...choice });
-        await changed!.refresh();
+        await useSheetAction(changed!, { actorId, key, actionId, ...choice });
       },
       readOnly,
       supportsPartyFeatures: () => conn.partyFeatures,
@@ -114,16 +113,14 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           if (!selected) return;
           targetActorId = selected.id;
         }
-        await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
-        await changed!.refresh();
+        await useSheetAction(changed!, { actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
       },
       onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
       restActors: () => (store.state?.actors ?? []).filter(a => !a.disabled && a.id !== actorId && !!a.ownerId),
       onRest: async rest => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
         await changed!.flush();
-        await useFeature({ actorId, key: '', actionId: 'rest', rest });
-        await changed!.refresh();
+        await useSheetAction(changed!, { actorId, key: '', actionId: 'rest', rest });
       },
       onDamageTaken: async (severity) => {
         await changed!.flush();
@@ -132,8 +129,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onIncomingDamage: async incomingDamage => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
         await changed!.flush();
-        await useFeature({ actorId, key: '', actionId: 'damage', incomingDamage });
-        await changed!.refresh();
+        await useSheetAction(changed!, { actorId, key: '', actionId: 'damage', incomingDamage });
       },
       onDeathOptions: async () => {
         await changed!.flush();
@@ -171,8 +167,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           return (async () => {
             if (!conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
             await changed!.flush();
-            await useFeature({ actorId, key: '', actionId: 'roll', transactionalRoll: r });
-            await changed!.refresh();
+            await useSheetAction(changed!, { actorId, key: '', actionId: 'roll', transactionalRoll: r });
             return true;
           })();
         }
@@ -193,7 +188,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     view.classList.add('dh-popout');
     root.replaceChildren(view);
     if (rulesWarning) report(rulesWarning);
-    void changed.refresh().catch((e: Error) => report(e.message));
+    changed();
   };
   root.replaceChildren(el('div', { class: 'center' }, el('p', { class: 'muted' }, 'Loading sheet...')));
 
@@ -225,7 +220,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           return;
         }
         if (m.type === 'sheetChanged') {
-          if (m.actorId === actorId && changed) void changed.refresh().catch((e: Error) => report(e.message));
+          if (m.actorId === actorId && changed) void changed.refresh(m.version).catch((e: Error) => report(e.message));
           return;
         }
         if (m.type === 'error') { report(m.message); return; }
@@ -273,7 +268,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   conn.start();
   try {
     const res = await getSheet(actorId);
-    acceptSheetVersion(actorId, res.version);
+    acceptSheetVersion(actorId, res.version, res.sheet);
     const name = store.state?.actors.find((a) => a.id === actorId)?.name ?? res.name ?? 'Character';
     actorName = name;
     disabled = store.state?.actors.find(a => a.id === actorId)?.disabled ?? res.disabled ?? false;
@@ -284,6 +279,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       try { await refreshCharacterAutomation(character); }
       catch (e) { rulesWarning = `Could not refresh compendium rules; using saved rules: ${(e as Error).message}`; }
     }
+    rememberLoadedCharacter(character, res.sheet);
     allowed = true;
     if (!unauthorized) refresh();
   } catch (e) {

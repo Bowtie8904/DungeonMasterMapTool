@@ -7,11 +7,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CampaignStoreTest {
@@ -268,6 +276,297 @@ class CampaignStoreTest {
         org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
                 () -> store.deleteHistoryEntry(campaign.getId(), 1, 10));
         assertEquals(original, Files.readString(history));
+    }
+
+    @Test
+    void journaledAppendToLongHistoryPreservesExistingFileAndBytes() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Long history");
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        StringBuilder legacy = new StringBuilder();
+        for (int i = 0; i < 5000; i++) {
+            legacy.append("{\"id\":").append(i).append(",\"ts\":").append(i + 100)
+                    .append(",\"text\":\"legacy ").append(i).append(" — 雪\"}\r\n");
+        }
+        Files.writeString(history, legacy, StandardCharsets.UTF_8);
+        byte[] before = Files.readAllBytes(history);
+        Object key = Files.readAttributes(history, BasicFileAttributes.class).fileKey();
+        assertEquals(4999, store.historyTail(campaign.getId(), 1).getFirst().path("id").asLong());
+        assertEquals("legacy 12 — 雪", store.historyEntry(campaign.getId(), 12, 112).path("text").asText());
+        var message = mapper.createObjectNode().put("id", 5000).put("ts", 5100).put("text", "new report");
+        store.saveSheetsAndMessage(campaign.getId(), java.util.Map.of(), message);
+        assertEquals(key, Files.readAttributes(history, BasicFileAttributes.class).fileKey());
+        assertArrayEquals(before, Arrays.copyOf(Files.readAllBytes(history), before.length));
+        assertEquals(List.of(message), store.historyTail(campaign.getId(), 1));
+        assertEquals(5001, store.historyTail(campaign.getId(), 6000).size());
+        assertEquals(message, new CampaignStore(dir).historyEntry(campaign.getId(), 5000, 5100));
+    }
+
+    @Test
+    void indexedReplacementsKeepOriginalPositionIdentityWhispersAndDefensiveCopies() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Indexed history");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "first");
+        var whisper = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "secret")
+                .put("whisper", true).put("to", "player");
+        var reused = mapper.createObjectNode().put("id", 1).put("ts", 30).put("text", "next session");
+        for (var entry : List.of(first, whisper, reused)) store.appendHistoryChecked(campaign.getId(), entry);
+        assertEquals(first, store.historyEntry(campaign.getId(), 1, 10));
+        assertEquals(reused, store.historyEntry(campaign.getId(), 1, 30));
+        assertNull(store.historyEntry(campaign.getId(), 1, 11));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) store.historyEntry(campaign.getId(), 2, 20))
+                .put("text", "uncommitted");
+        ((com.fasterxml.jackson.databind.node.ObjectNode) store.historyTail(campaign.getId(), 3).getFirst())
+                .put("text", "uncommitted");
+        assertEquals(first, store.historyEntry(campaign.getId(), 1, 10));
+        assertEquals(whisper, store.historyEntry(campaign.getId(), 2, 20));
+        var replacement = whisper.deepCopy().put("text", "a longer edited secret — 雪");
+        store.replaceHistoryEntry(campaign.getId(), 2, 20, replacement);
+        assertEquals(List.of(first, replacement, reused), store.historyTail(campaign.getId(), 10));
+        assertEquals(replacement, store.historyEntry(campaign.getId(), 2, 20));
+        store.deleteHistoryEntry(campaign.getId(), 1, 10);
+        assertNull(store.historyEntry(campaign.getId(), 1, 10));
+        assertEquals(List.of(replacement, reused), store.historyTail(campaign.getId(), 10));
+        assertEquals(List.of(replacement, reused), new CampaignStore(dir).historyTail(campaign.getId(), 10));
+    }
+
+    @Test
+    void historyIndexDetectsExternalAppendRewriteReplacementDeletionAndRecreation() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("External history");
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "A");
+        store.appendHistoryChecked(campaign.getId(), first);
+        assertEquals(first, store.historyEntry(campaign.getId(), 1, 10));
+        var edited = first.deepCopy().put("text", "B");
+        FileTime oldTime = Files.getLastModifiedTime(history);
+        Files.writeString(history, edited + "\n");
+        Files.setLastModifiedTime(history, FileTime.fromMillis(oldTime.toMillis() + 2000));
+        assertEquals(edited, store.historyEntry(campaign.getId(), 1, 10));
+        var second = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "C");
+        Files.writeString(history, second + "\n", StandardOpenOption.APPEND);
+        assertEquals(List.of(edited, second), store.historyTail(campaign.getId(), 10));
+        Path external = history.resolveSibling("external-history.jsonl");
+        Files.writeString(external, second + "\n");
+        Files.move(external, history, StandardCopyOption.REPLACE_EXISTING);
+        assertNull(store.historyEntry(campaign.getId(), 1, 10));
+        assertEquals(second, store.historyEntry(campaign.getId(), 2, 20));
+        Files.writeString(history, "");
+        assertTrue(store.historyTail(campaign.getId(), 10).isEmpty());
+        Files.delete(history);
+        assertNull(store.historyEntry(campaign.getId(), 2, 20));
+        Files.writeString(history, first + "\n");
+        assertEquals(List.of(first), store.historyTail(campaign.getId(), 10));
+    }
+
+    @Test
+    void damagedHistoryRemainsBestEffortToReadButStrictMutationsAndRecoveryFail() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Damaged history");
+        Path folder = dir.resolve(campaign.getId());
+        Path history = folder.resolve("history.jsonl");
+        var entry = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "valid");
+        store.appendHistoryChecked(campaign.getId(), entry);
+        assertEquals(entry, store.historyEntry(campaign.getId(), 1, 10));
+        Files.writeString(history, "not json\n", StandardOpenOption.APPEND);
+        String damaged = Files.readString(history);
+        assertEquals(List.of(entry), store.historyTail(campaign.getId(), 10));
+        assertTrue(store.historyTail(campaign.getId(), 1).isEmpty());
+        assertEquals(entry, store.historyEntry(campaign.getId(), 1, 10));
+        assertThrows(IOException.class, () -> store.replaceHistoryEntry(campaign.getId(), 1, 10,
+                entry.deepCopy().put("text", "edited")));
+        assertThrows(IOException.class, () -> store.deleteHistoryEntry(campaign.getId(), 1, 10));
+        assertEquals(damaged, Files.readString(history));
+        var newEntry = mapper.createObjectNode().put("id", 2).put("ts", 20);
+        assertThrows(IOException.class, () -> store.saveSheetsAndMessage(campaign.getId(), java.util.Map.of(), newEntry));
+        assertEquals(damaged, Files.readString(history));
+        assertTrue(Files.exists(folder.resolve("sheet-transfer.json")));
+        assertNull(store.historyEntry(campaign.getId(), 1, 10));
+        assertTrue(store.historyTail(campaign.getId(), 10).isEmpty());
+        assertThrows(IOException.class, () -> store.loadSheet(campaign.getId(), "hero"));
+        Files.delete(folder.resolve("sheet-transfer.json"));
+        store.appendHistoryChecked(campaign.getId(), newEntry);
+        assertEquals(List.of(entry, newEntry), store.historyTail(campaign.getId(), 10));
+    }
+
+    @Test
+    void invalidUtf8HistoryPreservesWholeReadFailureAndStrictWriteFailure() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Invalid UTF-8 history");
+        var entry = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        store.appendHistoryChecked(campaign.getId(), entry);
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        Files.write(history, new byte[]{(byte) 0xff, '\n'}, StandardOpenOption.APPEND);
+        byte[] damaged = Files.readAllBytes(history);
+        assertTrue(store.historyTail(campaign.getId(), 10).isEmpty());
+        assertNull(store.historyEntry(campaign.getId(), 1, 10));
+        assertThrows(IOException.class, () -> store.deleteHistoryEntry(campaign.getId(), 1, 10));
+        assertThrows(IOException.class, () -> store.replaceHistoryEntry(campaign.getId(), 1, 10, entry));
+        assertArrayEquals(damaged, Files.readAllBytes(history));
+    }
+
+    @Test
+    void historyReadsRecoverFirstMessageEvenWhenHistoryDoesNotYetExist() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("First journaled message");
+        var message = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Recovered");
+        var transaction = mapper.createObjectNode();
+        transaction.putObject("hero").put("revision", 1);
+        transaction.set("$message", message);
+        Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
+        Files.writeString(journal, transaction.toString());
+        assertEquals(List.of(message), store.historyTail(campaign.getId(), 1));
+        assertEquals(message, store.historyEntry(campaign.getId(), 1, 10));
+        assertEquals(1, mapper.readTree(store.loadSheet(campaign.getId(), "hero")).path("revision").asInt());
+        assertTrue(Files.notExists(journal));
+    }
+
+    @Test
+    void tornJournaledAppendCompletesBeforeReplayWithoutDuplicatingOrLosingMessages() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Torn append");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        store.appendHistoryChecked(campaign.getId(), first);
+        Path folder = dir.resolve(campaign.getId());
+        Path history = folder.resolve("history.jsonl");
+        long offset = Files.size(history);
+        var message = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "whisper 雪");
+        var transaction = mapper.createObjectNode();
+        transaction.putObject("hero").put("revision", 2);
+        transaction.set("$message", message);
+        String payload = message + "\n";
+        byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+        Path appendJournal = folder.resolve("history-append.json");
+        Files.writeString(appendJournal, mapper.createObjectNode().put("offset", offset).put("append", payload).toString());
+        Files.write(history, Arrays.copyOf(bytes, bytes.length - 4), StandardOpenOption.APPEND);
+        Path sheetJournal = folder.resolve("sheet-transfer.json");
+        Files.writeString(sheetJournal, transaction.toString());
+        CampaignStore reopened = new CampaignStore(dir);
+        assertEquals(message, reopened.historyEntry(campaign.getId(), 2, 20));
+        assertEquals(List.of(first, message), reopened.historyTail(campaign.getId(), 10));
+        assertEquals(2, mapper.readTree(reopened.loadSheet(campaign.getId(), "hero")).path("revision").asInt());
+        assertTrue(Files.notExists(appendJournal));
+        assertTrue(Files.notExists(sheetJournal));
+        Files.writeString(appendJournal, mapper.createObjectNode().put("offset", offset).put("append", payload).toString());
+        Files.writeString(sheetJournal, transaction.toString());
+        assertEquals(List.of(first, message), new CampaignStore(dir).historyTail(campaign.getId(), 10));
+        assertTrue(Files.notExists(appendJournal));
+        assertTrue(Files.notExists(sheetJournal));
+    }
+
+    @Test
+    void pendingAppendRejectsExternalChangesWithoutOverwritingThemOrReturningCachedData() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Conflicting append");
+        store.saveSheet(campaign.getId(), "hero", "{\"revision\":1}");
+        assertNotNull(store.loadSheet(campaign.getId(), "hero"));
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        store.appendHistoryChecked(campaign.getId(), first);
+        assertNotNull(store.historyEntry(campaign.getId(), 1, 10));
+        Path folder = dir.resolve(campaign.getId());
+        Path history = folder.resolve("history.jsonl");
+        long offset = Files.size(history);
+        Files.writeString(folder.resolve("history-append.json"),
+                mapper.createObjectNode().put("offset", offset).put("append", "{\"id\":2,\"ts\":20}\n").toString());
+        Files.writeString(history, "external change", StandardOpenOption.APPEND);
+        String changed = Files.readString(history);
+        assertThrows(IOException.class, () -> store.loadSheet(campaign.getId(), "hero"));
+        assertNull(store.historyEntry(campaign.getId(), 1, 10));
+        assertTrue(store.historyTail(campaign.getId(), 10).isEmpty());
+        assertEquals(changed, Files.readString(history));
+        assertTrue(Files.exists(folder.resolve("history-append.json")));
+    }
+
+    @Test
+    void legacyUnterminatedUnicodeHistoryAndDuplicateIdentitiesRemainReadable() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Legacy lines");
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "雪");
+        var duplicate = first.deepCopy().put("text", "same legacy identity");
+        Files.writeString(history, first + "\r" + duplicate);
+        assertEquals(first, store.historyEntry(campaign.getId(), 1, 10));
+        var third = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "third");
+        store.saveSheetsAndMessage(campaign.getId(), java.util.Map.of(), third);
+        assertEquals(List.of(first, duplicate, third), store.historyTail(campaign.getId(), 10));
+        var replacement = first.deepCopy().put("text", "replacement");
+        store.replaceHistoryEntry(campaign.getId(), 1, 10, replacement);
+        assertEquals(List.of(replacement, duplicate, third), store.historyTail(campaign.getId(), 10));
+        store.deleteHistoryEntry(campaign.getId(), 1, 10);
+        assertEquals(List.of(third), new CampaignStore(dir).historyTail(campaign.getId(), 10));
+    }
+
+    @Test
+    void sharedCardIndexKeepsFirstMatchAndTracksEditsDeletionAndExternalChanges() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Shared cards");
+        var first = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        first.putObject("sharedCard").put("cardId", "card-one").put("text", "first");
+        var duplicate = first.deepCopy().put("id", 2).put("ts", 20);
+        duplicate.withObject("/sharedCard").put("text", "duplicate");
+        store.appendHistoryChecked(campaign.getId(), first);
+        store.appendHistoryChecked(campaign.getId(), duplicate);
+        assertEquals(first, store.historyCard(campaign.getId(), "card-one"));
+        assertNull(store.historyCard(campaign.getId(), "missing"));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) store.historyCard(campaign.getId(), "card-one"))
+                .withObject("/sharedCard").put("text", "uncommitted");
+        assertEquals(first, store.historyCard(campaign.getId(), "card-one"));
+        var changed = first.deepCopy();
+        changed.withObject("/sharedCard").put("cardId", "card-two");
+        store.replaceHistoryEntry(campaign.getId(), 1, 10, changed);
+        assertEquals(changed, store.historyCard(campaign.getId(), "card-two"));
+        assertEquals(duplicate, store.historyCard(campaign.getId(), "card-one"));
+        store.deleteHistoryEntry(campaign.getId(), 2, 20);
+        assertNull(store.historyCard(campaign.getId(), "card-one"));
+        Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        Files.writeString(history, first + "\n");
+        assertEquals(first, store.historyCard(campaign.getId(), "card-one"));
+        assertNull(store.historyCard(campaign.getId(), "card-two"));
+    }
+
+    @Test
+    void sheetReadCacheInvalidatesOnWritesRecoveryExternalChangesAndCampaignDeletion() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        CampaignStore store = new CampaignStore(dir);
+        Campaign campaign = store.create("Sheet cache");
+        String campaignId = campaign.getId();
+        Path folder = dir.resolve(campaignId);
+        Path sheet = folder.resolve("sheets").resolve("hero.json");
+        store.saveSheet(campaignId, "hero", "{\"revision\":1}");
+        String original = store.loadSheet(campaignId, "hero");
+        assertSame(original, store.loadSheet(campaignId, "hero"));
+        store.saveSheet(campaignId, "hero", "{\"revision\":2}");
+        assertEquals(2, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        store.saveSheets(campaignId, java.util.Map.of("hero", mapper.createObjectNode().put("revision", 3)));
+        assertEquals(3, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        Files.writeString(folder.resolve("sheet-transfer.json"), "{\"hero\":{\"revision\":4}}");
+        assertEquals(4, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        FileTime modified = Files.getLastModifiedTime(sheet);
+        Files.writeString(sheet, "{\"revision\":5}");
+        Files.setLastModifiedTime(sheet, FileTime.fromMillis(modified.toMillis() + 2000));
+        assertEquals(5, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        Path replacement = sheet.resolveSibling("external-sheet.json");
+        Files.writeString(replacement, "{\"revision\":6}");
+        Files.move(replacement, sheet, StandardCopyOption.REPLACE_EXISTING);
+        assertEquals(6, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        Files.delete(sheet);
+        assertNull(store.loadSheet(campaignId, "hero"));
+        Files.writeString(sheet, "{\"revision\":7}");
+        assertEquals(7, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
+        store.delete(campaignId);
+        assertNull(store.loadSheet(campaignId, "hero"));
+        store.saveSheet(campaignId, "hero", "{\"revision\":8}");
+        assertEquals(8, mapper.readTree(store.loadSheet(campaignId, "hero")).path("revision").asInt());
     }
 
     @Test

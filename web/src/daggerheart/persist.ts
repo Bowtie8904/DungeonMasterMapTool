@@ -1,6 +1,6 @@
 // Loads and saves a character sheet on the host (one JSON file per actor).
 
-import { acceptSheetVersion, getSheet, InventoryConflict, saveSheet } from '../api';
+import { acceptSheetVersion, getSheet, InventoryConflict, saveSheet, sheetVersion, useFeature, type CommittedSheetState, type FeatureRequest } from '../api';
 import { CharacterSheet, emptyCharacter, multiclassesOf, normalizeSheet } from './data';
 import { CompendiumFile, fetchCompendiumCategory, fetchCompendiumIndex } from './compendium';
 import { syncResources } from './engine';
@@ -225,7 +225,7 @@ export async function refreshCharacterAutomation(c: CharacterSheet): Promise<voi
 
 export async function loadCharacter(actorId: string, actorName: string, onWarning?: (message: string) => void): Promise<CharacterSheet> {
   const res = await getSheet(actorId);
-  acceptSheetVersion(actorId, res.version);
+  acceptSheetVersion(actorId, res.version, res.sheet);
   const c = res.sheet ? normalizeSheet(res.sheet, actorName) : emptyCharacter(actorName);
   c.testingCharacter = res.testingCharacter === true;
   if (!c.testingCharacter) delete c.testingBuild;
@@ -243,7 +243,22 @@ export async function loadCharacter(actorId: string, actorName: string, onWarnin
       onWarning(`Could not refresh compendium rules; using saved rules: ${(e as Error).message}`);
     }
   }
+  rememberLoadedCharacter(c, res.sheet);
   return c;
+}
+
+const loadedBaselines = new WeakMap<CharacterSheet, string>();
+const initialSaves = new WeakSet<CharacterSheet>();
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+}
+
+/** Only truly unchanged stored sheets start saved; normalization and rule migrations still need persistence. */
+export function rememberLoadedCharacter(c: CharacterSheet, stored?: Partial<CharacterSheet> | null): void {
+  if (stored && canonical({ ...stored, testingCharacter: c.testingCharacter }) === canonical(c))
+    loadedBaselines.set(c, JSON.stringify(c));
+  else initialSaves.add(c);
 }
 
 /** Returns a function to call after every possible change; it saves (debounced) only when the sheet really differs from the last save. */
@@ -268,46 +283,77 @@ export function applyInventory(c: CharacterSheet, incoming: Partial<Omit<Charact
   return changed;
 }
 
-export type SheetSave = (() => void) & { flush: () => Promise<void>; refresh: () => Promise<void> };
+export type SheetSave = (() => void) & {
+  flush: () => Promise<void>;
+  refresh: (version?: string) => Promise<void>;
+  accept: (state: CommittedSheetState) => boolean;
+  action: (request: FeatureRequest) => Promise<void>;
+};
+
+/** All feature callers use the synchronizer; legacy sheet handles/hosts retain their GET fallback. */
+export async function useSheetAction(save: { action?: SheetSave['action']; refresh?: () => Promise<void> }, request: FeatureRequest): Promise<void> {
+  if (save.action) return save.action(request);
+  await useFeature(request);
+  await save.refresh?.();
+}
 
 export function autosave(actorId: string, c: CharacterSheet, onError: (message: string) => void, delayMs = 700,
                          readOnly: () => boolean = () => false): SheetSave {
-  let last = '';
+  let last = loadedBaselines.get(c) ?? '';
   const baseline = JSON.stringify(c);
-  const dirty = () => JSON.stringify(c) !== (last || baseline);
+  const dirty = () => !last && initialSaves.has(c) || JSON.stringify(c) !== (last || baseline);
   let timer: number | undefined;
   let saving: Promise<void> | undefined;
   let refreshPending = false;
   let refreshing: Promise<void> | undefined;
+  let revision = 0;
+  let actionPending = 0;
+  let actionTail: Promise<void> = Promise.resolve();
+  let currentVersion = sheetVersion(actorId);
+  let requestedVersion: string | undefined;
   const replace = (sheet: Partial<CharacterSheet>, version?: string) => {
     const normalized = normalizeSheet(sheet, c.name);
     normalized.testingCharacter = c.testingCharacter;
     for (const key of Object.keys(c)) Reflect.deleteProperty(c, key);
     Object.assign(c, normalized);
-    acceptSheetVersion(actorId, version);
+    acceptSheetVersion(actorId, version, sheet);
+    currentVersion = version;
+    revision++;
     last = JSON.stringify(c);
     document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
     document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
   };
-  const refreshFull = async () => {
+  const accept = (state: CommittedSheetState): boolean => {
+    if (state.actorId !== actorId || !state.version || !state.sheet || saving || dirty()) return false;
+    if (currentVersion !== state.version) replace(state.sheet, state.version);
+    if (!requestedVersion || requestedVersion === state.version) refreshPending = false;
+    return true;
+  };
+  const refreshFull = async (version?: string) => {
+    if (version && version === currentVersion) return;
+    requestedVersion = version;
     refreshPending = true;
-    if (saving || dirty()) return;
+    if (saving || actionPending || dirty()) return;
     if (refreshing) { await refreshing; return; }
+    // Merge notifications delivered in the same turn before requesting a full representation.
     refreshing = (async () => {
+      await Promise.resolve();
       do {
         refreshPending = false;
+        const startedAt = revision;
         const data = await getSheet(actorId);
-        if (saving || dirty()) { refreshPending = true; break; }
+        if (startedAt !== revision) continue;
+        if (saving || actionPending || dirty()) { refreshPending = true; break; }
         if (data.version && data.sheet) {
           const normalized = normalizeSheet(data.sheet, c.name);
           normalized.testingCharacter = c.testingCharacter;
           if (JSON.stringify(normalized) !== JSON.stringify(c))
             replace(data.sheet, data.version);
-          else acceptSheetVersion(actorId, data.version);
+          else { acceptSheetVersion(actorId, data.version, data.sheet); currentVersion = data.version; last = JSON.stringify(c); }
         } else if (data.version && !data.sheet && data.name) {
           if (c.name !== data.name || c.description.Name !== data.name)
             replace({ ...c, name: data.name, description: { ...c.description, Name: data.name } }, data.version);
-          else acceptSheetVersion(actorId, data.version);
+          else { acceptSheetVersion(actorId, data.version); currentVersion = data.version; }
         } else {
           if (data.sheet && applyInventory(c, data.sheet))
             document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
@@ -316,7 +362,8 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
             document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
           last = JSON.stringify(c);
         }
-      } while (refreshPending && !saving && !dirty());
+        if (requestedVersion === currentVersion) refreshPending = false;
+      } while (refreshPending && !saving && !actionPending && !dirty());
     })();
     try { await refreshing; } finally { refreshing = undefined; }
   };
@@ -330,7 +377,8 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     if (json === last) return;
     const operation = async () => {
       try {
-        const result = await saveSheet(actorId, c);
+        const result = await saveSheet(actorId, c, json);
+        if (result?.version) currentVersion = result.version;
         if (result?.version && result.sheet && JSON.stringify(c) === json) {
           const normalized = normalizeSheet(result.sheet, c.name);
           normalized.testingCharacter = c.testingCharacter;
@@ -355,7 +403,10 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     };
     saving = operation();
     try { await saving; } finally { saving = undefined; }
-    if (refreshPending) await refreshFull();
+    if (refreshPending) {
+      if (requestedVersion && requestedVersion === currentVersion) refreshPending = false;
+      else await refreshFull(requestedVersion);
+    }
   };
   const backgroundFlush = () => { void flush().catch(() => { /* reported by flush */ }); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') backgroundFlush(); });
@@ -368,5 +419,20 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
   return Object.assign(changed, {
     flush,
     refresh: refreshFull,
+    accept,
+    action: (request: FeatureRequest) => {
+      const operation = actionTail.then(async () => {
+        await flush();
+        actionPending++;
+        let applied = false;
+        try {
+          const result = await useFeature(request);
+          applied = !!result?.sheetState && accept(result.sheetState);
+        } finally { actionPending--; }
+        if (!applied || refreshPending) await refreshFull(requestedVersion);
+      });
+      actionTail = operation.catch(() => { /* An explicit later action may proceed; failed spending is never replayed. */ });
+      return operation;
+    },
   });
 }

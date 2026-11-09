@@ -1,6 +1,7 @@
 import { ClockSync } from './clock';
 import { ServerMessage } from './protocol';
-import { dmSheetAuthorization } from './api';
+import { configureSheetActionResponses, configureSheetPatches, dmSheetAuthorization } from './api';
+import { invalidateCompendium } from './daggerheart/compendium';
 
 export interface ConnectionEvents {
   onMessage(msg: ServerMessage): void;
@@ -101,6 +102,8 @@ export class Connection {
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.sheetSync = false;
+    configureSheetActionResponses(false);
+    configureSheetPatches(false);
     this.events.onStatus('connecting');
     const ws = new WebSocket(this.url());
     this.ws = ws;
@@ -131,6 +134,9 @@ export class Connection {
         return;
       }
       if (msg.type === 'hello') {
+        invalidateCompendium();
+        configureSheetActionResponses(msg.sheetActionResponses === true);
+        configureSheetPatches(msg.sheetPatches === true);
         this.keptDice = msg.keptDice === true;
         this.zeroKeptDice = msg.zeroKeptDice === true;
         this.glancingBlowDamage = msg.glancingBlowDamage === true;
@@ -156,6 +162,7 @@ export class Connection {
         this.sheetSync = msg.sheetSync === true;
         if (this.clock.samples === 0) this.clock.seed(msg.serverTime, performance.now());
       }
+      if (msg.type === 'catalogChanged') invalidateCompendium();
       if (msg.type === 'kicked') {
         this.stopped = true;
         this.events.onStatus('kicked');

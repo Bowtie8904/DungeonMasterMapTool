@@ -1,10 +1,10 @@
-import { cardRequest, logout, useFeature, damageTaken, takeDeathMove, getDeathOptions } from './api';
+import { cardRequest, logout, damageTaken, takeDeathMove, getDeathOptions } from './api';
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
-import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
 import { basicDeathOptions } from './daggerheart/death';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type GrabQuantity, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
@@ -642,11 +642,21 @@ export class App {
   }
 
   private effectsTimer: number | null = null;
+  private rollActionsPending = false;
   private pendingConditionRemovals = new Set<string>();
 
   private scheduleEffects(): void {
     if (this.effectsTimer !== null) return;
     this.effectsTimer = window.setTimeout(() => { this.effectsTimer = null; this.renderEffectsOverlay(); }, 0);
+  }
+
+  private scheduleRollActions(): void {
+    if (this.rollActionsPending) return;
+    this.rollActionsPending = true;
+    queueMicrotask(() => {
+      this.rollActionsPending = false;
+      this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+    });
   }
 
   private renderEffectsOverlay(): void {
@@ -689,8 +699,7 @@ export class App {
       if (!selected) return;
       targetActorId = selected.id;
     }
-    await useFeature({ actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
-    await save.refresh();
+    await useSheetAction(save, { actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
   }
 
   private selectTool(): void {
@@ -915,6 +924,7 @@ export class App {
   private handle(msg: ServerMessage): void {
     switch (msg.type) {
       case 'hello':
+        void this.compendium.revalidate().catch((error: Error) => this.toast(error.message));
         this.playerId = msg.playerId;
         this.setAccountColor(msg.campaignId ?? '', msg.playerId, msg.accountColor);
         this.measurementColors = msg.measurementColors === true;
@@ -933,7 +943,7 @@ export class App {
         this.goldTransfers = msg.goldTransfers === true;
         this.grabQuantity = msg.grabQuantity === true;
         for (const handle of this.sheetHandles.values()) {
-          void handle.save.refresh().then(() => handle.bus.notify()).catch((e: Error) => this.toast(e.message));
+          void handle.save.refresh().catch((e: Error) => this.toast(e.message));
         }
         this.view.playerId = msg.playerId;
         this.view.campaignId = msg.campaignId ?? '';
@@ -1029,7 +1039,11 @@ export class App {
         break;
       case 'chatUpdate': {
         const index = this.log.findIndex(e => e.kind === 'chat' && e.m.id === msg.message.id && e.m.ts === msg.message.ts);
-        if (index >= 0) this.log[index] = { kind: 'chat', m: msg.message };
+        if (index >= 0) {
+          const entry = this.log[index];
+          entry.m = msg.message;
+          this.logCards.delete(entry);
+        }
         if (this.store.state?.chatTail) {
           const tail = this.store.state.chatTail.findIndex(m => m.id === msg.message.id && m.ts === msg.message.ts);
           if (tail >= 0) this.store.state.chatTail[tail] = { type: 'chat', ...msg.message };
@@ -1054,7 +1068,7 @@ export class App {
         break;
       case 'sheetChanged': {
         const handle = this.sheetHandles.get(msg.actorId);
-        if (handle) void handle.save.refresh().catch((error: Error) => this.toast(error.message));
+        if (handle) void handle.save.refresh(msg.version).catch((error: Error) => this.toast(error.message));
         break;
       }
       case 'sheetInventory': {
@@ -1069,7 +1083,7 @@ export class App {
         if (handle && applyFeatureState(handle.character, msg)) {
           handle.bus.notify();
           handle.save();
-          this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+          this.scheduleRollActions();
         }
         break;
       }
@@ -1078,7 +1092,8 @@ export class App {
         const entry = this.log.find(e => e.kind === 'roll' && e.m.id === msg.id && e.m.ts === msg.ts);
         if (entry?.kind === 'roll') {
           const { type: _type, ...update } = msg;
-          this.log[this.log.indexOf(entry)] = { kind: 'roll', m: { ...entry.m, ...update } };
+          entry.m = { ...entry.m, ...update };
+          this.logCards.delete(entry);
           this.renderLog();
         }
         break;
@@ -1163,13 +1178,13 @@ export class App {
       if (full || this.store.changed.has('actors')) {
         setDisabledCopycatSources(s.actors.filter(a => a.disabled).map(a => a.id));
         for (const handle of this.sheetHandles.values()) {
-          handle.bus.notify();
-          void handle.save.refresh().catch((error: Error) => this.toast(error.message));
+          handle.bus.notify(false);
+          if (!this.conn.sheetSync) void handle.save.refresh().catch((error: Error) => this.toast(error.message));
         }
       }
       this.renderActors(s);
       if (full || this.store.changed.has('actors'))
-        this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+        this.scheduleRollActions();
     }
     if (full || this.store.changed.has('effectTextures')) {
       const previous = this.textureSelect.value || 'none';
@@ -1327,7 +1342,10 @@ export class App {
     });
     const keep = new Set<Element>(cards);
     for (const child of Array.from(this.logContent.children)) if (!keep.has(child)) child.remove();
-    for (const card of cards) if (card.parentElement !== this.logContent) this.logContent.append(card);
+    cards.forEach((card, index) => {
+      const current = this.logContent.children[index];
+      if (current !== card) this.logContent.insertBefore(card, current ?? null);
+    });
     if (!this.followChat && anchor?.isConnected && anchorTop !== undefined && this.section === 'chat') {
       this.chatScrollTop = this.logEl.scrollTop + anchor.getBoundingClientRect().top - anchorTop;
     }
@@ -1477,11 +1495,11 @@ export class App {
         });
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
           if ((event as CustomEvent<string>).detail === a.id) {
-            bus.notify();
-            this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+            bus.notify(false);
+            this.scheduleRollActions();
           }
         });
-        void changed.refresh().catch((error: Error) => this.toast(error.message));
+        changed();
         const win = new SheetWindow(
           {
             cardPreferences,
@@ -1493,22 +1511,20 @@ export class App {
               this.actorRowUpdates.get(a.id)?.();
               void this.sendMissingConditionEffects(a.id, character);
               this.scheduleEffects();
-              this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+              this.scheduleRollActions();
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
             onRest: async rest => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
               await changed.flush();
-              await useFeature({ actorId: a.id, key: '', actionId: 'rest', rest });
-              await changed.refresh();
+              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'rest', rest });
             },
             supportsSpecialCardActions: () => this.conn.specialCardActions,
             gmFear: () => this.store.state?.fear ?? 0,
             onSpecialCard: async (key, actionId, choice) => {
               await changed.flush();
-              await useFeature({ actorId: a.id, key, actionId, ...choice });
-              await changed.refresh();
+              await useSheetAction(changed, { actorId: a.id, key, actionId, ...choice });
             },
             onCopycat: (key, actionId) => openCopycat(character, a.id, key, actionId, changed),
             onDamageTaken: async (severity) => {
@@ -1518,8 +1534,7 @@ export class App {
             onIncomingDamage: async incomingDamage => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
               await changed.flush();
-              await useFeature({ actorId: a.id, key: '', actionId: 'damage', incomingDamage });
-              await changed.refresh();
+              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'damage', incomingDamage });
             },
             onDeathOptions: async () => {
               await changed.flush();
@@ -1559,8 +1574,7 @@ export class App {
                 return (async () => {
                   if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
                   await changed.flush();
-                  await useFeature({ actorId: a.id, key: '', actionId: 'roll', transactionalRoll: r });
-                  await changed.refresh();
+                  await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'roll', transactionalRoll: r });
                   return true;
                 })();
               }
@@ -1598,7 +1612,7 @@ export class App {
     this.myActors = mine;
     this.actorRowUpdates.clear();
     for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
-    if (changedStatus.length) this.logContent.querySelectorAll('.roll-actions').forEach(box => box.dispatchEvent(new Event('refresh-roll-actions')));
+    if (changedStatus.length) this.scheduleRollActions();
     for (const a of mine) void this.ensureSheet(a).then(handle => {
       if (handle.bus.artwork !== a.artwork) {
         handle.bus.artwork = a.artwork;

@@ -225,6 +225,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private dmmt.ui.OnlinePlayPanel onlinePanel;
     private Region onlineScroll;
     private dmmt.online.OnlineSessionController onlineController;
+    private final dmmt.online.ActorTokenResources.Reader actorResourceReader = new dmmt.online.ActorTokenResources.Reader();
     private RemoteSessionPanel sessionPanel;
     private ScrollPane sessionScroll;
     private dmmt.ui.RemoteBusyDialog remoteBusyDialog;
@@ -11148,7 +11149,7 @@ public class DungeonMasterMapToolApplication extends Application {
     private void refreshActorTokenResources(dmmt.online.Campaign campaign) {
         try {
             renderer.setActorResources(campaign == null ? null : campaign.getId(),
-                    dmmt.online.ActorTokenResources.load(campaign, onlineController.store()));
+                    actorResourceReader.load(campaign, onlineController.store()));
         } catch (IOException ex) {
             renderer.setActorResources(null, Map.of());
             status("Could not load actor token HP and Stress: " + ex.getMessage());

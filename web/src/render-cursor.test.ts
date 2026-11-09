@@ -69,6 +69,24 @@ describe('map interaction cursors', () => {
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+  it('skips hidden-tab canvas and vision work but redraws the latest state on visibility', () => {
+    const draw = vi.fn();
+    const vision = vi.fn();
+    Reflect.set(view, 'draw', draw);
+    Reflect.set(view, 'recomputeVision', vision);
+    Reflect.set(document, 'hidden', true);
+    Reflect.get(view, 'frame').call(view, 1000);
+    expect(draw).not.toHaveBeenCalled();
+    expect(vision).not.toHaveBeenCalled();
+    expect(Reflect.get(view, 'dirty')).toBe(true);
+    Reflect.set(document, 'hidden', false);
+    Reflect.get(view, 'frame').call(view, 2000);
+    expect(draw).toHaveBeenCalledWith(current);
+    expect(vision).toHaveBeenCalledOnce();
+    Reflect.get(view, 'frame').call(view, 3000);
+    expect(draw).toHaveBeenCalledOnce();
+  });
+
   it('creates drawings and measurements with the chosen account-default or tool-override color', () => {
     view.style.color = '#2979ff';
     view.onDrawing = vi.fn();

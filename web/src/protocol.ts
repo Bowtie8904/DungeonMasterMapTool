@@ -347,6 +347,8 @@ export interface Hello {
   mapPings?: boolean;
   type: 'hello';
   sheetSync?: boolean;
+  sheetActionResponses?: boolean;
+  sheetPatches?: boolean;
   deathMoves?: boolean;
   deathMoveOptions?: boolean;
   protocol: number;
@@ -403,7 +405,7 @@ import type { AudioMessage } from './audio';
 
 export type ServerMessage =
   | { type: 'catalogChanged' }
-  | { type: 'sheetChanged'; actorId: string }
+  | { type: 'sheetChanged'; actorId: string; version?: string }
   | Hello
   | { type: 'cardStock'; actorId: string }
   | { type: 'sheetInventory'; actorId: string; inventory: Partial<import('./daggerheart/data').CharacterSheet> }

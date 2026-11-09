@@ -86,6 +86,8 @@ export interface WeaponDamageAction {
 }
 
 export interface SheetViewOptions {
+  /** Hidden windows retain their live model and dialog handlers without building sheet DOM. */
+  visible?: () => boolean;
   supportsSpecialCardActions?: () => boolean;
   gmFear?: () => number;
   onSpecialCard?: (key: string, actionId: string, choice: SpecialCardChoice) => Promise<void>;
@@ -195,6 +197,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const canEdit = () => editMode && !opts.readOnly?.();
   const displayedPronouns = () => c.description.Pronouns?.trim() ? c.description.Pronouns : c.pronouns;
   const pronounsText = (value: string) => value.trim() ? ` (${value})` : '';
+  let portraitErrorMessage = '';
   let pronounsDisplay: HTMLElement;
   const root = el('div', { class: 'dh' });
   root.addEventListener('click', event => {
@@ -216,9 +219,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }, opts.onDeathOptions, initial);
   const inventoryQuery = { equipment: '', loot: '' };
   const expandedDescriptions = new Set<string>();
-  const descriptionObserver = new ResizeObserver(() => measureDescriptions());
+  let layoutPending = false;
+  const scheduleLayout = () => {
+    if (layoutPending || opts.visible?.() === false) return;
+    layoutPending = true;
+    requestAnimationFrame(() => {
+      layoutPending = false;
+      if (opts.visible?.() === false) return;
+      measureDescriptions();
+      layoutCards();
+    });
+  };
+  const descriptionObserver = new ResizeObserver(scheduleLayout);
   descriptionObserver.observe(root);
-  const cardLayoutObserver = new ResizeObserver(() => layoutCards());
+  const cardLayoutObserver = new ResizeObserver(scheduleLayout);
   function layoutCards(): void {
     root.querySelectorAll<HTMLElement>('.cards:not(.cards-list)').forEach(grid => {
       const width = grid.clientWidth;
@@ -415,7 +429,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     return true;
   };
-  opts.bus?.subscribe((save) => render(save));
+  let renderPending = false;
+  let renderSave = false;
+  opts.bus?.subscribe((save = true) => {
+    renderSave ||= save;
+    if (renderPending) return;
+    renderPending = true;
+    queueMicrotask(() => {
+      renderPending = false;
+      const save = renderSave;
+      renderSave = false;
+      render(save);
+    });
+  });
   if (opts.bus) opts.bus.featureAction = (name, id) => {
     const feature = activeFeatures(c).find(f => f.name === name);
     const action = feature?.automation?.actions?.find(a => a.id === id);
@@ -425,7 +451,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   };
   for (const ev of ['click', 'input', 'change']) root.addEventListener(ev, event => {
     const target = event.target as Element;
-    if (target.closest('.card-view-switch, .feature-search, .sheet-edit-control')
+    if (target.closest('.tabs, .card-view-switch, .feature-search, .sheet-edit-control')
       || ev === 'click' && target.closest('.domain-list-summary') && !target.closest('button')) return;
     if (!opts.readOnly?.()) opts.onChange?.();
   });
@@ -798,6 +824,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const bonded = readOnly ? null : resolveBonded(c, rollLocal);
     if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
+    if (opts.visible?.() === false) {
+      if (!readOnly && save) opts.onChange?.();
+      return;
+    }
     actionRefreshers = [];
     const editControl = editSwitch();
     opts.onEditControl?.(editControl);
@@ -808,7 +838,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
     root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
-    layoutCards();
+    scheduleLayout();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
       applyReadOnlyControls();
@@ -817,7 +847,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (p) p.scrollTop = scroll;
     const sidebar = root.querySelector('.sheet-sidebar');
     if (sidebar) sidebar.scrollTop = sidebarScroll;
-    requestAnimationFrame(() => { measureDescriptions(); layoutCards(); });
+    scheduleLayout();
   };
 
   function editSwitch(): HTMLElement {
@@ -913,7 +943,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const artwork = opts.bus?.artwork ?? opts.artwork;
     if (artwork) portrait.append(el('img', { src: artwork, alt: '' }));
     else portrait.textContent = c.name.slice(0, 1).toUpperCase();
-    const portraitError = el('span', { class: 'error portrait-error', role: 'alert' });
+    const portraitError = el('span', { class: 'error portrait-error', role: 'alert' }, portraitErrorMessage);
     if (canEdit() && opts.actorId) {
       portrait.classList.add('editable-portrait');
       portrait.tabIndex = 0;
@@ -924,6 +954,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const edit = async () => {
         if (editing || !canEdit()) return;
         editing = true;
+        portraitErrorMessage = '';
         try {
           const artwork = await editTokenArtwork(opts.actorId!, canEdit);
           if (artwork) {
@@ -931,7 +962,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             if (opts.bus) opts.bus.artwork = artwork;
             render(false);
           }
-        } catch (error) { portraitError.textContent = `Could not update character image: ${(error as Error).message}`; }
+        } catch (error) {
+          portraitErrorMessage = `Could not update character image: ${(error as Error).message}`;
+          render(false);
+        }
         finally { editing = false; }
       };
       portrait.addEventListener('click', () => { void edit(); });
@@ -1105,7 +1139,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const b = el('button', { class: 'tab', type: 'button' }, label + count);
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(id === page));
-      b.addEventListener('click', () => { page = id; render(); });
+      b.addEventListener('click', () => { page = id; render(false); });
       nav.append(b);
     }
     return nav;

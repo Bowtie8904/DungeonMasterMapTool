@@ -1,5 +1,15 @@
 # Online Play web client
 
+Sheet catalogs share in-flight downloads and parsed data across owned actors, rules and compendium tools.
+Reconnects and catalog edits invalidate that cache; custom fetchers and actor-scoped DM authorization stay isolated.
+Hidden/minimized sheets retain live data, effects and chat damage handlers without building their full sheet DOM.
+Layout and sheet notifications are coalesced, and hidden browser tabs skip map drawing until visible again.
+Unchanged saved sheets no longer need an initial save; new characters and migrations still persist.
+Hosts advertising `sheetActionResponses` can return committed sheet data after feature actions, avoiding a follow-up GET.
+Hosts advertising `sheetPatches` receive top-level save patches only with a known baseline and exact `If-Match` version.
+Old hosts retain full saves and GET refreshes. Pending local edits are never replaced by action responses; conflicts and
+persistence errors remain explicit. Spending and rolls are never queued for automatic offline replay.
+
 The browser map never displays token names, including when a DM enables a name label. Names are hidden by
 default and can be shown to the DM only from the desktop map's token right-click menu.
 Token condition menus open from the canceled browser `contextmenu` event, rather than on pointer press,

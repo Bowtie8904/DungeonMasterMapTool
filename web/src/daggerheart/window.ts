@@ -1,5 +1,5 @@
 import { el } from '../login';
-import { renderSheetView, SheetViewOptions } from './view';
+import { renderSheetView, SheetBus, SheetViewOptions } from './view';
 
 const HIDDEN = 'hidden';
 
@@ -25,6 +25,7 @@ export class SheetWindow {
   readonly element: HTMLElement;
   private readonly title: HTMLElement;
   private readonly body: HTMLElement;
+  private readonly bus: SheetBus;
 
   constructor(
     options: SheetViewOptions,
@@ -41,8 +42,11 @@ export class SheetWindow {
     const mini = el('div', { class: 'dh-win-mini' });
     const editControl = el('div', { class: 'sheet-edit-host' });
     const label = el('h2', {}, `${actorName} - Daggerheart sheet`);
+    this.bus = options.bus ?? new SheetBus();
     this.body = el('div', { class: 'dh-win-body' }, renderSheetView({
       ...options,
+      bus: this.bus,
+      visible: () => !!this.element && this.isOpen && !this.element.classList.contains('minimised'),
       onEditControl: control => {
         options.onEditControl?.(control);
         editControl.replaceChildren(control);
@@ -53,7 +57,7 @@ export class SheetWindow {
     this.title.append(
       el('div', { class: 'sheet-heading' }, label, editControl),
       mk('\u29C9', 'Pop out to a new browser window', () => { this.setOpen(false); onPopOut(); }),
-      mk('\u2013', 'Minimise', () => this.element.classList.toggle('minimised')),
+      mk('\u2013', 'Minimise', () => { this.element.classList.toggle('minimised'); this.bus.notify(false); }),
       mk('\u2715', 'Close', () => this.setOpen(false)),
     );
     this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, mini, this.body);
@@ -68,6 +72,7 @@ export class SheetWindow {
   setOpen(open: boolean): void {
     this.element.classList.toggle(HIDDEN, !open);
     if (open) { this.element.classList.remove('minimised'); bringToFront(this.element); }
+    this.bus.notify(false);
     this.onVisibility(open);
   }
 

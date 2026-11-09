@@ -120,6 +120,48 @@ public final class OnlineSessionServer {
 
     private final Config config;
     private final CampaignStore store;
+    private final HostCatalog hostCatalog = new HostCatalog();
+    private final ThreadLocal<SheetOperation> sheetOperation = new ThreadLocal<>();
+    private volatile SheetDiagnostics lastSheetDiagnostics = new SheetDiagnostics(0, 0, 0);
+
+    record SheetDiagnostics(int hydrations, int hydrationCacheHits, int normalizations) { }
+
+    SheetDiagnostics sheetDiagnostics() {
+        return lastSheetDiagnostics;
+    }
+
+    HostCatalog.Diagnostics catalogDiagnostics() {
+        return hostCatalog.diagnostics();
+    }
+
+    private static final class SheetOperation {
+        HostCatalog.Snapshot catalogs;
+        final Map<String, HydratedSheet> sheets = new java.util.HashMap<>();
+        int hydrations;
+        int hydrationCacheHits;
+        int normalizations;
+    }
+
+    private record HydratedSheet(String stored, ObjectNode sheet) { }
+
+    private void withSheetOperation(Context ctx, io.javalin.http.Handler handler) throws Exception {
+        sheetOperation.set(new SheetOperation());
+        try {
+            handler.handle(ctx);
+        } finally {
+            SheetOperation operation = sheetOperation.get();
+            if (operation != null) lastSheetDiagnostics = new SheetDiagnostics(operation.hydrations,
+                    operation.hydrationCacheHits, operation.normalizations);
+            sheetOperation.remove();
+        }
+    }
+
+    private HostCatalog.Snapshot catalogs() throws IOException {
+        SheetOperation operation = sheetOperation.get();
+        if (operation == null) return hostCatalog.snapshot(host.compendiumDirectory());
+        if (operation.catalogs == null) operation.catalogs = hostCatalog.snapshot(host.compendiumDirectory());
+        return operation.catalogs;
+    }
     private final CampaignNotes notes;
     private final Object handoutsLock = new Object();
     private CampaignHandouts handouts;
@@ -266,30 +308,30 @@ public final class OnlineSessionServer {
         javalin.post("/api/logout", this::handleLogout);
         javalin.get("/api/preferences", ctx -> handlePreferences(ctx, false));
         javalin.put("/api/preferences", ctx -> handlePreferences(ctx, true));
-        javalin.get("/api/sheet/{id}", this::handleSheet);
-        javalin.get("/api/copycat/{id}", this::handleCopycatCandidates);
-        javalin.put("/api/sheet/{id}", this::handleSheetSave);
-        javalin.post("/api/feature", this::handleFeature);
-        javalin.post("/api/death-move", this::handleDeathMove);
-        javalin.get("/api/death-move/{id}", this::handleDeathOptions);
-        javalin.post("/api/death-recovery", this::handleDeathRecovery);
-        javalin.post("/api/roll-reward", this::handleRollReward);
-        javalin.post("/api/damage-taken", this::handleDamageTaken);
+        javalin.get("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheet));
+        javalin.get("/api/copycat/{id}", ctx -> withSheetOperation(ctx, this::handleCopycatCandidates));
+        javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
+        javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
+        javalin.post("/api/death-move", ctx -> withSheetOperation(ctx, this::handleDeathMove));
+        javalin.get("/api/death-move/{id}", ctx -> withSheetOperation(ctx, this::handleDeathOptions));
+        javalin.post("/api/death-recovery", ctx -> withSheetOperation(ctx, this::handleDeathRecovery));
+        javalin.post("/api/roll-reward", ctx -> withSheetOperation(ctx, this::handleRollReward));
+        javalin.post("/api/damage-taken", ctx -> withSheetOperation(ctx, this::handleDamageTaken));
         javalin.get("/api/notes", ctx -> handleNotes(ctx, "list"));
         javalin.get("/api/notes/content", ctx -> handleNotes(ctx, "read"));
         javalin.post("/api/notes", ctx -> handleNotes(ctx, "edit"));
         javalin.get("/api/handouts", this::handleHandoutList);
         javalin.get("/api/handouts/{id}", this::handleHandoutImage);
-        javalin.post("/api/chat-cards", this::handleShareCard);
-        javalin.get("/api/chat-cards/{id}", this::handleCardStock);
-        javalin.post("/api/chat-cards/{id}/grab", this::handleGrabCard);
+        javalin.post("/api/chat-cards", ctx -> withSheetOperation(ctx, this::handleShareCard));
+        javalin.get("/api/chat-cards/{id}", ctx -> withSheetOperation(ctx, this::handleCardStock));
+        javalin.post("/api/chat-cards/{id}/grab", ctx -> withSheetOperation(ctx, this::handleGrabCard));
         javalin.get("/api/compendium", this::handleCompendiumIndex);
         javalin.get("/api/compendium/{category}", this::handleCompendiumCategory);
         javalin.get("/api/dm/compendium/actors", this::handleDmCompendiumActors);
         javalin.get("/api/dm/catalog/{category}", ctx -> handleCatalogEditor(ctx, false));
         javalin.put("/api/dm/catalog/{category}", ctx -> handleCatalogEditor(ctx, true));
-        javalin.post("/api/dm/compendium/add", ctx -> handleDmCompendiumAction(ctx, false));
-        javalin.post("/api/dm/compendium/link", ctx -> handleDmCompendiumAction(ctx, true));
+        javalin.post("/api/dm/compendium/add", ctx -> withSheetOperation(ctx, request -> handleDmCompendiumAction(request, false)));
+        javalin.post("/api/dm/compendium/link", ctx -> withSheetOperation(ctx, request -> handleDmCompendiumAction(request, true)));
         javalin.put("/api/actors/{id}/artwork", this::handleArtwork);
         javalin.get("/api/actors/{id}/artwork", this::handleArtworkSettings);
         javalin.get("/a/{name}", this::handleAsset);
@@ -299,10 +341,13 @@ public final class OnlineSessionServer {
         javalin.ws("/ws", ws -> {
             ws.onConnect(this::onConnect);
             ws.onMessage(ctx -> {
+                sheetOperation.set(new SheetOperation());
                 try {
                     onMessage(ctx, ctx.message());
                 } catch (Exception e) {
                     sendTo(ctx, error("Request failed"));
+                } finally {
+                    sheetOperation.remove();
                 }
             });
             ws.onClose(ctx -> onDisconnect(ctx.sessionId()));
@@ -439,12 +484,7 @@ public final class OnlineSessionServer {
     private void refreshCatalogSheet(ObjectNode sheet) throws IOException {
         java.nio.file.Path directory = host.compendiumDirectory();
         if (directory == null || !java.nio.file.Files.isDirectory(directory)) return;
-        List<ObjectNode> files = new java.util.ArrayList<>();
-        for (String category : CatalogEditor.CATEGORIES) {
-            if (java.nio.file.Files.isRegularFile(directory.resolve(category + ".json")))
-                files.add(CatalogEditor.read(directory, category).file());
-        }
-        CatalogSheets.refresh(sheet, files);
+        catalogs().refresh(sheet);
         for (String location : List.of("loadout", "vault"))
             for (JsonNode node : sheet.path(location)) {
                 if (!(node instanceof ObjectNode card) || !"Copycat".equals(card.path("name").asText())
@@ -465,7 +505,7 @@ public final class OnlineSessionServer {
                 ? null : dir.resolve(category + ".json");
         if (file == null || !java.nio.file.Files.isRegularFile(file))
             throw new IllegalArgumentException("Unknown compendium category.");
-        return MAPPER.readTree(file.toFile());
+        return catalogs().document(category);
     }
 
     private synchronized void handleDmCompendiumAction(Context ctx, boolean link) {
@@ -1303,27 +1343,20 @@ public final class OnlineSessionServer {
             return;
         }
         ArrayNode categories = MAPPER.createArrayNode();
-        java.nio.file.Path dir = host.compendiumDirectory();
-        if (dir != null && java.nio.file.Files.isDirectory(dir)) {
-            try (var files = java.nio.file.Files.list(dir)) {
-                files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().forEach(p -> {
-                    String name = p.getFileName().toString();
-                    name = name.substring(0, name.length() - 5);
-                    if (!COMPENDIUM_NAME.matcher(name).matches()) {
-                        return;
-                    }
-                    try {
-                        JsonNode doc = MAPPER.readTree(p.toFile());
-                        ObjectNode c = categories.addObject();
-                        c.put("category", name);
-                        c.put("label", doc.path("label").asText(name));
-                        c.put("count", doc.path("entries").size());
-                    } catch (IOException ignored) {
-                        // a malformed homebrew file is skipped
-                    }
-                });
+        HostCatalog.Snapshot catalogs;
+        try {
+            catalogs = catalogs();
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read catalog revisions."));
+            return;
+        }
+        for (String name : catalogs.categories()) {
+            if (!COMPENDIUM_NAME.matcher(name).matches()) continue;
+            try {
+                ObjectNode category = catalogs.summary(name);
+                if (category != null) categories.add(category);
             } catch (IOException ignored) {
-                // unreadable folder: report no categories
+                // A malformed homebrew file is skipped, never served from a stale revision.
             }
         }
         ObjectNode body = MAPPER.createObjectNode();
@@ -1332,10 +1365,9 @@ public final class OnlineSessionServer {
         if (isDmCompendium(ctx)) {
             try {
                 StringBuilder revisions = new StringBuilder();
-                if (dir != null) for (String category : CatalogEditor.CATEGORIES) {
-                    java.nio.file.Path file = dir.resolve(category + ".json");
-                    if (java.nio.file.Files.isRegularFile(file))
-                        revisions.append(category).append(CampaignStore.sha256(java.nio.file.Files.readAllBytes(file)));
+                for (String category : CatalogEditor.CATEGORIES) {
+                    String revision = catalogs.revision(category);
+                    if (revision != null) revisions.append(category).append(revision);
                 }
                 body.put("revision", CampaignStore.sha256(revisions.toString().getBytes(StandardCharsets.UTF_8)));
             } catch (IOException e) {
@@ -1343,8 +1375,25 @@ public final class OnlineSessionServer {
                 return;
             }
         }
-        ctx.header("Cache-Control", "no-store");
+        if (catalogNotModified(ctx, CampaignStore.sha256(body.toString().getBytes(StandardCharsets.UTF_8)))) return;
         json(ctx, 200, body);
+    }
+
+    private boolean catalogNotModified(Context ctx, String revision) {
+        String etag = "\"" + revision + "\"";
+        ctx.header("Cache-Control", "private, no-cache");
+        ctx.header("Vary", "Cookie, Authorization");
+        ctx.header("ETag", etag);
+        String matches = ctx.header("If-None-Match");
+        if (matches != null) for (String match : matches.split(",")) {
+            String value = match.strip();
+            if (value.startsWith("W/")) value = value.substring(2);
+            if (etag.equals(value) || "*".equals(value)) {
+                ctx.status(304);
+                return true;
+            }
+        }
+        return false;
     }
 
     private void handleCompendiumCategory(Context ctx) {
@@ -1359,8 +1408,14 @@ public final class OnlineSessionServer {
             return;
         }
         try {
-            ctx.header("Cache-Control", "no-store");
-            ctx.status(200).contentType("application/json").result(java.nio.file.Files.readAllBytes(file));
+            HostCatalog.Snapshot catalogs = catalogs();
+            byte[] bytes = catalogs.bytes(name);
+            if (bytes == null) {
+                json(ctx, 404, errorBody("Unknown compendium category"));
+                return;
+            }
+            if (catalogNotModified(ctx, catalogs.revision(name))) return;
+            ctx.status(200).contentType("application/json").result(bytes);
         } catch (IOException e) {
             json(ctx, 500, errorBody("Compendium unavailable"));
         }
@@ -1377,12 +1432,6 @@ public final class OnlineSessionServer {
             json(ctx, 404, errorBody("Unknown actor"));
             return;
         }
-        ObjectNode body = MAPPER.createObjectNode();
-        body.put("actorId", actor.getId());
-        body.put("saved", true);
-        body.put("name", actor.getName());
-        body.put("testingCharacter", actor.isTestingCharacter());
-        body.put("disabled", actor.isDisabled());
         ctx.header("Cache-Control", "no-store");
         try {
             Map<String, ObjectNode> grants = new java.util.LinkedHashMap<>();
@@ -1391,22 +1440,43 @@ public final class OnlineSessionServer {
                 persistFeatureSheets(grants, null, false);
                 for (var entry : grants.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
             }
-            String stored = store.loadSheet(c.getId(), actor.getId());
-            if (stored == null) {
-                body.putNull("sheet");
-            } else {
-                ObjectNode sheet = (ObjectNode) MAPPER.readTree(stored);
-                refreshCatalogSheet(sheet);
-                SpecialCardActions.migrateVitality(sheet);
-                setSheetName(sheet, actor.getName());
-                body.set("sheet", sheet);
-            }
-            body.put("version", sheetVersion(stored, actor));
+            json(ctx, 200, sheetState(actor));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read the character sheet."));
             return;
         }
-        json(ctx, 200, body);
+    }
+
+    private ObjectNode sheetState(Campaign.Actor actor) throws IOException {
+        String stored = store.loadSheet(campaign.getId(), actor.getId());
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", actor.getId()).put("saved", true)
+                .put("name", actor.getName()).put("testingCharacter", actor.isTestingCharacter())
+                .put("disabled", actor.isDisabled()).put("version", sheetVersion(stored, actor));
+        if (stored == null) body.putNull("sheet");
+        else {
+            ObjectNode sheet = hydrateSheet(actor.getId(), stored);
+            setSheetName(sheet, actor.getName());
+            body.set("sheet", sheet);
+        }
+        return body;
+    }
+
+    private void actionResponse(Context ctx, String playerId, Campaign.Actor actor) {
+        ObjectNode response = MAPPER.createObjectNode().put("ok", true);
+        if ("1".equals(ctx.header("X-DMMT-Sheet-Response")) && actor != null
+                && playerId.equals(actor.getOwnerId())) {
+            try {
+                ObjectNode state = sheetState(actor);
+                ObjectNode representation = response.putObject("sheetState");
+                for (String field : List.of("actorId", "version", "sheet", "testingCharacter"))
+                    representation.set(field, state.get(field));
+            } catch (IOException | RuntimeException e) {
+                // The action is already committed. Fall back to the legacy refresh, never report a failed mutation.
+                LOG.log(java.util.logging.Level.WARNING, "Could not include the committed sheet response", e);
+            }
+        }
+        ctx.header("Cache-Control", "no-store");
+        json(ctx, 200, response);
     }
 
     static final int MAX_SHEET_BYTES = 512 * 1024;
@@ -1433,17 +1503,36 @@ public final class OnlineSessionServer {
                 json(ctx, 400, errorBody("Sheet must be a JSON object"));
                 return;
             }
-            refreshCatalogSheet((ObjectNode) sheet);
-            ObjectNode previous = storedSheet(actor.getId());
             String expected = ctx.header("If-Match");
-            if (expected != null && !expected.equals(sheetVersion(store.loadSheet(c.getId(), actor.getId()), actor))) {
+            boolean patch = "1".equals(ctx.header("X-DMMT-Sheet-Patch"));
+            if (patch && expected == null) {
+                json(ctx, 428, errorBody("A compact sheet save requires If-Match. Reload the sheet before saving."));
+                return;
+            }
+            if (patch && !expected.matches("\"[0-9a-f]{64}\"")) {
+                json(ctx, 400, errorBody("Invalid sheet version. Reload the sheet before saving."));
+                return;
+            }
+            String stored = store.loadSheet(c.getId(), actor.getId());
+            ObjectNode previous = stored == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), stored);
+            String previousVersion = sheetVersion(stored, actor);
+            if (expected != null && !expected.equals(previousVersion)) {
                 ObjectNode conflict = errorBody("The character sheet changed in another window. Latest sheet loaded; please reapply your edit.");
                 setSheetName(previous, actor.getName());
                 conflict.set("sheet", previous);
-                conflict.put("version", sheetVersion(store.loadSheet(c.getId(), actor.getId()), actor));
+                conflict.put("version", previousVersion);
                 json(ctx, 409, conflict);
                 return;
             }
+            if (patch) {
+                ObjectNode original = stored == null ? MAPPER.createObjectNode() : (ObjectNode) MAPPER.readTree(stored);
+                sheet = applySheetPatch(original, sheet);
+                if (MAPPER.writeValueAsBytes(sheet).length > MAX_SHEET_BYTES) {
+                    json(ctx, 413, errorBody("Sheet is too large"));
+                    return;
+                }
+            }
+            refreshCatalogSheet((ObjectNode) sheet);
             if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)
                     || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)
                     || sheet.path("featureRevision").asLong(0) != previous.path("featureRevision").asLong(0)) {
@@ -1473,7 +1562,6 @@ public final class OnlineSessionServer {
             }
             setSheetName(saved, name);
             boolean renamed = !name.equals(actor.getName());
-            refreshCatalogSheet(saved);
             validateDeathSave(saved, previous);
             WitchEffects.validateSave(saved, previous);
             InvisibilityEffects.validateSave(saved, previous);
@@ -1513,7 +1601,8 @@ public final class OnlineSessionServer {
                 host.campaignChanged(c);
             }
             stockChanged(actor.getId());
-            handleSheet(ctx);
+            ctx.header("Cache-Control", "no-store");
+            json(ctx, 200, sheetState(actor));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
         } catch (IllegalArgumentException e) {
@@ -1526,6 +1615,32 @@ public final class OnlineSessionServer {
     private static String sheetVersion(String stored, Campaign.Actor actor) {
         return "\"" + CampaignStore.sha256((stored == null ? "actor:" + actor.getName() : stored)
                 .getBytes(StandardCharsets.UTF_8)) + "\"";
+    }
+
+    static ObjectNode applySheetPatch(ObjectNode original, JsonNode patch) {
+        if (!(patch.path("fields") instanceof ObjectNode fields) || !patch.path("removed").isArray()
+                || patch.size() != 2)
+            throw new IllegalArgumentException("A compact sheet save requires fields and removed.");
+        ObjectNode result = original.deepCopy();
+        Set<String> removed = new java.util.HashSet<>();
+        for (JsonNode key : patch.path("removed")) {
+            if (!key.isTextual() || !sheetPatchKey(key.asText()) || !removed.add(key.asText())
+                    || fields.has(key.asText()))
+                throw new IllegalArgumentException("Invalid removed sheet field.");
+            result.remove(key.asText());
+        }
+        var updates = fields.fields();
+        while (updates.hasNext()) {
+            var entry = updates.next();
+            if (!sheetPatchKey(entry.getKey())) throw new IllegalArgumentException("Invalid changed sheet field.");
+            result.set(entry.getKey(), entry.getValue().deepCopy());
+        }
+        return result;
+    }
+
+    private static boolean sheetPatchKey(String key) {
+        return !key.isBlank() && key.length() <= 256 && key.chars().noneMatch(Character::isISOControl)
+                && !List.of("__proto__", "prototype", "constructor").contains(key);
     }
 
     static void setSheetName(ObjectNode sheet, String name) {
@@ -1551,7 +1666,13 @@ public final class OnlineSessionServer {
         Campaign.Actor actor = campaign.actor(actorId);
         if (actor == null) return;
         host.actorSheetChanged(actorId);
-        String message = MAPPER.createObjectNode().put("type", "sheetChanged").put("actorId", actorId).toString();
+        ObjectNode notification = MAPPER.createObjectNode().put("type", "sheetChanged").put("actorId", actorId);
+        try {
+            notification.put("version", sheetVersion(store.loadSheet(campaign.getId(), actorId), actor));
+        } catch (IOException ignored) {
+            // Legacy notifications remain useful when a version cannot be read.
+        }
+        String message = notification.toString();
         for (Client client : clients.values())
             if (client.fullSheets && actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)
                     && (client.dmActorId == null || client.dmActorId.equals(actorId)))
@@ -1596,14 +1717,9 @@ public final class OnlineSessionServer {
 
     private List<DeathMoves.Source> deathSources(ObjectNode sheet) throws IOException {
         List<DeathMoves.Source> sources = new ArrayList<>();
-        List<JsonNode> catalogs = new ArrayList<>();
         java.nio.file.Path directory = host.compendiumDirectory();
-        if (directory != null) {
-            try (var files = java.nio.file.Files.list(directory)) {
-                for (var file : files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList())
-                    catalogs.add(MAPPER.readTree(file.toFile()));
-            }
-        }
+        HostCatalog.Snapshot catalogs = directory == null ? null : catalogs();
+        if (catalogs != null) catalogs.requireReadable();
         for (String field : List.of("features", "heritage", "loadout", "activeArmor", "inventory")) {
             JsonNode values = sheet.path(field);
             Iterable<JsonNode> entries = values.isArray() ? values : values.isObject() ? List.of(values) : List.of();
@@ -1613,10 +1729,7 @@ public final class OnlineSessionServer {
                 String kind = "loadout".equals(field) ? "card" : "activeArmor".equals(field) ? "armor"
                         : "inventory".equals(field) ? "item" : "feat";
                 JsonNode automation = directory == null ? entry.path("automation") : null;
-                for (JsonNode catalog : catalogs) {
-                    JsonNode found = findCatalogFeature(catalog, name);
-                    if (found != null) { automation = found; break; }
-                }
+                if (catalogs != null) automation = catalogs.automation(name);
                 if (automation != null && automation.path("deathMove").isObject())
                     sources.add(new DeathMoves.Source(kind + ":" + name, name, automation, entry));
             }
@@ -1671,7 +1784,7 @@ public final class OnlineSessionServer {
             commitFeatureSheets(Map.of(actor.getId(), sheet), roll);
             sendFeatureState(actor, sheet);
             broadcastRollUpdate(roll);
-            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+            actionResponse(ctx, playerId, actor);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid death recovery request."));
         } catch (IllegalArgumentException e) {
@@ -1709,7 +1822,7 @@ public final class OnlineSessionServer {
                 for (var entry : normalized.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
                 deliver(report, null, false);
                 if (sheet.path("hp").path("on").asInt() < sheet.path("hp").path("slots").asInt()) {
-                    json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                    actionResponse(ctx, playerId, actor);
                     return;
                 }
             }
@@ -1738,7 +1851,7 @@ public final class OnlineSessionServer {
             commitFeatureSheets(Map.of(actor.getId(), sheet), message, true);
             sendFeatureState(actor, sheet);
             deliver(message, null, false);
-            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+            actionResponse(ctx, playerId, actor);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid death move request."));
         } catch (IllegalArgumentException e) {
@@ -1899,22 +2012,22 @@ public final class OnlineSessionServer {
             if (sourceActor.isDisabled()) throw new IllegalArgumentException("This character is disabled.");
             if (request.has("incomingDamage")) {
                 resolveBoneValorDamage(sourceActor, request.path("incomingDamage"));
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             if (request.has("transactionalRoll")) {
                 resolveCardOptionRoll(sourceActor, request.path("transactionalRoll"));
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             if (request.has("rest")) {
                 resolveBoneValorRest(sourceActor, request.path("rest"));
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             if (request.has("benefitId")) {
                 claimActionBenefit(request, sourceActor);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             String key = request.path("key").asText("").strip();
@@ -1930,7 +2043,7 @@ public final class OnlineSessionServer {
                 if (!automation.path("restReroll").asBoolean() || !"reroll".equals(actionId))
                     throw new IllegalArgumentException("This feature cannot reroll downtime dice.");
                 rerollRestDie(request, sourceActor, source, sourceSheet, key, automation);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             boolean hasRoll = request.path("roll").isObject();
@@ -1938,12 +2051,12 @@ public final class OnlineSessionServer {
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
             if (definition.has("specialAction")) {
                 resolveSpecialCardAction(request, sourceActor, sourceSheet, source, key, automation, definition);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             if (definition.path("copycat").asBoolean()) {
                 copycatAction(request, sourceActor, sourceSheet, key, automation, definition);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
             boolean conditionalTrigger = false;
@@ -2001,7 +2114,7 @@ public final class OnlineSessionServer {
                 if (clients.values().stream().noneMatch(client -> playerId.equals(client.playerId)))
                     throw new IllegalArgumentException("Reconnect before rolling Glancing Blow damage. No Stress was paid.");
                 resolveGlancingBlow(sourceActor, sourceSheet, source, key, automation, definition, originalRoll, request.path("damage"));
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
 
@@ -2033,7 +2146,7 @@ public final class OnlineSessionServer {
             }
             Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
             changedSheets.put(sourceActor.getId(), sourceSheet);
-            if (lifeWard) removeLifeWards(changedSheets, sourceActor.getId());
+            if (lifeWard) removeLifeWards(changedSheets, sourceActor.getId(), new java.util.LinkedHashMap<>());
             for (Campaign.Actor target : targets) {
                 changedSheets.computeIfAbsent(target.getId(), id -> {
                     try { return storedSheet(id); }
@@ -2174,7 +2287,7 @@ public final class OnlineSessionServer {
                     } else commitFeatureSheets(changedSheets);
                     sendFeatureState(sourceActor, sourceSheet);
                     publishFeatureCheck(sourceActor, source, actionLabel, result, String.join(" ", reportLines));
-                    json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                    actionResponse(ctx, playerId, sourceActor);
                     return;
                 }
                 boolean marked = die != check.path("unless").asInt(Integer.MIN_VALUE);
@@ -2192,7 +2305,7 @@ public final class OnlineSessionServer {
                 commitFeatureSheets(changedSheets);
                 for (var entry : changedSheets.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
                 publishFeatureCheck(sourceActor, source, actionLabel, result, consequence);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, sourceActor);
                 return;
             }
 
@@ -2452,7 +2565,7 @@ public final class OnlineSessionServer {
                     reportLines.add(0, "Changed the original roll to " + ("hope".equals(definition.path("outcome").asText()) ? "Hope" : "Fear") + ".");
                 publishActionReport(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
             }
-            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+            actionResponse(ctx, playerId, sourceActor);
         } catch (FeatureIoException e) {
             json(ctx, 500, errorBody("Could not read the target character sheet."));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -3208,13 +3321,9 @@ public final class OnlineSessionServer {
         JsonNode ref = request.path("roll");
         if (!sessionRolls.contains(rollKey(ref.path("id").asLong(-1), ref.path("ts").asLong(-1))))
             throw new IllegalArgumentException("That performance is not from this hosting session.");
-        ObjectNode message = null;
-        for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE))
-            if (List.of("chat", "roll").contains(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
-                    && entry.path("ts").equals(ref.path("ts")) && entry instanceof ObjectNode object) {
-                message = object.deepCopy();
-                break;
-            }
+        JsonNode history = store.historyEntry(campaign.getId(), ref.path("id").asLong(-1), ref.path("ts").asLong(-1));
+        ObjectNode message = history instanceof ObjectNode object
+                && List.of("chat", "roll").contains(history.path("type").asText()) ? object : null;
         if (message == null || !message.path("actionBenefits").isObject())
             throw new IllegalArgumentException("That message has no claimable benefit.");
         ObjectNode claims = (ObjectNode) message.path("actionBenefits");
@@ -3294,14 +3403,8 @@ public final class OnlineSessionServer {
         JsonNode ref = request.path("roll");
         if (!sessionRolls.contains(rollKey(ref.path("id").asLong(-1), ref.path("ts").asLong(-1))))
             throw new IllegalArgumentException("That rest is not from this hosting session.");
-        ObjectNode message = null;
-        for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE)) {
-            if ("chat".equals(entry.path("type").asText()) && entry.path("id").equals(ref.path("id"))
-                    && entry.path("ts").equals(ref.path("ts")) && entry instanceof ObjectNode object) {
-                message = object.deepCopy();
-                break;
-            }
-        }
+        JsonNode entry = store.historyEntry(campaign.getId(), ref.path("id").asLong(-1), ref.path("ts").asLong(-1));
+        ObjectNode message = entry instanceof ObjectNode object && "chat".equals(entry.path("type").asText()) ? object : null;
         if (message == null || !message.path("text").asText().startsWith("SHORT REST\n") || message.has("toId"))
             throw new IllegalArgumentException("Choose a public short-rest report.");
         JsonNode index = request.path("restDie");
@@ -3506,52 +3609,11 @@ public final class OnlineSessionServer {
         if (key.startsWith("card:Copycat/")) return fallback;
         java.nio.file.Path directory = host.compendiumDirectory();
         if (directory == null || name.isBlank()) return fallback;
-        try (var files = java.nio.file.Files.list(directory)) {
-            List<java.nio.file.Path> ordered = files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList();
-            String preferred = key.startsWith("card:") ? "domain-cards.json"
-                    : key.startsWith("item:") ? "items.json"
-                    : key.startsWith("weapon:") ? "weapons.json"
-                    : key.startsWith("armor:") ? "armor.json" : "";
-            if (!preferred.isEmpty()) ordered = java.util.stream.Stream.concat(
-                    ordered.stream().filter(p -> p.getFileName().toString().equals(preferred)),
-                    ordered.stream().filter(p -> !p.getFileName().toString().equals(preferred))).toList();
-            for (java.nio.file.Path file : ordered) {
-                JsonNode root = MAPPER.readTree(file.toFile());
-                if (key.startsWith("card:") && key.contains("/") && file.getFileName().toString().equals(preferred)) {
-                    String nestedName = key.substring(5);
-                    int separator = nestedName.indexOf('/');
-                    for (JsonNode book : root.path("entries")) {
-                        if (!nestedName.substring(0, separator).equals(book.path("name").asText())) continue;
-                        for (JsonNode spell : book.path("spells"))
-                            if (nestedName.substring(separator + 1).equals(spell.path("name").asText()))
-                                return spell.path("automation");
-                    }
-                }
-                JsonNode found = findCatalogFeature(root, name);
-                if (found != null) return found;
-            }
+        try {
+            return catalogs().automation(key, name, fallback);
         } catch (IOException | RuntimeException ignored) {
             return fallback;
         }
-        return fallback;
-    }
-
-    private JsonNode findCatalogFeature(JsonNode node, String name) {
-        if (node.isObject()) {
-            if (name.equals(node.path("name").asText()) && node.path("automation").isObject())
-                return node.path("automation");
-            var fields = node.fields();
-            while (fields.hasNext()) {
-                JsonNode found = findCatalogFeature(fields.next().getValue(), name);
-                if (found != null) return found;
-            }
-        } else if (node.isArray()) {
-            for (JsonNode child : node) {
-                JsonNode found = findCatalogFeature(child, name);
-                if (found != null) return found;
-            }
-        }
-        return null;
     }
 
     private ObjectNode findSessionRoll(JsonNode ref) throws IOException {
@@ -3567,10 +3629,8 @@ public final class OnlineSessionServer {
         long ts = ref.path("ts").asLong(-1);
         Campaign c = campaign;
         if (c == null) throw new IllegalArgumentException("No online session is running.");
-        for (JsonNode entry : store.historyTail(c.getId(), Integer.MAX_VALUE)) {
-            if ("roll".equals(entry.path("type").asText()) && entry.path("id").asLong(-1) == id
-                    && entry.path("ts").asLong(-1) == ts && entry instanceof ObjectNode object) return object.deepCopy();
-        }
+        JsonNode entry = store.historyEntry(c.getId(), id, ts);
+        if (entry instanceof ObjectNode object && "roll".equals(entry.path("type").asText())) return object;
         throw new IllegalArgumentException("That roll is no longer available for a feature reaction.");
     }
 
@@ -3642,7 +3702,7 @@ public final class OnlineSessionServer {
                 sendFeatureState(actor, sheet);
                 broadcastRollUpdate(roll);
                 deliver(report, report.path("toId").asText(null), false);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, actor);
                 return;
             }
             if ("favor".equals(request.path("reward").asText())) {
@@ -3674,7 +3734,7 @@ public final class OnlineSessionServer {
                 sendFeatureState(actor, sheet);
                 broadcastRollUpdate(roll);
                 deliver(report, report.path("toId").asText(null), false);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, actor);
                 return;
             }
             if (request.has("reward")) {
@@ -3714,7 +3774,7 @@ public final class OnlineSessionServer {
                 sendFeatureState(actor, sheet);
                 broadcastRollUpdate(roll);
                 deliver(report, report.path("toId").asText(null), false);
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, actor);
                 return;
             }
             JsonNode meleeReward = critical ? criticalMeleeReward(sheet, roll) : MAPPER.createObjectNode();
@@ -3734,7 +3794,7 @@ public final class OnlineSessionServer {
             store.saveSheetsAndRoll(campaign.getId(), Map.of(actor.getId(), sheet), roll);
             sendFeatureState(actor, sheet);
             broadcastRollUpdate(roll);
-            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+            actionResponse(ctx, playerId, actor);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid roll reward request."));
         } catch (IllegalArgumentException e) {
@@ -4155,13 +4215,23 @@ public final class OnlineSessionServer {
         return removed;
     }
 
-    private boolean removeLifeWards(Map<String, ObjectNode> changes, String casterId) throws IOException {
+    private ObjectNode normalizationOriginal(Map<String, ObjectNode> originals, String actorId) throws IOException {
+        ObjectNode sheet = originals.get(actorId);
+        if (sheet == null) {
+            sheet = storedSheet(actorId);
+            originals.put(actorId, sheet);
+        }
+        return sheet;
+    }
+
+    private boolean removeLifeWards(Map<String, ObjectNode> changes, String casterId,
+                                    Map<String, ObjectNode> originals) throws IOException {
         boolean anyRemoved = false;
         for (Campaign.Actor actor : campaign.getActors()) {
             if (actor.isDisabled()) continue;
             ObjectNode sheet = changes.get(actor.getId());
             boolean loaded = sheet != null;
-            if (!loaded) sheet = storedSheet(actor.getId());
+            if (!loaded) sheet = normalizationOriginal(originals, actor.getId()).deepCopy();
             if (!(sheet.path("effects") instanceof ArrayNode effects)) continue;
             boolean removed = false;
             for (int i = effects.size() - 1; i >= 0; i--) {
@@ -4183,18 +4253,28 @@ public final class OnlineSessionServer {
     }
 
     private List<String> normalizeDeathChanges(Map<String, ObjectNode> changes) throws IOException {
+        if (sheetOperation.get() == null) {
+            sheetOperation.set(new SheetOperation());
+            try {
+                return normalizeDeathChanges(changes);
+            } finally {
+                sheetOperation.remove();
+            }
+        }
+        Map<String, ObjectNode> originals = new java.util.LinkedHashMap<>();
+        sheetOperation.get().normalizations++;
         List<String> reports = new ArrayList<>();
         for (String id : List.copyOf(changes.keySet())) {
             ObjectNode sheet = changes.get(id);
-            ObjectNode previous = storedSheet(id);
+            ObjectNode previous = normalizationOriginal(originals, id);
             if (sheet.path("longRestRevision").asLong() > previous.path("longRestRevision").asLong()) {
-                if (removeLifeWards(changes, id))
+                if (removeLifeWards(changes, id, originals))
                     reports.add(campaign.actor(id).getName() + ": long rest ended all Life Wards cast by this character.");
             }
         }
         for (var entry : changes.entrySet()) {
             ObjectNode sheet = entry.getValue();
-            ObjectNode previous = storedSheet(entry.getKey());
+            ObjectNode previous = normalizationOriginal(originals, entry.getKey());
             String name = campaign.actor(entry.getKey()).getName();
             boolean spectral = hasSpectral(previous);
             int slots = sheet.path("hp").path("slots").asInt();
@@ -4224,12 +4304,13 @@ public final class OnlineSessionServer {
         Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
         for (Campaign.Actor actor : campaign.getActors()) {
             if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
-            party.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
+            party.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId())
+                    : normalizationOriginal(originals, actor.getId()).deepCopy());
         }
         Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
         party.forEach((id, sheet) -> before.put(id, sheet.deepCopy()));
         Map<String, ObjectNode> previousParty = new java.util.LinkedHashMap<>();
-        for (String id : party.keySet()) previousParty.put(id, storedSheet(id));
+        for (String id : party.keySet()) previousParty.put(id, normalizationOriginal(originals, id));
         WitchEffects.synchronize(party, previousParty);
         for (ObjectNode sheet : party.values()) {
             if (!(sheet.path("effects") instanceof ArrayNode effects)) continue;
@@ -4250,15 +4331,16 @@ public final class OnlineSessionServer {
         Map<String, ObjectNode> warriors = new java.util.LinkedHashMap<>(party);
         for (Campaign.Actor actor : campaign.getActors())
             if (!actor.isDisabled() && !warriors.containsKey(actor.getId()) && store.loadSheet(campaign.getId(), actor.getId()) != null)
-                warriors.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId()) : storedSheet(actor.getId()));
+                warriors.put(actor.getId(), changes.containsKey(actor.getId()) ? changes.get(actor.getId())
+                        : normalizationOriginal(originals, actor.getId()).deepCopy());
         warriors.forEach((id, sheet) -> before.putIfAbsent(id, sheet.deepCopy()));
         Map<String, ObjectNode> previousCopycatParty = new java.util.LinkedHashMap<>();
         Map<String, ObjectNode> copycatParty = new java.util.LinkedHashMap<>(warriors);
         for (Campaign.Actor actor : campaign.getActors()) {
             if (actor.isDisabled() && store.loadSheet(campaign.getId(), actor.getId()) != null)
-                copycatParty.put(actor.getId(), storedSheet(actor.getId()));
+                copycatParty.put(actor.getId(), normalizationOriginal(originals, actor.getId()).deepCopy());
         }
-        for (String id : copycatParty.keySet()) previousCopycatParty.put(id, storedSheet(id));
+        for (String id : copycatParty.keySet()) previousCopycatParty.put(id, normalizationOriginal(originals, id));
         CopycatCards.synchronize(copycatParty, previousCopycatParty);
         Map<String, ObjectNode> disabledSources = new java.util.LinkedHashMap<>(copycatParty);
         disabledSources.keySet().removeAll(warriors.keySet());
@@ -4358,6 +4440,8 @@ public final class OnlineSessionServer {
 
     private void sendFeatureState(Campaign.Actor actor, ObjectNode sheet) {
         sheetChanged(actor.getId());
+        List<Client> recipients = partialSheetClients(actor);
+        if (recipients.isEmpty()) return;
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
         for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
@@ -4366,8 +4450,14 @@ public final class OnlineSessionServer {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
         message.set("pendingDeathRoll", sheet.has("pendingDeathRoll") ? sheet.get("pendingDeathRoll") : MAPPER.nullNode());
-        for (Client client : clients.values())
-            if (actor.getOwnerId() != null && actor.getOwnerId().equals(client.playerId)) sendTo(client.ctx, message.toString());
+        String json = message.toString();
+        for (Client client : recipients) sendTo(client.ctx, json);
+    }
+
+    private List<Client> partialSheetClients(Campaign.Actor actor) {
+        return clients.values().stream().filter(client -> !client.fullSheets && actor.getOwnerId() != null
+                && actor.getOwnerId().equals(client.playerId)
+                && (client.dmActorId == null || client.dmActorId.equals(actor.getId()))).toList();
     }
 
     private static String actionReportTitle(JsonNode sheet, JsonNode source, String action) {
@@ -4589,7 +4679,7 @@ public final class OnlineSessionServer {
             if (severity > 4 || severity < 0)
                 throw new IllegalArgumentException("Only Severe or Massive damage ends this effect.");
             if (severity < 3) {
-                json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+                actionResponse(ctx, playerId, actor);
                 return;
             }
             Map<String, ObjectNode> changed = removeSourceSevereEffects(actor);
@@ -4602,7 +4692,7 @@ public final class OnlineSessionServer {
                     if (changedActor != null) sendFeatureState(changedActor, entry.getValue());
                 }
             }
-            json(ctx, 200, MAPPER.createObjectNode().put("ok", true));
+            actionResponse(ctx, playerId, actor);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid damage notification."));
         } catch (IllegalArgumentException e) {
@@ -4644,11 +4734,26 @@ public final class OnlineSessionServer {
         String stored = store.loadSheet(campaign.getId(), actorId);
         if (stored == null)
             return MAPPER.createObjectNode();
+        return hydrateSheet(actorId, stored);
+    }
+
+    private ObjectNode hydrateSheet(String actorId, String stored) throws IOException {
+        SheetOperation operation = sheetOperation.get();
+        HydratedSheet cached = operation == null ? null : operation.sheets.get(actorId);
+        if (cached != null && cached.stored().equals(stored)) {
+            operation.hydrationCacheHits++;
+            return cached.sheet().deepCopy();
+        }
         JsonNode sheet = MAPPER.readTree(stored);
         if (!(sheet instanceof ObjectNode object))
             throw new IOException("Invalid stored sheet");
         refreshCatalogSheet(object);
         SpecialCardActions.migrateVitality(object);
+        if (operation != null) {
+            operation.hydrations++;
+            operation.sheets.put(actorId, new HydratedSheet(stored, object));
+            return object.deepCopy();
+        }
         return object;
     }
 
@@ -4759,13 +4864,8 @@ public final class OnlineSessionServer {
     private JsonNode sharedCardMessage(String cardId) {
         JsonNode message = sharedCards.get(cardId);
         if (message == null) {
-            for (JsonNode entry : store.historyTail(campaign.getId(), Integer.MAX_VALUE)) {
-                if (cardId.equals(entry.path("sharedCard").path("cardId").asText())) {
-                    message = entry;
-                    sharedCards.put(cardId, message);
-                    break;
-                }
-            }
+            message = store.historyCard(campaign.getId(), cardId);
+            if (message != null) sharedCards.put(cardId, message);
         }
         return message;
     }
@@ -4909,16 +5009,16 @@ public final class OnlineSessionServer {
     }
 
     private void inventoryChanged(Campaign.Actor actor, ObjectNode sheet) {
-        ObjectNode message = MAPPER.createObjectNode().put("type", "sheetInventory").put("actorId", actor.getId());
-        ObjectNode inventory = message.putObject("inventory");
-        for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor",
-                "compendiumRevision", "loadout", "vault", "gold")) {
-            if (sheet.has(field))
-                inventory.set(field, sheet.get(field));
-        }
-        for (Client client : clients.values()) {
-            if (actor.getOwnerId().equals(client.playerId))
-                sendTo(client.ctx, message.toString());
+        List<Client> recipients = partialSheetClients(actor);
+        if (!recipients.isEmpty()) {
+            ObjectNode message = MAPPER.createObjectNode().put("type", "sheetInventory").put("actorId", actor.getId());
+            ObjectNode inventory = message.putObject("inventory");
+            for (String field : List.of("inventoryRevision", "inventory", "activeWeapons", "carriedWeapons", "activeArmor", "carriedArmor",
+                    "compendiumRevision", "loadout", "vault", "gold")) {
+                if (sheet.has(field)) inventory.set(field, sheet.get(field));
+            }
+            String json = message.toString();
+            for (Client client : recipients) sendTo(client.ctx, json);
         }
         stockChanged(actor.getId());
     }
@@ -5181,6 +5281,8 @@ public final class OnlineSessionServer {
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
+            hello.put("sheetActionResponses", true);
+            hello.put("sheetPatches", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
             sendHandouts(handouts(), client);
@@ -5909,9 +6011,7 @@ public final class OnlineSessionServer {
         if (directory == null) return null;
         java.nio.file.Path file = directory.resolve("domain-cards.json");
         if (!java.nio.file.Files.isRegularFile(file)) return null;
-        for (JsonNode card : MAPPER.readTree(file.toFile()).path("entries"))
-            if (name.equals(card.path("name").asText())) return card;
-        return null;
+        return catalogs().card(name);
     }
 
     private ObjectNode rollSource(JsonNode msg) {

@@ -34,6 +34,256 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
+    private ObjectNode performanceSheet() throws Exception {
+        return (ObjectNode) MAPPER.readTree("""
+                {"name":"Hero","featureRevision":0,"notes":"Keep me","usage":{},"resources":{},
+                 "hope":{"on":3,"slots":6},"hp":{"on":0,"slots":6},"stress":{"on":0,"slots":6},
+                 "effects":[],"features":[{"name":"Check","automation":{"actions":[
+                   {"id":"check","label":"Check","check":{"dice":"1d6","unless":0,"mark":"stress"}}]}}]}
+                """);
+    }
+
+    private HttpResponse<String> sheetRead(String cookie, String actorId) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + actorId))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> patchSheet(String cookie, String actorId, JsonNode patch, String version) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + actorId))
+                .header("Cookie", cookie).header("Content-Type", "application/json").header("X-DMMT-Sheet-Patch", "1");
+        if (version != null) request.header("If-Match", version);
+        return http.send(request.PUT(HttpRequest.BodyPublishers.ofString(patch.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void featureRepresentationsAreOptionalOwnedCommittedAndVersioned() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).testingCharacter(true).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("other-performance").name("Other").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "performance", performanceSheet().toString());
+        store.saveSheet(campaign.getId(), "other-performance", performanceSheet().toString());
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "performance").put("key", "feat:Check").put("actionId", "check");
+        HttpResponse<String> legacy = featureHttp(cookie, action);
+        assertEquals(200, legacy.statusCode(), legacy.body());
+        assertEquals(MAPPER.readTree("{\"ok\":true}"), MAPPER.readTree(legacy.body()));
+        Inbox inbox = new Inbox();
+        WebSocket ws = http.newWebSocketBuilder().header("Cookie", cookie)
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1"), inbox).join();
+        try {
+            JsonNode hello = inbox.next("hello");
+            assertTrue(hello.path("sheetActionResponses").asBoolean());
+            assertTrue(hello.path("sheetPatches").asBoolean());
+            var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                    .header("Cookie", cookie).header("X-DMMT-Sheet-Response", "1").header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(action.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode represented = MAPPER.readTree(response.body()).path("sheetState");
+            assertEquals(4, represented.size());
+            assertEquals("performance", represented.path("actorId").asText());
+            assertTrue(represented.path("testingCharacter").asBoolean());
+            assertEquals(2, represented.path("sheet").path("stress").path("on").asInt());
+            JsonNode push = inbox.next("sheetChanged");
+            assertEquals(represented.path("version"), push.path("version"));
+            JsonNode read = MAPPER.readTree(sheetRead(cookie, "performance").body());
+            assertEquals(read.path("version"), represented.path("version"));
+            assertEquals(read.path("sheet"), represented.path("sheet"));
+            String grant = URI.create(server.dmSheetUrl("performance")).getFragment();
+            var dmAction = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/feature"))
+                    .header("Authorization", "Bearer " + grant).header("X-DMMT-Sheet-Response", "1")
+                    .header("Content-Type", "application/json");
+            response = http.send(dmAction.POST(HttpRequest.BodyPublishers.ofString(action.toString())).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals("performance", MAPPER.readTree(response.body()).path("sheetState").path("actorId").asText());
+            response = http.send(dmAction.POST(HttpRequest.BodyPublishers.ofString(action.put("actorId", "other-performance").toString())).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(403, response.statusCode());
+            assertFalse(MAPPER.readTree(response.body()).has("sheetState"));
+            String ally = allyCookie("performance-outsider");
+            response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/feature"))
+                    .header("Cookie", ally).header("X-DMMT-Sheet-Response", "1")
+                    .POST(HttpRequest.BodyPublishers.ofString(action.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode());
+            assertFalse(MAPPER.readTree(response.body()).has("sheetState"));
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
+    void compactSheetSavesRequireCurrentVersionAndRetainAllNormalValidation() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "performance", performanceSheet().toString());
+        String cookie = cookie();
+        JsonNode baseline = MAPPER.readTree(sheetRead(cookie, "performance").body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").put("notes", "Compact edit");
+        patch.putArray("removed").add("usage");
+        assertEquals(428, patchSheet(cookie, "performance", patch, null).statusCode());
+        assertEquals(400, patchSheet(cookie, "performance", patch, "invalid").statusCode());
+        var saved = patchSheet(cookie, "performance", patch, baseline.path("version").asText());
+        assertEquals(200, saved.statusCode(), saved.body());
+        JsonNode current = MAPPER.readTree(saved.body());
+        assertEquals("Compact edit", current.path("sheet").path("notes").asText());
+        assertEquals(baseline.path("sheet").path("features"), current.path("sheet").path("features"));
+        assertFalse(current.path("sheet").has("usage"));
+        assertEquals(1, server.sheetDiagnostics().normalizations(), "Saving must not normalize again to construct its response.");
+        assertTrue(server.sheetDiagnostics().hydrationCacheHits() > 0);
+        var stale = patchSheet(cookie, "performance", patch, baseline.path("version").asText());
+        assertEquals(409, stale.statusCode());
+        assertEquals(current.path("version"), MAPPER.readTree(stale.body()).path("version"));
+        ObjectNode invalid = patch.deepCopy();
+        invalid.withObject("/fields").put("featureRevision", 999);
+        assertEquals(409, patchSheet(cookie, "performance", invalid, current.path("version").asText()).statusCode());
+        invalid = patch.deepCopy();
+        invalid.withObject("/fields").put("name", "");
+        assertEquals(400, patchSheet(cookie, "performance", invalid, current.path("version").asText()).statusCode());
+        invalid = patch.deepCopy();
+        invalid.withObject("/fields").put("__proto__", "bad");
+        assertEquals(400, patchSheet(cookie, "performance", invalid, current.path("version").asText()).statusCode());
+        invalid = patch.deepCopy();
+        invalid.withArray("removed").add("notes");
+        assertEquals(400, patchSheet(cookie, "performance", invalid, current.path("version").asText()).statusCode());
+        assertEquals(current.path("version"), MAPPER.readTree(sheetRead(cookie, "performance").body()).path("version"));
+    }
+
+    @Test
+    void compactSavesBoundReconstructedSizeAndDetectIndependentSameRevisionWrites() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).build());
+        ObjectNode initial = performanceSheet().put("largeNotes", "a".repeat(280_000));
+        store.saveSheet(campaign.getId(), "performance", initial.toString());
+        String cookie = cookie();
+        JsonNode baseline = MAPPER.readTree(sheetRead(cookie, "performance").body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").put("otherNotes", "b".repeat(280_000));
+        patch.putArray("removed");
+        var oversized = patchSheet(cookie, "performance", patch, baseline.path("version").asText());
+        assertEquals(413, oversized.statusCode(), oversized.body());
+        assertEquals(baseline.path("version"), MAPPER.readTree(sheetRead(cookie, "performance").body()).path("version"));
+        ObjectNode independent = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "performance"));
+        independent.withObject("/stress").put("on", 2);
+        java.nio.file.Files.writeString(store.root().resolve(campaign.getId()).resolve("sheets").resolve("performance.json"),
+                independent.toString());
+        patch.withObject("/fields").removeAll().put("notes", "Stale edit");
+        var stale = patchSheet(cookie, "performance", patch, baseline.path("version").asText());
+        assertEquals(409, stale.statusCode(), stale.body());
+        JsonNode fresh = MAPPER.readTree(stale.body());
+        assertEquals(2, fresh.path("sheet").path("stress").path("on").asInt());
+        assertEquals(baseline.path("sheet").path("featureRevision"), fresh.path("sheet").path("featureRevision"));
+        assertEquals("Keep me", fresh.path("sheet").path("notes").asText());
+    }
+
+    @Test
+    void catalogHttpRevalidatesContentAndNeverReturnsAuthenticated304ToLoggedOutClients() throws Exception {
+        dmCompendiumData();
+        String cookie = cookie();
+        String uri = "http://localhost:" + port + "/api/compendium/items";
+        var first = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, first.statusCode(), first.body());
+        String etag = first.headers().firstValue("ETag").orElseThrow();
+        assertEquals("private, no-cache", first.headers().firstValue("Cache-Control").orElseThrow());
+        long parses = server.catalogDiagnostics().parses();
+        var same = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("If-None-Match", etag).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(304, same.statusCode(), same.body());
+        assertTrue(same.body().isEmpty());
+        assertEquals(parses, server.catalogDiagnostics().parses(), "Unchanged files must not be reparsed.");
+        assertEquals(401, http.send(HttpRequest.newBuilder(URI.create(uri)).header("If-None-Match", etag).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        Path file = compendiumDir.resolve("items.json");
+        var timestamp = java.nio.file.Files.getLastModifiedTime(file);
+        java.nio.file.Files.writeString(file, java.nio.file.Files.readString(file).replace("Light.", "Flame."));
+        java.nio.file.Files.setLastModifiedTime(file, timestamp);
+        var edited = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("If-None-Match", etag).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, edited.statusCode(), edited.body());
+        assertNotNull(edited.headers().firstValue("ETag").orElse(null));
+        assertFalse(etag.equals(edited.headers().firstValue("ETag").orElseThrow()));
+        assertTrue(edited.body().contains("Flame."));
+        String indexUri = "http://localhost:" + port + "/api/compendium";
+        var index = http.send(HttpRequest.newBuilder(URI.create(indexUri)).header("Cookie", cookie).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertTrue(MAPPER.readTree(index.body()).path("categories").get(0).has("revision"));
+        assertEquals(304, http.send(HttpRequest.newBuilder(URI.create(indexUri)).header("Cookie", cookie)
+                .header("If-None-Match", index.headers().firstValue("ETag").orElseThrow()).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
+    @Test
+    void catalogsAndSheetsActuallyCompressForGzipHttpClients() throws Exception {
+        dmCompendiumData();
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(compendiumDir.resolve("items.json").toFile());
+        ((ObjectNode) catalog.path("entries").get(0)).put("text", "Long catalog rules. ".repeat(600));
+        java.nio.file.Files.writeString(compendiumDir.resolve("items.json"), catalog.toString());
+        ObjectNode sheet = performanceSheet().put("notes", "Long character notes. ".repeat(600));
+        store.saveSheet(campaign.getId(), "target", sheet.toString());
+        String cookie = cookie();
+        for (String endpoint : List.of("/api/compendium/items", "/api/sheet/target")) {
+            var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + endpoint))
+                    .header("Cookie", cookie).header("Accept-Encoding", "gzip").build(), HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, response.statusCode());
+            assertEquals("gzip", response.headers().firstValue("Content-Encoding").orElse("identity"), endpoint);
+            try (var gzip = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(response.body()))) {
+                byte[] plain = gzip.readAllBytes();
+                assertTrue(response.body().length < plain.length / 2);
+                assertTrue(MAPPER.readTree(plain).isObject());
+            }
+        }
+    }
+
+    @Test
+    void fullSheetClientsSkipRedundantPartialPayloadsWhileLegacyAndDmScopesRemainCorrect() throws Exception {
+        Campaign.Actor actor = Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).build();
+        campaign.getActors().add(actor);
+        campaign.getActors().add(Campaign.Actor.builder().id("other-performance").name("Other").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), actor.getId(), performanceSheet().toString());
+        store.saveSheet(campaign.getId(), "other-performance", performanceSheet().toString());
+        String cookie = cookie();
+        Inbox full = new Inbox(), legacy = new Inbox(), scopedDm = new Inbox();
+        WebSocket fullWs = http.newWebSocketBuilder().header("Cookie", cookie)
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1"), full).join();
+        WebSocket legacyWs = connect(cookie, legacy);
+        String grant = URI.create(server.dmSheetUrl("other-performance")).getFragment();
+        WebSocket dmWs = http.newWebSocketBuilder()
+                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?dm-sheet=" + grant), scopedDm).join();
+        try {
+            full.next("hello"); legacy.next("hello"); scopedDm.next("hello");
+            ObjectNode action = MAPPER.createObjectNode().put("actorId", actor.getId()).put("key", "feat:Check").put("actionId", "check");
+            assertEquals(200, featureHttp(cookie, action).statusCode());
+            var inventoryChanged = OnlineSessionServer.class.getDeclaredMethod("inventoryChanged", Campaign.Actor.class, ObjectNode.class);
+            inventoryChanged.setAccessible(true);
+            inventoryChanged.invoke(server, actor, MAPPER.readTree(store.loadSheet(campaign.getId(), actor.getId())));
+            server.dmChat("sheet-performance-barrier", null);
+            List<String> fullTypes = sheetMessagesBeforeBarrier(full);
+            List<String> legacyTypes = sheetMessagesBeforeBarrier(legacy);
+            List<String> scopedTypes = sheetMessagesBeforeBarrier(scopedDm);
+            assertTrue(fullTypes.contains("sheetChanged"));
+            assertTrue(fullTypes.contains("cardStock"));
+            assertFalse(fullTypes.contains("sheetFeature"));
+            assertFalse(fullTypes.contains("sheetInventory"));
+            assertTrue(legacyTypes.contains("sheetFeature"));
+            assertTrue(legacyTypes.contains("sheetInventory"));
+            assertFalse(scopedTypes.contains("sheetFeature"));
+            assertFalse(scopedTypes.contains("sheetInventory"));
+            assertFalse(scopedTypes.contains("sheetChanged"));
+        } finally {
+            fullWs.abort(); legacyWs.abort(); dmWs.abort();
+        }
+    }
+
+    private List<String> sheetMessagesBeforeBarrier(Inbox inbox) throws Exception {
+        List<String> types = new ArrayList<>();
+        long end = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < end) {
+            JsonNode message = inbox.messages.poll(200, TimeUnit.MILLISECONDS);
+            if (message == null) continue;
+            if ("sheet-performance-barrier".equals(message.path("text").asText())) return types;
+            types.add(message.path("type").asText());
+        }
+        throw new AssertionError("No sheet synchronization barrier");
+    }
+
     private ObjectNode bloodSheet(String... ids) throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");
         ObjectNode sheet = witchHostSheet();

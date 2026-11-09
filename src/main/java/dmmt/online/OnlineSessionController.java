@@ -74,6 +74,10 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     private OnlineAudioSync audioSync;
     private boolean audioStreaming = Tuning.ONLINE_AUDIO_STREAMING.get();
     private Boolean audioPublishedEnabled;
+    private final java.util.Map<String, SheetSnapshot> sheetSnapshots = new java.util.HashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean resourceRefreshPending = new java.util.concurrent.atomic.AtomicBoolean();
+
+    private record SheetSnapshot(String json, JsonNode sheet) { }
 
     public OnlineSessionController(Path root, App app) {
         this.root = root;
@@ -121,6 +125,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             return;
         }
         campaign = selected;
+        sheetSnapshots.clear();
         audioPublishedEnabled = null;
         audioSync = null;
         weatherSeed = new SecureRandom().nextInt();
@@ -152,6 +157,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             server.stop();
             server = null;
         }
+        sheetSnapshots.clear();
         app.changed();
     }
 
@@ -388,8 +394,8 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     public void inheritActorConditions(Campaign source, DmProject.TokenInstance token) throws IOException {
         Campaign.Actor actor = OnlineStateBuilder.actorOf(token, source);
         if (actor == null) return;
-        String saved = store.loadSheet(source.getId(), actor.getId());
-        if (saved != null) token.setConditions(OnlineTokenConditions.actorConditions(MAPPER.readTree(saved)));
+        JsonNode sheet = sheetSnapshot(source.getId(), actor.getId());
+        if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
     }
 
     private void synchronizeActorConditions(DmProject project) throws IOException {
@@ -398,12 +404,26 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
             if (actor == null) continue;
             if (!sheets.containsKey(actor.getId())) {
-                String saved = store.loadSheet(campaign.getId(), actor.getId());
-                sheets.put(actor.getId(), saved == null ? null : MAPPER.readTree(saved));
+                sheets.put(actor.getId(), sheetSnapshot(campaign.getId(), actor.getId()));
             }
             JsonNode sheet = sheets.get(actor.getId());
             if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
         }
+    }
+
+    private JsonNode sheetSnapshot(String campaignId, String actorId) throws IOException {
+        String key = campaignId + ":" + actorId;
+        String saved = store.loadSheet(campaignId, actorId);
+        if (saved == null) {
+            sheetSnapshots.remove(key);
+            return null;
+        }
+        SheetSnapshot previous = sheetSnapshots.get(key);
+        if (previous != null && previous.json().equals(saved)) return previous.sheet();
+        JsonNode sheet = MAPPER.readTree(saved);
+        if (!(sheet instanceof ObjectNode)) throw new IOException("Invalid character sheet for " + actorId);
+        sheetSnapshots.put(key, new SheetSnapshot(saved, sheet));
+        return sheet;
     }
 
     @Override
@@ -697,9 +717,9 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
         if (actor == null) return null;
         try {
-            String saved = store.loadSheet(campaign.getId(), actor.getId());
+            JsonNode saved = sheetSnapshot(campaign.getId(), actor.getId());
             if (saved == null) return null;
-            JsonNode effects = MAPPER.readTree(saved).path("effects");
+            JsonNode effects = saved.path("effects");
             if (effects.isArray()) {
                 for (JsonNode effect : effects)
                     if (effect.path("blocksMovement").asBoolean())
@@ -715,9 +735,9 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         if (token == null || campaign == null) return false;
         Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
         if (actor == null) return false;
-        String saved = store.loadSheet(campaign.getId(), actor.getId());
+        JsonNode saved = sheetSnapshot(campaign.getId(), actor.getId());
         if (saved == null) return false;
-        ObjectNode sheet = (ObjectNode) MAPPER.readTree(saved);
+        ObjectNode sheet = ((ObjectNode) saved).deepCopy();
         DeathMoves.sync(sheet);
         for (JsonNode effect : sheet.path("effects"))
             if (effect.has("spectralHp") && effect.path("phaseMovement").asBoolean()) return true;
@@ -744,7 +764,11 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     @Override
     public void actorSheetChanged(String actorId) {
-        Platform.runLater(app::actorResourcesChanged);
+        if (!resourceRefreshPending.compareAndSet(false, true)) return;
+        Platform.runLater(() -> {
+            resourceRefreshPending.set(false);
+            app.actorResourcesChanged();
+        });
     }
 
     @Override

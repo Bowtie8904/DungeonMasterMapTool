@@ -2,16 +2,15 @@ import { el } from '../login';
 import type { CharacterSheet } from './data';
 import { copycatCost, fetchCopycatCandidates, type CopycatCandidate } from './copycat';
 import { rich } from './rich';
-import { useFeature } from '../api';
+import { useSheetAction, type SheetSave } from './persist';
 
 export async function openCopycat(c: CharacterSheet, actorId: string, key: string, actionId: string,
-  save: { flush: () => Promise<void>; refresh: () => Promise<void> }): Promise<void> {
+  save: { flush: () => Promise<void>; refresh: () => Promise<void>; action?: SheetSave['action'] }): Promise<void> {
   await save.flush();
   const candidates = await fetchCopycatCandidates(actorId);
   await chooseCopycatCard(c, candidates, async candidate => {
     await save.flush();
-    await useFeature({ actorId, key, actionId, copyActorId: candidate.actorId, copyCardName: candidate.card.name });
-    await save.refresh();
+    await useSheetAction(save, { actorId, key, actionId, copyActorId: candidate.actorId, copyCardName: candidate.card.name });
   });
 }
 

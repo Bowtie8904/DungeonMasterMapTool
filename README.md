@@ -16,6 +16,17 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Sheet responsiveness:** Online Play reuses unchanged catalog/sheet data and coalesces resource
+  refreshes instead of repeatedly parsing the same data for each update. Optimizations preserve
+  host validation, cross-character effects, stale-edit conflicts and transaction recovery.
+  Updated hosts and browsers negotiate compact sheet edits and committed feature-action responses,
+  reducing upload size and avoiding an extra sheet download after supported actions.
+  Catalog downloads are shared between owned characters; hidden sheet views defer unnecessary redraws.
+  Edited chat results retain their original message position rather than becoming a new message.
+  Older browser/host combinations retain the full-sheet synchronization fallback.
+  On slower devices, **Settings > Smooth token movement** can already be turned off to reduce
+  decorative redraws without changing movement or visibility rules.
+
 - **Full Stress:** Marking every Stress slot automatically applies Vulnerable and its token badge.
   Clearing any Stress removes it only if full Stress applied it. Vulnerable from another source is preserved,
   and the automatic source is remembered across saves and reloads.

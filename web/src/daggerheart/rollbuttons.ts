@@ -2,7 +2,8 @@
 // Damage on attacks, and the roll triggers (rerolls, Hope/Stress on matching dice) of the character's features.
 
 import { el } from '../login';
-import { applyDeathRecovery, claimRollReward, useFeature } from '../api';
+import { applyDeathRecovery, claimRollReward } from '../api';
+import { useSheetAction, type SheetSave } from './persist';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
@@ -18,7 +19,7 @@ import type { Actor } from '../protocol';
 export interface RollButtonSheet {
   character: CharacterSheet;
   bus: SheetBus;
-  save: (() => void) & { flush?: () => Promise<void>; refresh?: () => Promise<void> };
+  save: (() => void) & { flush?: () => Promise<void>; refresh?: () => Promise<void>; action?: SheetSave['action'] };
 }
 
 export interface RollButtonHost {
@@ -189,10 +190,9 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
                 if (amount === undefined) return;
               }
               await sheet.save.flush?.();
-              await useFeature({ actorId, key: '', actionId: 'claim', benefitId: benefit.id, amount, roll: { id: m.id, ts: m.ts } });
+              await useSheetAction(sheet.save, { actorId, key: '', actionId: 'claim', benefitId: benefit.id, amount, roll: { id: m.id, ts: m.ts } });
               if (!claims.claimedBy.includes(host.playerId!)) claims.claimedBy.push(host.playerId!);
               if (benefit.featureAction) {
-                await sheet.save.refresh?.();
                 if (!sheet.bus.featureAction?.(benefit.featureAction.name, benefit.featureAction.id))
                   host.toast('Cannonball is prepared. Open its effect on your sheet to make the throw.');
               }
@@ -277,7 +277,7 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
             buttons.forEach(b => { b.disabled = true; });
             try {
               await sheet.save.flush?.();
-              await useFeature({ actorId, key, actionId: 'reroll', roll: { id: m.id, ts: m.ts }, restDie: index });
+              await useSheetAction(sheet.save, { actorId, key, actionId: 'reroll', roll: { id: m.id, ts: m.ts }, restDie: index });
               die.used = true;
             } catch (e) { host.toast((e as Error).message); }
             finally {
@@ -463,7 +463,6 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       next.addEventListener('click', async () => {
         next.disabled = true;
         try {
-          await rolledActor.sheet.save.flush?.();
           const current = await host.sheet(rolledActor.actorId);
           if (!current || !canContinueDeathrun(current.character))
             throw new Error('This Deathrun result is no longer current. Continue from its latest damage result.');
@@ -532,9 +531,8 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
                     ? null : 'The feature is no longer available for this roll.' },
               submit: async damage => {
                 await sheet.save.flush?.();
-                await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id,
+                await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id,
                   roll: { id: m.id, ts: m.ts }, damage });
-                await sheet.save.refresh?.();
                 m.featureUses ??= [];
                 m.featureUses.push(`${featureActorId}:${t.key}:${t.trigger.id}`);
                 return true;
@@ -547,21 +545,21 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           if (t.trigger.spendHopeAmount) {
             openHopeAmount(t, c, async amount => {
               await sheet.save.flush?.();
-              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+              await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
             }, () => { b.disabled = false; });
             return;
           }
           if (t.trigger.spendFavor) {
             chooseWarlockAmount(c, t.trigger, async amount => {
               await sheet.save.flush?.();
-              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+              await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
             }, () => { b.disabled = false; });
             return;
           }
           if (t.trigger.damageDice || t.trigger.choices) {
             chooseRollModification(m, t.trigger, async choice => {
               await sheet.save.flush?.();
-              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts },
+              await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts },
                 ...choice });
             }, () => { b.disabled = false; });
             return;
@@ -588,7 +586,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           if (t.trigger.tokenGain) {
             openTokenGain(t, cost, async (amount) => {
               await sheet.save.flush?.();
-              await useFeature({ actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
+              await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id, roll: { id: m.id, ts: m.ts }, amount });
             }, () => { b.disabled = false; });
             return;
           }
@@ -600,7 +598,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
               targetActorId = target.id;
             }
             await sheet.save.flush?.();
-            await useFeature({
+            await useSheetAction(sheet.save, {
               actorId: featureActorId,
               key: t.key,
               actionId: t.trigger.id,

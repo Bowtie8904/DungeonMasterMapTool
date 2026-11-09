@@ -3,7 +3,7 @@ import { iconButton } from './icons';
 import { pickActor } from './actor-picker';
 import { groupFeatures } from './daggerheart/feature-groups';
 import {
-  ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, fetchCompendiumCategory, fetchCompendiumIndex,
+  ADDABLE, CompendiumEntry, CompendiumFile, CompendiumIndexItem, fetchCompendiumCategory, fetchCompendiumIndex, invalidateCompendium,
   matchesSearch, type CompendiumFetch,
 } from './daggerheart/compendium';
 export type { CompendiumEntry };
@@ -181,6 +181,7 @@ export class CompendiumPanel {
   refreshActors(): void { this.render(); }
 
   async reload(): Promise<void> {
+    invalidateCompendium();
     this.files.clear();
     this.error = '';
     try {
@@ -190,6 +191,10 @@ export class CompendiumPanel {
     } catch (error) { this.error = (error as Error).message; }
     this.render();
     if (this.error) throw new Error(this.error);
+  }
+
+  async revalidate(): Promise<void> {
+    if (this.index) await this.reload();
   }
 
   /** Called when the window becomes visible; loads the category list once. */

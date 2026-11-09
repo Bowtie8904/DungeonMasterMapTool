@@ -413,8 +413,9 @@ describe('cross-player roll buttons', () => {
     const damage = vi.fn(() => true);
     const bus = new SheetBus();
     bus.damage = damage;
+    const flush = vi.fn(() => new Promise<void>(() => {}));
     const supported = { ...host, playerId: original.fromId, supportsDomainCardAutomation: () => true,
-      sheet: async () => ({ ...sheet!, bus }) };
+      sheet: async () => ({ ...sheet!, bus, save: Object.assign(() => {}, { flush }) }) };
     const message: RollMessage = { ...original, kind: 'dice', source: 'damage', weapon: 'Dagger',
       deathrun: { effectId: 'run', count: 0 } };
     const box = rollButtons(message, supported) as unknown as FakeElement;
@@ -422,6 +423,7 @@ describe('cross-player roll buttons', () => {
     const next = box.queryAll('button').find(button => button.text === 'Continue Run')!;
     expect(next).toBeDefined();
     await next.click();
+    expect(flush).not.toHaveBeenCalled();
     expect(damage).toHaveBeenCalledWith('Dagger');
     c.effects[0].counter!.value = 2;
     await next.click();
@@ -1038,7 +1040,7 @@ describe('cross-player roll buttons', () => {
 
   it('reconstructs a reroll from a persisted roll card and does not create a second feature log', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
-    vi.stubGlobal('fetch', vi.fn(async (_input: string, _init?: RequestInit) => ({ ok: true, status: 200 })));
+    vi.stubGlobal('fetch', vi.fn(async (_input: string, _init?: RequestInit) => new Response(null, { status: 204 })));
     const roller = character('Bob', {
       name: 'Luckbender',
       automation: { rollTriggers: [{

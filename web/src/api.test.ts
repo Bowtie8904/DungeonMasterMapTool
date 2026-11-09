@@ -1,7 +1,49 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { applyDeathRecovery, configureDmSheet, getDeathOptions, logout, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
+import { acceptSheetVersion, applyDeathRecovery, configureDmSheet, configureSheetActionResponses, configureSheetPatches, getDeathOptions, logout, saveSheet, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
+import { emptyCharacter } from './daggerheart/data';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { configureSheetPatches(false); configureSheetActionResponses(false); vi.unstubAllGlobals(); });
+
+it('sends versioned top-level patches only with a known accepted baseline and capability', async () => {
+  const c = emptyCharacter('Hero');
+  c.otherDetails = 'delete me';
+  c.notes = 'Unchanged character background. '.repeat(4000);
+  acceptSheetVersion('patch-actor', '"one"', c);
+  configureSheetPatches(true);
+  const fetch = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ version: '"two"' })));
+  vi.stubGlobal('fetch', fetch);
+  c.hp.on = 1;
+  Reflect.deleteProperty(c, 'otherDetails');
+  await saveSheet('patch-actor', c);
+  const init = fetch.mock.calls[0][1] as RequestInit;
+  expect(new Headers(init.headers).get('X-DMMT-Sheet-Patch')).toBe('1');
+  expect(new Headers(init.headers).get('If-Match')).toBe('"one"');
+  expect(JSON.parse(String(init.body))).toEqual({ fields: { hp: c.hp }, removed: ['otherDetails'] });
+  expect(new TextEncoder().encode(String(init.body)).length).toBeLessThan(512);
+  expect(String(init.body).length).toBeLessThan(JSON.stringify(c).length / 100);
+  c.notes = 'Next edit';
+  await saveSheet('patch-actor', c);
+  expect(JSON.parse(String(fetch.mock.calls[1][1].body))).toEqual({ fields: { notes: 'Next edit' }, removed: [] });
+  await saveSheet('unknown-patch-baseline', c);
+  expect(new Headers(fetch.mock.calls[2][1].headers).has('X-DMMT-Sheet-Patch')).toBe(false);
+  expect(JSON.parse(String(fetch.mock.calls[2][1].body)).name).toBe('Hero');
+  configureSheetPatches(false);
+  await saveSheet('patch-actor', c);
+  expect(new Headers(fetch.mock.calls[3][1].headers).has('X-DMMT-Sheet-Patch')).toBe(false);
+});
+
+it('requests committed feature sheets only from capable hosts and retains empty legacy success', async () => {
+  const state = { actorId: 'hero', version: '"done"', sheet: emptyCharacter('Hero'), testingCharacter: false };
+  const fetch = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ ok: true, sheetState: state })));
+  vi.stubGlobal('fetch', fetch);
+  configureSheetActionResponses(true);
+  expect((await useFeature({ actorId: 'hero', key: '', actionId: 'use' }))?.sheetState).toEqual(state);
+  expect(new Headers(fetch.mock.calls[0][1]?.headers).get('X-DMMT-Sheet-Response')).toBe('1');
+  configureSheetActionResponses(false);
+  fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+  expect(await useFeature({ actorId: 'hero', key: '', actionId: 'use' })).toBeUndefined();
+  expect(new Headers(fetch.mock.calls[1][1]?.headers).has('X-DMMT-Sheet-Response')).toBe(false);
+});
 
 it('loads token editor settings and saves a crop without replacing its source', async () => {
   const settings = { source: '/a/source.png', color: '#123456', sizeTiles: 1.5, zoom: 2, centerX: .2, centerY: .8 };

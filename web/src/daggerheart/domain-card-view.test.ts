@@ -573,6 +573,7 @@ it('offers the token editor only in edit mode, refreshes artwork without saving 
   expect(changed).not.toHaveBeenCalled();
   bus.artwork = '/a/from-other-window.png';
   bus.notify(false);
+  await Promise.resolve();
   expect(changed).not.toHaveBeenCalled();
   const next = root.querySelectorAll('div').find(node => node.ariaLabel === 'Edit character image')!;
   await next.click();
@@ -598,6 +599,7 @@ it('never lets edit mode bypass a disabled actor and restores it only after re-e
   const staleInput = root.querySelectorAll('input').find(input => input.ariaLabel === 'Agility base modifier')!;
   readOnly = true;
   bus.notify();
+  await Promise.resolve();
   expect(toggle().disabled).toBe(true);
   expect(toggle().attributes['aria-checked']).toBe('false');
   expect(root.querySelectorAll('input').some(input => input.ariaLabel === 'Agility base modifier')).toBe(false);
@@ -608,6 +610,7 @@ it('never lets edit mode bypass a disabled actor and restores it only after re-e
   expect(toggle().attributes['aria-checked']).toBe('false');
   readOnly = false;
   bus.notify();
+  await Promise.resolve();
   expect(toggle().disabled).toBe(false);
   expect(toggle().attributes['aria-checked']).toBe('true');
 });

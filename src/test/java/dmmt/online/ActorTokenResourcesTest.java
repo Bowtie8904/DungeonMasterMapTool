@@ -12,6 +12,44 @@ class ActorTokenResourcesTest {
     @TempDir Path temp;
 
     @Test
+    void readerReusesUnchangedDerivedValuesAndInvalidatesWritesAndExternalEdits() throws Exception {
+        var store = new CampaignStore(temp);
+        var campaign = Campaign.builder().id("campaign").system("daggerheart").build();
+        campaign.getActors().add(Campaign.Actor.builder().id("hero").testingCharacter(true).name("Hero").build());
+        var reader = new ActorTokenResources.Reader();
+        String original = "{\"hp\":{\"slots\":6,\"on\":1},\"stress\":{\"slots\":6,\"on\":0}}";
+        store.saveSheet("campaign", "hero", original);
+        var first = reader.load(campaign, store).get("hero");
+        assertSame(first, reader.load(campaign, store).get("hero"));
+        store.saveSheet("campaign", "hero", original.replace("\"on\":1", "\"on\":2"));
+        assertEquals(2, reader.load(campaign, store).get("hero").hp());
+        java.nio.file.Files.writeString(temp.resolve("campaign").resolve("sheets").resolve("hero.json"),
+                original.replace("\"on\":1", "\"on\":3"));
+        assertEquals(3, reader.load(campaign, store).get("hero").hp());
+        campaign.getActors().getFirst().setTestingCharacter(false);
+        assertTrue(reader.load(campaign, store).isEmpty());
+        campaign.getActors().getFirst().setTestingCharacter(true);
+        assertEquals(3, reader.load(campaign, store).get("hero").hp());
+        campaign.setSystem("other");
+        assertTrue(reader.load(campaign, store).isEmpty());
+        assertTrue(reader.load(null, store).isEmpty());
+    }
+
+    @Test
+    void readerDoesNotReuseAnotherCampaignOrInvalidTrack() throws Exception {
+        var store = new CampaignStore(temp);
+        var campaign = Campaign.builder().id("first").system("daggerheart").build();
+        campaign.getActors().add(Campaign.Actor.builder().id("hero").testingCharacter(true).name("Hero").build());
+        var reader = new ActorTokenResources.Reader();
+        store.saveSheet("first", "hero", "{\"hp\":{\"slots\":6,\"on\":1},\"stress\":{\"slots\":6,\"on\":0}}");
+        assertEquals(1, reader.load(campaign, store).get("hero").hp());
+        campaign.setId("second");
+        assertTrue(reader.load(campaign, store).isEmpty());
+        store.saveSheet("second", "hero", "{\"hp\":{\"slots\":6,\"on\":\"bad\"},\"stress\":{\"slots\":6,\"on\":0}}");
+        assertThrows(IOException.class, () -> reader.load(campaign, store));
+    }
+
+    @Test
     void loadsSavedPlayerTracksAndRefreshesWithoutIncludingOtherActors() throws Exception {
         var store = new CampaignStore(temp);
         var campaign = Campaign.builder().id("campaign").system("daggerheart").build();

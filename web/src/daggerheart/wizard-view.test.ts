@@ -87,7 +87,7 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
   expect(tooltipSources()).toContain('Conjure Shield');
 });
 
-it('updates sheet controls and minimized trait rolls when read-only is toggled', () => {
+it('updates sheet controls and minimized trait rolls when read-only is toggled', async () => {
   class Input extends Element {}
   class Textarea extends Element {}
   vi.stubGlobal('HTMLInputElement', Input);
@@ -113,6 +113,7 @@ it('updates sheet controls and minimized trait rolls when read-only is toggled',
   expect(miniButtons().every(button => !button.disabled)).toBe(true);
   disabled = true;
   bus.notify();
+  await Promise.resolve();
   expect(name().text).toContain('Disabled - read-only');
   expect(root.all().some(e => e.className === 'sheet-error')).toBe(false);
   expect(miniButtons().every(button => button.disabled)).toBe(true);
@@ -125,6 +126,7 @@ it('updates sheet controls and minimized trait rolls when read-only is toggled',
   expect(onChange).toHaveBeenCalledTimes(1);
   disabled = false;
   bus.notify();
+  await Promise.resolve();
   expect(name().text).not.toContain('Disabled');
   expect(miniButtons().every(button => !button.disabled)).toBe(true);
   expect(onChange).toHaveBeenCalledTimes(2);

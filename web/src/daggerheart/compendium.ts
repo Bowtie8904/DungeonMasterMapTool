@@ -2,7 +2,7 @@
 
 import { Armor, CharacterSheet, DomainCard, InventoryItem, Spell, Weapon } from './data';
 import type { Automation } from './engine';
-import { hostFetch } from '../api';
+import { dmSheetAuthorization, hostFetch } from '../api';
 
 export interface CompendiumFeature {
   name: string;
@@ -57,22 +57,67 @@ export interface CompendiumIndexItem {
   category: string;
   label: string;
   count: number;
+  revision?: string;
 }
 
 export type CompendiumFetch = (url: string) => Promise<Response>;
-const compendiumFetch: CompendiumFetch = url => hostFetch(url, { credentials: 'same-origin' });
+const compendiumFetch: CompendiumFetch = url => hostFetch(url, { credentials: 'same-origin', cache: 'no-cache' });
+let catalogGeneration = 0;
+interface CatalogCache {
+  entries: Map<string, { generation: number; revision?: string; pending: Promise<unknown> }>;
+  revisions: Map<string, string>;
+}
+const catalogs = new WeakMap<CompendiumFetch, Map<string, CatalogCache>>();
+
+/** Reconnects and catalog edits invalidate parsed data, including requests still in flight. */
+export function invalidateCompendium(): void { catalogGeneration++; }
+
+async function catalog<T>(url: string, request: CompendiumFetch): Promise<T> {
+  const identity = request === compendiumFetch ? globalThis.fetch as CompendiumFetch : request;
+  let scopes = catalogs.get(identity);
+  if (!scopes) catalogs.set(identity, scopes = new Map());
+  const authorization = dmSheetAuthorization() ?? '';
+  let cache = scopes.get(authorization);
+  if (!cache) {
+    if (scopes.size >= 8) scopes.clear();
+    scopes.set(authorization, cache = { entries: new Map(), revisions: new Map() });
+  }
+  const generation = catalogGeneration;
+  let entry = cache.entries.get(url);
+  if (entry && entry.generation !== generation && url !== '/api/compendium') {
+    await catalog('/api/compendium', request);
+    if (entry.revision && entry.revision === cache.revisions.get(url)) entry.generation = generation;
+  }
+  if (!entry || entry.generation !== generation) {
+    const pending = (async () => {
+      const res = await request(url);
+      if (!res.ok) throw new Error(`Compendium unavailable (${res.status})`);
+      const body = await res.json();
+      if (url === '/api/compendium' && generation === catalogGeneration) {
+        const index: CompendiumIndexItem[] = Array.isArray(body) ? body : body.categories ?? [];
+        cache!.revisions.clear();
+        for (const item of index) if (item.revision)
+          cache!.revisions.set(`/api/compendium/${encodeURIComponent(item.category)}`, item.revision);
+      }
+      return body;
+    })();
+    entry = { generation, revision: cache.revisions.get(url), pending };
+    cache.entries.set(url, entry);
+    void pending.catch(() => { if (cache!.entries.get(url)?.pending === pending) cache!.entries.delete(url); });
+  }
+  const value = await entry.pending;
+  if (generation !== catalogGeneration || authorization !== (dmSheetAuthorization() ?? '')) return catalog(url, request);
+  // Sheet automation is editable. Never let a consumer mutate another actor's cached rules.
+  return structuredClone(value) as T;
+}
 
 export async function fetchCompendiumIndex(request: CompendiumFetch = compendiumFetch): Promise<CompendiumIndexItem[]> {
-  const res = await request('/api/compendium');
-  if (!res.ok) throw new Error(`Compendium unavailable (${res.status})`);
-  const body = (await res.json()) as { categories?: CompendiumIndexItem[] } | CompendiumIndexItem[];
+  const body = await catalog<{ categories?: CompendiumIndexItem[] } | CompendiumIndexItem[]>('/api/compendium', request);
   return Array.isArray(body) ? body : body.categories ?? [];
 }
 
 export async function fetchCompendiumCategory(category: string, request: CompendiumFetch = compendiumFetch): Promise<CompendiumFile> {
-  const res = await request(`/api/compendium/${encodeURIComponent(category)}`);
-  if (!res.ok) throw new Error(`Cannot load ${category} (${res.status})`);
-  return (await res.json()) as CompendiumFile;
+  return catalog(`/api/compendium/${encodeURIComponent(category)}`, request);
 }
 
 /** Entries that can be put on a character sheet, with the label of the target list. */

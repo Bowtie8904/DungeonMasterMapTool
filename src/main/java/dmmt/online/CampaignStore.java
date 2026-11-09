@@ -13,14 +13,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -35,9 +36,18 @@ public final class CampaignStore {
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_-]{1,100}");
     private static final int MAX_ARTWORK_EDGE = 1024;
     private static final long MAX_ARTWORK_BYTES = 8L * 1024 * 1024;
+    private static final int MAX_HISTORY_INDEXES = 4;
+    private static final int MAX_SHEET_READS = 128;
+    private static final int MAX_CACHED_SHEET_CHARACTERS = 4 * 1024 * 1024;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Path root;
+    private final Map<String, HistoryIndex> historyIndexes = new LinkedHashMap<>(4, .75f, true);
+    private final Map<Path, CachedSheet> sheetReads = new LinkedHashMap<>(16, .75f, true);
+    private long cachedSheetCharacters;
+
+    private record CachedSheet(HistoryIndex.Stamp stamp, String json) {
+    }
 
     public CampaignStore(Path root) {
         this.root = root;
@@ -117,6 +127,10 @@ public final class CampaignStore {
 
     public synchronized void delete(String campaignId) throws IOException {
         Path folder = dir(campaignId);
+        historyIndexes.remove(campaignId);
+        for (Path file : new ArrayList<>(sheetReads.keySet())) {
+            if (file.startsWith(folder)) invalidateSheet(file);
+        }
         if (!Files.isDirectory(folder)) {
             return;
         }
@@ -171,55 +185,64 @@ public final class CampaignStore {
         recoverSheetTransfer(campaignId);
         Path folder = dir(campaignId);
         Files.createDirectories(folder);
-        Files.writeString(folder.resolve("history.jsonl"), MAPPER.writeValueAsString(entry) + "\n",
-                StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        try {
+            historyIndex(campaignId).append(entry, false);
+        } catch (IOException e) {
+            historyIndexes.remove(campaignId);
+            throw e;
+        }
     }
 
     public synchronized List<JsonNode> historyTail(String campaignId, int limit) {
-        List<JsonNode> result = new ArrayList<>();
-        Path file = dir(campaignId).resolve("history.jsonl");
-        if (!Files.isRegularFile(file)) {
-            return result;
-        }
         try {
             recoverSheetTransfer(campaignId);
-            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-            for (int i = Math.max(0, lines.size() - limit); i < lines.size(); i++) {
-                try {
-                    result.add(MAPPER.readTree(lines.get(i)));
-                } catch (IOException ignored) {
-                    // skip damaged line
-                }
-            }
+            return historyIndex(campaignId).tail(limit);
         } catch (IOException ignored) {
             // empty history
         }
-        return result;
+        return new ArrayList<>();
+    }
+
+    /** First persisted (id, ts) match, or null when absent/unreadable; returned JSON is caller-owned. */
+    public synchronized JsonNode historyEntry(String campaignId, long id, long timestamp) {
+        try {
+            recoverSheetTransfer(campaignId);
+            return historyIndex(campaignId).entry(id, timestamp);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    /** First persisted shared-card match, with the same recovery and ownership semantics as historyEntry. */
+    public synchronized JsonNode historyCard(String campaignId, String cardId) {
+        try {
+            recoverSheetTransfer(campaignId);
+            return historyIndex(campaignId).card(cardId);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private HistoryIndex historyIndex(String campaignId) throws IOException {
+        Path file = dir(campaignId).resolve("history.jsonl");
+        HistoryIndex.Stamp stamp = HistoryIndex.Stamp.read(file);
+        HistoryIndex cached = historyIndexes.get(campaignId);
+        if (cached != null && cached.matches(stamp)) return cached;
+        HistoryIndex index = HistoryIndex.read(file, stamp);
+        historyIndexes.put(campaignId, index);
+        if (historyIndexes.size() > MAX_HISTORY_INDEXES)
+            historyIndexes.remove(historyIndexes.keySet().iterator().next());
+        return index;
     }
 
     /** Rewrites history before publishing a deletion; failures leave the original file in place. */
     public synchronized void deleteHistoryEntry(String campaignId, long id, long timestamp) throws IOException {
         recoverSheetTransfer(campaignId);
-        Path file = dir(campaignId).resolve("history.jsonl");
-        List<String> kept = new ArrayList<>();
-        boolean found = false;
-        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-            JsonNode entry = MAPPER.readTree(line);
-            if (entry != null && entry.path("id").asLong(-1) == id && entry.path("ts").asLong() == timestamp) {
-                found = true;
-            } else {
-                kept.add(line);
-            }
-        }
-        if (!found) {
-            throw new IOException("Chat message no longer exists.");
-        }
-        Path temp = Files.createTempFile(file.getParent(), "history-", ".tmp");
         try {
-            Files.write(temp, kept, StandardCharsets.UTF_8);
-            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(temp);
+            historyIndex(campaignId).delete(id, timestamp);
+        } catch (IOException e) {
+            historyIndexes.remove(campaignId);
+            throw e;
         }
     }
 
@@ -237,29 +260,15 @@ public final class CampaignStore {
 
     private void writeHistoryEntryRaw(String campaignId, long id, long timestamp, ObjectNode replacement,
                                       boolean allowNew) throws IOException {
-        Path file = dir(campaignId).resolve("history.jsonl");
-        List<String> lines = allowNew && !Files.exists(file) ? List.of() : Files.readAllLines(file, StandardCharsets.UTF_8);
-        List<String> updated = new ArrayList<>(lines.size());
-        boolean found = false;
-        for (String line : lines) {
-            JsonNode entry = MAPPER.readTree(line);
-            if (!found && entry.path("id").asLong(-1) == id && entry.path("ts").asLong(-1) == timestamp) {
-                updated.add(MAPPER.writeValueAsString(replacement));
-                found = true;
-            } else {
-                updated.add(line);
-            }
-        }
-        if (!found) {
-            if (!allowNew) throw new IOException("Chat message no longer exists.");
-            updated.add(MAPPER.writeValueAsString(replacement));
-        }
-        Path temp = file.resolveSibling("history.jsonl.tmp");
         try {
-            Files.write(temp, updated, StandardCharsets.UTF_8);
-            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(temp);
+            HistoryIndex index = historyIndex(campaignId);
+            index.requireReadable();
+            JsonNode existing = index.entry(id, timestamp);
+            if (existing == null && allowNew) index.append(replacement, true);
+            else if (!replacement.equals(existing)) index.replace(id, timestamp, replacement);
+        } catch (IOException e) {
+            historyIndexes.remove(campaignId);
+            throw e;
         }
     }
 
@@ -318,8 +327,17 @@ public final class CampaignStore {
     public synchronized String loadSheet(String campaignId, String actorId) throws IOException {
         recoverSheetTransfer(campaignId);
         Path file = sheetFile(campaignId, actorId);
-        if (!Files.isRegularFile(file)) return null;
-        return Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+        if (!Files.isRegularFile(file)) {
+            invalidateSheet(file);
+            return null;
+        }
+        HistoryIndex.Stamp stamp = HistoryIndex.Stamp.read(file);
+        CachedSheet cached = sheetReads.get(file);
+        if (cached != null && cached.stamp.equals(stamp)) return cached.json;
+        invalidateSheet(file);
+        String json = Files.readString(file, StandardCharsets.UTF_8);
+        if (stamp != null && stamp.equals(HistoryIndex.Stamp.read(file))) cacheSheet(file, stamp, json);
+        return json;
     }
 
     public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
@@ -440,6 +458,7 @@ public final class CampaignStore {
 
     // Replay interrupted sheet transfers and roll rewards before subsequent reads/saves.
     private void recoverSheetTransfer(String campaignId) throws IOException {
+        HistoryIndex.recoverAppend(dir(campaignId).resolve("history.jsonl"));
         Path journal = dir(campaignId).resolve("sheet-transfer.json");
         if (!Files.isRegularFile(journal))
             return;
@@ -484,10 +503,26 @@ public final class CampaignStore {
 
     private void writeSheet(String campaignId, String actorId, String json) throws IOException {
         Path file = sheetFile(campaignId, actorId);
+        invalidateSheet(file);
         Files.createDirectories(file.getParent());
         Path temp = file.resolveSibling(actorId + ".json.tmp");
         Files.writeString(temp, json, java.nio.charset.StandardCharsets.UTF_8);
         Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private void invalidateSheet(Path file) {
+        CachedSheet removed = sheetReads.remove(file);
+        if (removed != null) cachedSheetCharacters -= removed.json.length();
+    }
+
+    private void cacheSheet(Path file, HistoryIndex.Stamp stamp, String json) {
+        invalidateSheet(file);
+        if (json.length() > MAX_CACHED_SHEET_CHARACTERS) return;
+        sheetReads.put(file, new CachedSheet(stamp, json));
+        cachedSheetCharacters += json.length();
+        while (sheetReads.size() > MAX_SHEET_READS || cachedSheetCharacters > MAX_CACHED_SHEET_CHARACTERS) {
+            invalidateSheet(sheetReads.keySet().iterator().next());
+        }
     }
 
     public static String sha256(byte[] bytes) {

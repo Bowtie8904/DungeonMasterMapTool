@@ -71,7 +71,10 @@ export function startToolPopout(root: HTMLElement, tool: 'note' | 'compendium', 
       if (message.type === 'hello') {
         playerId = message.playerId;
         compendiumChat = message.compendiumChat === true;
-        if (initialized) return;
+        if (initialized) {
+          if (compendium) void compendium.reload().catch((error: Error) => report(error.message));
+          return;
+        }
         initialized = true;
         if (tool === 'note') {
           if (!message.notes) { report('This host does not support campaign notes.'); return; }

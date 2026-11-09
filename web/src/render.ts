@@ -950,6 +950,10 @@ export class MapView {
   private frame(time: number): void {
     if (this.destroyed) return;
     requestAnimationFrame((t) => this.frame(t));
+    if (document.hidden) {
+      this.dirty = true;
+      return;
+    }
     const s = this.state;
     if (!s) return;
     const weatherActive = weatherKind(s.weather.type) !== 'none';

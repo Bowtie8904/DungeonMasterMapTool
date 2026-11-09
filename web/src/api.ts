@@ -2,7 +2,10 @@ import { SessionInfo } from './protocol';
 import type { CharacterSheet } from './daggerheart/data';
 
 let dmSheetToken: string | undefined;
-export function configureDmSheet(token: string): void { dmSheetToken = token; }
+export function configureDmSheet(token: string): void {
+  if (dmSheetToken !== token) { sheetVersions.clear(); sheetRepresentations.clear(); }
+  dmSheetToken = token;
+}
 export function dmSheetAuthorization(): string | undefined { return dmSheetToken; }
 export function hostFetch(url: string, options: RequestInit = {}): Promise<Response> {
   if (!dmSheetToken) return fetch(url, options);
@@ -12,9 +15,17 @@ export function hostFetch(url: string, options: RequestInit = {}): Promise<Respo
 }
 
 const sheetVersions = new Map<string, string>();
-export function acceptSheetVersion(actorId: string, version?: string): void {
+const sheetRepresentations = new Map<string, { version: string; sheet: Partial<CharacterSheet> }>();
+export function acceptSheetVersion(actorId: string, version?: string, sheet?: Partial<CharacterSheet> | null): void {
   if (version) sheetVersions.set(actorId, version);
+  if (version && sheet) sheetRepresentations.set(actorId, { version, sheet: structuredClone(sheet) });
 }
+export function sheetVersion(actorId: string): string | undefined { return sheetVersions.get(actorId); }
+
+let sheetActionResponses = false;
+let sheetPatches = false;
+export function configureSheetActionResponses(enabled: boolean): void { sheetActionResponses = enabled; }
+export function configureSheetPatches(enabled: boolean): void { sheetPatches = enabled; }
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public retryAfterSeconds?: number) {
@@ -140,13 +151,23 @@ export async function getSheet(actorId: string): Promise<SheetData> {
   return data;
 }
 
-export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise<SheetData | void> {
+export async function saveSheet(actorId: string, sheet: CharacterSheet, serialized = JSON.stringify(sheet)): Promise<SheetData | void> {
   const version = sheetVersions.get(actorId);
+  const baseline = sheetRepresentations.get(actorId);
+  const snapshot = JSON.parse(serialized) as CharacterSheet;
+  const patch = sheetPatches && version && baseline?.version === version;
+  const fields: Record<string, unknown> = {};
+  const removed: string[] = [];
+  if (patch) {
+    for (const [key, value] of Object.entries(snapshot))
+      if (JSON.stringify(value) !== JSON.stringify(Reflect.get(baseline.sheet, key))) fields[key] = value;
+    for (const key of Object.keys(baseline.sheet)) if (!(key in snapshot)) removed.push(key);
+  }
   const res = await hostFetch(`/api/sheet/${encodeURIComponent(actorId)}`, {
     method: 'PUT',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(version ? { 'If-Match': version } : {}) },
-    body: JSON.stringify(sheet),
+    headers: { 'Content-Type': 'application/json', ...(version ? { 'If-Match': version } : {}), ...(patch ? { 'X-DMMT-Sheet-Patch': '1' } : {}) },
+    body: patch ? JSON.stringify({ fields, removed }) : serialized,
   });
   if (res.status === 409) {
     const body: { error?: string; sheet?: Partial<CharacterSheet>; version?: string } = await res.json();
@@ -155,7 +176,7 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet): Promise
   }
   if (!res.ok) throw await readError(res);
   const data = await res.json() as SheetData;
-  acceptSheetVersion(actorId, data.version);
+  acceptSheetVersion(actorId, data.version, data.sheet ?? snapshot);
   return data;
 }
 
@@ -181,14 +202,25 @@ export interface FeatureRequest {
   damage?: import('./daggerheart/view').RollRequest;
 }
 
-export async function useFeature(request: FeatureRequest): Promise<void> {
+export interface CommittedSheetState {
+  actorId: string;
+  version: string;
+  sheet: Partial<CharacterSheet>;
+  testingCharacter?: boolean;
+}
+export interface FeatureResponse { ok: true; sheetState?: CommittedSheetState }
+
+export async function useFeature(request: FeatureRequest): Promise<FeatureResponse | undefined> {
   const res = await hostFetch('/api/feature', {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(sheetActionResponses ? { 'X-DMMT-Sheet-Response': '1' } : {}) },
     body: JSON.stringify(request),
   });
   if (!res.ok) throw await readError(res);
+  // Older hosts may return an empty success body.
+  const text = await res.text();
+  return text ? JSON.parse(text) as FeatureResponse : undefined;
 }
 
 export async function getDeathOptions(actorId: string): Promise<import('./daggerheart/death').DeathOptions> {
