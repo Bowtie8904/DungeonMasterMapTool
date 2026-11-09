@@ -3,7 +3,7 @@ import { CharacterSheet, TRAIT_ORDER, TraitName, tierOf } from './data';
 import { martialStances, missingStanceChoices } from './brawler';
 
 export function chooseStance(c: CharacterSheet, submit: (name: string, trait?: TraitName) => void, onLearn: () => void): void {
-  const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: 'Shift martial stance' });
+  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: 'Shift martial stance' });
   const catalog = martialStances(c);
   const known = () => catalog.filter(s => c.knownStances?.includes(s.name) && s.tier <= tierOf(c.level));
   const select = el('select', { ariaLabel: 'Known stance' });
@@ -39,7 +39,8 @@ export function chooseStance(c: CharacterSheet, submit: (name: string, trait?: T
       const box = el('input', { type: 'checkbox' });
       return { s, box, node: el('label', { class: 'dh-roll-option' }, box, `${s.name} (tier ${s.tier}): ${s.effect.text ?? ''}`) };
     });
-    const field = el('fieldset', {}, el('legend', {}, 'Known stances for an existing character'), ...checks.map(x => x.node), learn);
+    const field = el('div', { class: 'dh-roll-options' },
+      el('fieldset', {}, el('legend', {}, 'Known stances for an existing character'), ...checks.map(x => x.node)));
     learn.addEventListener('click', () => {
       const picked = checks.filter(x => x.box.checked).map(x => x.s.name);
       if (picked.length !== missing) { error.textContent = `Choose exactly ${missing} stances.`; return; }
@@ -50,9 +51,10 @@ export function chooseStance(c: CharacterSheet, submit: (name: string, trait?: T
       onLearn();
       error.textContent = '';
       field.remove();
+      learn.remove();
       refresh();
     });
-    dialog.append(field);
+    dialog.append(field, learn);
   }
   dialog.append(el('div', { class: 'acts' }, cancel, go));
   document.body.append(dialog);

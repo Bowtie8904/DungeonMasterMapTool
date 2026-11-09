@@ -530,6 +530,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   Numeric bonuses and token-spend counts sit beside their roll option in a labeled control on the right,
   including damage mitigation and Armor Slot counts. Related dropdowns stay aligned and fit narrow dialogs.
   Each option has its own subtly shaded, bordered panel to clearly separate it from neighboring options.
+  Long option lists scroll inside their own container across rolls, damage mitigation, downtime,
+  feature/Beastform/stance choices and card selection. Controls, previews, errors and action buttons
+  outside the list stay visible; damage recovery controls remain outside the mitigation list.
   Trait roll dialogs offer **Normal roll / Reaction roll** beneath advantage/disadvantage. Reaction rolls are
   marked in player and DM chat and never award the standard Hope or critical Stress recovery.
   Reaction-only options (Elf Quick Reactions and Anchoring Hook) appear only in Reaction mode;

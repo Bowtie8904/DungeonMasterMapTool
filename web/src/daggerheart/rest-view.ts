@@ -14,7 +14,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
   const o: RestOptions = {};
   const picks: RestPick[] = [];
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
-  const body = el('div', { class: 'dh-rest-body' });
+  const body = el('div', { class: 'dh-rest-body dh-roll-options' });
   const error = el('div', { class: 'error', role: 'alert' });
   const go = el('button', { class: 'primary', type: 'button' }, kind === 'long' ? 'Take long rest' : 'Take short rest');
   const cancel = el('button', { type: 'button' }, 'Cancel');
@@ -136,7 +136,7 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
   });
   cancel.addEventListener('click', () => { if (!pending) close(); });
   backdrop.addEventListener('click', (ev) => { if (!pending && ev.target === backdrop) close(); });
-  backdrop.append(el('div', { class: 'dh-rolldlg dh-restdlg' }, el('h4', {}, kind === 'long' ? 'Long rest - downtime moves' : 'Short rest - downtime moves'), body, error, el('div', { class: 'acts' }, cancel, go)));
+  backdrop.append(el('div', { class: 'dh-rolldlg dh-restdlg dh-option-rolldlg' }, el('h4', {}, kind === 'long' ? 'Long rest - downtime moves' : 'Short rest - downtime moves'), body, error, el('div', { class: 'acts' }, cancel, go)));
   document.addEventListener('keydown', onKey);
   host.ownerDocument.body.append(backdrop);
   draw();

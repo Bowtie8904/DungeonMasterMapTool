@@ -20,7 +20,7 @@ export function openDeathDialog(root: HTMLElement, c: CharacterSheet, take: (mov
     unbreakable: 'Prevent death, recover a host-rolled d6 HP and move Unbreakable to your vault.',
   };
   const description = el('p', {}, descriptions.blaze);
-  const fields = el('div');
+  const fields = el('div', { class: 'dh-roll-options' });
   let options = basicDeathOptions();
   let extras: () => DeathMoveExtras = () => ({});
   let validateExtras: () => string | undefined = () => undefined;
@@ -74,7 +74,7 @@ export function openDeathDialog(root: HTMLElement, c: CharacterSheet, take: (mov
       confirm.disabled = select.disabled = cancel.disabled = false;
     }
   });
-  backdrop.append(el('div', { class: 'dh-rolldlg', role: 'dialog', ariaLabel: 'Death move', ariaModal: 'true' },
+  backdrop.append(el('div', { class: 'dh-rolldlg dh-option-rolldlg', role: 'dialog', ariaLabel: 'Death move', ariaModal: 'true' },
     el('h4', {}, `${c.name} - Death move`), select, description, fields,
     el('p', { class: 'muted' }, 'The result is shared publicly in chat. Discuss the choice with your GM before confirming.'),
     error, el('div', { class: 'acts' }, cancel, confirm)));

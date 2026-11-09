@@ -14,7 +14,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     quantities: {}, rolls: {},
   };
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
-  const dialog = el('div', { class: 'dh-rolldlg dh-damage-dlg', role: 'dialog' });
+  const dialog = el('div', { class: 'dh-rolldlg dh-damage-dlg dh-option-rolldlg', role: 'dialog' });
   dialog.setAttribute('aria-label', 'Take damage');
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
@@ -27,7 +27,8 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     return [t, b] as const;
   });
   const typeRow = el('div', { class: 'dh-dmg-type' }, ...typeButtons.map(([, b]) => b));
-  const body = el('div', { class: 'dh-dmg-body' });
+  const recoveryControls = el('div');
+  const body = el('div', { class: 'dh-dmg-body dh-roll-options' });
   const preview = el('div', { class: 'dh-dmg-preview' });
   preview.setAttribute('aria-live', 'polite');
   const error = el('div', { class: 'error', role: 'alert' });
@@ -55,12 +56,14 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     const r = computeDamage(c, options, input);
     const free = Math.max(0, c.armorTrack.slots - c.armorTrack.on);
     body.replaceChildren();
+    recoveryControls.replaceChildren();
+    recoveryControls.hidden = !r.applied.some(m => m.option.recoveryChoice);
     if (r.applied.some(m => m.option.recoveryChoice)) {
       const recovery = el('select', { ariaLabel: 'Not Done Yet recovery' },
         el('option', { value: 'hope' }, 'Gain 1 Hope'), el('option', { value: 'stress' }, 'Clear 1 Stress'));
       recovery.value = r.recovery ?? 'hope';
       recovery.addEventListener('change', () => { input.recovery = recovery.value === 'stress' ? 'stress' : 'hope'; draw(); });
-      body.append(el('label', { class: 'dh-roll-field' }, 'Not Done Yet (automatic on Severe damage)', recovery));
+      recoveryControls.append(el('label', { class: 'dh-roll-field' }, 'Not Done Yet (automatic on Severe damage)', recovery));
     }
 
     // Base Armor Slot.
@@ -165,6 +168,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     el('div', { class: 'muted' }, `Thresholds: Minor < ${d.major} \u2264 Major < ${d.severe} \u2264 Severe; ${d.severe * 2}+ marks 4 HP`),
     el('label', {}, 'Damage taken', amount),
     typeRow,
+    recoveryControls,
     body,
     preview,
     error,

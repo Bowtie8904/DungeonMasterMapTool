@@ -6,7 +6,7 @@ import type { ActionDef, RollTrigger } from './engine';
 import { rich } from './rich';
 
 function selectionDialog(title: string, closed?: () => void) {
-  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-sorcerer-dialog', ariaLabel: title });
+  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-sorcerer-dialog dh-option-rolldlg', ariaLabel: title });
   const error = el('div', { class: 'error', role: 'alert' });
   const cancel = el('button', { type: 'button' }, 'Cancel');
   cancel.addEventListener('click', () => dialog.close());
@@ -34,7 +34,7 @@ export function chooseChannelCard(c: CharacterSheet, submit: (card: string, bene
   let selected = '';
   const hope = el('button', { type: 'button', class: 'primary', disabled: true }, 'Gain Hope');
   const damage = el('button', { type: 'button', class: 'primary', disabled: true }, 'Prepare damage bonus');
-  const cards = el('div', { class: 'cards' });
+  const cards = el('div', { class: 'cards dh-roll-options' });
   const buttons: HTMLButtonElement[] = [];
   for (const card of c.loadout) {
     const button = el('button', { type: 'button', class: 'dcard', ariaPressed: 'false' },
@@ -62,6 +62,7 @@ export function chooseFeatureEffects(action: ActionDef, submit: (ids: string[], 
   const config = action.chooseEffects!;
   const ui = selectionDialog(action.label);
   const selected = new Set<string>();
+  const options = el('div', { class: 'dh-roll-options' });
   const go = el('button', { type: 'button', class: 'primary', disabled: true }, 'Apply');
   const trait = el('select', { ariaLabel: 'Trait to increase' }, el('option', { value: '' }, 'Choose a trait'),
     ...TRAIT_ORDER.map(name => el('option', { value: name }, name)));
@@ -76,12 +77,12 @@ export function chooseFeatureEffects(action: ActionDef, submit: (ids: string[], 
       if (check.checked) selected.add(option.id); else selected.delete(option.id);
       refresh();
     });
-    ui.dialog.append(el('label', { class: 'dh-roll-option' }, check, option.label));
+    options.append(el('label', { class: 'dh-roll-option' }, check, option.label));
   }
   trait.addEventListener('change', refresh);
   go.addEventListener('click', () => { void ui.apply(() => submit([...selected], TRAIT_ORDER.find(t => t === trait.value))); });
   ui.dialog.append(el('p', { class: 'muted' }, `Choose exactly ${config.count} different benefits. They last until your next rest.`),
-    trait, ui.error, el('div', { class: 'acts' }, ui.cancel, go));
+    options, trait, ui.error, el('div', { class: 'acts' }, ui.cancel, go));
   refresh();
   ui.show();
 }
@@ -111,6 +112,7 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
   const go = el('button', { type: 'button', class: 'primary', disabled: true }, 'Apply');
   let choiceId: string | undefined;
   const selected = new Set<number>();
+  const options = el('div', { class: 'dh-roll-options' });
   if (trigger.damageDice) {
     const dice = el('div', { class: 'roll-dice' });
     const buttons: HTMLButtonElement[] = [];
@@ -131,15 +133,16 @@ export function chooseRollModification(m: RollMessage, trigger: RollTrigger,
     }
     ui.dialog.append(el('p', { class: 'muted' }, trigger.damageDice === 'reroll'
       ? `Select any number of ${trigger.damageDiceBelow ? `damage dice below ${trigger.damageDiceBelow}` : 'damage dice'} to reroll. New results replace the selected dice, even if lower.`
-      : 'Select one damage die to double its value.'), dice);
+      : 'Select one damage die to double its value.'));
+    options.append(dice);
   } else {
     for (const choice of trigger.choices ?? []) {
       const radio = el('input', { type: 'radio', name: 'roll-modification', value: choice.id });
       radio.addEventListener('change', () => { choiceId = choice.id; go.disabled = false; });
-      ui.dialog.append(el('label', { class: 'dh-roll-option' }, radio, choice.label));
+      options.append(el('label', { class: 'dh-roll-option' }, radio, choice.label));
     }
   }
   go.addEventListener('click', () => { void ui.apply(() => submit(trigger.damageDice ? { dice: [...selected], expectedDice } : { choiceId })); });
-  ui.dialog.append(ui.error, el('div', { class: 'acts' }, ui.cancel, go));
+  ui.dialog.append(options, ui.error, el('div', { class: 'acts' }, ui.cancel, go));
   ui.show();
 }

@@ -550,9 +550,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (routeDeathAction(action, deathDialog)) return;
       if (action.codexSwap) {
         if (c.testingCharacter) { opts.onLog?.('The testing loadout cannot be changed.'); return; }
-        const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: action.label });
+        const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: action.label });
         const error = el('div', { class: 'error', role: 'alert' });
-        const choices = el('div', { class: 'list' });
+        const choices = el('div', { class: 'list dh-roll-options' });
         for (const card of c.vault) {
           const button = el('button', { type: 'button', class: 'small' }, card.name);
           button.addEventListener('click', () => {
@@ -2277,6 +2277,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   });
   const optionFieldset = el('fieldset', {}, el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());
   optionFieldset.hidden = options.length === 0;
+  const optionContainer = el('div', { class: 'dh-roll-options' }, optionFieldset);
+  optionContainer.hidden = optionFieldset.hidden;
   const applied = el('div', { class: 'muted' }, `Applied: ${bonus.names.join(', ')}.`);
   applied.hidden = bonus.names.length === 0;
   const heading = el('h4', {}, `${label} (${signed(mod + bonus.value)})`);
@@ -2297,6 +2299,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       options = currentOptions();
       optionFieldset.replaceChildren(el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());
       optionFieldset.hidden = options.length === 0;
+      optionContainer.hidden = optionFieldset.hidden;
+      optionContainer.scrollTop = 0;
       applied.textContent = `Applied: ${bonus.names.join(', ')}.`;
       applied.hidden = bonus.names.length === 0;
       heading.textContent = `${label} (${signed(mod + bonus.value)})`;
@@ -2308,7 +2312,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); });
   backdrop.append(
     el(
-      'div', { class: 'dh-rolldlg' },
+      'div', { class: 'dh-rolldlg dh-option-rolldlg' },
       heading,
       applied,
       ...(weapon ? [el('label', { class: 'dh-roll-option' }, crit, el('span', {}, 'Critical damage (adds the maximum of the damage dice)'))] : [
@@ -2319,7 +2323,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         el('label', { class: 'dh-roll-field' }, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (${options.some(s => s.option.experience) ? '1 Hope, or 1 Stress with Adept' : 'spend 1 Hope'})`, exp),
       ]),
       ...(otherworldly ? [el('label', { class: 'dh-roll-field' }, 'Otherworldly: damage type', damageType)] : []),
-      optionFieldset,
+      optionContainer,
       preview,
       error,
       el('div', { class: 'acts' }, cancel, go),

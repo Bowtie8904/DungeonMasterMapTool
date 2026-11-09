@@ -3,12 +3,12 @@ import { CharacterSheet, TRAIT_ORDER, TraitName, tierOf } from './data';
 import { BeastformChoice, beastformCatalog, beastformParts } from './druid';
 
 export function chooseBeastform(c: CharacterSheet, evolution: boolean, submit: (choice: BeastformChoice) => void): void {
-  const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: 'Choose Beastform' });
+  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: 'Choose Beastform' });
   const catalog = beastformCatalog(c);
   const select = el('select', { ariaLabel: 'Beastform category' }, ...catalog.filter(f => f.tier <= tierOf(c.level))
     .map(f => el('option', { value: f.name }, `Tier ${f.tier}: ${f.name}`)));
   const trait = el('select', { ariaLabel: 'Evolution trait' }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name)));
-  const details = el('div');
+  const details = el('div', { class: 'dh-roll-options' });
   const error = el('div', { class: 'error', role: 'alert' });
   const go = el('button', { type: 'button', class: 'primary' }, 'Transform');
   const cancel = el('button', { type: 'button' }, 'Cancel');

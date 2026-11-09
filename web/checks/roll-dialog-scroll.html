@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Roll dialog scrolling check</title></head>
+<body><main id="host"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { rollBonus } from '../src/daggerheart/engine.ts';
+import { openRollDialog } from '../src/daggerheart/view.ts';
+import { openDamageDialog } from '../src/daggerheart/damage-view.ts';
+import { chooseFeatureEffects, chooseRollModification, chooseChannelCard } from '../src/daggerheart/sorcerer-view.ts';
+import '../src/daggerheart/sheet.css';
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const c = emptyCharacter('Scroll check');
+  c.features = [{
+    name: 'Many bonuses', source: 'Test', text: '',
+    automation: { rollOptions: Array.from({ length: 40 }, (_, i) => ({
+      id: `bonus-${i}`, label: `Optional bonus ${i + 1}`, roll: 'action', value: 1,
+    })) },
+  }];
+  const host = document.querySelector('#host');
+  const open = (targets, weapon) => openRollDialog(host, c, 'Scroll check', [],
+    rollBonus(c, targets), () => true, () => {}, targets, weapon);
+  const activeDialog = () => [...document.querySelectorAll('.dh-option-rolldlg')]
+    .filter(dialog => dialog.tagName !== 'DIALOG' || dialog.open).at(-1);
+  const button = text => [...activeDialog().querySelectorAll('button')].find(b => b.textContent === text);
+  const cancel = async () => {
+    button('Cancel').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert(!activeDialog(), 'Cancelled dialog remains open');
+  };
+  const check = () => {
+    const dialog = activeDialog();
+    const options = dialog.querySelector('.dh-roll-options');
+    assert(options.scrollHeight > options.clientHeight, 'Options do not overflow');
+    assert(dialog.scrollHeight <= dialog.clientHeight + 1, 'Entire dialog overflows');
+    const fixed = [...dialog.children].filter(child => child !== options && !child.hidden);
+    const before = fixed.map(child => child.getBoundingClientRect());
+    const bounds = dialog.getBoundingClientRect();
+    assert(bounds.top >= 0 && bounds.bottom <= innerHeight,
+      `${dialog.getAttribute('aria-label') ?? 'Roll'} exceeds viewport (${bounds.top}, ${bounds.bottom}, ${innerHeight})`);
+    assert(before.every(rect => rect.top >= bounds.top && rect.bottom <= bounds.bottom),
+      'Controls outside options are clipped');
+    options.scrollTop = options.scrollHeight;
+    assert(options.scrollTop > 0, 'Options cannot scroll');
+    assert(fixed.every((child, i) => child.getBoundingClientRect().top === before[i].top),
+      'Scrolling moves controls outside options');
+    const last = (options.querySelector('fieldset') ?? options).lastElementChild.getBoundingClientRect();
+    assert(last.bottom <= options.getBoundingClientRect().bottom + 1, 'Last option is unreachable');
+  };
+  open(['action', 'trait:Agility']);
+  check();
+  button('Reaction roll').click();
+  const options = document.querySelector('.dh-roll-options');
+  assert(options.hidden && getComputedStyle(options).display === 'none', 'Empty options leave a visible container');
+  button('Normal roll').click();
+  assert(!options.hidden && options.scrollTop === 0, 'Mode switch does not reset scrolling');
+  check();
+  await cancel();
+  c.features[0].automation.rollOptions.forEach(option => { option.roll = 'damage'; });
+  open(['damage'], { name: 'Blade', slot: 'Primary', trait: 'Agility', range: 'Melee',
+    damage: 'd6', damageType: 'physical', hands: 1, tier: 1 });
+  check();
+  await cancel();
+  c.features = [];
+  open(['action', 'trait:Agility']);
+  assert(document.querySelector('.dh-roll-options').hidden, 'No-bonus dialog shows options');
+  await cancel();
+  c.hp.slots = c.hp.total = 6;
+  c.activeArmor = { name: 'Test armor', score: 3, major: 6, severe: 12, tier: 1 };
+  c.features = [{
+    name: 'Many mitigations', source: 'Test', text: '',
+    automation: { mitigation: [
+      ...Array.from({ length: 40 }, (_, i) => ({ id: `mitigation-${i}`,
+        label: `Optional protection ${i + 1}`, reduce: 0 })),
+      { id: 'recovery', label: 'Recovery', passive: true, recoveryChoice: true },
+    ] },
+  }];
+  openDamageDialog(host, c, () => {}, { damage: 15, type: 'physical' });
+  check();
+  const recovery = document.querySelector('[aria-label="Not Done Yet recovery"]');
+  assert(recovery && !recovery.closest('.dh-roll-options'), 'Recovery controls scroll with mitigation');
+  const mitigationOptions = document.querySelector('.dh-roll-options');
+  const previousScroll = mitigationOptions.scrollTop;
+  mitigationOptions.querySelector('fieldset input').click();
+  assert(mitigationOptions.scrollTop === previousScroll, 'Mitigation selection resets scroll');
+  check();
+  await cancel();
+  chooseFeatureEffects({ id: 'benefits', label: 'Many benefits', chooseEffects: { count: 2,
+    options: Array.from({ length: 40 }, (_, i) => ({ id: `benefit-${i}`, label: `Benefit ${i + 1}` })) } }, () => {});
+  check();
+  await cancel();
+  chooseRollModification({ rolls: [] }, { label: 'Many choices',
+    choices: Array.from({ length: 40 }, (_, i) => ({ id: `choice-${i}`, label: `Choice ${i + 1}` })) },
+    async () => {}, () => {});
+  check();
+  await cancel();
+  c.loadout = Array.from({ length: 15 }, (_, i) => ({ name: `Card ${i + 1}`,
+    level: 1, domain: 'Arcana', text: 'A card description long enough to fill a selection panel.' }));
+  chooseChannelCard(c, () => {});
+  check();
+  await cancel();
+  result.textContent = `PASS ${innerWidth}x${innerHeight}`;
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack ?? error}`;
+}
+</script></body></html>

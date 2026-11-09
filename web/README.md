@@ -73,6 +73,12 @@ has its own padded, rounded, bordered panel with a subtle background and space b
 use the same layout with independently labeled controls. Experience, Otherworldly damage type and automatic
 damage-recovery dropdowns remain beside their labels and shrink to fit narrow dialogs. Roll behavior,
 settings and client/host compatibility contracts are unchanged.
+Long option lists scroll independently across roll bonuses, damage mitigation (including Armor and passive
+benefits), downtime, feature/damage-die/Beastform/stance/death-bonus choices, ancestry and card selection.
+Headings, controls outside the list, previews, errors and action buttons remain visible. Damage recovery
+controls stay outside the mitigation list. Switching roll modes resets the option list's scroll position.
+`checks/roll-dialog-scroll.html` checks real-browser overflow, stationary controls, last-option access,
+empty lists and mode changes for trait/damage rolls, mitigation, feature benefits and card/roll choices.
 
 Actor snapshots and sheet responses include an additive `disabled` flag. Disabled actors remain listed for
 their owner, but their sheets are read-only with a disabled indicator beside the name, and their tokens have no player controllers. Read-only navigation and background flushes do not save; pending edits remain until re-enabled. The host rejects

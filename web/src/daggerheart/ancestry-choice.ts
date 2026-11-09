@@ -30,7 +30,7 @@ export async function chooseAncestryFeature(host: HTMLElement, ancestry: string,
   const { entries } = await fetchCompendiumCategory('ancestries');
   return new Promise((resolve) => {
     const choice = { ancestry: allowAncestry ? '' : ancestry, feature: '' };
-    const dialog = el('dialog', { class: 'dh dh-rolldlg' });
+    const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg' });
     const cancel = el('button', { type: 'button' }, 'Cancel');
     const go = el('button', { type: 'button', class: 'primary' }, 'Choose');
     go.disabled = true;
@@ -43,7 +43,7 @@ export async function chooseAncestryFeature(host: HTMLElement, ancestry: string,
     dialog.addEventListener('close', () => { resolve(null); dialog.remove(); }, { once: true });
     dialog.addEventListener('keydown', (event) => { if (event.key === 'Escape') event.stopPropagation(); });
     dialog.append(el('h4', {}, allowAncestry ? 'Change Shape - downtime move' : 'Only Skin Deep - downtime move'),
-      ancestryPicker(entries, choice, () => { go.disabled = !choice.feature; }, allowAncestry, allowAncestry ? undefined : currentFeature), el('div', { class: 'acts' }, cancel, go));
+      el('div', { class: 'dh-roll-options' }, ancestryPicker(entries, choice, () => { go.disabled = !choice.feature; }, allowAncestry, allowAncestry ? undefined : currentFeature)), el('div', { class: 'acts' }, cancel, go));
     host.ownerDocument.body.append(dialog);
     dialog.showModal();
   });

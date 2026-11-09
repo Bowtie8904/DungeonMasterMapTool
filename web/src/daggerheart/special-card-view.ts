@@ -8,11 +8,11 @@ export interface SpecialCardChoice { amount?: number; choices?: VitalityBenefit[
 export function chooseSpecialCard(c: CharacterSheet, action: ActionDef, fear: () => number,
   submit: (choice: SpecialCardChoice) => Promise<void>): void {
   const vitality = action.specialAction === 'vitality';
-  const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: action.label });
+  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: action.label });
   const error = el('div', { class: 'error', role: 'alert' });
   const cancel = el('button', { type: 'button' }, 'Cancel');
   const go = el('button', { type: 'button', class: 'primary' }, vitality ? 'Gain two permanent benefits' : 'Steal Fear and roll');
-  const body = el('div');
+  const body = el('div', { class: 'dh-roll-options' });
   const choices = new Map<VitalityBenefit, HTMLInputElement>();
   const input = el('input', { type: 'number', min: '0', max: String(fear()), step: '1', value: '0', ariaLabel: 'Fear stolen (number of Horrified targets)' });
   if (vitality) {

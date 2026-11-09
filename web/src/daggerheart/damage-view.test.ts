@@ -66,4 +66,9 @@ it('groups mitigation and Armor Slot counts beside independent checkboxes, and a
   const recovery = root.all(element => element.className === 'dh-roll-field')[0];
   expect(recovery.text).toContain('Not Done Yet');
   expect(recovery.all(element => element.tag === 'select')).toHaveLength(1);
+  const dialog = root.all(element => element.className.includes('dh-option-rolldlg'))[0];
+  const options = dialog.all(element => element.className.includes('dh-roll-options'))[0];
+  expect(dialog.children.some(child => child instanceof Element && child.children.includes(recovery))).toBe(true);
+  expect(options.all(element => element === recovery)).toHaveLength(0);
+  expect(options.all(element => element.className === 'dh-roll-option-row').length).toBeGreaterThan(0);
 });
