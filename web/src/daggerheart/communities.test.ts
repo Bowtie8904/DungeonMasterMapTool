@@ -110,6 +110,21 @@ describe('community catalog automation', () => {
   }
 
   describe('community roll dialog wiring', () => {
+    it.each(['Reborne', 'Seaborne'])('keeps %s numeric controls beside their own option with separate labels', name => {
+      const { body } = rollDialog(name, true, name === 'Seaborne' ? 3 : undefined);
+      const row = body.find(element => element.className === 'dh-roll-option-row');
+      expect(row.children.map(child => child.className)).toEqual(['dh-roll-option', 'dh-roll-option-control']);
+      expect(row.children[0].find(element => element.tag === 'input').type).toBe('checkbox');
+      const control = row.children[1];
+      expect(control.tag).toBe('label');
+      expect(control.children[0].tag).toBe('span');
+      expect(control.children[0].text).not.toBe('');
+      expect(control.find(element => element.tag === 'input').type).toBe('number');
+      const experience = body.find(element => element.className === 'dh-roll-field');
+      expect(experience.text).toContain('Experience');
+      expect(experience.find(element => element.tag === 'select')).toBeDefined();
+    });
+
     it.each([true, false])('switches trait rolls to reaction, filtering bonuses and paying only sent selections (%s)', sent => {
       const c = emptyCharacter('Elf');
       c.stress.slots = 6;

@@ -2077,7 +2077,9 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
         ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
-    return amount ? el('div', {}, choice, el('label', {}, s.option.input?.label ?? s.option.quantity!.label, amount)) : choice;
+    return el('div', { class: 'dh-roll-option-row' }, choice,
+      ...(amount ? [el('label', { class: 'dh-roll-option-control' },
+        el('span', {}, s.option.input?.label ?? s.option.quantity!.label), amount)] : []));
   });
   exp.addEventListener('change', update);
   crit.addEventListener('change', update);
@@ -2170,9 +2172,9 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll with'), adv),
         ...(canChooseReaction ? [el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll type'),
           el('div', { class: 'dh-adv dh-roll-type', role: 'group', ariaLabel: 'Roll type' }, ...modeButtons))] : []),
-        el('label', {}, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (${options.some(s => s.option.experience) ? '1 Hope, or 1 Stress with Adept' : 'spend 1 Hope'})`, exp),
+        el('label', { class: 'dh-roll-field' }, `${targets.includes('companion') ? 'Companion Experience' : 'Experience'} (${options.some(s => s.option.experience) ? '1 Hope, or 1 Stress with Adept' : 'spend 1 Hope'})`, exp),
       ]),
-      ...(otherworldly ? [el('label', {}, 'Otherworldly: damage type', damageType)] : []),
+      ...(otherworldly ? [el('label', { class: 'dh-roll-field' }, 'Otherworldly: damage type', damageType)] : []),
       optionFieldset,
       preview,
       error,

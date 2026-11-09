@@ -503,6 +503,9 @@ Nothing starts until you click **Start online session**, so offline play and the
   Feature action cards name their origin without duplicated feature names (for example, **Hearthborne - Close-Knit**).
   Roll-option labels also keep qualifiers without repeating the feature name, such as **Elf - Quick Reactions (reaction roll)**
   and **Orderborne - Dedicated (Hope d20)**.
+  Numeric bonuses and token-spend counts sit beside their roll option in a labeled control on the right,
+  including damage mitigation and Armor Slot counts. Related dropdowns stay aligned and fit narrow dialogs.
+  Each option has its own subtly shaded, bordered panel to clearly separate it from neighboring options.
   Trait roll dialogs offer **Normal roll / Reaction roll** beneath advantage/disadvantage. Reaction rolls are
   marked in player and DM chat and never award the standard Hope or critical Stress recovery.
   Reaction-only options (Elf Quick Reactions and Anchoring Hook) appear only in Reaction mode;

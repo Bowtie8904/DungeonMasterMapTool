@@ -67,6 +67,13 @@ No settings or compatibility-version changes are required.
 
 Browser client for the Online Play host (plan.md section 3.41). Vanilla TypeScript, Canvas 2D, no runtime dependencies.
 
+Roll dialogs group each numeric bonus or token-spend input with its checkbox option, keeping the labeled
+control on the right and wrapping descriptions/costs on the left. Each option, including those without inputs,
+has its own padded, rounded, bordered panel with a subtle background and space between panels. Damage mitigation and Armor Slot counts
+use the same layout with independently labeled controls. Experience, Otherworldly damage type and automatic
+damage-recovery dropdowns remain beside their labels and shrink to fit narrow dialogs. Roll behavior,
+settings and client/host compatibility contracts are unchanged.
+
 Actor snapshots and sheet responses include an additive `disabled` flag. Disabled actors remain listed for
 their owner, but their sheets are read-only with a disabled indicator beside the name, and their tokens have no player controllers. Read-only navigation and background flushes do not save; pending edits remain until re-enabled. The host rejects
 disabled-actor writes, actions, rolls and inventory claims even from older clients, and excludes them from

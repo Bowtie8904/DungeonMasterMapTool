@@ -60,7 +60,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         el('option', { value: 'hope' }, 'Gain 1 Hope'), el('option', { value: 'stress' }, 'Clear 1 Stress'));
       recovery.value = r.recovery ?? 'hope';
       recovery.addEventListener('change', () => { input.recovery = recovery.value === 'stress' ? 'stress' : 'hope'; draw(); });
-      body.append(el('label', {}, 'Not Done Yet (automatic on Severe damage)', recovery));
+      body.append(el('label', { class: 'dh-roll-field' }, 'Not Done Yet (automatic on Severe damage)', recovery));
     }
 
     // Base Armor Slot.
@@ -71,12 +71,12 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
     armorBox.addEventListener('change', () => { input.armor = armorBox.checked; draw(); });
     const armorText = el('span', {}, r.anyArmor ? 'Mark Armor Slots' : 'Mark an Armor Slot', el('small', { class: 'muted' }, `Reduces severity by one per slot (${free}/${c.armorTrack.slots} free)`));
     if (armorWhy) armorText.append(el('small', { class: 'error' }, armorWhy));
-    const armorRow = el('label', { class: 'dh-roll-option' }, armorBox, armorText);
+    const armorRow = el('div', { class: 'dh-roll-option-row' },
+      el('label', { class: 'dh-roll-option' }, armorBox, armorText));
     if (r.anyArmor && input.armor) {
       const count = el('input', { type: 'number', min: '1', max: String(Math.max(1, r.armorAllowed)), value: String(r.armorUsed || 1) }) as HTMLInputElement;
-      count.addEventListener('click', (e) => e.preventDefault());
       count.addEventListener('change', () => { input.armorCount = Math.max(1, Math.floor(Number(count.value) || 1)); draw(); });
-      armorRow.append(count);
+      armorRow.append(el('label', { class: 'dh-roll-option-control' }, el('span', {}, 'Armor Slots'), count));
     }
     body.append(armorRow);
 
@@ -103,14 +103,14 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         if (box.checked && faces?.length) text.append(el('small', {}, `Rolled ${faces.join(', ')}`));
         const why = box.checked ? r.inactive[m.id] : staticWhy;
         if (why) text.append(el('small', { class: 'error' }, why));
-        const row = el('label', { class: 'dh-roll-option' }, box, text);
+        const row = el('div', { class: 'dh-roll-option-row' },
+          el('label', { class: 'dh-roll-option' }, box, text));
         if (m.option.quantity && box.checked) {
           const max = Math.max(1, quantityMax(c, m.option));
           const q = el('input', { type: 'number', min: '1', max: String(max), value: String(input.quantities![m.id] ?? 1) }) as HTMLInputElement;
           q.title = 'How many to spend';
-          q.addEventListener('click', (e) => e.preventDefault());
           q.addEventListener('change', () => { input.quantities![m.id] = Math.min(max, Math.max(1, Math.floor(Number(q.value) || 1))); draw(); });
-          row.append(q);
+          row.append(el('label', { class: 'dh-roll-option-control' }, el('span', {}, 'How many to spend'), q));
         }
         set.append(row);
       }

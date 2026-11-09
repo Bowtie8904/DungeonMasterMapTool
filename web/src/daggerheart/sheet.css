@@ -262,6 +262,13 @@ dialog.dh-sorcerer-dialog::backdrop { background: rgba(0,0,0,.6); }
 .dh-copycat-dialog .dh-copycat-list [hidden] { display: none !important; }
 .dh-rolldlg fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
 .dh-rolldlg label.dh-roll-option { justify-content: flex-start; align-items: flex-start; margin: 8px 0; color: var(--text); }
+.dh-rolldlg .dh-roll-option > input { flex-shrink: 0; }
+.dh-rolldlg .dh-roll-option > span { min-width: 0; overflow-wrap: anywhere; }
+.dh-roll-option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: 8px 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); }
+.dh-rolldlg .dh-roll-option-row > .dh-roll-option { min-width: 0; margin: 0; }
+.dh-rolldlg label.dh-roll-option-control { flex-direction: column; align-items: flex-end; gap: 4px; max-width: 96px; text-align: right; font-size: 11px; overflow-wrap: anywhere; }
+.dh-rolldlg label.dh-roll-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.dh-rolldlg .dh-roll-field select { width: 100%; min-width: 0; justify-self: end; }
 .dh-roll-option small { display: block; margin-top: 4px; }
 .dh-restdlg { width: min(720px, calc(100vw - 32px)); }
 .dh-rest-body { display: flex; flex-direction: column; gap: 8px; }
