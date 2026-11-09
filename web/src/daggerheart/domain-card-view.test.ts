@@ -60,6 +60,48 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('positions visible cards before the next animation frame on initial render and sheet notifications', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('HTMLElement', Element);
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  const frames = vi.fn();
+  vi.stubGlobal('requestAnimationFrame', frames);
+  const cards = [new Element('article'), new Element('article')];
+  const heights = [120, 80];
+  const measured = cards.map((card, i) => Object.assign(card, {
+    getBoundingClientRect: vi.fn(() => ({ height: heights[i] })),
+  }));
+  const grid = Object.assign(new Element('div'), { clientWidth: 700 });
+  grid.append(...cards);
+  const query = Element.prototype.querySelectorAll;
+  vi.spyOn(Element.prototype, 'querySelectorAll').mockImplementation(function (this: Element, selector: string) {
+    return selector === '.cards:not(.cards-list)' ? [grid] : query.call(this, selector);
+  });
+  const c = emptyCharacter('Hero');
+  c.mancer = { done: true };
+  const bus = new SheetBus();
+  let visible = true;
+  renderSheetView({ character: c, bus, visible: () => visible, onRoll: () => true });
+  const positioned = () => {
+    expect(cards[0].style).toMatchObject({ width: '345px', left: '0px', top: '0px' });
+    expect(cards[1].style).toMatchObject({ width: '345px', left: '355px', top: '0px' });
+    expect(grid.style).toMatchObject({ height: '120px' });
+  };
+  positioned();
+  expect(frames).toHaveBeenCalledTimes(1);
+  for (const card of cards) Object.assign(card.style, { width: '', left: '', top: '' });
+  bus.notify(false);
+  await Promise.resolve();
+  positioned();
+  expect(frames).toHaveBeenCalledTimes(1);
+  const reads = measured[0].getBoundingClientRect.mock.calls.length;
+  visible = false;
+  bus.notify(false);
+  await Promise.resolve();
+  expect(measured[0].getBoundingClientRect).toHaveBeenCalledTimes(reads);
+});
+
 it('keeps hidden nested roll controls hidden despite label layout styles', () => {
   const css = readFileSync(new URL('./sheet.css', import.meta.url), 'utf8');
   expect(css).toMatch(/\.dh-option-rolldlg\s+\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);

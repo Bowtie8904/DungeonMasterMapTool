@@ -4,6 +4,8 @@ Sheet catalogs share in-flight downloads and parsed data across owned actors, ru
 Reconnects and catalog edits invalidate that cache; custom fetchers and actor-scoped DM authorization stay isolated.
 Hidden/minimized sheets retain live data, effects and chat damage handlers without building their full sheet DOM.
 Layout and sheet notifications are coalesced, and hidden browser tabs skip map drawing until visible again.
+Visible sheet rebuilds position feature/domain cards immediately before restoring scroll; only follow-up
+resize measurements are deferred, preventing a flash of overlapping or full-width feature text.
 Unchanged saved sheets no longer need an initial save; new characters and migrations still persist.
 Hosts advertising `sheetActionResponses` can return committed sheet data after feature actions, avoiding a follow-up GET.
 Hosts advertising `sheetPatches` receive top-level save patches only with a known baseline and exact `If-Match` version.

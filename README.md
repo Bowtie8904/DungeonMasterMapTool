@@ -22,6 +22,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   Updated hosts and browsers negotiate compact sheet edits and committed feature-action responses,
   reducing upload size and avoiding an extra sheet download after supported actions.
   Catalog downloads are shared between owned characters; hidden sheet views defer unnecessary redraws.
+  Visible sheet updates position cards before painting to prevent feature-text flicker.
   Edited chat results retain their original message position rather than becoming a new message.
   Older browser/host combinations retain the full-sheet synchronization fallback.
   On slower devices, **Settings > Smooth token movement** can already be turned off to reduce

@@ -838,7 +838,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'sheet-main' }, tabs(), pages())),
     ]));
     root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
-    scheduleLayout();
+    layoutCards();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (readOnly) {
       applyReadOnlyControls();

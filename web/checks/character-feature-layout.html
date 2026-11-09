@@ -56,6 +56,12 @@ try {
   const rects = check();
   assert(new Set(rects.map(r => r.left)).size === 2, 'Not two columns');
   assert(rects[0].height > rects[1].height * 3 && rects[2].left === rects[1].left && rects[3].left === rects[1].left, 'Card heights ignored');
+  character.hope.on = 1;
+  bus.notify(false);
+  await Promise.resolve();
+  check();
+  assert(new Set([...grid().children].map(n => n.getBoundingClientRect().left)).size === 2,
+    'Sheet refresh exposed unpositioned cards before the next animation frame');
   search().value = 'Needle';
   search().dispatchEvent(new Event('input', { bubbles: true }));
   assert(check().length === 1, 'Grouped child text is not searchable');
