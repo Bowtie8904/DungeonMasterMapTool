@@ -47,7 +47,7 @@ class Element {
   select(): void {}
   setCustomValidity(message: string): void { this.validationMessage = message; }
   reportValidity(): boolean { return !this.validationMessage; }
-  querySelector(): null { return null; }
+  querySelector(_selector: string): Element | null { return null; }
   matches(): boolean { return this.attributes.role === 'tab' || ['Card view', 'List view'].includes(this.ariaLabel) || this.className === 'feature-search'; }
   querySelectorAll(selector: string): Element[] {
     const tags = selector.split(',').map(tag => tag.trim());
@@ -59,6 +59,78 @@ class Element {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('separates loot tools from limited actions while preserving sharing, usage and deletion', async () => {
+  const createElement = (tag: string) => {
+    const node = new Element(tag);
+    node.classList.add = (...names: string[]) => { node.className += ` ${names.join(' ')}`; };
+    return node;
+  };
+  vi.stubGlobal('document', { body: new Element('body'), createElement,
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const find = (node: Element, className: string): Element | null => {
+    for (const child of node.children) {
+      if (typeof child === 'string') continue;
+      if (child.className.split(' ').includes(className)) return child;
+      const nested = find(child, className);
+      if (nested) return nested;
+    }
+    return null;
+  };
+  vi.spyOn(Element.prototype, 'querySelector').mockImplementation(function (this: Element, selector: string) {
+    return selector.startsWith('.') ? find(this, selector.slice(1)) : null;
+  });
+  const c = emptyCharacter('Collector');
+  c.mancer = { done: true };
+  const label = 'Activate a particularly long special ability';
+  c.inventory = [{ name: 'Wondrous item', type: 'loot', qty: 1, note: 'An item description.',
+    automation: { uses: { max: 3, per: 'shortRest' }, actions: [{ id: 'activate', label }] } }];
+  const share = vi.fn();
+  const bus = new SheetBus();
+  const root = renderSheetView({ character: c, bus, onRoll: () => true, onShare: share }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Loot')!.click();
+  const table = find(root, 'loot-table')!;
+  expect(table.querySelectorAll('th').map(cell => cell.text())).toEqual(['Item', 'Qty', 'Usage & actions', 'Tools']);
+  const row = table.querySelectorAll('tbody')[0].querySelectorAll('tr')[0];
+  const cells = row.querySelectorAll('td');
+  expect(cells).toHaveLength(4);
+  expect(cells[0].text()).toContain('loot');
+  const actions = find(row, 'loot-actions')!;
+  expect(actions.querySelectorAll('button').map(button => button.text())).toEqual([label]);
+  expect(actions.text()).toContain('3/3 per short rest');
+  const description = find(row, 'loot-description')!;
+  const disclosure = find(row, 'loot-description-toggle')!;
+  expect(description.hidden).toBe(true);
+  expect(disclosure.attributes['aria-expanded']).toBe('false');
+  await disclosure.click();
+  expect(description.hidden).toBe(false);
+  expect(description.text()).toBe('An item description.');
+  expect(disclosure.attributes['aria-expanded']).toBe('true');
+  Reflect.apply(row.listeners.get('click')!, row, [{ target: { closest: () => disclosure } }]);
+  expect(description.hidden).toBe(false);
+  Reflect.apply(row.listeners.get('click')!, row, [{ target: { closest: () => null } }]);
+  expect(description.hidden).toBe(true);
+  await disclosure.click();
+  const tools = find(row, 'inventory-row-tools')!;
+  expect(tools.querySelectorAll('button').map(button => button.ariaLabel)).toEqual([
+    'Post Wondrous item to chat', 'Offer Wondrous item for transfer', 'Delete Wondrous item',
+  ]);
+  await tools.querySelectorAll('button')[0].click();
+  expect(share).toHaveBeenLastCalledWith({ category: 'item', item: c.inventory[0] });
+  await tools.querySelectorAll('button')[1].click();
+  expect(share).toHaveBeenLastCalledWith({ category: 'item', item: c.inventory[0] }, 1);
+  c.usage['item:Wondrous item'] = { used: 2, per: 'shortRest' };
+  bus.notify(false);
+  await Promise.resolve();
+  expect(find(root, 'loot-actions')!.text()).toContain('1/3 per short rest');
+  expect(find(root, 'loot-description')!.hidden).toBe(false);
+  await find(root, 'loot-description-toggle')!.click();
+  expect(find(root, 'loot-description')!.hidden).toBe(true);
+  await tools.querySelectorAll('button')[2].click();
+  expect(c.inventory).toHaveLength(0);
+});
 
 it.each([['umbral-veil', 'Umbral Veil', 'rest'], ['dark-army', 'Dark Army', 'long rest']])(
   'shows and refreshes the host-owned use counter for %s', async (id, name, per) => {

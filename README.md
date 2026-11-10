@@ -776,10 +776,11 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Transfer** icon next to the gold counter and works the same way. Offering does not remove or reserve stock. Claims are
   limited to the offered quantity and live unequipped stock; a full recipient inventory rejects the transfer
   without moving anything. Transfers update open sheets/pop-outs and are saved by the host.
-- **Equipment and loot:** row actions are grouped at the right edge: chat, transfer and delete icons on the first line, with the blue-outlined action button (Equip, Use, Drink…) on a second line to save width (delete removes carried equipment or loot). Items whose quantity reaches 0
+- **Equipment and loot:** Loot uses Item, Qty, Usage & actions and Tools columns, with the type badge beside the item name when space permits. Usage limits sit above full-width, wrapping action buttons; link-in-chat, transfer and delete icons stay in a separate, top-aligned row at the far right. Equipment keeps its grouped right-edge icons above blue-outlined action buttons (Equip, Use, Drink…). Delete removes carried equipment or loot. Items whose quantity reaches 0
   (use or action) are removed; the − stepper may rest at 0 so accidental clicks lose nothing. Grabbed transfers remove emptied source stacks. Active gear keeps its chat icon in the card's top-right corner.
   Search carried equipment or loot by name and description (all search words must match).
-  Loot descriptions are limited to two lines; use **Show more** / **Show less** to expand them inside the row.
+  Loot rows highlight subtly on hover or when a control within the row has keyboard focus.
+  Loot descriptions start hidden for compact rows. Click a row or its item-name disclosure button to show/hide the full description; keyboard users can activate that button with Enter/Space. Quantity, action and tool buttons do not expand rows. Expansion is retained across sheet refreshes, including in read-only views.
   The subtle **+** next to the Inventory search box adds a custom item (name, optional description, type -
   loot by default - and quantity, default 1). Custom items have no action buttons and never appear in or
   merge with the compendium.

@@ -212,7 +212,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   root.addEventListener('click', event => {
     if (!opts.readOnly?.()) return;
     const target = event.target as Element;
-    if (target.closest('.tabs [role="tab"], .loot-description button, .card-view-switch button, .feature-search')
+    if (target.closest('.tabs [role="tab"], .loot-description-toggle, .card-view-switch button, .feature-search')
+      || target.closest('.loot-table tr') && !target.closest('button, input, select, textarea, a, [role="button"]')
       || target.closest('.domain-list-summary') && !target.closest('button')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -235,7 +236,6 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     requestAnimationFrame(() => {
       layoutPending = false;
       if (opts.visible?.() === false) return;
-      measureDescriptions();
       layoutCards();
     });
   };
@@ -263,14 +263,6 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (grid.style.height !== height) grid.style.height = height;
     });
   }
-  function measureDescriptions(): void {
-    root.querySelectorAll<HTMLElement>('.loot-description').forEach(wrap => {
-      const text = wrap.querySelector<HTMLElement>('.loot-description-text')!;
-      const toggle = wrap.querySelector<HTMLButtonElement>('button')!;
-      const expanded = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.hidden = !expanded && text.scrollHeight <= text.clientHeight + 1;
-    });
-  }
   let sourceTooltip: HTMLElement | undefined;
   const hideSourceTooltip = () => {
     sourceTooltip?.remove();
@@ -282,7 +274,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   });
 
   function share(node: HTMLElement, entry: SharedEntry, offer = false, canOffer = offer): HTMLElement {
-    const header = (node.classList.contains('slot') ? node.querySelector('.top') : node.querySelector('.inventory-controls')) ?? (entry.category === 'feature'
+    const header = (node.classList.contains('slot') ? node.querySelector('.top') : node.querySelector('.inventory-row-tools') ?? node.querySelector('.inventory-controls')) ?? (entry.category === 'feature'
       ? node.querySelector('.src') ?? node
       : node.querySelector('td, .ft, .top, .hd') ?? node);
     if (offer) {
@@ -490,7 +482,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   let actionRefreshers: Array<() => void> = [];
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
   function usageCounter(key: string, a: Automation): HTMLElement {
-    const counter = el('span', { class: 'muted', style: 'font-size:11.5px' });
+    const counter = el('span', { class: 'muted usage-counter', style: 'font-size:11.5px' });
     const refresh = () => {
       counter.textContent = `${usesLeft(c, key, a)}/${usesMax(c, key, a)} per ${a.uses!.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`;
     };
@@ -511,7 +503,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) {
       const button = actionButton(key, a!, action, label, hooks);
       (action.usesSource === false ? row : sharedUses).append(action.uses
-        ? el('span', { class: 'row' }, button, usageCounter(`${key}:action:${action.id}`, { uses: action.uses }))
+        ? el('span', { class: 'row limited-action' }, button, usageCounter(`${key}:action:${action.id}`, { uses: action.uses }))
         : button);
     }
     const left = a ? usesLeft(c, key, a) : null;
@@ -977,7 +969,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function applyReadOnlyControls(): void {
     root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('input, textarea, select, button').forEach(control => {
-      if (control.matches('.tabs [role="tab"], .loot-description button, .card-view-switch button, .feature-search')) return;
+      if (control.matches('.tabs [role="tab"], .loot-description-toggle, .card-view-switch button, .feature-search')) return;
       if (control instanceof HTMLInputElement && ['text', 'number', 'search'].includes(control.type) || control instanceof HTMLTextAreaElement)
         control.readOnly = true;
       else control.disabled = true;
@@ -1833,7 +1825,38 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         attach.title = attach.disabled ? `No ${attachDef.to === 'weapon' ? 'weapon' : 'armor'} can receive ${i.name}.` : `Attach ${i.name} to ${attachDef.to === 'weapon' ? 'a weapon' : 'armor'}`;
         attach.addEventListener('click', () => openAttachDialog(i));
       }
-      return share(el('tr', {}, el('td', {}, el('b', {}, i.name), ...(i.note ? [lootDescription(i)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, ...(use ? [use] : []), ...(attach ? [attach] : []), ...(actions ? [actions] : [])))), { category: 'item', item: i }, true, i.qty > 0);
+      const name = el('div', { class: 'loot-name' }, el('b', {}, i.name), tag(i.type));
+      const description = i.note ? el('div', { class: 'loot-description muted' }, i.note) : null;
+      const row = share(el('tr', {},
+        el('td', {}, name, ...(description ? [description] : [])),
+        el('td', {}, qty(i)),
+        el('td', { class: 'usage-cell' }, el('div', { class: 'inventory-controls loot-actions' }, ...(use ? [use] : []), ...(attach ? [attach] : []), ...(actions ? [actions] : []))),
+        el('td', { class: 'tools-cell' }, el('div', { class: 'inventory-controls inventory-row-tools', role: 'group', ariaLabel: `${i.name} tools` })),
+      ), { category: 'item', item: i }, true, i.qty > 0);
+      if (description) {
+        const key = `${i.name}\n${i.note}`;
+        const toggle = el('button', { type: 'button', class: 'loot-description-toggle' }, i.name);
+        name.replaceChildren(toggle, tag(i.type));
+        row.classList.add('loot-expandable');
+        const paint = () => {
+          const expanded = expandedDescriptions.has(key);
+          description.hidden = !expanded;
+          toggle.setAttribute('aria-expanded', String(expanded));
+          toggle.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} ${i.name}'s description`);
+        };
+        const expand = () => {
+          if (expandedDescriptions.has(key)) expandedDescriptions.delete(key);
+          else expandedDescriptions.add(key);
+          paint();
+        };
+        toggle.addEventListener('click', expand);
+        row.addEventListener('click', event => {
+          if ((event.target as Element).closest('button, input, select, textarea, a, [role="button"]')) return;
+          expand();
+        });
+        paint();
+      }
+      return row;
     });
     const search = inventorySearch('loot', rows.map((node, i) => ({ node, text: `${c.inventory[i].name} ${c.inventory[i].note ?? ''}` })));
     const addItem = iconButton('add', 'Add custom item', addCustomItem);
@@ -1842,34 +1865,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       'div', {}, gold,
       el(
         'div', { class: 'card', style: 'margin-top:14px' },         el('h3', {}, 'Inventory', el('span', { class: 'right inventory-tools' }, search.input, addItem)),
-                el('table', { class: 't inventory-table loot-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Type'), el('th', {}, 'Qty'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows)),
+                el('table', { class: 't inventory-table loot-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Item'), el('th', {}, 'Qty'), el('th', { class: 'usage-cell' }, 'Usage & actions'), el('th', { class: 'tools-cell' }, 'Tools'))), el('tbody', {}, ...rows)),
         search.none,
         el('p', { class: 'muted', style: 'font-size:11.5px;margin:6px 0 0' }, 'Consumables are single-use; at most 5 of each. Loot stays until sold, discarded or lost.'),
       ),
     );
-  }
-
-  function lootDescription(item: InventoryItem): HTMLElement {
-    const key = `${item.name}\n${item.note}`;
-    const text = el('div', { class: 'loot-description-text muted' }, item.note ?? '');
-    const toggle = el('button', { type: 'button', class: 'description-toggle' });
-    const wrap = el('div', { class: 'loot-description' }, text, toggle);
-    const paint = () => {
-      const expanded = expandedDescriptions.has(key);
-      text.classList.toggle('expanded', expanded);
-      toggle.setAttribute('aria-expanded', String(expanded));
-      toggle.setAttribute('aria-label', `${expanded ? 'Show less' : 'Show more'} of ${item.name}'s description`);
-      toggle.textContent = expanded ? 'Show less' : 'Show more';
-    };
-    toggle.addEventListener('click', () => {
-      if (expandedDescriptions.has(key)) expandedDescriptions.delete(key);
-      else expandedDescriptions.add(key);
-      paint();
-      measureDescriptions();
-    });
-    paint();
-    toggle.hidden = !expandedDescriptions.has(key);
-    return wrap;
   }
 
   function inventorySearch(key: 'equipment' | 'loot', rows: Array<{ node: HTMLElement; text: string }>): { input: HTMLInputElement; none: HTMLElement } {
@@ -1879,7 +1879,6 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       inventoryQuery[key] = input.value;
       rows.forEach(({ node, text }) => { node.hidden = !textMatches(text, input.value); });
       none.hidden = !input.value.trim() || rows.some(({ node }) => !node.hidden);
-      requestAnimationFrame(measureDescriptions);
     };
     input.addEventListener('input', apply);
     apply();

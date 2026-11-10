@@ -465,8 +465,14 @@ with `all:true`, atomically to an owned receiving character, respecting consumab
 message recipients may grab. Offer quantities are not reservations; duplicate offers share live stock.
 Host-only `transferClaims` counters live on the source sheet and are persisted in the same transfer transaction
 as both inventories; sheet PUTs cannot change or delete them. Restarting cannot replenish an exhausted offer.
-Equipment/loot controls use compact trailing action groups. Search filters name/description in place and retains
-queries across rerenders. Loot descriptions clamp to two rendered lines with overflow-aware accessible expansion.
+Loot uses Item (including an inline type badge), Qty, Usage & actions and Tools columns. Usage counters stack above
+full-width, wrapping action buttons; link-in-chat, transfer and delete icons form a separate top-aligned row
+in the far-right Tools column. Equipment keeps its compact trailing action groups. This is presentation-only;
+settings, sharing/transfer contracts and compatibility versions are unchanged. Search filters name/description in place and retains
+queries across rerenders. Loot descriptions start fully hidden; clicking a row's non-interactive area or its
+keyboard-accessible item-name disclosure button toggles the full text. Other controls never toggle expansion.
+Expanded state survives sheet refreshes, and read-only viewers can also expand descriptions.
+Loot rows use a subtle blue-tinted highlight on hover and focus within, including collapsed rows.
 `cardStock {actorId}` invalidates availability; owner-only `sheetInventory {actorId,inventory}` updates open sheets.
 Transfers increment the persisted `inventoryRevision`; stale PUTs receive 409 and refresh inventory without
 overwriting pending non-inventory edits. Legacy saves still work before transfers; after a transfer they must
