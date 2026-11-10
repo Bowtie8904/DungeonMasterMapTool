@@ -94,6 +94,10 @@ class DiceRollerTest {
         assertThrows(IllegalArgumentException.class,
                 () -> DiceRoller.explode(DiceRoller.roll("1d4", 2, faces(4)), true, 2, faces(4, 4)));
         assertTrue(DiceRoller.explode(DiceRoller.roll("1d8-1d8", 2, faces(3, 8)), false, 2, faces()).isEmpty());
+
+        assertEquals(3, DiceRoller.countOnes(DiceRoller.roll("3d10+1d6+4", 4, faces(1, 5, 1, 1)), 4));
+        assertEquals(1, DiceRoller.countOnes(DiceRoller.roll("3d10kh2", 3, faces(1, 1, 7)), 3));
+        assertEquals(0, DiceRoller.countOnes(DiceRoller.roll("1d10-1d4", 2, faces(4, 1)), 2));
     }
 
     @Test

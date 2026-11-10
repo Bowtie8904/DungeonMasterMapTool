@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter, type CharacterSheet } from './data';
 import {
-  actionBlocker, activeFeatures, activeWeapons, addEffect, applyRest, availableRollOptions, damagePool, derivedStats,
-  runActionDetailed, syncDerived, traitTotal,
+  actionBlocker, activeFeatures, activeWeapons, addEffect, applyRest, availableRollOptions, availableRollTriggers, damagePool, derivedStats,
+  runActionDetailed, syncDerived, traitTotal, weaponDamageRules,
 } from './engine';
-import { activateAura, beastformCatalog, buildBeastform, canCastDomain, channelElement, transformBeastform } from './druid';
+import {
+  activateAura, assumeBeastform, beastformCatalog, buildBeastform, canCastDomain, catalogBeastforms, channelElement, transformBeastform,
+} from './druid';
 import { applyDamage, availableMitigations, computeDamage } from './damage';
 import { updateCharacterAutomation } from './persist';
 
 const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const items: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8'));
 function druid(level = 8) {
   const c = emptyCharacter('Druid');
   Object.assign(c, { className: 'Druid', subclass: 'Warden of the Elements', level });
@@ -217,5 +220,59 @@ describe('Druid automation', () => {
     expect(c.hope.on).toBe(4);
     const regen = action(c, 'Regeneration');
     expect(regen.action).toMatchObject({ target: 'actor', cost: { hope: 3 }, steps: [{ op: 'clear', resource: 'hp', amount: '1d4' }] });
+  });
+  it('applies Rampage to beastform weapon damage as a host-rolled d10 per die showing 1', () => {
+    const c = druid();
+    transform(c, 'Powerful Beast');
+    expect(weaponDamageRules(c, activeWeapons(c)[0])).toMatchObject({ onesBonus: 10, label: 'Rampage' });
+    expect(activeFeatures(c).find(f => f.name === 'Rampage')!.automation!.actions).toBeUndefined();
+    transform(c, 'Pack Predator');
+    expect(weaponDamageRules(c, activeWeapons(c)[0])).toBeUndefined();
+  });
+  it('offers on-hit Beastform triggers only on matching attacks', () => {
+    const c = druid();
+    transform(c, 'Pack Predator');
+    const weapon = activeWeapons(c)[0].name;
+    const ctx = { source: 'attack,trait:Strength,action', hope: 8, fear: 3, total: 15, weapon, kind: 'duality' as const };
+    expect(availableRollTriggers(c, ctx).find(t => t.trigger.id === 'hobble')?.trigger).toMatchObject({ cost: { stress: 1 } });
+    expect(availableRollTriggers(c, { ...ctx, difficulty: 20 }).some(t => t.trigger.id === 'hobble')).toBe(false);
+    expect(availableRollTriggers(c, { ...ctx, source: 'action,trait:Strength' }).some(t => t.trigger.id === 'hobble')).toBe(false);
+    transform(c, 'Striking Serpent');
+    const serpent = { ...ctx, weapon: activeWeapons(c)[0].name };
+    expect(availableRollTriggers(c, serpent).some(t => t.trigger.id === 'poisoned')).toBe(false);
+    expect(availableRollTriggers(c, { ...serpent, source: 'feat:Venomous Strike,attack,trait:Finesse,action' }).some(t => t.trigger.id === 'poisoned')).toBe(true);
+    transform(c, 'Stalking Arachnid');
+    expect(availableRollTriggers(c, { ...ctx, weapon: activeWeapons(c)[0].name }).find(t => t.trigger.id === 'poisoned')?.trigger.cost).toBeUndefined();
+  });
+  it('charges Companion Hope and rolls Unyielding automatically', () => {
+    const c = druid(1);
+    transform(c, 'Household Friend');
+    expect(action(c, 'Companion').action.cost).toEqual({ hope: 1 });
+    const unyielding = catalog.entries.flatMap(e => e.features ?? []).flatMap(f => f.automation?.beastforms ?? [])
+      .find(f => f.name === 'Epic Aquatic Beast')!.features!.find(f => f.name === 'Unyielding')!;
+    expect(unyielding.automation?.mitigation?.[0]).toMatchObject({ passive: true, saveArmor: 1 });
+  });
+  it('Puddleduck’s Fins make Aquatic Scout cost no Beastform Stress', () => {
+    const c = druid();
+    c.inventory.push({ name: 'Puddleduck’s Fins', type: 'gear', qty: 1, automation: structuredClone(items.entries.find(e => e.id === 'puddleducks-fins')!.automation) });
+    expect(transform(c, 'Aquatic Scout').join(' ')).toContain('no Stress');
+    expect(c.stress.on).toBe(0);
+    transform(c, 'Agile Scout');
+    expect(c.stress.on).toBe(1);
+  });
+  it('Yeti Coat assumes Powerful Beast for any class for the scene', () => {
+    const c = emptyCharacter('Guardian');
+    c.stress.slots = 6; c.stress.on = 0; c.hp.slots = 6;
+    const coat = structuredClone(items.entries.find(e => e.id === 'yeti-coat')!.automation!);
+    c.inventory.push({ name: 'Yeti Coat', type: 'gear', qty: 1, automation: coat });
+    const forms = catalogBeastforms(catalog);
+    const use = coat.actions!.find(a => a.id === 'use')!;
+    assumeBeastform(c, 'item:Yeti Coat', coat, use, forms);
+    expect(c.stress.on).toBe(3);
+    const form = c.effects.find(e => e.beastform)!;
+    expect(form).toMatchObject({ until: 'scene', name: 'Beastform: Powerful Beast' });
+    expect(activeWeapons(c)[0]).toMatchObject({ damage: 'd10+4', trait: 'Strength' });
+    expect(canCastDomain(c)).toBe(false);
+    expect(() => assumeBeastform(c, 'item:Yeti Coat', coat, { ...use, assumeBeastform: { form: 'Unknown' } }, forms)).toThrow('no Unknown');
   });
 });

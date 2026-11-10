@@ -464,6 +464,9 @@ the weapon's own attack.
   the same size per maximum face, and with `repeat` extra dice can trigger again (bounded by the host dice limit).
   `damage.label` names the rule in the breakdown. Both are host-rolled `damageRules.weaponRules`, apply to all positive
   damage dice of the roll and require `hello.weaponAutomation`; older hosts block only these rolls.
+  `damage.onesBonus: N` (2-100) adds one dN to the result per kept positive damage die showing 1 (Rampage d10);
+  the extra dice appear as `<label>: extra dice` in the breakdown. A Beastform feature's `automation.damage` is
+  copied onto the form effect, so it applies to the form attack while transformed.
 - Roll options: `required: true` is preselected and cannot be unticked while payable (Painful); `damageDie: 20` on an
   attack adds a `damageDie:20` tag so that attack's Damage button rolls d20 weapon dice (Devastating); `weaponName`
   restricts an option to the equipped weapon of that name. Costs may use `gold` (coins; one handful is 10).
@@ -1158,6 +1161,12 @@ additional trait. A form effect has `beastform`, `weapon`, and temporary `featur
 Temporary features participate in passive stats, roll options, actions and mitigation and appear only while
 their effect is active. `actionRoll.trait: "beastform"` uses the active form's attack trait, including in hybrids.
 Action-created effects from a Beastform feature inherit that form as their `requiresEffect` parent.
+On-hit form features are `rollTriggers` with `weaponRange: "Melee"` (checked against the form attack on web and
+host) or `on: "feat:<Feature>"` for features that roll their own attack. `automation.beastformFree: ["<Form>"]`
+on an equipped item skips the base Stress cost of transforming into that ordinary form (Puddleduck's Fins);
+Evolution still pays. An action `assumeBeastform: { "form": "<Form>", "until": "scene" }` lets any character
+transform into that catalog form after paying the action cost (Yeti Coat → Powerful Beast); evolved and hybrid
+forms are rejected.
 
 Effect `group` replaces other members of the group; `requiresEffect` expires a child when its named parent
 ends. `endOnDamage` is a minimum resolved severity (2 Major, 3 Severe), including mitigated damage whose actual

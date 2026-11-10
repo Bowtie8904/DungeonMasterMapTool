@@ -1,4 +1,5 @@
 import { CharacterSheet, Feature, TraitName, TRAIT_ORDER, Weapon, tierOf } from './data';
+import type { CompendiumFile } from './compendium';
 import {
   ActionDef, Automation, BeastformDef, EffectDef, activeFeatures, addEffect, runActionDetailed,
   syncEffectDependencies,
@@ -25,9 +26,9 @@ export function beastformParts(catalog: BeastformDef[], categories: string[]): {
   };
 }
 
-export function buildBeastform(c: CharacterSheet, choice: BeastformChoice, evolution: boolean): { effect: EffectDef; stress: number } {
-  const catalog = beastformCatalog(c);
-  const form = catalog.find(f => f.name === choice.form && f.tier <= tierOf(c.level));
+export function buildBeastform(c: CharacterSheet, choice: BeastformChoice, evolution: boolean,
+  catalog: BeastformDef[] = beastformCatalog(c), anyTier = false): { effect: EffectDef; stress: number } {
+  const form = catalog.find(f => f.name === choice.form && (anyTier || f.tier <= tierOf(c.level)));
   if (!form) throw new Error('Choose a Beastform of your tier or lower.');
   if (evolution && !TRAIT_ORDER.includes(choice.trait!)) throw new Error('Choose the trait raised by Evolution.');
   let base = form;
@@ -86,18 +87,44 @@ export function buildBeastform(c: CharacterSheet, choice: BeastformChoice, evolu
       ...(evolution ? [{ stat: `trait.${choice.trait}`, value: 1 }] : []),
     ],
     ...(features.some(f => f.name === 'Fragile') ? { endOnDamage: 2 } : {}),
+    ...(features.find(f => f.automation?.damage)?.automation?.damage ? { damage: structuredClone(features.find(f => f.automation?.damage)!.automation!.damage) } : {}),
   };
   return { effect, stress: form.hybrid?.stress ?? 0 };
 }
 
+/** The inventory item that lets this Beastform category skip the Beastform Stress cost (Puddleduck's Fins). */
+export function freeBeastformItem(c: CharacterSheet, form: string): string | undefined {
+  return c.inventory.find(i => i.qty > 0 && i.automation?.beastformFree?.includes(form))?.name;
+}
+
 export function transformBeastform(c: CharacterSheet, key: string, a: Automation, action: ActionDef, choice: BeastformChoice): string[] {
   const result = buildBeastform(c, choice, !!action.evolution);
-  const costAction = { ...action, cost: { ...action.cost, stress: Number(action.cost?.stress ?? 0) + result.stress } };
+  const free = action.evolution ? undefined : freeBeastformItem(c, choice.form);
+  const costAction = { ...action, cost: { ...action.cost, stress: (free ? 0 : Number(action.cost?.stress ?? 0)) + result.stress } };
   const log = runActionDetailed(c, key, a, costAction, action.label);
   if (!log) throw new Error('Cannot pay the transformation cost.');
   addEffect(c, result.effect, action.label);
   syncEffectDependencies(c);
-  return [...log, `Transformed into ${result.effect.name.slice('Beastform: '.length)}${action.evolution ? `; Evolution: +1 ${choice.trait}` : ''}.`];
+  return [...log, ...(free ? [`${free}: no Stress marked for this Beastform.`] : []),
+    `Transformed into ${result.effect.name.slice('Beastform: '.length)}${action.evolution ? `; Evolution: +1 ${choice.trait}` : ''}.`];
+}
+
+/** Druid class Beastform categories from the class catalog, for items that transform any character (Yeti Coat). */
+export function catalogBeastforms(classes: CompendiumFile): BeastformDef[] {
+  return classes.entries.flatMap(e => (e.features ?? []).flatMap(f => f.automation?.beastforms ?? []));
+}
+
+export function assumeBeastform(c: CharacterSheet, key: string, a: Automation, action: ActionDef, catalog: BeastformDef[]): string[] {
+  const spec = action.assumeBeastform;
+  if (!spec) throw new Error('This action has no Beastform.');
+  const form = catalog.find(f => f.name === spec.form);
+  if (!form || form.evolved || form.hybrid) throw new Error(`The class catalog has no ${spec.form} Beastform.`);
+  const result = buildBeastform(c, { form: spec.form }, false, catalog, true);
+  const log = runActionDetailed(c, key, a, action, action.label);
+  if (!log) throw new Error('Cannot pay the transformation cost.');
+  addEffect(c, { ...result.effect, ...(spec.until ? { until: spec.until } : {}) }, action.label);
+  syncEffectDependencies(c);
+  return [...log, `Transformed into ${spec.form}${spec.until === 'scene' ? ' for the scene' : ''}.`];
 }
 
 export function channelElement(c: CharacterSheet, key: string, a: Automation, action: ActionDef): string[] {

@@ -1566,6 +1566,9 @@
        "stress": 1
       }
      }
+    ],
+    "beastformFree": [
+     "Aquatic Scout"
     ]
    }
   },
@@ -2231,17 +2234,10 @@
       "cost": {
        "stress": 3
       },
-      "steps": [
-       {
-        "op": "effect",
-        "effect": {
-         "name": "Yeti Form",
-         "kind": "buff",
-         "until": "scene",
-         "text": "Transformed into a Yeti for the scene as if using a Druid’s Beastform feature (Powerful Beast form). Apply the form’s statistics with the GM."
-        }
-       }
-      ]
+      "assumeBeastform": {
+       "form": "Powerful Beast",
+       "until": "scene"
+      }
      }
     ],
     "mitigation": [

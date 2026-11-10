@@ -15,7 +15,8 @@ import {
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
-import { activateAura, canCastDomain, channelElement, transformBeastform } from './druid';
+import { activateAura, assumeBeastform, canCastDomain, catalogBeastforms, channelElement, transformBeastform } from './druid';
+import { fetchCompendiumCategory } from './compendium';
 import { chooseBeastform } from './druid-view';
 import { channelRawPower, chooseActionEffects } from './sorcerer';
 import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
@@ -56,7 +57,7 @@ export interface RollRequest {
   deathrunRemove?: number;
   weaponDamage?: { proficiency: number; proficiencyBonus: number; maximizeDie?: number; multiplier: number; options: Array<{ key: string; id: string }> };
   damageRules?: { comboDie?: number; maximumOnes?: boolean; rerollBelow?: number; matchingDice?: boolean;
-    weaponRules?: { onesAs?: number; explode?: 'once' | 'repeat'; label?: string } };
+    weaponRules?: { onesAs?: number; onesBonus?: number; explode?: 'once' | 'repeat'; label?: string } };
   label: string;
   expression: string;
   kind?: 'duality';
@@ -758,6 +759,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         };
         if (action.channelRawPower) chooseChannelCard(c, (card, benefit) => report(channelRawPower(c, key, a, action, card, benefit)));
         else chooseFeatureEffects(action, (ids, trait) => report(chooseActionEffects(c, key, a, action, ids, trait)));
+        return;
+      }
+      if (action.assumeBeastform) {
+        if (!opts.supportsDruidAutomation?.()) { opts.onLog?.('Update the host to use Druid automation.'); return; }
+        setBusy(true);
+        try {
+          const catalog = catalogBeastforms(await fetchCompendiumCategory('classes'));
+          const lines = assumeBeastform(c, key, a, action, catalog);
+          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          hooks.after?.(action);
+          page = 'beastform';
+        } catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
+        finally { setBusy(false); }
+        render();
         return;
       }
       if ((action.beastform || action.evolution || action.channel || action.aura) && !opts.supportsDruidAutomation?.()) {

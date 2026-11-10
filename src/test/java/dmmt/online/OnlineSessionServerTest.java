@@ -5164,6 +5164,54 @@ class OnlineSessionServerTest {
             msg.withObject("/damageRules/weaponRules").put("explode", "sometimes");
             ws.sendText(msg.toString(), true).join();
             assertTrue(inbox.next("error").toString().contains("weapon damage rules"));
+
+            diceSeed(seedFor(random -> random.nextInt(10) == 0 && random.nextInt(10) != 0));
+            msg = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d10+4").put("source", "damage");
+            msg.putObject("damageRules").putObject("weaponRules").put("onesBonus", 10).put("label", "Rampage");
+            msg.putArray("contributions").addObject().put("label", "Beastform: Powerful Beast damage").put("expression", "2d10+4");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode rampage = inbox.next("roll");
+            assertEquals(3, rampage.path("rolls").size());
+            assertEquals(1, rampage.path("rolls").path(0).asInt());
+            assertEquals("Rampage: extra dice", rampage.path("breakdown").path(1).path("label").asText());
+            total = 0;
+            for (JsonNode part : rampage.path("breakdown")) total += part.path("total").asInt();
+            assertEquals(rampage.path("total").asInt(), total);
+
+            msg.withObject("/damageRules/weaponRules").put("onesBonus", 1);
+            ws.sendText(msg.toString(), true).join();
+            assertTrue(inbox.next("error").toString().contains("weapon damage rules"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void beastformMeleeTriggersUseTheFormWeaponInsteadOfEquippedWeapons() throws Exception {
+        ObjectNode sheet = weaponSheet("scepter-of-elias");
+        ObjectNode form = sheet.withArray("effects").addObject().put("name", "Beastform: Pack Predator").put("beastform", true);
+        form.putObject("weapon").put("name", "Beastform: Pack Predator").put("range", "Melee").put("trait", "Strength").put("damage", "d8+2");
+        var features = form.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("druid".equals(entry.path("id").asText()))
+                for (JsonNode feature : entry.path("features"))
+                    for (JsonNode category : feature.path("automation").path("beastforms"))
+                        if ("Pack Predator".equals(category.path("name").asText()))
+                            features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) category.path("features"));
+        store.saveSheet(campaign.getId(), "gunner", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,trait:Strength,action","actorId":"gunner","weapon":"Beastform: Pack Predator"}
+                    """, true).join();
+            JsonNode attack = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "gunner").put("key", "feat:Hobbling Strike").put("actionId", "hobble");
+            request.putObject("roll").put("id", attack.path("id").asLong()).put("ts", attack.path("ts").asLong());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(sheet.path("stress").path("on").asInt() + 1,
+                    MAPPER.readTree(store.loadSheet(campaign.getId(), "gunner")).path("stress").path("on").asInt());
         } finally { ws.abort(); }
     }
 

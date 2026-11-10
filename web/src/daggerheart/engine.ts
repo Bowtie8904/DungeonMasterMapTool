@@ -189,6 +189,8 @@ export interface ActionDef {
   confirm?: string;
   companion?: 'comfortHope' | 'comfortStress';
   beastform?: boolean;
+  /** Item transformation into one fixed Beastform category from the Druid class catalog (Yeti Coat). Works for any class. */
+  assumeBeastform?: { form: string; until?: Until };
   evolution?: boolean;
   channel?: string;
   aura?: boolean;
@@ -402,6 +404,8 @@ export interface Automation {
   companionTraining?: number;
   effectCounters?: Array<{ label: string; effect: string; cardOnly?: boolean }>;
   beastforms?: BeastformDef[];
+  /** Beastform categories this item lets a druid assume without the Beastform Stress cost (Puddleduck's Fins). */
+  beastformFree?: string[];
   channelBenefit?: { element: string; effect: EffectDef };
   unarmedWeapon?: Omit<CharacterSheet['activeWeapons'][number], 'trait'>;
   stances?: Array<{ name: string; tier: number; effect: EffectDef; chooseTrait?: boolean }>;
@@ -428,6 +432,8 @@ export interface Automation {
   damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean; proficiencyOnly?: boolean;
     /** Host damage rule: damage dice showing 1 count as this value (Serrated 8, Self-Correcting 6). */
     onesAs?: number;
+    /** Host damage rule: roll one die of this size for each kept damage die showing 1 and add it (Rampage d10). */
+    onesBonus?: number;
     /** Host damage rule: each maximum face rolls one more die; `repeat` lets the new dice trigger again (Brutal/Recursive). */
     explode?: 'once' | 'repeat';
     /** Feature name shown in the damage breakdown for the host rules. */
@@ -1693,19 +1699,21 @@ export function damagePool(c: CharacterSheet, weapon: CharacterSheet['activeWeap
   const pools = [weapon.automation?.damage, ...c.effects.map(e => e.damage)]
     .filter((p): p is NonNullable<Automation['damage']> => !!p && (!p.proficiencyOnly || !weapon.fixedDice));
   if (!pools.length) return undefined;
-  const rule = pools.find(p => p.onesAs || p.explode);
+  const rule = pools.find(p => p.onesAs || p.explode || p.onesBonus);
   return { extraDice: pools.reduce((n, p) => n + (p.extraDice ?? 0), 0), dropLowest: pools.reduce((n, p) => n + (p.dropLowest ?? 0), 0),
     maximumOnes: pools.some(p => p.maximumOnes),
     ...(rule?.onesAs ? { onesAs: rule.onesAs } : {}),
+    ...(pools.some(p => p.onesBonus) ? { onesBonus: Math.max(...pools.map(p => p.onesBonus ?? 0)) } : {}),
     ...(pools.some(p => p.explode) ? { explode: pools.some(p => p.explode === 'repeat') ? 'repeat' as const : 'once' as const } : {}),
     ...(rule?.label ? { label: rule.label } : {}) };
 }
 
 /** Host-applied damage dice rules of the weapon's damage pool, sent with the damage roll. */
-export function weaponDamageRules(c: CharacterSheet, weapon: Weapon): { onesAs?: number; explode?: 'once' | 'repeat'; label?: string } | undefined {
+export function weaponDamageRules(c: CharacterSheet, weapon: Weapon): { onesAs?: number; onesBonus?: number; explode?: 'once' | 'repeat'; label?: string } | undefined {
   const pool = damagePool(c, weapon);
-  if (!pool?.onesAs && !pool?.explode) return undefined;
-  return { ...(pool.onesAs ? { onesAs: pool.onesAs } : {}), ...(pool.explode ? { explode: pool.explode } : {}),
+  if (!pool?.onesAs && !pool?.explode && !pool?.onesBonus) return undefined;
+  return { ...(pool.onesAs ? { onesAs: pool.onesAs } : {}), ...(pool.onesBonus ? { onesBonus: pool.onesBonus } : {}),
+    ...(pool.explode ? { explode: pool.explode } : {}),
     label: (pool.label ?? weapon.feature?.name ?? weapon.name).slice(0, 60) };
 }
 

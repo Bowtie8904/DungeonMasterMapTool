@@ -4349,7 +4349,11 @@ public final class OnlineSessionServer {
         String profile = null;
         for (String tag : roll.path("source").asText("").split(","))
             if (tag.startsWith("weaponProfile:")) profile = tag.substring("weaponProfile:".length());
-        for (JsonNode weapon : sheet.path("activeWeapons")) {
+        List<JsonNode> weapons = new ArrayList<>();
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.path("weapon").isObject()) { weapons.add(effect.path("weapon")); break; }
+        if (weapons.isEmpty()) sheet.path("activeWeapons").forEach(weapons::add);
+        for (JsonNode weapon : weapons) {
             if (!weapon.path("name").asText().equals(roll.path("weapon").asText())) continue;
             String weaponRange = weapon.path("range").asText();
             if (profile != null) {
@@ -6430,6 +6434,8 @@ public final class OnlineSessionServer {
                 JsonNode weaponRules = msg.path("damageRules").path("weaponRules");
                 if (!weaponRules.isMissingNode() && (!weaponRules.isObject()
                         || weaponRules.has("onesAs") && !weaponRules.path("onesAs").isInt()
+                        || weaponRules.has("onesBonus") && (!weaponRules.path("onesBonus").isInt()
+                            || weaponRules.path("onesBonus").asInt() < 2 || weaponRules.path("onesBonus").asInt() > 100)
                         || weaponRules.has("explode") && !List.of("once", "repeat").contains(weaponRules.path("explode").asText())
                         || weaponRules.path("label").asText().length() > 60))
                     throw new IllegalArgumentException("Invalid weapon damage rules.");
@@ -6476,6 +6482,8 @@ public final class OnlineSessionServer {
                             .put("impact", "Damage dice showing 1 deal " + onesRule.path("onesAs").asInt() + " instead.");
             }
             String matchingExpression = result.expression();
+            JsonNode onesBonusRule = msg.path("damageRules").path("weaponRules");
+            int onesBonusDice = onesBonusRule.has("onesBonus") ? DiceRoller.countOnes(result, config.maxDice()) : 0;
             JsonNode explodeRule = msg.path("damageRules").path("weaponRules");
             if (explodeRule.has("explode")) {
                 boolean repeat = "repeat".equals(explodeRule.path("explode").asText());
@@ -6499,6 +6507,23 @@ public final class OnlineSessionServer {
                     all.addAll(faces);
                     result = new DiceRoller.Result(result.expression() + "+" + extra, all, result.total() + extra);
                 }
+            }
+            if (onesBonusDice > 0) {
+                int sides = onesBonusRule.path("onesBonus").asInt();
+                if (result.rolls().size() + onesBonusDice > config.maxDice())
+                    throw new IllegalArgumentException("Extra damage dice exceed the host's dice limit.");
+                List<Integer> faces = new ArrayList<>();
+                for (int i = 0; i < onesBonusDice; i++) faces.add(diceRandom.nextInt(sides) + 1);
+                int extra = faces.stream().mapToInt(Integer::intValue).sum();
+                String label = onesBonusRule.path("label").asText("").isBlank() ? "Weapon feature" : onesBonusRule.path("label").asText();
+                if (breakdown == null) breakdown = new ArrayList<>(List.of(new DiceRoller.Detail("Damage", result.expression(), result.rolls(), result.total())));
+                breakdown.add(new DiceRoller.Detail(label + ": extra dice", onesBonusDice + "d" + sides, faces, extra));
+                while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
+                breakdownNotes.get(breakdown.size() - 1).addObject().put("label", label)
+                        .put("impact", "Each damage die showing 1 added a d" + sides + ".");
+                List<Integer> all = new ArrayList<>(result.rolls());
+                all.addAll(faces);
+                result = new DiceRoller.Result(result.expression() + "+" + extra, all, result.total() + extra);
             }
             if (msg.path("damageRules").has("comboDie")) {
                 JsonNode die = msg.path("damageRules").path("comboDie");

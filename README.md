@@ -560,6 +560,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   attack bonuses remain explicit roll options. Poison damage and Fire retaliation buttons roll an unmodified
   1d10 directly, without bonus selection; poison is separate damage when the poisoned creature acts. Fragile forms
   end on Major damage, all forms end on the last HP, and domain spells cannot be cast while transformed.
+  Rampage rolls an extra d10 for each damage die showing 1 automatically. On-hit form features (Hobbling Strike,
+  Snapping Strike, Venomous Bite, Devastating Strikes, Ocean Master, Trample, Demolish, Venomous Strike) are
+  roll-card triggers that pay their cost and apply Vulnerable/Poisoned. Puddleduck's Fins make Aquatic Scout
+  free, and Yeti Coat transforms its wearer into Powerful Beast for the scene.
   Cannonball posts a claimable ally action: the thrower chooses Agility or Strength and rolls with their own
   stats and Proficiency. Clarity reports total available Stress recovery, Regeneration selects a healing target,
   and Warden's Protection reports its rolled ally count.

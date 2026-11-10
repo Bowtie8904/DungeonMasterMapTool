@@ -103,6 +103,23 @@ public final class DiceRoller {
         return new Result(result.expression(), rolls, total(parsed, rolls));
     }
 
+    /** Kept positive damage dice showing 1 (Rampage rolls an extra die for each). */
+    public static int countOnes(Result result, int maxDice) {
+        Terms parsed = terms(result.expression(), maxDice);
+        boolean[] kept = new boolean[parsed.dice().size()];
+        java.util.Arrays.fill(kept, true);
+        for (Keep keep : parsed.keeps()) {
+            List<Integer> indices = new ArrayList<>();
+            for (int i = keep.offset(); i < keep.offset() + keep.count(); i++) indices.add(i);
+            indices.sort(Comparator.comparingInt(i -> Math.abs(result.rolls().get(i))));
+            for (int i = 0; i < keep.count() - keep.kept(); i++) kept[indices.get(i)] = false;
+        }
+        int count = 0;
+        for (int i = 0; i < kept.length; i++)
+            if (kept[i] && parsed.dice().get(i) > 0 && result.rolls().get(i) == 1) count++;
+        return count;
+    }
+
     /**
      * Extra dice for every positive die showing its maximum face (Brutal). With {@code repeat}, extra dice
      * showing their maximum roll again (Recursive). Returns the extra faces with their die sizes.

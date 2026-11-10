@@ -4367,7 +4367,7 @@
         "advantages": ["climb", "locate", "protect"],
         "features": [
          { "name": "Companion", "text": "When you Help an Ally, roll a d8 as your advantage die.",
-          "automation": { "actions": [{ "id": "help", "label": "Help an Ally", "sendRoll": { "dice": "1d8", "label": "Companion - Help an Ally advantage die" } }] } },
+          "automation": { "actions": [{ "id": "help", "label": "Help an Ally", "cost": { "hope": 1 }, "sendRoll": { "dice": "1d8", "label": "Companion - Help an Ally advantage die" } }] } },
          { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
         ]
        },
@@ -4385,7 +4385,7 @@
         "advantages": ["attack", "sprint", "track"],
         "features": [
          { "name": "Hobbling Strike", "text": "After a successful Melee attack, mark a Stress to make the target temporarily Vulnerable.",
-          "automation": { "actions": [{ "id": "hobble", "label": "Hobbling Strike", "cost": { "stress": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Vulnerable." } }] } },
+          "automation": { "rollTriggers": [{ "id": "hobble", "label": "Hobbling Strike: target temporarily Vulnerable", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "cost": { "stress": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Vulnerable." } }] } },
          { "name": "Pack Hunting", "text": "After a successful attack against the same target as an ally acting immediately before you, add a d8 to damage.",
           "automation": { "rollOptions": [{ "id": "pack", "label": "Pack Hunting", "roll": "damage", "dice": "1d8", "description": "Successful attack against the same target as the ally immediately before you." }] } }
         ]
@@ -4403,7 +4403,10 @@
         "advantages": ["attack", "climb", "sneak"],
         "features": [
          { "name": "Venomous Bite", "text": "On a successful Melee attack, the target is temporarily Poisoned, taking 1d10 direct physical damage each time they act.",
-          "automation": { "actions": [{ "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Bite - direct physical poison damage" } }] } },
+          "automation": {
+           "actions": [{ "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Bite - direct physical poison damage" } }],
+           "rollTriggers": [{ "id": "poisoned", "label": "Venomous Bite: target temporarily Poisoned", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "report": { "text": "After your successful Melee attack, the target is temporarily Poisoned, taking 1d10 direct physical damage each time they act." } }]
+          } },
          { "name": "Webslinger", "text": "Create webbing supporting one creature. Succeed on a Finesse Roll to temporarily Restrain a target within Close range.",
           "automation": { "actions": [{ "id": "web", "label": "Webslinger", "actionRoll": { "trait": "Finesse" } }] } }
         ]
@@ -4453,7 +4456,7 @@
          { "name": "Rampage", "text": "When a damage die is 1, roll a d10 and add it. Before an attack, mark a Stress for +1 Proficiency for that attack.",
           "automation": {
            "rollOptions": [{ "id": "rampage", "label": "Rampage: +1 Proficiency", "roll": "attack", "proficiency": 1, "cost": { "stress": 1 } }],
-           "actions": [{ "id": "one", "label": "Rampage: bonus for a damage die of 1", "sendRoll": { "dice": "1d10", "label": "Rampage - add to damage after rolling a 1" } }]
+           "damage": { "extraDice": 0, "dropLowest": 0, "onesBonus": 10, "label": "Rampage" }
           } },
          { "name": "Thick Hide", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
         ]
@@ -4467,7 +4470,8 @@
           "automation": { "actions": [
            { "id": "attack", "label": "Trample attack", "cost": { "stress": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
            { "id": "damage", "label": "Trample damage", "damage": { "dice": "d8+1", "type": "physical" } }
-          ] } }
+          ],
+          "rollTriggers": [{ "id": "vulnerable", "label": "Trample: targets temporarily Vulnerable", "on": "feat:Trample", "successIfKnown": true, "report": { "text": "Each target the Trample attack succeeded against is temporarily Vulnerable." } }] } }
         ]
        },
        {
@@ -4478,7 +4482,8 @@
           "automation": { "actions": [
            { "id": "attack", "label": "Venomous Strike", "actionRoll": { "trait": "beastform", "attack": true } },
            { "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Strike - direct physical poison damage" } }
-          ] } },
+          ],
+          "rollTriggers": [{ "id": "poisoned", "label": "Venomous Strike: targets temporarily Poisoned", "on": "feat:Venomous Strike", "successIfKnown": true, "report": { "text": "Each target the Venomous Strike succeeded against is temporarily Poisoned, taking 1d10 direct physical damage each time they act." } }] } },
          { "name": "Warning Hiss", "text": "Mark a Stress to force any number of Melee targets back to Very Close range.",
           "automation": { "actions": [{ "id": "hiss", "label": "Warning Hiss", "cost": { "stress": 1 }, "report": { "text": "Chosen targets within Melee range move back to Very Close range." } }] } }
         ]
@@ -4517,7 +4522,7 @@
         "features": [
          { "name": "Physical Defense", "text": "+3 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 3 }] } },
          { "name": "Snapping Strike", "text": "After a successful Melee attack, spend a Hope to clamp the target in your jaws, making them temporarily Restrained and Vulnerable.",
-          "automation": { "actions": [{ "id": "snap", "label": "Snapping Strike", "cost": { "hope": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained and Vulnerable in your jaws." } }] } }
+          "automation": { "rollTriggers": [{ "id": "snap", "label": "Snapping Strike: target Restrained and Vulnerable", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "cost": { "hope": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained and Vulnerable in your jaws." } }] } }
         ]
        },
        {
@@ -4550,7 +4555,8 @@
           "automation": { "actions": [
            { "id": "attack", "label": "Demolish attack", "cost": { "hope": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
            { "id": "damage", "label": "Demolish damage", "damage": { "dice": "d8+10", "type": "physical" } }
-          ] } },
+          ],
+          "rollTriggers": [{ "id": "vulnerable", "label": "Demolish: targets temporarily Vulnerable", "on": "feat:Demolish", "successIfKnown": true, "report": { "text": "Each target the Demolish attack succeeded against is temporarily Vulnerable." } }] } },
          { "name": "Undaunted", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
         ]
        },
@@ -4559,7 +4565,7 @@
         "advantages": ["attack", "deceive", "scare", "track"],
         "features": [
          { "name": "Devastating Strikes", "text": "When you deal Severe damage to a Melee target, mark a Stress to force them to mark an additional HP.",
-          "automation": { "actions": [{ "id": "devastate", "label": "Devastating Strikes", "cost": { "stress": 1 }, "report": { "text": "The Melee target that took Severe damage marks one additional HP." } }] } },
+          "automation": { "rollTriggers": [{ "id": "devastate", "label": "Devastating Strikes: +1 HP (Severe damage to a Melee target)", "on": "damage", "weaponRange": "Melee", "cost": { "stress": 1 }, "report": { "text": "The Melee target that took Severe damage marks one additional HP." } }] } },
          { "name": "Massive Stride", "text": "Move up to Far without rolling. Ignore rough terrain at the GM's discretion." }
         ]
        },
@@ -4577,9 +4583,9 @@
         "advantages": ["locate", "protect", "scare", "track"],
         "features": [
          { "name": "Ocean Master", "text": "Breathe and move naturally underwater. On a successful Melee attack, temporarily Restrain the target.",
-          "automation": { "actions": [{ "id": "restrain", "label": "Ocean Master: Restrain", "report": { "text": "After your successful Melee attack, the target is temporarily Restrained." } }] } },
+          "automation": { "rollTriggers": [{ "id": "restrain", "label": "Ocean Master: target temporarily Restrained", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained." } }] } },
          { "name": "Unyielding", "text": "When you would mark an Armor Slot, roll a d6. On 5+, reduce severity by one without marking the slot.",
-          "automation": { "mitigation": [{ "id": "unyielding", "label": "Unyielding", "when": { "armor": true }, "roll": { "sides": 6, "success": 5 }, "saveArmor": 1 }] } }
+          "automation": { "mitigation": [{ "id": "unyielding", "label": "Unyielding", "passive": true, "when": { "armor": true }, "roll": { "sides": 6, "success": 5 }, "saveArmor": 1 }] } }
         ]
        },
        { "name": "Mythic Beast", "tier": 4, "evolved": { "maxTier": 2, "damage": 9, "trait": 2, "evasion": 3, "increaseDie": true } },
