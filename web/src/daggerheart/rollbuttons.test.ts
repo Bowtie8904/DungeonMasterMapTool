@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from './rollbuttons';
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
-import { applyRest } from './engine';
+import { applyRest, rollTriggerSection } from './engine';
 import { SheetBus, type WeaponDamageAction } from './view';
 import { renderLogEntry } from '../chat';
 
@@ -579,6 +579,70 @@ describe('cross-player roll buttons', () => {
       { ...host, playerId: 'player-b', supportsRollRewards: () => true }) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(box.queryAll('button').some(b => b.text === 'Gain 2 Hope / Clear 2 Stress')).toBe(true);
+  });
+
+  it('groups roll results, the rolling feature\'s effects and other features\' triggers into styled sections', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', { name: 'Luckbender', automation: {
+      rollTriggers: [{ id: 'reroll', label: 'Luckbender: reroll', on: 'action', reroll: 'duality' }],
+    } });
+    c.loadout = [
+      { name: 'Spell', domain: 'Arcana', level: 1, type: 'Spell', recall: 0, text: '', automation: { conditionalRollTriggers: [
+        { id: 'damage', label: 'Spell damage', on: 'card:Spell', damage: { dice: 'd8', type: 'magic' } },
+        { id: 'stress', label: 'Spell: target marks Stress', on: 'card:Spell', cost: { stress: 1 } },
+      ] } },
+      { name: 'Observe', domain: 'Codex', level: 1, type: 'Ability', recall: 0, text: '', automation: { conditionalRollTriggers: [
+        { id: 'ask', label: 'Observe: ask', on: 'trait:Instinct' },
+      ] } },
+    ];
+    const { host } = hostFor({ 'actor-b': c });
+    const supported = { ...host, playerId: 'player-b', supportsRollRewards: () => true, supportsDomainCardAutomation: () => true };
+    const sections = (box: FakeElement) => box.children.map(group => [group.className,
+      ...group.children.map(button => `${button.className}|${button.text}`)]);
+    const spell = rollButtons({ ...original, source: 'action,spellcast,trait:Instinct,card:Spell', rolls: [9, 3], rewardClaimed: false },
+      supported) as unknown as FakeElement;
+    const observed = rollButtons({ ...original, source: 'action,trait:Instinct,featureAction:card:Observe:observe,card:Observe' },
+      supported) as unknown as FakeElement;
+    const generic = rollButtons({ ...original, source: 'action,trait:Instinct' }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(sections(spell)).toEqual([
+      ['roll-action-group result', 'small primary|Gain 1 Hope', 'small primary|Spell damage'],
+      ['roll-action-group feature', 'small|Spell: target marks Stress (1 Stress)'],
+      ['roll-action-group other', 'small related|Luckbender: reroll', 'small related|Observe: ask'],
+    ]);
+    expect(sections(observed).map(group => group[0])).toEqual(['roll-action-group feature', 'roll-action-group other']);
+    expect(sections(observed)[0]).toContain('small|Observe: ask');
+    expect(sections(generic).flat()).toContain('small related|Observe: ask');
+  });
+
+  it('assigns configured content roll triggers to valid sections', () => {
+    const files = ['ancestries', 'classes', 'communities', 'consumables', 'domain-cards', 'items', 'transformations'];
+    const triggers: Array<{ label: string; on: string; rollSection?: string }> = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (!node || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if ((key === 'rollTriggers' || key === 'conditionalRollTriggers') && Array.isArray(value)) triggers.push(...value);
+        walk(value);
+      }
+    };
+    for (const file of files) walk(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')));
+    expect(triggers.length).toBeGreaterThan(100);
+    expect(triggers.filter(t => t.rollSection && !['result', 'feature', 'other'].includes(t.rollSection))).toEqual([]);
+    const section = (label: string) => {
+      const trigger = triggers.find(t => t.label === label)!;
+      return rollTriggerSection({ key: 'feat:x', source: 'x', automation: {}, trigger: trigger as never }, '');
+    };
+    expect(section('Stunning Sunlight: spend Hope and roll damage')).toBe('result');
+    expect(section('Successful Fireball: damage')).toBe('result');
+    expect(section('Successful Damnation: Stress damage')).toBe('result');
+    expect(section('Blighting Strike failed: mark a Stress')).toBe('feature');
+    expect(section('Siphon Essence: heal target\'s marked HP')).toBe('feature');
+    expect(section('End Run')).toBe('feature');
+    expect(section('Feed')).toBe('feature');
+    expect(section('Build on companion success')).toBe('feature');
+    expect(section('Charge: roll damage')).toBe('other');
+    expect(section('Endless Charisma: reroll Hope Die')).toBe('other');
   });
 
   it.each([

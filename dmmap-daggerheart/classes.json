@@ -142,6 +142,7 @@
         "id": "build-on-companion",
         "label": "Build on companion success",
         "on": "companion",
+        "rollSection": "feature",
         "when": "hope",
         "description": "Confirm the companion command succeeded with Hope. Only use the advantage if your next action builds on that success.",
         "steps": [

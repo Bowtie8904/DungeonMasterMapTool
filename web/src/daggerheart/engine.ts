@@ -325,7 +325,12 @@ export interface RollTrigger extends ActionDef {
   weapon?: string;
   weaponAttack?: boolean;
   tokenGain?: { resource: string; max: number };
+  /** Chat button group; defaults via {@link rollTriggerSection}. */
+  rollSection?: RollActionSection;
 }
+
+/** `result`: outcome of the roll (primary), `feature`: effects of the feature that made the roll, `other`: other features reacting to it. */
+export type RollActionSection = 'result' | 'feature' | 'other';
 
 export interface Automation {
   hideSpellcast?: boolean;
@@ -1542,6 +1547,16 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
     }
     default: return true;
   }
+}
+
+/** Chat section of a roll button: its own `rollSection`, otherwise derived from whether the trigger's feature made the roll. */
+export function rollTriggerSection(t: AvailableRollTrigger, rollSource: string): RollActionSection {
+  if (t.trigger.rollSection) return t.trigger.rollSection;
+  const tags = rollSource.split(',');
+  const own = !!t.trigger.damageSource || /^(card|feat|featureAction|option):/.test(t.trigger.on)
+    || tags.some(tag => tag === t.key || tag.startsWith(`featureAction:${t.key}:`));
+  if (!own) return 'other';
+  return t.trigger.damage || t.trigger.resourceRoll || t.trigger.spentTokenDamage ? 'result' : 'feature';
 }
 
 /** Buttons the character's features offer on a finished roll. */

@@ -147,6 +147,7 @@
         "weapon": "Fangs",
         "description": "Use only after a successful Fangs attack against a creature that can bleed.",
         "tokenGain": { "resource": "feedTokens", "max": 6 },
+        "rollSection": "feature",
         "cost": {
          "stress": 1
         }

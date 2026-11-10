@@ -166,6 +166,8 @@ button.inventory-action:hover:not(:disabled), button.inventory-action:focus-visi
 .entry button:not(.share-icon):hover:not(:disabled), .entry button:not(.share-icon):focus-visible { background: #4fc3f733; border-color: var(--accent); color: var(--text); }
 .entry button.primary:not(.share-icon) { background: #1f6f93; border-color: #2c8fba; color: #fff; font-weight: 600; }
 .entry button.primary:not(.share-icon):hover:not(:disabled), .entry button.primary:not(.share-icon):focus-visible { background: #2680a8; border-color: var(--accent); color: #fff; }
+.entry button.related:not(.share-icon) { background: #7d8fff17; border-color: #8c9dff70; color: #d3dbff; }
+.entry button.related:not(.share-icon):hover:not(:disabled), .entry button.related:not(.share-icon):focus-visible { background: #7d8fff30; border-color: #a9b6ff; color: #eef1ff; }
 button.inventory-action:disabled, .entry button:not(.share-icon):disabled { background: transparent; border-color: #53677c55; color: var(--muted); opacity: .5; cursor: not-allowed; }
 .shared-source { color: var(--muted); font-size: 10px; letter-spacing: .4px; }
 .shared-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
@@ -213,6 +215,8 @@ button.share-icon:disabled { opacity: .25; }
 .entry > .roll-actions { margin: 0; padding: 0 12px 12px; }
 .roll-actions button { width: 100%; text-align: center; white-space: normal; }
 .roll-actions[hidden] { display: none; }
+.roll-action-group { display: flex; flex-direction: column; gap: 6px; }
+.roll-action-group + .roll-action-group { margin-top: 3px; padding-top: 9px; border-top: 1px solid #8c9dff1f; }
 .roll-outcome { font-size: 10px; font-weight: 650; padding: 3px 7px; border-radius: 5px; background: #ffffff08; border: 1px solid #ffffff14; }
 .roll-outcome.hope { color: #ffda84; background: #a379181a; border-color: #a3791844; }
 .roll-outcome.fear { color: #d9c2ff; background: #8964c61a; border-color: #8964c644; }

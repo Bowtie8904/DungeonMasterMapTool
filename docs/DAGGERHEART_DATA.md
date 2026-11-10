@@ -718,7 +718,12 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   and updating the saved roll's expression, dice, total and breakdown through additive `rollUpdate` fields.
   Original Hope/Fear dice and outcome are unchanged. Heart of a Poet uses this for its 1-Hope d4.
   Effects may also carry `rollTriggers`; the host resolves their definitions from the learned granting
-  feature, not from editable effect metadata. `dualityDieBonus: {die: "hope"|"fear", value: number}`
+  feature, not from editable effect metadata. `rollSection: "result"|"feature"|"other"` chooses the chat
+  button group: primary roll results, secondary effects of the feature that made the roll, or indigo
+  triggers from other features. Without it, triggers bound to their own roll (`on` starting with `card:`,
+  `feat:`, `featureAction:` or `option:`, `damageSource`, or a roll tagged with the trigger's feature key)
+  are `feature`, or `result` when they roll damage (`damage`, `resourceRoll`, `spentTokenDamage`); all
+  others are `other`. `dualityDieBonus: {die: "hope"|"fear", value: number}`
   adjusts that die and the total on the finished roll, preserving its original face in the host's saved roll
   and identifying the adjustment in the breakdown. Equal adjusted dice are a critical success. The
   `hello.dualityDieBonus` capability gates these buttons on older hosts. `requiresEffect` and `endEffect`

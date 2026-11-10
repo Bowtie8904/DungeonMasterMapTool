@@ -1,5 +1,5 @@
-// Buttons shown under a roll in the chat, only to the player who rolled it:
-// Damage on attacks, and the roll triggers (rerolls, Hope/Stress on matching dice) of the character's features.
+// Buttons shown under a roll in the chat, only to the player who rolled it, in three groups:
+// roll results (Hope, weapon and feature damage), effects of the feature that made the roll, and other features' roll triggers.
 
 import { el } from '../login';
 import { applyDeathRecovery, claimRollReward } from '../api';
@@ -7,8 +7,8 @@ import { useSheetAction, type SheetSave } from './persist';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, runAction, usesLeft } from './engine';
-import type { AvailableRollTrigger, RollContext } from './engine';
+import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
+import type { AvailableRollTrigger, RollActionSection, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification, damageDieChoices } from './sorcerer-view';
@@ -66,6 +66,9 @@ export function rollContext(m: RollMessage): RollContext | null {
   if (m.kind !== 'duality' || values.length < 2) return null;
   return { source: m.source ?? '', hope: values[0], fear: values[1], total: m.total, outcome: m.outcome, weapon: m.weapon, difficulty: m.difficulty, resourceOnes } as RollContext;
 }
+
+const SECTION_BUTTON_CLASS: Record<RollActionSection, string> = { result: 'small primary', feature: 'small', other: 'small related' };
+const SECTION_LABEL: Record<RollActionSection, string> = { result: 'Roll result', feature: 'Feature effects', other: 'Other features' };
 
 function newRef(): string {
   return Math.random().toString(36).slice(2, 12);
@@ -386,7 +389,8 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
   let claiming = false;
 
   const paint = (sheets: Array<{ actorId: string; sheet: RollButtonSheet }>) => {
-    const buttons: HTMLElement[] = [];
+    const sections: Record<RollActionSection, HTMLElement[]> = { result: [], feature: [], other: [] };
+    const buttons = sections.result;
     const rolledActor = actorId ? sheets.find((entry) => entry.actorId === actorId) : undefined;
     const critical = !!ctx && ctx.kind !== 'damage' && ctx.hope === ctx.fear;
     const withHope = !!ctx && ctx.kind !== 'damage' && !ctx.source.split(',').includes('reaction')
@@ -529,7 +533,8 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         if (trigger.dualityDieBonus && trigger.endEffect
             && m.featureUses?.includes(`${featureActorId}:effectBonus:${trigger.endEffect}`)) continue;
         const cost = costText(t.trigger.cost, c);
-        const b = el('button', { class: 'small', type: 'button' },
+        const section = rollTriggerSection(t, m.source ?? '');
+        const b = el('button', { class: SECTION_BUTTON_CLASS[section], type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
         const unsupported = t.trigger.splendorAction && !host.supportsSplendorAutomation?.()
@@ -678,11 +683,13 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             b.disabled = false;
           }
         });
-        buttons.push(b);
+        sections[section].push(b);
       }
     }
-    box.replaceChildren(...buttons);
-    box.hidden = buttons.length === 0;
+    const groups = (Object.keys(sections) as RollActionSection[]).filter(section => sections[section].length)
+      .map(section => el('div', { class: `roll-action-group ${section}`, role: 'group', ariaLabel: SECTION_LABEL[section] }, ...sections[section]));
+    box.replaceChildren(...groups);
+    box.hidden = groups.length === 0;
   };
 
   const paintFor = async () => {

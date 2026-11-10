@@ -388,6 +388,11 @@ Proficiency buffs; these are context, not additional terms in the total. Weapon 
 are separate breakdown rows.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Expanded cards and the reader's scroll position survive new messages.
+Action buttons under a roll are grouped into subtly separated sections: **roll results** (primary blue: Hope rewards,
+weapon damage and damage caused by the rolling feature, such as a successful spell's damage), **feature effects**
+(the standard secondary buttons for other effects of the feature that made the roll, such as marking Stress or clearing
+HP) and **other features** (indigo buttons from other features that can modify or react to the roll, such as
+rerolls or added dice). Content can set `rollSection` on a roll trigger when the derived section is not correct.
 Chat's rail icon gets an accessible unread dot for live entries received while another section is open or
 the sidebar is collapsed; opening Chat clears it. Snapshots do not mark history unread. Chat follows new
 entries and delayed card resizes (including sender-only roll action buttons) only while at the bottom.

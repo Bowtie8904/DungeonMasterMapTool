@@ -1861,7 +1861,7 @@
      }
     ],
     "rollOptions":[{"id":"run","label":"Deathrun","roll":"attack","weapon":"any","cost":{"hope":3},"hostOwned":true,"excludesEffect":"Deathrun","effect":{"name":"Deathrun","kind":"buff","until":"manual","deathrun":true,"counter":{"value":0,"max":100},"rollOptions":[{"id":"damage","label":"Deathrun damage","roll":"damage","weapon":"any","defaultOn":true,"deathrun":true,"hostOwned":true}],"actions":[{"id":"end","label":"End Run","hostOwned":true,"endEffect":"Deathrun"}]}}],
-    "rollTriggers":[{"id":"end","label":"End Run","on":"damage","deathrunResult":true,"endEffect":"Deathrun"}]
+    "rollTriggers":[{"id":"end","label":"End Run","on":"damage","deathrunResult":true,"endEffect":"Deathrun","rollSection":"feature"}]
    }
   },
   {
@@ -5237,7 +5237,7 @@
    "name": "Stunning Sunlight",
    "automation": { "conditionalRollTriggers": [
     { "id": "damage", "label": "Stunning Sunlight: spend Hope and roll damage", "on": "card:Stunning Sunlight",
-      "successIfKnown": true, "splendorAction": "sunlight", "hostOwned": true }
+      "successIfKnown": true, "splendorAction": "sunlight", "hostOwned": true, "rollSection": "result" }
    ] },
    "cardType": "Spell",
    "domain": "Splendor",
