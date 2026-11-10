@@ -193,6 +193,8 @@ export interface LevelUpRecord {
 }
 
 export interface CharacterSheet {
+  /** Character-local bookmarks; inactive equipment/cards retain their keys. */
+  quickAccessFavorites?: string[];
   element?: string;
   companion?: RangerCompanion;
   knownStances?: string[];

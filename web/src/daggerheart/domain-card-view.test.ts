@@ -115,11 +115,11 @@ it('separates loot tools from limited actions while preserving sharing, usage an
   await disclosure.click();
   const tools = find(row, 'inventory-row-tools')!;
   expect(tools.querySelectorAll('button').map(button => button.ariaLabel)).toEqual([
-    'Post Wondrous item to chat', 'Offer Wondrous item for transfer', 'Delete Wondrous item',
+    'Favorite Wondrous item', 'Post Wondrous item to chat', 'Offer Wondrous item for transfer', 'Delete Wondrous item',
   ]);
-  await tools.querySelectorAll('button')[0].click();
-  expect(share).toHaveBeenLastCalledWith({ category: 'item', item: c.inventory[0] });
   await tools.querySelectorAll('button')[1].click();
+  expect(share).toHaveBeenLastCalledWith({ category: 'item', item: c.inventory[0] });
+  await tools.querySelectorAll('button')[2].click();
   expect(share).toHaveBeenLastCalledWith({ category: 'item', item: c.inventory[0] }, 1);
   c.usage['item:Wondrous item'] = { used: 2, per: 'shortRest' };
   bus.notify(false);
@@ -128,7 +128,7 @@ it('separates loot tools from limited actions while preserving sharing, usage an
   expect(find(root, 'loot-description')!.hidden).toBe(false);
   await find(root, 'loot-description-toggle')!.click();
   expect(find(root, 'loot-description')!.hidden).toBe(true);
-  await tools.querySelectorAll('button')[2].click();
+  await tools.querySelectorAll('button')[3].click();
   expect(c.inventory).toHaveLength(0);
 });
 

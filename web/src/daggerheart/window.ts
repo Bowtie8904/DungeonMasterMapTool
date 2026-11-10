@@ -1,5 +1,6 @@
 import { el } from '../login';
 import { renderSheetView, SheetBus, SheetViewOptions } from './view';
+import { QuickAccessTray } from './quick-access-tray';
 
 const HIDDEN = 'hidden';
 
@@ -26,6 +27,7 @@ export class SheetWindow {
   private readonly title: HTMLElement;
   private readonly body: HTMLElement;
   private readonly bus: SheetBus;
+  private readonly quickAccess: QuickAccessTray;
 
   constructor(
     options: SheetViewOptions,
@@ -43,24 +45,43 @@ export class SheetWindow {
     const editControl = el('div', { class: 'sheet-edit-host' });
     const label = el('h2', {}, `${actorName} - Daggerheart sheet`);
     this.bus = options.bus ?? new SheetBus();
+    const frame = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` });
+    this.quickAccess = new QuickAccessTray(frame, () => this.bus.notify(false));
     this.body = el('div', { class: 'dh-win-body' }, renderSheetView({
       ...options,
       bus: this.bus,
       visible: () => !!this.element && this.isOpen && !this.element.classList.contains('minimised'),
+      miniVisible: () => !!this.element && this.isOpen && this.element.classList.contains('minimised'),
+      quickAccessVisible: () => this.quickAccess.isOpen,
+      onQuickAccess: content => {
+        if (content) this.quickAccess.setContent(content);
+        else this.quickAccess.close();
+      },
       onEditControl: control => {
         options.onEditControl?.(control);
         editControl.replaceChildren(control);
         label.textContent = `${options.character.name} - Daggerheart sheet`;
       },
-      onMiniStrip: (strip) => { options.onMiniStrip?.(strip); mini.replaceChildren(...(strip ? [strip] : [])); },
+      onMiniStrip: (strip) => {
+        options.onMiniStrip?.(strip);
+        const restoreFocus = document.activeElement === this.quickAccess.button;
+        mini.replaceChildren(...(strip ? [strip, this.quickAccess.button] : []));
+        if (restoreFocus && strip) this.quickAccess.button.focus({ preventScroll: true });
+      },
     }));
     this.title.append(
       el('div', { class: 'sheet-heading' }, label, editControl),
       mk('\u29C9', 'Pop out to a new browser window', () => { this.setOpen(false); onPopOut(); }),
-      mk('\u2013', 'Minimise', () => { this.element.classList.toggle('minimised'); this.bus.notify(false); }),
+      mk('\u2013', 'Minimise', () => this.toggleMinimised()),
       mk('\u2715', 'Close', () => this.setOpen(false)),
     );
-    this.element = el('section', { class: `dh-win ${HIDDEN}`, ariaLabel: `${actorName} character sheet` }, this.title, mini, this.body);
+    this.title.addEventListener('dblclick', (e) => {
+      if ((e.target as HTMLElement).closest('button, input, label, select, textarea, [role="switch"]')) return;
+      e.preventDefault();
+      this.toggleMinimised();
+    });
+    this.element = frame;
+    frame.append(this.title, mini, this.body);
     this.enableDrag();
     trackStacking(this.element);
   }
@@ -69,7 +90,28 @@ export class SheetWindow {
     return !this.element.classList.contains(HIDDEN);
   }
 
+  toggleMinimised(): void {
+    if (!this.quickAccess.isExternal) this.quickAccess.close();
+    this.element.classList.toggle('minimised');
+    this.bus.notify(false);
+  }
+
+  /** Toggles Quick Access beside an external trigger, independent of the sheet's open/minimized state. */
+  toggleQuickAccess(trigger: HTMLElement): void {
+    this.quickAccess.toggleFrom(trigger);
+  }
+
+  closeQuickAccess(): void {
+    this.quickAccess.close();
+  }
+
+  /** Closes Quick Access only when it was opened from the given external trigger. */
+  closeQuickAccessFrom(trigger: HTMLElement): void {
+    if (this.quickAccess.isOpenFrom(trigger)) this.quickAccess.close();
+  }
+
   setOpen(open: boolean): void {
+    if (!this.quickAccess.isExternal) this.quickAccess.close();
     this.element.classList.toggle(HIDDEN, !open);
     if (open) { this.element.classList.remove('minimised'); bringToFront(this.element); }
     this.bus.notify(false);

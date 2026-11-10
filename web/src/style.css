@@ -40,6 +40,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .left-tools { position: absolute; top: 20px; left: 20px; width: 58px; }
 .tool-rail, .section-rail { display: flex; flex-direction: column; gap: 7px; padding: 8px; background: #171b21f2; border: 1px solid var(--border); }
 .tool-rail { border-radius: 9px; }
+.tool-rail .rail-quick-access { position: relative; margin-top: 7px; }
+.tool-rail .rail-quick-access::before { content: ''; position: absolute; left: 4px; right: 4px; top: -8px; border-top: 1px solid var(--border); }
+.tool-rail .rail-quick-access[aria-expanded='true'] { background: #d3d9df; color: #14181e; border-color: #e3e8ef; }
 .selection-controls { margin-top: 12px; width: 210px; padding: 10px; background: #171b21e8; border: 1px solid var(--border); border-radius: 8px; }
 .selection-controls:has(button:disabled) { display: none; }
 .tool-flyout { position: absolute; left: 90px; top: 20px; width: 255px; max-height: calc(100dvh - 210px); overflow-y: auto; background: #171b21f7; border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 12px 35px #0004; z-index: 3; }

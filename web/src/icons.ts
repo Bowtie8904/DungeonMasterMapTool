@@ -26,6 +26,7 @@ const paths: Record<string, string> = {
   files: 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM7 17l3-4 2 2 2-3 3 5',
   delete: 'M3 6h18M9 6V3h6v3M6 6v15h12V6M10 10v7M14 10v7',
   shield: 'M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6ZM9 12h6',
+  star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z',
 };
 
 export function iconButton(icon: string, label: string, action: () => void): HTMLButtonElement {

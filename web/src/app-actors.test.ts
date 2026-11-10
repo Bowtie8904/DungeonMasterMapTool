@@ -51,6 +51,8 @@ function fixture(actors = [actor]) {
     scheduleEffects: vi.fn(), syncTokenConditionEffects: vi.fn(),
     openSheet: vi.fn(), view: { focus: vi.fn() },
     logContent: { querySelectorAll: () => [] },
+    quickAccessButton: { disabled: true, title: '' },
+    sheetWindows: new Map(),
   };
   const render = () => Reflect.get(App.prototype, 'renderActors').call(context, { actors, tokens: [{ actorId: actor.id }] });
   return { context, character, handle, actorsEl, render };
@@ -131,6 +133,13 @@ describe('compact player actor list', () => {
     expect(rows[0].find('actor-identity').text()).toBe('LyraDisabledTesting');
     rows[0].fire('dblclick');
     expect(f.context.openSheet).toHaveBeenCalledWith(disabled);
+    expect(f.context.quickAccessButton.disabled).toBe(true);
+  });
+
+  it('enables the rail Quick Access star for the first active character', () => {
+    const f = fixture([{ ...actor, id: 'off', name: 'Off', disabled: true }, actor]);
+    f.render();
+    expect(f.context.quickAccessButton).toEqual({ disabled: false, title: `Quick Access (${actor.name})` });
   });
 
   it('uses an initial for missing portraits and handles uncreated characters', () => {

@@ -185,6 +185,36 @@ list rows show name, source and chat link and expand to the complete feature wit
 subfeatures. Search covers names, sources and full text (including grouped children), survives refreshes
 and remains available on read-only sheets, as does row expansion. No settings or remote contracts change.
 
+Star Character-tab features (including grouped children), domain cards, weapons and loot to bookmark
+them for that character. Minimize the floating sheet and select **Quick Access** to open its compact
+tray: Weapons, Domain Cards, Character Features, then Items; empty sections are omitted. Weapons are
+Primary then Secondary, cards ascend by level, features keep Character-tab order, items are alphabetical. Only equipped
+weapons and active-loadout cards appear, but unequipping/vaulting never clears their stars.
+Click an entry's name to expand its description independently; gameplay actions, uses and token
+controls remain visible, including grouped features and grimoire spells. Management actions such as
+unequip, move to vault, transfer and delete stay in the full sheet. The tray opens above or below the
+bar according to available space, follows dragging/resizing, and becomes a bottom drawer on narrow
+screens. Escape, its close button or an outside click dismisses it. Scroll and description expansion
+survive sheet updates; read-only sheets permit inspection, not gameplay or favorite changes.
+The star button sits immediately left of the chat-link icon (for carried equipment and loot it is the
+leftmost of the subtle star/link/transfer/delete icons; the Loot tools column fits all four). Tray entries
+are calm cards: name with a chevron (no chevron when there is no description) and star, muted metadata,
+an optional description panel, then left-aligned action rows with compact token inputs and usage chips.
+The minimized bar shows a shield button directly right of Evasion that opens the damage mitigation
+dialog (disabled on read-only sheets). Above the other controls, HP, Stress, Armor and Hope share one horizontally scrollable row,
+showing only available slots with labels beside the blocks and minimal vertical padding. These reuse normal marking, HP healing locks and read-only restrictions,
+save through the sheet render flow and refresh with sheet updates; edit mode never changes their capacity.
+The lower Evasion/trait row uses compact line heights and minimal vertical padding while keeping trait names above modifiers.
+Double-clicking empty title-bar space or the title text toggles
+minimize/restore like the Minimize button; double-clicks on title buttons and the Edit mode switch are ignored.
+The map-tool rail ends with a separated, neutral outlined star matching the other tools (`App.quickAccessButton`) that toggles the same tray for
+the player's first non-disabled owned character via `SheetWindow.toggleQuickAccess`, whether its sheet is
+closed, open or minimized (disabled when there is none). That tray is placed right of the rail with
+`quickAccessSidePlacement` (bottom-aligned, growing upward; drawer on narrow screens), is rendered by
+`view.ts` whenever the tray is open, survives sheet open/close/minimize, and returns focus to the star.
+Favorites are additive `quickAccessFavorites` sheet metadata, saved with the character through existing
+full/compact saves without changing settings or remote compatibility versions.
+
 The Java host serves the build output from the classpath `/web` (`/` and `/sheet/<actorId>` return `index.html`).
 Sheet edit mode is local to each open view and defaults off. Its labeled switch is next to the sheet title
 and hidden when minimized. The title and switch have 24 px separation; the **Edit mode** label is muted gray

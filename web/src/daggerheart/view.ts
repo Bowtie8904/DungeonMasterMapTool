@@ -47,6 +47,7 @@ import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } 
 import { activeCards, activeCardSources, actorAutomationAvailable, copiedCardAvailable } from './copycat';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
 import type { DomainCardView } from '../api';
+import { favoriteKey, isFavorite, quickAccessEntries, type FavoriteCategory } from './quick-access';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
 
@@ -136,6 +137,9 @@ export interface SheetViewOptions {
   supportsPartyFeatures?: () => boolean;
   /** Receives a compact Evasion and traits strip after every render (the floating window shows it on its minimised bar). */
   onMiniStrip?: (strip: HTMLElement | null) => void;
+  miniVisible?: () => boolean;
+  quickAccessVisible?: () => boolean;
+  onQuickAccess?: (content: HTMLElement | null) => void;
   onEditControl?: (control: HTMLElement) => void;
 }
 
@@ -144,13 +148,13 @@ const PAGES: Array<[Page, string]> = [
   ['char', 'Character'], ['companion', 'Companion'], ['beastform', 'Beastform'], ['cards', 'Domain Cards'], ['equip', 'Equipment'], ['loot', 'Loot'], ['bg', 'Background'], ['effects', 'Effects'],
 ];
 
-export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0, onSlotEdit?: (slots: number) => void, interactive = true): HTMLElement {
+export function pips(track: Track, kind: string, color: string, round = false, onChange?: () => void, scars = 0, permanent = 0, temporary = 0, onSlotEdit?: (slots: number) => void, interactive = true, availableOnly = false): HTMLElement {
   const box = el('div', { class: 'pips' });
   box.dataset.kind = kind;
   box.style.setProperty('--c', color);
   const btns: HTMLButtonElement[] = [];
   const paint = () => btns.forEach((b, i) => b.classList.toggle('on', i < track.on));
-  for (let i = 0; i < track.total; i++) {
+  for (let i = 0; i < (availableOnly ? Math.min(track.slots, track.total - scars) : track.total); i++) {
     const locked = i >= track.slots || i < permanent + temporary;
     const scarred = i >= track.total - scars;
     const b = el('button', { type: 'button', disabled: !interactive || locked && (!onSlotEdit || i < permanent + temporary), class: `pip${round ? ' round' : ''}${locked ? ' locked' : ''}${scarred ? ' scarred' : ''}${i < permanent ? ' permanent-hp' : ''}`, title: i < permanent ? 'Permanently marked HP — cannot be healed' : scarred ? 'Crossed out by a permanent scar' : onSlotEdit ? (i >= track.slots ? `Enable ${kind} slots through ${i + 1}` : `Disable ${kind} slot ${i + 1} and later slots`) : locked ? 'Locked - gained through advancement' : '' }, i < permanent ? '×' : scarred ? 'X' : '');
@@ -227,8 +231,90 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (!opts.onDeathMove) throw new Error('This host does not support death moves. Update the host.');
     await opts.onDeathMove(move, extras);
   }, opts.onDeathOptions, initial);
+  const openDamage = (host: HTMLElement = root) => openDamageDialog(host, c, (summary, severity, incomingDamage) => {
+    opts.onLog?.(summary, undefined, undefined, incomingDamage);
+    opts.onChange?.();
+    render();
+    if (severity >= 3 && opts.onDamageTaken) {
+      void opts.onDamageTaken(severity).catch((e: Error) => opts.onLog?.(`Could not expire damage-linked effects: ${e.message}`));
+    }
+  }, undefined, opts.onIncomingDamage, (label, value) => opts.onLog?.(`${label}\nWard Die: 1d8 = ${value}\nIncoming damage reduced by ${value}.${value === 8 ? ' The Rune Ward trinket is destroyed.' : ''}`));
   const inventoryQuery = { equipment: '', loot: '' };
   const expandedDescriptions = new Set<string>();
+  const expandedQuickDescriptions = new Set<string>();
+
+  function favoriteButton(category: FavoriteCategory, item: { name: string; source?: string }): HTMLButtonElement {
+    const selected = isFavorite(c, category, item);
+    const button = el('button', { type: 'button', class: 'favorite-button share-icon', disabled: !!opts.readOnly?.(),
+      title: `${selected ? 'Remove' : 'Add'} ${item.name} ${selected ? 'from' : 'to'} Quick Access`,
+      ariaLabel: `Favorite ${item.name}` }, selected ? '\u2605' : '\u2606');
+    button.setAttribute('aria-pressed', String(selected));
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (opts.readOnly?.()) return;
+      const key = favoriteKey(category, item);
+      c.quickAccessFavorites = selected ? (c.quickAccessFavorites ?? []).filter(value => value !== key)
+        : [...(c.quickAccessFavorites ?? []), key];
+      render();
+    });
+    return button;
+  }
+
+  function quickEntry(category: FavoriteCategory, item: { name: string; source?: string }, meta: Node | string, description: Node[], controls: Node[]): HTMLElement {
+    const key = favoriteKey(category, item);
+    const { toggle, text } = quickDescription(key, item.name, description);
+    const row = el('article', { class: 'quick-entry' },
+      el('div', { class: 'quick-entry-heading' }, toggle, favoriteButton(category, item)),
+      el('div', { class: 'quick-meta muted' }, meta), text, ...controls);
+    row.dataset.quickKey = key;
+    return row;
+  }
+
+  function quickDescription(key: string, name: string, description: Node[]): { toggle: HTMLButtonElement; text: HTMLElement } {
+    const text = el('div', { class: 'quick-description' }, ...description);
+    const toggle = el('button', { type: 'button', class: 'quick-description-toggle' }, name);
+    if (!text.textContent?.trim()) {
+      text.hidden = true;
+      toggle.disabled = true;
+      toggle.classList.add('no-description');
+      return { toggle, text };
+    }
+    const paint = () => {
+      text.hidden = !expandedQuickDescriptions.has(key);
+      toggle.setAttribute('aria-expanded', String(!text.hidden));
+      toggle.title = `${text.hidden ? 'Show' : 'Hide'} ${name}'s description`;
+    };
+    toggle.addEventListener('click', () => {
+      if (expandedQuickDescriptions.has(key)) expandedQuickDescriptions.delete(key);
+      else expandedQuickDescriptions.add(key);
+      paint();
+    });
+    paint();
+    return { toggle, text };
+  }
+
+  function quickAccess(): HTMLElement {
+    const entries = quickAccessEntries(c);
+    const sections: HTMLElement[] = [];
+    const section = (name: string, rows: HTMLElement[]) => {
+      if (rows.length) sections.push(el('section', { class: 'quick-section', ariaLabel: name }, el('h3', {}, name), ...rows));
+    };
+    section('Weapons', entries.weapons.map(w => weaponSlot(w, true)));
+    section('Domain Cards', entries.cards.map(d => dcard(d, true, false, true)));
+    section('Character Features', entries.features.map(({ feature, children }) => characterFeatureCard(feature, children, true)));
+    section('Items', entries.items.map(i => quickEntry('item', i, `${i.type} \u00b7 \u00d7${i.qty}`,
+      [el('p', {}, i.note || 'No description.')], [itemActions(i, true)])));
+    const content = el('div', { class: 'quick-content' }, ...(sections.length ? sections : [
+      el('p', { class: 'muted' }, 'No active favorites. Star entries on your sheet; weapons must be equipped and domain cards in your loadout.'),
+    ]));
+    if (opts.readOnly?.()) {
+      content.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('button, input, select').forEach(control => {
+        if (!control.matches('.quick-description-toggle')) control.disabled = true;
+      });
+    }
+    return content;
+  }
   let layoutPending = false;
   const scheduleLayout = () => {
     if (layoutPending || opts.visible?.() === false) return;
@@ -277,26 +363,29 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const header = (node.classList.contains('slot') ? node.querySelector('.top') : node.querySelector('.inventory-row-tools') ?? node.querySelector('.inventory-controls')) ?? (entry.category === 'feature'
       ? node.querySelector('.src') ?? node
       : node.querySelector('td, .ft, .top, .hd') ?? node);
-    if (offer) {
-      const remove = iconButton('delete', `Delete ${entry.item.name}`, () => {
-        const list = (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor) as unknown[];
-        const index = list.indexOf(entry.item);
-        if (index >= 0) list.splice(index, 1);
-        render();
-      });
-      remove.classList.add('share-icon', 'delete-item');
-      header.append(remove);
-    }
+    const remove = offer ? iconButton('delete', `Delete ${entry.item.name}`, () => {
+      const list = (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor) as unknown[];
+      const index = list.indexOf(entry.item);
+      if (index >= 0) list.splice(index, 1);
+      render();
+    }) : undefined;
+    remove?.classList.add('share-icon', 'delete-item');
     if (entry.category === 'domain' && canEdit()) header.append(deleteCardButton(entry.item));
-    if (!opts.onShare) return node;
-    const button = iconButton('chat', `Post ${entry.item.name} to chat`, () => opts.onShare!(entry));
-    button.classList.add('share-icon');
-    header.insertBefore(button, header.querySelector('.delete-item'));
-    if (canOffer) {
-      const transfer = iconButton('transfer', `Offer ${entry.item.name} for transfer`, () => offerEntry(entry));
-      transfer.classList.add('share-icon');
-      header.insertBefore(transfer, header.querySelector('.delete-item'));
+    if (entry.category === 'weapon' && entry.item.generated !== 'companion' || entry.category === 'domain'
+      || entry.category === 'feature' && (c.features.includes(entry.item) || c.heritage.includes(entry.item)) || entry.category === 'item')
+      header.append(favoriteButton(entry.category, entry.item));
+    if (opts.onShare) {
+      const button = iconButton('chat', `Post ${entry.item.name} to chat`, () => opts.onShare!(entry));
+      button.classList.add('share-icon');
+      header.append(button);
+      if (canOffer) {
+        const transfer = iconButton('transfer', `Offer ${entry.item.name} for transfer`, () => offerEntry(entry));
+        transfer.classList.add('share-icon');
+        header.append(transfer);
+      }
     }
+    if (remove) header.append(remove);
+    if (!opts.onShare) return node;
     if (transferable(entry) && opts.actorId && opts.onPrepareShare) {
       node.draggable = true;
       node.classList.add('inventory-draggable');
@@ -891,7 +980,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const bonded = readOnly ? null : resolveBonded(c, rollLocal);
     if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
+    const ready = c.mancer?.done !== false && !(c.transformation === 'Shapeshifter' && !c.ancestryFeature);
     if (opts.visible?.() === false) {
+      actionRefreshers = [];
+      if (opts.miniVisible?.()) opts.onMiniStrip?.(ready ? miniStrip() : null);
+      if (opts.miniVisible?.() || opts.quickAccessVisible?.()) opts.onQuickAccess?.(ready && opts.quickAccessVisible?.() ? quickAccess() : null);
       if (!readOnly && save) opts.onChange?.();
       return;
     }
@@ -907,6 +1000,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
     layoutCards();
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
+    if (opts.quickAccessVisible?.()) opts.onQuickAccess?.(ready ? quickAccess() : null);
     if (readOnly) {
       applyReadOnlyControls();
     } else if (save) opts.onChange?.();
@@ -1172,8 +1266,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   const levelBox = (v: number, l: string) => el('div', { class: 'level-box' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l));
   const vital = (label: string, body: HTMLElement, cls = '') => el('div', { class: `vital ${cls}`.trim() }, el('div', { class: 'lbl' }, label), body);
 
-  function hopePips(): HTMLElement {
-    const track = pips(c.hope, 'hope', 'var(--hope)', true, render, c.scars);
+  function hopePips(compact = false): HTMLElement {
+    const track = pips(c.hope, 'hope', 'var(--hope)', true, render, c.scars, 0, 0, undefined, !compact || opts.readOnly?.() !== true, compact);
     if (hasCompanionTraining(c, 'light-in-the-dark')) {
       const slot = track.children[c.hope.slots - 1] as HTMLElement | undefined;
       if (slot) {
@@ -1238,6 +1332,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function miniStrip(): HTMLElement {
+    const interactive = opts.readOnly?.() !== true;
+    const resources = el('div', { class: 'mini-resources', role: 'group', ariaLabel: 'Character resources' },
+      vital('HP', pips(c.hp, 'hp', 'var(--hp)', false, render, 0, c.permanentHp, hpHealingFloor(c) - (c.permanentHp ?? 0), undefined, interactive, true)),
+      vital('Stress', pips(c.stress, 'stress', 'var(--stress)', false, render, 0, 0, 0, undefined, interactive, true)),
+      vital('Armor', pips(c.armorTrack, 'armor', 'var(--armor)', false, render, 0, 0, 0, undefined, interactive, true)),
+      vital('Hope', hopePips(true)));
     const strip = el('div', { class: 'mini-strip' });
     const evasion = el('div', { class: 'mini-evasion', title: 'Evasion' },
       el('span', { class: 'nm' }, 'Evasion'), el('span', { class: 'md' }, String(derivedStats(c).evasion)));
@@ -1251,8 +1351,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       tile.addEventListener('click', () => rollDuality(name, name, [`trait:${name}`]));
       group.append(tile);
     }
-    strip.append(evasion, el('span', { class: 'mini-sep', ariaHidden: 'true' }), group);
-    return strip;
+    const damage = iconButton('shield', 'Take damage: calculate HP to mark and mitigation', () => openDamage(document.body));
+    damage.classList.add('mini-damage');
+    damage.disabled = opts.readOnly?.() === true;
+    strip.append(evasion, damage, el('span', { class: 'mini-sep', ariaHidden: 'true' }), group);
+    return el('div', { class: 'mini-summary dh' }, resources, strip);
   }
 
   function experiences(): HTMLElement {
@@ -1303,16 +1406,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       return v;
     };
     const thresholds = vital('Thresholds', el('div', { class: 'thresholds' }, thr(`< ${th.major}`, 'Minor'), sep(), thr(String(th.major), 'Major'), sep(), thr(String(th.severe), 'Severe')), 'v-th');
-    const damageButton = iconButton('shield', 'Take damage: calculate HP to mark and mitigation', () => {
-      openDamageDialog(root, c, (summary, severity, incomingDamage) => {
-        opts.onLog?.(summary, undefined, undefined, incomingDamage);
-        opts.onChange?.();
-        render();
-        if (severity >= 3 && opts.onDamageTaken) {
-          void opts.onDamageTaken(severity).catch((e: Error) => opts.onLog?.(`Could not expire damage-linked effects: ${e.message}`));
-        }
-      }, undefined, opts.onIncomingDamage, (label, value) => opts.onLog?.(`${label}\nWard Die: 1d8 = ${value}\nIncoming damage reduced by ${value}.${value === 8 ? ' The Rune Ward trinket is destroyed.' : ''}`));
-    });
+    const damageButton = iconButton('shield', 'Take damage: calculate HP to mark and mitigation', () => openDamage());
     damageButton.classList.add('dh-dmg-btn');
     damageButton.addEventListener('click', (e) => e.stopPropagation());
     thresholds.querySelector('.lbl')?.append(damageButton);
@@ -1498,39 +1592,50 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return featurePage;
   }
 
-  function featurePanel(): HTMLElement {
-    const feat = (f: Feature, children: Feature[] = []) => {
-      const node = featureCard(f, f.hope && !f.automation?.actions ? () => {
-        if (c.hope.on < (f.cost ?? 0)) return;
-        c.hope.on -= f.cost ?? 0;
+  function characterFeatureCard(f: Feature, children: Feature[] = [], quick = false): HTMLElement {
+    const use = f.hope && !f.automation?.actions ? () => {
+      if (c.hope.on < (f.cost ?? 0)) return;
+      c.hope.on -= f.cost ?? 0;
+      render();
+    } : undefined;
+    const useButton = quick && use ? el('button', { type: 'button', class: 'small', disabled: c.hope.on < (f.cost ?? 0) }, `Use (${f.cost ?? 0} Hope)`) : undefined;
+    if (useButton && use) useButton.addEventListener('click', use);
+    const node = quick ? quickEntry('feature', f, f.source, [rich(f.text)], useButton ? [useButton] : []) : featureCard(f, use);
+    const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+    if (f.automation?.elementChoice && (c.element || c.mancer?.choices?.element)) {
+      node.append(el('p', { class: 'muted' }, `Element: ${c.element || c.mancer?.choices?.element}`));
+    } else if (f.automation?.elementChoice) {
+      const select = el('select', { ariaLabel: 'Elementalist element' }, el('option', { value: '' }, 'Choose your element'),
+        ...f.automation.elementChoice.map(element => el('option', { value: element }, element)));
+      select.value = c.element ?? c.mancer?.choices?.element ?? '';
+      select.addEventListener('change', () => {
+        if (!select.value) return;
+        c.element = select.value;
+        if (c.mancer?.choices) c.mancer.choices.element = select.value;
         render();
-      } : undefined);
-      const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
-      if (f.automation?.elementChoice && (c.element || c.mancer?.choices?.element)) {
-        node.append(el('p', { class: 'muted' }, `Element: ${c.element || c.mancer?.choices?.element}`));
-      } else if (f.automation?.elementChoice) {
-        const select = el('select', { ariaLabel: 'Elementalist element' }, el('option', { value: '' }, 'Choose your element'),
-          ...f.automation.elementChoice.map(element => el('option', { value: element }, element)));
-        select.value = c.element ?? c.mancer?.choices?.element ?? '';
-        select.addEventListener('change', () => {
-          if (!select.value) return;
-          c.element = select.value;
-          if (c.mancer?.choices) c.mancer.choices.element = select.value;
-          render();
-        });
-        node.append(el('label', { class: 'row' }, 'Element', select));
+      });
+      node.append(el('label', { class: 'row' }, 'Element', select));
+    }
+    if (actions) node.append(actions);
+    if (quick && f.automation?.classResourceOnly)
+      for (const resource of f.automation.resources ?? []) node.append(el('label', { class: 'row' }, resource.label, poolControls(resource)));
+    if (quick && f.automation?.dicePool) node.append(dicePoolControls(f.automation.dicePool));
+    for (const child of children) {
+      if (quick) {
+        node.append(characterFeatureCard(child, [], true));
+        continue;
       }
-      if (actions) node.append(actions);
-      for (const child of children) {
-        const section = el('div', { class: 'feature-section' },
-          el('div', { class: 'src' }, el('span', { class: 'feature-section-name' }, child.name)),
-          rich(child.text));
-        const childActions = actionRow(`feat:${child.name}`, child.automation, child.name);
-        if (childActions) section.append(childActions);
-        node.append(share(section, { category: 'feature', item: child }));
-      }
-      return share(node, { category: 'feature', item: f });
-    };
+      const section = el('div', { class: 'feature-section' },
+        el('div', { class: 'src' }, el('span', { class: 'feature-section-name' }, child.name)),
+        rich(child.text));
+      const childActions = actionRow(`feat:${child.name}`, child.automation, child.name);
+      if (childActions) section.append(childActions);
+      node.append(share(section, { category: 'feature', item: child }));
+    }
+    return quick ? node : share(node, { category: 'feature', item: f });
+  }
+
+  function featurePanel(): HTMLElement {
     const tf = el('button', { class: 'small', type: 'button', title: 'A character can have one transformation; it counts as heritage' }, c.transformation ? `Transformation: ${c.transformation} (change)` : 'Add a transformation');
     tf.addEventListener('click', () => {
       if (!canEdit()) return;
@@ -1538,10 +1643,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       else void openTransformation(root, c, () => render());
     });
     const nodes = characterFeatureGroups(c.features, c.heritage).map(({ feature, children }) => {
-      const full = feat(feature, children);
+      const full = characterFeatureCard(feature, children);
       if (featureView === 'card') return { feature, children, node: full };
       const details = el('details', { class: 'domain-list-row feature-list-row', open: expandedFeatures.has(feature) });
-      const chat = el('span', { class: 'list-chat' });
+      const chat = el('span', { class: 'list-chat' }, favoriteButton('feature', feature));
       if (opts.onShare) {
         const button = iconButton('chat', `Post ${feature.name} to chat`, () => opts.onShare!({ category: 'feature', item: feature }));
         button.classList.add('share-icon');
@@ -1601,7 +1706,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return card(form.name, drop, ...(form.weapon ? [weaponSlot(form.weapon)] : []), ...rows);
   }
 
-  function weaponSlot(w: Weapon): HTMLElement {
+  function weaponSlot(w: Weapon, quick = false): HTMLElement {
     const companion = w.generated === 'companion';
     const attackButton = (weapon: Weapon) => {
       const mod = traitTotal(c, weapon.trait);
@@ -1638,6 +1743,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       traitChoice.value = w.trait;
       traitChoice.addEventListener('change', () => { c.brawlerTrait = traitChoice.value as TraitName; render(); });
     }
+    if (quick) return quickEntry('weapon', w, weaponBadges(w),
+      [...(w.feature ? [el('b', {}, w.feature.name), rich(w.feature.text)] : []),
+        ...(w.attachments ?? []).map(attachment => el('p', {}, `Attached: ${attachment.item.name}`))],
+      [...(traitChoice ? [el('label', {}, 'Attack trait', traitChoice)] : []),
+        el('div', { class: 'inventory-controls' }, attack, dmg, ...(reload ? [reload] : []), ...(actions ? [actions] : [])), ...profiles]);
     return share(el(
       'div', { class: 'slot' },
       el('div', { class: 'top' }, el('span', { class: 'cat' }, w.slot), el('span', { class: 'nm' }, w.name)),
@@ -1783,6 +1893,30 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }));
   }
 
+  function itemActions(i: InventoryItem, quick = false): HTMLElement {
+      const use = i.use && !i.custom ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
+      if (use) {
+        use.disabled = i.qty <= 0 || !!c.pendingDeathRoll;
+        if (c.pendingDeathRoll) use.title = 'Resolve pending Risk It All recovery in chat before rolling';
+      }
+      use?.addEventListener('click', () => {
+        if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return; }
+        if (i.qty > 0) { i.qty--; dropIfEmpty(i); rollDamage(i.name + (i.note ? ` (${i.note})` : ''), i.use!, rollSourceFor(c, `item:${i.name}`)); render(); }
+      });
+      const actions = i.custom ? null : actionRow(`item:${i.name}`, i.automation, i.name, {
+        extraBlock: () => (i.qty <= 0 ? 'None left' : null),
+        after: (action) => { if (i.type === 'consumable') useConsumableUnit(c, i, action); },
+      });
+      const attachDef = quick ? undefined : attachmentDef(i);
+      const attach = attachDef ? el('button', { class: 'small primary', type: 'button' }, 'Attach to\u2026') : null;
+      if (attach && attachDef) {
+        attach.disabled = i.qty <= 0 || !attachTargets(c, attachDef).length;
+        attach.title = attach.disabled ? `No ${attachDef.to === 'weapon' ? 'weapon' : 'armor'} can receive ${i.name}.` : `Attach ${i.name} to ${attachDef.to === 'weapon' ? 'a weapon' : 'armor'}`;
+        attach.addEventListener('click', () => openAttachDialog(i));
+      }
+      return el('div', { class: 'inventory-controls loot-actions' }, ...(use ? [use] : []), ...(attach ? [attach] : []), ...(actions ? [actions] : []));
+  }
+
   function lootPage(): HTMLElement {
     const input = el('input', { type: 'number', value: String(c.gold), min: '0' });
     input.setAttribute('aria-label', 'Gold coins');
@@ -1803,34 +1937,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       gold.append(transfer);
     }
     const rows = c.inventory.map((i) => {
-      const use = i.use && !i.custom ? el('button', { class: 'small', type: 'button' }, 'Use') : null;
-      if (use) {
-        use.disabled = i.qty <= 0 || !!c.pendingDeathRoll;
-        if (c.pendingDeathRoll) use.title = 'Resolve pending Risk It All recovery in chat before rolling';
-      }
-      use?.addEventListener('click', () => {
-        if (c.pendingDeathRoll) { opts.onLog?.('Resolve pending Risk It All recovery in chat before rolling.'); return; }
-        if (i.qty > 0) { i.qty--; dropIfEmpty(i); rollDamage(i.name + (i.note ? ` (${i.note})` : ''), i.use!, rollSourceFor(c, `item:${i.name}`)); render(); }
-      });
-      const key = `item:${i.name}`;
-      const consumable = i.type === 'consumable';
-      const actions = i.custom ? null : actionRow(key, i.automation, i.name, {
-        extraBlock: () => (i.qty <= 0 ? 'None left' : null),
-        after: (action) => { if (consumable) useConsumableUnit(c, i, action); },
-      });
-      const attachDef = attachmentDef(i);
-      const attach = attachDef ? el('button', { class: 'small primary', type: 'button' }, 'Attach to…') : null;
-      if (attach && attachDef) {
-        attach.disabled = i.qty <= 0 || !attachTargets(c, attachDef).length;
-        attach.title = attach.disabled ? `No ${attachDef.to === 'weapon' ? 'weapon' : 'armor'} can receive ${i.name}.` : `Attach ${i.name} to ${attachDef.to === 'weapon' ? 'a weapon' : 'armor'}`;
-        attach.addEventListener('click', () => openAttachDialog(i));
-      }
       const name = el('div', { class: 'loot-name' }, el('b', {}, i.name), tag(i.type));
       const description = i.note ? el('div', { class: 'loot-description muted' }, i.note) : null;
       const row = share(el('tr', {},
         el('td', {}, name, ...(description ? [description] : [])),
         el('td', {}, qty(i)),
-        el('td', { class: 'usage-cell' }, el('div', { class: 'inventory-controls loot-actions' }, ...(use ? [use] : []), ...(attach ? [attach] : []), ...(actions ? [actions] : []))),
+        el('td', { class: 'usage-cell' }, itemActions(i)),
         el('td', { class: 'tools-cell' }, el('div', { class: 'inventory-controls inventory-row-tools', role: 'group', ariaLabel: `${i.name} tools` })),
       ), { category: 'item', item: i }, true, i.qty > 0);
       if (description) {
@@ -1886,7 +1998,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   /** A grimoire spell: its own text, Spellcast roll and automation buttons, independent of the other spells. */
-  function spellBlock(d: DomainCard, s: Spell, loadout: boolean, cardKey = `card:${d.name}`): HTMLElement {
+  function spellBlock(d: DomainCard, s: Spell, loadout: boolean, cardKey = `card:${d.name}`, quick = false): HTMLElement {
     const acts = el('div', { class: 'act' });
     if (d.spellcast && asksSpellcastRoll(s.text) && !s.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
@@ -1905,10 +2017,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       });
       if (actions) acts.append(actions);
     }
-    return el('div', { class: 'dspell' }, el('span', { class: 'sn' }, s.name), rich(s.text), ...(acts.childElementCount ? [acts] : []));
+    const description = quick ? quickDescription(`${cardKey}/${s.name}`, s.name, [rich(s.text)]) : undefined;
+    return el('div', { class: 'dspell' }, ...(description ? [description.toggle, description.text] : [el('span', { class: 'sn' }, s.name), rich(s.text)]), ...(acts.childElementCount ? [acts] : []));
   }
 
-  function dcard(d: DomainCard, loadout: boolean, embedded = false): HTMLElement {
+  function dcard(d: DomainCard, loadout: boolean, embedded = false, quick = false): HTMLElement {
     const cardKey = embedded ? `card:Copycat/${d.name}` : `card:${d.name}`;
     const acts = el('div', { class: 'act' });
     const spells = d.spells?.length ? d.spells : null;
@@ -1945,6 +2058,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         opts.onChange?.();
       });
       acts.append(el('label', { class: 'banish-field' }, 'Banish difficulty', input), error);
+    }
+    if (quick) {
+      const pools = loadout ? (d.automation?.resources ?? []).map(r => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
+      const copied = d.name === 'Copycat' && d.borrowedCard ? [
+        el('p', { class: 'muted' }, `Copied from ${d.borrowedCard.sourceActorName}. Ends on rest or source vaulting.${copiedCardAvailable(d) ? '' : ' Source disabled; copied card is unavailable.'}`),
+        ...(copiedCardAvailable(d) ? [dcard(d.borrowedCard.card, loadout, true, true)] : []),
+      ] : [];
+      const description = [rich(d.text)];
+      const controls = [...pools, acts, ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey, true)) : []), ...copied];
+      if (embedded) {
+        const { toggle, text } = quickDescription(cardKey, d.name, description);
+        return el('div', { class: 'dspell' }, toggle, text, ...controls);
+      }
+      return quickEntry('domain', d, `Level ${d.level} \u00b7 ${d.domain} \u00b7 ${d.type}`, description, controls);
     }
     if (embedded) {
       const pools = loadout ? (d.automation?.resources ?? []).map(r => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
@@ -2077,7 +2204,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const menu = d.permanentlyVaulted || d.name === 'Vitality' && c.vitalityBenefits?.length ? tag(c.testingCharacter ? 'Permanently used' : 'Permanently vaulted')
       : c.testingCharacter ? el('span', { class: 'list-menu' }) : cardMenu(
       loadout ? 'Move to vault' : `Recall to loadout (mark ${d.recall} Stress)`, move);
-    const chat = el('span', { class: 'list-chat' });
+    const chat = el('span', { class: 'list-chat' }, favoriteButton('domain', d));
     if (opts.onShare) {
       const button = iconButton('chat', `Post ${d.name} to chat`, () => opts.onShare!({ category: 'domain', item: d }));
       button.classList.add('share-icon');

@@ -484,6 +484,23 @@ Nothing starts until you click **Start online session**, so offline play and the
   Stress regardless of damage amount, or an owner Armor Slot with Armored (including Loyal Friend interceptions). Full Stress makes the animal
   unavailable until the next long rest; it returns with one Stress cleared. Stress-clearing downtime moves
   also recover your available companion. Companion state is saved with its owner and shared by sheet pop-outs.
+- **Character Quick Access:** star Character-tab features, domain cards, weapons and loot on your
+  online sheet, then use **Quick Access** on its minimized bar. The compact tray shows Weapons,
+  Domain Cards, Character Features and Items in that order, hiding empty sections. Weapons list
+  Primary before Secondary, cards sort by level, features follow the Character tab and items are
+  alphabetical. Unequipped weapons
+  and vaulted cards keep their favorites but appear only when equipped/in the active loadout.
+  Expand descriptions independently while keeping gameplay actions, uses and tokens at hand;
+  equipment/loadout management remains in the full sheet. Favorites save with the character.
+  The tray follows the bar, opens above/below to fit the screen and uses a bottom drawer on phones.
+  The star sits just left of each entry's chat button (at the far left of the link/transfer/delete
+  icons on carried equipment and loot). The minimized bar also has a shield button right of Evasion
+  that opens the damage mitigation dialog. Double-click the sheet's title bar to minimize or restore it.
+  A star matching the other tool buttons at the bottom of the left map-tool rail opens the same Quick Access tray for your first
+  active character beside the rail, whether its sheet is open, minimized or closed.
+  The minimized sheet also shows HP, Stress, Armor and Hope counters in a low-profile row above the other controls, with labels beside the blocks.
+  Only available slots appear; mark or unmark them as on the full sheet, with automatic updates.
+  The lower Evasion/trait row uses compact stacked labels and modifiers to keep the minimized sheet short.
 - **Daggerheart compendium and automation**: the `dmmap-daggerheart` folder (setting `online.daggerheartDirectory`)
   holds the maintained Daggerheart data (armor, weapons, domain cards, classes, ancestries, communities,
   transformations, consumables, items; see `docs/DAGGERHEART_DATA.md`). Players browse it in the **Compendium**

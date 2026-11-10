@@ -167,6 +167,7 @@ export class App {
   private fogLoad = 0;
   private audioAvailable = false;
   private sheetWindows = new Map<string, SheetWindow>();
+  private quickAccessButton = iconButton('star', 'Quick Access', () => this.toggleQuickAccess());
   private stageEl = el('div', { class: 'stage' });
   private soundBtn = el('button', { class: 'primary hidden' }, 'Click to enable sound');
   private muteBtn = el('button', { class: 'icon hidden' });
@@ -550,6 +551,10 @@ export class App {
       }
       this.toolButtons.set(id, button); rail.append(button);
     }
+    this.quickAccessButton.classList.add('rail-quick-access');
+    this.quickAccessButton.disabled = true;
+    this.quickAccessButton.setAttribute('aria-expanded', 'false');
+    rail.append(this.quickAccessButton);
     const modes = el('div', { class: 'mode-buttons' });
     for (const [id, icon, label] of [['pen', 'pen', 'Pen'], ['brush', 'draw', 'Freehand brush'], ['line', 'line', 'Line'],
       ['circle', 'circle', 'Circle'], ['rect', 'rect', 'Rectangle']] as const) {
@@ -1619,6 +1624,14 @@ export class App {
     return load;
   }
 
+  private toggleQuickAccess(): void {
+    const actor = this.myActors.find(a => !a.disabled);
+    if (!actor) return;
+    for (const [id, win] of this.sheetWindows) if (id !== actor.id) win.closeQuickAccess();
+    this.ensureSheet(actor).then(() => this.sheetWindows.get(actor.id)?.toggleQuickAccess(this.quickAccessButton))
+      .catch((e: Error) => this.toast(`Cannot load the character sheet: ${e.message}`));
+  }
+
   private openSheet(a: Actor, toggle = false, show = true): void {
     this.ensureSheet(a).then(() => {
       const win = this.sheetWindows.get(a.id)!;
@@ -1631,6 +1644,10 @@ export class App {
     const mine = s.actors.filter((a) => a.ownerId === this.playerId);
     const changedStatus = mine.filter(actor => this.myActors.some(old => old.id === actor.id && !!old.disabled !== !!actor.disabled));
     this.myActors = mine;
+    const quickActor = mine.find(a => !a.disabled);
+    this.quickAccessButton.disabled = !quickActor;
+    this.quickAccessButton.title = quickActor ? `Quick Access (${quickActor.name})` : 'Quick Access (no active character)';
+    for (const [id, win] of this.sheetWindows) if (id !== quickActor?.id) win.closeQuickAccessFrom(this.quickAccessButton);
     this.actorRowUpdates.clear();
     for (const actor of changedStatus) this.sheetHandles.get(actor.id)?.bus.notify();
     if (changedStatus.length) this.scheduleRollActions();
