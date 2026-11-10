@@ -217,13 +217,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    },
@@ -480,6 +482,16 @@
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Presence, Melee, d8."
    },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Presence",
+      "range": "Melee",
+      "damage": "1d8"
+     }
+    ]
+   },
    "starter": true
   },
   {
@@ -730,13 +742,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -889,6 +903,14 @@
    "feature": {
     "name": "Brutal",
     "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "explode": "once",
+     "label": "Brutal"
+    }
    }
   },
   {
@@ -931,13 +953,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -1008,6 +1032,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -1198,6 +1228,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Presence, Melee, d8+3."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Presence",
+      "range": "Melee",
+      "damage": "1d8+3"
+     }
+    ]
    }
   },
   {
@@ -1260,6 +1300,12 @@
    "feature": {
     "name": "Pompous",
     "text": "You must have a Presence of 0 or lower to use this weapon."
+   },
+   "automation": {
+    "requirement": {
+     "trait": "Presence",
+     "max": 0
+    }
    }
   },
   {
@@ -1280,6 +1326,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Knowledge, Far, d6+3."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Knowledge",
+      "range": "Far",
+      "damage": "1d6+3"
+     }
+    ]
    }
   },
   {
@@ -1340,6 +1396,14 @@
    "feature": {
     "name": "Brutal",
     "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "explode": "once",
+     "label": "Brutal"
+    }
    }
   },
   {
@@ -1386,6 +1450,27 @@
    "feature": {
     "name": "Invigorating",
     "text": "On a successful attack, roll a d4. On a result of 4, clear a Stress."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "invigorating",
+      "label": "Invigorating: roll a d4",
+      "on": "attack",
+      "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
+      "check": {
+       "dice": "1d4",
+       "success": 4
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -1653,13 +1738,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -1848,13 +1935,16 @@
     "text": "Before you make an attack roll, you can mark a Stress to use a d20 as your damage die."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Devastating",
+      "id": "devastating",
+      "label": "Devastating: d20 damage die",
+      "roll": "attack",
+      "damageDie": 20,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "This attack's Damage button rolls d20s as the weapon's damage dice."
      }
     ]
    }
@@ -1905,6 +1995,17 @@
    "feature": {
     "name": "Dueling",
     "text": "When there are no other creatures within Close range of the target, gain advantage on your attack roll against them."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "dueling",
+      "label": "Dueling: target is isolated",
+      "roll": "attack",
+      "advantage": "advantage",
+      "description": "No other creatures are within Close range of the target."
+     }
+    ]
    }
   },
   {
@@ -1971,6 +2072,14 @@
    "feature": {
     "name": "Brutal",
     "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "explode": "once",
+     "label": "Brutal"
+    }
    }
   },
   {
@@ -1991,6 +2100,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -2011,6 +2126,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Agility, Melee, d10+5."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Agility",
+      "range": "Melee",
+      "damage": "1d10+5"
+     }
+    ]
    }
   },
   {
@@ -2147,6 +2272,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Presence, Melee, d8+4."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Presence",
+      "range": "Melee",
+      "damage": "1d8+4"
+     }
+    ]
    }
   },
   {
@@ -2211,13 +2346,17 @@
     "text": "On a failed attack, you can mark a Stress to reroll your attack."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Lucky",
+      "id": "lucky",
+      "label": "Lucky: reroll the failed attack",
+      "on": "attack",
+      "when": "failure",
       "cost": {
        "stress": 1
-      }
+      },
+      "reroll": "duality",
+      "description": "Use only after a failed attack with this weapon."
      }
     ]
    }
@@ -2278,6 +2417,9 @@
    "feature": {
     "name": "Otherworldly",
     "text": "On a successful attack, you can deal physical or magic damage."
+   },
+   "automation": {
+    "damageTypeChoice": true
    }
   },
   {
@@ -2298,6 +2440,20 @@
    "feature": {
     "name": "Painful",
     "text": "Each time you make a successful attack, you must mark a Stress."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "painful",
+      "label": "Painful: mark a Stress",
+      "roll": "damage",
+      "cost": {
+       "stress": 1
+      },
+      "required": true,
+      "description": "Each successful attack with this weapon marks a Stress."
+     }
+    ]
    }
   },
   {
@@ -2338,6 +2494,14 @@
    "feature": {
     "name": "Self-Correcting",
     "text": "When you roll a 1 on a damage die, it deals 6 damage instead."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "onesAs": 6,
+     "label": "Self-Correcting"
+    }
    }
   },
   {
@@ -2404,6 +2568,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -2610,13 +2780,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -2745,13 +2917,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -2776,13 +2950,15 @@
     "text": "On a successful attack, you can spend a Hope to knock the target back to Far range."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Concussive",
+      "id": "concussive",
+      "label": "Concussive: knock the target back to Far range",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after a successful attack with this weapon."
      }
     ]
    }
@@ -2833,6 +3009,14 @@
    "feature": {
     "name": "Serrated",
     "text": "When you roll a 1 on a damage die, it deals 8 damage instead."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "onesAs": 8,
+     "label": "Serrated"
+    }
    }
   },
   {
@@ -2875,13 +3059,15 @@
     "text": "On a successful attack, you can spend a Hope to Restrain the target or pull them into Melee range with you."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Grappling",
+      "id": "grappling",
+      "label": "Grappling: Restrain the target or pull it into Melee range",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after a successful attack with this weapon."
      }
     ]
    }
@@ -2904,6 +3090,23 @@
    "feature": {
     "name": "Bouncing",
     "text": "Mark 1 or more Stress to hit that many targets in range of the attack."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "bouncing",
+      "label": "Bouncing: targets hit",
+      "roll": "attack",
+      "cost": {
+       "stress": 1
+      },
+      "quantity": {
+       "resource": "stress",
+       "label": "Stress to mark (one per target)"
+      },
+      "description": "Mark 1 or more Stress to hit that many targets in range of the attack."
+     }
+    ]
    }
   },
   {
@@ -2952,6 +3155,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -3088,6 +3297,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Presence, Melee, d8+6."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Presence",
+      "range": "Melee",
+      "damage": "1d8+6"
+     }
+    ]
    }
   },
   {
@@ -3170,6 +3389,44 @@
    "feature": {
     "name": "Lifestealing",
     "text": "On a successful attack, roll a d6. On a result of 6, clear a Hit Point or clear a Stress."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "lifestealing",
+      "label": "Lifestealing: roll a d6",
+      "on": "attack",
+      "description": "Use after a successful attack with this weapon. Choose what a 6 clears, then roll.",
+      "check": {
+       "dice": "1d6",
+       "success": 6
+      },
+      "choices": [
+       {
+        "id": "hp",
+        "label": "clear a Hit Point on a 6",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "stress",
+        "label": "clear a Stress on a 6",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -3190,6 +3447,20 @@
    "feature": {
     "name": "Greedy",
     "text": "Spend a handful of gold to gain a +1 bonus to your Proficiency on a damage roll."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "greedy",
+      "label": "Greedy: spend a handful of gold, +1 Proficiency",
+      "roll": "damage",
+      "proficiency": 1,
+      "cost": {
+       "gold": 10
+      },
+      "description": "Spends 10 gold coins (one handful) from your sheet."
+     }
+    ]
    }
   },
   {
@@ -3236,6 +3507,20 @@
    "feature": {
     "name": "Painful",
     "text": "Each time you make a successful attack, you must mark a Stress."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "painful",
+      "label": "Painful: mark a Stress",
+      "roll": "damage",
+      "cost": {
+       "stress": 1
+      },
+      "required": true,
+      "description": "Each successful attack with this weapon marks a Stress."
+     }
+    ]
    }
   },
   {
@@ -3304,6 +3589,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -3354,13 +3645,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    },
@@ -3386,13 +3679,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -3417,13 +3712,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -3448,13 +3745,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -4130,6 +4429,18 @@
    "feature": {
     "name": "Parry",
     "text": "When you are attacked, roll this weapon’s damage dice. If any of the attacker’s damage dice rolled the same value as your dice, the matching results are discarded from the attacker’s damage dice before the damage you take is totaled."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "parry",
+      "label": "Parry",
+      "sendRoll": {
+       "dice": "@total_proficiencyd6",
+       "label": "Parry: discard matching attacker damage dice"
+      }
+     }
+    ]
    }
   },
   {
@@ -4369,6 +4680,11 @@
       "label": "Deflecting",
       "cost": {
        "armor": 1
+      },
+      "sendRoll": {
+       "dice": "@armor_available",
+       "base": "evasion",
+       "label": "Deflecting: Evasion against this attack"
       }
      }
     ]
@@ -4394,13 +4710,17 @@
     "text": "Mark a Stress to gain a +1 bonus to your Proficiency on a primary weapon attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Charged",
+      "id": "charged",
+      "label": "Charged: +1 Proficiency",
+      "roll": "attack",
+      "weapon": "primary",
+      "proficiency": 1,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Primary weapon attack; the bonus applies to this attack's damage."
      }
     ]
    }
@@ -4423,6 +4743,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Finesse, Close, d8+4."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Finesse",
+      "range": "Close",
+      "damage": "1d8+4"
+     }
+    ]
    }
   },
   {
@@ -4674,6 +5004,38 @@
    "feature": {
     "name": "Locked On",
     "text": "On a successful attack, your next attack against the same target with your primary weapon automatically succeeds."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "locked-on",
+      "label": "Locked On: next primary attack succeeds",
+      "on": "attack",
+      "description": "Use after a successful attack with this weapon.",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Locked On",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Your next attack against the same target with your primary weapon automatically succeeds.",
+         "rollOptions": [
+          {
+           "id": "success",
+           "label": "Locked On: automatically succeeds against the same target",
+           "roll": "attack",
+           "weapon": "primary",
+           "defaultOn": true,
+           "endEffect": "Locked On",
+           "description": "Only against the target you locked on to."
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -4793,13 +5155,15 @@
     "text": "When you hit a target you can spend a Hope to temporarily Restrain it."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Restraining",
+      "id": "restraining",
+      "label": "Restraining: temporarily Restrain the target",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after hitting a target with this weapon."
      }
     ]
    }
@@ -4831,7 +5195,26 @@
     "actions": [
      {
       "id": "use",
-      "label": "Watchful"
+      "label": "Watchful: cast Floating Eye",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Watchful: Floating Eye",
+         "kind": "debuff",
+         "until": "scene",
+         "text": "Disadvantage on Reaction Rolls against mind reading or clairvoyance for this scene.",
+         "rollOptions": [
+          {
+           "id": "watchful",
+           "label": "Watchful: against mind reading or clairvoyance",
+           "roll": "reaction",
+           "advantage": "disadvantage"
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -4856,26 +5239,34 @@
     "text": "When you take magic damage, you can mark a Stress to halve it and store the remaining damage in the Claws until your next rest. The stored damage is added to your next damage roll with the Claws."
    },
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Channeling",
-      "cost": {
-       "stress": 1
-      }
-     }
-    ],
     "mitigation": [
      {
       "id": "channeling",
       "label": "Channeling",
-      "description": "Mark a Stress for resistance to magic damage.",
+      "description": "Mark a Stress to halve magic damage and store the halved-away damage in the Claws until your next rest.",
       "when": {
        "type": "magic"
       },
       "halve": true,
       "cost": {
        "stress": 1
+      },
+      "storeHalvedDamage": {
+       "name": "Claws of Yifang: Channeling",
+       "kind": "buff",
+       "until": "rest",
+       "text": "Damage stored in the Claws of Yifang; it is added to your next damage roll with them.",
+       "rollOptions": [
+        {
+         "id": "stored",
+         "label": "Channeling: stored damage",
+         "roll": "damage",
+         "value": 0,
+         "weaponName": "Claws of Yifang",
+         "defaultOn": true,
+         "endEffect": "Claws of Yifang: Channeling"
+        }
+       ]
       }
      }
     ]
@@ -4901,13 +5292,15 @@
     "text": "When you hit a creature wearing metal armor, you can mark a Stress to deform it. The target gains a stacking -2 penalty to damage thresholds until the end of the scene."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Deforming",
+      "id": "deforming",
+      "label": "Deforming: deform the target's metal armor",
+      "on": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Use after hitting a creature wearing metal armor; it gains a stacking -2 penalty to damage thresholds until the end of the scene."
      }
     ]
    }
@@ -4930,6 +5323,17 @@
    "feature": {
     "name": "Life-Linked",
     "text": "+2 to Spellcast Rolls against undead creatures; succeed on a Spellcast Roll to temporarily Stun an undead. While Stunned, they can’t use reactions and can’t take any other actions."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "undead",
+      "label": "Life-Linked: against undead",
+      "roll": "spellcast",
+      "value": 2,
+      "description": "Spellcast Roll against an undead creature."
+     }
+    ]
    }
   },
   {
@@ -4970,6 +5374,17 @@
    "feature": {
     "name": "Webslinger",
     "text": "You can temporarily Restrain a target within Close range by succeeding on a Finesse Roll against them."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Webslinger: Restrain a target",
+      "actionRoll": {
+       "trait": "Finesse"
+      }
+     }
+    ]
    }
   },
   {
@@ -4992,13 +5407,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -5073,6 +5490,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Finesse, Melee, d10."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Finesse",
+      "range": "Melee",
+      "damage": "1d10"
+     }
+    ]
    }
   },
   {
@@ -5125,6 +5552,9 @@
    "feature": {
     "name": "Otherworldly",
     "text": "On a successful attack, you can deal physical or magic damage."
+   },
+   "automation": {
+    "damageTypeChoice": true
    }
   },
   {
@@ -5147,13 +5577,15 @@
     "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Ricochet",
+      "id": "ricochet",
+      "label": "Ricochet: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within Very Close range of the first target."
      }
     ]
    }
@@ -5176,6 +5608,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Instinct, Melee, d8."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Instinct",
+      "range": "Melee",
+      "damage": "1d8"
+     }
+    ]
    }
   },
   {
@@ -5196,6 +5638,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -5218,13 +5666,24 @@
     "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Aimed",
+      "id": "penalty",
+      "label": "Aimed: target is close or engaged",
+      "roll": "attack",
+      "advantage": "disadvantage",
+      "exclusive": "aimed",
+      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+     },
+     {
+      "id": "ignore",
+      "label": "Aimed: ignore the penalty",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "exclusive": "aimed",
+      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
      }
     ]
    }
@@ -5249,13 +5708,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -5330,6 +5791,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+3."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Finesse",
+      "range": "Melee",
+      "damage": "1d10+3"
+     }
+    ]
    }
   },
   {
@@ -5406,6 +5877,18 @@
    "feature": {
     "name": "Parry",
     "text": "When you are attacked, roll this weapon’s damage dice. If any of the attacker’s damage dice rolled the same value as your dice, the matching results are discarded from the attacker’s damage dice before the damage you take is totaled."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "parry",
+      "label": "Parry",
+      "sendRoll": {
+       "dice": "@total_proficiencyd8",
+       "label": "Parry: discard matching attacker damage dice"
+      }
+     }
+    ]
    }
   },
   {
@@ -5474,6 +5957,16 @@
    "feature": {
     "name": "Stockpiled",
     "text": "You can throw this weapon at a target within Far range by making an attack roll using Agility without having to retrieve it, as you always have another one on hand."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Stockpiled (thrown)",
+      "trait": "Agility",
+      "range": "Far",
+      "damage": "1d6+6"
+     }
+    ]
    }
   },
   {
@@ -5510,6 +6003,9 @@
    "feature": {
     "name": "Otherworldly",
     "text": "On a successful attack, you can deal physical or magic damage."
+   },
+   "automation": {
+    "damageTypeChoice": true
    }
   },
   {
@@ -5532,13 +6028,15 @@
     "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Ricochet",
+      "id": "ricochet",
+      "label": "Ricochet: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within Very Close range of the first target."
      }
     ]
    }
@@ -5561,6 +6059,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+3."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Instinct",
+      "range": "Melee",
+      "damage": "1d8+3"
+     }
+    ]
    }
   },
   {
@@ -5581,6 +6089,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -5603,13 +6117,24 @@
     "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Aimed",
+      "id": "penalty",
+      "label": "Aimed: target is close or engaged",
+      "roll": "attack",
+      "advantage": "disadvantage",
+      "exclusive": "aimed",
+      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+     },
+     {
+      "id": "ignore",
+      "label": "Aimed: ignore the penalty",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "exclusive": "aimed",
+      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
      }
     ]
    }
@@ -5660,6 +6185,17 @@
    "feature": {
     "name": "Omnipresent",
     "text": "You can make attacks against targets within Very Far range, but must do so with disadvantage."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "omnipresent",
+      "label": "Omnipresent: target within Very Far range",
+      "roll": "attack",
+      "advantage": "disadvantage",
+      "description": "Attack a target within Very Far range with disadvantage."
+     }
+    ]
    }
   },
   {
@@ -5716,6 +6252,27 @@
    "feature": {
     "name": "Invigorating",
     "text": "On a successful attack, roll a d4. On a result of 4, clear a Stress."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "invigorating",
+      "label": "Invigorating: roll a d4",
+      "on": "attack",
+      "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
+      "check": {
+       "dice": "1d4",
+       "success": 4
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -5738,13 +6295,15 @@
     "text": "Spend a Hope to target a group of creatures within range. Targets you succeed against take half damage."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Volleyed",
+      "id": "volleyed",
+      "label": "Volleyed: target a group",
+      "roll": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Target a group of creatures within range. Targets you succeed against take half damage."
      }
     ]
    }
@@ -5769,13 +6328,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -5850,6 +6411,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+6."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Finesse",
+      "range": "Melee",
+      "damage": "1d10+6"
+     }
+    ]
    }
   },
   {
@@ -5892,10 +6463,16 @@
      "max": 1,
      "per": "scene"
     },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Accelerator"
+      "id": "accelerator",
+      "label": "Accelerator: move to Far range, +1 Proficiency",
+      "roll": "attack",
+      "proficiency": 1,
+      "cost": {
+       "stress": 1
+      },
+      "description": "Move to Far range, then make this attack. The bonus applies to its damage."
      }
     ]
    }
@@ -5940,13 +6517,14 @@
     "text": "When an adversary within this weapon’s range deals damage to you, you can mark 2 Stress to force them to mark a Hit Point."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
-      "label": "Braced",
+      "id": "braced",
+      "label": "Braced: attacker marks a Hit Point",
       "cost": {
        "stress": 2
-      }
+      },
+      "description": "An adversary within this weapon's range dealt this damage. The GM marks its Hit Point."
      }
     ]
    }
@@ -5971,13 +6549,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -6000,6 +6580,37 @@
    "feature": {
     "name": "Bolstering",
     "text": "When you critically succeed on an attack, all PCs within Close range gain a Hope."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "bolstering",
+      "label": "Bolstering: PCs within Close range gain a Hope",
+      "on": "attack",
+      "criticalOnly": true,
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ],
+      "chatBenefits": [
+       {
+        "id": "hope",
+        "label": "Within Close range: gain 1 Hope",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ],
+      "description": "You critically succeeded on an attack with this weapon."
+     }
+    ]
    }
   },
   {
@@ -6020,6 +6631,19 @@
    "feature": {
     "name": "Rebounding",
     "text": "When you throw this weapon, it returns to your hand. On a failed attack, you can reroll your attack with disadvantage."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "rebounding",
+      "label": "Rebounding: reroll with disadvantage",
+      "on": "attack",
+      "when": "failure",
+      "reroll": "duality",
+      "disadvantage": true,
+      "description": "Use only after a failed attack with this weapon."
+     }
+    ]
    }
   },
   {
@@ -6056,6 +6680,9 @@
    "feature": {
     "name": "Otherworldly",
     "text": "On a successful attack, you can deal physical or magic damage."
+   },
+   "automation": {
+    "damageTypeChoice": true
    }
   },
   {
@@ -6078,13 +6705,15 @@
     "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Ricochet",
+      "id": "ricochet",
+      "label": "Ricochet: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within Very Close range of the first target."
      }
     ]
    }
@@ -6107,6 +6736,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+6."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Instinct",
+      "range": "Melee",
+      "damage": "1d8+6"
+     }
+    ]
    }
   },
   {
@@ -6127,6 +6766,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -6149,13 +6794,24 @@
     "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Aimed",
+      "id": "penalty",
+      "label": "Aimed: target is close or engaged",
+      "roll": "attack",
+      "advantage": "disadvantage",
+      "exclusive": "aimed",
+      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+     },
+     {
+      "id": "ignore",
+      "label": "Aimed: ignore the penalty",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "exclusive": "aimed",
+      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
      }
     ]
    }
@@ -6180,13 +6836,15 @@
     "text": "On a successful attack, you can spend a Hope to knock the target back to Far range."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Concussive",
+      "id": "concussive",
+      "label": "Concussive: knock the target back to Far range",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after a successful attack with this weapon."
      }
     ]
    }
@@ -6229,6 +6887,23 @@
    "feature": {
     "name": "Bouncing",
     "text": "Mark any number of Stress to target that many additional creatures in range of the attack."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "bouncing",
+      "label": "Bouncing: additional targets",
+      "roll": "attack",
+      "cost": {
+       "stress": 1
+      },
+      "quantity": {
+       "resource": "stress",
+       "label": "Stress to mark (one per target)"
+      },
+      "description": "Mark any number of Stress to target that many additional creatures in range of the attack."
+     }
+    ]
    }
   },
   {
@@ -6269,6 +6944,17 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Agility, Melee, d8+6 phy."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Agility",
+      "range": "Melee",
+      "damage": "1d8+6",
+      "damageType": "phys"
+     }
+    ]
    }
   },
   {
@@ -6291,13 +6977,40 @@
     "text": "On a successful attack, you can mark a Stress to give an ally within Close range a +3 bonus to their next attack roll."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Catalytic",
+      "id": "catalytic",
+      "label": "Catalytic: ally gains +3 to next attack",
+      "on": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Use after a successful attack with this weapon.",
+      "chatBenefits": [
+       {
+        "id": "catalytic",
+        "label": "Ally within Close range: +3 to your next attack roll",
+        "exclusiveClaim": true,
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Catalytic",
+           "kind": "buff",
+           "until": "manual",
+           "text": "+3 bonus to your next attack roll.",
+           "modifiers": [
+            {
+             "roll": "attack",
+             "value": 3,
+             "consume": true
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
      }
     ]
    }
@@ -6322,13 +7035,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -6403,6 +7118,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Finesse, Melee, d10+9."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Finesse",
+      "range": "Melee",
+      "damage": "1d10+9"
+     }
+    ]
    }
   },
   {
@@ -6467,6 +7192,42 @@
    "feature": {
     "name": "Extending",
     "text": "You can increase the range of this weapon up to Very Far. You gain a −1 penalty to attack rolls for each step you increase the range by (such as Melee to Very Close, Very Close to Close, or Close to Far)."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "extend-1",
+      "label": "Extending: reach Very Close",
+      "roll": "attack",
+      "value": -1,
+      "exclusive": "extending",
+      "description": "Increase the range by 1 step."
+     },
+     {
+      "id": "extend-2",
+      "label": "Extending: reach Close",
+      "roll": "attack",
+      "value": -2,
+      "exclusive": "extending",
+      "description": "Increase the range by 2 steps."
+     },
+     {
+      "id": "extend-3",
+      "label": "Extending: reach Far",
+      "roll": "attack",
+      "value": -3,
+      "exclusive": "extending",
+      "description": "Increase the range by 3 steps."
+     },
+     {
+      "id": "extend-4",
+      "label": "Extending: reach Very Far",
+      "roll": "attack",
+      "value": -4,
+      "exclusive": "extending",
+      "description": "Increase the range by 4 steps."
+     }
+    ]
    }
   },
   {
@@ -6489,13 +7250,16 @@
     "text": "Before you make an attack roll, you can mark a Stress to use a d20 as your damage die."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Devastating",
+      "id": "devastating",
+      "label": "Devastating: d20 damage die",
+      "roll": "attack",
+      "damageDie": 20,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "This attack's Damage button rolls d20s as the weapon's damage dice."
      }
     ]
    }
@@ -6548,13 +7312,15 @@
     "text": "When you make an attack, you can mark a Stress to target another creature within range."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Quick",
+      "id": "quick",
+      "label": "Quick: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within range with this attack."
      }
     ]
    }
@@ -6577,6 +7343,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -6613,6 +7385,9 @@
    "feature": {
     "name": "Otherworldly",
     "text": "On a successful attack, you can deal physical or magic damage."
+   },
+   "automation": {
+    "damageTypeChoice": true
    }
   },
   {
@@ -6635,13 +7410,15 @@
     "text": "When you throw this weapon, it returns to your hand. When you make an attack, you can mark a Stress to target another creature within Very Close range of the first target with that attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Ricochet",
+      "id": "ricochet",
+      "label": "Ricochet: target another creature",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Also target another creature within Very Close range of the first target."
      }
     ]
    }
@@ -6664,6 +7441,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Instinct, Melee, d8+9."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Instinct",
+      "range": "Melee",
+      "damage": "1d8+9"
+     }
+    ]
    }
   },
   {
@@ -6684,6 +7471,12 @@
    "feature": {
     "name": "Reloading",
     "text": "After you make an attack, roll a d6. On a result of 1, you must mark a Stress to reload this weapon before you can fire it again."
+   },
+   "automation": {
+    "reloading": {
+     "dice": "1d6",
+     "fail": 1
+    }
    }
   },
   {
@@ -6706,13 +7499,24 @@
     "text": "Your attack has disadvantage if the target is within Very Close range of you or within Melee range of one of your allies. You can mark a Stress to ignore this penalty."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Aimed",
+      "id": "penalty",
+      "label": "Aimed: target is close or engaged",
+      "roll": "attack",
+      "advantage": "disadvantage",
+      "exclusive": "aimed",
+      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+     },
+     {
+      "id": "ignore",
+      "label": "Aimed: ignore the penalty",
+      "roll": "attack",
       "cost": {
        "stress": 1
-      }
+      },
+      "exclusive": "aimed",
+      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
      }
     ]
    }
@@ -6735,6 +7539,14 @@
    "feature": {
     "name": "Serrated",
     "text": "When you roll a 1 on a damage die, it deals 8 damage instead."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "onesAs": 8,
+     "label": "Serrated"
+    }
    }
   },
   {
@@ -6795,6 +7607,23 @@
    "feature": {
     "name": "Bouncing",
     "text": "Mark any number of Stress to target that many additional creatures in range of the attack."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "bouncing",
+      "label": "Bouncing: additional targets",
+      "roll": "attack",
+      "cost": {
+       "stress": 1
+      },
+      "quantity": {
+       "resource": "stress",
+       "label": "Stress to mark (one per target)"
+      },
+      "description": "Mark any number of Stress to target that many additional creatures in range of the attack."
+     }
+    ]
    }
   },
   {
@@ -6815,6 +7644,28 @@
    "feature": {
     "name": "Ethereal",
     "text": "You must mark a Stress to conjure this weapon. It lasts until the end of the scene."
+   },
+   "automation": {
+    "actions": [
+     {
+      "id": "conjure",
+      "label": "Conjure",
+      "cost": {
+       "stress": 1
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Ethereal Zweihänder conjured",
+         "kind": "buff",
+         "until": "scene",
+         "text": "The Ethereal Zweihänder lasts until the end of the scene."
+        }
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -6837,13 +7688,15 @@
     "text": "When you make an attack with this weapon, you can spend a Hope to force all adversaries within Very Close range of the target to make a Reaction Roll (16). Creatures who fail must mark a Stress and are pulled into Melee range of the target."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Magnetic",
+      "id": "magnetic",
+      "label": "Magnetic: pull adversaries near the target",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Adversaries within Very Close range of the target make a Reaction Roll (16); those who fail mark a Stress and are pulled into Melee range of the target."
      }
     ]
    }
@@ -6868,13 +7721,17 @@
     "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Follow-Up",
+      "id": "follow-up",
+      "label": "Follow-Up: +1 Proficiency",
+      "roll": "damage",
+      "weapon": "primary",
+      "proficiency": 1,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Successful primary weapon attack within Melee range."
      }
     ]
    }
@@ -6929,6 +7786,16 @@
    "feature": {
     "name": "Stockpiled",
     "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Stockpiled (thrown)",
+      "trait": "Finesse",
+      "range": "Close",
+      "damage": "1d8"
+     }
+    ]
    }
   },
   {
@@ -7039,13 +7906,17 @@
     "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Follow-Up",
+      "id": "follow-up",
+      "label": "Follow-Up: +1 Proficiency",
+      "roll": "damage",
+      "weapon": "primary",
+      "proficiency": 1,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Successful primary weapon attack within Melee range."
      }
     ]
    }
@@ -7100,6 +7971,16 @@
    "feature": {
     "name": "Stockpiled",
     "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Stockpiled (thrown)",
+      "trait": "Finesse",
+      "range": "Close",
+      "damage": "1d8+2"
+     }
+    ]
    }
   },
   {
@@ -7236,6 +8117,11 @@
       "label": "Deflecting",
       "cost": {
        "armor": 1
+      },
+      "sendRoll": {
+       "dice": "@armor_score",
+       "base": "evasion",
+       "label": "Deflecting: Evasion against this attack"
       }
      }
     ]
@@ -7299,13 +8185,16 @@
     "text": "On a successful attack with your primary weapon against a target within Very Close range, you can spend a Hope to make the target temporarily Vulnerable."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Entangling",
+      "id": "entangling",
+      "label": "Entangling: target becomes temporarily Vulnerable",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after a successful primary weapon attack against a target within Very Close range.",
+      "primaryWeapon": true
      }
     ]
    }
@@ -7330,13 +8219,17 @@
     "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Follow-Up",
+      "id": "follow-up",
+      "label": "Follow-Up: +1 Proficiency",
+      "roll": "damage",
+      "weapon": "primary",
+      "proficiency": 1,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Successful primary weapon attack within Melee range."
      }
     ]
    }
@@ -7391,6 +8284,16 @@
    "feature": {
     "name": "Stockpiled",
     "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Stockpiled (thrown)",
+      "trait": "Finesse",
+      "range": "Close",
+      "damage": "1d8+4"
+     }
+    ]
    }
   },
   {
@@ -7501,13 +8404,11 @@
     "text": "+1 to attack rolls made with your primary weapon"
    },
    "automation": {
-    "rollOptions": [
+    "modifiers": [
      {
-      "id": "trusty",
-      "label": "Trusty",
       "roll": "attack",
       "value": 1,
-      "description": "Only attacks made with your primary weapon."
+      "weapon": "primary"
      }
     ]
    }
@@ -7532,13 +8433,40 @@
     "text": "When you fail a weapon attack, you can spend a Hope to succeed on your next weapon attack."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Targeted",
+      "id": "targeted",
+      "label": "Targeted: next weapon attack succeeds",
+      "on": "attack",
+      "when": "failure",
+      "weaponAttack": true,
+      "anyWeapon": true,
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use only after a failed weapon attack.",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Targeted",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Your next weapon attack automatically succeeds.",
+         "rollOptions": [
+          {
+           "id": "success",
+           "label": "Targeted: this attack automatically succeeds",
+           "roll": "attack",
+           "weapon": "any",
+           "defaultOn": true,
+           "endEffect": "Targeted",
+           "description": "Treat this weapon attack as a success."
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -7563,13 +8491,22 @@
     "text": "On a successful attack, you can spend a Hope to force the target to mark a Stress. If they do, you clear a Stress."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Draining",
+      "id": "draining",
+      "label": "Draining: target marks a Stress, you clear a Stress",
+      "on": "attack",
       "cost": {
        "hope": 1
-      }
+      },
+      "description": "Use after a successful attack with this weapon; only if the target marks the Stress.",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -7592,6 +8529,16 @@
    "feature": {
     "name": "Versatile",
     "text": "This weapon can also be used with these statistics—Agility, Melee, d8+5."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Versatile",
+      "trait": "Agility",
+      "range": "Melee",
+      "damage": "1d8+5"
+     }
+    ]
    }
   },
   {
@@ -7614,13 +8561,17 @@
     "text": "On a successful attack with your primary weapon within Melee range, you can mark a Stress to gain a +1 bonus to your Proficiency for this attack."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Follow-Up",
+      "id": "follow-up",
+      "label": "Follow-Up: +1 Proficiency",
+      "roll": "damage",
+      "weapon": "primary",
+      "proficiency": 1,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Successful primary weapon attack within Melee range."
      }
     ]
    }
@@ -7675,6 +8626,16 @@
    "feature": {
     "name": "Stockpiled",
     "text": "You can throw this weapon within Close range by making an attack roll using Finesse. You don’t have to retrieve it, as you always have another on hand."
+   },
+   "automation": {
+    "alternateProfiles": [
+     {
+      "label": "Stockpiled (thrown)",
+      "trait": "Finesse",
+      "range": "Close",
+      "damage": "1d8+6"
+     }
+    ]
    }
   },
   {
@@ -7783,6 +8744,26 @@
    "feature": {
     "name": "Inverted",
     "text": "When you roll a weapon attack with Fear, you gain a Hope."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "inverted",
+      "label": "Inverted: gain a Hope",
+      "on": "attack",
+      "when": "fear",
+      "weaponAttack": true,
+      "anyWeapon": true,
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ],
+      "description": "You rolled a weapon attack with Fear."
+     }
+    ]
    }
   },
   {
@@ -7823,6 +8804,14 @@
    "feature": {
     "name": "Recursive",
     "text": "When you roll the maximum value on a damage die, roll an additional damage die and add the result to the total damage. This feature can trigger repeatedly."
+   },
+   "automation": {
+    "damage": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "explode": "repeat",
+     "label": "Recursive"
+    }
    }
   },
   {
@@ -7871,6 +8860,9 @@
       "label": "Make Them Dance",
       "cost": {
        "stress": 1
+      },
+      "actionRoll": {
+       "trait": "Presence"
       }
      }
     ]

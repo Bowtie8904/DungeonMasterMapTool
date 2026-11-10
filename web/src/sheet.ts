@@ -191,6 +191,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       supportsWitchAutomation: () => conn.witchAutomation,
       supportsDomainCardAutomation: () => conn.domainCardAutomation,
       supportsSplendorAutomation: () => conn.splendorAutomation,
+      supportsWeaponAutomation: () => conn.weaponAutomation,
       supportsBloodAutomation: () => conn.bloodAutomation,
       supportsRollMultipliers: () => conn.rollMultipliers,
     });

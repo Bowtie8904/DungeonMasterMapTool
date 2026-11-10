@@ -66,11 +66,12 @@ describe('daggerheart data', () => {
     c.activeWeapons[0].feature = { name: 'Accurate', text: '' };
     c.activeWeapons[0].automation = { modifiers: [{ roll: 'attack', value: 1 }] };
     addEffect(c, { name: 'Blessing', kind: 'buff', modifiers: [{ roll: 'attack', value: 2, dice: 'd4' }] });
-    const bonus = rollBonus(c, ['attack', 'trait:Agility']);
+    const bonus = rollBonus(c, ['attack', 'trait:Agility'], c.activeWeapons[0]);
     expect(bonus.contributions).toEqual([
       { label: 'Blessing', expression: '2+1d4' },
       { label: 'Shortbow - Accurate', expression: '1' },
     ]);
+    expect(rollBonus(c, ['attack', 'trait:Agility']).contributions).toEqual([{ label: 'Blessing', expression: '2+1d4' }]);
     const trait = traitContributions(c, 'Agility');
     expect(trait.map(s => Number(s.expression))).toEqual([2, -1]);
     expect(trait.reduce((n, s) => n + Number(s.expression), 0)).toBe(traitTotal(c, 'Agility'));

@@ -77,6 +77,26 @@ class DiceRollerTest {
     }
 
     @Test
+    void weaponFaceReplacementAndExplodingDiceUseRolledFacesWithinTheDiceLimit() {
+        var serrated = DiceRoller.onesAs(DiceRoller.roll("3d8+2-1d4", 4, faces(1, 5, 1, 1)), 8, 4);
+        assertEquals(List.of(8, 5, 8, -1), serrated.rolls());
+        assertEquals(22, serrated.total());
+        var kept = DiceRoller.onesAs(DiceRoller.roll("3d6kh2", 3, faces(1, 4, 2)), 6, 3);
+        assertEquals(10, kept.total());
+        assertThrows(IllegalArgumentException.class, () -> DiceRoller.onesAs(serrated, 0, 4));
+
+        var brutal = DiceRoller.roll("2d10+1d6+6", 6, faces(10, 4, 6));
+        var once = DiceRoller.explode(brutal, false, 6, faces(10, 2));
+        assertEquals(List.of(10, 6), once.stream().map(die -> die[0]).toList());
+        assertEquals(List.of(10, 2), once.stream().map(die -> die[1]).toList());
+        var repeated = DiceRoller.explode(DiceRoller.roll("1d4", 4, faces(4)), true, 4, faces(4, 4, 1));
+        assertEquals(List.of(4, 4, 1), repeated.stream().map(die -> die[1]).toList());
+        assertThrows(IllegalArgumentException.class,
+                () -> DiceRoller.explode(DiceRoller.roll("1d4", 2, faces(4)), true, 2, faces(4, 4)));
+        assertTrue(DiceRoller.explode(DiceRoller.roll("1d8-1d8", 2, faces(3, 8)), false, 2, faces()).isEmpty());
+    }
+
+    @Test
     void doublesRolledDamageIncludingKeptDiceBonusesAndCriticalWithoutExtraRolls() {
         var result = DiceRoller.roll("(3d8kh2+2+2d4+24)*2", 5, faces(1, 8, 4, 2, 3));
         assertEquals(List.of(1, 8, 4, 2, 3), result.rolls());

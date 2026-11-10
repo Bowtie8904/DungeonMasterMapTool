@@ -105,6 +105,11 @@ export interface MitigationOption {
   roll?: MitigationRoll;
   /** Rolled on apply and posted with the summary, e.g. Shrug It Off's vault check. */
   followUp?: { dice: string; text: string };
+  /**
+   * Channeling: on apply, stores the damage removed by halving in this effect's `stored` damage option,
+   * adding to an existing effect of the same name.
+   */
+  storeHalvedDamage?: EffectDef;
 }
 
 export interface AvailableMitigation {
@@ -483,6 +488,20 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       }
     }
     if (m.option.effect) addEffect(c, m.option.effect, m.source);
+    if (m.option.storeHalvedDamage && m.option.halve) {
+      const stored = Math.max(0, Math.floor(r.input) - Math.ceil(Math.floor(r.input) / 2));
+      const definition = m.option.storeHalvedDamage;
+      const previous = c.effects.find(e => e.name === definition.name);
+      const total = stored + Number(previous?.rollOptions?.find(o => o.id === 'stored')?.value ?? 0);
+      if (total > 0) {
+        addEffect(c, {
+          ...structuredClone(definition),
+          text: `${definition.text ?? ''} Stored: ${total} damage.`.trim(),
+          rollOptions: (definition.rollOptions ?? []).map(o => o.id === 'stored' ? { ...o, value: total } : o),
+        }, m.source);
+        notes.push(`${definition.name}: stored ${stored} damage (${total} total) for the next damage roll with ${m.source}.`);
+      }
+    }
     if (m.option.endEffect) c.effects = c.effects.filter(e => e.name !== m.option.endEffect);
     if (m.option.endEffectIfNoHp && expiringZeroHpEffects.includes(m.option.endEffectIfNoHp))
       c.effects = c.effects.filter(e => e.name !== m.option.endEffectIfNoHp);

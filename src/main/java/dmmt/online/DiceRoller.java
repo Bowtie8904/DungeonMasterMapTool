@@ -92,6 +92,40 @@ public final class DiceRoller {
         return new Result(result.expression(), rolls, total(parsed, rolls));
     }
 
+    /** Positive damage dice showing 1 count as {@code value} (Serrated, Self-Correcting). */
+    public static Result onesAs(Result result, int value, int maxDice) {
+        if (value < 1 || value > MAX_SIDES) throw new IllegalArgumentException("Invalid replacement die value.");
+        Terms parsed = terms(result.expression(), maxDice);
+        List<Integer> rolls = new ArrayList<>(result.rolls());
+        for (int i = 0; i < rolls.size(); i++) {
+            if (parsed.dice().get(i) > 0 && rolls.get(i) == 1) rolls.set(i, value);
+        }
+        return new Result(result.expression(), rolls, total(parsed, rolls));
+    }
+
+    /**
+     * Extra dice for every positive die showing its maximum face (Brutal). With {@code repeat}, extra dice
+     * showing their maximum roll again (Recursive). Returns the extra faces with their die sizes.
+     */
+    public static List<int[]> explode(Result result, boolean repeat, int maxDice, Random random) {
+        Terms parsed = terms(result.expression(), maxDice);
+        List<int[]> extra = new ArrayList<>();
+        List<Integer> pending = new ArrayList<>();
+        for (int i = 0; i < result.rolls().size(); i++) {
+            int sides = parsed.dice().get(i);
+            if (sides > 1 && result.rolls().get(i) == sides) pending.add(sides);
+        }
+        int rolled = result.rolls().size();
+        while (!pending.isEmpty()) {
+            int sides = pending.removeFirst();
+            if (++rolled > maxDice) throw new IllegalArgumentException("Extra damage dice exceed the host's dice limit.");
+            int face = random.nextInt(sides) + 1;
+            extra.add(new int[]{sides, face});
+            if (repeat && face == sides) pending.add(sides);
+        }
+        return extra;
+    }
+
     /** Per-die bonus for matching kept faces across the whole roll, not separately per contribution. */
     public static List<Integer> matchingDiceBonuses(Result result, int maxDice) {
         Terms parsed = terms(result.expression(), maxDice);

@@ -441,6 +441,55 @@ Rules reference: [official SRD](https://www.daggerheart.com/srd/), Ranger/compan
 
 No settings, required protocol fields or LAN compatibility versions change.
 
+### Weapon feature metadata
+
+Weapon-owned roll `modifiers` apply only to rolls made with that weapon (including its alternate profiles), never to
+spell, feature or other-weapon rolls. A modifier's `weapon: "primary"|"secondary"` instead applies it to rolls with
+the equipped weapon in that slot (Trusty). Weapon-owned roll options default to the source weapon (see `rollOptions`).
+Weapon-owned `rollTriggers` appear only on their own weapon's results; `primaryWeapon: true` targets the equipped
+primary weapon (Entangling) and `anyWeapon: true` any weapon attack (Vorpal Shard's Targeted, Void Needle's Inverted).
+Browser and host both enforce this scoping. Features worded "a weapon attack" use `anyWeapon`; plain "an attack" means
+the weapon's own attack.
+
+- `alternateProfiles: [{label, trait, range, damage, damageType?}]` adds a second attack row with its own Attack and
+  Damage buttons (Versatile, Stockpiled). Rolls keep the weapon name and add a `weaponProfile:<label>` source tag;
+  chat Damage buttons, range-gated triggers and the host's range checks use the profile's statistics.
+- `damageTypeChoice: true` shows the physical/magic selector in that weapon's damage dialog (Otherworldly).
+- `requirement: {trait, min?, max?}` blocks attacks while the current trait total is outside the bounds (Pompous).
+- `reloading: {dice, fail}`: after every attack with the weapon that is not tagged `reroll`, the Online Play host rolls
+  the die and reports it on the attack card. On `fail` it adds a manual `"<Weapon>: Unloaded"` debuff
+  (`unloadedWeapon`) whose Reload action marks 1 Stress and ends it; the weapon's Attack button and the host reject
+  attacks with it until then. Chat rerolls (`reroll: "duality"`) add a `reroll` source tag and never roll Reloading.
+- `damage.onesAs: N` counts damage dice showing 1 as N; `damage.explode: "once"|"repeat"` rolls one extra die of
+  the same size per maximum face, and with `repeat` extra dice can trigger again (bounded by the host dice limit).
+  `damage.label` names the rule in the breakdown. Both are host-rolled `damageRules.weaponRules`, apply to all positive
+  damage dice of the roll and require `hello.weaponAutomation`; older hosts block only these rolls.
+- Roll options: `required: true` is preselected and cannot be unticked while payable (Painful); `damageDie: 20` on an
+  attack adds a `damageDie:20` tag so that attack's Damage button rolls d20 weapon dice (Devastating); `weaponName`
+  restricts an option to the equipped weapon of that name. Costs may use `gold` (coins; one handful is 10).
+- Triggers: `disadvantage: true` rerolls with an added -d6 (Rebounding). A `check: {dice, success}` without `gain`
+  applies the trigger's `steps` on the success face, and a selected `choices` entry may supply its own `steps`
+  (Invigorating, Lifestealing). These host workflows require `hello.weaponAutomation`.
+- Mitigation `storeHalvedDamage: <EffectDef>` stores the damage removed by halving in that effect's `stored` damage
+  option value, accumulating across uses (Channeling's rest-duration "Claws of Yifang: Channeling").
+- `sendRoll.dice` supports `@total_proficiency`, `@armor_available` (unmarked Armor Slots before the action's cost)
+  and `@armor_score` (Parry, Deflecting).
+
+| Weapon feature | Automation |
+|---|---|
+| Reliable, Heavy, Cumbersome, Protective, Barrier, Brave, Padded, Destructive/Incendiary penalties, Massive, Powerful, Sharpwing, Bonded | Passive modifiers or kept-dice damage on the weapon's own rolls. |
+| Paired, Double Duty, Focused, Trusty | Primary-weapon damage options / attack modifier. |
+| Quick, Ricochet, Bouncing (Stress quantity), Volleyed, Aimed, Dueling, Omnipresent, Extending, Charged, Accelerator, Devastating, Persuasive, Life-Linked | Attack, trait or Spellcast roll options with their costs. |
+| Follow-Up, Greedy (10 gold), Painful (required) | Damage roll options. |
+| Concussive, Grappling, Restraining, Entangling, Deforming, Magnetic, Draining, Catalytic, Lucky, Rebounding, Targeted, Locked On, Inverted, Invigorating, Lifestealing, Bolstering | Buttons on the attack result; target consequences stay with the GM. |
+| Versatile, Stockpiled, Otherworldly, Pompous, Reloading, Brutal, Recursive, Serrated, Self-Correcting | Profile rows, type selector, attack requirement and host dice rules above. |
+| Parry, Deflecting, Startling, Swatter, Ethereal, Watchful, Make Them Dance, Webslinger, Healing | Sheet actions, rest passives and roll/report actions. |
+| Braced, Channeling | Incoming-damage options. |
+| Scary, Deadly, Burning, Eruptive, Freezing, Hooked, Tethered, Doubled Up, Venomous, Disturbing, Nonlethal, Poisonous, Piercing, Echo, Long, Sheltering, Returning, Retractable, Hot, Timebending, Incorporeal | Manual: they change only targets, nearby creatures, allies or the narrative. |
+
+Catalog weapons are refreshed on catalog-linked sheets by the host's catalog merge; customized or unlinked carried
+weapons keep their saved automation until re-added from the compendium.
+
 ### General automation fields
 
 ```json
@@ -857,6 +906,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged
   flat bonus and independent bonus dice. The host's kept-dice expression is `NdSkhK` (for example `4d6kh3+6`);
   chat records all rolls and the kept total. An attachable Greatstone does not grant this to every carried weapon.
+  Optional `onesAs`, `explode` and `label` are host damage rules described under Weapon feature metadata.
 - **creation**: additive `{hp?, stress?, evasion?, domainCards?, domains?, experienceBonus?}`; numeric slot/evasion/card allowances
   and optional extra accessible domain names. Apply through the Character Mancer once, not as repeating resource
   gains. Whole/mixed-ancestry feature selection must respect which feature was chosen. Endurance, High Stamina,
@@ -882,10 +932,10 @@ as complete automation.
 |---|---:|---:|---:|---:|
 | Domain cards | 236 | 236 | 223 | 13 |
 | Armor | 110 | 110 | 80 | 30 |
-| Weapons | 336 | 336 | 144 | 192 |
+| Weapons | 336 | 336 | 210 | 126 |
 | Consumables | 182 | 182 | 62 | 120 |
 | Items | 174 | 174 | 84 | 90 |
-| **All categories** | **1,187** | **1,296** | **777** | **519** |
+| **All categories** | **1,187** | **1,296** | **843** | **453** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -986,7 +1036,8 @@ Classes, ancestries, communities and transformations are included in the total.
   damage from Paired/Double Duty/Focused is opt-in. Powerful/Massive cover 14 weapons. Charging Quiver is optional
   `@tier` damage **only for arrows stored in it**. Piercing Arrows is `@proficiency` damage with its own
   three-per-rest option limit. Six trait relics grant +1 while active; Lorekeeper/Cursed Carols bonuses are
-  situational. Alconite recharge requires its explicit salt-water downtime action.
+  situational. Alconite recharge requires its explicit salt-water downtime action. Every weapon feature is mapped
+  as described in [Weapon feature metadata](#weapon-feature-metadata).
 - **Domain cards:** optional Body Basher, Cruel Precision, Bold Presence, Boost, Forceful Push, Natural Familiar,
   Nature's Tongue and Runic Adrenaline; Rise Up/Notorious passives; Full Surge and explicit self-healing/recovery
   actions. Bold Presence's condition avoidance has an independent once-per-rest action limit; its Presence roll
@@ -1099,10 +1150,10 @@ claims retain their prior per-player behavior.
   Hex, Drain, unconfigured aura allies and target-dependent damage. Explicit `target` actions
   support character selection/healing and configured effects; this does not infer general target automation.
 - **Roll-result-dependent rules:** trigger validation, changing Hope/Fear die size or values, reroll selection,
-  exploding dice (Brutal/Recursive), special face replacements (Serrated/Self-Correcting), doubling matching dice,
-  critical conversion, damage severity changes and arbitrary after-the-fact roll replacement. Explicit outcome
-  overrides and configured rerolls are supported without inferring other replacements. Ordinary optional extra dice
-  are supported; these algorithms are not inferred from prose.
+  doubling matching dice, critical conversion, damage severity changes and arbitrary after-the-fact roll replacement.
+  Explicit outcome overrides, configured rerolls and the explicit weapon `damage.explode`/`damage.onesAs` rules
+  (Brutal, Recursive, Serrated, Self-Correcting) are supported without inferring other replacements. Ordinary
+  optional extra dice are supported; these algorithms are not inferred from prose.
 - **Conditional passives and substitutions:** Wolf Form/Feral Hide, Conjure Shield, Irontree reinforcement,
   Defiant Bulwark, Vowkeeper and Heartsteel, four-domain “Touched” loadout conditions, resource-dependent
   thresholds, proficiency for only one attack, min/half/multiplied formulas, and effects ending on a damage/result

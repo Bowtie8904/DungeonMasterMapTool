@@ -397,6 +397,8 @@ export interface Hello {
   bloodAutomation?: boolean;
   specialCardActions?: boolean;
   splendorAutomation?: boolean;
+  /** Weapon damage rules (Brutal, Serrated...), Reloading checks and weapon trigger checks. */
+  weaponAutomation?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

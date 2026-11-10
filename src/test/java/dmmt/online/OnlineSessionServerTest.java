@@ -5001,6 +5001,127 @@ class OnlineSessionServerTest {
         } finally { ws.abort(); }
     }
 
+    private ObjectNode weaponSheet(String... weaponIds) throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("gunner").name("Gunner").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        var weapons = sheet.putArray("activeWeapons");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("weapons.json").toFile()).path("entries"))
+            if (List.of(weaponIds).contains(entry.path("id").asText()))
+                weapons.addObject().put("name", entry.path("name").asText())
+                        .put("slot", "secondary".equals(entry.path("weapon").path("slot").asText()) ? "Secondary" : "Primary")
+                        .put("range", entry.path("weapon").path("range").asText())
+                        .set("automation", entry.path("automation").deepCopy());
+        sheet.putArray("effects");
+        store.saveSheet(campaign.getId(), "gunner", sheet.toString());
+        return sheet;
+    }
+
+    private static long seedFor(java.util.function.Predicate<java.util.Random> matches) {
+        long seed = 0;
+        while (!matches.test(new java.util.Random(seed))) seed++;
+        return seed;
+    }
+
+    @Test
+    void reloadingRollsAfterNewAttacksUnloadsOnOneAndBlocksUntilReloaded() throws Exception {
+        weaponSheet("blunderbuss");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            assertTrue(inbox.next("hello").path("weaponAutomation").asBoolean());
+            String attack = """
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,trait:Finesse,action","actorId":"gunner","weapon":"Blunderbuss"}
+                    """;
+            diceSeed(seedFor(random -> { random.nextInt(12); random.nextInt(12); return random.nextInt(6) != 0; }));
+            ws.sendText(attack, true).join();
+            JsonNode loaded = inbox.next("roll");
+            assertTrue(loaded.path("featureRoll").path("consequence").asText().contains("stays loaded"), loaded.toString());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "gunner")).path("effects").size());
+
+            diceSeed(seedFor(random -> { random.nextInt(12); random.nextInt(12); return random.nextInt(6) == 0; }));
+            ws.sendText(attack, true).join();
+            JsonNode unloaded = inbox.next("roll");
+            assertTrue(unloaded.path("featureRoll").path("consequence").asText().contains("unloaded"), unloaded.toString());
+            JsonNode effect = MAPPER.readTree(store.loadSheet(campaign.getId(), "gunner")).path("effects").path(0);
+            assertEquals("Blunderbuss", effect.path("unloadedWeapon").asText());
+            assertEquals("Blunderbuss: Unloaded", effect.path("actions").path(0).path("endEffect").asText());
+            assertEquals(1, effect.path("actions").path(0).path("cost").path("stress").asInt());
+
+            ws.sendText(attack, true).join();
+            assertTrue(inbox.next("error").toString().contains("unloaded"));
+            ws.sendText(attack.replace("attack,trait", "attack,reroll,trait"), true).join();
+            JsonNode reroll = inbox.next("roll");
+            assertFalse(reroll.has("featureRoll"), "Rerolls of the same attack do not roll Reloading again");
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void weaponDamageRulesReplaceOnesAndAddExplodedDiceWithAccurateBreakdown() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            inbox.next("hello");
+            diceSeed(seedFor(random -> random.nextInt(8) == 0 && random.nextInt(8) == 7));
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d8+9").put("source", "damage");
+            msg.putObject("damageRules").putObject("weaponRules").put("onesAs", 8).put("label", "Serrated");
+            msg.putArray("contributions").addObject().put("label", "Curved Dagger damage").put("expression", "2d8+9");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode serrated = inbox.next("roll");
+            assertEquals(List.of(8, 8), List.of(serrated.path("rolls").path(0).asInt(), serrated.path("rolls").path(1).asInt()));
+            assertEquals(25, serrated.path("total").asInt());
+            assertTrue(serrated.path("breakdown").path(0).path("notes").toString().contains("Serrated"));
+
+            diceSeed(seedFor(random -> random.nextInt(10) == 9 && random.nextInt(10) != 9));
+            msg = MAPPER.createObjectNode().put("type", "roll").put("expression", "2d10+6").put("source", "damage");
+            msg.putObject("damageRules").putObject("weaponRules").put("explode", "once").put("label", "Brutal");
+            msg.putArray("contributions").addObject().put("label", "Knuckle Blades damage").put("expression", "2d10+6");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode brutal = inbox.next("roll");
+            assertEquals(3, brutal.path("rolls").size());
+            assertEquals("Brutal: extra dice", brutal.path("breakdown").path(1).path("label").asText());
+            int total = 0;
+            for (JsonNode part : brutal.path("breakdown")) total += part.path("total").asInt();
+            assertEquals(brutal.path("total").asInt(), total);
+
+            msg.withObject("/damageRules/weaponRules").put("explode", "sometimes");
+            ws.sendText(msg.toString(), true).join();
+            assertTrue(inbox.next("error").toString().contains("weapon damage rules"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void weaponTriggersApplyOnlyToTheirOwnWeaponAndRunSuccessCheckSteps() throws Exception {
+        ObjectNode sheet = weaponSheet("scepter-of-elias", "vorpal-shard");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,action","actorId":"gunner","weapon":"Vorpal Shard"}
+                    """, true).join();
+            JsonNode other = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "gunner").put("key", "weapon:Scepter of Elias").put("actionId", "invigorating");
+            request.putObject("roll").put("id", other.path("id").asLong()).put("ts", other.path("ts").asLong());
+            var rejected = featureHttp(cookie, request);
+            assertEquals(400, rejected.statusCode());
+            assertTrue(rejected.body().contains("only to rolls with Scepter of Elias"), rejected.body());
+
+            ws.sendText("""
+                    {"type":"roll","kind":"duality","expression":"2d12","source":"attack,action","actorId":"gunner","weapon":"Scepter of Elias"}
+                    """, true).join();
+            JsonNode own = inbox.next("roll");
+            request.putObject("roll").put("id", own.path("id").asLong()).put("ts", own.path("ts").asLong());
+            diceSeed(seedFor(random -> random.nextInt(4) == 3));
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(sheet.path("stress").path("on").asInt() - 1,
+                    MAPPER.readTree(store.loadSheet(campaign.getId(), "gunner")).path("stress").path("on").asInt());
+            assertTrue(inbox.next("roll").toString().contains("Invigorating"));
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode rewardRoll(long id, int hope, int fear) throws Exception {
         ObjectNode roll = MAPPER.createObjectNode().put("type", "roll").put("id", id).put("ts", 1234)
                 .put("fromId", playerId()).put("actorId", "reward-actor").put("kind", "duality")

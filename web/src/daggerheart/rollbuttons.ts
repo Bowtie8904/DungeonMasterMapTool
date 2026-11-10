@@ -47,6 +47,7 @@ export interface RollButtonHost {
   supportsBloodAutomation?: () => boolean;
   supportsGlancingBlowDamage?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
+  supportsWeaponAutomation?: () => boolean;
   sessionId?: () => string;
   supportsDeathMoveOptions?: () => boolean;
 }
@@ -141,6 +142,14 @@ function openHopeAmount(t: AvailableRollTrigger, c: CharacterSheet, submit: (amo
   amount.select();
 }
 
+/** Attack-linked damage changes carried by source tags (Versatile profile, Devastating d20). */
+export function attackDamageContext(m: Pick<RollMessage, 'source'>): { profile?: string; damageDie?: number } | undefined {
+  const tags = m.source?.split(',') ?? [];
+  const profile = tags.find(tag => tag.startsWith('weaponProfile:'))?.slice('weaponProfile:'.length);
+  const die = Number(tags.find(tag => /^damageDie:\d+$/.test(tag))?.split(':')[1] ?? 0);
+  return profile || die ? { ...(profile ? { profile } : {}), ...(die ? { damageDie: die } : {}) } : undefined;
+}
+
 /** Request repeating the roll (optionally with advantage) or rolling only the Hope Die again. */
 export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
   const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
@@ -158,10 +167,13 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
     weapon: m.weapon,
   };
   const advantage = t.trigger.advantage;
+  const disadvantage = !advantage && t.trigger.disadvantage;
+  const tags = (m.source ?? '').split(',').filter(Boolean);
   return {
-    ...original, ...base, label, source: m.source,
-    expression: original.expression + (advantage ? '+1d6' : ''),
-    contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: '1d6' }] : [])],
+    ...original, ...base, label, source: tags.includes('reroll') || !tags.length ? m.source : [...tags, 'reroll'].join(','),
+    expression: original.expression + (advantage ? '+1d6' : disadvantage ? '-1d6' : ''),
+    contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: '1d6' }]
+      : disadvantage ? [{ label: `Disadvantage - ${t.source}`.slice(0, 120), expression: '-1d6' }] : [])],
   };
 }
 
@@ -427,7 +439,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       && (critical || (ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) === 'hope');
     if (rolledActor && withHope && m.fromId === host.playerId && host.supportsRollRewards?.() && m.rewardClaimed === false) {
       const { character: c, save } = rolledActor.sheet;
-      const extra = criticalMeleeBonus(c, m.weapon, critical);
+      const extra = criticalMeleeBonus(c, m.weapon, critical, attackDamageContext(m)?.profile);
       const reward = el('button', { class: 'small primary', type: 'button' },
         critical ? `Gain ${1 + extra.hope} Hope / Clear ${1 + extra.stress} Stress` : 'Gain 1 Hope');
       reward.disabled = claiming || (c.hope.on >= c.hope.slots && (!critical || c.stress.on <= 0));
@@ -515,10 +527,13 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       damage.addEventListener('click', () => {
         const proficiency = Number(m.source?.split(',').find(tag => /^proficiency:\d+$/.test(tag))?.split(':')[1] ?? 0);
         const linkedBonus = Number(m.source?.split(',').find(tag => /^linkedDamage:-?\d+$/.test(tag))?.split(':')[1] ?? 0);
+        const attack = attackDamageContext(m);
         const fear = ctx?.kind !== 'damage' ? ctx?.fear : undefined;
+        const outcome = critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear');
+        const extra = attack ? [attack] as const : [] as const;
         const opened = linkedBonus
-          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus, undefined, critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear'))
-          : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, undefined, undefined, critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear'));
+          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus, undefined, outcome, ...extra)
+          : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, undefined, undefined, outcome, ...extra);
         if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
       });
       buttons.push(damage);
@@ -590,6 +605,8 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           : (t.trigger.advanceEffect || t.trigger.swapDuality) && !host.supportsGuardianRolls?.()
           ? 'Update the host to use Guardian roll actions.'
           : t.trigger.dualityDieBonus && !host.supportsDualityDieBonus?.() ? 'Update the host to adjust Duality dice after a roll.'
+          : (t.trigger.check && !t.trigger.check.gain && t.trigger.check.success !== undefined || t.trigger.choices?.some(choice => choice.steps))
+            && !host.supportsWeaponAutomation?.() ? 'Update the host to use this weapon feature.'
           : t.trigger.addDice && !host.supportsPartyFeatures?.() ? 'Update the host to add dice to finished rolls.' : undefined;
         b.disabled = !!blocked || !!unsupported;
         b.title = unsupported ?? blocked ?? t.trigger.description ?? t.source;

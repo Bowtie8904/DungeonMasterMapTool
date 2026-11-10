@@ -644,6 +644,15 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Powerful** weapons such as the Advanced Greatstaff roll an extra weapon damage die and discard the lowest
   on the host; chat marks discarded dice and preserves the correct breakdown. Older hosts are identified by an
   additive capability flag and show an update-required message rather than silently rolling incorrect damage.
+  **Weapon features:** every catalog weapon feature has an explicit mapping. Weapon bonuses apply only to that
+  weapon's own rolls. Versatile and Stockpiled weapons show a second attack row with the alternate trait, range and
+  damage. Quick, Ricochet, Bouncing, Aimed, Devastating (d20 damage dice for that attack), Charged and similar costs
+  are attack-roll options; Follow-Up, Greedy (spends 10 gold coins) and the required Painful Stress are damage
+  options. After-hit costs such as Concussive, Grappling or Catalytic, and Lucky/Rebounding rerolls, appear on that
+  weapon's attack result in chat. The host rolls Brutal/Recursive extra dice, Serrated/Self-Correcting replacements
+  and Reloading's d6 after each attack (a 1 unloads the weapon until you mark a Stress to reload). Channeling stores
+  halved magic damage for the next Claws damage roll; Parry and Deflecting post their rolls from the sheet. Effects
+  on targets (Scary, Deadly, Piercing, ...) remain with the GM.
   Existing sheets refresh copied automation from the current host compendium when opened, without resetting
   resources or rebuilding creation/level-up choices. Full narrative effects, targeting and conditional outcomes
   still require player/GM adjudication. Patron's Fury and No Mercy have a feature button that pays the cost and

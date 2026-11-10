@@ -1,5 +1,5 @@
 import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
-import { ActionDef, Automation, DiceRoll, addEffect, automationSources, runActionDetailed, syncResources, traitTotal } from './engine';
+import { ActionDef, Automation, DiceRoll, addEffect, automationSources, runActionDetailed, syncResources, traitTotal, weaponWithProfile } from './engine';
 import { companionAvailable, companionWeapon } from './companion';
 
 export function martialStances(c: CharacterSheet): NonNullable<Automation['stances']> {
@@ -63,9 +63,10 @@ export function comboDie(c: CharacterSheet): number {
   return [4, 6, 8, 10, 12][Math.min(4, increases)];
 }
 
-export function criticalMeleeBonus(c: CharacterSheet, weapon: string | undefined, critical: boolean): NonNullable<Automation['criticalMelee']> {
+export function criticalMeleeBonus(c: CharacterSheet, weapon: string | undefined, critical: boolean, profile?: string): NonNullable<Automation['criticalMelee']> {
   const companion = companionAvailable(c) ? companionWeapon(c) : undefined;
-  const melee = [...c.activeWeapons, ...(companion ? [companion] : [])].some(w => w.name === weapon && w.range.toLowerCase() === 'melee');
+  const weapons = c.activeWeapons.map(w => profile && w.name === weapon ? weaponWithProfile(w, profile) : w);
+  const melee = [...weapons, ...(companion ? [companion] : [])].some(w => w.name === weapon && w.range.toLowerCase() === 'melee');
   return critical && melee ? automationSources(c).find(a => a.criticalMelee)?.criticalMelee ?? { hope: 0, stress: 0, proficiency: 0 }
     : { hope: 0, stress: 0, proficiency: 0 };
 }

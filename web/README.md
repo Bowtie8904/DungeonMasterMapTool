@@ -138,6 +138,12 @@ separate bonus row after host-generated damage bonuses.
 Smite's optional weapon-attack roll option spends 3 Hope and grants the same charge as its card action,
 sharing the card's once-per-rest limit. It is unavailable on Spellcast rolls or while already charged.
 No settings or DM Link compatibility changes are required.
+Weapon features use the additive `weaponAutomation` host capability for host-rolled damage rules
+(`damageRules.weaponRules`: Brutal/Recursive extra dice, Serrated/Self-Correcting face replacements),
+Reloading checks on new attacks (rerolls carry a `reroll` tag) and success-check trigger steps.
+`engine.ts` scopes weapon modifiers and triggers to their own weapon, resolves `weaponProfile:` alternate
+statistics (Versatile/Stockpiled) and `damageDie:` attack tags for chat Damage buttons, and blocks attacks
+with Pompous requirements or Unloaded weapons. Older hosts disable only the affected rolls and buttons.
 Blood Hunter rules use conditional current-HP costs/dice, effect-gated stats and success-gated Psychometry
 chat claims. The rest dialog provides a free restricted Mutagens brewing slot with trait/benefit selectors;
 feature upgrades unlock choices and +2/-2 automatically. Volatile Toxins locks marked HP until the next

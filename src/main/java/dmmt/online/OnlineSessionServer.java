@@ -2310,6 +2310,7 @@ public final class OnlineSessionServer {
                 ObjectNode chosen = definition.deepCopy();
                 chosen.put("label", definition.path("label").asText() + ": " + choice.path("label").asText());
                 if (choice.has("addDice")) chosen.set("addDice", choice.path("addDice"));
+                if (choice.path("steps").isArray()) chosen.set("steps", choice.path("steps").deepCopy());
                 definition = chosen;
             }
             if (definition.has("deathMove"))
@@ -2542,12 +2543,15 @@ public final class OnlineSessionServer {
                 JsonNode check = definition.path("check");
                 DiceRoller.Result result = DiceRoller.roll(check.path("dice").asText(""), config.maxDice(), diceRandom);
                 int die = result.rolls().isEmpty() ? 0 : result.rolls().getFirst();
-                if (check.has("gain")) {
+                if (check.has("gain") || check.has("success")) {
                     if (die == check.path("success").asInt()) {
                         ArrayNode steps = MAPPER.createArrayNode();
-                        steps.addObject().put("op", "gain").put("resource", check.path("gain").asText()).put("amount", 1);
+                        if (check.has("gain"))
+                            steps.addObject().put("op", "gain").put("resource", check.path("gain").asText()).put("amount", 1);
+                        else if (definition.path("steps").isArray()) steps.addAll((ArrayNode) definition.path("steps").deepCopy());
                         applyFeatureSteps(sourceSheet, steps, actionLabel, sourceActor, key, reportLines);
-                    } else reportLines.add("No resource gained.");
+                    } else reportLines.add(check.has("gain") ? "No resource gained."
+                            : "No effect (needed " + check.path("success").asInt() + ").");
                     if (originalRoll != null) {
                         originalRoll.withArray("featureUses").add(sourceActor.getId() + ":" + key + ":" + actionId);
                         sourceSheet.put("featureRevision", sourceSheet.path("featureRevision").asLong() + 1);
@@ -3045,6 +3049,7 @@ public final class OnlineSessionServer {
             if (weaponName.equals(candidate.path("name").asText())) weapon = candidate;
         for (JsonNode effect : sheet.path("effects"))
             if (weaponName.equals(effect.path("weapon").path("name").asText())) weapon = effect.path("weapon");
+        if (weapon != null) weapon = profiledWeapon(weapon, tags);
         ObjectNode run = null;
         List<String> lines = new ArrayList<>();
         List<JsonNode> definitions = new ArrayList<>();
@@ -4275,9 +4280,18 @@ public final class OnlineSessionServer {
     }
 
     private boolean matchingWeaponRange(ObjectNode sheet, ObjectNode roll, String range) {
+        String profile = null;
+        for (String tag : roll.path("source").asText("").split(","))
+            if (tag.startsWith("weaponProfile:")) profile = tag.substring("weaponProfile:".length());
         for (JsonNode weapon : sheet.path("activeWeapons")) {
-            if (weapon.path("name").asText().equals(roll.path("weapon").asText())
-                    && range.equalsIgnoreCase(weapon.path("range").asText())) return true;
+            if (!weapon.path("name").asText().equals(roll.path("weapon").asText())) continue;
+            String weaponRange = weapon.path("range").asText();
+            if (profile != null) {
+                JsonNode automation = catalogAutomation("weapon:" + weapon.path("name").asText(), weapon.path("name").asText(), weapon.path("automation"));
+                for (JsonNode alternate : automation.path("alternateProfiles"))
+                    if (profile.equals(alternate.path("label").asText())) weaponRange = alternate.path("range").asText(weaponRange);
+            }
+            if (range.equalsIgnoreCase(weaponRange)) return true;
         }
         JsonNode companion = sheet.path("companion");
         if (!companion.isObject() || companion.path("unavailable").asBoolean()
@@ -4310,6 +4324,9 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to your own character's roll.");
         if ("ally".equals(audience) && sourceActor.getId().equals(rolledActorId))
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
+        if (key.startsWith("weapon:") && !trigger.path("primaryWeapon").asBoolean() && !trigger.path("anyWeapon").asBoolean()
+                && !key.substring("weapon:".length()).equals(roll.path("weapon").asText()))
+            throw new IllegalArgumentException("This weapon feature applies only to rolls with " + key.substring("weapon:".length()) + ".");
         String source = roll.path("source").asText("");
         List<String> tags = List.of(source.split(","));
         if (trigger.has("damageSource") && (!tags.contains("damage")
@@ -5827,6 +5844,7 @@ public final class OnlineSessionServer {
             hello.put("bloodAutomation", true);
             hello.put("specialCardActions", true);
             hello.put("splendorAutomation", true);
+            hello.put("weaponAutomation", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -6331,6 +6349,13 @@ public final class OnlineSessionServer {
                     if (!threshold.isInt()) throw new IllegalArgumentException("Invalid reroll threshold.");
                     result = DiceRoller.rerollBelow(result, threshold.asInt(), config.maxDice(), diceRandom);
                 }
+                JsonNode weaponRules = msg.path("damageRules").path("weaponRules");
+                if (!weaponRules.isMissingNode() && (!weaponRules.isObject()
+                        || weaponRules.has("onesAs") && !weaponRules.path("onesAs").isInt()
+                        || weaponRules.has("explode") && !List.of("once", "repeat").contains(weaponRules.path("explode").asText())
+                        || weaponRules.path("label").asText().length() > 60))
+                    throw new IllegalArgumentException("Invalid weapon damage rules.");
+                if (weaponRules.has("onesAs")) result = DiceRoller.onesAs(result, weaponRules.path("onesAs").asInt(), config.maxDice());
             }
             if (msg.has("contributions")) {
                 JsonNode sources = msg.path("contributions");
@@ -6367,8 +6392,36 @@ public final class OnlineSessionServer {
                 if (msg.path("damageRules").has("rerollBelow") && !breakdownNotes.isEmpty())
                     breakdownNotes.getFirst().addObject().put("label", "Deadly Raptor")
                             .put("impact", "Rerolled damage dice below Proficiency (" + msg.path("damageRules").path("rerollBelow").asInt() + ") once.");
+                JsonNode onesRule = msg.path("damageRules").path("weaponRules");
+                if (onesRule.has("onesAs") && !breakdownNotes.isEmpty())
+                    breakdownNotes.getFirst().addObject().put("label", onesRule.path("label").asText("Weapon feature").isBlank() ? "Weapon feature" : onesRule.path("label").asText())
+                            .put("impact", "Damage dice showing 1 deal " + onesRule.path("onesAs").asInt() + " instead.");
             }
             String matchingExpression = result.expression();
+            JsonNode explodeRule = msg.path("damageRules").path("weaponRules");
+            if (explodeRule.has("explode")) {
+                boolean repeat = "repeat".equals(explodeRule.path("explode").asText());
+                List<int[]> extraDice = DiceRoller.explode(result, repeat, config.maxDice(), diceRandom);
+                if (!extraDice.isEmpty()) {
+                    int extra = extraDice.stream().mapToInt(die -> die[1]).sum();
+                    String label = explodeRule.path("label").asText("").isBlank() ? (repeat ? "Recursive" : "Brutal") : explodeRule.path("label").asText();
+                    if (breakdown == null) breakdown = new ArrayList<>(List.of(new DiceRoller.Detail("Damage", result.expression(), result.rolls(), result.total())));
+                    StringBuilder expression = new StringBuilder();
+                    for (int i = 0; i < extraDice.size(); ) {
+                        int sides = extraDice.get(i)[0], run = 0;
+                        while (i < extraDice.size() && extraDice.get(i)[0] == sides) { run++; i++; }
+                        expression.append(expression.isEmpty() ? "" : "+").append(run).append("d").append(sides);
+                    }
+                    List<Integer> faces = extraDice.stream().map(die -> die[1]).toList();
+                    breakdown.add(new DiceRoller.Detail(label + ": extra dice", expression.toString(), faces, extra));
+                    while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
+                    breakdownNotes.get(breakdown.size() - 1).addObject().put("label", label)
+                            .put("impact", repeat ? "Each maximum damage die rolled another die, repeatedly." : "Each maximum damage die rolled one additional die.");
+                    List<Integer> all = new ArrayList<>(result.rolls());
+                    all.addAll(faces);
+                    result = new DiceRoller.Result(result.expression() + "+" + extra, all, result.total() + extra);
+                }
+            }
             if (msg.path("damageRules").has("comboDie")) {
                 JsonNode die = msg.path("damageRules").path("comboDie");
                 if (!die.isInt()) throw new IllegalArgumentException("Invalid Combo Die.");
@@ -6591,6 +6644,7 @@ public final class OnlineSessionServer {
                 changed = true;
             }
         }
+        changed |= applyReloading(sheet, roll);
         changed |= applyDomainSuccess(sheet, actor, roll);
         List<String> formReports = ArcanaSageRules.finishForms(sheet, roll);
         if (!formReports.isEmpty()) {
@@ -6601,6 +6655,73 @@ public final class OnlineSessionServer {
         if (!changed) return false;
         commitFeatureSheets(changedSheets, roll, true);
         for (var entry : changedSheets.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        return true;
+    }
+
+    /**
+     * The weapon as used by a roll: its {@code weaponProfile:} alternate statistics and an attack-linked
+     * {@code damageDie:} size, accepted only when the weapon's catalog automation declares them.
+     */
+    private JsonNode profiledWeapon(JsonNode weapon, List<String> tags) {
+        String name = weapon.path("name").asText();
+        JsonNode automation = catalogAutomation("weapon:" + name, name, weapon.path("automation"));
+        ObjectNode result = null;
+        for (String tag : tags) {
+            if (tag.startsWith("weaponProfile:")) {
+                for (JsonNode profile : automation.path("alternateProfiles"))
+                    if (tag.substring("weaponProfile:".length()).equals(profile.path("label").asText())) {
+                        if (result == null) result = weapon.deepCopy();
+                        result.put("damage", profile.path("damage").asText(result.path("damage").asText()));
+                        result.put("range", profile.path("range").asText(result.path("range").asText()));
+                    }
+            } else if (tag.matches("damageDie:\\d+")) {
+                String sides = tag.substring("damageDie:".length());
+                boolean declared = false;
+                for (JsonNode option : automation.path("rollOptions"))
+                    if (sides.equals(option.path("damageDie").asText())) declared = true;
+                if (!declared) continue;
+                if (result == null) result = weapon.deepCopy();
+                result.put("damage", result.path("damage").asText().replaceFirst("(?i)(\\d*)d\\d+", "$1d" + sides));
+            }
+        }
+        return result == null ? weapon : result;
+    }
+
+    /** Reloading weapons: roll the check die after every new attack; on a failure the weapon becomes Unloaded. */
+    private boolean applyReloading(ObjectNode sheet, ObjectNode roll) {
+        List<String> tags = List.of(roll.path("source").asText("").split(","));
+        String weaponName = roll.path("weapon").asText("");
+        if (!tags.contains("attack") || tags.contains("reroll") || weaponName.isBlank()) return false;
+        JsonNode weapon = null;
+        for (JsonNode candidate : sheet.path("activeWeapons"))
+            if (weaponName.equals(candidate.path("name").asText())) weapon = candidate;
+        if (weapon == null) return false;
+        JsonNode reloading = catalogAutomation("weapon:" + weaponName, weaponName, weapon.path("automation")).path("reloading");
+        if (!reloading.isObject()) return false;
+        for (JsonNode effect : sheet.path("effects"))
+            if (weaponName.equals(effect.path("unloadedWeapon").asText()))
+                throw new IllegalArgumentException(weaponName + " is unloaded. Mark a Stress to reload it before attacking.");
+        DiceRoller.Result check = DiceRoller.roll(reloading.path("dice").asText("1d6"), config.maxDice(), diceRandom);
+        int fail = reloading.path("fail").asInt(1);
+        String die = reloading.path("dice").asText("1d6").replaceFirst("^1d", "d");
+        String effectName = weaponName + ": Unloaded";
+        String consequence;
+        if (check.total() == fail) {
+            ObjectNode effect = sheet.withArray("effects").addObject();
+            effect.put("id", "reload-" + java.util.UUID.randomUUID()).put("name", effectName).put("kind", "debuff")
+                    .put("until", "manual").put("unloadedWeapon", weaponName).put("sourceKey", "weapon:" + weaponName)
+                    .put("source", weaponName)
+                    .put("text", "You must mark a Stress to reload " + weaponName + " before you can fire it again.");
+            ObjectNode action = effect.putArray("actions").addObject();
+            action.put("id", "reload").put("label", "Reload").put("endEffect", effectName);
+            action.putObject("cost").put("stress", 1);
+            sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+            consequence = "Reloading " + die + ": " + check.total() + ". " + weaponName + " is unloaded: mark a Stress to reload it before firing again.";
+        } else consequence = "Reloading " + die + ": " + check.total() + ". " + weaponName + " stays loaded.";
+        JsonNode existing = roll.path("featureRoll");
+        if (existing.isObject())
+            ((ObjectNode) existing).put("consequence", existing.path("consequence").asText() + " " + consequence);
+        else roll.putObject("featureRoll").put("name", "Reloading").put("result", check.total()).put("consequence", consequence);
         return true;
     }
 

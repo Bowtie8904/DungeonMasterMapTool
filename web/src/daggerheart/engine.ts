@@ -39,9 +39,13 @@ export interface Modifier {
   /** Removed once it has been applied to a matching roll */
   consume?: boolean;
   requiresEffect?: string;
+  /** On a weapon: applies to rolls with the equipped weapon in this slot instead of the source weapon (Trusty). */
+  weapon?: 'primary' | 'secondary';
 }
 
 export interface EffectDef {
+  /** Host-created Reloading debuff: blocks attacks with this weapon until reloaded. */
+  unloadedWeapon?: string;
   endOnAction?: boolean;
   surgeResource?: string;
   maintainOnAction?: string;
@@ -279,6 +283,12 @@ export interface RollOption extends ActionDef {
   resourceEmpty?: string;
   input?: { label: string; default: number; min: number; max: number; source?: 'attackFear' };
   quantity?: { resource: string; label: string; max?: number };
+  /** Preselected and cannot be unticked while it can be paid (Painful). */
+  required?: boolean;
+  /** Attack option: that attack's damage uses this die size for the weapon's dice (Devastating). */
+  damageDie?: number;
+  /** Only offered for rolls with the equipped weapon of this name (stored Channeling damage). */
+  weaponName?: string;
 }
 
 /** A button a feature offers on a finished roll in the chat. */
@@ -304,7 +314,9 @@ export interface RollTrigger extends ActionDef {
   repeatable?: boolean;
   magicAction?: boolean;
   damageDice?: 'reroll' | 'double';
-  choices?: Array<{ id: string; label: string; addDice?: string }>;
+  /** Rerolls (`reroll: 'duality'`) with an added -d6 disadvantage die (Rebounding). */
+  disadvantage?: boolean;
+  choices?: Array<{ id: string; label: string; addDice?: string; steps?: Step[] }>;
   dualityDieBonus?: { die: 'hope' | 'fear'; value: number };
   advanceEffect?: string;
   swapDuality?: boolean;
@@ -326,6 +338,8 @@ export interface RollTrigger extends ActionDef {
   outcome?: 'hope' | 'fear';
   weapon?: string;
   weaponAttack?: boolean;
+  /** Weapon-owned trigger offered on attacks with any weapon, not just its own (Vorpal Shard, Void Needle). */
+  anyWeapon?: boolean;
   tokenGain?: { resource: string; max: number };
   /** Chat button group; defaults via {@link rollTriggerSection}. */
   rollSection?: RollActionSection;
@@ -383,9 +397,31 @@ export interface Automation {
   resources?: ResourceDef[];
   creation?: { hp?: number; stress?: number; evasion?: number; domainCards?: number; domains?: string[]; experienceBonus?: number };
   rollOptions?: RollOption[];
-  damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean; proficiencyOnly?: boolean };
+  damage?: { extraDice: number; dropLowest: number; maximumOnes?: boolean; proficiencyOnly?: boolean;
+    /** Host damage rule: damage dice showing 1 count as this value (Serrated 8, Self-Correcting 6). */
+    onesAs?: number;
+    /** Host damage rule: each maximum face rolls one more die; `repeat` lets the new dice trigger again (Brutal/Recursive). */
+    explode?: 'once' | 'repeat';
+    /** Feature name shown in the damage breakdown for the host rules. */
+    label?: string };
   /** Options offered in the incoming-damage dialog (see damage.ts). */
   mitigation?: MitigationOption[];
+  /** Alternate weapon statistics offered as a separate attack row (Versatile, Stockpiled). */
+  alternateProfiles?: WeaponProfile[];
+  /** Successful attacks may deal physical or magic damage (Otherworldly). */
+  damageTypeChoice?: boolean;
+  /** Attacks with this weapon require the trait to stay within these bounds (Pompous). */
+  requirement?: { trait: TraitName; min?: number; max?: number };
+  /** Host rolls this die after every attack with the weapon; on `fail` the weapon becomes Unloaded (Reloading). */
+  reloading?: { dice: string; fail: number };
+}
+
+export interface WeaponProfile {
+  label: string;
+  trait: TraitName;
+  range: string;
+  damage: string;
+  damageType?: 'phys' | 'magic';
 }
 
 export interface BeastformDef {
@@ -570,6 +606,8 @@ export function evalValue(value: ModValue | undefined, c: CharacterSheet): numbe
   else if (key.startsWith('cards_')) n = [...c.loadout, ...c.vault].filter((d) => d.domain.toLowerCase() === key.slice(6)).length;
   else if (key === 'level') n = c.level;
   else if (key === 'proficiency') n = c.proficiency.on;
+  else if (key === 'armor_available') n = Math.max(0, c.armorTrack.slots - c.armorTrack.on);
+  else if (key === 'armor_score') n = derivedStats(c).armorSlots;
   else if (key === 'spellcast') n = c.traits.find((t) => t.spellcast)?.mod ?? 0;
   else if (key === 'total_spellcast') {
     const spellcast = c.traits.find(t => t.spellcast);
@@ -812,10 +850,48 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
   };
   for (const e of c.effects) for (const m of e.modifiers ?? []) take(m, e.name, e);
   for (const s of namedSources(c)) {
-    if (weapon && s.weapon && s.weapon !== weapon) continue;
-    for (const m of [...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])]) take(m, s.name);
+    for (const m of [...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])]) {
+      if (s.weapon && m.roll && !weaponModifierApplies(c, s.weapon, m, weapon)) continue;
+      take(m, s.name);
+    }
   }
   return out;
+}
+
+/** A weapon's roll modifier counts only for rolls made with that weapon, or with the slot it explicitly names. */
+function weaponModifierApplies(c: CharacterSheet, source: Weapon, m: Modifier, weapon?: Weapon): boolean {
+  if (!weapon) return false;
+  if (m.weapon) return weapon.slot.toLowerCase() === m.weapon && activeWeapons(c).some(w => w.name === weapon.name);
+  return sameWeapon(source, weapon);
+}
+
+/** Alternate statistics and attack-linked die changes are copies of the equipped weapon with the same name and slot. */
+export function sameWeapon(a: Weapon | undefined, b: Weapon | undefined): boolean {
+  return !!a && !!b && (a === b || a.name === b.name && a.slot === b.slot);
+}
+
+export function weaponProfiles(w: Weapon): WeaponProfile[] {
+  return w.automation?.alternateProfiles ?? [];
+}
+
+/** The weapon as used with one of its alternate statistics; unknown labels return the weapon itself. */
+export function weaponWithProfile(w: Weapon, label?: string): Weapon {
+  const profile = label ? weaponProfiles(w).find(p => p.label === label) : undefined;
+  return profile ? { ...w, trait: profile.trait, range: profile.range, damage: profile.damage,
+    damageType: profile.damageType ?? w.damageType, profile: profile.label } : w;
+}
+
+/** Why the weapon cannot attack right now (Pompous requirement, Reloading). */
+export function weaponAttackBlocker(c: CharacterSheet, w: Weapon): string | null {
+  const unloaded = c.effects.find(e => e.unloadedWeapon === w.name);
+  if (unloaded) return `${w.name} is unloaded. Reload it first (Effects or the weapon's Reload button).`;
+  const requirement = w.automation?.requirement;
+  if (requirement) {
+    const value = traitTotal(c, requirement.trait);
+    if (requirement.max !== undefined && value > requirement.max) return `Requires ${requirement.trait} ${signed(requirement.max)} or lower (currently ${signed(value)}).`;
+    if (requirement.min !== undefined && value < requirement.min) return `Requires ${requirement.trait} ${signed(requirement.min)} or higher (currently ${signed(value)}).`;
+  }
+  return null;
 }
 
 export interface AvailableRollOption {
@@ -924,9 +1000,10 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
     .filter((o) => !o.resourceMultiplier || (c.resources?.[o.resourceMultiplier.resource] ?? 0) > 0)
+    .filter((o) => !o.weaponName || weapon?.name === o.weaponName && activeWeapons(c).some(w => w.name === o.weaponName))
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
-      ? weapon?.slot.toLowerCase() === o.weapon && activeWeapons(c).includes(weapon)
-      : !s.weapon || o.weapon === 'any' || !weapon || weapon === s.weapon)
+      ? weapon?.slot.toLowerCase() === o.weapon && activeWeapons(c).some(w => sameWeapon(w, weapon))
+      : !s.weapon || o.weapon === 'any' || !weapon || sameWeapon(weapon, s.weapon))
     .map((option) => ({
       key: option.uses ? `${s.key}:roll:${option.id}` : s.key,
       source: s.name, origin: s.origin, automation: option.uses ? { ...s.auto!, uses: option.uses } : option.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, option,
@@ -1129,7 +1206,10 @@ export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['a
       label: e.name, impact: `Each pool: roll ${e.damage!.extraDice} extra; discard ${e.damage!.dropLowest} lowest`,
     })),
     ...(raw < 1 ? [{ label: 'Minimum Proficiency', impact: diceCount(1 - raw) }] : []),
-    ...(weapon.automation?.damage ? [{ label: weapon.feature?.name ?? weapon.name, impact: `Roll ${weapon.automation.damage.extraDice} extra; discard ${weapon.automation.damage.dropLowest} lowest` }] : []),
+    ...(weapon.automation?.damage && (weapon.automation.damage.extraDice || weapon.automation.damage.dropLowest)
+      ? [{ label: weapon.feature?.name ?? weapon.name, impact: `Roll ${weapon.automation.damage.extraDice} extra; discard ${weapon.automation.damage.dropLowest} lowest` }] : []),
+    ...(weapon.profile ? [{ label: weapon.profile, impact: `Alternate statistics: ${weapon.trait}, ${weapon.range}, ${weapon.damage}`.slice(0, 120) }] : []),
+    ...(weapon.dieOverride ? [{ label: 'Attack option', impact: `d${weapon.dieOverride} damage dice for this attack` }] : []),
   ];
   return [
     { label: `${weapon.name} damage (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, ...(parts ? { notes } : {}) },
@@ -1215,7 +1295,7 @@ export function usesMax(c: CharacterSheet, key: string, a: Automation): number {
 export function costText(cost?: ActionDef['cost'], c?: CharacterSheet): string {
   if (!cost) return '';
   const parts: string[] = [];
-  const labels: Record<string, string> = { hope: 'Hope', stress: 'Stress', armor: 'Armor Slot', hp: 'HP' };
+  const labels: Record<string, string> = { hope: 'Hope', stress: 'Stress', armor: 'Armor Slot', hp: 'HP', gold: 'gold coins' };
   for (const [res, value] of Object.entries(cost)) {
     if (value === undefined) continue;
     const n = c ? evalValue(value, c) : value;
@@ -1230,6 +1310,7 @@ function track(c: CharacterSheet, r: Resource) {
 
 export function amountAvailable(c: CharacterSheet, resource: string): number {
   syncResources(c);
+  if (resource === 'gold') return Math.max(0, Math.floor(c.gold ?? 0));
   const t = track(c, resource);
   return Math.max(0, t ? resource === 'hope' ? t.on : t.slots - t.on : c.resources?.[resource] ?? 0);
 }
@@ -1239,6 +1320,10 @@ function costBlocker(c: CharacterSheet, cost: ActionDef['cost']): string | null 
   for (const [res, value] of Object.entries(cost ?? {})) {
     const n = evalValue(value, c);
     if (!Number.isFinite(n) || n < 0) return `Invalid ${res} cost`;
+    if (res === 'gold') {
+      if ((c.gold ?? 0) < n) return `Not enough gold (${n} coins needed)`;
+      continue;
+    }
     const t = track(c, res);
     if (t) {
       if (res === 'hope' ? t.on < n : t.on + n > t.slots) return res === 'hope' ? 'Not enough Hope' : `Not enough free ${res === 'armor' ? 'Armor Slots' : res.toUpperCase()}`;
@@ -1254,6 +1339,7 @@ function costBlocker(c: CharacterSheet, cost: ActionDef['cost']): string | null 
 function payCost(c: CharacterSheet, cost: ActionDef['cost']): void {
   for (const [res, value] of Object.entries(cost ?? {})) {
     const n = evalValue(value, c);
+    if (res === 'gold') { c.gold = Math.max(0, (c.gold ?? 0) - n); continue; }
     const t = track(c, res);
     if (t) t.on += res === 'hope' ? -n : n;
     else c.resources![res] -= n;
@@ -1449,8 +1535,20 @@ export function damagePool(c: CharacterSheet, weapon: CharacterSheet['activeWeap
   const pools = [weapon.automation?.damage, ...c.effects.map(e => e.damage)]
     .filter((p): p is NonNullable<Automation['damage']> => !!p && (!p.proficiencyOnly || !weapon.fixedDice));
   if (!pools.length) return undefined;
-  return { extraDice: pools.reduce((n, p) => n + p.extraDice, 0), dropLowest: pools.reduce((n, p) => n + p.dropLowest, 0),
-    maximumOnes: pools.some(p => p.maximumOnes) };
+  const rule = pools.find(p => p.onesAs || p.explode);
+  return { extraDice: pools.reduce((n, p) => n + (p.extraDice ?? 0), 0), dropLowest: pools.reduce((n, p) => n + (p.dropLowest ?? 0), 0),
+    maximumOnes: pools.some(p => p.maximumOnes),
+    ...(rule?.onesAs ? { onesAs: rule.onesAs } : {}),
+    ...(pools.some(p => p.explode) ? { explode: pools.some(p => p.explode === 'repeat') ? 'repeat' as const : 'once' as const } : {}),
+    ...(rule?.label ? { label: rule.label } : {}) };
+}
+
+/** Host-applied damage dice rules of the weapon's damage pool, sent with the damage roll. */
+export function weaponDamageRules(c: CharacterSheet, weapon: Weapon): { onesAs?: number; explode?: 'once' | 'repeat'; label?: string } | undefined {
+  const pool = damagePool(c, weapon);
+  if (!pool?.onesAs && !pool?.explode) return undefined;
+  return { ...(pool.onesAs ? { onesAs: pool.onesAs } : {}), ...(pool.explode ? { explode: pool.explode } : {}),
+    label: (pool.label ?? weapon.feature?.name ?? weapon.name).slice(0, 60) };
 }
 
 /** Extra damage of a critical hit: the maximum result of the (kept) damage dice, never the modifiers. */
@@ -1512,17 +1610,19 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
   if (t.rerollResourceDice && (!(ctx.source.split(',').some(target => target === 'attack' || target === 'damage'))
       || !ctx.resourceOnes?.includes(t.rerollResourceDice))) return false;
   const targets = ctx.source.split(',');
-  if (t.primaryWeapon && !activeWeapons(c).some(w => w.slot === 'Primary' && w.name === ctx.weapon)) return false;
+  const profile = targets.find(tag => tag.startsWith('weaponProfile:'))?.slice('weaponProfile:'.length);
+  const weapons = activeWeapons(c).map(w => profile && w.name === ctx.weapon ? weaponWithProfile(w, profile) : w);
+  if (t.primaryWeapon && !weapons.some(w => w.slot === 'Primary' && w.name === ctx.weapon)) return false;
   if (t.spendFavor && ctx.difficulty !== undefined && ctx.total < ctx.difficulty) return false;
   const magic = targets.includes('magicdamage') || targets.includes('spelldamage')
-    || activeWeapons(c).some(w => w.name === ctx.weapon && w.damageType === 'magic');
+    || weapons.some(w => w.name === ctx.weapon && w.damageType === 'magic');
   if (t.magicOnly && !magic) return false;
   if (t.magicAction && !(targets.includes('spellcast') || targets.includes('attack') && magic)) return false;
   if (t.on === 'companion' && !companionAvailable(c)) return false;
   if (t.swapDuality && (ctx.kind === 'damage' || ctx.hope === ctx.fear)) return false;
   const companion = companionWeapon(c);
-  if (t.weaponRange && ![...activeWeapons(c), ...(companion ? [companion] : [])].some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
-  if (t.weaponRanges && !activeWeapons(c).some(w => w.name === ctx.weapon && t.weaponRanges!.some(range => range.toLowerCase() === w.range.toLowerCase()))) return false;
+  if (t.weaponRange && ![...weapons, ...(companion ? [companion] : [])].some(w => w.name === ctx.weapon && w.range.toLowerCase() === t.weaponRange!.toLowerCase())) return false;
+  if (t.weaponRanges && !weapons.some(w => w.name === ctx.weapon && t.weaponRanges!.some(range => range.toLowerCase() === w.range.toLowerCase()))) return false;
   if (t.excludeRolls?.some((target) => ctx.source.split(',').includes(target))) return false;
   if (t.on === 'duality' && ctx.kind === 'damage') return false;
   if (t.on === 'trait' && !targets.some(target => target.startsWith('trait:'))) return false;
@@ -1573,6 +1673,7 @@ export function availableRollTriggers(c: CharacterSheet, ctx: RollContext): Avai
     ...c.effects.filter(e => actorAutomationAvailable(e.sourceActorId)).map((e) => ({ key: `effect:${e.id}`, name: e.name, auto: { rollTriggers: e.rollTriggers } })),
   ];
   return sources.flatMap((s) => [...(s.auto?.rollTriggers ?? []), ...(s.auto?.conditionalRollTriggers ?? [])].filter((t) => !t.automatic && triggerApplies(c, t, ctx))
+    .filter((t) => !s.key.startsWith('weapon:') || t.primaryWeapon || t.anyWeapon || ctx.weapon === s.name)
     .map((trigger) => ({ key: s.key, source: s.name,
       automation: trigger.usesSource === false ? { ...s.auto!, uses: undefined } : s.auto!, trigger })));
 }

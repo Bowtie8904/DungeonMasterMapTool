@@ -155,6 +155,8 @@ Desktop tool for tabletop dungeon masters that:
 - **Token preparation and current traits:** Flight replaces its previous tokens with current Agility, minimum one. Inspirational Words, Restoration, Strategic Approach and Fane regenerate on long rest, even in the vault; compute regeneration after rest-expiring effects are removed. Strategic Approach has a minimum of one. Existing explicit reset/preparation controls remain manual overrides, not additional automatic awards. The current-trait expressions are `@total_<trait>`, `@total_spellcast` and `@total_proficiency`; existing base-value expressions retain their meaning.
 - **Compatibility:** optional `domainCardAutomationV3` identifies hosts supporting the Grace/Codex targeted effects, linked tokens, atomic claims and borrowed cards in addition to audited nested reactions. Retain V1/V2 for older clients; current clients disable host-dependent domain actions on hosts without V3. LAN `RemoteCompatibility.VERSION` is unchanged because connection/snapshot contracts remain backward-compatible.
 
+- **Weapon feature automation audit:** every weapon entry was reviewed individually; the decisions are recorded in the weapon ledger below. Weapon-owned roll modifiers apply only to rolls made with that weapon (never to spell or non-weapon damage), unless a modifier explicitly targets the primary weapon (Trusty). Weapon-owned chat triggers appear only on their own weapon's attack/damage results unless they explicitly target primary-weapon attacks (Entangling); the host enforces the same rule. Effects that only change the target, nearby adversaries or GM state (Scary, Deadly, Destructive/Incendiary consequences, Burning, Eruptive, Freezing, Hooked, Tethered, Doubled Up, Venomous, Disturbing, Nonlethal, Poisonous, Piercing, Echo, Long, Sheltering) stay manual with their descriptions. Costed after-hit options (Concussive, Grappling, Restraining, Entangling, Deforming, Magnetic, Draining, Catalytic) are buttons on that weapon's attack result, not sheet buttons; Catalytic grants one ally an exclusive claim to a consumable +3 next-attack bonus and Draining clears your Stress. Quick/Ricochet/Bouncing/Volleyed/Aimed/Dueling/Omnipresent/Extending/Charged/Accelerator/Devastating are attack-roll options; Follow-Up/Greedy/Painful are damage options (Painful is preselected and required while payable; Greedy spends 10 coins, one handful, of the sheet's gold). Devastating's Stress-paid attack option carries a d20 damage die to that attack's Damage button. Lucky/Rebounding reroll failed attacks (Rebounding with disadvantage; rerolls are tagged `reroll`), Targeted and Locked On grant a preselected next-attack effect, Inverted gains Hope on a Fear attack, Invigorating/Lifestealing roll their host-side check dice, and Bolstering grants the attacker 1 Hope and every other player a once-per-player Hope claim on a critical attack. Versatile and Stockpiled add a second attack row with the alternate trait/range/damage; rolls keep the weapon name and carry a `weaponProfile:<label>` tag so chat Damage buttons and the host use the alternate profile. Otherworldly offers the physical/magic damage-type selector. Brutal (one extra die per maximum face), Recursive (repeating), Serrated (1 counts as 8) and Self-Correcting (1 counts as 6) are host-rolled damage rules gated by `hello.weaponAutomation`. Reloading is host-rolled after every non-reroll attack with that weapon; a 1 creates a manual "<Weapon>: Unloaded" debuff that blocks its attacks until its Reload action marks a Stress. Channeling's Stress-paid magic halving stores the halved-away amount in a rest-duration "Claws of Yifang: Channeling" effect, accumulating, preselected and consumed on the next Claws damage roll. Pompous blocks attacks while Presence is above 0. Parry rolls the weapon's Proficiency damage dice (no modifier) to chat; Deflecting marks an Armor Slot and posts Evasion plus the unmarked Armor Slots before marking (Armor Score for Eldritch Vambrace); Braced is a Stress-paid incoming-damage option. Ethereal, Watchful, Make Them Dance, Webslinger and Life-Linked use existing action/roll patterns. New fields are additive; the Online Play host advertises `weaponAutomation`, older hosts block only the new damage rules, and the LAN compatibility version and settings are unchanged.
+
 - **Grace chat follow-ups:** Enrapture's optional Stress payment and Hypnotic Shimmer's once-per-rest activation belong on their successful Spellcast results, not their cards. Casting remains available after those benefits are spent. Thought Delver exposes only its Hope payment on the card; the committed payment report offers an optional Spellcast roll. Shared `chatOnly` actions and `followUpAction` references keep that roll off the card and preserve ordinary roll cancellation, affordability and active-card checks. The host adds optional `actionFollowUp` report metadata; older clients ignore it and older hosts retain existing behavior. No settings or LAN compatibility-version change.
 
 ### Individual domain-card disposition ledger
@@ -399,6 +401,38 @@ Desktop tool for tabletop dungeon masters that:
 | 234 | Words of Discord | Supported: fixed difficulty and repeat-target -5 option; control/target identities manual. |
 | 235 | Wrangle | Supported: Agility action roll and Hope-payment result action; target movement manual. |
 | 236 | Zone of Protection | Supported: fixed difficulty/use; zone membership and affected adversary consequences manual. |
+
+### Individual weapon-feature disposition ledger
+
+All 336 weapon entries were reviewed by feature. `Supported` names the implemented pattern; `Manual` features change only targets, allies or the narrative and keep their descriptions.
+
+| Feature (weapons) | Disposition |
+|---|---|
+| Reliable (13), Heavy (8), Cumbersome (9), Protective (10), Barrier (4), Brave (1), Padded (4), Massive (4), Powerful (10) | Supported unchanged: passive modifiers / kept-dice damage. |
+| Sharpwing (1), Bonded (1) | Supported: damage bonus only on that weapon's damage (confirmed). |
+| Paired (12), Double Duty (2), Focused (4) | Supported unchanged: opt-in primary-weapon damage options. |
+| Trusty (1) | Fixed: always-on +1 on primary-weapon attacks (was an option restricted to the hammer itself). |
+| Quick (16), Ricochet (4) | Fixed: Stress-paid attack options instead of sheet buttons. |
+| Bouncing (3) | Supported: attack option with a Stress quantity, one per target. |
+| Volleyed (1), Aimed (4), Dueling (1), Omnipresent (1), Extending (1) | Supported: attack options (Hope cost, disadvantage/ignore, advantage, -1 per range step). |
+| Charged (1), Accelerator (1) | Fixed: Stress-paid +1 Proficiency attack options; Accelerator once per scene with its missing Stress cost. |
+| Devastating (2) | Fixed: Stress-paid attack option carrying d20 damage dice to that attack's Damage button. |
+| Follow-Up (4), Greedy (1), Painful (2) | Supported: damage options; Greedy spends 10 gold coins (confirmed); Painful required (confirmed). |
+| Concussive (2), Grappling (1), Restraining (1), Entangling (1), Deforming (1), Magnetic (1) | Fixed: costed buttons on the weapon's attack result (confirmed); target effects manual. Entangling requires a primary-weapon attack. |
+| Draining (1), Catalytic (1) | Fixed: attack-result buttons; Draining clears your Stress, Catalytic grants one ally an exclusive consumable +3 next attack. |
+| Lucky (1), Rebounding (1) | Supported: failed-attack rerolls (Stress / with disadvantage). |
+| Targeted (1), Locked On (1), Inverted (1) | Supported: next-attack effects and Fear-attack Hope; Targeted/Inverted apply to any weapon attack. |
+| Invigorating (2), Lifestealing (1) | Supported: host-rolled d4/d6 checks clearing Stress or the chosen HP/Stress. |
+| Bolstering (1) | Supported: critical attack grants the attacker 1 Hope and other players a Hope claim (confirmed). |
+| Versatile (17), Stockpiled (5) | Supported: alternate-profile attack rows (confirmed). |
+| Otherworldly (5) | Supported: physical/magic damage-type selector. |
+| Brutal (3), Recursive (1), Serrated (2), Self-Correcting (1) | Supported: host damage rules. |
+| Reloading (10) | Supported: host d6 after each attack; Unloaded until a Stress-paid Reload (confirmed). |
+| Pompous (1) | Supported: attacks blocked above Presence 0. |
+| Channeling (1) | Supported: halving plus rest-duration stored damage for the next Claws damage roll (confirmed). |
+| Parry (2), Deflecting (2), Braced (1) | Supported: Proficiency weapon dice roll, Evasion report using unmarked Armor Slots before marking (confirmed) or Armor Score, Stress-paid incoming-damage option. |
+| Startling (4), Swatter (1), Healing (1), Persuasive (1), Watchful (1), Ethereal (1), Make Them Dance (1), Webslinger (1), Life-Linked (1) | Supported: sheet actions, rest passive, roll options, scene effects and trait action rolls. |
+| Scary (3), Deadly (2), Destructive/Incendiary consequences (3), Burning (2), Eruptive (1), Freezing (2), Hooked (4), Tethered (1), Doubled Up (2), Venomous (1), Disturbing (1), Nonlethal (1), Poisonous (1), Piercing (6), Echo (1), Long (1), Sheltering (1), Returning (5), Retractable (2), Hot (1), Timebending (2), Incorporeal (1) | Manual (confirmed for target-only effects). |
 
 ### Open automation decisions and alternatives
 

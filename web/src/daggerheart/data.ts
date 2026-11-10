@@ -38,6 +38,10 @@ export interface Weapon {
   automation?: Automation;
   /** Spell damage with a fixed dice count instead of Proficiency dice. */
   fixedDice?: boolean;
+  /** Transient: label of the alternate statistics (Versatile) this roll uses; never saved. */
+  profile?: string;
+  /** Transient: attack-linked replacement damage die size (Devastating); never saved. */
+  dieOverride?: number;
 }
 
 export interface Armor {
