@@ -319,7 +319,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   A Compendium pop-out can still browse, search, filter and add entries to owned characters: **Add** opens/focuses
   the receiving character sheet and applies the entry there, preserving its unsaved changes.
 - **DM character sheets**: while hosting a Daggerheart campaign, double-click a player-owned actor in the Actors
-  tree or its map token with Select to open its sheet inside the DM view. Right-click an actor and choose
+  tree or its map token with Select to open its sheet inside the DM view. Only tokens for actors assigned to a
+  campaign player open the sheet; other actor tokens remain selectable and draggable. Right-click an actor and choose
   **Open character sheet** for the same action. Windows are non-modal, draggable and resizable; reopening an actor
   brings its existing sheet forward. Offline players' sheets are available too. The DM uses the same sheet and
   rules as players, acting on behalf of the character's owner. Saved changes synchronize live in both directions,
@@ -720,7 +721,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
   In Select mode, hovering over a controllable token or your own drawing/measurement shows a **grab** cursor;
-  moving it shows **grabbing**. Drawing resize handles show a diagonal resize cursor, and your measurement
+  double-click a controlled token for an actor you own to open its character sheet. Moving a token shows
+  **grabbing**. Drawing resize handles show a diagonal resize cursor, and your measurement
   delete buttons show a pointer. Objects you cannot control keep the normal cursor; paused maps do not
   advertise editing. Drawing and measurement tools retain their crosshair cursor.
   To grant movement of a regular image token, right-click its placed instance on the DM map and open

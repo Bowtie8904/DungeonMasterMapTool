@@ -3787,11 +3787,14 @@ public class DungeonMasterMapToolApplication extends Application {
                         && event.getClickCount() == 2 && token.getActorId() != null) {
                     var campaign = onlineController == null ? null : onlineController.campaign();
                     if (campaign != null && campaign.getId().equals(token.getCampaignId())) {
-                        clearSingleSelection();
-                        selectedTokenId = token.getId();
-                        openCharacterSheet(campaign, campaign.actor(token.getActorId()));
-                        event.consume();
-                        return;
+                        var actor = campaign.actor(token.getActorId());
+                        if (actor != null && campaign.player(actor.getOwnerId()) != null) {
+                            clearSingleSelection();
+                            selectedTokenId = token.getId();
+                            openCharacterSheet(campaign, actor);
+                            event.consume();
+                            return;
+                        }
                     }
                 }
                 clearSingleSelection();

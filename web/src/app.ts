@@ -197,6 +197,10 @@ export class App {
     };
     this.view.onUndo = () => this.undoDrawing();
     this.view.onMove = (m) => this.commitMove(m);
+    this.view.onOpenActor = actorId => {
+      const actor = this.store.state?.actors.find(a => a.id === actorId && a.ownerId === this.playerId);
+      if (actor) this.openSheet(actor);
+    };
     this.view.onPortal = id => {
       const state = this.store.state;
       if (state && !this.conn.send({ type: 'command', kind: 'togglePortal', id,

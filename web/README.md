@@ -539,6 +539,8 @@ also selects it. Both selection methods show dashed square token outlines; selec
 rotation handle when the host advertises `hello.tokenRotation:true`. Dragging it previews rotation locally
 and sends `command {cmdId,kind:"rotateToken",tokenId,mapId,levelId,rotationDeg}` on release. The host checks
 current map/level, pause, visibility, ownership and finite angles, then applies an undoable persisted edit.
+Double-clicking a controlled actor token opens its character sheet only for the actor’s assigned player;
+other tokens and actors remain unaffected.
 Rejected or cancelled rotation never replaces the authoritative token state. Older hosts retain selection
 and movement without rotation handles; Online Play and DM Link compatibility versions are unchanged.
 Arrow keys with the map focused move all selected controlled tokens by exactly half a grid tile per

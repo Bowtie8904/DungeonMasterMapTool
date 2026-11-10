@@ -24,6 +24,11 @@ class CanvasStub {
     this.listeners.get(type)?.(event);
     return event;
   }
+  doubleClick(x: number, y: number) {
+    const event = Object.assign(new Event('dblclick', { cancelable: true }), { clientX: x, clientY: y });
+    this.listeners.get('dblclick')?.(event);
+    return event;
+  }
   key(key: string, modifiers: Partial<KeyboardEvent> = {}) {
     const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });
     this.listeners.get('keydown')?.(event);
@@ -87,6 +92,34 @@ describe('map interaction cursors', () => {
     view.setState(store.state);
     expect(store.state!.tokens[0].x).toBe(225);
     expect(Reflect.get(view, 'drag').token).toBe(store.state!.tokens[0]);
+  });
+
+  it('opens only the signed-in player’s controlled actor token on double-click', () => {
+    current.actors = [
+      { id: 'owned', name: 'Owned', ownerId: 'player' },
+      { id: 'other', name: 'Other', ownerId: 'other-player' },
+    ];
+    current.tokens[0].actorId = 'owned';
+    const openActor = vi.fn();
+    view.onOpenActor = openActor;
+
+    expect(canvas.doubleClick(100, 100).defaultPrevented).toBe(true);
+    expect(openActor).toHaveBeenCalledWith('owned');
+
+    openActor.mockClear();
+    current.tokens[0].controlledBy = ['other-player'];
+    canvas.doubleClick(100, 100);
+    expect(openActor).not.toHaveBeenCalled();
+
+    current.tokens[0].controlledBy = ['player'];
+    current.tokens[0].actorId = 'other';
+    canvas.doubleClick(100, 100);
+    expect(openActor).not.toHaveBeenCalled();
+
+    current.tokens[0].actorId = 'owned';
+    view.paused = true;
+    canvas.doubleClick(100, 100);
+    expect(openActor).not.toHaveBeenCalled();
   });
 
   it('keeps attached lights and fog vision at the token position after release', () => {

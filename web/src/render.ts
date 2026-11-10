@@ -80,6 +80,7 @@ export class MapView {
   canControlPortals = false;
   onPortal: (id: string) => void = () => {};
   onRotate: (tokenId: string, rotationDeg: number) => void = () => {};
+  onOpenActor: (actorId: string) => void = () => {};
   canEditConditions = false;
   onTokenContext: (token: Token, screenX: number, screenY: number) => boolean = () => false;
   private rotation: { tokenId: string; startAngle: number; before: number; angle: number } | null = null;
@@ -125,6 +126,16 @@ export class MapView {
     canvas.addEventListener('pointerdown', (e) => { this.pointerDown(e); this.updateCursor(); });
     canvas.addEventListener('pointermove', (e) => this.pointerMove(e));
     canvas.addEventListener('pointerup', (e) => { this.pointerUp(e); this.updateCursor(); });
+    canvas.addEventListener('dblclick', e => {
+      if (this.paused || this.tool !== 'navigate') return;
+      const world = this.toWorld(e);
+      const token = this.tokenAt(world.x, world.y);
+      if (!token?.actorId) return;
+      const actor = this.state?.actors.find(a => a.id === token.actorId && a.ownerId === this.playerId);
+      if (!actor) return;
+      e.preventDefault();
+      this.onOpenActor(actor.id);
+    });
     canvas.addEventListener('pointercancel', e => {
       this.cancelPingHold();
       if (this.drag?.kind === 'pan') {
