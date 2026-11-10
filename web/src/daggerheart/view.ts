@@ -25,6 +25,8 @@ import { rollSourceFor } from './roll-source';
 import { characterFeatureGroups } from './feature-groups';
 import { isManualOverride, removeManualOverride, setManualStat } from './engine';
 import { weaponAttackBlocker, weaponDamageRules, weaponProfiles, weaponWithProfile } from './engine';
+import { useConsumableUnit, withSelectedAmount } from './engine';
+import { attachmentDef, attachItem, attachTargets, detachItem } from './attachments';
 import { isVitalityEffect, removeVitality } from './vitality';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
@@ -432,7 +434,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action) return false;
       const feature = [...activeFeatures(c), ...c.heritage].find((f) => f.name === name);
       const featureAction = feature?.automation?.actions?.find((a) => a.damage);
-      if (!feature || !featureAction) return false;
+      if (!feature || !featureAction) {
+        // Thrown consumables leave a pending-damage effect; reusable gear (Ice Gloves) keeps its own Damage action.
+        const pending = c.effects.find(e => (e.source === name || e.source?.startsWith(`${name} - `)) && e.actions?.some(a => a.damage));
+        if (pending) {
+          openFeatureDamage(`effect:${pending.id}`, {}, pending.actions!.find(a => a.damage)!, pending.name, critical, undefined, attackFear);
+          return true;
+        }
+        const item = c.inventory.find(i => !i.custom && i.name === name && i.qty > 0 && i.type !== 'consumable');
+        const itemAction = item?.automation?.actions?.find(a => a.damage);
+        if (!item || !itemAction) return false;
+        openFeatureDamage(`item:${name}`, item.automation!, itemAction, name, critical, undefined, attackFear);
+        return true;
+      }
       openFeatureDamage(`feat:${name}`, feature.automation!, featureAction, name, critical, undefined, attackFear);
     }
     return true;
@@ -483,7 +497,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     actionRefreshers.push(refresh);
     return counter;
   }
-  function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
+  function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: (action: ActionDef) => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
     if (!actions.length && (!a?.resources?.length || a.classResourceOnly) && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
@@ -508,9 +522,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function featureWeapon(label: string, spec: NonNullable<ActionDef['damage']>): Weapon {
     const spellcast = c.traits.find(trait => trait.spellcast);
     const count = spellcast ? Math.max(0, Math.floor(traitTotal(c, spellcast.name))) : 0;
-    const dice = spec.count === 'spellcast'
+    const dice = (spec.count === 'spellcast'
       ? spec.dice.replace(/(\d*)d(\d+)/gi, (_term, diceCount: string, sides: string) => count > 0 ? `${Number(diceCount || 1) * count}d${sides}` : '0')
-      : spec.dice;
+      : spec.dice).replace(/@([a-z_][\w-]*?)(?=d\d)/gi, (value) => String(Math.max(0, evalValue(value, c))));
     return { name: label, slot: 'Primary', damageType: spec.type === 'magic' ? 'magic' : 'phys', trait: 'Instinct',
       range: '', damage: dice, hands: 1, tier: 0, fixedDice: spec.fixed || spec.count === 'spellcast',
       ...(spec.extraDice ? { automation: { damage: { extraDice: spec.extraDice, dropLowest: 0 } } } : {}) };
@@ -521,7 +535,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       () => { runActionDetailed(c, key, a, action, label); after?.(); }, rollSourceFor(c, key), { key, automation: a, action }, attackFear);
   }
 
-  function actionButton(key: string, a: Automation, action: ActionDef, label: string, hooks: { extraBlock?: () => string | null; after?: () => void }): HTMLElement {
+  function actionButton(key: string, a: Automation, action: ActionDef, label: string, hooks: { extraBlock?: () => string | null; after?: (action: ActionDef) => void }): HTMLElement {
     if (action.specialAction === 'vitality' && c.vitalityBenefits?.length) {
       return el('span', { class: 'muted' }, `Vitality permanently used: ${c.vitalityBenefits.join(', ')}.${c.vitalityEffectRemoved ? ' Buff removed; benefits no longer apply.' : ' Buff removable only in edit mode under Effects.'}${c.testingCharacter ? ' Retained only to preserve the fixed testing loadout.' : ''}`);
     }
@@ -557,7 +571,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.splendorAction) {
         if (!opts.onSplendor) { opts.onLog?.('Update the host to use Splendor automation.'); return; }
         setBusy(true);
-        try { await opts.onSplendor(key, action); hooks.after?.(); render(); }
+        try { await opts.onSplendor(key, action); hooks.after?.(action); render(); }
         catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
         finally { setBusy(false); }
         return;
@@ -565,13 +579,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.castTokens || action.selectAmount || action.hostOwned && action.resourceRoll) {
         const amount = await chooseActionAmount(c, action);
         if (amount === undefined) return;
-        action = { ...action, selectedAmount: amount, ...(action.castTokens
-          ? { cost: { ...action.cost, [action.castTokens.resource]: amount } } : {}) };
+        action = withSelectedAmount({ ...action, ...(action.castTokens
+          ? { cost: { ...action.cost, [action.castTokens.resource]: amount } } : {}) }, amount);
       }
       if (action.hostOwned && !action.actionRoll) {
         if (!opts.onFeature || !opts.supportsDomainCardAutomation?.()) { opts.onLog?.('Update the host to use this card action.'); return; }
         setBusy(true);
-        try { await opts.onFeature(key, action.id, action.selectedAmount); hooks.after?.(); render(false); }
+        try { await opts.onFeature(key, action.id, action.selectedAmount); hooks.after?.(action); render(false); }
         catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
         finally { setBusy(false); }
         return;
@@ -580,7 +594,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (!opts.supportsSpecialCardActions?.() || !opts.onSpecialCard) { opts.onLog?.('Update the host to use this special card action.'); return; }
         const submit = async (choice: SpecialCardChoice) => {
           await opts.onSpecialCard!(key, action.id, choice);
-          hooks.after?.();
+          hooks.after?.(action);
           render();
         };
         if (action.specialAction !== 'massDisguise') chooseSpecialCard(c, action, opts.gmFear ?? (() => 0), submit);
@@ -595,7 +609,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.copycat) {
         if (!opts.onCopycat || !opts.supportsDomainCardAutomation?.()) { opts.onLog?.('Update the host to use Copycat.'); return; }
         setBusy(true);
-        try { await opts.onCopycat(key, action.id); hooks.after?.(); render(); }
+        try { await opts.onCopycat(key, action.id); hooks.after?.(action); render(); }
         catch (e) { opts.onLog?.((e as Error).message); }
         finally { setBusy(false); }
         return;
@@ -618,7 +632,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.witchAction === 'lifeblood') {
         if (!opts.onFeature) { opts.onLog?.('Update the host to create a Lifeblood Talisman.'); return; }
         setBusy(true);
-        try { await opts.onFeature(key, action.id); hooks.after?.(); render(); }
+        try { await opts.onFeature(key, action.id); hooks.after?.(action); render(); }
         catch (e) { opts.onLog?.((e as Error).message); }
         finally { setBusy(false); }
         return;
@@ -627,7 +641,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (!opts.onFeature) { opts.onLog?.('Update the host to create an Enchanted Talisman.'); return; }
         chooseTalismanHope(c, async amount => {
           await opts.onFeature!(key, action.id, amount);
-          hooks.after?.();
+          hooks.after?.(action);
           render();
         });
         return;
@@ -674,15 +688,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       }
       if (action.hopeDice || action.resourceRoll) {
         const spec = action.resourceRoll ?? { ...action.hopeDice!, resource: 'hope' as const };
-        const resourceLabel = spec.resource === 'hope' ? 'Hope' : 'Stress';
-        const available = () => spec.resource === 'hope' ? c.hope.on : c.stress.slots - c.stress.on;
-        const inputLabel = `${resourceLabel} to ${spec.resource === 'hope' ? 'spend' : 'mark'}`;
+        const gold = spec.resource === 'gold';
+        const resourceLabel = spec.resource === 'hope' ? 'Hope' : gold ? 'handfuls of gold' : 'Stress';
+        const available = () => spec.resource === 'hope' ? c.hope.on : gold ? Math.floor((c.gold ?? 0) / 10) : c.stress.slots - c.stress.on;
+        const inputLabel = `${gold ? 'Handfuls of gold' : resourceLabel} to ${spec.resource === 'stress' ? 'mark' : 'spend'}`;
         const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: action.label });
         const input = el('input', { type: 'number', min: '1', max: String(available()), step: '1', value: '1', ariaLabel: inputLabel });
         const error = el('div', { class: 'error', role: 'alert' });
         const cancel = el('button', { type: 'button' }, 'Cancel');
         const go = el('button', { type: 'button', class: 'primary', disabled: available() < 1 },
-          `${spec.resource === 'hope' ? 'Spend' : 'Mark'} ${resourceLabel} and roll`);
+          `${spec.resource === 'stress' ? 'Mark' : 'Spend'} ${resourceLabel} and roll`);
         cancel.addEventListener('click', () => dialog.close());
         dialog.addEventListener('close', () => dialog.remove(), { once: true });
         go.addEventListener('click', () => {
@@ -691,20 +706,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             error.textContent = `Enter a whole number from 1 to ${available()}.`;
             return;
           }
-          const active = activeCardSources(c).some(source => source.key === key);
-          if (!active) { error.textContent = 'This card is no longer in your active loadout.'; return; }
-          const paidAction = { ...action, cost: { ...action.cost, [spec.resource]: amount } };
+          const active = key.startsWith('item:') ? c.inventory.some(item => `item:${item.name}` === key && item.qty > 0)
+            : activeCardSources(c).some(source => source.key === key);
+          if (!active) { error.textContent = key.startsWith('item:') ? 'This item is no longer in your inventory.' : 'This card is no longer in your active loadout.'; return; }
+          const paidAction = { ...action, cost: { ...action.cost, [spec.resource]: gold ? amount * 10 : amount } };
           const blocker = actionBlocker(c, key, a, paidAction);
           if (blocker) { error.textContent = blocker; return; }
           const expression = `${amount}d${spec.sides}${spec.bonusPerDie ? `+${amount * spec.bonusPerDie}` : ''}`;
-          const source = spec.type ? `damage,${spec.type === 'magic' ? 'magicdamage,spelldamage' : 'physicaldamage'}` : key;
+          const source = spec.type ? `damage,${spec.type === 'magic' ? `magicdamage${key.startsWith('card:') ? ',spelldamage' : ''}` : 'physicaldamage'}` : key;
           const sent = sendRoll(source, undefined, rollSourceFor(c, key))({
             label: spec.type ? `${action.label} damage` : action.label, expression,
             contributions: [{ label: `${amount} ${resourceLabel}`, expression }],
           });
           if (!sent) { error.textContent = 'Not connected. Nothing was spent.'; return; }
           runActionDetailed(c, key, a, paidAction, label);
-          hooks.after?.();
+          hooks.after?.(action);
           dialog.close();
           render();
         });
@@ -723,7 +739,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         }
         const submit = async (amount?: number) => {
           await opts.onFeature!(key, action.id, amount);
-          hooks.after?.();
+          hooks.after?.(action);
           render();
         };
         if (action.menacingReach) {
@@ -737,7 +753,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.channelRawPower || action.chooseEffects) {
         const report = (lines: string[]) => {
           opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
-          hooks.after?.();
+          hooks.after?.(action);
           render();
         };
         if (action.channelRawPower) chooseChannelCard(c, (card, benefit) => report(channelRawPower(c, key, a, action, card, benefit)));
@@ -797,16 +813,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.target || action.check || action.chatBenefits && !action.actionRoll) {
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
-          openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(); render(); }));
+          openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(action); render(); }));
           return;
         }
         setBusy(true);
-        void opts.onFeature(key, action.id).then(() => { busy = false; hooks.after?.(); render(); })
+        void opts.onFeature(key, action.id).then(() => { busy = false; hooks.after?.(action); render(); })
           .catch((e: Error) => { setBusy(false); opts.onLog?.(`Could not use ${label}: ${e.message}`); });
         return;
       }
       if (action.damage) {
-        openFeatureDamage(key, a, action, label, false, hooks.after);
+        openFeatureDamage(key, a, action, label, false, () => hooks.after?.(action));
         return;
       }
       if (action.actionRoll) {
@@ -819,11 +835,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           ...(spec.trait === 'spellcast' ? ['spellcast'] : []),
           ...(key.startsWith('card:') || key.startsWith('feat:') ? [key] : [])];
         const bonus = rollBonus(c, targets, undefined, false);
-        const damage = a.actions?.find((candidate) => candidate.damage)?.damage;
+        const damage = a.actions?.find((candidate) => candidate.damage)?.damage
+          ?? action.steps?.flatMap(step => step.effect?.actions ?? []).find(candidate => candidate.damage)?.damage;
         const weapon = spec.attack && damage ? featureWeapon(label, damage) : undefined;
         openRollDialog(root, c, action.label, trait ? traitContributions(c, trait) : [], bonus,
           (request) => sendRoll(targets.join(','), weapon?.name, rollSourceFor(c, key))({ ...request, difficulty: spec.difficulty }),
-          () => { if (!action.hostRollAction) runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(); render(); },
+          () => { if (!action.hostRollAction) runActionDetailed(c, key, a, action, label); consumeBonus(c, bonus); hooks.after?.(action); render(); },
           targets, undefined, undefined, weapon, false, { key, automation: a, action }, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
         return;
       }
@@ -834,7 +851,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         const dice = action.sendRoll.dice.replace(/@tier(?=d|\b)/g, String(tierOf(c.level)))
           .replace(/@spellcast(?=d|\b)/g, String(Math.max(0, evalValue('@spellcast', c))))
           .replace(/@total_proficiency(?=d|\b)/g, String(Math.max(1, derivedStats(c).proficiency)))
-          .replace(/@(armor_available|armor_score)\b/g, (value) => String(Math.max(0, evalValue(value, c))));
+          .replace(/@(armor_available|armor_score)\b/g, (value) => String(Math.max(0, evalValue(value, c))))
+          .replace(/@(agility|strength|finesse|instinct|presence|knowledge)(?=d)/gi, (_value, trait: string) =>
+            String(Math.max(0, traitTotal(c, (trait[0].toUpperCase() + trait.slice(1).toLowerCase()) as TraitName))))
+          .replace(/(^|\+)0d\d+(?:kh\d+)?/g, (_term, prefix: string) => `${prefix}0`);
         const sent = opts.onRoll({
           label: action.sendRoll.label.slice(0, 80), expression: `${base}+${dice}`,
           contributions: [...(action.sendRoll.base ? [{ label: 'Evasion', expression: String(base) }] : []), { label: `${label} ${dice}`.slice(0, 120), expression: dice }],
@@ -848,7 +868,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       try { effects = runActionDetailed(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`); }
       catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); return; }
       if (effects === null) return;
-      hooks.after?.();
+      hooks.after?.(action);
       opts.onLog?.(formatActionReport({ title, character: c.name, lines: effects.length ? effects : ['used'] }), rollSourceFor(c, key));
       render();
     });
@@ -1617,6 +1637,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       weaponBadges(w),
       ...(traitChoice ? [el('label', {}, 'Attack trait', traitChoice)] : []),
       ...(w.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, w.feature.name), rich(w.feature.text))] : []),
+      ...(attachmentControls(w) ? [attachmentControls(w)!] : []),
       el('div', { class: 'inventory-controls' }, attack, dmg, ...(reload ? [reload] : []), ...(actions ? [actions] : []), unequip),
       ...profiles,
     ), { category: 'weapon', item: w });
@@ -1642,6 +1663,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       un.addEventListener('click', () => { c.carriedArmor.push(a); c.activeArmor = undefined; render(); });
       const actions = actionRow(`armor:${a.name}`, a.automation, a.feature?.name ?? a.name);
       armorBody.push(share(el('div', { class: 'slot' }, el('div', { class: 'top' }, el('span', { class: 'nm' }, a.name)), armorBadges(a), ...(a.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, a.feature.name), rich(a.feature.text))] : []),
+        ...(attachmentControls(a) ? [attachmentControls(a)!] : []),
         el('div', { class: 'inventory-controls' }, ...(actions ? [actions] : []), un)), { category: 'armor', item: a }));
     } else {
       armorBody.push(el('div', { class: 'slot empty' }, 'No armor equipped'));
@@ -1650,10 +1672,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const rows: HTMLElement[] = [];
     const equipBtn = (fn: () => void) => { const b = el('button', { class: 'small', type: 'button' }, 'Equip'); b.addEventListener('click', fn); return b; };
     for (const w of c.carriedWeapons) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, w.name), weaponBadges(w)), featureCell(w.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipWeapon(w))))), { category: 'weapon', item: w }, true));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, w.name), weaponBadges(w), ...(attachmentControls(w) ? [attachmentControls(w)!] : [])), featureCell(w.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipWeapon(w))))), { category: 'weapon', item: w }, true));
     }
     for (const a of c.carriedArmor) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, a.name), armorBadges(a)), featureCell(a.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipArmor(a))))), { category: 'armor', item: a }, true));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, a.name), armorBadges(a), ...(attachmentControls(a) ? [attachmentControls(a)!] : [])), featureCell(a.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipArmor(a))))), { category: 'armor', item: a }, true));
     }
     const table = el('table', { class: 't inventory-table equipment-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Name'), el('th', {}, 'Feature'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows));
     const entries = [...c.carriedWeapons, ...c.carriedArmor];
@@ -1708,6 +1730,52 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (item.qty <= 0) c.inventory = c.inventory.filter(i => i !== item);
   }
 
+  function openAttachDialog(item: InventoryItem): void {
+    const def = attachmentDef(item);
+    if (!def) return;
+    const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: `Attach ${item.name}` });
+    const error = el('div', { class: 'error', role: 'alert' });
+    const choices = el('div', { class: 'list dh-roll-options' });
+    for (const gear of attachTargets(c, def)) {
+      const equipped = gear === c.activeArmor || c.activeWeapons.includes(gear as Weapon);
+      const button = el('button', { type: 'button', class: 'small' }, `${gear.name}${equipped ? ' (equipped)' : ''}`);
+      button.addEventListener('click', () => {
+        try {
+          const lines = attachItem(c, item, gear);
+          opts.onLog?.(formatActionReport({ title: `${item.name} - Attach`, character: c.name, lines }), rollSourceFor(c, `item:${item.name}`));
+          dialog.close();
+          render();
+        } catch (e) { error.textContent = (e as Error).message; }
+      });
+      choices.append(button);
+    }
+    const cancel = el('button', { type: 'button' }, 'Cancel');
+    cancel.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.append(el('h4', {}, `Attach ${item.name}`),
+      el('p', { class: 'muted' }, `Choose ${def.to === 'weapon' ? 'a weapon' : 'armor'} to receive ${def.feature?.name ?? (def.trait ? `${def.trait} attacks` : item.name)}.`),
+      choices, error, cancel);
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
+  /** Attachment chips with Detach buttons, shown on weapon and armor cards. */
+  function attachmentControls(gear: Weapon | Armor): HTMLElement | null {
+    if (!gear.attachments?.length) return null;
+    return el('div', { class: 'badges gear-attachments' }, ...gear.attachments.map((attachment, index) => {
+      const detach = el('button', { class: 'small', type: 'button', title: `Detach ${attachment.item.name} and return it to the inventory` }, 'Detach');
+      detach.disabled = !!opts.readOnly?.();
+      detach.addEventListener('click', () => {
+        try {
+          const lines = detachItem(c, gear, index);
+          opts.onLog?.(formatActionReport({ title: `${attachment.item.name} - Detach`, character: c.name, lines }), rollSourceFor(c, `item:${attachment.item.name}`));
+          render();
+        } catch (e) { opts.onLog?.((e as Error).message); }
+      });
+      return el('span', { class: 'tag' }, `Attached: ${attachment.item.name}`, detach);
+    }));
+  }
+
   function lootPage(): HTMLElement {
     const input = el('input', { type: 'number', value: String(c.gold), min: '0' });
     input.setAttribute('aria-label', 'Gold coins');
@@ -1741,9 +1809,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const consumable = i.type === 'consumable';
       const actions = i.custom ? null : actionRow(key, i.automation, i.name, {
         extraBlock: () => (i.qty <= 0 ? 'None left' : null),
-        after: () => { if (consumable) { i.qty = Math.max(0, i.qty - 1); dropIfEmpty(i); } },
+        after: (action) => { if (consumable) useConsumableUnit(c, i, action); },
       });
-      return share(el('tr', {}, el('td', {}, el('b', {}, i.name), ...(i.note ? [lootDescription(i)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, ...(use ? [use] : []), ...(actions ? [actions] : [])))), { category: 'item', item: i }, true, i.qty > 0);
+      const attachDef = attachmentDef(i);
+      const attach = attachDef ? el('button', { class: 'small primary', type: 'button' }, 'Attach to…') : null;
+      if (attach && attachDef) {
+        attach.disabled = i.qty <= 0 || !attachTargets(c, attachDef).length;
+        attach.title = attach.disabled ? `No ${attachDef.to === 'weapon' ? 'weapon' : 'armor'} can receive ${i.name}.` : `Attach ${i.name} to ${attachDef.to === 'weapon' ? 'a weapon' : 'armor'}`;
+        attach.addEventListener('click', () => openAttachDialog(i));
+      }
+      return share(el('tr', {}, el('td', {}, el('b', {}, i.name), ...(i.note ? [lootDescription(i)] : [])), el('td', {}, tag(i.type)), el('td', {}, qty(i)), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, ...(use ? [use] : []), ...(attach ? [attach] : []), ...(actions ? [actions] : [])))), { category: 'item', item: i }, true, i.qty > 0);
     });
     const search = inventorySearch('loot', rows.map((node, i) => ({ node, text: `${c.inventory[i].name} ${c.inventory[i].note ?? ''}` })));
     const addItem = iconButton('add', 'Add custom item', addCustomItem);
@@ -2175,6 +2250,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const values = new Map<number, number>();
   const traitChoices = new Map<number, TraitName>();
   const dieChoices = new Map<number, HTMLSelectElement>();
+  const dieSizeChoices = new Map<number, number>();
   const checks = new Map<number, HTMLInputElement>();
   const runEffect = () => c.effects.find(e => e.deathrun && e.deathrunRoll);
   const removeRunDie = el('select', { ariaLabel: 'Deathrun die to remove' });
@@ -2192,7 +2268,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const selected = () => options.flatMap((s, i) => checked.has(i) ? [{
     ...configuredRollOption(c, s, values.get(i)),
     option: { ...configuredRollOption(c, s, values.get(i)).option,
-      ...(s.option.traitChoices ? { traitValue: traitChoices.get(i) } : {}) },
+      ...(s.option.traitChoices ? { traitValue: traitChoices.get(i) } : {}),
+      ...(s.option.dieSizes?.length ? { dice: `1d${dieSizeChoices.get(i) ?? s.option.dieSizes[0]}`, diceByLevel: undefined, diceByFeature: undefined, diceConditions: undefined } : {}) },
   }] : []);
   const currentTrait = () => {
     const index = options.findIndex((s, i) => checked.has(i) && s.option.chooseTrait);
@@ -2342,6 +2419,12 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     }
     const dieSelect = s.option.maximizeDie && weapon ? el('select', { ariaLabel: 'Damage die to maximize' }) : undefined;
     if (dieSelect) { dieChoices.set(i, dieSelect); dieSelect.addEventListener('change', update); }
+    const sizeSelect = s.option.dieSizes?.length ? el('select', { ariaLabel: `${rollOptionLabel(s)} die size` },
+      ...s.option.dieSizes.map(size => el('option', { value: String(size) }, `d${size}`))) : undefined;
+    if (sizeSelect) {
+      dieSizeChoices.set(i, s.option.dieSizes![0]);
+      sizeSelect.addEventListener('change', () => { dieSizeChoices.set(i, Number(sizeSelect.value)); update(); });
+    }
     const choice = el('label', { class: 'dh-roll-option' }, input,
       el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
         ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
@@ -2352,7 +2435,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       ...(amount ? [el('label', { class: 'dh-roll-option-control' },
         el('span', {}, s.option.input?.label ?? s.option.quantity!.label), amount)] : []),
       ...(traitSelect ? [el('label', { class: 'dh-roll-option-control' }, s.option.traitChoices ? 'Damage bonus trait' : 'Weapon trait', traitSelect)] : []),
-      ...(dieSelect ? [el('label', { class: 'dh-roll-option-control' }, 'Damage die', dieSelect)] : []));
+      ...(dieSelect ? [el('label', { class: 'dh-roll-option-control' }, 'Damage die', dieSelect)] : []),
+      ...(sizeSelect ? [el('label', { class: 'dh-roll-option-control' }, 'Die size', sizeSelect)] : []));
   });
   exp.addEventListener('change', update);
   crit.addEventListener('change', update);
@@ -2391,7 +2475,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     } : {
       label,
       source: [...effectiveTargets(),
-        ...selected().filter(s => s.key.startsWith('card:') || s.key.startsWith('effect:')).map(s => `option:${s.key}:${s.option.id}`),
+        ...selected().filter(s => s.key.startsWith('card:') || s.key.startsWith('effect:') || s.key.startsWith('item:')).map(s => `option:${s.key}:${s.option.id}`),
         ...(selected().some(s => s.option.proficiency) ? [`proficiency:${selected().reduce((n, s) => n + (s.option.proficiency ?? 0), 0)}`] : []),
         ...(selected().some(s => s.option.damageDie) ? [`damageDie:${Math.max(...selected().map(s => s.option.damageDie ?? 0))}`] : []),
         ...(selected().some(s => s.option.linkedDamageTrait) ? [`linkedDamage:${selected().reduce((n, s) => n + (s.option.linkedDamageTrait ? (s.option.linkedDamageMultiplier ?? 2) * traitTotal(c, s.option.linkedDamageTrait) : 0), 0)}`] : [])].join(','),

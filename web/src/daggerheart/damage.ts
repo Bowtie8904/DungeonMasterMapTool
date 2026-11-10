@@ -114,6 +114,8 @@ export interface MitigationOption {
   storeHalvedDamage?: EffectDef;
   /** Capacitor: on apply, stores this option's rolled reduction as the `stored` roll option value of this effect. */
   storeRoll?: EffectDef;
+  /** Lightning Scarab: on apply, adds the incoming damage to this custom resource pool. */
+  storeDamage?: string;
   /** Hope gained on apply, capped at the Hope slots. */
   gainHope?: number;
   /** Text added to the damage report on apply (consequences for the attacker or nearby creatures). */
@@ -536,6 +538,12 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       const gained = Math.min(m.option.gainHope, Math.max(0, c.hope.slots - c.hope.on));
       c.hope.on += gained;
       notes.push(`${m.option.label}: gained ${gained} Hope.`);
+    }
+    if (m.option.storeDamage) {
+      const pool = m.option.storeDamage;
+      const stored = Math.max(0, Math.floor(r.input));
+      c.resources = { ...c.resources, [pool]: (c.resources?.[pool] ?? 0) + stored };
+      notes.push(`${m.option.label}: stored ${stored} damage (${c.resources[pool]} total).`);
     }
     if (m.option.report) notes.push(`${m.option.label}: ${m.option.report}`);
     if (m.option.endEffect) c.effects = c.effects.filter(e => e.name !== m.option.endEffect);

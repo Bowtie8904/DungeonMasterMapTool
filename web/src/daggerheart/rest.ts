@@ -193,6 +193,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const hpBefore = c.hp.on;
   const stressBefore = c.stress.on;
   const armorBefore = c.armorTrack.on;
+  const hopeBefore = c.hope.on;
   const slots = restSlots(c, kind, o);
   if (picks.length > slots.length) throw new Error('Too many downtime moves chosen');
   picks.forEach((p, i) => {
@@ -311,6 +312,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
         }
         execute(s, a);
         const table = a.downtime?.table;
+        if (a.downtime?.craft) lines.push(`${s.name}: the host adds the crafted consumable to your inventory.`);
         if (table?.forage) lines.push(`${s.name}: the host rolls for your foraged consumable.`);
         else if (table) {
           const evaluate = (expression: string) => expression.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c)));
@@ -344,6 +346,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
     if (b.chooseAlly) continue; // The host pays and grants cross-character benefits atomically.
     if (b.condition === 'armorMarked' && c.armorTrack.on === 0) continue;
     if (b.condition === 'noArmorMarked' && armorBefore > 0) continue;
+    if (b.minHope && hopeBefore < b.minHope) { lines.push(`${s.name}: requires ${b.minHope} Hope; skipped.`); continue; }
     execute(s, b);
     if (b.consumeItem) consume(s);
   }

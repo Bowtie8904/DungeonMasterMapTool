@@ -1743,6 +1743,46 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void recipeDowntimeMovesCraftTheirCatalogConsumableWithinTheCarryCap() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("brewer").name("Brewer").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ObjectNode recipe = (ObjectNode) deathEntry("items.json", "Minor Health Potion Recipe");
+        sheet.putArray("inventory").addObject().put("name", recipe.path("name").asText()).put("type", "gear").put("qty", 1)
+                .set("automation", recipe.path("automation").deepCopy());
+        sheet.putArray("effects");
+        store.saveSheet(campaign.getId(), "brewer", sheet.toString());
+        String cookie = cookie();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "brewer"));
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "brewer");
+            ObjectNode rest = request.putObject("rest").put("kind", "long").put("report", "Long rest.");
+            rest.set("sheet", saved.deepCopy().put("shortRestsInRow", 0));
+            rest.putArray("picks").addObject().put("move", "act:item:Minor Health Potion Recipe|downtime-narrative");
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+        }
+        JsonNode inventory = MAPPER.readTree(store.loadSheet(campaign.getId(), "brewer")).path("inventory");
+        assertEquals(2, inventory.size(), inventory.toString());
+        JsonNode potion = inventory.get(1);
+        assertEquals("Minor Health Potion", potion.path("name").asText());
+        assertEquals("consumable", potion.path("type").asText());
+        assertEquals(2, potion.path("qty").asInt());
+        assertEquals("1d4", potion.path("automation").path("actions").path(0).path("steps").path(0).path("amount").asText());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("crafted Minor Health Potion")));
+
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "brewer"));
+        ((ObjectNode) saved.path("inventory").get(1)).put("qty", 5);
+        store.saveSheet(campaign.getId(), "brewer", saved.toString());
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "brewer");
+        ObjectNode rest = request.putObject("rest").put("kind", "long");
+        rest.set("sheet", saved.deepCopy().put("shortRestsInRow", 0));
+        rest.putArray("picks").addObject().put("move", "act:item:Minor Health Potion Recipe|downtime-narrative");
+        var response = featureHttp(cookie, request);
+        assertEquals(400, response.statusCode());
+        assertTrue(response.body().contains("already carry 5"), response.body());
+    }
+
+    @Test
     void conjuredSteedsPaysSelectedHopeAndRestrictsClaimsToThePurchasedMounts() throws Exception {
         String first = allyCookie("first-rider"), second = allyCookie("second-rider");
         campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Caster").ownerId(playerId()).build());
@@ -5020,6 +5060,43 @@ class OnlineSessionServerTest {
         long seed = 0;
         while (!matches.test(new java.util.Random(seed))) seed++;
         return seed;
+    }
+
+    @Test
+    void itemRollOptionsExpendTheirChargeWhenTheirOwnDieShowsTheConfiguredFace() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Caster").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        ObjectNode crystal = (ObjectNode) deathEntry("items.json", "Superior Alconite Crystal");
+        sheet.putArray("inventory").addObject().put("name", crystal.path("name").asText()).put("type", "gear").put("qty", 1)
+                .set("automation", crystal.path("automation").deepCopy());
+        sheet.putObject("resources").put("superior_alconite", 1);
+        sheet.putArray("effects");
+        store.saveSheet(campaign.getId(), "caster", sheet.toString());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            inbox.next("hello");
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality").put("expression", "2d12+1d4")
+                    .put("source", "action,spellcast,trait:Knowledge,option:item:Superior Alconite Crystal:crystal").put("actorId", "caster");
+            var parts = msg.putArray("contributions");
+            parts.addObject().put("label", "Hope die").put("expression", "1d12");
+            parts.addObject().put("label", "Fear die").put("expression", "1d12");
+            parts.addObject().put("label", "Superior Alconite Crystal").put("expression", "1d4");
+
+            diceSeed(seedFor(random -> { random.nextInt(12); random.nextInt(12); return random.nextInt(4) != 3; }));
+            ws.sendText(msg.toString(), true).join();
+            JsonNode kept = inbox.next("roll");
+            assertFalse(kept.has("featureRoll"), kept.toString());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("resources").path("superior_alconite").asInt());
+
+            diceSeed(seedFor(random -> { random.nextInt(12); random.nextInt(12); return random.nextInt(4) == 3; }));
+            ws.sendText(msg.toString(), true).join();
+            JsonNode expended = inbox.next("roll");
+            assertTrue(expended.path("featureRoll").path("consequence").asText().contains("expended"), expended.toString());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("resources").path("superior_alconite").asInt());
+        } finally { ws.abort(); }
+        assertEquals("Superior Alconite Crystal", OnlineSessionServer.optionContributionLabel("Superior Alconite Crystal", "Superior Alconite Crystal"));
+        assertEquals("Ring - Bonus", OnlineSessionServer.optionContributionLabel("Ring", "Bonus"));
     }
 
     @Test

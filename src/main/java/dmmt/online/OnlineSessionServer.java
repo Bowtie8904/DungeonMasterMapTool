@@ -3332,6 +3332,7 @@ public final class OnlineSessionServer {
                 }
             }
         }
+        craftRecipeConsumables(before, next, request.path("picks"), report);
         message.put("text", String.join("\n", report));
         if ("short".equals(kind) && request.path("result").path("dice").isArray()) message.set("restDice", request.path("result").path("dice"));
         commitFeatureSheets(changed, message, true);
@@ -3365,24 +3366,66 @@ public final class OnlineSessionServer {
 
     private void addForagedItem(ObjectNode sheet, String actorId, String id, List<String> report) throws IOException {
         ensureForageCapacity(sheet, actorId);
-        JsonNode entry = foragedItem(id);
+        addCatalogConsumable(sheet, foragedItem(id), true, report);
+    }
+
+    /** Recipe downtime moves (`downtime.craft`): adds the crafted catalog consumable, respecting the per-item cap of 5. */
+    private void craftRecipeConsumables(ObjectNode before, ObjectNode next, JsonNode picks, List<String> report) throws IOException {
+        for (JsonNode recipe : before.path("inventory")) {
+            if (recipe.path("custom").asBoolean() || recipe.path("qty").asInt() < 1) continue;
+            String name = recipe.path("name").asText();
+            String key = "item:" + name;
+            JsonNode automation = catalogAutomation(key, name, recipe.path("automation"));
+            for (JsonNode action : automation.path("actions")) {
+                String craft = action.path("downtime").path("craft").asText("");
+                if (craft.isBlank()) continue;
+                String move = "act:" + key + "|" + action.path("id").asText();
+                for (JsonNode pick : picks) {
+                    if (pick.path("ally").asBoolean() || !move.equals(pick.path("move").asText())) continue;
+                    JsonNode entry = consumableEntry(craft);
+                    int carried = 0;
+                    for (JsonNode item : next.path("inventory"))
+                        if (!item.path("custom").asBoolean() && "consumable".equals(item.path("type").asText())
+                                && entry.path("name").asText().equals(item.path("name").asText())) carried += Math.max(0, item.path("qty").asInt());
+                    if (carried >= 5)
+                        throw new IllegalArgumentException("You already carry 5 " + entry.path("name").asText() + ". Use or remove one before crafting.");
+                    report.add(name + ": crafted " + entry.path("name").asText() + ".");
+                    addCatalogConsumable(next, entry, false, report);
+                }
+            }
+        }
+    }
+
+    private JsonNode consumableEntry(String id) throws IOException {
+        JsonNode consumables = catalogs().document("consumables");
+        if (consumables != null) for (JsonNode entry : consumables.path("entries"))
+            if (id.equals(entry.path("id").asText())) return entry;
+        throw new IllegalArgumentException("The crafted consumable is missing from the compendium.");
+    }
+
+    private void addCatalogConsumable(ObjectNode sheet, JsonNode entry, boolean foraged, List<String> report) {
         ObjectNode item = MAPPER.createObjectNode().put("name", entry.path("name").asText())
-                .put("qty", 1).put("type", "consumable").put("note", entry.path("text").asText()).put("foraged", true);
+                .put("qty", 1).put("type", "consumable").put("note", entry.path("text").asText());
+        if (foraged) item.put("foraged", true);
+        else item.put("capped", true);
         item.set("automation", entry.path("automation").deepCopy());
         ObjectNode identity = ChatCards.identity(item);
-        identity.remove("foraged");
+        identity.remove(List.of("foraged", "capped"));
         ObjectNode stack = null;
         for (JsonNode existing : sheet.withArray("inventory")) {
             if (!(existing instanceof ObjectNode object) || object.path("name").asText("").isBlank()) continue;
             ObjectNode existingIdentity = ChatCards.identity(object);
-            existingIdentity.remove(List.of("catalog", "foraged"));
+            existingIdentity.remove(List.of("catalog", "foraged", "capped"));
             if (existingIdentity.equals(identity)) {
                 stack = object;
                 break;
             }
         }
         if (stack == null) sheet.withArray("inventory").add(item);
-        else stack.put("qty", Math.addExact(Math.max(0, stack.path("qty").asInt(1)), 1)).put("foraged", true);
+        else {
+            stack.put("qty", Math.addExact(Math.max(0, stack.path("qty").asInt(1)), 1));
+            if (foraged) stack.put("foraged", true);
+        }
         sheet.put("inventoryRevision", sheet.path("inventoryRevision").asLong() + 1);
         report.add("Added " + entry.path("name").asText() + " to inventory.");
     }
@@ -6679,6 +6722,7 @@ public final class OnlineSessionServer {
                 changed = true;
             }
         }
+        changed |= applyExpendingOptions(sheet, roll, tags);
         changed |= applyReloading(sheet, roll);
         changed |= applyDomainSuccess(sheet, actor, roll);
         List<String> formReports = ArcanaSageRules.finishForms(sheet, roll);
@@ -6723,6 +6767,52 @@ public final class OnlineSessionServer {
     }
 
     /** Reloading weapons: roll the check die after every new attack; on a failure the weapon becomes Unloaded. */
+    /**
+     * Item roll options with {@code expendOn}: when the option's own die shows that face, the option's
+     * {@code requiresResource} pool is emptied and the roll card reports it (Superior Alconite Crystal).
+     */
+    private boolean applyExpendingOptions(ObjectNode sheet, ObjectNode roll, List<String> tags) {
+        boolean changed = false;
+        for (JsonNode item : sheet.path("inventory")) {
+            if (item.path("custom").asBoolean()) continue;
+            String name = item.path("name").asText();
+            String prefix = "option:item:" + name + ":";
+            if (name.isBlank() || tags.stream().noneMatch(tag -> tag.startsWith(prefix))) continue;
+            JsonNode automation = catalogAutomation("item:" + name, name, item.path("automation"));
+            for (JsonNode option : automation.path("rollOptions")) {
+                int face = option.path("expendOn").asInt(0);
+                String resource = option.path("requiresResource").asText("");
+                String id = option.path("id").asText();
+                if (face < 1 || resource.isBlank() || id.isBlank()
+                        || !tags.contains(prefix + id) && !tags.contains(prefix + "roll:" + id + ":" + id)) continue;
+                String label = optionContributionLabel(name, option.path("label").asText(""));
+                boolean expended = false;
+                for (JsonNode detail : roll.path("breakdown"))
+                    if (label.equals(detail.path("label").asText()))
+                        for (JsonNode value : detail.path("rolls")) if (value.asInt() == face) expended = true;
+                if (!expended) continue;
+                sheet.withObject("/resources").put(resource, 0);
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                String consequence = name + " rolled " + face + ": its energy is expended until it is recharged as a downtime move.";
+                JsonNode existing = roll.path("featureRoll");
+                if (existing.isObject())
+                    ((ObjectNode) existing).put("consequence", existing.path("consequence").asText() + " " + consequence);
+                else roll.putObject("featureRoll").put("name", name).put("result", face).put("consequence", consequence);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** Mirrors the browser's roll-option contribution label: source and option names without adjacent duplicates. */
+    static String optionContributionLabel(String source, String option) {
+        String label;
+        if (option.isBlank() || option.equals(source)) label = source;
+        else if (option.startsWith(source + " (") || option.startsWith(source + ":") || option.startsWith(source + " - ")) label = option;
+        else label = source + " - " + option;
+        return label.length() > 120 ? label.substring(0, 120) : label;
+    }
+
     private boolean applyReloading(ObjectNode sheet, ObjectNode roll) {
         List<String> tags = List.of(roll.path("source").asText("").split(","));
         String weaponName = roll.path("weapon").asText("");

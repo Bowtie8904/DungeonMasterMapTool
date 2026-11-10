@@ -490,6 +490,54 @@ the weapon's own attack.
 Catalog weapons are refreshed on catalog-linked sheets by the host's catalog merge; customized or unlinked carried
 weapons keep their saved automation until re-added from the compendium.
 
+### Item and consumable metadata
+
+Every item and consumable entry was audited individually. Consumable sheet actions use up one unit after they
+succeed (after a roll/damage dialog is sent or a host action commits), with these additive controls:
+
+- `keepItem: true` never uses up a unit (Aetherflower). `portions: "<resource>"` spends from an item-declared
+  portion pool and uses up the unit only when the pool is empty; consuming a unit (by any action) refills the item's
+  portion pools to `initial` for the next unit (Boomberry Jam 5, Pastries of Warmth 4).
+- `table: {dice, outcomes: [{min, max?, text, steps?}]}` rolls once after costs; the first inclusive range
+  containing the total is reported and its steps run (Ancient Runestone, Box of Many Goods, Sun Tree Sap, Boomberry,
+  Eclipse Coin and Two-Faced Aegis Brooch with `1d2` coin flips).
+- `selectAmount` actions replace `@amount` in their cost, steps and damage dice with the chosen amount (Armor
+  Stitcher). `minimumHope` blocks an action below that Hope; `cost: {hope: "@hope"}` spends all Hope (Backsies Stone).
+  `@<resource id>` values (and damage dice counts such as `@jam_portionsd8+4`) read custom pools.
+- `refreshUses: "long"|"short"` clears rest-limited usage counters as if that rest had been taken (Cockerel Claw Tea).
+- Steps may target `scars` (gain/clear) and `permanentHp` (`mark` permanently loses that many HP slots); `mark` accepts
+  `amount: "all"`. `doomsday: {effect}` runs the Doomsday Potion sequence: a d12 per Hope slot (2d12 keep highest when
+  marked), a scar for every result below 12 and, on the first 12, clearing all HP/Stress and adding `effect`.
+- Report amounts are evaluated before the action's steps, so an action may report and then clear a pool (Lightning Scarab).
+- Modifiers accept `min`/`max` clamps (Berserker's Brew: `@total_instinct`, at least 1).
+- Roll options: `dieSizes: [4, 6, ...]` shows a die-size dropdown (first is the default) and rolls one die of the
+  chosen size (Hero's Powder). `requiresResource` offers the option only while that pool is above 0 without spending it;
+  `expendOn: <face>` lets the Online Play host empty that pool and report it on the roll card when the option's own die
+  shows that face (Superior Alconite Crystal). Item options add `option:item:<name>:<id>` roll-source tags. Older hosts
+  never expend the charge.
+- Mitigation `storeDamage: "<resource>"` adds the incoming damage to that pool on apply (Lightning Scarab).
+- Rest passives accept `minHope` (Hopekeeper Locket imbues only from 6 Hope; otherwise the report notes the skip).
+- `resourceRoll.resource: "gold"` asks for handfuls of gold (10 coins each) and rolls one die per handful (Gambler's Fallacy).
+- `sendRoll.dice` accepts trait counts such as `@Agilityd6kh1` (current trait total, never negative; zero dice roll 0)
+  with `base: "evasion"` (Vial of Darksmoke).
+- Thrown consumables make an attack roll whose action grants a pending-damage effect carrying the `damage` action;
+  the attack card's Damage button and the Effects tab both roll it and end the effect (Arcane Shards, Dragonbloom Tea,
+  Abyssal Sap). Reusable gear with `actionRoll.attack` and a `damage` action (Ice Gloves) works from the chat too.
+- `automation.attach: {to: "weapon"|"armor", requires?: {noFeature?, range?, nameIncludes?, damageType?}, feature?,
+  automation?, trait?}` adds an **Attach to…** button. It moves one unit onto an eligible equipped or carried weapon/armor
+  (generated weapons excluded), stores the gear's pre-attachment `attachmentBase` and lists `attachments` on the gear.
+  Attached feature, automation (arrays appended, other fields only when absent) and attack trait apply while attached;
+  **Detach** recomputes or restores the baseline and returns the unit to the inventory. One attack-trait attachment per
+  weapon. Catalog refreshes keep attached values as overrides. Covers Bloodstone, Greatstone, the six Gems, Tarrasque
+  Sinew, Tortoise Horn, Airblade Charm, Valorstone and War God's Sigil.
+
+Ally benefits use chat claims (Bottled Song, Ciscan Fog Bottle, Hopehold Flare, Arcane Prism, Hero's Helm critical
+attacks). Recipe downtime moves declare `downtime.craft: "<consumable id>"`; such rests go through the Online Play host
+(like Forager), which adds the complete catalog consumable to the inventory, stacks it with identical copies and rejects
+the rest if 5 of that consumable are already carried. Remaining manual boundaries: adversary
+conditions/targets and areas, timers measured in minutes or hours, permanent Hope-slot gains (Prismatic Water), choosing
+which Experience a free use applies to (Mnemonic Potion), and range/narrative prerequisites.
+
 ### General automation fields
 
 ```json
@@ -905,7 +953,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   damage dice**, never bonus dice from coatings/options or another equipped weapon. Powerful/Massive use
   `{extraDice:1, dropLowest:1}`. Roll one extra weapon die and discard the lowest before adding the unchanged
   flat bonus and independent bonus dice. The host's kept-dice expression is `NdSkhK` (for example `4d6kh3+6`);
-  chat records all rolls and the kept total. An attachable Greatstone does not grant this to every carried weapon.
+  chat records all rolls and the kept total. An unattached Greatstone does not grant this to any carried weapon.
   Optional `onesAs`, `explode` and `label` are host damage rules described under Weapon feature metadata.
 - **creation**: additive `{hp?, stress?, evasion?, domainCards?, domains?, experienceBonus?}`; numeric slot/evasion/card allowances
   and optional extra accessible domain names. Apply through the Character Mancer once, not as repeating resource
@@ -919,7 +967,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
 
 ## Catalog coverage
 
-The maintained catalog covers **1,187 entries / 1,296 rule sources**, including expansion content, not just core
+The maintained catalog covers **1,192 entries / 1,301 rule sources**, including expansion content, not just core
 classes or the named examples. A source is an individual class/heritage/transformation feature, or one gear/card/item
 entry. The counts below describe the current catalog snapshot; edit them when catalog changes affect the totals.
 “Executable” means at least one modifier, counter/usage upgrade, action/chat benefit, roll option, creation/rest grant, damage-mitigation option, weapon-damage operation or death-move metadata;
@@ -933,9 +981,9 @@ as complete automation.
 | Domain cards | 236 | 236 | 223 | 13 |
 | Armor | 110 | 110 | 95 | 15 |
 | Weapons | 336 | 336 | 210 | 126 |
-| Consumables | 182 | 182 | 62 | 120 |
-| Items | 174 | 174 | 84 | 90 |
-| **All categories** | **1,187** | **1,296** | **858** | **438** |
+| Consumables | 187 | 187 | 187 | 0 |
+| Items | 174 | 174 | 123 | 51 |
+| **All categories** | **1,192** | **1,301** | **1,022** | **279** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -1036,7 +1084,9 @@ Classes, ancestries, communities and transformations are included in the total.
   damage from Paired/Double Duty/Focused is opt-in. Powerful/Massive cover 14 weapons. Charging Quiver is optional
   `@tier` damage **only for arrows stored in it**. Piercing Arrows is `@proficiency` damage with its own
   three-per-rest option limit. Six trait relics grant +1 while active; Lorekeeper/Cursed Carols bonuses are
-  situational. Alconite recharge requires its explicit salt-water downtime action. Every weapon feature is mapped
+  situational. Alconite recharge requires its explicit salt-water downtime action. Attachable gems, stones, sinew,
+  pommel, charm and sigils use `automation.attach` (see [Item and consumable metadata](#item-and-consumable-metadata)).
+  Every weapon feature is mapped
   as described in [Weapon feature metadata](#weapon-feature-metadata).
 - **Domain cards:** optional Body Basher, Cruel Precision, Bold Presence, Boost, Forceful Push, Natural Familiar,
   Nature's Tongue and Runic Adrenaline; Rise Up/Notorious passives; Full Surge and explicit self-healing/recovery
@@ -1090,10 +1140,11 @@ Classes, ancestries, communities and transformations are included in the total.
   Other target effects remain table-managed. Separate healing choices never
   clear both resources unless the export says both. The individual domain-card review is complete;
   remaining decisions are recorded in the living-spec ledger.
-- **Consumables:** existing healing and next-roll trait potions retained; Sweet Moss, Self-Sewing Thread,
-  Nursewood Sap, Godling's Pomelo, Votive Bloom Nectar and Tincture self-healing choices; Steelskin, Featherstep,
-  Drakemantle, Vigilance, Lionheart, Demiurge and Needle Key temporary modifiers. Six weapon coatings are
-  opt-in, consume one stock explicitly, and require the **coated weapon**; ongoing target damage/conditions stay manual.
+- **Consumables:** every consumable has executable automation (see [Item and consumable metadata](#item-and-consumable-metadata)).
+  Healing and next-roll trait potions, Sweet Moss/Sleeping Sap rest benefits, self-healing choices, temporary
+  modifiers and six opt-in weapon coatings (consuming one stock and requiring the **coated weapon**) are retained;
+  narrative consumables post an action report and lasting ones add a correctly timed Effects-tab entry. Ongoing
+  target damage/conditions stay manual.
 
 ### Druid forms and elements
 
@@ -1160,19 +1211,21 @@ claims retain their prior per-player behavior.
   trigger unless explicitly configured (`endOnSourceSevere`). Conditions never become always-on bonuses.
   Other early-expiring numeric effects have explicit removal notes.
 - **Selections and permanent changes:** Bare Bones' armor replacement table, Vitality's choose-two bonuses,
-  Mutagens/Transcendence choices, arbitrary chosen Experiences, scars, permanently lost slots, copied/attached/transferred
-  item features, unconfigured transformation statistics and replacing upgraded feature dice. Beastform choices
+  Mutagens/Transcendence choices, arbitrary chosen Experiences, scars and permanently lost slots (except explicit
+  `scars`/`permanentHp` item steps), copied/transferred item features (attachable items use `automation.attach`),
+  unconfigured transformation statistics and replacing upgraded feature dice. Beastform choices
   are explicitly supported as above; no choice is guessed.
 - **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values;
   Wild Surge and Moon phases keep stateful die faces; Zone of Protection explicitly shares its advancing
   die-value tokens with joined recipients. Other variable token expenditure, rolled-table
-  outcomes and automatic rest/session hooks stay manual unless an explicit button/option is listed. Grimoires
+  outcomes and automatic rest/session hooks stay manual unless an explicit button/option or action `table` is listed. Grimoires
     (`Book of ...`) have no card-level automation; each spell in `spells[]` is its own feature with its own
     parsed cost/usage button, Spellcast roll button and usage counter (key `card:<Book>/<Spell>`), so spells never
     share one subspell's cost/use. The sheet draws a separator line between spells.
   Unconfigured usage upgrades such as Devout/Reliable Backup do not invent new once-per-rest actions.
-- **Narrative/world/inventory:** crafting recipes, foraging, downtime projects, timers/countdowns, conjured objects,
-  item attachment, form/appearance changes, portals, memory/information gathering, immunities, senses and travel.
+- **Narrative/world/inventory:** foraging and crafting results beyond Forager and `downtime.craft` recipes,
+  downtime projects, timers/countdowns, conjured objects, form/appearance changes, portals, memory/information
+  gathering, immunities, senses and travel.
   Descriptions and manual boundary notes remain available, even when there is no executable action.
 - **Rests:** content-specific rules are configured directly in each relevant catalog entry's automation. The runtime
   reads metadata, never feature/item names or labels. Base SRD rest moves remain engine rules.

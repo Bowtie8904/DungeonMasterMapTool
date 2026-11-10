@@ -38,6 +38,9 @@ export interface Weapon {
   automation?: Automation;
   /** Spell damage with a fixed dice count instead of Proficiency dice. */
   fixedDice?: boolean;
+  /** Attached items (Bloodstone, Gems...) and the pre-attachment values restored when the last one is detached. */
+  attachments?: GearAttachment[];
+  attachmentBase?: { feature?: Weapon['feature']; automation?: Automation; trait?: TraitName };
   /** Transient: label of the alternate statistics (Versatile) this roll uses; never saved. */
   profile?: string;
   /** Transient: attack-linked replacement damage die size (Devastating); never saved. */
@@ -55,6 +58,13 @@ export interface Armor {
   tier: number;
   feature?: { name: string; text: string };
   automation?: Automation;
+  attachments?: GearAttachment[];
+  attachmentBase?: { feature?: Armor['feature']; automation?: Automation };
+}
+
+/** An inventory item attached to a weapon or armor; detaching returns this unit to the inventory. */
+export interface GearAttachment {
+  item: InventoryItem;
 }
 
 export interface InventoryItem {

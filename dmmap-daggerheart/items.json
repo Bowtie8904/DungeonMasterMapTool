@@ -127,7 +127,7 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Recreate a guise",
       "cost": {
        "hope": 1
       }
@@ -174,21 +174,33 @@
    "rarity": "Common",
    "text": "You can attach this stone to armor that doesn’t already have a feature. The armor gains the following feature. Resilient: Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot.",
    "automation": {
-    "mitigation": [
-     {
-      "id": "valorstone",
-      "label": "Valorstone",
-      "passive": true,
-      "when": {
-       "lastArmor": true
-      },
-      "roll": {
-       "sides": 6,
-       "success": 6
-      },
-      "saveArmor": 1
+    "attach": {
+     "to": "armor",
+     "requires": {
+      "noFeature": true
+     },
+     "feature": {
+      "name": "Resilient",
+      "text": "Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot."
+     },
+     "automation": {
+      "mitigation": [
+       {
+        "id": "resilient",
+        "label": "Resilient",
+        "passive": true,
+        "when": {
+         "lastArmor": true
+        },
+        "roll": {
+         "sides": 6,
+         "success": 6
+        },
+        "saveArmor": 1
+       }
+      ]
      }
-    ]
+    }
    }
   },
   {
@@ -212,7 +224,47 @@
    "id": "arcane-prism",
    "name": "Arcane Prism",
    "rarity": "Common",
-   "text": "Position this prism in a location of your choosing and activate it. All allies within Close range of it gain a +1 bonus to their Spellcast Rolls. While activated, the prism can’t be moved. Once the prism is deactivated, it can’t be activated again until your next long rest."
+   "text": "Position this prism in a location of your choosing and activate it. All allies within Close range of it gain a +1 bonus to their Spellcast Rolls. While activated, the prism can’t be moved. Once the prism is deactivated, it can’t be activated again until your next long rest.",
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "longRest"
+    },
+    "actions": [
+     {
+      "id": "activate",
+      "label": "Activate prism",
+      "allowSourceOwner": true,
+      "chatBenefits": [
+       {
+        "id": "prism",
+        "label": "Within Close range: +1 Spellcast",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Arcane Prism",
+           "kind": "buff",
+           "until": "manual",
+           "text": "+1 to Spellcast Rolls while within Close range of the activated prism. Remove this effect when the prism is deactivated or you leave its range.",
+           "rollOptions": [
+            {
+             "id": "prism",
+             "label": "Arcane Prism",
+             "roll": "spellcast",
+             "value": 1,
+             "defaultOn": true,
+             "description": "Only while within Close range of the activated prism."
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "minor-stamina-potion-recipe",
@@ -223,8 +275,11 @@
     "actions": [
      {
       "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "label": "Craft a Minor Stamina Potion",
+      "timing": "downtime",
+      "downtime": {
+       "craft": "minor-stamina-potion"
+      }
      }
     ]
    }
@@ -238,8 +293,11 @@
     "actions": [
      {
       "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "label": "Craft a Minor Health Potion",
+      "timing": "downtime",
+      "downtime": {
+       "craft": "minor-health-potion"
+      }
      }
     ]
    }
@@ -256,14 +314,17 @@
    "rarity": "Common",
    "text": "This tiny sprite sits in the curve of your ear canal and whispers helpful advice during combat. Once per short rest, you can gain advantage on an attack roll.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "shortRest"
-    },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Use"
+      "id": "advantage",
+      "label": "Corrector Sprite",
+      "roll": "attack",
+      "advantage": "advantage",
+      "uses": {
+       "max": 1,
+       "per": "shortRest"
+      },
+      "description": "Once per short rest: the sprite’s whispered advice grants advantage on this attack roll."
      }
     ]
    }
@@ -304,7 +365,10 @@
       "cost": {
        "stress": 1
       },
-      "timing": "downtime"
+      "timing": "downtime",
+      "downtime": {
+       "craft": "vial-of-darksmoke"
+      }
      }
     ]
    }
@@ -313,13 +377,51 @@
    "id": "bloodstone",
    "name": "Bloodstone",
    "rarity": "Uncommon",
-   "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Brutal: When you roll the maximum value on a damage die, roll an additional damage die."
+   "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Brutal: When you roll the maximum value on a damage die, roll an additional damage die.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "requires": {
+      "noFeature": true
+     },
+     "feature": {
+      "name": "Brutal",
+      "text": "When you roll the maximum value on a damage die, roll an additional damage die."
+     },
+     "automation": {
+      "damage": {
+       "extraDice": 0,
+       "dropLowest": 0,
+       "explode": "once",
+       "label": "Brutal"
+      }
+     }
+    }
+   }
   },
   {
    "id": "greatstone",
    "name": "Greatstone",
    "rarity": "Uncommon",
-   "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Powerful: On a successful attack, roll an additional damage die and discard the lowest result."
+   "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Powerful: On a successful attack, roll an additional damage die and discard the lowest result.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "requires": {
+      "noFeature": true
+     },
+     "feature": {
+      "name": "Powerful",
+      "text": "On a successful attack, roll an additional damage die and discard the lowest result."
+     },
+     "automation": {
+      "damage": {
+       "extraDice": 1,
+       "dropLowest": 1
+      }
+     }
+    }
+   }
   },
   {
    "id": "glider",
@@ -330,7 +432,7 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Deploy glider",
       "cost": {
        "stress": 1
       }
@@ -347,7 +449,18 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Silence footsteps",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Silent Footsteps",
+         "kind": "buff",
+         "until": "rest",
+         "text": "Your footsteps are silent until your next rest."
+        }
+       }
+      ],
       "cost": {
        "hope": 1
       }
@@ -359,7 +472,19 @@
    "id": "calming-pendant",
    "name": "Calming Pendant",
    "rarity": "Uncommon",
-   "text": "When you would mark your last Stress, roll a d6. On a result of 5 or higher, don’t mark it."
+   "text": "When you would mark your last Stress, roll a d6. On a result of 5 or higher, don’t mark it.",
+   "automation": {
+    "actions": [
+     {
+      "id": "roll",
+      "label": "Last Stress: roll d6",
+      "sendRoll": {
+       "dice": "1d6",
+       "label": "Calming Pendant: on 5 or higher, don’t mark your last Stress"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "dual-flask",
@@ -371,7 +496,27 @@
    "id": "bag-of-ficklesand",
    "name": "Bag of Ficklesand",
    "rarity": "Uncommon",
-   "text": "You can convince this small bag of sand to be much heavier or lighter with a successful Presence Roll (10). Additionally, on a successful Finesse Roll (10), you can blow a bit of sand into a target’s face to make them temporarily Vulnerable."
+   "text": "You can convince this small bag of sand to be much heavier or lighter with a successful Presence Roll (10). Additionally, on a successful Finesse Roll (10), you can blow a bit of sand into a target’s face to make them temporarily Vulnerable.",
+   "automation": {
+    "actions": [
+     {
+      "id": "weight",
+      "label": "Change weight (Presence 10)",
+      "actionRoll": {
+       "trait": "Presence",
+       "difficulty": 10
+      }
+     },
+     {
+      "id": "sand",
+      "label": "Blow sand: Vulnerable (Finesse 10)",
+      "actionRoll": {
+       "trait": "Finesse",
+       "difficulty": 10
+      }
+     }
+    ]
+   }
   },
   {
    "id": "ring-of-resistance",
@@ -383,17 +528,11 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Use"
-     }
-    ],
     "mitigation": [
      {
       "id": "ring",
       "label": "Ring of Resistance",
-      "description": "Resistance to the incoming damage.",
+      "description": "After a successful attack against you: resistance to the incoming damage.",
       "halve": true,
       "uses": "source"
      }
@@ -422,7 +561,27 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Open the box",
+      "table": {
+       "dice": "1d12",
+       "outcomes": [
+        {
+         "min": 1,
+         "max": 6,
+         "text": "It’s empty."
+        },
+        {
+         "min": 7,
+         "max": 10,
+         "text": "It contains one random common consumable (the GM rolls or picks it)."
+        },
+        {
+         "min": 11,
+         "max": 12,
+         "text": "It contains two random common consumables (the GM rolls or picks them)."
+        }
+       ]
+      }
      }
     ]
    }
@@ -433,16 +592,26 @@
    "rarity": "Uncommon",
    "text": "You can attach this charm to a weapon with a Melee range. Three times per rest, you can activate the charm and attack a target within Close range.",
    "automation": {
-    "uses": {
-     "max": 3,
-     "per": "rest"
-    },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Use"
+    "attach": {
+     "to": "weapon",
+     "requires": {
+      "range": "Melee"
+     },
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "airblade",
+        "label": "Airblade Charm: attack within Close range",
+        "roll": "attack",
+        "uses": {
+         "max": 3,
+         "per": "rest"
+        },
+        "description": "Activate the charm to attack a target within Close range."
+       }
+      ]
      }
-    ]
+    }
    }
   },
   {
@@ -457,22 +626,27 @@
    "rarity": "Rare",
    "text": "As a downtime move, you can meditate on an ideal or principle you hold dear and focus your will into this chain. Once per long rest, you can spend a Hope to roll a d20 as your Hope Die for rolls that directly align with that principle.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
     "actions": [
      {
-      "id": "use",
-      "label": "Use",
+      "id": "downtime-narrative",
+      "label": "Meditate on your principle",
+      "timing": "downtime"
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "principle",
+      "label": "Paragon’s Chain (Hope d20)",
+      "roll": "duality",
+      "hopeDie": 20,
       "cost": {
        "hope": 1
-      }
-     },
-     {
-      "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      },
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "description": "Only for a roll that directly aligns with the principle focused into the chain."
      }
     ]
    }
@@ -490,7 +664,18 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Become Hidden",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Hidden (Elusive Amulet)",
+         "kind": "buff",
+         "until": "manual",
+         "text": "Hidden until you move. You remain unseen even if an adversary moves to where they would normally see you. Remove this effect when you move."
+        }
+       }
+      ]
      }
     ]
    }
@@ -501,13 +686,50 @@
    "rarity": "Rare",
    "text": "During a long rest, if you have 6 Hope, you can spend a Hope to imbue this locket with your bountiful resolve. When you have 0 Hope, you can use the locket to immediately gain a Hope. The locket must be re-imbued before it can be used this way again.",
    "automation": {
+    "resources": [
+     {
+      "id": "hopekeeper_locket",
+      "label": "Imbued",
+      "initial": 0,
+      "max": 1
+     }
+    ],
+    "rest": {
+     "passives": [
+      {
+       "id": "imbue",
+       "label": "imbue the locket (1 Hope, requires 6 Hope)",
+       "defaultOn": false,
+       "rest": "long",
+       "minHope": 6,
+       "cost": {
+        "hope": 1
+       },
+       "steps": [
+        {
+         "op": "gain",
+         "resource": "hopekeeper_locket",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    },
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "At 0 Hope: gain a Hope",
+      "requiresZeroHope": true,
       "cost": {
-       "hope": 1
-      }
+       "hopekeeper_locket": 1
+      },
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -606,7 +828,18 @@
    "id": "honing-relic",
    "name": "Honing Relic",
    "rarity": "Rare",
-   "text": "You gain a +1 bonus to an Experience of your choice. You can only carry one relic."
+   "text": "You gain a +1 bonus to an Experience of your choice. You can only carry one relic.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "experience",
+      "label": "Honing Relic",
+      "roll": "duality",
+      "value": 1,
+      "description": "Only when you utilize the Experience you chose for the relic."
+     }
+    ]
+   }
   },
   {
    "id": "flickerfly-pendant",
@@ -635,8 +868,11 @@
     "actions": [
      {
       "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "label": "Craft Mythic Dust",
+      "timing": "downtime",
+      "downtime": {
+       "craft": "mythic-dust"
+      }
      }
     ]
    }
@@ -647,10 +883,14 @@
    "rarity": "Legendary",
    "text": "Once per long rest, you can spend 2 Hope to recall a domain card from your vault instead of paying its Recall Cost.",
    "automation": {
+    "uses": {
+     "max": 1,
+     "per": "longRest"
+    },
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Recall a vault card",
       "cost": {
        "hope": 2
       }
@@ -662,37 +902,73 @@
    "id": "gem-of-alacrity",
    "name": "Gem of Alacrity",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Agility when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Agility when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Agility"
+    }
+   }
   },
   {
    "id": "gem-of-might",
    "name": "Gem of Might",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Strength when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Strength when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Strength"
+    }
+   }
   },
   {
    "id": "gem-of-precision",
    "name": "Gem of Precision",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Finesse when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Finesse when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Finesse"
+    }
+   }
   },
   {
    "id": "gem-of-insight",
    "name": "Gem of Insight",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Instinct when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Instinct when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Instinct"
+    }
+   }
   },
   {
    "id": "gem-of-audacity",
    "name": "Gem of Audacity",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Presence when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Presence when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Presence"
+    }
+   }
   },
   {
    "id": "gem-of-sagacity",
    "name": "Gem of Sagacity",
    "rarity": "Legendary",
-   "text": "You can attach this gem to a weapon, allowing you to use your Knowledge when making an attack with that weapon."
+   "text": "You can attach this gem to a weapon, allowing you to use your Knowledge when making an attack with that weapon.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "trait": "Knowledge"
+    }
+   }
   },
   {
    "id": "ring-of-unbreakable-resolve",
@@ -784,8 +1060,21 @@
    "text": "When you make a reaction roll to avoid being moved against your will, you can deploy this anchor to gain advantage on the roll, and resistance to any damage you take from the movement.",
    "automation": {
     "rollOptions": [
-     { "id": "anchor", "label": "Avoid forced movement", "roll": "reaction", "advantage": "advantage",
-      "description": "Use only to avoid being moved against your will. Resistance to damage from that movement is resolved in the damage dialog." }
+     {
+      "id": "anchor",
+      "label": "Avoid forced movement",
+      "roll": "reaction",
+      "advantage": "advantage",
+      "description": "Use only to avoid being moved against your will. Resistance to damage from that movement is in the damage dialog."
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "anchor",
+      "label": "Anchoring Hook: forced-movement damage",
+      "description": "Resistance to damage you take from being moved against your will while the anchor is deployed.",
+      "halve": true
+     }
     ]
    }
   },
@@ -798,9 +1087,67 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Trace the rune",
       "cost": {
-       "stress": 1
+       "hope": 1
+      },
+      "table": {
+       "dice": "1d6",
+       "outcomes": [
+        {
+         "min": 1,
+         "text": "Mark a Stress.",
+         "steps": [
+          {
+           "op": "mark",
+           "resource": "stress",
+           "amount": 1
+          }
+         ]
+        },
+        {
+         "min": 2,
+         "max": 3,
+         "text": "Nothing happens."
+        },
+        {
+         "min": 4,
+         "max": 5,
+         "text": "Advantage on your next Spellcast Roll.",
+         "steps": [
+          {
+           "op": "effect",
+           "effect": {
+            "name": "Runestone: Spellcast Advantage",
+            "kind": "buff",
+            "until": "manual",
+            "text": "Advantage on your next Spellcast Roll.",
+            "rollOptions": [
+             {
+              "id": "advantage",
+              "label": "Runestone advantage",
+              "roll": "spellcast",
+              "advantage": "advantage",
+              "defaultOn": true,
+              "endEffect": "Runestone: Spellcast Advantage"
+             }
+            ]
+           }
+          }
+         ]
+        },
+        {
+         "min": 6,
+         "text": "Clear all Stress.",
+         "steps": [
+          {
+           "op": "clear",
+           "resource": "stress",
+           "amount": "all"
+          }
+         ]
+        }
+       ]
       }
      }
     ]
@@ -855,7 +1202,36 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Activate (Finesse 10)",
+      "actionRoll": {
+       "trait": "Finesse",
+       "difficulty": 10
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Bubble Stream",
+         "kind": "buff",
+         "until": "manual",
+         "text": "The next attack against you has disadvantage. If it misses, gain a Hope. Remove this effect if the Finesse Roll failed or after that attack.",
+         "actions": [
+          {
+           "id": "miss",
+           "label": "Attack missed: gain a Hope",
+           "steps": [
+            {
+             "op": "gain",
+             "resource": "hope",
+             "amount": 1
+            }
+           ],
+           "endEffect": "Bubble Stream"
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -875,8 +1251,29 @@
     "actions": [
      {
       "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "label": "Meditate: ask the GM a question",
+      "timing": "downtime",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Croakroot Backlash",
+         "kind": "debuff",
+         "until": "rest",
+         "text": "Until your next rest, take 1d6 magic damage whenever you make an Insight (Instinct) roll with Fear.",
+         "actions": [
+          {
+           "id": "damage",
+           "label": "Insight roll with Fear: 1d6 magic damage",
+           "sendRoll": {
+            "dice": "1d6",
+            "label": "Croakroot Pad: magic damage you take"
+           }
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -906,13 +1303,39 @@
    "id": "dread-weave-boots",
    "name": "Dread-Weave Boots",
    "rarity": "Rare",
-   "text": "While wearing these boots, you have resistance to any magic damage triggered by contact with the ground."
+   "text": "While wearing these boots, you have resistance to any magic damage triggered by contact with the ground.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "ground",
+      "label": "Dread-Weave Boots: ground-triggered magic",
+      "description": "Resistance to magic damage triggered by contact with the ground.",
+      "when": {
+       "type": "magic"
+      },
+      "halve": true
+     }
+    ]
+   }
   },
   {
    "id": "dreamers-shard",
    "name": "Dreamer’s Shard",
    "rarity": "Uncommon",
-   "text": "During a long rest, you can use this crystal to induce a prophetic dream, giving a hint to a question that is worrying you. When you do this, you must succeed on an Instinct Reaction Roll (14) or be trapped in a nightmare, paralyzed until someone wakes you. The shard shatters if you fail the reaction roll."
+   "text": "During a long rest, you can use this crystal to induce a prophetic dream, giving a hint to a question that is worrying you. When you do this, you must succeed on an Instinct Reaction Roll (14) or be trapped in a nightmare, paralyzed until someone wakes you. The shard shatters if you fail the reaction roll.",
+   "automation": {
+    "actions": [
+     {
+      "id": "dream",
+      "label": "Prophetic dream (Instinct Reaction 14)",
+      "actionRoll": {
+       "trait": "Instinct",
+       "reaction": true,
+       "difficulty": 14
+      }
+     }
+    ]
+   }
   },
   {
    "id": "etheric-anchor",
@@ -923,7 +1346,7 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Succeed vs spatial distortion",
       "cost": {
        "stress": 2
       }
@@ -935,37 +1358,158 @@
    "id": "flickerbloom",
    "name": "Flickerbloom",
    "rarity": "Rare",
-   "text": "While carrying this flower, you have advantage on Reaction Rolls to resist any temporal anomalies, but if you fail such a roll, you must mark a Stress."
+   "text": "While carrying this flower, you have advantage on Reaction Rolls to resist any temporal anomalies, but if you fail such a roll, you must mark a Stress.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "temporal",
+      "label": "Flickerbloom",
+      "roll": "reaction",
+      "advantage": "advantage",
+      "description": "Only against temporal anomalies. If you still fail, mark a Stress."
+     }
+    ]
+   }
   },
   {
    "id": "gravitic-tether",
    "name": "Gravitic Tether",
    "rarity": "Rare",
-   "text": "While wearing this belt, you take half damage from falls, and no damage from the effects of gravitational anomalies, but you can’t travel further than Very Close range on your move without an agility roll."
+   "text": "While wearing this belt, you take half damage from falls, and no damage from the effects of gravitational anomalies, but you can’t travel further than Very Close range on your move without an agility roll.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "fall",
+      "label": "Gravitic Tether: falling",
+      "description": "Half damage from falls.",
+      "halve": true
+     },
+     {
+      "id": "gravity",
+      "label": "Gravitic Tether: gravitational anomaly",
+      "description": "No damage from the effects of gravitational anomalies.",
+      "negate": true
+     }
+    ]
+   }
   },
   {
    "id": "ice-gloves",
    "name": "Ice Gloves",
    "rarity": "Common",
-   "text": "When you pick up snow with these gloves you can form it into a deadly snowball and throw it as a weapon (Agility, Close, mag d6+1)."
+   "text": "When you pick up snow with these gloves you can form it into a deadly snowball and throw it as a weapon (Agility, Close, mag d6+1).",
+   "automation": {
+    "actions": [
+     {
+      "id": "attack",
+      "label": "Throw a snowball",
+      "actionRoll": {
+       "trait": "Agility",
+       "attack": true
+      }
+     },
+     {
+      "id": "damage",
+      "label": "Snowball damage",
+      "damage": {
+       "dice": "d6+1",
+       "type": "magic"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "jamming-spanner",
    "name": "Jamming Spanner",
    "rarity": "Rare",
-   "text": "Make a successful Finesse Roll to place this tool into a machine to prevent it from operating. The GM can spend a Fear to break the spanner and restart the machine, or you can remove it with a second roll. If you make either roll with Fear, you take damage. The Difficulty and damage depend on the machine."
+   "text": "Make a successful Finesse Roll to place this tool into a machine to prevent it from operating. The GM can spend a Fear to break the spanner and restart the machine, or you can remove it with a second roll. If you make either roll with Fear, you take damage. The Difficulty and damage depend on the machine.",
+   "automation": {
+    "actions": [
+     {
+      "id": "jam",
+      "label": "Jam or remove (Finesse)",
+      "actionRoll": {
+       "trait": "Finesse"
+      }
+     }
+    ]
+   }
   },
   {
    "id": "lantern-of-shadows",
    "name": "Lantern of Shadows",
    "rarity": "Rare",
-   "text": "While using this lantern, you can see through any illusions and see secret doors and passageways within Close range. When you roll with Fear or when the scene ends, the lantern extinguishes, and can’t be lit again until you take a long rest."
+   "text": "While using this lantern, you can see through any illusions and see secret doors and passageways within Close range. When you roll with Fear or when the scene ends, the lantern extinguishes, and can’t be lit again until you take a long rest.",
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "longRest"
+    },
+    "actions": [
+     {
+      "id": "light",
+      "label": "Light the lantern",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Lantern of Shadows",
+         "kind": "buff",
+         "until": "scene",
+         "text": "See through illusions and see secret doors and passageways within Close range. The lantern goes out when you roll with Fear or the scene ends; remove this effect then."
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "lightning-scarab",
    "name": "Lightning Scarab",
    "rarity": "Rare",
-   "text": "When you’re hit by electrical damage, you can divert it into this brooch, then roll your Duality Dice. If the total is less than the diverted damage, the brooch explodes and you take the sum of all the damage it has absorbed. The brooch safely discharges all stored damage during a long rest."
+   "text": "When you’re hit by electrical damage, you can divert it into this brooch, then roll your Duality Dice. If the total is less than the diverted damage, the brooch explodes and you take the sum of all the damage it has absorbed. The brooch safely discharges all stored damage during a long rest.",
+   "automation": {
+    "resources": [
+     {
+      "id": "scarab_damage",
+      "label": "Stored damage",
+      "initial": 0,
+      "resetOn": "longRest"
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "divert",
+      "label": "Divert into Lightning Scarab",
+      "description": "Electrical damage only: the brooch absorbs it. If the Duality total is less than the diverted damage, use Brooch explodes.",
+      "negate": true,
+      "storeDamage": "scarab_damage",
+      "followUp": {
+       "dice": "2d12",
+       "text": "Duality Dice; if lower than the diverted damage, the brooch explodes"
+      }
+     }
+    ],
+    "actions": [
+     {
+      "id": "explode",
+      "label": "Brooch explodes",
+      "report": {
+       "amount": "@scarab_damage",
+       "text": "The brooch explodes: take {amount} damage (everything it absorbed)."
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "scarab_damage",
+        "amount": "all"
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "lovebugs",
@@ -995,13 +1539,35 @@
    "id": "pathfinders-ledger",
    "name": "Pathfinder’s Ledger",
    "rarity": "Rare",
-   "text": "If you scribe your path into this book as you travel, you have advantage on rolls to navigate or avoid being disoriented. If you fail such a roll with Fear, you lose one piece of information you previously knew about your current path."
+   "text": "If you scribe your path into this book as you travel, you have advantage on rolls to navigate or avoid being disoriented. If you fail such a roll with Fear, you lose one piece of information you previously knew about your current path.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "navigate",
+      "label": "Pathfinder’s Ledger",
+      "roll": "duality",
+      "advantage": "advantage",
+      "description": "Only to navigate or avoid being disoriented while scribing your path. Failing with Fear loses a piece of information about the path."
+     }
+    ]
+   }
   },
   {
    "id": "puddleducks-fins",
    "name": "Puddleduck’s Fins",
    "rarity": "Common",
-   "text": "While wearing these fins on your feet, you must mark a Stress to move further than Very Close range on land, but you can move at normal speed when swimming. A druid wearing these fins can Beastform into an Aquatic Scout without marking a Stress."
+   "text": "While wearing these fins on your feet, you must mark a Stress to move further than Very Close range on land, but you can move at normal speed when swimming. A druid wearing these fins can Beastform into an Aquatic Scout without marking a Stress.",
+   "automation": {
+    "actions": [
+     {
+      "id": "land",
+      "label": "Move beyond Very Close on land",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "pure-crystal",
@@ -1016,7 +1582,15 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Restore 1 additional HP",
+      "target": "actor",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -1073,7 +1647,25 @@
    "id": "rootslicer-gauntlet",
    "name": "Rootslicer Gauntlet",
    "rarity": "Uncommon",
-   "text": "You have advantage on attacks and Reaction Rolls against plant-based creatures and hazards. Each time you use this feature and still fail the roll, the GM gains a Fear."
+   "text": "You have advantage on attacks and Reaction Rolls against plant-based creatures and hazards. Each time you use this feature and still fail the roll, the GM gains a Fear.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "attack",
+      "label": "Rootslicer Gauntlet",
+      "roll": "attack",
+      "advantage": "advantage",
+      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+     },
+     {
+      "id": "reaction",
+      "label": "Rootslicer Gauntlet",
+      "roll": "reaction",
+      "advantage": "advantage",
+      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+     }
+    ]
+   }
   },
   {
    "id": "shadowangler-lure",
@@ -1124,7 +1716,29 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Become Incorporeal",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Incorporeal (Soulweave Cloak)",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Move through physical objects and resist physical damage until you end the condition or the scene ends. Other incorporeal creatures have advantage on attacks against you.",
+         "mitigation": [
+          {
+           "id": "incorporeal",
+           "label": "Incorporeal: physical resistance",
+           "passive": true,
+           "when": {
+            "type": "physical"
+           },
+           "halve": true
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -1133,13 +1747,47 @@
    "id": "spirit-seeker",
    "name": "Spirit Seeker",
    "rarity": "Rare",
-   "text": "Hold out this willow wand and spend a Hope to sense the location of the nearest dead or undead creature larger than a cat within Far range. You can additionally mark a stress for each dead or undead creature you want to exclude from the search."
+   "text": "Hold out this willow wand and spend a Hope to sense the location of the nearest dead or undead creature larger than a cat within Far range. You can additionally mark a stress for each dead or undead creature you want to exclude from the search.",
+   "automation": {
+    "actions": [
+     {
+      "id": "sense",
+      "label": "Sense the nearest dead",
+      "cost": {
+       "hope": 1
+      }
+     },
+     {
+      "id": "exclude",
+      "label": "Exclude a creature",
+      "cost": {
+       "stress": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "stingshield-robes",
    "name": "Stingshield Robes",
    "rarity": "Uncommon",
-   "text": "While wearing these bug-resistant clothes and dont have any marked Armor Slots you are immune to damage by any creature up to the size of a bee, and resistant to damage from all creatures up to the size of a mouse. These robes regain their properties once you cleared your armor slots."
+   "text": "While wearing these bug-resistant clothes and dont have any marked Armor Slots you are immune to damage by any creature up to the size of a bee, and resistant to damage from all creatures up to the size of a mouse. These robes regain their properties once you cleared your armor slots.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "bee",
+      "label": "Stingshield Robes: bee-sized attacker",
+      "description": "Only with no marked Armor Slots: immune to damage from creatures up to the size of a bee.",
+      "negate": true
+     },
+     {
+      "id": "mouse",
+      "label": "Stingshield Robes: mouse-sized attacker",
+      "description": "Only with no marked Armor Slots: resistance to damage from creatures up to the size of a mouse.",
+      "halve": true
+     }
+    ]
+   }
   },
   {
    "id": "superior-alconite-crystal",
@@ -1147,19 +1795,37 @@
    "rarity": "Uncommon",
    "text": "You can use the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. If you roll a 4, the energy is expended and it can’t be reused until you recharge it as a downtime move by immersing it in salt water.",
    "automation": {
+    "resources": [
+     {
+      "id": "superior_alconite",
+      "label": "Charged",
+      "initial": 1,
+      "max": 1
+     }
+    ],
     "rollOptions": [
      {
       "id": "crystal",
       "label": "Superior Alconite Crystal",
       "roll": "spellcast",
-      "dice": "1d4"
+      "dice": "1d4",
+      "requiresResource": "superior_alconite",
+      "expendOn": 4,
+      "description": "On a 4 the energy is expended until you recharge it in salt water as a downtime move."
      }
     ],
     "actions": [
      {
-      "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "id": "recharge",
+      "label": "Downtime in salt water: recharge",
+      "timing": "downtime",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "superior_alconite",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -1168,7 +1834,33 @@
    "id": "tarrasque-sinew",
    "name": "Tarrasque Sinew",
    "rarity": "Rare",
-   "text": "When you string a bow without a feature with this powerful cord, it gains the following feature. Titan-Slayer: You gain a +1 bonus to your Proficiency for damage rolls with this weapon when you hit a creature more than twice your size."
+   "text": "When you string a bow without a feature with this powerful cord, it gains the following feature. Titan-Slayer: You gain a +1 bonus to your Proficiency for damage rolls with this weapon when you hit a creature more than twice your size.",
+   "automation": {
+    "attach": {
+     "to": "weapon",
+     "requires": {
+      "noFeature": true,
+      "nameIncludes": [
+       "bow"
+      ]
+     },
+     "feature": {
+      "name": "Titan-Slayer",
+      "text": "You gain a +1 bonus to your Proficiency for damage rolls with this weapon when you hit a creature more than twice your size."
+     },
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "titan-slayer",
+        "label": "Titan-Slayer",
+        "roll": "damage",
+        "proficiency": 1,
+        "description": "Only when you hit a creature more than twice your size."
+       }
+      ]
+     }
+    }
+   }
   },
   {
    "id": "ticket-masters-pouch",
@@ -1226,22 +1918,50 @@
    "rarity": "Common",
    "text": "If you use this bony fragment as a pommel for a weapon that doesn’t already have a feature, the weapon gains the following feature. Concussive: When succeeding an attack roll, you can mark a Stress to gain a +1 bonus to your Proficiency for that attack.",
    "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Use",
-      "cost": {
-       "stress": 1
-      }
+    "attach": {
+     "to": "weapon",
+     "requires": {
+      "noFeature": true
+     },
+     "feature": {
+      "name": "Concussive",
+      "text": "When succeeding an attack roll, you can mark a Stress to gain a +1 bonus to your Proficiency for that attack."
+     },
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "concussive",
+        "label": "Concussive",
+        "roll": "damage",
+        "proficiency": 1,
+        "cost": {
+         "stress": 1
+        },
+        "description": "Only after a successful attack roll."
+       }
+      ]
      }
-    ]
+    }
    }
   },
   {
    "id": "twisted-lens",
    "name": "Twisted Lens",
    "rarity": "Rare",
-   "text": "When you look through this lens, you can see into far distance through objects and terrain. However, everything you see is distorted and evil-looking. You must succeed on a Presence Reaction Roll (14). If you fail the roll you must mark a Stress and wont be able to make any sense of what you saw."
+   "text": "When you look through this lens, you can see into far distance through objects and terrain. However, everything you see is distorted and evil-looking. You must succeed on a Presence Reaction Roll (14). If you fail the roll you must mark a Stress and wont be able to make any sense of what you saw.",
+   "automation": {
+    "actions": [
+     {
+      "id": "look",
+      "label": "Look through (Presence Reaction 14)",
+      "actionRoll": {
+       "trait": "Presence",
+       "reaction": true,
+       "difficulty": 14
+      }
+     }
+    ]
+   }
   },
   {
    "id": "veilcloak",
@@ -1249,14 +1969,17 @@
    "rarity": "Rare",
    "text": "While wearing this, you have advantage on Finesse Rolls made while in darkness. You can also spend a Hope once per long rest to make it shine with dim light up to Close range. Creatures outside that range must mark a Stress to see inside.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "longRest"
-    },
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Shine dim light",
+      "cost": {
+       "hope": 1
+      },
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      }
      }
     ],
     "rollOptions": [
@@ -1265,7 +1988,7 @@
       "label": "Veilcloak",
       "roll": "trait:Finesse",
       "advantage": "advantage",
-      "description": "While wearing this, you have advantage on Finesse Rolls made while in darkness. You can also spend a Hope once per long rest to make it shine with dim light up to Close range. Creatures outside that range must mark a Stress to see inside."
+      "description": "Only for Finesse Rolls made while in darkness."
      }
     ]
    }
@@ -1274,13 +1997,58 @@
    "id": "veilshroud-hood",
    "name": "Veilshroud Hood",
    "rarity": "Uncommon",
-   "text": "While wearing this cloak you have advantage on Reaction Rolls against illusions and being magically spied on, but disadvantage on rolls to perceive normal sights and sounds. Once you don the cloak, you must wear it until your next rest or it loses its powers."
+   "text": "While wearing this cloak you have advantage on Reaction Rolls against illusions and being magically spied on, but disadvantage on rolls to perceive normal sights and sounds. Once you don the cloak, you must wear it until your next rest or it loses its powers.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "illusion",
+      "label": "Veilshroud Hood",
+      "roll": "reaction",
+      "advantage": "advantage",
+      "description": "Only against illusions and being magically spied on."
+     },
+     {
+      "id": "perceive",
+      "label": "Veilshroud Hood: dulled senses",
+      "roll": "duality",
+      "advantage": "disadvantage",
+      "description": "Rolls to perceive normal sights and sounds."
+     }
+    ]
+   }
   },
   {
    "id": "war-gods-sigil",
    "name": "War God’s Sigil",
    "rarity": "Common",
-   "text": "You can transfer this design onto armor that doesn’t have a feature. It gains the following feature: Herald of War: On your first attack in a scene, you can add your Presence to the attack roll."
+   "text": "You can transfer this design onto armor that doesn’t have a feature. It gains the following feature: Herald of War: On your first attack in a scene, you can add your Presence to the attack roll.",
+   "automation": {
+    "attach": {
+     "to": "armor",
+     "requires": {
+      "noFeature": true
+     },
+     "feature": {
+      "name": "Herald of War",
+      "text": "On your first attack in a scene, you can add your Presence to the attack roll."
+     },
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "herald",
+        "label": "Herald of War",
+        "roll": "attack",
+        "traitValue": "Presence",
+        "uses": {
+         "max": 1,
+         "per": "scene"
+        },
+        "description": "Only on your first attack in a scene."
+       }
+      ]
+     }
+    }
+   }
   },
   {
    "id": "winter-wolf-cloak",
@@ -1291,10 +2059,29 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Evasion +1 until damaged",
       "cost": {
        "hope": 1
-      }
+      },
+      "excludesEffect": "Winter Wolf Cloak",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Winter Wolf Cloak",
+         "kind": "buff",
+         "until": "manual",
+         "text": "+1 Evasion until you next take damage. Use only after you cause an adversary to mark HP.",
+         "endAfterIncomingDamage": true,
+         "modifiers": [
+          {
+           "stat": "evasion",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
      }
     ]
    }
@@ -1309,15 +2096,36 @@
      "max": 1,
      "per": "longRest"
     },
+    "mitigation": [
+     {
+      "id": "psychic",
+      "label": "Witherroot Charm: ignore psychic attack",
+      "description": "Ignore all damage from a psychic attack; afterwards you have disadvantage on Presence Reaction Rolls until you purge the charm.",
+      "negate": true,
+      "uses": "source",
+      "effect": {
+       "name": "Psychic Residue",
+       "kind": "debuff",
+       "until": "manual",
+       "text": "Disadvantage on Presence Reaction Rolls until you take a downtime move to purge the charm.",
+       "rollOptions": [
+        {
+         "id": "residue",
+         "label": "Psychic Residue",
+         "roll": "reaction",
+         "advantage": "disadvantage",
+         "description": "Presence Reaction Rolls only."
+        }
+       ]
+      }
+     }
+    ],
     "actions": [
      {
-      "id": "use",
-      "label": "Use"
-     },
-     {
       "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "label": "Purge the charm",
+      "timing": "downtime",
+      "endEffect": "Psychic Residue"
      }
     ]
    }
@@ -1326,13 +2134,89 @@
    "id": "wolffriend-pendant",
    "name": "Wolffriend Pendant",
    "rarity": "Common",
-   "text": "While wearing this item, dogs and wolves will not attack you unless you are hostile towards them or their packmates, and you have advantage on rolls to befriend or influence them."
+   "text": "While wearing this item, dogs and wolves will not attack you unless you are hostile towards them or their packmates, and you have advantage on rolls to befriend or influence them.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "befriend",
+      "label": "Wolffriend Pendant",
+      "roll": "duality",
+      "advantage": "advantage",
+      "description": "Only to befriend or influence dogs and wolves."
+     }
+    ]
+   }
   },
   {
    "id": "wraith-trap",
    "name": "Wraith Trap",
    "rarity": "Rare",
-   "text": "This box can hold up to three undead spirits. You can make a Finesse Roll to trap an undead creature, with a +1 bonus for every HP the target has marked. For each trapped spirit, you have a +1 bonus to reaction rolls against psychic attacks. You can open the box and release all trapped spirits."
+   "text": "This box can hold up to three undead spirits. You can make a Finesse Roll to trap an undead creature, with a +1 bonus for every HP the target has marked. For each trapped spirit, you have a +1 bonus to reaction rolls against psychic attacks. You can open the box and release all trapped spirits.",
+   "automation": {
+    "resources": [
+     {
+      "id": "wraith_spirits",
+      "label": "Trapped spirits",
+      "initial": 0,
+      "max": 3
+     }
+    ],
+    "actions": [
+     {
+      "id": "trap",
+      "label": "Trap an undead (Finesse)",
+      "actionRoll": {
+       "trait": "Finesse"
+      }
+     },
+     {
+      "id": "store",
+      "label": "Spirit trapped",
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "wraith_spirits",
+        "amount": 1
+       }
+      ]
+     },
+     {
+      "id": "release",
+      "label": "Release all spirits",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "wraith_spirits",
+        "amount": "all"
+       }
+      ]
+     }
+    ],
+    "rollOptions": [
+     {
+      "id": "marked",
+      "label": "Wraith Trap: target’s marked HP",
+      "roll": "trait:Finesse",
+      "input": {
+       "label": "Target’s marked HP",
+       "default": 0,
+       "min": 0,
+       "max": 20
+      },
+      "description": "Only when trapping an undead creature: +1 per HP it has marked."
+     },
+     {
+      "id": "psychic",
+      "label": "Wraith Trap: trapped spirits",
+      "roll": "reaction",
+      "resourceMultiplier": {
+       "resource": "wraith_spirits",
+       "value": 1
+      },
+      "description": "Only against psychic attacks: +1 per trapped spirit."
+     }
+    ]
+   }
   },
   {
    "id": "yeti-coat",
@@ -1343,10 +2227,29 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Transform into a Yeti",
       "cost": {
        "stress": 3
-      }
+      },
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Yeti Form",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Transformed into a Yeti for the scene as if using a Druid’s Beastform feature (Powerful Beast form). Apply the form’s statistics with the GM."
+        }
+       }
+      ]
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "cold",
+      "label": "Yeti Coat: cold exposure",
+      "description": "Half damage from exposure to cold.",
+      "halve": true
      }
     ]
    }
@@ -1402,7 +2305,31 @@
    "id": "cloak-of-displacement",
    "name": "Cloak of Displacement",
    "rarity": "Uncommon",
-   "text": "While you wear this cloak, mark a Stress to project an illusion that makes you appear to be standing in a place near your actual location, causing any creature to have disadvantage on attack rolls against you. The projection lasts until the end of the scene. If you take damage, the property ceases to function until the start of your next rest. This property is suppressed while you are unable to move."
+   "text": "While you wear this cloak, mark a Stress to project an illusion that makes you appear to be standing in a place near your actual location, causing any creature to have disadvantage on attack rolls against you. The projection lasts until the end of the scene. If you take damage, the property ceases to function until the start of your next rest. This property is suppressed while you are unable to move.",
+   "automation": {
+    "actions": [
+     {
+      "id": "use",
+      "label": "Project displacement",
+      "cost": {
+       "stress": 1
+      },
+      "excludesEffect": "Displacement",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Displacement",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Creatures have disadvantage on attack rolls against you until the end of the scene. If you take damage, the cloak stops working until the start of your next rest. Suppressed while you are unable to move.",
+         "endAfterIncomingDamage": true
+        }
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "blood-scrying-crystal",
@@ -1435,7 +2362,18 @@
    "id": "grapnel",
    "name": "Grapnel",
    "rarity": "Common",
-   "text": "You gain advantage on action rolls to climb sheer surfaces."
+   "text": "You gain advantage on action rolls to climb sheer surfaces.",
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "climb",
+      "label": "Grapnel",
+      "roll": "action",
+      "advantage": "advantage",
+      "description": "Only to climb sheer surfaces."
+     }
+    ]
+   }
   },
   {
    "id": "ball-bearings",
@@ -1458,7 +2396,18 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use",
+      "label": "Activate gemstone",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Treasure Sense",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Until the end of the scene the gemstone shows proximity to hidden treasure: warm colors for near, cool colors for far."
+        }
+       }
+      ],
       "cost": {
        "hope": 1
       }
@@ -1506,7 +2455,19 @@
    "id": "loaded-dice",
    "name": "Loaded Dice",
    "rarity": "Common",
-   "text": "You can choose what result this set of weighted dice rolls with a successful Finesse Roll (14). If you roll with Fear, anyone watching knows the dice are loaded."
+   "text": "You can choose what result this set of weighted dice rolls with a successful Finesse Roll (14). If you roll with Fear, anyone watching knows the dice are loaded.",
+   "automation": {
+    "actions": [
+     {
+      "id": "roll",
+      "label": "Choose the result (Finesse 14)",
+      "actionRoll": {
+       "trait": "Finesse",
+       "difficulty": 14
+      }
+     }
+    ]
+   }
   },
   {
    "id": "hollowbark-horn",
@@ -1592,14 +2553,17 @@
    "rarity": "Uncommon",
    "text": "Once per scene, you can activate this girdle to gain a +1 bonus to your Proficiency for your next attack.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
-      "label": "Use"
+      "id": "girdle",
+      "label": "Titan’s Girdle",
+      "roll": "damage",
+      "proficiency": 1,
+      "uses": {
+       "max": 1,
+       "per": "scene"
+      },
+      "description": "+1 Proficiency for this attack’s damage."
      }
     ]
    }
@@ -1736,7 +2700,54 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Flip the coin",
+      "table": {
+       "dice": "1d2",
+       "outcomes": [
+        {
+         "min": 1,
+         "text": "Heads: +1 to attack rolls until your next successful attack.",
+         "steps": [
+          {
+           "op": "effect",
+           "effect": {
+            "name": "Eclipse Coin: Heads",
+            "kind": "buff",
+            "until": "manual",
+            "text": "+1 to attack rolls until your next successful attack. Remove this effect after a successful attack.",
+            "modifiers": [
+             {
+              "roll": "attack",
+              "value": 1
+             }
+            ]
+           }
+          }
+         ]
+        },
+        {
+         "min": 2,
+         "text": "Tails: +1 Evasion until an attack against you fails.",
+         "steps": [
+          {
+           "op": "effect",
+           "effect": {
+            "name": "Eclipse Coin: Tails",
+            "kind": "buff",
+            "until": "manual",
+            "text": "+1 Evasion until an attack against you fails. Remove this effect then.",
+            "modifiers": [
+             {
+              "stat": "evasion",
+              "value": 1
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ]
+      }
      }
     ]
    }
@@ -1885,7 +2896,66 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Flip the coin",
+      "table": {
+       "dice": "1d2",
+       "outcomes": [
+        {
+         "min": 1,
+         "text": "Heads: immune to the next physical damage you take.",
+         "steps": [
+          {
+           "op": "effect",
+           "effect": {
+            "name": "Aegis: Physical Immunity",
+            "kind": "buff",
+            "until": "manual",
+            "text": "Immune to the next physical damage you take.",
+            "mitigation": [
+             {
+              "id": "aegis",
+              "label": "Two-Faced Aegis Brooch",
+              "passive": true,
+              "when": {
+               "type": "physical"
+              },
+              "negate": true,
+              "endEffect": "Aegis: Physical Immunity"
+             }
+            ]
+           }
+          }
+         ]
+        },
+        {
+         "min": 2,
+         "text": "Tails: immune to the next magic damage you take.",
+         "steps": [
+          {
+           "op": "effect",
+           "effect": {
+            "name": "Aegis: Magic Immunity",
+            "kind": "buff",
+            "until": "manual",
+            "text": "Immune to the next magic damage you take.",
+            "mitigation": [
+             {
+              "id": "aegis",
+              "label": "Two-Faced Aegis Brooch",
+              "passive": true,
+              "when": {
+               "type": "magic"
+              },
+              "negate": true,
+              "endEffect": "Aegis: Magic Immunity"
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ]
+      }
      }
     ]
    }
@@ -1961,13 +3031,49 @@
    "id": "temporal-sanctuary",
    "name": "Temporal Sanctuary",
    "rarity": "Legendary",
-   "text": "A PC who takes a rest in the temporal sanctuary can choose an additional downtime move."
+   "text": "A PC who takes a rest in the temporal sanctuary can choose an additional downtime move.",
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "sanctuary",
+       "label": "resting in the temporal sanctuary: +1 downtime move",
+       "defaultOn": false,
+       "extraMoves": 1
+      }
+     ]
+    }
+   }
   },
   {
    "id": "heros-helm",
    "name": "Hero’s Helm",
    "rarity": "Legendary",
-   "text": "When you critically succeed on an attack, all allies within Close range gain a Hope."
+   "text": "When you critically succeed on an attack, all allies within Close range gain a Hope.",
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "helm",
+      "label": "Hero’s Helm: allies gain a Hope",
+      "on": "attack",
+      "criticalOnly": true,
+      "allowSourceOwner": true,
+      "chatBenefits": [
+       {
+        "id": "hope",
+        "label": "Within Close range: gain 1 Hope",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
   },
   {
    "id": "rings-of-friendship",
@@ -2005,14 +3111,29 @@
    "rarity": "Legendary",
    "text": "When the GM spends a Fear, roll a d4. Once per scene on a result of 4, you clear a Stress.",
    "automation": {
-    "uses": {
-     "max": 1,
-     "per": "scene"
-    },
     "actions": [
      {
-      "id": "use",
-      "label": "Use"
+      "id": "roll",
+      "label": "GM spent Fear: roll d4",
+      "sendRoll": {
+       "dice": "1d4",
+       "label": "Phobophage’s Circlet: on a 4, clear a Stress (once per scene)"
+      }
+     },
+     {
+      "id": "clear",
+      "label": "Rolled a 4: clear a Stress",
+      "uses": {
+       "max": 1,
+       "per": "scene"
+      },
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "stress",
+        "amount": 1
+       }
+      ]
      }
     ]
    }
@@ -2036,7 +3157,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Teleport",
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -2110,13 +3234,52 @@
    "id": "dancing-remains",
    "name": "Dancing remains",
    "rarity": "Rare",
-   "text": "Throw the remains within Very Close range and make an Agility or Presence Roll (10). On a success, you make them dance, giving them a resemblence of life until they take damage or until the end of the scene. When a creature within Very Close range of the remains makes a roll, spend a Hope to force them to make it with disadvantage, and forcing them to mark a Stress on a failure. A creature within Very Close range of the remains with all Stress marked starts Dancing, using their movement to move in a random direction whenever they have the spotlight."
+   "text": "Throw the remains within Very Close range and make an Agility or Presence Roll (10). On a success, you make them dance, giving them a resemblence of life until they take damage or until the end of the scene. When a creature within Very Close range of the remains makes a roll, spend a Hope to force them to make it with disadvantage, and forcing them to mark a Stress on a failure. A creature within Very Close range of the remains with all Stress marked starts Dancing, using their movement to move in a random direction whenever they have the spotlight.",
+   "automation": {
+    "actions": [
+     {
+      "id": "agility",
+      "label": "Throw (Agility 10)",
+      "actionRoll": {
+       "trait": "Agility",
+       "difficulty": 10
+      }
+     },
+     {
+      "id": "presence",
+      "label": "Throw (Presence 10)",
+      "actionRoll": {
+       "trait": "Presence",
+       "difficulty": 10
+      }
+     },
+     {
+      "id": "hinder",
+      "label": "Force disadvantage on a nearby roll",
+      "cost": {
+       "hope": 1
+      }
+     }
+    ]
+   }
   },
   {
    "id": "mask-of-the-dead-court",
    "name": "Mask of the dead court",
    "rarity": "Rare",
-   "text": "While wearing the mask, you look like a healthy, young member of your species, hiding any Transformation, curse or affliction you might have from mundane or magical detection. Whenever something would detect or reveal your true nature, you can make a Presence Reaction roll to prevent it. If you succeed and the GM spent Fear to attempt it, they gain it back."
+   "text": "While wearing the mask, you look like a healthy, young member of your species, hiding any Transformation, curse or affliction you might have from mundane or magical detection. Whenever something would detect or reveal your true nature, you can make a Presence Reaction roll to prevent it. If you succeed and the GM spent Fear to attempt it, they gain it back.",
+   "automation": {
+    "actions": [
+     {
+      "id": "resist",
+      "label": "Hide your true nature (Presence Reaction)",
+      "actionRoll": {
+       "trait": "Presence",
+       "reaction": true
+      }
+     }
+    ]
+   }
   },
   {
    "id": "mask-of-the-dance-master",

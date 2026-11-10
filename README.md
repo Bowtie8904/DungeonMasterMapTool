@@ -536,6 +536,17 @@ Nothing starts until you click **Start online session**, so offline play and the
   The report keeps the potion name as the action source so the item and its effect are distinct. Rest-only moves and
   benefits have no standalone action buttons; use them only in a confirmed rest. Downtime timing, additional moves,
   passive benefits and roll tables are configured in the relevant compendium JSON entries.
+  Every consumable has an action: using it uses up one unit, posts an action report and, for lasting effects, adds an
+  Effects-tab entry with the printed duration (scene, rest, long rest or until removed). Multi-portion consumables
+  (Boomberry Jam, Pastries of Warmth) show a portion counter and keep the unit until the last portion. Thrown items
+  (Arcane Shards, Dragonbloom Tea, Abyssal Sap) roll the attack first; the attack card's **Damage** button or the
+  Effects tab rolls their damage. Some items roll result tables (Ancient Runestone, Box of Many Goods, Eclipse Coin)
+  or offer a die-size dropdown in the roll dialog (Hero's Powder). Attachable items (Bloodstone, Greatstone, the
+  Gems, Tarrasque Sinew, Tortoise Horn, Airblade Charm, Valorstone, War God's Sigil) have an **Attach to…** button
+  that moves one onto a suitable equipped or carried weapon/armor; the gear shows an **Attached** chip with **Detach**,
+  which returns the item. Items that help allies (Bottled Song, Hopehold Flare, Arcane Prism, Hero's Helm) post chat
+  claim buttons for the other players. Recipe downtime moves (Minor Health/Stamina Potion, Vial of Darksmoke, Mythic
+  Dust) add the crafted consumable to the inventory when the host resolves the rest (at most 5 of each).
   A subtle shield button on the **Thresholds** vital opens a damage dialog, styled like the roll windows. Enter the
   incoming damage and type, then tick an Armor Slot or any armor, card, feature or item mitigation available to the
   character (for example Scales, Shrug It Off or Ring of Resistance). A live preview shows the HP to mark: Minor 1,

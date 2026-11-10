@@ -18,6 +18,9 @@ export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'se
 export type ModValue = number | string;
 
 export interface Modifier {
+  /** Clamps the resolved value (Berserker's Brew: at least 1 / at most -1). */
+  min?: number;
+  max?: number;
   divisor?: number;
   round?: 'up' | 'down';
   hopeMin?: number;
@@ -133,6 +136,18 @@ export interface Step {
 }
 
 export interface ActionDef {
+  /** Rolls `dice` once; the first outcome whose inclusive range contains the total is reported and its steps run. */
+  table?: { dice: string; outcomes: Array<{ min: number; max?: number; text: string; steps?: Step[] }> };
+  /** Requires at least this much Hope (Backsies Stone: spend all, minimum 1). */
+  minimumHope?: number;
+  /** Refreshes rest-limited feature uses as if the given rest had been taken (Cockerel Claw Tea). */
+  refreshUses?: RestKind;
+  /** Consumable portion pool: the action keeps the unit until this resource is empty, then consumes it and refills the pool. */
+  portions?: string;
+  /** Consumable action that never uses up a unit by itself (multi-portion items, throwing on later portions). */
+  keepItem?: boolean;
+  /** Doomsday Potion: rolls each Hope slot, scarring each roll below 12, and grants `effect` on the first 12. */
+  doomsday?: { effect: EffectDef };
   splendorAction?: 'healingHands' | 'secondWind' | 'zone' | 'sunlight' | 'salvation' | 'invigoration' | 'resurrection';
   otherPlayerOnly?: boolean;
   benefitsPerAmount?: boolean;
@@ -154,7 +169,8 @@ export interface ActionDef {
   chatDamage?: ActionDef['damage'];
   excludesEffect?: string;
   vaultSource?: boolean;
-  resourceRoll?: { resource: 'hope' | 'stress'; sides: number; bonusPerDie?: number; type?: 'magic' | 'physical' };
+  /** Spend a chosen amount and roll that many dice; `gold` counts handfuls of 10 coins (Gambler's Fallacy). */
+  resourceRoll?: { resource: 'hope' | 'stress' | 'gold'; sides: number; bonusPerDie?: number; type?: 'magic' | 'physical' };
   codexSwap?: boolean;
   requiresZeroHope?: boolean;
   loadoutDomain?: { domain: string; min: number };
@@ -192,6 +208,8 @@ export interface ActionDef {
     rest?: RestKind;
     additional?: boolean;
     consumeItem?: boolean;
+    /** Recipe: the Online Play host adds this consumable (catalog id) to the inventory when the move is resolved. */
+    craft?: string;
     table?: { expression: string; outcomes: string[]; repeat?: string; forage?: boolean };
   };
   cost?: Partial<Record<Resource, ModValue>>;
@@ -237,6 +255,12 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  /** Die sizes the player picks from in the roll dialog (first is the default); replaces `dice` with one die of that size. */
+  dieSizes?: number[];
+  /** Offered only while this resource is above 0; it is not spent by selecting the option. */
+  requiresResource?: string;
+  /** Host: when this option's die shows this face, the `requiresResource` pool is emptied and reported (Superior Alconite Crystal). */
+  expendOn?: number;
   deathrun?: boolean;
   traitChoices?: TraitName[];
   requiresRollOutcome?: 'hopeOrCritical';
@@ -351,6 +375,8 @@ export interface RollTrigger extends ActionDef {
 export type RollActionSection = 'result' | 'feature' | 'other';
 
 export interface Automation {
+  /** Attachable item: while attached, the chosen weapon/armor gains this feature, automation and/or attack trait. */
+  attach?: AttachmentDef;
   hideSpellcast?: boolean;
   spellcastSuccessSteps?: Step[];
   unarmoredBase?: { score: number; trait: TraitName; thresholdsByTier: Record<string, [number, number]> };
@@ -430,6 +456,14 @@ export interface Automation {
   zeroHopeClearArmor?: number;
 }
 
+export interface AttachmentDef {
+  to: 'weapon' | 'armor';
+  requires?: { noFeature?: boolean; range?: string; nameIncludes?: string[]; damageType?: 'phys' | 'magic' };
+  feature?: { name: string; text: string };
+  automation?: Automation;
+  trait?: TraitName;
+}
+
 export interface WeaponProfile {
   label: string;
   trait: TraitName;
@@ -484,6 +518,8 @@ export interface RestBenefit extends ActionDef {
   move?: string;
   bonus?: number;
   condition?: 'noRecovery' | 'armorMarked' | 'noArmorMarked';
+  /** Applies only when the character has at least this much Hope as the rest starts (Hopekeeper Locket). */
+  minHope?: number;
 }
 
 export interface RestMoveModifier {
@@ -620,13 +656,14 @@ export function setGmFear(n: number | undefined): void {
 export function evalValue(value: ModValue | undefined, c: CharacterSheet): number {
   if (typeof value === 'number') return value;
   if (!value) return 0;
-  const m = /^([+-]?)@(\w+)$/.exec(value.trim());
+  const m = /^([+-]?)@([\w-]+)$/.exec(value.trim());
   if (!m) return Number(value) || 0;
   const sign = m[1] === '-' ? -1 : 1;
   const key = m[2].toLowerCase();
   let n = 0;
   if (key === 'tier') n = tierOf(c.level);
   else if (key === 'fear') n = gmFear;
+  else if (key === 'hope') n = c.hope.on;
   else if (key.startsWith('cards_')) n = [...c.loadout, ...c.vault].filter((d) => d.domain.toLowerCase() === key.slice(6)).length;
   else if (key === 'level') n = c.level;
   else if (key === 'proficiency') n = c.proficiency.on;
@@ -643,7 +680,7 @@ export function evalValue(value: ModValue | undefined, c: CharacterSheet): numbe
   }
   else {
     const t = c.traits.find((x) => x.name.toLowerCase() === key);
-    n = t ? t.mod : 0;
+    n = t ? t.mod : c.resources?.[m[2]] ?? Object.entries(c.resources ?? {}).find(([id]) => id.toLowerCase() === key)?.[1] ?? 0;
   }
   return sign * n;
 }
@@ -657,7 +694,8 @@ function modifierValue(m: Modifier, c: CharacterSheet): number {
   if (m.markedHpMultiplier !== undefined) return c.hp.on * m.markedHpMultiplier;
   if (m.markedStressMultiplier !== undefined) return c.stress.on * m.markedStressMultiplier;
   const value = m.traitValue ? traitTotal(c, m.traitValue) : evalValue(m.value, c);
-  return m.divisor ? m.round === 'up' ? Math.ceil(value / m.divisor) : Math.floor(value / m.divisor) : value;
+  const scaled = m.divisor ? m.round === 'up' ? Math.ceil(value / m.divisor) : Math.floor(value / m.divisor) : value;
+  return Math.min(m.max ?? Infinity, Math.max(m.min ?? -Infinity, scaled));
 }
 
 export interface DerivedStats {
@@ -1023,6 +1061,7 @@ export function availableRollOptions(c: CharacterSheet, targets: string[], weapo
     .filter((o) => !o.magicOnly || weapon?.damageType === 'magic' || targets.includes('magicdamage') || targets.includes('spelldamage'))
     .filter((o) => !o.requiresEffect || c.effects.some((e) => e.name === o.requiresEffect))
     .filter((o) => !o.resourceEmpty || (c.resources?.[o.resourceEmpty] ?? 0) === 0)
+    .filter((o) => !o.requiresResource || (c.resources?.[o.requiresResource] ?? 0) > 0)
     .filter((o) => !o.resourceMultiplier || (c.resources?.[o.resourceMultiplier.resource] ?? 0) > 0)
     .filter((o) => !o.weaponName || weapon?.name === o.weaponName && activeWeapons(c).some(w => w.name === o.weaponName))
     .filter((o) => o.weapon === 'primary' || o.weapon === 'secondary'
@@ -1044,7 +1083,7 @@ export function rollOptionDice(c: CharacterSheet, option: RollOption): string | 
     return sides ? `1d${sides}` : undefined;
   }
   const level = Object.keys(option.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
-  let dice = level === undefined ? option.dice : option.diceByLevel![String(level)];
+  let dice = level === undefined ? option.dice ?? (option.dieSizes?.length ? `1d${option.dieSizes[0]}` : undefined) : option.diceByLevel![String(level)];
   for (const [feature, replacement] of Object.entries(option.diceByFeature ?? {})) {
     if (hasFeature(c, feature)) dice = replacement;
   }
@@ -1143,7 +1182,7 @@ export function selectionBlocker(c: CharacterSheet, selected: AvailableRollOptio
       return `${s.source}: no tokens left`;
     if (!loadoutDomainMatches(c, s.option.loadoutDomain)) return 'Required domain cards are no longer in the active loadout';
     if (s.option.condition && !conditionMatches(c, s.option.condition)) return 'A selected bonus no longer meets its condition';
-    if (s.key.startsWith('effect:') && !c.effects.some(e => s.key === `effect:${e.id}` || s.prepared?.effect === e)) return 'This effect is no longer active';
+    if (s.key.startsWith('effect:') && !c.effects.some(e => s.key === `effect:${e.id}` || s.key === `effect:${e.id}:pending` || s.prepared?.effect === e)) return 'This effect is no longer active';
     if (s.active) continue;
     const block = actionBlocker(c, s.key, s.automation, s.option);
     if (block) return block;
@@ -1391,6 +1430,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (amountResource && amountAvailable(c, amountResource) < minimum) return `Not enough ${amountResource}`;
   if (!loadoutDomainMatches(c, action.loadoutDomain)) return 'Requires more matching domain cards in the active loadout';
   if (action.requiresZeroHope && c.hope.on !== 0) return 'Requires zero Hope';
+  if (action.minimumHope && c.hope.on < action.minimumHope) return 'Not enough Hope';
   if (action.usesSource === false) a = { ...a, uses: undefined };
   if ((action.companion || action.requiresCompanion) && !companionAvailable(c)) return 'Your companion is unavailable';
   if (action.aura && !c.effects.some(e => e.group === 'channel')) return 'Channel an element first';
@@ -1412,6 +1452,7 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return noUsesLeftText(a.uses?.per);
   for (const step of action.steps ?? []) {
+    if (step.resource === 'scars' || step.resource === 'permanentHp') continue;
     if (step.resource && !step.fallbackEffect && !track(c, step.resource) && !resourceDefinitions(c).some((r) => r.id === step.resource)) return `Resource unavailable: ${step.resource}`;
   }
   return costBlocker(c, actionCost(c, action));
@@ -1484,7 +1525,26 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     const companionCleared = clearCompanionStress(c, 1);
     log.push(`cleared ${cleared} owner Stress and ${companionCleared} companion Stress`);
   }
-  for (const step of action.steps ?? []) {
+  const steps = [...action.steps ?? []];
+  if (action.table) {
+    const total = roll(action.table.dice);
+    const outcome = action.table.outcomes.find(o => total >= o.min && total <= (o.max ?? o.min));
+    log.push(`rolled ${action.table.dice} = ${total}${outcome ? `: ${outcome.text}` : ''}`);
+    steps.push(...outcome?.steps ?? []);
+  }
+  if (action.refreshUses) {
+    const kinds = action.refreshUses === 'long' ? ['shortRest', 'rest', 'longRest'] : ['shortRest', 'rest'];
+    const keys = Object.keys(c.usage).filter(k => kinds.includes(c.usage[k].per) && k !== key);
+    for (const k of keys) delete c.usage[k];
+    log.push(`refreshed ${keys.length} limited feature use${keys.length === 1 ? '' : 's'} as if after a ${action.refreshUses} rest`);
+  }
+  if (action.doomsday) log.push(...rollDoomsday(c, action.doomsday.effect, label, roll));
+  // Report amounts describe the state before this action's steps (Lightning Scarab clears the pool it reports).
+  const reportAmount = action.report ? (() => {
+    const trait = TRAIT_ORDER.find(name => action.report!.amount === `@${name}`);
+    return action.report!.dice ? roll(action.report!.dice) : trait ? traitTotal(c, trait) : evalValue(action.report!.amount, c);
+  })() : 0;
+  for (const step of steps) {
     if (step.fallbackEffect && !(step.resource && track(c, step.resource)) && !resourceDefinitions(c).some(r => r.id === step.resource)) {
       addEffect(c, structuredClone(step.fallbackEffect), label);
       log.push(`gained ${step.fallbackEffect.name}`);
@@ -1496,6 +1556,21 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
         ? roll(step.amount.replace(/@[a-z]+/gi, (value) => String(evalValue(value, c))), step.op === 'clear' && t ? step.resource : undefined)
         : step.amount ? evalValue(step.amount, c) : fallback;
     const amount = (fallback: number) => Math.max(step.minimumAmount ?? 0, rawAmount(fallback));
+    if (step.resource === 'scars' || step.resource === 'permanentHp') {
+      const n = Math.max(0, amount(1));
+      if (step.resource === 'scars') {
+        const before = c.scars ?? 0;
+        c.scars = step.op === 'clear' ? Math.max(0, before - n) : Math.min(c.hope.total, before + n);
+        log.push(`${step.op === 'clear' ? 'healed' : 'gained'} ${Math.abs(c.scars - before)} scar${Math.abs(c.scars - before) === 1 ? '' : 's'}`);
+      } else if (step.op !== 'clear') {
+        const lost = Math.min(n, Math.max(0, c.hp.slots - (c.permanentHp ?? 0)));
+        c.permanentHp = (c.permanentHp ?? 0) + lost;
+        c.hp.on = Math.min(c.hp.slots, c.hp.on + lost);
+        log.push(`permanently lost ${lost} HP slot${lost === 1 ? '' : 's'}`);
+      }
+      syncDeathState(c);
+      continue;
+    }
     if (step.resource && !t) {
       const def = resourceDefinitions(c).find((r) => r.id === step.resource)!;
       const before = c.resources![def.id];
@@ -1522,9 +1597,10 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       t.on = Math.min(t.slots, t.on + n);
       log.push(`gained ${t.on - before} ${step.resource === 'hope' ? 'Hope' : step.resource}`);
     } else if (step.op === 'mark' && t && step.resource) {
-      const n = Math.max(0, amount(1));
+      const n = step.amount === 'all' ? t.slots - t.on : Math.max(0, amount(1));
+      const before = t.on;
       t.on = Math.min(t.slots, t.on + n);
-      log.push(`marked ${n} ${step.resource}`);
+      log.push(`marked ${t.on - before} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : step.resource === 'stress' ? 'Stress' : step.resource}`);
     } else if (step.op === 'effect' && step.effect) {
       const form = c.effects.find(e => e.beastform && e.features?.some(f => key === `feat:${f.name}`));
       addEffect(c, { ...step.effect, ...(form ? { requiresEffect: form.name } : {}) }, label);
@@ -1535,14 +1611,68 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     c.effects = c.effects.filter((e) => e.name !== action.endEffect);
     log.push(`ended ${action.endEffect}`);
   }
-  if (action.report) {
-    const trait = TRAIT_ORDER.find(name => action.report!.amount === `@${name}`);
-    const n = action.report.dice ? roll(action.report.dice) : trait ? traitTotal(c, trait) : evalValue(action.report.amount, c);
-    log.push(action.report.text.replace('{amount}', String(Math.max(0, n))));
-  }
+  if (action.report) log.push(action.report.text.replace('{amount}', String(Math.max(0, reportAmount))));
   syncEffectDependencies(c);
   syncDeathState(c);
   return log;
+}
+
+/** Doomsday Potion: d12 per Hope slot (2d12 keep highest if marked); below 12 scars the slot, a 12 stops and grants `effect`. */
+export function rollDoomsday(c: CharacterSheet, effect: EffectDef, label: string, roll: DiceRoll = rollLocal): string[] {
+  const log: string[] = [];
+  const slots = c.hope.slots;
+  const marked = c.hope.on;
+  let scars = 0;
+  for (let slot = 0; slot < slots; slot++) {
+    const isMarked = slot < marked;
+    const first = roll('1d12');
+    const result = isMarked ? Math.max(first, roll('1d12')) : first;
+    const text = `Hope slot ${slot + 1}${isMarked ? ' (marked, 2d12 keep highest)' : ''}: ${result}`;
+    if (result >= 12) {
+      const clearedHp = Math.max(0, c.hp.on - hpHealingFloor(c));
+      c.hp.on -= clearedHp;
+      const clearedStress = c.stress.on;
+      c.stress.on = 0;
+      addEffect(c, structuredClone(effect), label);
+      log.push(`${text}: stopped rolling`, `cleared ${clearedHp} HP and ${clearedStress} Stress`, `gained ${effect.name}`);
+      break;
+    }
+    scars++;
+    log.push(`${text}: crossed out (scar)`);
+  }
+  if (scars) {
+    c.scars = (c.scars ?? 0) + scars;
+    log.push(`gained ${scars} scar${scars === 1 ? '' : 's'}`);
+  }
+  if (!slots) log.push('no Hope slots to roll');
+  return log;
+}
+
+/**
+ * Uses up one consumable unit after its sheet action, unless the action keeps it or portions of the unit remain.
+ * Consuming a unit refills its portion pools for the next unit; an emptied stack leaves the inventory.
+ */
+export function useConsumableUnit(c: CharacterSheet, item: CharacterSheet['inventory'][number], action: ActionDef): void {
+  if (action.keepItem) return;
+  if (action.portions && (c.resources?.[action.portions] ?? 0) > 0) return;
+  item.qty = Math.max(0, item.qty - 1);
+  for (const id of new Set((item.automation?.actions ?? []).map(a => a.portions).filter((p): p is string => !!p))) {
+    const def = item.automation?.resources?.find(r => r.id === id);
+    if (def) c.resources = { ...c.resources, [id]: Math.max(0, evalValue(def.initial, c)) };
+  }
+  if (item.qty <= 0) c.inventory = c.inventory.filter(i => i !== item);
+}
+
+/** Replaces `@amount` in an action's cost, steps and damage dice with the amount chosen in its `selectAmount` dialog. */
+export function withSelectedAmount<T extends ActionDef>(action: T, amount: number): T {
+  const sub = <V>(value: V): V => (typeof value === 'string' ? value.replace(/@amount\b/g, String(amount)) : value) as V;
+  return {
+    ...action,
+    selectedAmount: amount,
+    ...(action.cost ? { cost: Object.fromEntries(Object.entries(action.cost).map(([k, v]) => [k, sub(v)])) } : {}),
+    ...(action.steps ? { steps: action.steps.map(step => ({ ...step, amount: sub(step.amount) })) } : {}),
+    ...(action.damage ? { damage: { ...action.damage, dice: sub(action.damage.dice) } } : {}),
+  };
 }
 
 /** Parses a weapon damage string like "d8+1" or "1d10+2" against the proficiency (dice count). */
